@@ -26,6 +26,8 @@ import type {
 import type {
   BodyUploadFile,
   FileChunksSchema,
+  FileCopySchema,
+  FileMoveSchema,
   FileSchema,
   FileTextCreateSchema,
   HTTPValidationError,
@@ -621,7 +623,96 @@ export function useGetFileContent<TData = Awaited<ReturnType<typeof getFileConte
 
 
 
-export const getDownloadFileUrl = (fileId: number,) => {
+export const getCopyFileUrl = (fileId: number,) => {
+
+
+
+
+  return `/api/v1/files/${fileId}/copy`
+}
+
+/**
+ * Copy a current file into a new record and index fresh chunks.
+ * @summary Copy File
+ */
+export const copyFile = async (fileId: number,
+    fileCopySchema: FileCopySchema, options?: Parameters<typeof apiFetch>[1]): Promise<FileSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<FileSchema>(getCopyFileUrl(fileId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(fileCopySchema)
+  }
+);}
+
+
+
+
+
+export const getCopyFileMutationKey = () => ['copyFile'] as const;
+
+export const getCopyFileMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof copyFile>>, TError,CopyFileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof copyFile>>, TError,CopyFileMutationVariables, TContext> => {
+
+const mutationKey = getCopyFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof copyFile>>, CopyFileMutationVariables> = (props) => {
+          const {fileId,data} = props ?? {};
+
+          return  copyFile(fileId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CopyFileMutationResult = NonNullable<Awaited<ReturnType<typeof copyFile>>>
+    export type CopyFileMutationBody = FileCopySchema
+    export type CopyFileMutationError = HTTPValidationError
+    export type CopyFileMutationVariables = {fileId: number;data: FileCopySchema}
+
+    /**
+ * @summary Copy File
+ */
+export const useCopyFile = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof copyFile>>, TError,CopyFileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof copyFile>>,
+        TError,
+        CopyFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCopyFileMutationOptions(options), queryClient);
+    }
+    export const getDownloadFileUrl = (fileId: number,) => {
 
 
 
@@ -721,3 +812,92 @@ export function useDownloadFile<TData = Awaited<ReturnType<typeof downloadFile>>
 
 
 
+export const getMoveFileUrl = (fileId: number,) => {
+
+
+
+
+  return `/api/v1/files/${fileId}/move`
+}
+
+/**
+ * Move a current file to another logical path without re-indexing.
+ * @summary Move File
+ */
+export const moveFile = async (fileId: number,
+    fileMoveSchema: FileMoveSchema, options?: Parameters<typeof apiFetch>[1]): Promise<FileSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<FileSchema>(getMoveFileUrl(fileId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(fileMoveSchema)
+  }
+);}
+
+
+
+
+
+export const getMoveFileMutationKey = () => ['moveFile'] as const;
+
+export const getMoveFileMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof moveFile>>, TError,MoveFileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof moveFile>>, TError,MoveFileMutationVariables, TContext> => {
+
+const mutationKey = getMoveFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof moveFile>>, MoveFileMutationVariables> = (props) => {
+          const {fileId,data} = props ?? {};
+
+          return  moveFile(fileId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MoveFileMutationResult = NonNullable<Awaited<ReturnType<typeof moveFile>>>
+    export type MoveFileMutationBody = FileMoveSchema
+    export type MoveFileMutationError = HTTPValidationError
+    export type MoveFileMutationVariables = {fileId: number;data: FileMoveSchema}
+
+    /**
+ * @summary Move File
+ */
+export const useMoveFile = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof moveFile>>, TError,MoveFileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof moveFile>>,
+        TError,
+        MoveFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getMoveFileMutationOptions(options), queryClient);
+    }

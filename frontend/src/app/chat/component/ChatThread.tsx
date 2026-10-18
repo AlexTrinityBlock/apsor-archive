@@ -10,6 +10,8 @@ import {
   userText,
   type ToolResultInfo,
 } from "../types";
+import { PageContextCard } from "../../agent/component/PageContextCard";
+import { isPageContextEntry } from "../../agent/page-context";
 import { AssistantEntry } from "./AssistantEntry";
 import { MethodDisclosure } from "./MethodDisclosure";
 import { NoticeEntry } from "./NoticeEntry";
@@ -30,6 +32,9 @@ function ThreadEntry({
   readonly entry: AgentEntrySchema;
   readonly toolResults: ReadonlyMap<string, ToolResultInfo>;
 }) {
+  if (isPageContextEntry(entry)) {
+    return <PageContextCard entry={entry} />;
+  }
   switch (entry.kind) {
     case "pi.user":
       return <UserMarginalia text={userText(entry)} createdAt={entry.created_at} />;

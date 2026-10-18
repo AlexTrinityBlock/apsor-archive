@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
 import "./library.css";
 
-import type { FileSchema } from "../generated-apis-types/schemas";
+import type { FileSchema, PathFileSchema } from "../generated-apis-types/schemas";
+import { copyFile, moveFile, uploadFile } from "../generated-apis-types/files/files";
 import { useSeedDemo } from "../generated-apis-types/system/system";
 import { useReadPath } from "../generated-apis-types/tree/tree";
-import { parentPath } from "../../lib/format";
+import { parentPath, pathSegments } from "../../lib/format";
 import { Badge } from "../component/Badge";
 import { Button } from "../component/Button";
 import { Icon } from "../component/Icon";
@@ -17,32 +18,66 @@ import { QueryState } from "../component/QueryState";
 import { useToast } from "../component/Toast";
 import { useDebouncedValue } from "../hook/useDebouncedValue";
 import { FileReader } from "./component/FileReader";
+import { LibraryBoard } from "./component/LibraryBoard";
 import { LibraryResults } from "./component/LibraryResults";
 import { LibraryToolbar } from "./component/LibraryToolbar";
+import { MoveCopyDialog } from "./component/MoveCopyDialog";
+import { NewFolderDialog } from "./component/NewFolderDialog";
 import { UploadDialog } from "./component/UploadDialog";
 import {
+  ACCEPTED_FILE_HINT,
+  MAX_UPLOAD_BYTES,
   describeError,
+  isAcceptedFileName,
   isNotFoundError,
+  isSafeUploadName,
+  joinArchivePath,
   normalizeLibraryPath,
   parsePositiveInt,
   pathParamValue,
   readerBackLabel,
+  sameArchivePath,
+  type LibraryUploadTask,
+  type LibraryView,
 } from "./component/library-utils";
+import { useMediaQuery } from "./hook/useMediaQuery";
 
 interface ParamUpdates {
   readonly [key: string]: string | number | null;
 }
 
+type FileOperationMode = "move" | "copy";
+
+interface MoveCopyRequest {
+  readonly file: PathFileSchema;
+  readonly mode: FileOperationMode;
+}
+
+function resolveView(rawView: string | null, isDesktop: boolean): LibraryView {
+  if (rawView === "board" || rawView === "list") {
+    return rawView;
+  }
+  return isDesktop ? "board" : "list";
+}
+
 /**
  * The file shelf. Browse state lives entirely in the query string:
- * `path`, `file`, `chunk` (1-based), and `q` (fuzzy path search). Directory and
- * file clicks push history; search typing and chunk turns replace it.
+ * `path`, `file`, `chunk` (1-based), `q` (fuzzy path search), and `view`
+ * (`board` or `list`). Directory and file clicks push history; search typing,
+ * chunk turns, and the view toggle replace it.
  */
 export function LibraryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const isDesktop = useMediaQuery("(min-width: 761px)");
+  const nextUploadId = useRef(1);
+
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadTarget, setUploadTarget] = useState("/");
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [moveCopyRequest, setMoveCopyRequest] = useState<MoveCopyRequest | null>(null);
+  const [uploadTasks, setUploadTasks] = useState<readonly LibraryUploadTask[]>([]);
 
   const path = normalizeLibraryPath(searchParams.get("path"));
   const fileId = parsePositiveInt(searchParams.get("file"));
@@ -51,6 +86,7 @@ export function LibraryPage() {
   const query = rawQuery.trim();
   const debouncedQuery = useDebouncedValue(query, 300);
   const activeQuery = query.length > 0 ? debouncedQuery.trim() : "";
+  const view = resolveView(searchParams.get("view"), isDesktop);
 
   const browseQuery = useReadPath(
     {
@@ -121,6 +157,14 @@ export function LibraryPage() {
     [updateParams],
   );
 
+  const openUpload = useCallback(
+    (targetPath?: string) => {
+      setUploadTarget(targetPath ?? path);
+      setUploadOpen(true);
+    },
+    [path],
+  );
+
   const openCreatedFile = useCallback(
     (file: FileSchema) => {
       setUploadOpen(false);
@@ -169,17 +213,187 @@ export function LibraryPage() {
     updateParams({ file: null, chunk: null }, { replace: true });
   }, [updateParams]);
 
+  const handleViewChange = useCallback(
+    (nextView: LibraryView) => {
+      updateParams({ view: nextView }, { replace: true });
+    },
+    [updateParams],
+  );
+
+  const updateUploadTask = useCallback(
+    (id: number, updates: Partial<LibraryUploadTask>) => {
+      setUploadTasks((current) =>
+        current.map((task) => (task.id === id ? { ...task, ...updates } : task)),
+      );
+    },
+    [],
+  );
+
+  const handleFilesDropped = useCallback(
+    async (files: readonly File[], targetFolder: string) => {
+      const accepted: Array<{ readonly id: number; readonly file: File }> = [];
+      const rejected: LibraryUploadTask[] = [];
+
+      for (const file of files) {
+        const id = nextUploadId.current;
+        nextUploadId.current += 1;
+        const targetPath = joinArchivePath(targetFolder, file.name);
+        if (!isSafeUploadName(file.name) || !isAcceptedFileName(file.name)) {
+          rejected.push({
+            id,
+            name: file.name || "Unnamed file",
+            targetPath,
+            status: "error",
+            message: `Allowed types: ${ACCEPTED_FILE_HINT}.`,
+          });
+          continue;
+        }
+        if (file.size > MAX_UPLOAD_BYTES) {
+          rejected.push({
+            id,
+            name: file.name,
+            targetPath,
+            status: "error",
+            message: "Larger than the 10 MB upload limit.",
+          });
+          continue;
+        }
+        accepted.push({ id, file });
+      }
+
+      const queued: LibraryUploadTask[] = accepted.map(({ id, file }) => ({
+        id,
+        name: file.name,
+        targetPath: joinArchivePath(targetFolder, file.name),
+        status: "queued",
+      }));
+
+      if (queued.length > 0 || rejected.length > 0) {
+        setUploadTasks((current) => [...current, ...queued, ...rejected]);
+      }
+      if (rejected.length > 0) {
+        toast.error(
+          `${rejected.length} ${rejected.length === 1 ? "file was" : "files were"} rejected. See the intake queue.`,
+        );
+      }
+      if (accepted.length === 0) {
+        return;
+      }
+
+      let archived = 0;
+      for (const item of accepted) {
+        updateUploadTask(item.id, { status: "uploading" });
+        try {
+          await uploadFile({
+            path: joinArchivePath(targetFolder, item.file.name),
+            file: item.file,
+          });
+          archived += 1;
+          updateUploadTask(item.id, {
+            status: "done",
+            message: `Archived in ${targetFolder}`,
+          });
+        } catch (error) {
+          updateUploadTask(item.id, {
+            status: "error",
+            message: describeError(error),
+          });
+        }
+      }
+
+      await queryClient.invalidateQueries();
+      if (archived > 0) {
+        toast.success(
+          `${archived} ${archived === 1 ? "file" : "files"} archived in ${targetFolder}.`,
+        );
+      }
+    },
+    [queryClient, toast, updateUploadTask],
+  );
+
+  const handleOperationDone = useCallback(
+    (result: FileSchema, targetFolder: string, mode: FileOperationMode) => {
+      void queryClient.invalidateQueries();
+      if (mode === "move") {
+        toast.success(`“${result.file_name}” moved to ${targetFolder}.`);
+        if (fileId === result.id) {
+          updateParams(
+            {
+              path: pathParamValue(parentPath(result.raw_file_path)),
+              file: result.id,
+              chunk: requestedChunk,
+              q: null,
+            },
+            { replace: true },
+          );
+        }
+      } else {
+        toast.success(`“${result.file_name}” copied to ${targetFolder} as #${result.id}.`);
+      }
+      setMoveCopyRequest(null);
+    },
+    [fileId, queryClient, requestedChunk, toast, updateParams],
+  );
+
+  const handleDropMoveCopy = useCallback(
+    async (file: PathFileSchema, targetFolder: string, mode: FileOperationMode) => {
+      if (mode === "move" && sameArchivePath(parentPath(file.raw_file_path), targetFolder)) {
+        toast.info(`“${file.file_name}” already lives in ${targetFolder}.`);
+        return;
+      }
+      const targetPath = joinArchivePath(targetFolder, file.file_name);
+      try {
+        const result =
+          mode === "move"
+            ? await moveFile(file.file_id, { path: targetPath })
+            : await copyFile(file.file_id, { path: targetPath });
+        handleOperationDone(result, targetFolder, mode);
+      } catch (error) {
+        toast.error(describeError(error));
+      }
+    },
+    [handleOperationDone, toast],
+  );
+
+  const handleRequestMoveCopy = useCallback((file: PathFileSchema, mode: FileOperationMode) => {
+    setMoveCopyRequest({ file, mode });
+  }, []);
+
   const listing = browseQuery.data;
   const folderCount = activeQuery ? 0 : (listing?.directories.length ?? 0);
   const fileCount = listing?.files.length ?? 0;
   const settling = query !== activeQuery;
+
+  const folderSuggestions = useMemo(() => {
+    const suggestions: string[] = [];
+    const seen = new Set<string>();
+    const add = (candidate: string) => {
+      if (!seen.has(candidate)) {
+        seen.add(candidate);
+        suggestions.push(candidate);
+      }
+    };
+    add(path);
+    if (path !== "/") {
+      add(parentPath(path));
+    }
+    const segments = pathSegments(path);
+    for (let index = 1; index <= segments.length; index += 1) {
+      add(`/${segments.slice(0, index).join("/")}`);
+    }
+    for (const folder of listing?.directories ?? []) {
+      add(folder.path);
+    }
+    add("/");
+    return suggestions;
+  }, [listing?.directories, path]);
 
   return (
     <div className="page library-page">
       <PageHeader
         eyebrow="Library · file shelf"
         title="Every file has a branch."
-        description="Browse current leaves by path, read them chunk by chunk, and let a new upload branch the same path instead of erasing it. Earlier editions stay in history."
+        description="Browse current leaves by path, drop files onto a branch, move or copy a leaf without rewriting its history, and read every edition chunk by chunk."
         meta={<span>read_path · 1-based chunks · soft delete keeps history</span>}
         actions={
           <div className="library-actions">
@@ -187,7 +401,7 @@ export function LibraryPage() {
               Current leaves
             </Badge>
             <Badge tone="ochre">Versions branch</Badge>
-            <Button variant="primary" size="sm" onClick={() => setUploadOpen(true)}>
+            <Button variant="primary" size="sm" onClick={() => openUpload()}>
               <Icon name="plus" size={15} />
               Add file
             </Button>
@@ -217,10 +431,12 @@ export function LibraryPage() {
             fileCount={fileCount}
             loading={browseQuery.isLoading}
             settling={settling}
+            view={view}
             onNavigate={openFolder}
             onQueryChange={handleQueryChange}
             onQuerySubmit={handleQuerySubmit}
             onClearQuery={clearQuery}
+            onViewChange={handleViewChange}
           />
 
           {browseQuery.error && isNotFoundError(browseQuery.error) ? (
@@ -243,14 +459,38 @@ export function LibraryPage() {
               error={browseQuery.error}
               loadingLabel="Reading the shelf"
             >
-              {listing ? (
+              {listing && view === "board" ? (
+                <LibraryBoard
+                  listing={listing}
+                  path={path}
+                  query={activeQuery}
+                  seeding={seedMutation.isPending}
+                  uploads={uploadTasks}
+                  onOpenFolder={openFolder}
+                  onOpenFile={selectFile}
+                  onUpload={() => openUpload()}
+                  onUploadHere={(folderPath) => openUpload(folderPath)}
+                  onNewFolder={() => setNewFolderOpen(true)}
+                  onClearSearch={clearQuery}
+                  onSeed={() => seedMutation.mutate()}
+                  onDismissUploads={() => setUploadTasks([])}
+                  onMoveFile={(file, targetFolder, mode) => {
+                    void handleDropMoveCopy(file, targetFolder, mode);
+                  }}
+                  onRequestMove={handleRequestMoveCopy}
+                  onFilesDropped={(files, targetFolder) => {
+                    void handleFilesDropped(files, targetFolder);
+                  }}
+                />
+              ) : null}
+              {listing && view === "list" ? (
                 <LibraryResults
                   listing={listing}
                   query={activeQuery}
                   seeding={seedMutation.isPending}
                   onOpenFolder={openFolder}
                   onOpenFile={selectFile}
-                  onUpload={() => setUploadOpen(true)}
+                  onUpload={() => openUpload()}
                   onClearSearch={clearQuery}
                   onSeed={() => seedMutation.mutate()}
                 />
@@ -262,9 +502,28 @@ export function LibraryPage() {
 
       {uploadOpen ? (
         <UploadDialog
-          currentPath={path}
+          currentPath={uploadTarget}
           onClose={() => setUploadOpen(false)}
           onUploaded={openCreatedFile}
+        />
+      ) : null}
+
+      {newFolderOpen ? (
+        <NewFolderDialog
+          currentPath={path}
+          onClose={() => setNewFolderOpen(false)}
+          onCreated={() => setNewFolderOpen(false)}
+        />
+      ) : null}
+
+      {moveCopyRequest ? (
+        <MoveCopyDialog
+          file={moveCopyRequest.file}
+          mode={moveCopyRequest.mode}
+          currentPath={path}
+          suggestions={folderSuggestions}
+          onClose={() => setMoveCopyRequest(null)}
+          onDone={handleOperationDone}
         />
       ) : null}
     </div>

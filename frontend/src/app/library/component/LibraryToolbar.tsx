@@ -1,5 +1,7 @@
 import { Button } from "../../component/Button";
+import { Icon } from "../../component/Icon";
 import { SearchField } from "../../component/SearchField";
+import type { LibraryView } from "./library-utils";
 import { LibraryBreadcrumbs } from "./LibraryBreadcrumbs";
 
 interface LibraryToolbarProps {
@@ -10,10 +12,12 @@ interface LibraryToolbarProps {
   readonly fileCount: number;
   readonly loading: boolean;
   readonly settling: boolean;
+  readonly view: LibraryView;
   readonly onNavigate: (path: string) => void;
   readonly onQueryChange: (value: string) => void;
   readonly onQuerySubmit: (value: string) => void;
   readonly onClearQuery: () => void;
+  readonly onViewChange: (view: LibraryView) => void;
 }
 
 type SearchStatusProps = Pick<
@@ -76,6 +80,8 @@ export function LibraryToolbar({
   onQueryChange,
   onQuerySubmit,
   onClearQuery,
+  view,
+  onViewChange,
 }: LibraryToolbarProps) {
   return (
     <div className="library-toolbar reveal reveal-2">
@@ -101,6 +107,26 @@ export function LibraryToolbar({
             settling={settling}
             onClearQuery={onClearQuery}
           />
+          <div className="library-view-toggle" role="group" aria-label="Library view">
+            <button
+              type="button"
+              className={view === "board" ? "library-view-toggle__btn is-active" : "library-view-toggle__btn"}
+              aria-pressed={view === "board"}
+              onClick={() => onViewChange("board")}
+            >
+              <Icon name="layers" size={13} />
+              Board
+            </button>
+            <button
+              type="button"
+              className={view === "list" ? "library-view-toggle__btn is-active" : "library-view-toggle__btn"}
+              aria-pressed={view === "list"}
+              onClick={() => onViewChange("list")}
+            >
+              <Icon name="menu" size={13} />
+              List
+            </button>
+          </div>
         </div>
       </div>
     </div>

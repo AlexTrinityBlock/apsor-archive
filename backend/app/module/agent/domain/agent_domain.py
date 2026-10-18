@@ -11,6 +11,7 @@ from typing import Any, Literal
 KIND_USER = "pi.user"
 KIND_ASSISTANT = "pi.assistant"
 KIND_TOOL_RESULT = "pi.tool-result"
+KIND_PAGE_CONTEXT = "pi.page-context"
 KIND_SYSTEM = "pi.system"
 KIND_RESET = "pi.reset"
 KIND_COMPACTION = "pi.compaction"
@@ -20,6 +21,7 @@ ENTRY_KINDS = (
     KIND_USER,
     KIND_ASSISTANT,
     KIND_TOOL_RESULT,
+    KIND_PAGE_CONTEXT,
     KIND_SYSTEM,
     KIND_RESET,
     KIND_COMPACTION,
@@ -30,8 +32,11 @@ MODEL_REQUIRED_KINDS = (
     KIND_USER,
     KIND_ASSISTANT,
     KIND_TOOL_RESULT,
+    KIND_PAGE_CONTEXT,
     KIND_SYSTEM,
 )
+
+MAX_PAGE_CONTEXT_CHARS = 6000
 
 EDIT_ACTION_OMIT = "omit"
 EDIT_ACTION_REPLACE = "replace"

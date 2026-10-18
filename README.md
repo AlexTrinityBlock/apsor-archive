@@ -33,12 +33,23 @@ path, sample a season, press a new memory, or trace a superseded one. Every
 result carries its source, chunk number, and time.
 
 > Status: v0.1.0 — file/memory/media archive, owner login, persistent
-> Pi-shaped agent, SSE chat, and dedicated PDF/DOCX/image/text viewers.
+> Pi-shaped agent, SSE chat, dedicated PDF/DOCX/image/text viewers, a folder
+> workspace, and a three-state agent dock.
 
 ## Highlights
 
 - **Files have lineage.** A path is a branch, not an overwrite. Re-uploading a
   file grows a new leaf; the previous edition remains addressable as history.
+- **The library is a folder workspace.** Folders are first-class: create them in
+  place, drop files onto a folder card to upload, drag a file card onto another
+  folder to move it, and use an explicit Copy action when you want an
+  independent second record.
+- **The agent stays within reach.** A global dock collapses to a seal, opens as
+  a compact chat panel, or expands into a split desk where the current tool call
+  is inspected beside the conversation.
+- **Page context respects the cache.** A plain-text snapshot of the current page
+  is appended only when the page key changes, in the same commit as the user
+  message, so earlier entries and the KV-cache prefix stay untouched.
 - **Memories are linear and traceable.** A new belief can supersede an old one.
   The old memory leaves the search surface but stays readable through its chain.
 - **Search is hybrid.** BM25 over CJK bigrams and Latin tokens runs beside vector
@@ -209,17 +220,60 @@ services directly through its own registry.
 `present_resource` returns a viewer URL such as `/viewer/file/{id}?chunk={n}`,
 `/viewer/media/{id}`, or `/viewer/memory/{id}` and never fetches the resource.
 
+Persisted `pi.tool-result` entries also carry UI-only `data`: bounded excerpts,
+dimensions, tags, and viewer URLs for the expanded inspector. This payload never
+enters the provider message; the model still sees only the XML tool result.
+
 `save_memory` is a write action. The tool requires `user_confirmed=true` and the
 system prompt instructs the model to save only after an explicit user request
 and confirmed wording. The model supplies that flag; there is no separate
 approval dialog in the chat UI yet, so this is prompt-enforced rather than a
-human-in-the-loop gate.
+human-in-the-loop gate. The expanded inspector shows the resulting receipt; it
+does not approve the write.
 
 Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 /api/v1/files/text`, `DELETE /api/v1/files/{file_id}`, `GET /api/v1/paths`,
 `GET /api/v1/tree`, `GET /api/v1/memories`, `POST /api/v1/memories`,
 `POST /api/v1/summaries`, `GET /api/v1/stats`, `POST /api/v1/demo/seed`,
 `GET /api/v1/health`, `GET /api/v1/ai/status`, and `POST /api/v1/ask`.
+
+### Folder workspace
+
+`/library` is a folder-first workspace. A breadcrumb and folder rail describe
+where you are; the main area shows folder cards and file cards for the current
+path. The previous table remains available as a compact list view for dense
+browsing, and it is the fallback layout on narrow screens.
+
+- **New folder** creates the requested folder and any missing ancestors. The
+  operation is idempotent: repeating it returns the same folder with `201`.
+- **Drag upload** accepts files dropped from the desktop onto a folder card or
+  the current folder surface. The upload uses the same intake path, extension
+  allowlist, and server limits as the upload dialog: 10 MB per uploaded file
+  and `.md`, `.markdown`, `.txt`, `.csv`, `.json`, `.log`, `.pdf`, `.docx`,
+  `.jpg`, `.jpeg`, `.png`, or `.webp`. The dialog also supports a 2 MB
+  plain-text creation. Dropped files are never opened or executed.
+- **Move versus copy** is explicit. A normal drag onto a folder moves the file;
+  holding Alt/Option while dropping copies it. Touch and keyboard users get
+  separate **Move** and **Copy** actions instead of drag.
+- A **move** keeps the same file id, version, chunks, embeddings, and original
+  bytes. Only `raw_file_path`, the file name, and the tree node location change,
+  so existing search, timeline, citation, and viewer links remain valid.
+- A **copy** creates a new current file id at version 1, clones the stored
+  original when one exists, rebuilds chunks and embeddings, and copies the AI
+  summary, tags, document type, and extraction method. Both files remain
+  current and searchable.
+- Moves and copies must keep the original extension. A target occupied by
+  another current node returns `409 tree_path_conflict`; an invalid path or a
+  changed extension returns `422 invalid_path`.
+
+| Method | Path | Body | Purpose |
+|---|---|---|---|
+| `POST` | `/api/v1/folders` | `{path}` | Create a folder and missing ancestors; idempotent `201` |
+| `POST` | `/api/v1/files/{file_id}/move` | `{path}` | Move one current file in place; `200` |
+| `POST` | `/api/v1/files/{file_id}/copy` | `{path}` | Copy one current file to a new record; `201` |
+
+All three endpoints require the owner session and bump the archive cache version
+when they change the tree or file index.
 
 ### Agent conversations
 
@@ -228,8 +282,9 @@ immutable entry log instead of mutating a chat array:
 
 - `agent_conversation` — transcript scope, provider/model identity, and metadata.
 - `agent_entry` — immutable `pi.user`, `pi.assistant`, `pi.tool-result`,
-  `pi.system`, `pi.reset`, `pi.compaction`, and `ui.notice` entries. `model` is
-  exactly the provider payload; `data` is UI/diagnostics only.
+  `pi.page-context`, `pi.system`, `pi.reset`, `pi.compaction`, and `ui.notice`
+  entries. `model` is exactly the provider payload; `data` is UI/diagnostics
+  only.
 - `agent_run` — durable state for one submission (`request_id`, status, abort,
   last entry, safe error). `agent_commit_seq` groups entries written in one
   transaction.
@@ -254,21 +309,63 @@ failure never becomes an HTTP 500.
 | `GET` | `/api/v1/agent/tools` | Current tool catalog plus prompt/tools versions |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` accepts
-`{content, request_id?}` and `.../retry` accepts
+`{content, request_id?, page_context?}` and `.../retry` accepts
 `{request_id?}`. Both stream `text/event-stream` by default. The event names are
 `run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
-`tool_end`, `run_end`, and `error`. `message_start` has `entry_id=null` because
-the assistant entry is persisted only at `message_end`; deltas are transport-only.
-Send `Accept: application/json` for the completed turn instead. SSE responses set
-`Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, and
-Starlette's GZip middleware excludes `text/event-stream`.
+`tool_end`, `run_end`, and `error`. `run_start` reports
+`page_context_entry_id` (or `null`) and `page_context_attached` so the client can
+mark whether a new snapshot was written. `tool_end` carries the persisted
+tool-result `data` payload plus `duration_ms` and `error_code`, so the inspector
+can render previews before the transcript refetch settles. `message_start` has
+`entry_id=null` because the assistant entry is persisted only at `message_end`;
+deltas are transport-only. Send `Accept: application/json` for the completed turn
+instead. SSE responses set `Cache-Control: no-cache, no-transform` and
+`X-Accel-Buffering: no`, and Starlette's GZip middleware excludes
+`text/event-stream`.
 
 The agent allows one active run per conversation, at most 8 model steps, 6 tool
 calls per user turn, 24k tokens, and 12k result characters per tool (24k total).
 A failed or cancelled run can be retried without duplicating the user entry. The
 backend retry endpoint is tested; the chat UI does not yet render a Retry action.
 Conversation detail returns the first entry page, and the UI loads later pages
-with **Load more entries**.
+with **Load more entries**. It also returns `last_page_context_key`, read from the
+entry log rather than from browser storage, so a reloaded conversation still
+knows which page snapshot was attached last.
+
+#### Page context and the KV cache
+
+The client may send one `page_context` object with a message:
+
+| Field | Type | Rule |
+|---|---|---|
+| `key` | string | Stable page identity; 1–512 characters |
+| `path` | string | Human-readable route plus meaningful query parameters; 1–1024 characters |
+| `title` | string or null | Optional page title; at most 300 characters |
+| `text` | string | Plain text visible on the page; 1–12,000 characters before server clipping |
+
+The server normalizes line endings and whitespace, collapses repeated blank
+lines, and caps the stored snapshot at 6,000 characters. The entry stores
+`page_key`, `path`, an optional `title`, `text_chars`, and `truncated` in `data`,
+and sends the model a user-role message inside a `<page_context>` XML envelope.
+The system prompt marks that envelope as data, never as an instruction.
+
+Page context is append-only and cache-preserving:
+
+- `begin_message` compares the incoming key with the newest existing
+  `pi.page-context` entry in the same conversation.
+- Only a different key appends a new snapshot. Asking again from the same page
+  does not repeat it.
+- The snapshot entry and the user entry share one `commit_seq`; the snapshot is
+  ordered immediately before the user entry.
+- Earlier entries are never rewritten, so the stable system/tool prefix and the
+  previous conversation prefix remain a valid KV-cache lineage.
+
+The composer shows an expandable **Current page context** preview, and the
+transcript renders the snapshot as a compact context card rather than as a user
+question. Capture runs only on AppShell pages from `#main-content`; navigation,
+controls, hidden nodes, and the agent's own surfaces are excluded. `/chat` is
+skipped because the desk is the conversation itself. Viewer routes live outside
+`AppShell` and do not produce a snapshot.
 
 Tests inject a deterministic `FakeChatGenerator` from
 `app/module/agent/test/fake_chat_generator.py` by setting
@@ -294,6 +391,60 @@ Chat appears in the **Studio** navigation and the command palette. On mobile the
 bottom tabs remain Overview, Search, Timeline, Library, and More; Chat and the
 thread rail are reached from the navigation drawer.
 
+### Agent dock
+
+The global agent dock lives inside `AppShell` but outside `<main>`, so it is
+available on every archive page except `/chat` without becoming part of the
+captured page text. `/chat` keeps the full-page desk as the single composer for
+that route. The dock has three states:
+
+- **Collapsed** — a floating seal in the lower-right corner.
+- **Panel** — a compact chat panel with recent conversations, the live stream,
+  and the composer.
+- **Expanded** — a full-screen split desk. The left column holds the
+  conversation, status bubbles, and composer; the right column is an inspector
+  that follows the current tool call.
+
+The selected state is stored locally and survives a reload. **Expand** from the
+panel opens the same conversation in the split desk instead of starting a new
+thread; `/chat` remains the full-page reading room. On mobile the collapsed
+state opens a full-height sheet, and the layout must not introduce horizontal
+overflow.
+
+Status bubbles describe observable work, not hidden chain-of-thought:
+orienting, searching, reading, comparing, composing, saving, sealed, and error.
+Each row can show the step, tool name, elapsed time, status, and a short result
+summary.
+
+The expanded inspector keeps the resource the user is reading on screen. It
+follows the newest tool call until the user pins a panel, offers **Follow
+current** to resume following, and retains the last valid resource when a later
+tool has no resource. Inspector panels reuse the same safe renderers and viewer
+queries as the standalone `/viewer/...` routes rather than adding a second
+rendering path.
+
+| Tool | Inspector idea |
+|---|---|
+| `search_knowledge` | Result constellation across files, memories, and summaries; excerpts open in place |
+| `read_file` | Manuscript chunk window with file id, chunk number, and citation |
+| `read_timeline` | Time band with density, sampled events, and skip counts |
+| `read_path` | Folder branch map that opens a folder or file directly |
+| `read_memory` | Pressed-leaf memory chain with supersession neighbours |
+| `save_memory` | Wax-seal receipt with status, memory id, and superseded ids |
+| `search_media` | Contact sheet of thumbnails with an in-panel lightbox |
+| `get_media` | Specimen sheet with image, caption, OCR text, and tags |
+| `present_resource` | Display stand that embeds the file, media, or memory viewer |
+
+Every panel provides loading, empty, error, and success states. Tool result
+`data` carries the bounded, UI-only excerpts and viewer URLs that make these
+panels possible; provider-facing tool content is unchanged.
+
+The dock, panel/expanded surfaces, inspector panels, and folder board are
+implemented in the current release, and the committed `frontend/dist` is the
+rebuilt production client. Rebuild and commit `frontend/dist` after further
+frontend changes, because the Docker image serves the committed client and does
+not run a frontend build.
+
 ### Resource viewer
 
 `/viewer/file/:fileId`, `/viewer/media/:mediaId`, and
@@ -311,7 +462,8 @@ their top bar and safe-area layout so a resource can open in a new tab.
 `GET /api/v1/files/{file_id}/content` serves originals inline with `nosniff`, a
 sandboxing CSP, ETag/Last-Modified, and single-range HTTP Range support
 (`206`/`416`; `If-None-Match` returns `304`). `/download` stays an attachment.
-Text-only records have `has_original=false` and fall back to indexed chunks.
+Text-only records have `has_original=false`; the sheet skips the `/content`
+probe entirely and reads indexed chunks.
 
 PDF.js CMaps and standard fonts are copied from the pinned `pdfjs-dist` package
 into `frontend/public/pdfjs/` by `bun run pdf-assets`, which `dev` and `build`
@@ -386,6 +538,9 @@ make api-check
 
 It re-exports the schema, regenerates the client, and fails on any diff. This
 keeps the convenience of a committed client without letting it drift silently.
+The committed client includes the folder, move, and copy operations and the
+page-context request, detail, and entry-kind contracts; the library board calls
+the generated hooks directly.
 
 ### Load a real corpus
 
@@ -508,7 +663,8 @@ memory_summary ───┘
   text, and the n-gram index used for text → image search.
 - `agent_conversation` / `agent_entry` / `agent_run`: the persistent agent's
   transcript scope, immutable entry log, and per-submission run state.
-  `agent_commit_seq` groups entries written in one transaction.
+  `agent_commit_seq` groups entries written in one transaction. Page snapshots
+  are `pi.page-context` entries in the same log, not a separate table.
 
 The complete local design notes live under `docs/plan/` (gitignored). The
 committed code, comments, UI copy, and documentation are English.
@@ -535,7 +691,16 @@ bun audit
 The integration suite uses one real PostgreSQL test database
 (`dendromatrix_test`) on the same instance, runs sequentially, and resets every
 table between tests. There are exactly ten tests; each one exercises the real
-HTTP surface and database.
+HTTP surface and database. Page-context deduplication and ordering extend the
+existing agent test, and folder creation plus move/copy coverage extend the
+existing file-library test. Neither adds an eleventh test function.
+
+Current validation: `ruff`, `mypy`, `bandit`, `pip-audit`, and the ten
+sequential tests pass. Migration `c4f1a9e2b7d3` upgrades and downgrades on the
+real development database. Frontend typecheck, lint, build, and audit pass.
+Playwright passed 34 deterministic checks plus a 6-check focused re-check,
+including the `save_memory` receipt panel. A clean Docker Compose smoke passed
+once.
 
 ## Project layout
 
@@ -554,16 +719,18 @@ backend/
       schema/                   Pydantic contracts
       exception/                stable error codes
     module/media/               standalone image archive and visual retrieval
-    module/agent/               persistent transcript, context builder, tools, SSE
+    module/agent/               persistent transcript, page context, tools, SSE
   alembic/                      migrations
   tests/                        ten integration tests
 frontend/
   src/app/
     component/                  shared archive UI
     generated-apis-types/       committed Orval client
+    agent/                      global dock, page capture, inspector panels
     chat/                       persistent reading room
     viewer/                     file, media, and memory viewers
-    home/ search/ timeline/ library/ tree/ media/ memory/ ask/ ...
+    library/                    folder workspace board and list
+    home/ search/ timeline/ tree/ media/ memory/ ask/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting

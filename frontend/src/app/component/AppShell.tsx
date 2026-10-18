@@ -2,6 +2,8 @@ import { Suspense, useCallback, useEffect, useState, type CSSProperties } from "
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useGetHealth, useListMemories } from "../generated-apis-types";
+import { AgentDock } from "../agent/AgentDock";
+import { isChatPath } from "../agent/page-context";
 import { useAuth } from "../auth/AuthProvider";
 import { useCommandK } from "../hook/useCommandK";
 import { useScrollLock } from "../hook/useScrollLock";
@@ -312,6 +314,8 @@ export function AppShell() {
           </Suspense>
         </div>
       </main>
+
+      {!isChatPath(location.pathname) ? <AgentDock /> : null}
 
       <nav className="mobile-tabs" aria-label="Primary mobile">
         {MOBILE_NAV.map((item) => (
