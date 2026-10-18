@@ -1,0 +1,53 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+.secrets/
+.tavily/
+private/
+private-docs/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.bandit-cache/
+htmlcov/
+.coverage
+coverage.xml
+*.log
+
+# Data
+backend/data/
+data/
+*.db
+*.sqlite3
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/.vite/
+*.tsbuildinfo
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Local-only planning and agent material (never committed)
+docs/plan/
+.agents/
+
+# Cloudflare tunnel token
+secrets/*
+!secrets/README.md
+
+# local root-level OpenAPI export
+/openapi.json
+
+# Playwright artifacts
+frontend/test-results/
+frontend/playwright-report/

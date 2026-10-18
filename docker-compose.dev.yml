@@ -1,0 +1,49 @@
+name: dendromatrix-dev
+
+# Local development dependencies only. Run the API and Vite on the host:
+#   docker compose -f docker-compose.dev.yml up -d --wait
+#   cd backend && uv run dendromatrix --reload
+#   cd frontend && bun run dev
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: dendro
+      POSTGRES_PASSWORD: dendro
+      POSTGRES_DB: dendromatrix
+    ports:
+      - "127.0.0.1:55432:5432"
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=50
+    volumes:
+      - dendro-dev-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dendro -d dendromatrix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  cache:
+    image: valkey/valkey:8-alpine
+    command:
+      - valkey-server
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "127.0.0.1:56379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  dendro-dev-postgres:
