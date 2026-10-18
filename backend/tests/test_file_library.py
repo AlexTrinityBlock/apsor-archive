@@ -64,3 +64,55 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     )
     assert int(recreated["id"]) > file_id
     assert recreated["version"] == 1
+
+    # Text-only records have no stored original: the inline endpoint keeps the
+    # existing domain error while the viewer falls back to indexed chunks.
+    unavailable = client.get(f"/api/v1/files/{file_id}/content")
+    assert unavailable.status_code == 404
+    assert unavailable.json()["error"] == "file_content_unavailable"
+
+    payload = b"Engine notes: intake, compression, ignition, exhaust.\n"
+    uploaded = client.post(
+        "/api/v1/files",
+        data={"path": "/history/industry/engine.txt"},
+        files={"file": ("engine.txt", payload, "text/plain")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    uploaded_id = int(uploaded.json()["id"])
+
+    inline = client.get(f"/api/v1/files/{uploaded_id}/content")
+    assert inline.status_code == 200
+    assert inline.content == payload
+    assert inline.headers["content-type"].startswith("text/plain")
+    assert inline.headers["content-disposition"].startswith("inline")
+    assert inline.headers["accept-ranges"] == "bytes"
+    assert inline.headers["x-content-type-options"] == "nosniff"
+    assert "content-security-policy" in inline.headers
+    assert inline.headers["etag"].endswith('"')
+
+    partial = client.get(
+        f"/api/v1/files/{uploaded_id}/content",
+        headers={"Range": "bytes=0-5"},
+    )
+    assert partial.status_code == 206
+    assert partial.content == payload[:6]
+    assert partial.headers["content-range"] == f"bytes 0-5/{len(payload)}"
+
+    open_ended = client.get(
+        f"/api/v1/files/{uploaded_id}/content",
+        headers={"Range": "bytes=-8"},
+    )
+    assert open_ended.status_code == 206
+    assert open_ended.content == payload[-8:]
+
+    unsatisfiable = client.get(
+        f"/api/v1/files/{uploaded_id}/content",
+        headers={"Range": "bytes=9999-"},
+    )
+    assert unsatisfiable.status_code == 416
+    assert unsatisfiable.headers["content-range"] == f"bytes */{len(payload)}"
+
+    attachment = client.get(f"/api/v1/files/{uploaded_id}/download")
+    assert attachment.status_code == 200
+    assert attachment.content == payload
+    assert attachment.headers["content-disposition"].startswith("attachment")

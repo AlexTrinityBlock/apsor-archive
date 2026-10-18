@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from tests.helpers import create_memory, create_text
 
 
-def test_hybrid_search_returns_sources_and_dedup(client: TestClient) -> None:
+def test_hybrid_search_and_union_query(client: TestClient) -> None:
     create_text(
         client,
         "/research/tools.md",
@@ -52,8 +52,6 @@ def test_hybrid_search_returns_sources_and_dedup(client: TestClient) -> None:
     assert "<file_result" in tool.text
     assert "<memory_result" in tool.text
 
-
-def test_union_query_boosts_chunks_with_both_terms(client: TestClient) -> None:
     both = create_text(
         client,
         "/research/both.md",
@@ -67,12 +65,12 @@ def test_union_query_boosts_chunks_with_both_terms(client: TestClient) -> None:
         "2026-09-04T09:00:00Z",
     )
 
-    search = client.get(
+    union = client.get(
         "/api/v1/search",
         params={"query": "automobile ford", "result_number": 2},
     )
-    assert search.status_code == 200
-    file_results = search.json()["file_results"]
+    assert union.status_code == 200
+    file_results = union.json()["file_results"]
     file_ids = [item["file_id"] for item in file_results]
     assert file_ids[0] == both["id"]
     assert only["id"] in file_ids

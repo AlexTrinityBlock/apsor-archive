@@ -9,8 +9,13 @@ export type IconName =
   | "tree"
   | "memory"
   | "ask"
+  | "chat"
   | "method"
   | "settings"
+  | "pencil"
+  | "archive"
+  | "trash"
+  | "stop"
   | "command"
   | "sun"
   | "moon"
@@ -92,12 +97,38 @@ const ICONS: Record<IconName, ReactNode> = {
       <path d="M9 10.5h6M12 7.5v6" />
     </>
   ),
+  chat: (
+    <>
+      <path d="M4 4.5h10v11H8.2L4 19z" />
+      <path d="M8 8.5h4M8 11.5h2.6" />
+      <path d="M16.5 7.5H20v8.5h-1.8L17 18.5V16" />
+    </>
+  ),
   method: (
     <>
       <path d="M4.5 5.5c2.7-1.6 5.2-1.6 7.5 0v13c-2.3-1.6-4.8-1.6-7.5 0z" />
       <path d="M19.5 5.5c-2.7-1.6-5.2-1.6-7.5 0v13c2.3-1.6 4.8-1.6 7.5 0z" />
     </>
   ),
+  pencil: (
+    <>
+      <path d="m4 20 4.2-1 10.6-10.6a2 2 0 0 0-2.8-2.8L5.4 16.2z" />
+      <path d="m14.8 7.4 2.8 2.8" />
+    </>
+  ),
+  archive: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="4" rx="0.8" />
+      <path d="M5 8.5V20h14V8.5M9.5 12h5" />
+    </>
+  ),
+  trash: (
+    <>
+      <path d="M4.5 6.5h15M9 6.5V4h6v2.5M6.5 6.5 7.5 20h9l1-13.5" />
+      <path d="M10 10v6M14 10v6" />
+    </>
+  ),
+  stop: <rect x="6" y="6" width="12" height="12" rx="1.5" />,
   settings: (
     <>
       <path d="M4 7h7M15 7h5M4 17h5M13 17h7" />

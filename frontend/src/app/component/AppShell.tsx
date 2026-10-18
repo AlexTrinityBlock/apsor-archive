@@ -45,9 +45,10 @@ const NAV_SECTIONS: readonly NavSection[] = [
   {
     label: "Studio",
     items: [
-      { to: "/ask", label: "Ask", index: "08", icon: "ask" },
-      { to: "/method", label: "Method", index: "09", icon: "method" },
-      { to: "/settings", label: "Settings", index: "10", icon: "settings" },
+      { to: "/chat", label: "Chat", index: "08", icon: "chat" },
+      { to: "/ask", label: "Quick ask", index: "09", icon: "ask" },
+      { to: "/method", label: "Method", index: "10", icon: "method" },
+      { to: "/settings", label: "Settings", index: "11", icon: "settings" },
     ],
   },
 ];
