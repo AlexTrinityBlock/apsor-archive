@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.16.0",
+    "argon2-cffi>=25.1.0",
     "cryptography>=50.0.2",
     "fastapi>=0.121.0",
     "httpx>=0.28.1",
@@ -57,6 +58,9 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 "app/module/knowledge/router/**" = ["B008"]
 "app/module/media/dependencies.py" = ["B008"]
 "app/module/media/router/**" = ["B008"]
+"app/module/auth/dependencies.py" = ["B008"]
+"app/module/auth/router/**" = ["B008"]
+"app/dependency/**" = ["B008"]
 "alembic/versions/**" = ["E501"]
 
 [tool.mypy]

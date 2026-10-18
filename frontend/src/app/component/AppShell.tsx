@@ -2,6 +2,7 @@ import { Suspense, useCallback, useEffect, useState, type CSSProperties } from "
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useGetHealth, useListMemories } from "../generated-apis-types";
+import { useAuth } from "../auth/AuthProvider";
 import { useCommandK } from "../hook/useCommandK";
 import { useScrollLock } from "../hook/useScrollLock";
 import { CommandPalette } from "./CommandPalette";
@@ -91,6 +92,7 @@ export function AppShell() {
   const latestMemories = useListMemories({ limit: 1 });
   const latestMemoryId = latestMemories.data?.resources[0]?.memory_id;
   const memoryHref = latestMemoryId ? `/memory/${latestMemoryId}` : "/memory/new";
+  const { user, logout, isSubmitting } = useAuth();
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
@@ -259,6 +261,28 @@ export function AppShell() {
           </button>
 
           <ThemeToggle />
+
+          {user ? (
+            <div className="account-chip">
+              <span className="account-chip__mark" aria-hidden="true">
+                {user.username.slice(0, 2).toUpperCase()}
+              </span>
+              <span className="account-chip__copy">
+                <span>Signed in</span>
+                <strong>{user.username}</strong>
+              </span>
+              <button
+                type="button"
+                className="account-chip__action"
+                onClick={() => void logout()}
+                disabled={isSubmitting}
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <Icon name="logout" size={16} />
+              </button>
+            </div>
+          ) : null}
 
           <div className="system-status" aria-label="System status">
             <span

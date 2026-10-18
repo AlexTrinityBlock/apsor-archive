@@ -12,7 +12,47 @@ BLUE_PNG = base64.b64decode(
 )
 
 
-def test_health_gzip_and_cache_invalidation(client: TestClient) -> None:
+def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> None:
+    client = anonymous_client
+
+    status = client.get("/api/v1/auth/status")
+    assert status.status_code == 200
+    assert status.json()["requires_setup"] is True
+    assert status.json()["authenticated"] is False
+    assert client.get("/api/v1/stats").status_code == 401
+    assert client.get("/api/v1/health").status_code == 200
+
+    password = "correct-horse-battery"
+    setup = client.post(
+        "/api/v1/auth/setup",
+        json={
+            "username": "owner",
+            "password": password,
+            "confirm_password": password,
+        },
+    )
+    assert setup.status_code == 201, setup.text
+    assert setup.json()["user"]["username"] == "owner"
+    assert client.get("/api/v1/auth/status").json()["authenticated"] is True
+
+    logout = client.post("/api/v1/auth/logout")
+    assert logout.status_code == 204
+    assert client.get("/api/v1/stats").status_code == 401
+
+    wrong = client.post(
+        "/api/v1/auth/login",
+        json={"username": "owner", "password": "wrong-password"},
+    )
+    assert wrong.status_code == 401
+    assert wrong.json()["error"] == "invalid_credentials"
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"username": "owner", "password": password},
+    )
+    assert login.status_code == 200
+    assert client.get("/api/v1/stats").status_code == 200
+
     health = client.get("/api/v1/health")
     assert health.status_code == 200
     assert health.json()["database"] == "ok"

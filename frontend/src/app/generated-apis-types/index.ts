@@ -1,4 +1,5 @@
 export * from './ai/ai';
+export * from './auth/auth';
 export * from './files/files';
 export * from './media/media';
 export * from './memories/memories';
