@@ -12,6 +12,7 @@ AgentEntryKind = Literal[
     "pi.user",
     "pi.assistant",
     "pi.tool-result",
+    "pi.page-context",
     "pi.system",
     "pi.reset",
     "pi.compaction",
@@ -39,6 +40,17 @@ class AgentConversationPatchSchema(BaseModel):
     status: AgentConversationStatus | None = None
 
 
+class AgentPageContextSchema(BaseModel):
+    """A plain-text snapshot of the page the user is currently viewing."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1, max_length=512)
+    path: str = Field(min_length=1, max_length=1024)
+    title: str | None = Field(default=None, max_length=300)
+    text: str = Field(min_length=1, max_length=12_000)
+
+
 class AgentMessageCreateSchema(BaseModel):
     """Append one user entry and start a run."""
 
@@ -46,6 +58,7 @@ class AgentMessageCreateSchema(BaseModel):
 
     content: str = Field(min_length=1, max_length=32_000)
     request_id: str | None = Field(default=None, min_length=1, max_length=128)
+    page_context: AgentPageContextSchema | None = None
 
 
 class AgentRetrySchema(BaseModel):
@@ -112,6 +125,7 @@ class AgentConversationDetailSchema(AgentConversationSchema):
     entries_total: int
     entries_next_after_id: int | None
     entries_has_more: bool
+    last_page_context_key: str | None = None
 
 
 class AgentRunSchema(BaseModel):

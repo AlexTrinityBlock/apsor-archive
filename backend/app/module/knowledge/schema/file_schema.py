@@ -41,6 +41,34 @@ class FileTextCreateSchema(BaseModel):
     occurred_at: datetime | None = None
 
 
+class FolderCreateSchema(BaseModel):
+    """Create one folder and any missing ancestors.
+
+    Empty values reach the service so they become the stable ``invalid_path``
+    domain error instead of a generic schema-validation error.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(max_length=1024)
+
+
+class FileMoveSchema(BaseModel):
+    """Move one current file to another logical path."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(max_length=1024)
+
+
+class FileCopySchema(BaseModel):
+    """Copy one current file to a new logical path."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(max_length=1024)
+
+
 class ChunkSchema(BaseModel):
     """One chunk in a read window."""
 

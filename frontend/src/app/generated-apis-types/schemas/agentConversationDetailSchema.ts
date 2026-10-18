@@ -21,6 +21,7 @@ export interface AgentConversationDetailSchema {
   fork_at_entry_id: number | null;
   id: number;
   last_entry_at: string | null;
+  last_page_context_key?: string | null;
   model: string;
   parent_conversation_id: number | null;
   provider: string;

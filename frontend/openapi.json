@@ -135,6 +135,17 @@
             ],
             "title": "Last Entry At"
           },
+          "last_page_context_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Page Context Key"
+          },
           "model": {
             "title": "Model",
             "type": "string"
@@ -476,6 +487,7 @@
               "pi.user",
               "pi.assistant",
               "pi.tool-result",
+              "pi.page-context",
               "pi.system",
               "pi.reset",
               "pi.compaction",
@@ -525,6 +537,16 @@
             "title": "Content",
             "type": "string"
           },
+          "page_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentPageContextSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "request_id": {
             "anyOf": [
               {
@@ -543,6 +565,49 @@
           "content"
         ],
         "title": "AgentMessageCreateSchema",
+        "type": "object"
+      },
+      "AgentPageContextSchema": {
+        "additionalProperties": false,
+        "description": "A plain-text snapshot of the page the user is currently viewing.",
+        "properties": {
+          "key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 12000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "key",
+          "path",
+          "text"
+        ],
+        "title": "AgentPageContextSchema",
         "type": "object"
       },
       "AgentRetrySchema": {
@@ -1586,6 +1651,38 @@
         "title": "FileChunksSchema",
         "type": "object"
       },
+      "FileCopySchema": {
+        "additionalProperties": false,
+        "description": "Copy one current file to a new logical path.",
+        "properties": {
+          "path": {
+            "maxLength": 1024,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "FileCopySchema",
+        "type": "object"
+      },
+      "FileMoveSchema": {
+        "additionalProperties": false,
+        "description": "Move one current file to another logical path.",
+        "properties": {
+          "path": {
+            "maxLength": 1024,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "FileMoveSchema",
+        "type": "object"
+      },
       "FileSchema": {
         "description": "File metadata returned by the API.",
         "properties": {
@@ -1811,6 +1908,22 @@
           "content"
         ],
         "title": "FileTextCreateSchema",
+        "type": "object"
+      },
+      "FolderCreateSchema": {
+        "additionalProperties": false,
+        "description": "Create one folder and any missing ancestors.\n\nEmpty values reach the service so they become the stable ``invalid_path``\ndomain error instead of a generic schema-validation error.",
+        "properties": {
+          "path": {
+            "maxLength": 1024,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "FolderCreateSchema",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -4459,6 +4572,59 @@
         ]
       }
     },
+    "/api/v1/files/{file_id}/copy": {
+      "post": {
+        "description": "Copy a current file into a new record and index fresh chunks.",
+        "operationId": "copyFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileCopySchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Copy File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/api/v1/files/{file_id}/download": {
       "get": {
         "operationId": "downloadFile",
@@ -4496,6 +4662,101 @@
         "summary": "Download File",
         "tags": [
           "files"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/move": {
+      "post": {
+        "description": "Move a current file to another logical path without re-indexing.",
+        "operationId": "moveFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileMoveSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Move File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/folders": {
+      "post": {
+        "description": "Create a folder and its missing ancestors; return 201 on every success.\n\nReturning the existing folder with the same 201 keeps the API idempotent\nfor clients without a second status branch.",
+        "operationId": "createFolder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectorySchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Folder",
+        "tags": [
+          "folders"
         ]
       }
     },

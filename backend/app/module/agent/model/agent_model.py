@@ -89,13 +89,14 @@ class AgentEntryModel(Base):
     __tablename__ = "agent_entry"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('pi.user', 'pi.assistant', 'pi.tool-result', 'pi.system', "
-            "'pi.reset', 'pi.compaction', 'ui.notice')",
+            "kind IN ('pi.user', 'pi.assistant', 'pi.tool-result', "
+            "'pi.page-context', 'pi.system', 'pi.reset', 'pi.compaction', "
+            "'ui.notice')",
             name="kind_valid",
         ),
         CheckConstraint(
-            "kind NOT IN ('pi.user', 'pi.assistant', 'pi.tool-result', 'pi.system') "
-            "OR model IS NOT NULL",
+            "kind NOT IN ('pi.user', 'pi.assistant', 'pi.tool-result', "
+            "'pi.page-context', 'pi.system') OR model IS NOT NULL",
             name="model_required",
         ),
         CheckConstraint(

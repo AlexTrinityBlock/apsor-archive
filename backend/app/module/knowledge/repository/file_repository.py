@@ -26,6 +26,19 @@ class FileRepository:
         file.updated_at = utcnow()
         await self.session.flush()
 
+    async def update_location(
+        self,
+        file: FileModel,
+        *,
+        path: str,
+        file_name: str,
+    ) -> None:
+        """Move one current file record in place without starting a new version."""
+        file.raw_file_path = path
+        file.file_name = file_name
+        file.updated_at = utcnow()
+        await self.session.flush()
+
     async def get_by_id(self, file_id: int) -> FileModel | None:
         return await self.session.get(FileModel, file_id)
 

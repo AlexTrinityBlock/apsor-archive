@@ -25,6 +25,8 @@ from app.module.knowledge.dependencies import (
 )
 from app.module.knowledge.schema.file_schema import (
     FileChunksSchema,
+    FileCopySchema,
+    FileMoveSchema,
     FileSchema,
     FileTextCreateSchema,
 )
@@ -145,6 +147,36 @@ async def create_text_file(
         content=payload.content,
         occurred_at=payload.occurred_at,
     )
+
+
+@router.post(
+    "/{file_id}/move",
+    response_model=FileSchema,
+    status_code=status.HTTP_200_OK,
+    operation_id="moveFile",
+)
+async def move_file(
+    file_id: int,
+    payload: FileMoveSchema,
+    file_service: FileService = Depends(get_file_service),
+) -> FileSchema:
+    """Move a current file to another logical path without re-indexing."""
+    return await file_service.move_file(file_id, path=payload.path)
+
+
+@router.post(
+    "/{file_id}/copy",
+    response_model=FileSchema,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="copyFile",
+)
+async def copy_file(
+    file_id: int,
+    payload: FileCopySchema,
+    file_service: FileService = Depends(get_file_service),
+) -> FileSchema:
+    """Copy a current file into a new record and index fresh chunks."""
+    return await file_service.copy_file(file_id, path=payload.path)
 
 
 @router.get("/{file_id}", response_model=FileSchema, operation_id="getFile")

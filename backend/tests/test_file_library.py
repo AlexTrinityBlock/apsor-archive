@@ -116,3 +116,154 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert attachment.status_code == 200
     assert attachment.content == payload
     assert attachment.headers["content-disposition"].startswith("attachment")
+
+    # Folder creation creates missing ancestors and is idempotent.
+    folder = client.post(
+        "/api/v1/folders",
+        json={"path": "/history/workshop/engines"},
+    )
+    assert folder.status_code == 201, folder.text
+    assert folder.json() == {
+        "path": "/history/workshop/engines",
+        "name": "engines",
+        "depth": 3,
+    }
+    repeated_folder = client.post(
+        "/api/v1/folders",
+        json={"path": "/history/workshop/engines/"},
+    )
+    assert repeated_folder.status_code == 201
+    assert repeated_folder.json() == folder.json()
+
+    invalid_folder = client.post("/api/v1/folders", json={"path": "/"})
+    assert invalid_folder.status_code == 422
+    assert invalid_folder.json()["error"] == "invalid_path"
+    empty_folder = client.post("/api/v1/folders", json={"path": ""})
+    assert empty_folder.status_code == 422
+    assert empty_folder.json()["error"] == "invalid_path"
+    folder_conflict = client.post(
+        "/api/v1/folders",
+        json={"path": "/history/industry/engine.txt"},
+    )
+    assert folder_conflict.status_code == 409
+    assert folder_conflict.json()["error"] == "tree_path_conflict"
+
+    # A move keeps the file id, version, chunks, and original bytes.
+    moved = client.post(
+        f"/api/v1/files/{uploaded_id}/move",
+        json={"path": "/history/workshop/engines/engine.txt"},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["id"] == uploaded_id
+    assert moved.json()["version"] == 1
+    assert moved.json()["raw_file_path"] == "/history/workshop/engines/engine.txt"
+
+    old_listing = client.get(
+        "/api/v1/paths",
+        params={"path": "/history/industry", "path_depth": 1},
+    )
+    assert all(item["file_id"] != uploaded_id for item in old_listing.json()["files"])
+    new_listing = client.get(
+        "/api/v1/paths",
+        params={"path": "/history/workshop/engines", "path_depth": 1},
+    )
+    assert any(item["file_id"] == uploaded_id for item in new_listing.json()["files"])
+    moved_content = client.get(f"/api/v1/files/{uploaded_id}/content")
+    assert moved_content.status_code == 200
+    assert moved_content.content == payload
+
+    same_move = client.post(
+        f"/api/v1/files/{uploaded_id}/move",
+        json={"path": "/history/workshop/engines/engine.txt"},
+    )
+    assert same_move.status_code == 200
+    assert same_move.json()["raw_file_path"] == "/history/workshop/engines/engine.txt"
+    extension_move = client.post(
+        f"/api/v1/files/{uploaded_id}/move",
+        json={"path": "/history/workshop/engines/engine.md"},
+    )
+    assert extension_move.status_code == 422
+    assert extension_move.json()["error"] == "invalid_path"
+
+    # A copy creates a new current file id at version 1 with fresh chunks.
+    copied = client.post(
+        f"/api/v1/files/{uploaded_id}/copy",
+        json={"path": "/history/workshop/engines/engine-copy.txt"},
+    )
+    assert copied.status_code == 201, copied.text
+    copied_id = int(copied.json()["id"])
+    assert copied_id != uploaded_id
+    assert copied.json()["version"] == 1
+    assert copied.json()["is_current"] is True
+    assert copied.json()["raw_file_path"] == "/history/workshop/engines/engine-copy.txt"
+    assert copied.json()["has_original"] is True
+    copied_content = client.get(f"/api/v1/files/{copied_id}/content")
+    assert copied_content.status_code == 200
+    assert copied_content.content == payload
+
+    both_current = client.get(
+        "/api/v1/paths",
+        params={"path": "/history/workshop/engines", "path_depth": 1},
+    )
+    current_ids = {item["file_id"] for item in both_current.json()["files"]}
+    assert {uploaded_id, copied_id} <= current_ids
+    assert client.get(f"/api/v1/files/{uploaded_id}").json()["is_current"] is True
+    assert client.get(f"/api/v1/files/{copied_id}").json()["is_current"] is True
+
+    search = client.get(
+        "/api/v1/search",
+        params={"query": "compression", "result_number": 5},
+    )
+    assert search.status_code == 200
+    searched_ids = {item["file_id"] for item in search.json()["file_results"]}
+    assert copied_id in searched_ids
+
+    # Text-only sources reconstruct their text from chunks without duplicating
+    # the stored overlap, then re-chunk to the same boundaries.
+    text_source = create_text(
+        client,
+        "/history/archive/notes.md",
+        content,
+        "2026-09-03T09:00:00Z",
+    )
+    text_copy = client.post(
+        f"/api/v1/files/{int(text_source['id'])}/copy",
+        json={"path": "/history/workshop/engines/notes-copy.md"},
+    )
+    assert text_copy.status_code == 201, text_copy.text
+    assert text_copy.json()["has_original"] is False
+    assert text_copy.json()["total_chunks"] == text_source["total_chunks"]
+    source_window = client.get(
+        f"/api/v1/files/{int(text_source['id'])}/chunks/1",
+        params={"chunk_range": 1},
+    )
+    copy_window = client.get(
+        f"/api/v1/files/{int(text_copy.json()['id'])}/chunks/1",
+        params={"chunk_range": 1},
+    )
+    assert copy_window.json()["chunks"] == source_window.json()["chunks"]
+
+    target_occupied = create_text(
+        client,
+        "/history/workshop/engines/reserved.txt",
+        "Reserved for conflict checks.",
+    )
+    move_conflict = client.post(
+        f"/api/v1/files/{uploaded_id}/move",
+        json={"path": "/history/workshop/engines/reserved.txt"},
+    )
+    assert move_conflict.status_code == 409
+    assert move_conflict.json()["error"] == "tree_path_conflict"
+    copy_conflict = client.post(
+        f"/api/v1/files/{uploaded_id}/copy",
+        json={"path": "/history/workshop/engines/reserved.txt"},
+    )
+    assert copy_conflict.status_code == 409
+    assert copy_conflict.json()["error"] == "tree_path_conflict"
+    copy_extension = client.post(
+        f"/api/v1/files/{uploaded_id}/copy",
+        json={"path": "/history/workshop/engines/engine-copy.md"},
+    )
+    assert copy_extension.status_code == 422
+    assert copy_extension.json()["error"] == "invalid_path"
+    assert int(target_occupied["id"]) > copied_id

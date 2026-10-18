@@ -8,9 +8,18 @@
  */
 import { ApiError } from "./fetch-client";
 
+export interface AgentPageContextPayload {
+  readonly key: string;
+  readonly path: string;
+  readonly title: string | null;
+  readonly text: string;
+}
+
 export interface AgentRunStartData {
   readonly run_id: number;
   readonly user_entry_id: number;
+  readonly page_context_entry_id: number | null;
+  readonly page_context_attached: boolean;
 }
 
 export interface AgentMessageStartData {
@@ -43,6 +52,9 @@ export interface AgentToolEndData {
   readonly name: string;
   readonly status: string;
   readonly resource: unknown;
+  readonly data: Readonly<Record<string, unknown>> | null;
+  readonly duration_ms: number | null;
+  readonly error_code: string | null;
 }
 
 export interface AgentRunEndData {
@@ -69,6 +81,7 @@ export type AgentStreamEvent =
 export interface StreamAgentMessageOptions {
   readonly conversationId: number;
   readonly content: string;
+  readonly pageContext?: AgentPageContextPayload;
   readonly requestId?: string;
   readonly signal?: AbortSignal;
   readonly onEvent: (event: AgentStreamEvent) => void;
@@ -219,7 +232,12 @@ function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
     }
     return {
       type: "run_start",
-      data: { run_id: runId, user_entry_id: userEntryId },
+      data: {
+        run_id: runId,
+        user_entry_id: userEntryId,
+        page_context_entry_id: numberValue(parsed.page_context_entry_id),
+        page_context_attached: parsed.page_context_attached === true,
+      },
     };
   }
 
@@ -287,6 +305,9 @@ function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
         name,
         status: stringValue(parsed.status) ?? "unknown",
         resource: parsed.resource,
+        data: isRecord(parsed.data) ? parsed.data : null,
+        duration_ms: numberValue(parsed.duration_ms),
+        error_code: stringValue(parsed.error_code),
       },
     };
   }
@@ -324,6 +345,7 @@ function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
 export async function streamAgentMessage({
   conversationId,
   content,
+  pageContext,
   requestId,
   signal,
   onEvent,
@@ -342,6 +364,7 @@ export async function streamAgentMessage({
         body: JSON.stringify({
           content,
           request_id: requestId ?? createRequestId(),
+          ...(pageContext ? { page_context: pageContext } : {}),
         }),
         signal,
       },

@@ -39,7 +39,7 @@ from app.module.knowledge.exception.domain_error import (
     UnsupportedFileTypeError,
     VisionExtractionError,
 )
-from app.module.knowledge.model.chunk_model import SOURCE_FILE
+from app.module.knowledge.model.chunk_model import SOURCE_FILE, ChunkModel
 from app.module.knowledge.model.file_model import FileModel
 from app.module.knowledge.model.tree_model import NODE_KIND_FILE, NODE_KIND_FOLDER, TreeNodeModel
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
@@ -182,6 +182,24 @@ class FileService:
             return normalize_file_path(raw)
         except InvalidPathValueError as exc:
             raise InvalidPathError(str(exc)) from exc
+
+    @staticmethod
+    def _normalized_directory(raw: str) -> str:
+        try:
+            normalized = normalize_directory_path(raw)
+        except InvalidPathValueError as exc:
+            raise InvalidPathError(str(exc)) from exc
+        if normalized == "/":
+            raise InvalidPathError("A folder path must include a folder name.")
+        return normalized
+
+    @staticmethod
+    def _directory_schema(node: TreeNodeModel) -> DirectorySchema:
+        return DirectorySchema(path=node.path, name=node.name, depth=node.depth)
+
+    @staticmethod
+    def _new_storage_key(suffix: str) -> str:
+        return f"files/{uuid4().hex[:2]}/{uuid4().hex}{suffix}"
 
     @staticmethod
     def _decode_text(data: bytes) -> str:
@@ -462,9 +480,11 @@ class FileService:
             )
         raise UnsupportedFileTypeError(suffix)
 
-    async def _ensure_parent_folder(self, path: str) -> int | None:
+    async def _ensure_folder_chain(self, directory: str) -> TreeNodeModel | None:
+        """Create every missing folder in ``directory`` and return the leaf folder."""
         parent_id: int | None = None
-        segments = path_segments(parent_directory(path))
+        current: TreeNodeModel | None = None
+        segments = path_segments(directory)
         for index, segment in enumerate(segments, start=1):
             directory_path = "/" + "/".join(segments[:index])
             node = await self.tree_repository.get_current_by_path(directory_path)
@@ -481,7 +501,12 @@ class FileService:
             elif node.kind != NODE_KIND_FOLDER:
                 raise TreePathConflictError(directory_path)
             parent_id = node.id
-        return parent_id
+            current = node
+        return current
+
+    async def _ensure_parent_folder(self, path: str) -> int | None:
+        node = await self._ensure_folder_chain(parent_directory(path))
+        return node.id if node is not None else None
 
     async def _ingest(
         self,
@@ -612,7 +637,7 @@ class FileService:
             or mimetypes.guess_type(normalized)[0]
             or "application/octet-stream"
         )
-        storage_key = f"files/{uuid4().hex[:2]}/{uuid4().hex}{suffix}"
+        storage_key = self._new_storage_key(suffix)
         await self.storage.save(storage_key, data)
         try:
             return await self._ingest(
@@ -629,6 +654,150 @@ class FileService:
             )
         except Exception:
             await self.storage.delete(storage_key)
+            raise
+
+    async def create_folder(self, path: str) -> DirectorySchema:
+        """Create one folder plus missing ancestors, idempotently."""
+        normalized = self._normalized_directory(path)
+        occupied_file = await self.file_repository.get_current_by_path(normalized)
+        if occupied_file is not None:
+            raise TreePathConflictError(normalized)
+        existing = await self.tree_repository.get_current_by_path(normalized)
+        if existing is not None:
+            if existing.kind != NODE_KIND_FOLDER:
+                raise TreePathConflictError(normalized)
+            return self._directory_schema(existing)
+
+        node = await self._ensure_folder_chain(normalized)
+        if node is None:  # pragma: no cover - the root path is rejected above
+            raise InvalidPathError("A folder path must include a folder name.")
+        await self.cache.bump_version()
+        return self._directory_schema(node)
+
+    async def _require_current_file(self, file_id: int) -> FileModel:
+        file = await self.file_repository.get_by_id(file_id)
+        if file is None or file.deleted_at is not None or not file.is_current:
+            raise FileRecordNotFoundError(file_id)
+        return file
+
+    @staticmethod
+    def _target_file_path(file: FileModel, raw: str) -> str:
+        target = FileService._normalized_path(raw)
+        if extension(target) != file.extension:
+            raise InvalidPathError(
+                "A moved or copied file must keep its original extension."
+            )
+        return target
+
+    async def _target_is_occupied(self, path: str) -> bool:
+        node = await self.tree_repository.get_current_by_path(path)
+        if node is not None:
+            return True
+        return await self.file_repository.get_current_by_path(path) is not None
+
+    def _merge_chunk_contents(self, chunks: list[ChunkModel]) -> str:
+        """Rebuild text by removing the known overlap between adjacent chunks."""
+        contents = [chunk.content for chunk in chunks if chunk.is_current]
+        if not contents:
+            return ""
+        merged = contents[0]
+        for content in contents[1:]:
+            if not content:
+                continue
+            max_overlap = min(self.overlap_chars, len(merged), len(content))
+            overlap = 0
+            for size in range(max_overlap, 0, -1):
+                if merged.endswith(content[:size]):
+                    overlap = size
+                    break
+            if overlap:
+                merged += content[overlap:]
+                continue
+            separator = (
+                ""
+                if merged.endswith(("\n", " ")) or content.startswith(("\n", " "))
+                else "\n"
+            )
+            merged = f"{merged}{separator}{content}"
+        return merged
+
+    async def move_file(self, file_id: int, *, path: str) -> FileSchema:
+        """Move one current file in place, preserving its identity and chunks."""
+        file = await self._require_current_file(file_id)
+        target = self._target_file_path(file, path)
+        if target == file.raw_file_path:
+            return self._to_schema(file)
+        if await self._target_is_occupied(target):
+            raise TreePathConflictError(target)
+
+        parent_id = await self._ensure_parent_folder(target)
+        old_node = await self.tree_repository.get_current_by_path(file.raw_file_path)
+        if old_node is not None and (
+            old_node.kind != NODE_KIND_FILE or old_node.file_id != file.id
+        ):
+            old_node = None
+
+        name = file_name(target)
+        depth = len(path_segments(target))
+        await self.file_repository.update_location(file, path=target, file_name=name)
+        if old_node is None:
+            await self.tree_repository.add(
+                TreeNodeModel(
+                    parent_id=parent_id,
+                    path=target,
+                    name=name,
+                    kind=NODE_KIND_FILE,
+                    file_id=file.id,
+                    depth=depth,
+                )
+            )
+        else:
+            await self.tree_repository.update_location(
+                old_node,
+                parent_id=parent_id,
+                path=target,
+                name=name,
+                depth=depth,
+            )
+        await self.cache.bump_version()
+        return self._to_schema(file)
+
+    async def copy_file(self, file_id: int, *, path: str) -> FileSchema:
+        """Copy one current file into a new file record with fresh chunks."""
+        source = await self._require_current_file(file_id)
+        target = self._target_file_path(source, path)
+        if await self._target_is_occupied(target):
+            raise TreePathConflictError(target)
+
+        chunks = await self.chunk_repository.get_source_chunks(SOURCE_FILE, source.id)
+        text = self._merge_chunk_contents(chunks)
+        if not text.strip():
+            raise EmptyContentError()
+
+        storage_key: str | None = None
+        if source.storage_key is not None:
+            data = await self.storage.read(source.storage_key)
+            storage_key = self._new_storage_key(source.extension)
+            await self.storage.save(storage_key, data)
+        else:
+            data = text.encode("utf-8")
+
+        try:
+            return await self._ingest(
+                path=target,
+                data=data,
+                text=text,
+                mime_type=source.mime_type,
+                storage_key=storage_key,
+                occurred_at=None,
+                ai_summary=source.ai_summary,
+                ai_tags=list(source.ai_tags),
+                document_type=source.document_type,
+                extraction_method=source.extraction_method,
+            )
+        except Exception:
+            if storage_key is not None:
+                await self.storage.delete(storage_key)
             raise
 
     async def get_file(self, file_id: int) -> FileSchema:

@@ -23,6 +23,16 @@ function asCall(tool: ChatStreamTool): ToolCallMeta {
   };
 }
 
+function pageContextLabel(stream: ChatStreamView): string {
+  if (!stream.pageContextAttached) {
+    return "This page is already attached to the thread";
+  }
+  if (stream.pageContextEntryId === null) {
+    return "Page context captured";
+  }
+  return "Page context captured · entry #" + stream.pageContextEntryId;
+}
+
 function asResult(tool: ChatStreamTool): ToolResultMeta {
   return {
     tool: tool.name,
@@ -31,6 +41,8 @@ function asResult(tool: ChatStreamTool): ToolResultMeta {
     durationMs: null,
     arguments: tool.arguments,
     resource: tool.resource,
+    data: tool.data,
+    detail: null,
   };
 }
 
@@ -77,6 +89,13 @@ export const StreamingTurn = memo(function StreamingTurn({
         </header>
 
         {liveBody}
+
+        {stream.pageContextKey !== null && stream.runId !== null ? (
+          <p className={stream.pageContextAttached ? "pi-context-live is-attached" : "pi-context-live"}>
+            <Icon name="layers" size={12} />
+            {pageContextLabel(stream)}
+          </p>
+        ) : null}
 
         {stream.toolCalls.length > 0 ? (
           <div className="chat-sheet__calls">

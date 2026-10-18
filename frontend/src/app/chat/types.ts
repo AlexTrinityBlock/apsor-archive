@@ -4,7 +4,10 @@
  * The API deliberately keeps those columns open-ended, so every UI reader
  * narrows `unknown` before rendering. Nothing here injects markup.
  */
-import type { AgentEntrySchema } from "../generated-apis-types/schemas";
+import type {
+  AgentConversationDetailSchema,
+  AgentEntrySchema,
+} from "../generated-apis-types/schemas";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -48,6 +51,8 @@ export interface ToolResultMeta {
   readonly durationMs: number | null;
   readonly arguments: JsonRecord | null;
   readonly resource: ResourceMeta | null;
+  readonly data: JsonRecord | null;
+  readonly detail: string | null;
 }
 
 export interface ToolResultInfo {
@@ -198,7 +203,17 @@ export function readToolResultMeta(entry: AgentEntrySchema): ToolResultMeta {
     durationMs: numberValue(data?.duration_ms),
     arguments: asRecord(data?.arguments),
     resource: readResource(data?.resource),
+    data,
+    detail: stringValue(data?.detail),
   };
+}
+
+/** The backend adds `last_page_context_key` to conversation detail. */
+export function lastPageContextKey(
+  conversation: AgentConversationDetailSchema | null | undefined,
+): string | null {
+  const candidate = conversation?.last_page_context_key;
+  return typeof candidate === "string" && candidate.length > 0 ? candidate : null;
 }
 
 export function readToolResultInfo(entry: AgentEntrySchema): ToolResultInfo {

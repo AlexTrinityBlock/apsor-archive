@@ -4,6 +4,7 @@
  * DendroMatrix
  * OpenAPI spec version: 0.1.0
  */
+import type { AgentPageContextSchema } from './agentPageContextSchema';
 
 /**
  * Append one user entry and start a run.
@@ -14,5 +15,6 @@ export interface AgentMessageCreateSchema {
      * @maxLength 32000
      */
   content: string;
+  page_context?: AgentPageContextSchema | null;
   request_id?: string | null;
 }

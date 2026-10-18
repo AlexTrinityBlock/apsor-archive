@@ -34,6 +34,16 @@ class TreeRepositoryProtocol(Protocol):
         superseded_by_id: int | None = None,
     ) -> None: ...
 
+    async def update_location(
+        self,
+        node: TreeNodeModel,
+        *,
+        parent_id: int | None,
+        path: str,
+        name: str,
+        depth: int,
+    ) -> None: ...
+
     async def mark_deleted(self, node: TreeNodeModel) -> None: ...
 
     async def list_descendants(self, node: TreeNodeModel) -> Sequence[TreeNodeModel]: ...
