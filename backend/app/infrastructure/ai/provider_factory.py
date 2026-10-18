@@ -61,6 +61,7 @@ class ProviderFactory:
             timeout_seconds=self.settings.deepseek_timeout_seconds,
             max_tokens=self.settings.deepseek_max_tokens,
             temperature=self.settings.deepseek_temperature,
+            supports_thinking=config.provider == "deepseek",
         )
 
     def build_embedder(self, config: ProviderConfig) -> EmbedderProtocol:

@@ -5,6 +5,29 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './agentConversationCreateSchema';
+export * from './agentConversationCreateSchemaProvider';
+export * from './agentConversationDetailSchema';
+export * from './agentConversationDetailSchemaStatus';
+export * from './agentConversationPatchSchema';
+export * from './agentConversationPatchSchemaStatus';
+export * from './agentConversationSchema';
+export * from './agentConversationSchemaStatus';
+export * from './agentEntryPageSchema';
+export * from './agentEntrySchema';
+export * from './agentEntrySchemaData';
+export * from './agentEntrySchemaEdits';
+export * from './agentEntrySchemaKind';
+export * from './agentEntrySchemaModel';
+export * from './agentMessageCreateSchema';
+export * from './agentRetrySchema';
+export * from './agentRunSchema';
+export * from './agentRunSchemaStatus';
+export * from './agentToolCatalogSchema';
+export * from './agentToolSchema';
+export * from './agentToolSchemaParameters';
+export * from './agentTurnResultSchema';
+export * from './agentTurnResultSchemaUsage';
 export * from './aiProviderReadSchema';
 export * from './aiProviderReadSchemaKeySource';
 export * from './aiProviderReadSchemaPurpose';
@@ -34,11 +57,16 @@ export * from './fileSchema';
 export * from './fileSearchResultSchema';
 export * from './fileSearchResultSchemaMatchedByItem';
 export * from './fileTextCreateSchema';
+export * from './getAgentConversationParams';
 export * from './getTreeParams';
 export * from './healthSchema';
 export * from './hTTPValidationError';
+export * from './listAgentConversationsParams';
+export * from './listAgentConversationsStatus';
+export * from './listAgentEntriesParams';
 export * from './listMediaParams';
 export * from './listMemoriesParams';
+export * from './listResponseSchemaAgentConversationSchema';
 export * from './listResponseSchemaMediaSchema';
 export * from './listResponseSchemaMemorySchema';
 export * from './listResponseSchemaSummarySchema';

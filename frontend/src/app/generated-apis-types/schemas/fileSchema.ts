@@ -17,6 +17,7 @@ export interface FileSchema {
   extension: string;
   extraction_method: string;
   file_name: string;
+  has_original: boolean;
   id: number;
   is_current: boolean;
   mime_type: string;

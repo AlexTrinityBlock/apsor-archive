@@ -93,6 +93,17 @@ class ExtractedDocument:
     ai_tags: list[str]
 
 
+@dataclass(frozen=True)
+class FileOriginal:
+    """The stored bytes and validators for one file version."""
+
+    data: bytes
+    file_name: str
+    mime_type: str
+    content_hash: str
+    updated_at: datetime
+
+
 class FileService:
     """Coordinate file storage, multimodal extraction, tree placement, and indexing."""
 
@@ -144,6 +155,7 @@ class FileService:
             supersedes_file_id=file.supersedes_file_id,
             is_current=file.is_current,
             total_chunks=file.total_chunks,
+            has_original=file.storage_key is not None,
             ai_summary=file.ai_summary,
             ai_tags=list(file.ai_tags),
             document_type=file.document_type,
@@ -750,10 +762,27 @@ class FileService:
         await self.cache.bump_version()
 
     async def download(self, file_id: int) -> tuple[bytes, str, str]:
+        original = await self.read_original(file_id)
+        return original.data, original.file_name, original.mime_type
+
+    async def read_original(self, file_id: int) -> FileOriginal:
+        """Load the stored original for inline viewing or attachment download.
+
+        Text created through ``POST /files/text`` has no stored original; its
+        content is only available through the indexed chunks. That case keeps
+        the existing ``file_content_unavailable`` domain error so callers can
+        fall back explicitly instead of receiving an empty body.
+        """
         file = await self.file_repository.get_by_id(file_id)
         if file is None:
             raise FileRecordNotFoundError(file_id)
         if not file.storage_key:
             raise FileContentUnavailableError(file_id)
         data = await self.storage.read(file.storage_key)
-        return data, file.file_name, file.mime_type
+        return FileOriginal(
+            data=data,
+            file_name=file.file_name,
+            mime_type=file.mime_type,
+            content_hash=file.content_hash,
+            updated_at=file.updated_at,
+        )
