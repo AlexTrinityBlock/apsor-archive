@@ -1,0 +1,4653 @@
+{
+  "components": {
+    "schemas": {
+      "AiProviderReadSchema": {
+        "description": "Safe provider state; the API key is never included.",
+        "properties": {
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "key_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Hint"
+          },
+          "key_source": {
+            "enum": [
+              "database",
+              "environment",
+              "none"
+            ],
+            "title": "Key Source",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "purpose": {
+            "enum": [
+              "chat",
+              "embedding"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "database",
+              "environment",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "purpose",
+          "provider",
+          "model",
+          "base_url",
+          "dimension",
+          "enabled",
+          "configured",
+          "key_hint",
+          "key_source",
+          "source",
+          "updated_at"
+        ],
+        "title": "AiProviderReadSchema",
+        "type": "object"
+      },
+      "AiProviderUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Update one provider; omit ``api_key`` to keep the stored key.",
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "maximum": 4096.0,
+                "minimum": 16.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "model": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "AiProviderUpdateSchema",
+        "type": "object"
+      },
+      "AiSettingsReadSchema": {
+        "description": "Both provider slots plus re-index advice.",
+        "properties": {
+          "chat": {
+            "$ref": "#/components/schemas/AiProviderReadSchema"
+          },
+          "embedding": {
+            "$ref": "#/components/schemas/AiProviderReadSchema"
+          },
+          "reindex_required": {
+            "title": "Reindex Required",
+            "type": "boolean"
+          },
+          "vector_enabled": {
+            "title": "Vector Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "chat",
+          "embedding",
+          "vector_enabled",
+          "reindex_required"
+        ],
+        "title": "AiSettingsReadSchema",
+        "type": "object"
+      },
+      "AiStatusSchema": {
+        "description": "Configuration state for the AI and vector paths.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "embedding_model": {
+            "title": "Embedding Model",
+            "type": "string"
+          },
+          "embedding_provider": {
+            "title": "Embedding Provider",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "vector_enabled": {
+            "title": "Vector Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "configured",
+          "model",
+          "provider",
+          "embedding_provider",
+          "embedding_model",
+          "vector_enabled"
+        ],
+        "title": "AiStatusSchema",
+        "type": "object"
+      },
+      "AiTestResultSchema": {
+        "description": "The outcome of a provider connection test.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "purpose": {
+            "enum": [
+              "chat",
+              "embedding"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "purpose",
+          "provider",
+          "model",
+          "latency_ms",
+          "detail"
+        ],
+        "title": "AiTestResultSchema",
+        "type": "object"
+      },
+      "AskRequestSchema": {
+        "additionalProperties": false,
+        "description": "A question answered from retrieved knowledge.",
+        "properties": {
+          "question": {
+            "maxLength": 2000,
+            "minLength": 2,
+            "title": "Question",
+            "type": "string"
+          },
+          "result_number": {
+            "default": 4,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Result Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskRequestSchema",
+        "type": "object"
+      },
+      "AskResponseSchema": {
+        "description": "The answer plus every source the retrieval stage supplied.",
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/CitationSchema"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "retrieved": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Retrieved",
+            "type": "object"
+          },
+          "search_queries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Search Queries",
+            "type": "array"
+          },
+          "usage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "answer",
+          "citations",
+          "model",
+          "usage",
+          "elapsed_ms",
+          "retrieved",
+          "search_queries"
+        ],
+        "title": "AskResponseSchema",
+        "type": "object"
+      },
+      "AuthResponseSchema": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserSchema"
+          }
+        },
+        "required": [
+          "user"
+        ],
+        "title": "AuthResponseSchema",
+        "type": "object"
+      },
+      "AuthStatusSchema": {
+        "properties": {
+          "authenticated": {
+            "title": "Authenticated",
+            "type": "boolean"
+          },
+          "requires_setup": {
+            "title": "Requires Setup",
+            "type": "boolean"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "requires_setup",
+          "authenticated",
+          "user"
+        ],
+        "title": "AuthStatusSchema",
+        "type": "object"
+      },
+      "Body_searchMediaByImage": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_searchMediaByImage",
+        "type": "object"
+      },
+      "Body_uploadFile": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "file"
+        ],
+        "title": "Body_uploadFile",
+        "type": "object"
+      },
+      "Body_uploadMedia": {
+        "properties": {
+          "caption": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption"
+          },
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_uploadMedia",
+        "type": "object"
+      },
+      "ChunkSchema": {
+        "description": "One chunk in a read window.",
+        "properties": {
+          "char_count": {
+            "title": "Char Count",
+            "type": "integer"
+          },
+          "chunk": {
+            "title": "Chunk",
+            "type": "integer"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "token_count": {
+            "title": "Token Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chunk",
+          "content",
+          "char_count",
+          "token_count",
+          "is_current"
+        ],
+        "title": "ChunkSchema",
+        "type": "object"
+      },
+      "CitationSchema": {
+        "description": "One retrievable source behind an answer.",
+        "properties": {
+          "chunk": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk"
+          },
+          "cited": {
+            "title": "Cited",
+            "type": "boolean"
+          },
+          "excerpt": {
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "memory",
+              "summary"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "memory_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Id"
+          },
+          "memory_summary_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Summary Id"
+          },
+          "raw_file_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw File Path"
+          },
+          "time": {
+            "format": "date-time",
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "excerpt",
+          "time",
+          "cited"
+        ],
+        "title": "CitationSchema",
+        "type": "object"
+      },
+      "DemoSeedSchema": {
+        "description": "What the demo seed created.",
+        "properties": {
+          "files_created": {
+            "title": "Files Created",
+            "type": "integer"
+          },
+          "memories_created": {
+            "title": "Memories Created",
+            "type": "integer"
+          },
+          "summaries_created": {
+            "title": "Summaries Created",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "files_created",
+          "memories_created",
+          "summaries_created"
+        ],
+        "title": "DemoSeedSchema",
+        "type": "object"
+      },
+      "DirectorySchema": {
+        "description": "One directory in a path listing.",
+        "properties": {
+          "depth": {
+            "title": "Depth",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "name",
+          "depth"
+        ],
+        "title": "DirectorySchema",
+        "type": "object"
+      },
+      "EmbeddingReindexSchema": {
+        "description": "The result of re-embedding the current chunk corpus.",
+        "properties": {
+          "dimension": {
+            "title": "Dimension",
+            "type": "integer"
+          },
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "reindexed": {
+            "title": "Reindexed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reindexed",
+          "model",
+          "dimension",
+          "elapsed_ms"
+        ],
+        "title": "EmbeddingReindexSchema",
+        "type": "object"
+      },
+      "FileChunksSchema": {
+        "description": "The response of the read_file tool.",
+        "properties": {
+          "chunk_end": {
+            "title": "Chunk End",
+            "type": "integer"
+          },
+          "chunk_start": {
+            "title": "Chunk Start",
+            "type": "integer"
+          },
+          "chunks": {
+            "items": {
+              "$ref": "#/components/schemas/ChunkSchema"
+            },
+            "title": "Chunks",
+            "type": "array"
+          },
+          "file_id": {
+            "title": "File Id",
+            "type": "integer"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "raw_file_path": {
+            "title": "Raw File Path",
+            "type": "string"
+          },
+          "total_chunks": {
+            "title": "Total Chunks",
+            "type": "integer"
+          },
+          "update_time": {
+            "format": "date-time",
+            "title": "Update Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "raw_file_path",
+          "file_name",
+          "update_time",
+          "total_chunks",
+          "chunk_start",
+          "chunk_end",
+          "chunks"
+        ],
+        "title": "FileChunksSchema",
+        "type": "object"
+      },
+      "FileSchema": {
+        "description": "File metadata returned by the API.",
+        "properties": {
+          "ai_summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Summary"
+          },
+          "ai_tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ai Tags",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "document_type": {
+            "title": "Document Type",
+            "type": "string"
+          },
+          "extension": {
+            "title": "Extension",
+            "type": "string"
+          },
+          "extraction_method": {
+            "title": "Extraction Method",
+            "type": "string"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "raw_file_path": {
+            "title": "Raw File Path",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "supersedes_file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes File Id"
+          },
+          "total_chunks": {
+            "title": "Total Chunks",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "raw_file_path",
+          "file_name",
+          "extension",
+          "mime_type",
+          "size_bytes",
+          "version",
+          "supersedes_file_id",
+          "is_current",
+          "total_chunks",
+          "ai_summary",
+          "ai_tags",
+          "document_type",
+          "extraction_method",
+          "created_at",
+          "updated_at",
+          "deleted_at"
+        ],
+        "title": "FileSchema",
+        "type": "object"
+      },
+      "FileSearchResultSchema": {
+        "properties": {
+          "chunk": {
+            "title": "Chunk",
+            "type": "integer"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "integer"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "file_id": {
+            "title": "File Id",
+            "type": "integer"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "matched_by": {
+            "items": {
+              "enum": [
+                "text",
+                "vector"
+              ],
+              "type": "string"
+            },
+            "title": "Matched By",
+            "type": "array"
+          },
+          "raw_file_path": {
+            "title": "Raw File Path",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "update_time": {
+            "format": "date-time",
+            "title": "Update Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "raw_file_path",
+          "file_name",
+          "update_time",
+          "chunk",
+          "chunk_id",
+          "content",
+          "is_current",
+          "score",
+          "matched_by"
+        ],
+        "title": "FileSearchResultSchema",
+        "type": "object"
+      },
+      "FileTextCreateSchema": {
+        "additionalProperties": false,
+        "description": "Create a text file directly; used by the UI and tests.",
+        "properties": {
+          "content": {
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "title": "FileTextCreateSchema",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthSchema": {
+        "description": "Cheap liveness information without secrets.",
+        "properties": {
+          "ai": {
+            "title": "Ai",
+            "type": "string"
+          },
+          "cache": {
+            "title": "Cache",
+            "type": "string"
+          },
+          "database": {
+            "title": "Database",
+            "type": "string"
+          },
+          "embedding_provider": {
+            "title": "Embedding Provider",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "database",
+          "cache",
+          "ai",
+          "embedding_provider"
+        ],
+        "title": "HealthSchema",
+        "type": "object"
+      },
+      "ListResponseSchema_MediaSchema_": {
+        "properties": {
+          "items_per_page": {
+            "title": "Items Per Page",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/MediaSchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "start_index": {
+            "title": "Start Index",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "start_index",
+          "items_per_page",
+          "resources"
+        ],
+        "title": "ListResponseSchema[MediaSchema]",
+        "type": "object"
+      },
+      "ListResponseSchema_MemorySchema_": {
+        "properties": {
+          "items_per_page": {
+            "title": "Items Per Page",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "start_index": {
+            "title": "Start Index",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "start_index",
+          "items_per_page",
+          "resources"
+        ],
+        "title": "ListResponseSchema[MemorySchema]",
+        "type": "object"
+      },
+      "ListResponseSchema_SummarySchema_": {
+        "properties": {
+          "items_per_page": {
+            "title": "Items Per Page",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/SummarySchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "start_index": {
+            "title": "Start Index",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "start_index",
+          "items_per_page",
+          "resources"
+        ],
+        "title": "ListResponseSchema[SummarySchema]",
+        "type": "object"
+      },
+      "LoginSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginSchema",
+        "type": "object"
+      },
+      "MediaSchema": {
+        "properties": {
+          "caption": {
+            "title": "Caption",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_type": {
+            "title": "Document Type",
+            "type": "string"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "media_id": {
+            "title": "Media Id",
+            "type": "integer"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "ocr_text": {
+            "title": "Ocr Text",
+            "type": "string"
+          },
+          "raw_file_path": {
+            "title": "Raw File Path",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "update_time": {
+            "format": "date-time",
+            "title": "Update Time",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "media_id",
+          "raw_file_path",
+          "file_name",
+          "mime_type",
+          "size_bytes",
+          "width",
+          "height",
+          "caption",
+          "ocr_text",
+          "title",
+          "summary",
+          "document_type",
+          "tags",
+          "update_time",
+          "created_at"
+        ],
+        "title": "MediaSchema",
+        "type": "object"
+      },
+      "MediaSearchResponseSchema": {
+        "properties": {
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "text",
+              "visual"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/MediaSearchResultSchema"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "mode",
+          "total",
+          "elapsed_ms",
+          "results"
+        ],
+        "title": "MediaSearchResponseSchema",
+        "type": "object"
+      },
+      "MediaSearchResultSchema": {
+        "properties": {
+          "caption": {
+            "title": "Caption",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_type": {
+            "title": "Document Type",
+            "type": "string"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "matched_by": {
+            "enum": [
+              "text",
+              "visual"
+            ],
+            "title": "Matched By",
+            "type": "string"
+          },
+          "media_id": {
+            "title": "Media Id",
+            "type": "integer"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "ocr_text": {
+            "title": "Ocr Text",
+            "type": "string"
+          },
+          "raw_file_path": {
+            "title": "Raw File Path",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "update_time": {
+            "format": "date-time",
+            "title": "Update Time",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "media_id",
+          "raw_file_path",
+          "file_name",
+          "mime_type",
+          "size_bytes",
+          "width",
+          "height",
+          "caption",
+          "ocr_text",
+          "title",
+          "summary",
+          "document_type",
+          "tags",
+          "update_time",
+          "created_at",
+          "score",
+          "matched_by"
+        ],
+        "title": "MediaSearchResultSchema",
+        "type": "object"
+      },
+      "MemoryCreateSchema": {
+        "additionalProperties": false,
+        "description": "The save_memory tool payload.",
+        "properties": {
+          "content": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "source": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "ai",
+              "import"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "supersedes": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 50,
+            "title": "Supersedes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "MemoryCreateSchema",
+        "type": "object"
+      },
+      "MemoryReadSchema": {
+        "description": "The read_memory tool result.",
+        "properties": {
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySchema"
+            },
+            "title": "Chain",
+            "type": "array"
+          },
+          "neighbors_after": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySchema"
+            },
+            "title": "Neighbors After",
+            "type": "array"
+          },
+          "neighbors_before": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySchema"
+            },
+            "title": "Neighbors Before",
+            "type": "array"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemorySchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "supersedes": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySchema"
+            },
+            "title": "Supersedes",
+            "type": "array"
+          },
+          "target": {
+            "$ref": "#/components/schemas/MemorySchema"
+          }
+        },
+        "required": [
+          "target",
+          "neighbors_before",
+          "neighbors_after",
+          "supersedes",
+          "superseded_by",
+          "chain"
+        ],
+        "title": "MemoryReadSchema",
+        "type": "object"
+      },
+      "MemorySaveSchema": {
+        "description": "The result of save_memory, including superseded rows and any new summary.",
+        "properties": {
+          "deprecated": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySchema"
+            },
+            "title": "Deprecated",
+            "type": "array"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/MemorySchema"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SummarySchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "memory",
+          "deprecated",
+          "summary"
+        ],
+        "title": "MemorySaveSchema",
+        "type": "object"
+      },
+      "MemorySchema": {
+        "description": "A memory as returned by the API.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deleted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "manual",
+              "ai",
+              "import"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "deprecated"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Id"
+          },
+          "supersedes_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Supersedes Ids",
+            "type": "array"
+          },
+          "update_time": {
+            "format": "date-time",
+            "title": "Update Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_id",
+          "content",
+          "status",
+          "update_time",
+          "supersedes_ids",
+          "superseded_by_id",
+          "source",
+          "created_at",
+          "deleted_at"
+        ],
+        "title": "MemorySchema",
+        "type": "object"
+      },
+      "MemorySearchResultSchema": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "matched_by": {
+            "items": {
+              "enum": [
+                "text",
+                "vector"
+              ],
+              "type": "string"
+            },
+            "title": "Matched By",
+            "type": "array"
+          },
+          "memory_id": {
+            "title": "Memory Id",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "update_time": {
+            "format": "date-time",
+            "title": "Update Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_id",
+          "update_time",
+          "content",
+          "status",
+          "score",
+          "matched_by"
+        ],
+        "title": "MemorySearchResultSchema",
+        "type": "object"
+      },
+      "PathFileSchema": {
+        "description": "One file in a path listing.",
+        "properties": {
+          "file_id": {
+            "title": "File Id",
+            "type": "integer"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "raw_file_path": {
+            "title": "Raw File Path",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "total_chunks": {
+            "title": "Total Chunks",
+            "type": "integer"
+          },
+          "update_time": {
+            "format": "date-time",
+            "title": "Update Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_id",
+          "raw_file_path",
+          "file_name",
+          "total_chunks",
+          "size_bytes",
+          "update_time"
+        ],
+        "title": "PathFileSchema",
+        "type": "object"
+      },
+      "PathListingSchema": {
+        "description": "The response of the read_path tool.",
+        "properties": {
+          "directories": {
+            "items": {
+              "$ref": "#/components/schemas/DirectorySchema"
+            },
+            "title": "Directories",
+            "type": "array"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/PathFileSchema"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "fuzzy_search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fuzzy Search"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "fuzzy_search",
+          "directories",
+          "files"
+        ],
+        "title": "PathListingSchema",
+        "type": "object"
+      },
+      "SearchResponseSchema": {
+        "description": "The search_knowledge tool result.",
+        "properties": {
+          "elapsed_ms": {
+            "title": "Elapsed Ms",
+            "type": "integer"
+          },
+          "file_results": {
+            "items": {
+              "$ref": "#/components/schemas/FileSearchResultSchema"
+            },
+            "title": "File Results",
+            "type": "array"
+          },
+          "include_history": {
+            "title": "Include History",
+            "type": "boolean"
+          },
+          "memory_results": {
+            "items": {
+              "$ref": "#/components/schemas/MemorySearchResultSchema"
+            },
+            "title": "Memory Results",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "result_number": {
+            "title": "Result Number",
+            "type": "integer"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/SearchStatsSchema"
+          },
+          "summary_results": {
+            "items": {
+              "$ref": "#/components/schemas/SummarySearchResultSchema"
+            },
+            "title": "Summary Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "result_number",
+          "include_history",
+          "elapsed_ms",
+          "stats",
+          "file_results",
+          "memory_results",
+          "summary_results"
+        ],
+        "title": "SearchResponseSchema",
+        "type": "object"
+      },
+      "SearchStatsSchema": {
+        "description": "Diagnostics that make the 2 + 2 dedup visible to the UI.",
+        "properties": {
+          "chunks_scanned": {
+            "title": "Chunks Scanned",
+            "type": "integer"
+          },
+          "deduplicated": {
+            "title": "Deduplicated",
+            "type": "integer"
+          },
+          "merged": {
+            "title": "Merged",
+            "type": "integer"
+          },
+          "terms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Terms",
+            "type": "array"
+          },
+          "text_candidates": {
+            "title": "Text Candidates",
+            "type": "integer"
+          },
+          "vector_candidates": {
+            "title": "Vector Candidates",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "text_candidates",
+          "vector_candidates",
+          "merged",
+          "deduplicated",
+          "chunks_scanned",
+          "terms"
+        ],
+        "title": "SearchStatsSchema",
+        "type": "object"
+      },
+      "SetupSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "confirm_password": {
+            "maxLength": 256,
+            "minLength": 10,
+            "title": "Confirm Password",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 10,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 3,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "confirm_password"
+        ],
+        "title": "SetupSchema",
+        "type": "object"
+      },
+      "StatsSchema": {
+        "description": "Library-wide counts shown on the home and settings screens.",
+        "properties": {
+          "active_memory_count": {
+            "title": "Active Memory Count",
+            "type": "integer"
+          },
+          "chunk_count": {
+            "title": "Chunk Count",
+            "type": "integer"
+          },
+          "file_count": {
+            "title": "File Count",
+            "type": "integer"
+          },
+          "memory_count": {
+            "title": "Memory Count",
+            "type": "integer"
+          },
+          "newest_memory_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest Memory Time"
+          },
+          "oldest_memory_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Memory Time"
+          },
+          "storage_bytes": {
+            "title": "Storage Bytes",
+            "type": "integer"
+          },
+          "summary_count": {
+            "title": "Summary Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "file_count",
+          "chunk_count",
+          "memory_count",
+          "active_memory_count",
+          "summary_count",
+          "storage_bytes",
+          "oldest_memory_time",
+          "newest_memory_time"
+        ],
+        "title": "StatsSchema",
+        "type": "object"
+      },
+      "SummaryCreateSchema": {
+        "additionalProperties": false,
+        "description": "Create a summary for an explicit set of memories or a period.",
+        "properties": {
+          "force": {
+            "default": false,
+            "title": "Force",
+            "type": "boolean"
+          },
+          "memory_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 500,
+            "title": "Memory Ids",
+            "type": "array"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          }
+        },
+        "title": "SummaryCreateSchema",
+        "type": "object"
+      },
+      "SummarySchema": {
+        "description": "A periodic summary over a memory window.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "generator": {
+            "enum": [
+              "deepseek",
+              "extractive"
+            ],
+            "title": "Generator",
+            "type": "string"
+          },
+          "memory_count": {
+            "title": "Memory Count",
+            "type": "integer"
+          },
+          "memory_summary_id": {
+            "title": "Memory Summary Id",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "period_end": {
+            "format": "date-time",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "source_memory_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Source Memory Ids",
+            "type": "array"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memory_summary_id",
+          "content",
+          "period_start",
+          "period_end",
+          "memory_count",
+          "source_memory_ids",
+          "themes",
+          "generator",
+          "model",
+          "created_at"
+        ],
+        "title": "SummarySchema",
+        "type": "object"
+      },
+      "SummarySearchResultSchema": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "matched_by": {
+            "items": {
+              "enum": [
+                "text",
+                "vector"
+              ],
+              "type": "string"
+            },
+            "title": "Matched By",
+            "type": "array"
+          },
+          "memory_summary_id": {
+            "title": "Memory Summary Id",
+            "type": "integer"
+          },
+          "period_end": {
+            "format": "date-time",
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "format": "date-time",
+            "title": "Period Start",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "update_time": {
+            "format": "date-time",
+            "title": "Update Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_summary_id",
+          "update_time",
+          "content",
+          "period_start",
+          "period_end",
+          "themes",
+          "score",
+          "matched_by"
+        ],
+        "title": "SummarySearchResultSchema",
+        "type": "object"
+      },
+      "TimelineDensitySchema": {
+        "description": "Per-day counts used by the density strip.",
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "file_count": {
+            "title": "File Count",
+            "type": "integer"
+          },
+          "memory_count": {
+            "title": "Memory Count",
+            "type": "integer"
+          },
+          "summary_count": {
+            "title": "Summary Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "file_count",
+          "memory_count",
+          "summary_count"
+        ],
+        "title": "TimelineDensitySchema",
+        "type": "object"
+      },
+      "TimelineEventSchema": {
+        "description": "One sampled timeline event.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "anchor": {
+            "title": "Anchor",
+            "type": "number"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "kind": {
+            "enum": [
+              "memory",
+              "summary",
+              "file_update"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "memory_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Id"
+          },
+          "memory_summary_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Summary Id"
+          },
+          "raw_file_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw File Path"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "time": {
+            "format": "date-time",
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "anchor",
+          "time",
+          "content"
+        ],
+        "title": "TimelineEventSchema",
+        "type": "object"
+      },
+      "TimelineResponseSchema": {
+        "description": "The read_timeline tool result.",
+        "properties": {
+          "day_range": {
+            "title": "Day Range",
+            "type": "integer"
+          },
+          "density": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineDensitySchema"
+            },
+            "title": "Density",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineEventSchema"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "range_end": {
+            "format": "date-time",
+            "title": "Range End",
+            "type": "string"
+          },
+          "range_start": {
+            "format": "date-time",
+            "title": "Range Start",
+            "type": "string"
+          },
+          "sampled": {
+            "title": "Sampled",
+            "type": "integer"
+          },
+          "skipped": {
+            "title": "Skipped",
+            "type": "integer"
+          },
+          "skips": {
+            "items": {
+              "$ref": "#/components/schemas/TimelineSkipSchema"
+            },
+            "title": "Skips",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "range_start",
+          "range_end",
+          "day_range",
+          "sampled",
+          "total",
+          "skipped",
+          "truncated",
+          "events",
+          "skips",
+          "density"
+        ],
+        "title": "TimelineResponseSchema",
+        "type": "object"
+      },
+      "TimelineSkipSchema": {
+        "description": "A count of events omitted between two samples.",
+        "properties": {
+          "file_number": {
+            "title": "File Number",
+            "type": "integer"
+          },
+          "from_time": {
+            "format": "date-time",
+            "title": "From Time",
+            "type": "string"
+          },
+          "memory_number": {
+            "title": "Memory Number",
+            "type": "integer"
+          },
+          "summary_number": {
+            "title": "Summary Number",
+            "type": "integer"
+          },
+          "to_time": {
+            "format": "date-time",
+            "title": "To Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_time",
+          "to_time",
+          "file_number",
+          "memory_number",
+          "summary_number"
+        ],
+        "title": "TimelineSkipSchema",
+        "type": "object"
+      },
+      "TreeNodeSchema": {
+        "description": "One node in the unified tree.",
+        "properties": {
+          "deleted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted At"
+          },
+          "depth": {
+            "title": "Depth",
+            "type": "integer"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_current": {
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "folder",
+              "file"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "superseded_by_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Id"
+          },
+          "update_time": {
+            "format": "date-time",
+            "title": "Update Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "parent_id",
+          "path",
+          "name",
+          "kind",
+          "file_id",
+          "depth",
+          "is_current",
+          "superseded_by_id",
+          "deleted_at",
+          "update_time"
+        ],
+        "title": "TreeNodeSchema",
+        "type": "object"
+      },
+      "TreeSchema": {
+        "description": "Flat nodes for the frontend tree layout engine.",
+        "properties": {
+          "depth": {
+            "title": "Depth",
+            "type": "integer"
+          },
+          "include_history": {
+            "title": "Include History",
+            "type": "boolean"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/TreeNodeSchema"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "root",
+          "depth",
+          "include_history",
+          "total",
+          "truncated",
+          "nodes"
+        ],
+        "title": "TreeSchema",
+        "type": "object"
+      },
+      "UserSchema": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "created_at",
+          "last_login_at"
+        ],
+        "title": "UserSchema",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "DendroMatrix",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/ai/status": {
+      "get": {
+        "operationId": "getAiStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiStatusSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ai Status",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/ask": {
+      "post": {
+        "description": "Answer a question from retrieved sources with explicit citations.",
+        "operationId": "askKnowledge",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequestSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponseSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ask Knowledge",
+        "tags": [
+          "ai"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "description": "Verify a password and issue a new session cookie.",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "description": "Delete the server session and clear the browser cookie.",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "description": "Return the signed-in owner.",
+        "operationId": "getCurrentUser",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/setup": {
+      "post": {
+        "description": "Create the owner account on the first run and sign it in.",
+        "operationId": "setupAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Setup Account",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/status": {
+      "get": {
+        "description": "Public endpoint used by the login gate.",
+        "operationId": "getAuthStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthStatusSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Auth Status",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/demo/seed": {
+      "post": {
+        "description": "Populate an empty library with a small demo archive.",
+        "operationId": "seedDemo",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoSeedSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Seed Demo",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/files": {
+      "post": {
+        "description": "Upload one file; the server extracts text and indexes it.",
+        "operationId": "uploadFile",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_uploadFile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/text": {
+      "post": {
+        "description": "Create a text file directly; useful for the UI editor and automation.",
+        "operationId": "createTextFile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileTextCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Text File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}": {
+      "delete": {
+        "description": "Soft-delete a leaf file and hide its branch and chunks.",
+        "operationId": "deleteFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete File",
+        "tags": [
+          "files"
+        ]
+      },
+      "get": {
+        "operationId": "getFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/chunks/{chunk}": {
+      "get": {
+        "description": "Read one chunk and its neighbors (the read_file tool).",
+        "operationId": "readFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "chunk",
+            "required": true,
+            "schema": {
+              "title": "Chunk",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chunk_range",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 5,
+              "minimum": 0,
+              "title": "Chunk Range",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileChunksSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/download": {
+      "get": {
+        "operationId": "downloadFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "description": "Check the database, cache, and AI configuration without leaking secrets.",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Health",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/media": {
+      "get": {
+        "operationId": "listMedia",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_MediaSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Media",
+        "tags": [
+          "media"
+        ]
+      },
+      "post": {
+        "description": "Upload an image; caption/tags are generated when possible.",
+        "operationId": "uploadMedia",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_uploadMedia"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Media",
+        "tags": [
+          "media"
+        ]
+      }
+    },
+    "/api/v1/media/search": {
+      "get": {
+        "description": "Search image captions and tags (text to image).",
+        "operationId": "searchMedia",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSearchResponseSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Media",
+        "tags": [
+          "media"
+        ]
+      }
+    },
+    "/api/v1/media/search/image": {
+      "post": {
+        "description": "Find visually similar images (image to image).",
+        "operationId": "searchMediaByImage",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 12,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_searchMediaByImage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSearchResponseSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Media By Image",
+        "tags": [
+          "media"
+        ]
+      }
+    },
+    "/api/v1/media/{media_id}": {
+      "delete": {
+        "operationId": "deleteMedia",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_id",
+            "required": true,
+            "schema": {
+              "title": "Media Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Media",
+        "tags": [
+          "media"
+        ]
+      },
+      "get": {
+        "operationId": "getMedia",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_id",
+            "required": true,
+            "schema": {
+              "title": "Media Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Media",
+        "tags": [
+          "media"
+        ]
+      }
+    },
+    "/api/v1/media/{media_id}/content": {
+      "get": {
+        "operationId": "getMediaContent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_id",
+            "required": true,
+            "schema": {
+              "title": "Media Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Media Content",
+        "tags": [
+          "media"
+        ]
+      }
+    },
+    "/api/v1/media/{media_id}/describe": {
+      "post": {
+        "description": "Regenerate the caption and tags with the configured vision provider.",
+        "operationId": "describeMedia",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "media_id",
+            "required": true,
+            "schema": {
+              "title": "Media Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Describe Media",
+        "tags": [
+          "media"
+        ]
+      }
+    },
+    "/api/v1/memories": {
+      "get": {
+        "operationId": "listMemories",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_MemorySchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Memories",
+        "tags": [
+          "memories"
+        ]
+      },
+      "post": {
+        "description": "Create a memory and deprecate the memories it replaces.",
+        "operationId": "saveMemory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySaveSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/api/v1/memories/{memory_id}": {
+      "get": {
+        "description": "Read a memory, its neighbors, and its supersession chain.",
+        "operationId": "readMemory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "memory_range",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10,
+              "minimum": 0,
+              "title": "Memory Range",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trace_history",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Trace History",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/api/v1/paths": {
+      "get": {
+        "description": "List a directory or fuzzy-search file paths (the read_path tool).",
+        "operationId": "readPath",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "schema": {
+              "default": "/",
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path_depth",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Path Depth",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fuzzy_search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fuzzy Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PathListingSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Path",
+        "tags": [
+          "tree"
+        ]
+      }
+    },
+    "/api/v1/search": {
+      "get": {
+        "description": "Run BM25 and vector recall, then de-duplicate the merged candidates.",
+        "operationId": "searchKnowledge",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "result_number",
+            "required": false,
+            "schema": {
+              "default": 2,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Result Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_history",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include History",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponseSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Knowledge",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/v1/settings/ai": {
+      "get": {
+        "description": "Return both provider slots with masked key hints.",
+        "operationId": "getAiSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ai Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/ai/embedding/reindex": {
+      "post": {
+        "description": "Re-embed every current chunk with the active embedding provider.",
+        "operationId": "reindexEmbeddings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingReindexSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reindex Embeddings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/ai/{purpose}": {
+      "put": {
+        "description": "Update or create one provider configuration and reload it immediately.",
+        "operationId": "updateAiProvider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "purpose",
+            "required": true,
+            "schema": {
+              "title": "Purpose",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiProviderUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Ai Provider",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/ai/{purpose}/key": {
+      "delete": {
+        "description": "Remove the stored key and reload the provider runtime.",
+        "operationId": "clearAiProviderKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "purpose",
+            "required": true,
+            "schema": {
+              "title": "Purpose",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Ai Provider Key",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/ai/{purpose}/test": {
+      "post": {
+        "description": "Make one small provider request and report latency or the error.",
+        "operationId": "testAiProvider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "purpose",
+            "required": true,
+            "schema": {
+              "title": "Purpose",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiTestResultSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Ai Provider",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "operationId": "getStats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Stats",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/summaries": {
+      "get": {
+        "operationId": "listSummaries",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_SummarySchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Summaries",
+        "tags": [
+          "memories"
+        ]
+      },
+      "post": {
+        "description": "Summarize explicit memories or the unsummarized memories in a period.",
+        "operationId": "createSummary",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SummaryCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummarySchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Summary",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/api/v1/summaries/{summary_id}": {
+      "get": {
+        "operationId": "getSummary",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "summary_id",
+            "required": true,
+            "schema": {
+              "title": "Summary Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummarySchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Summary",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/api/v1/timeline": {
+      "get": {
+        "description": "Read a date range with up to five sampled events per source kind.",
+        "operationId": "readTimeline",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "maximum": 2200,
+              "minimum": 1900,
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": true,
+            "schema": {
+              "maximum": 12,
+              "minimum": 1,
+              "title": "Month",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "day",
+            "required": true,
+            "schema": {
+              "maximum": 31,
+              "minimum": 1,
+              "title": "Day",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "day_range",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Day Range",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_history",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include History",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineResponseSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Timeline",
+        "tags": [
+          "timeline"
+        ]
+      }
+    },
+    "/api/v1/tools/read_file": {
+      "get": {
+        "description": "Return one chunk window as XML.",
+        "operationId": "toolReadFile",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chunk",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Chunk",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chunk_range",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 5,
+              "minimum": 0,
+              "title": "Chunk Range",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read File Tool",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/api/v1/tools/read_memory": {
+      "get": {
+        "description": "Render a memory, its neighbours, and its chain as XML.",
+        "operationId": "toolReadMemory",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "memory_range",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 10,
+              "minimum": 0,
+              "title": "Memory Range",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trace_history",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Trace History",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Memory Tool",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/api/v1/tools/read_path": {
+      "get": {
+        "description": "Return a directory listing or fuzzy path matches as XML.",
+        "operationId": "toolReadPath",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "path",
+            "required": false,
+            "schema": {
+              "default": "/",
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "path_depth",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Path Depth",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fuzzy_search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fuzzy Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Path Tool",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/api/v1/tools/read_timeline": {
+      "get": {
+        "description": "Return a sparse timeline as XML.",
+        "operationId": "toolReadTimeline",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "year",
+            "required": true,
+            "schema": {
+              "maximum": 2200,
+              "minimum": 1900,
+              "title": "Year",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "month",
+            "required": true,
+            "schema": {
+              "maximum": 12,
+              "minimum": 1,
+              "title": "Month",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "day",
+            "required": true,
+            "schema": {
+              "maximum": 31,
+              "minimum": 1,
+              "title": "Day",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "day_range",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Day Range",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_history",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include History",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Timeline Tool",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/api/v1/tools/save_memory": {
+      "post": {
+        "description": "Create a memory and render the supersession result as XML.",
+        "operationId": "toolSaveMemory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Memory Tool",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/api/v1/tools/search_knowledge": {
+      "get": {
+        "description": "Return the search_knowledge tool payload as XML.",
+        "operationId": "toolSearchKnowledge",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "result_number",
+            "required": false,
+            "schema": {
+              "default": 2,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Result Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_history",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include History",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Knowledge Tool",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/api/v1/tree": {
+      "get": {
+        "description": "Return a flat tree; the frontend performs the SVG layout.",
+        "operationId": "getTree",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "root",
+            "required": false,
+            "schema": {
+              "default": "/",
+              "maxLength": 1024,
+              "minLength": 1,
+              "title": "Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "depth",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Depth",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_history",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include History",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreeSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Tree",
+        "tags": [
+          "tree"
+        ]
+      }
+    }
+  }
+}
