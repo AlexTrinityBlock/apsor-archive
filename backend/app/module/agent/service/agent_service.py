@@ -13,8 +13,10 @@ from uuid import uuid4
 from app.module.agent.domain.agent_domain import (
     ERROR_FINISH_REASONS,
     KIND_ASSISTANT,
+    KIND_PAGE_CONTEXT,
     KIND_TOOL_RESULT,
     KIND_USER,
+    MAX_PAGE_CONTEXT_CHARS,
     MAX_STEPS,
     MAX_TOOL_CALLS_PER_TURN,
     MAX_TOOL_RESULT_CHARS,
@@ -32,7 +34,7 @@ from app.module.agent.domain.agent_domain import (
 )
 from app.module.agent.domain.context_domain import build_context, render_tool_result
 from app.module.agent.domain.tool_catalog import PROMPT_VERSION, TOOLS_VERSION
-from app.module.agent.domain.xml_domain import attributes, xml_text
+from app.module.agent.domain.xml_domain import attributes, clip, xml_text
 from app.module.agent.exception.domain_error import (
     AgentConversationArchivedError,
     AgentConversationNotFoundError,
@@ -61,6 +63,7 @@ from app.module.agent.schema.agent_schema import (
     AgentEntryPageSchema,
     AgentEntrySchema,
     AgentMessageCreateSchema,
+    AgentPageContextSchema,
     AgentRetrySchema,
     AgentRunSchema,
     AgentToolCatalogSchema,
@@ -75,6 +78,8 @@ from app.shared.time import utcnow
 logger = logging.getLogger(__name__)
 
 CITATION_PATTERN = re.compile(r"\[(?:file|memory|media|summary):\d+(?:#\d+)?\]")
+_PAGE_CONTEXT_LINE_WS = re.compile(r"[ \t\f\v]+")
+_PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")
 LIMIT_CODES = frozenset(
     {"step_limit", "token_limit", "tool_call_limit", "tool_result_budget_exhausted"}
 )
@@ -88,6 +93,7 @@ class AgentTurnState:
     run: AgentRunSchema
     user_entry: AgentEntrySchema
     cutoff_entry_id: int
+    page_context_entry_id: int | None = None
 
 
 @dataclass
@@ -170,12 +176,16 @@ class AgentService:
         total = await self.repository.count_entries(conversation_id)
         page = _entry_page(conversation_id, entries, total, has_more)
         base = _conversation_schema(conversation)
+        last_page_context_key = await self.repository.last_page_context_key(
+            conversation_id
+        )
         return AgentConversationDetailSchema(
             **base.model_dump(),
             entries=page.entries,
             entries_total=page.total_results,
             entries_next_after_id=page.next_after_id,
             entries_has_more=page.has_more,
+            last_page_context_key=last_page_context_key,
         )
 
     async def list_entries(
@@ -244,13 +254,23 @@ class AgentService:
         data: dict[str, Any] | None = None
         if payload.request_id is not None:
             data = {"request_id": payload.request_id}
-        conversation_model, user_entry, run = await self.repository.append_user_and_run(
+        page_context_draft, page_context_key = _page_context_draft(
+            payload.page_context
+        )
+        (
+            conversation_model,
+            user_entry,
+            run,
+            page_context_entry,
+        ) = await self.repository.append_user_and_run(
             conversation_id=conversation_id,
             draft=EntryDraft(
                 kind=KIND_USER,
                 messages=[{"role": "user", "content": content}],
                 data=data,
             ),
+            page_context_draft=page_context_draft,
+            page_context_key=page_context_key,
             request_id=payload.request_id,
             now=utcnow(),
         )
@@ -259,6 +279,9 @@ class AgentService:
             run=_run_schema(run),
             user_entry=_entry_schema(user_entry),
             cutoff_entry_id=user_entry.id,
+            page_context_entry_id=(
+                page_context_entry.id if page_context_entry is not None else None
+            ),
         )
 
     async def begin_retry(
@@ -295,6 +318,7 @@ class AgentService:
             run=_run_schema(run),
             user_entry=_entry_schema(user_entry),
             cutoff_entry_id=cutoff_entry_id,
+            page_context_entry_id=None,
         )
 
     async def stream_turn(self, turn: AgentTurnState) -> AsyncIterator[AgentStreamEvent]:
@@ -310,7 +334,12 @@ class AgentService:
         try:
             yield AgentStreamEvent(
                 "run_start",
-                {"run_id": run_id, "user_entry_id": turn.user_entry.id},
+                {
+                    "run_id": run_id,
+                    "user_entry_id": turn.user_entry.id,
+                    "page_context_entry_id": turn.page_context_entry_id,
+                    "page_context_attached": turn.page_context_entry_id is not None,
+                },
             )
             context = await self._context(conversation_id, turn.cutoff_entry_id)
 
@@ -960,6 +989,69 @@ class AgentService:
             raise AgentNotConfiguredError()
 
 
+def _page_context_draft(
+    context: AgentPageContextSchema | None,
+) -> tuple[EntryDraft | None, str | None]:
+    """Build the UI payload and provider message for one page snapshot.
+
+    Page context is append-only data. It is sent as a user-role message so the
+    model sees it next to the question, but the visible user entry always keeps
+    exactly the user's own text.
+    """
+    if context is None:
+        return None, None
+    key = context.key.strip()
+    path = context.path.strip()
+    title: str | None = (
+        " ".join(context.title.split()) if context.title else ""
+    ) or None
+    text = _normalize_page_text(context.text)
+    if not key or not path or not text:
+        return None, None
+
+    truncated = len(text) > MAX_PAGE_CONTEXT_CHARS
+    if truncated:
+        text = clip(text, MAX_PAGE_CONTEXT_CHARS)
+    values: dict[str, object] = {"key": key, "path": path}
+    if title:
+        values["title"] = title
+    provider_content = (
+        f"<page_context{attributes(values)}>"
+        f"<text>{xml_text(text)}</text>"
+        "</page_context>"
+    )
+    data = {
+        "page_key": key,
+        "path": path,
+        "title": title,
+        "text_chars": len(text),
+        "truncated": truncated,
+    }
+    return (
+        EntryDraft(
+            kind=KIND_PAGE_CONTEXT,
+            messages=[{"role": "user", "content": provider_content}],
+            data=data,
+        ),
+        key,
+    )
+
+
+def _normalize_page_text(value: str) -> str:
+    """Normalize line endings and whitespace without losing paragraph breaks."""
+    normalized = (
+        value.replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\u00a0", " ")
+    )
+    lines = [
+        _PAGE_CONTEXT_LINE_WS.sub(" ", line).strip()
+        for line in normalized.split("\n")
+    ]
+    normalized = "\n".join(lines).strip()
+    return _PAGE_CONTEXT_BLANK_LINES.sub("\n\n", normalized)
+
+
 def _conversation_schema(model: AgentConversationModel) -> AgentConversationSchema:
     return AgentConversationSchema.model_validate(model)
 
@@ -1066,6 +1158,7 @@ def _tool_result_draft(call: ChatToolCall, outcome: ToolOutcome) -> EntryDraft:
             }
         ],
         data={
+            **outcome.data,
             "tool": call.name,
             "status": outcome.status,
             "error_code": outcome.error_code,
@@ -1086,6 +1179,9 @@ def _tool_end_event(
         "tool_call_id": call.call_id,
         "name": call.name,
         "status": outcome.status,
+        "error_code": outcome.error_code,
+        "duration_ms": outcome.data.get("duration_ms"),
+        "data": outcome.data,
     }
     if outcome.resource is not None:
         data["resource"] = outcome.resource

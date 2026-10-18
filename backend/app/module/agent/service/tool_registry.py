@@ -38,6 +38,7 @@ from app.module.knowledge.exception.domain_error import (
     KnowledgeError,
 )
 from app.module.knowledge.schema.memory_schema import MemorySchema
+from app.module.knowledge.schema.timeline_schema import TimelineEventSchema
 from app.module.media.exception.domain_error import MediaError
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ MEMORY_CONTENT_LIMIT = 4_000
 MEDIA_TEXT_LIMIT = 2_000
 MAX_LISTED_ENTRIES = 100
 MAX_TIMELINE_EVENTS = 50
+PREVIEW_EXCERPT_LIMIT = 600
 
 _SPECS: dict[str, ToolSpec] = {spec.name: spec for spec in TOOL_SPECS}
 
@@ -230,15 +232,26 @@ async def _search_knowledge(
                 "chunk": item.chunk,
                 "raw_file_path": item.raw_file_path,
                 "score": item.score,
+                "excerpt": _excerpt(item.content),
+                "viewer_url": _file_viewer_url(item.file_id, item.chunk),
             }
             for item in result.file_results
         ],
         "memory_results": [
-            {"memory_id": item.memory_id, "score": item.score}
+            {
+                "memory_id": item.memory_id,
+                "score": item.score,
+                "excerpt": _excerpt(item.content),
+                "viewer_url": _memory_viewer_url(item.memory_id),
+            }
             for item in result.memory_results
         ],
         "summary_results": [
-            {"memory_summary_id": item.memory_summary_id, "score": item.score}
+            {
+                "memory_summary_id": item.memory_summary_id,
+                "score": item.score,
+                "excerpt": _excerpt(item.content),
+            }
             for item in result.summary_results
         ],
     }
@@ -289,11 +302,13 @@ async def _read_file(
         "total_chunks": result.total_chunks,
         "chunk_start": result.chunk_start,
         "chunk_end": result.chunk_end,
+        "viewer_url": _file_viewer_url(result.file_id, result.chunk_start),
         "chunks": [
             {
                 "chunk": item.chunk,
                 "char_count": item.char_count,
                 "token_count": item.token_count,
+                "excerpt": _excerpt(item.content),
             }
             for item in result.chunks
         ],
@@ -362,7 +377,10 @@ async def _read_timeline(
                 "time": event.time.isoformat(),
                 "memory_id": event.memory_id,
                 "memory_summary_id": event.memory_summary_id,
+                "summary_id": event.memory_summary_id,
                 "file_id": event.file_id,
+                "content": _excerpt(event.content),
+                "viewer_url": _timeline_viewer_url(event),
             }
             for event in events
         ],
@@ -422,6 +440,7 @@ async def _read_path(
                 "file_name": item.file_name,
                 "total_chunks": item.total_chunks,
                 "size_bytes": item.size_bytes,
+                "viewer_url": _file_viewer_url(item.file_id),
             }
             for item in files
         ],
@@ -449,6 +468,11 @@ async def _read_memory(
     data = {
         "memory_id": result.target.memory_id,
         "status": result.target.status,
+        "target": _memory_preview(result.target),
+        "neighbors": [
+            _memory_preview(item)
+            for item in [*result.neighbors_before, *result.neighbors_after]
+        ],
         "neighbors_before": [item.memory_id for item in result.neighbors_before],
         "neighbors_after": [item.memory_id for item in result.neighbors_after],
         "supersedes": [item.memory_id for item in result.supersedes],
@@ -480,6 +504,7 @@ async def _save_memory(
     data = {
         "memory_id": result.memory.memory_id,
         "status": result.memory.status,
+        "memory": _memory_preview(result.memory),
         "supersedes": [item.memory_id for item in result.deprecated],
     }
     return content, data, None
@@ -516,6 +541,13 @@ async def _search_media(
                 "title": item.title,
                 "mime_type": item.mime_type,
                 "score": item.score,
+                "excerpt": _excerpt(
+                    item.caption or item.summary or item.ocr_text or item.title
+                ),
+                "width": item.width,
+                "height": item.height,
+                "tags": list(item.tags),
+                "viewer_url": _media_viewer_url(item.media_id),
             }
             for item in result.results
         ],
@@ -554,6 +586,10 @@ async def _get_media(
         "width": media.width,
         "height": media.height,
         "tags": list(media.tags),
+        "caption": _excerpt(media.caption),
+        "summary": _excerpt(media.summary),
+        "ocr_text": _excerpt(media.ocr_text),
+        "viewer_url": _media_viewer_url(media.media_id),
     }
     return content, data, None
 
@@ -621,6 +657,46 @@ async def _present_resource(
         },
     )
     return content, {"resource": resource}, resource
+
+
+def _excerpt(value: str | None, limit: int = PREVIEW_EXCERPT_LIMIT) -> str:
+    """Return a whitespace-normalized, bounded UI excerpt."""
+    if not value:
+        return ""
+    return clip(" ".join(value.split()), limit)
+
+
+def _file_viewer_url(file_id: int, chunk: int | None = None) -> str:
+    url = f"/viewer/file/{file_id}"
+    if chunk is not None:
+        url += f"?chunk={chunk}"
+    return url
+
+
+def _media_viewer_url(media_id: int) -> str:
+    return f"/viewer/media/{media_id}"
+
+
+def _memory_viewer_url(memory_id: int) -> str:
+    return f"/viewer/memory/{memory_id}"
+
+
+def _memory_preview(memory: MemorySchema) -> dict[str, Any]:
+    """Return the bounded memory fields used by the inspector."""
+    return {
+        "memory_id": memory.memory_id,
+        "status": memory.status,
+        "content": _excerpt(memory.content),
+        "update_time": memory.update_time.isoformat(),
+    }
+
+
+def _timeline_viewer_url(event: TimelineEventSchema) -> str | None:
+    if event.memory_id is not None:
+        return _memory_viewer_url(event.memory_id)
+    if event.file_id is not None:
+        return _file_viewer_url(event.file_id)
+    return None
 
 
 def _memory_element(name: str, memory: MemorySchema) -> str:

@@ -99,6 +99,23 @@ class TreeRepository:
         node.updated_at = utcnow()
         await self.session.flush()
 
+    async def update_location(
+        self,
+        node: TreeNodeModel,
+        *,
+        parent_id: int | None,
+        path: str,
+        name: str,
+        depth: int,
+    ) -> None:
+        """Move one current tree node in place so its identity stays stable."""
+        node.parent_id = parent_id
+        node.path = path
+        node.name = name
+        node.depth = depth
+        node.updated_at = utcnow()
+        await self.session.flush()
+
     async def mark_deleted(self, node: TreeNodeModel) -> None:
         now = utcnow()
         node.is_current = False

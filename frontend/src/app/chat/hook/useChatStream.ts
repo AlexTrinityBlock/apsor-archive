@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "../../../apis/fetch-client";
 import {
   streamAgentMessage,
+  type AgentPageContextPayload,
   type AgentStreamEvent,
 } from "../../../apis/agent-stream";
 import { invalidateConversation } from "../query";
@@ -20,9 +21,13 @@ export interface ChatStreamTool {
   readonly status: string;
   readonly resource: ResourceMeta | null;
   readonly entryId: number | null;
+  readonly data: JsonRecord | null;
+  readonly durationMs: number | null;
+  readonly errorCode: string | null;
 }
 
 export interface ChatStreamView {
+  readonly conversationId: number;
   readonly userContent: string;
   readonly assistantText: string;
   readonly toolCalls: readonly ChatStreamTool[];
@@ -30,13 +35,20 @@ export interface ChatStreamView {
   readonly finishReason: string | null;
   readonly error: { readonly code: string; readonly detail: string } | null;
   readonly runId: number | null;
+  readonly pageContextEntryId: number | null;
+  readonly pageContextAttached: boolean;
+  readonly pageContextKey: string | null;
   readonly status: "running" | "done" | "failed";
 }
 
 interface UseChatStreamResult {
   readonly stream: ChatStreamView | null;
   readonly isStreaming: boolean;
-  readonly start: (conversationId: number, content: string) => Promise<void>;
+  readonly start: (
+    conversationId: number,
+    content: string,
+    pageContext?: AgentPageContextPayload,
+  ) => Promise<void>;
   readonly stop: () => void;
 }
 
@@ -66,6 +78,9 @@ function upsertTool(
         status: patch.status ?? "running",
         resource: patch.resource ?? null,
         entryId: patch.entryId ?? null,
+        data: patch.data ?? null,
+        durationMs: patch.durationMs ?? null,
+        errorCode: patch.errorCode ?? null,
       },
     ];
   }
@@ -80,7 +95,12 @@ function applyEvent(
 ): ChatStreamView {
   switch (event.type) {
     case "run_start":
-      return { ...state, runId: event.data.run_id };
+      return {
+        ...state,
+        runId: event.data.run_id,
+        pageContextEntryId: event.data.page_context_entry_id,
+        pageContextAttached: event.data.page_context_attached,
+      };
     case "message_start": {
       // A new assistant step after tools starts a fresh prose run; the
       // persisted transcript will replace this live view when it settles.
@@ -122,6 +142,9 @@ function applyEvent(
           status: event.data.status,
           resource: readResource(event.data.resource),
           entryId: event.data.entry_id,
+          data: event.data.data,
+          durationMs: event.data.duration_ms,
+          errorCode: event.data.error_code,
         }),
       };
     case "run_end":
@@ -164,7 +187,11 @@ export function useChatStream(
   }, []);
 
   const start = useCallback(
-    async (conversationId: number, content: string) => {
+    async (
+      conversationId: number,
+      content: string,
+      pageContext?: AgentPageContextPayload,
+    ) => {
       const trimmed = content.trim();
       if (trimmed.length === 0 || activeRef.current) {
         return;
@@ -174,6 +201,7 @@ export function useChatStream(
       const controller = new AbortController();
       controllerRef.current = controller;
       setStream({
+        conversationId,
         userContent: trimmed,
         assistantText: "",
         toolCalls: [],
@@ -181,6 +209,9 @@ export function useChatStream(
         finishReason: null,
         error: null,
         runId: null,
+        pageContextEntryId: null,
+        pageContextAttached: false,
+        pageContextKey: pageContext?.key ?? null,
         status: "running",
       });
 
@@ -204,6 +235,7 @@ export function useChatStream(
         await streamAgentMessage({
           conversationId,
           content: trimmed,
+          pageContext,
           signal: controller.signal,
           onEvent: handleEvent,
         });

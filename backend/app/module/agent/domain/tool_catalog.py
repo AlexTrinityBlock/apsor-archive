@@ -22,7 +22,7 @@ from app.module.agent.domain.tool_args import (
     SearchMediaArgs,
 )
 
-PROMPT_VERSION = "archive-agent-v1"
+PROMPT_VERSION = "archive-agent-v2"
 TOOLS_VERSION = "archive-tools-v1"
 
 
