@@ -1,0 +1,79 @@
+name: dendromatrix
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: dendro
+      POSTGRES_PASSWORD: dendro
+      POSTGRES_DB: dendromatrix
+    ports:
+      - "127.0.0.1:55432:5432"
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=50
+    volumes:
+      - dendro-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dendro -d dendromatrix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  cache:
+    image: valkey/valkey:8-alpine
+    command:
+      - valkey-server
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "127.0.0.1:56379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+    environment:
+      DENDRO_DATABASE_URL: postgresql+psycopg://dendro:dendro@db:5432/dendromatrix
+      DENDRO_CACHE_URL: redis://cache:6379/0
+      DENDRO_DATA_DIR: /data
+      DENDRO_STATIC_DIR: /app/frontend/dist
+      DENDRO_TIMEZONE: Asia/Taipei
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - dendro-data:/data
+      # Read-only local secrets. The app reads .secrets/deepseek.env itself, so
+      # the key never becomes a container environment variable.
+      - ./.secrets:/app/backend/.secrets:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - /app/backend/.venv/bin/python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health').read()
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  dendro-postgres:
+  dendro-data:
