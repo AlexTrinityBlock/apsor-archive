@@ -48,6 +48,9 @@ secrets/*
 # local root-level OpenAPI export
 /openapi.json
 
+# Generated PDF.js runtime assets (copied from pdfjs-dist at build time)
+frontend/public/pdfjs/
+
 # Playwright artifacts
 frontend/test-results/
 frontend/playwright-report/

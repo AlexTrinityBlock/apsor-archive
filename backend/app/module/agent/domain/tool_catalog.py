@@ -1,0 +1,163 @@
+"""The frozen tool catalog injected into a conversation's system entry.
+
+The catalog is built once per conversation and stored in ``pi.system``. Changing a
+description or parameter schema therefore only affects new conversations, which
+keeps the provider cache prefix honest.
+"""
+
+from dataclasses import dataclass
+from typing import Any
+
+from pydantic import BaseModel
+
+from app.module.agent.domain.tool_args import (
+    GetMediaArgs,
+    PresentResourceArgs,
+    ReadFileArgs,
+    ReadMemoryArgs,
+    ReadPathArgs,
+    ReadTimelineArgs,
+    SaveMemoryArgs,
+    SearchKnowledgeArgs,
+    SearchMediaArgs,
+)
+
+PROMPT_VERSION = "archive-agent-v1"
+TOOLS_VERSION = "archive-tools-v1"
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    """One tool's model-facing definition and argument validator."""
+
+    name: str
+    description: str
+    args_model: type[BaseModel]
+    requires_confirmation: bool = False
+
+    def parameters(self) -> dict[str, Any]:
+        """Return a compact, deterministic JSON schema for the arguments."""
+        return _clean_schema(self.args_model.model_json_schema())
+
+    def definition(self) -> dict[str, Any]:
+        """Return one OpenAI-compatible function tool definition."""
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.parameters(),
+            },
+        }
+
+
+TOOL_SPECS: tuple[ToolSpec, ...] = (
+    ToolSpec(
+        name="search_knowledge",
+        description=(
+            "Search the archive for files, memories, and periodic summaries. "
+            "Use this before making factual claims. Results carry source labels "
+            "such as [file:10#2] and [memory:7]."
+        ),
+        args_model=SearchKnowledgeArgs,
+    ),
+    ToolSpec(
+        name="read_file",
+        description=(
+            "Read a bounded chunk window from a text file by file id. Find ids "
+            "with search_knowledge or read_path. Cite chunks as [file:id#chunk]."
+        ),
+        args_model=ReadFileArgs,
+    ),
+    ToolSpec(
+        name="read_timeline",
+        description=(
+            "Read a sparse timeline of memories, summaries, and file updates for "
+            "one date range. Use it for questions about what happened when."
+        ),
+        args_model=ReadTimelineArgs,
+    ),
+    ToolSpec(
+        name="read_path",
+        description=(
+            "List folders and files under one File Library path. Use '/' for the "
+            "root. Fuzzy search is only a fallback when the exact path is unknown."
+        ),
+        args_model=ReadPathArgs,
+    ),
+    ToolSpec(
+        name="read_memory",
+        description=(
+            "Read one memory with its neighboring memories, supersession chain, "
+            "and deprecation history. Cite it as [memory:id]."
+        ),
+        args_model=ReadMemoryArgs,
+    ),
+    ToolSpec(
+        name="save_memory",
+        description=(
+            "Save a new memory ONLY when the user explicitly asks you to remember "
+            "or record something and confirms the wording. Never save inferred, "
+            "speculative, or unconfirmed content. Set user_confirmed=true only "
+            "after that explicit confirmation. This is a write action."
+        ),
+        args_model=SaveMemoryArgs,
+        requires_confirmation=True,
+    ),
+    ToolSpec(
+        name="search_media",
+        description=(
+            "Search image captions, OCR text, and tags in the media library. Use "
+            "it to find images, then call get_media or present_resource."
+        ),
+        args_model=SearchMediaArgs,
+    ),
+    ToolSpec(
+        name="get_media",
+        description=(
+            "Read metadata and the caption for one media asset by id. Cite it as "
+            "[media:id]."
+        ),
+        args_model=GetMediaArgs,
+    ),
+    ToolSpec(
+        name="present_resource",
+        description=(
+            "Show a file, memory, or image to the user as a viewer card. Use this "
+            "when the user should open the resource. It only returns the viewer "
+            "URL and metadata; it does not fetch content."
+        ),
+        args_model=PresentResourceArgs,
+    ),
+)
+
+
+def tool_definitions() -> list[dict[str, Any]]:
+    """Build a fresh frozen tool-definition list for a new conversation."""
+    return [spec.definition() for spec in TOOL_SPECS]
+
+
+def tool_catalog() -> list[dict[str, Any]]:
+    """Return the public catalog shown by the UI and method page."""
+    return [
+        {
+            "name": spec.name,
+            "description": spec.description,
+            "parameters": spec.parameters(),
+            "requires_confirmation": spec.requires_confirmation,
+        }
+        for spec in TOOL_SPECS
+    ]
+
+
+def _clean_schema(value: object) -> Any:
+    """Drop Pydantic title noise while preserving property order."""
+    if isinstance(value, dict):
+        return {
+            key: _clean_schema(item)
+            for key, item in value.items()
+            if key != "title"
+        }
+    if isinstance(value, list):
+        return [_clean_schema(item) for item in value]
+    return value

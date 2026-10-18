@@ -520,6 +520,107 @@ export function useReadFile<TData = Awaited<ReturnType<typeof readFile>>, TError
 
 
 
+export const getGetFileContentUrl = (fileId: number,) => {
+
+
+
+
+  return `/api/v1/files/${fileId}/content`
+}
+
+/**
+ * Serve the stored original inline, with byte-range support for viewers.
+ * @summary Get File Content
+ */
+export const getFileContent = async (fileId: number, options?: Parameters<typeof apiFetch>[1]): Promise<unknown> => {
+
+  return apiFetch<unknown>(getGetFileContentUrl(fileId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFileContentQueryKey = (fileId: number,) => {
+    return [
+    `/api/v1/files/${fileId}/content`
+    ] as const;
+    }
+
+
+export const getGetFileContentQueryOptions = <TData = Awaited<ReturnType<typeof getFileContent>>, TError = HTTPValidationError>(fileId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFileContentQueryKey(fileId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFileContent>>> = ({ signal }) => getFileContent(fileId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: fileId !== null && fileId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFileContent>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetFileContentQueryResult = NonNullable<Awaited<ReturnType<typeof getFileContent>>>
+export type GetFileContentQueryError = HTTPValidationError
+
+
+export function useGetFileContent<TData = Awaited<ReturnType<typeof getFileContent>>, TError = HTTPValidationError>(
+ fileId: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileContent>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getFileContent>>,
+          TError,
+          Awaited<ReturnType<typeof getFileContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetFileContent<TData = Awaited<ReturnType<typeof getFileContent>>, TError = HTTPValidationError>(
+ fileId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileContent>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getFileContent>>,
+          TError,
+          Awaited<ReturnType<typeof getFileContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetFileContent<TData = Awaited<ReturnType<typeof getFileContent>>, TError = HTTPValidationError>(
+ fileId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get File Content
+ */
+
+export function useGetFileContent<TData = Awaited<ReturnType<typeof getFileContent>>, TError = HTTPValidationError>(
+ fileId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetFileContentQueryOptions(fileId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export const getDownloadFileUrl = (fileId: number,) => {
 
 

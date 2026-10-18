@@ -6,6 +6,7 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from app.infrastructure.config.settings import get_settings
+from app.module.agent import model as agent_model  # noqa: F401
 from app.module.auth import model as auth_model  # noqa: F401
 from app.module.knowledge.model import Base
 from app.module.media import model as media_model  # noqa: F401

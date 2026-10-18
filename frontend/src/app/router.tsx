@@ -1,9 +1,11 @@
-import { lazy } from "react";
+import { lazy, Suspense } from "react";
 import { createBrowserRouter } from "react-router-dom";
 
 import { AuthGate } from "./auth/AuthGate";
 import { AppShell } from "./component/AppShell";
+import { RouteFallback } from "./component/RouteFallback";
 import { NotFoundPage } from "./not-found/page";
+import { loadViewerPage } from "./viewer/route";
 
 const HomePage = lazy(() =>
   import("./home/page").then((module) => ({ default: module.HomePage })),
@@ -26,6 +28,9 @@ const MediaPage = lazy(() =>
 const MemoryPage = lazy(() =>
   import("./memory/page").then((module) => ({ default: module.MemoryPage })),
 );
+const ChatPage = lazy(() =>
+  import("./chat/page").then((module) => ({ default: module.ChatPage })),
+);
 const AskPage = lazy(() =>
   import("./ask/page").then((module) => ({ default: module.AskPage })),
 );
@@ -35,6 +40,15 @@ const MethodPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./settings/page").then((module) => ({ default: module.SettingsPage })),
 );
+const ViewerPage = lazy(loadViewerPage);
+
+function ViewerRoute() {
+  return (
+    <Suspense fallback={<RouteFallback />}>
+      <ViewerPage />
+    </Suspense>
+  );
+}
 
 /**
  * Each workspace loads on demand so the initial archive shell stays light.
@@ -55,12 +69,17 @@ export const router = createBrowserRouter([
           { path: "tree", element: <TreePage /> },
           { path: "media", element: <MediaPage /> },
           { path: "memory/:memoryId", element: <MemoryPage /> },
+          { path: "chat", element: <ChatPage /> },
+          { path: "chat/:conversationId", element: <ChatPage /> },
           { path: "ask", element: <AskPage /> },
           { path: "method", element: <MethodPage /> },
           { path: "settings", element: <SettingsPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],
       },
+      { path: "viewer/file/:fileId", element: <ViewerRoute /> },
+      { path: "viewer/media/:mediaId", element: <ViewerRoute /> },
+      { path: "viewer/memory/:memoryId", element: <ViewerRoute /> },
     ],
   },
 ]);

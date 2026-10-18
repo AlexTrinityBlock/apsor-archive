@@ -23,6 +23,9 @@ from app.infrastructure.database.session import Database
 from app.infrastructure.files.local_storage import LocalFileStorage
 from app.infrastructure.logger.logging import configure_logging
 from app.infrastructure.security.secret_cipher import SecretCipher
+from app.module.agent.exception.handler import register_exceptions as register_agent_exceptions
+from app.module.agent.repository.agent_repository import AgentRepository
+from app.module.agent.router import router as agent_router
 from app.module.auth.exception.handler import register_exceptions as register_auth_exceptions
 from app.module.auth.router.auth_router import router as auth_router
 from app.module.knowledge.exception.handler import register_exceptions
@@ -32,6 +35,7 @@ from app.module.knowledge.router.health_router import router as health_router
 from app.module.media.exception.handler import register_exceptions as register_media_exceptions
 from app.module.media.router.media_router import router as media_router
 from app.shared.exception.registry import ExceptionRegistry
+from app.shared.time import utcnow
 
 _NOT_BUILT = """<!doctype html>
 <html lang="en">
@@ -63,6 +67,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resolved_settings.database_url,
             echo=resolved_settings.debug,
         )
+        await AgentRepository(app.state.db.session_factory).mark_interrupted_runs(
+            now=utcnow()
+        )
         app.state.cache = build_cache(resolved_settings.cache_url)
         app.state.storage = LocalFileStorage(resolved_settings.data_dir)
         cipher = SecretCipher.from_settings(resolved_settings)
@@ -92,6 +99,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exceptions()
     register_media_exceptions()
     register_auth_exceptions()
+    register_agent_exceptions()
     ExceptionRegistry.setup_app(app)
 
     if resolved_settings.cors_origins:
@@ -115,6 +123,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(
         media_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_authenticated)],
+    )
+    app.include_router(
+        agent_router,
         prefix="/api/v1",
         dependencies=[Depends(require_authenticated)],
     )

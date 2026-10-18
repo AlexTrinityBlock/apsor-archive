@@ -1,4 +1,28 @@
-# DendroMatrix
+<div align="center">
+  <img src="frontend/public/favicon.svg" alt="DendroMatrix" width="112" height="112">
+</div>
+
+<h1 align="center">DendroMatrix</h1>
+
+<p align="center">
+  A local-first knowledge and memory archive for files, memories, and the media between them.
+</p>
+
+<p align="center">
+  <a href="https://github.com/AlexTrinityBlock/dendromatrix"><img src="https://img.shields.io/badge/version-0.1.0-171717" alt="Version 0.1.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/AlexTrinityBlock/dendromatrix?label=license&amp;color=171717" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/self--hosted-yes-171717" alt="Self-hosted">
+  <a href="https://github.com/AlexTrinityBlock/dendromatrix/pulls"><img src="https://img.shields.io/badge/PRs-welcome-171717" alt="Pull requests welcome"></a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.13-3776AB?logo=python&amp;logoColor=white" alt="Python 3.13">
+  <img src="https://img.shields.io/badge/react-19-61DAFB?logo=react&amp;logoColor=black" alt="React 19">
+  <img src="https://img.shields.io/badge/vite-8-646CFF?logo=vite&amp;logoColor=white" alt="Vite 8">
+  <img src="https://img.shields.io/badge/bun-1.3.6-fbf0df?logo=bun&amp;logoColor=black" alt="Bun 1.3.6">
+  <img src="https://img.shields.io/badge/postgresql-17-4169E1?logo=postgresql&amp;logoColor=white" alt="PostgreSQL 17">
+  <img src="https://img.shields.io/badge/docker%20compose-2496ED?logo=docker&amp;logoColor=white" alt="Docker Compose">
+</p>
 
 A local-first knowledge and memory archive with a branching file library, a
 linear memory timeline, hybrid retrieval, and grounded AI answers.
@@ -8,7 +32,10 @@ number of deliberate tool calls: search a passage, read its neighbours, walk the
 path, sample a season, press a new memory, or trace a superseded one. Every
 result carries its source, chunk number, and time.
 
-## Why it exists
+> Status: v0.1.0 — file/memory/media archive, owner login, persistent
+> Pi-shaped agent, SSE chat, and dedicated PDF/DOCX/image/text viewers.
+
+## Highlights
 
 - **Files have lineage.** A path is a branch, not an overwrite. Re-uploading a
   file grows a new leaf; the previous edition remains addressable as history.
@@ -28,9 +55,10 @@ result carries its source, chunk number, and time.
 - **Documents choose their extractor.** PDFs try text first and fall back to
   vision for scanned pages. DOCX, TXT, JSON, CSV, and logs use text, with AI
   structured metadata; images use vision.
-- **The archive is local.** It binds to `127.0.0.1` by default and has no login.
-  Run it on your own machine; put it behind Cloudflare Tunnel only if you add
-  your own access controls.
+- **The archive is local and single-owner.** It binds to `127.0.0.1` by default
+  and is protected by one owner account with an Argon2 password hash and an
+  HttpOnly session cookie. Run it on your own machine; put it behind Cloudflare
+  Tunnel only with your own access controls.
 
 ## Stack
 
@@ -52,8 +80,13 @@ result carries its source, chunk number, and time.
 docker compose up --build
 ```
 
-Open <http://127.0.0.1:8000>. The first screen invites you to seed a small demo
-archive. The database and file data live on named volumes.
+Open <http://127.0.0.1:8000>. The first visit asks you to create the single
+owner account. Once signed in, an empty archive offers a demo seed. The database
+and file data live on named volumes.
+
+The API image copies the committed `frontend/dist`; it does not run a frontend
+build. After changing frontend code, run `cd frontend && bun run build` before
+`docker compose up --build`.
 
 To enable AI answers and AI summaries:
 
@@ -69,8 +102,9 @@ The Compose file mounts `.secrets/` read-only. The app reads the env file itself
 so the key never becomes a container environment variable and never appears in
 `docker compose config`. The `644` mode is required because the API container
 runs as a non-root user. The key is gitignored and is never returned by the API.
-Without it, summaries fall back to a deterministic extractive form and
-`POST /api/v1/ask` returns `503 ai_not_configured`.
+Without it, summaries fall back to a deterministic extractive form,
+`POST /api/v1/ask` returns `503 ai_not_configured`, and agent messages return
+`503 agent_not_configured`.
 
 ### Configure AI in the app
 
@@ -88,9 +122,9 @@ key. If it is unset, a `0600` key file is created at `data/.secret_key` (or
 
 Precedence is: **database row → environment → built-in default**. The Settings
 page labels each provider with its source. Changing the embedding model does not
-rewrite existing vectors; `reindex_required` warns you, and re-ingest a file to
-refresh its chunks. Vector search skips chunks whose dimension does not match the
-current embedder.
+rewrite existing vectors; `reindex_required` warns you. Run **Re-embed library**
+(or `POST /api/v1/settings/ai/embedding/reindex`) to refresh current chunks.
+Vector search skips chunks whose dimension does not match the current embedder.
 
 Settings API:
 
@@ -148,24 +182,143 @@ docker compose -f docker-compose.cloudflare.yml up -d --build
 Point the tunnel ingress for `archive.example.com` at `http://caddy:80`. The
 token file is gitignored. See `secrets/README.md` for permissions.
 
-## The six tools
+## Tool surface
 
-The HTTP API is the tool surface. Each endpoint is deliberately small enough for
-an LLM to call in sequence.
+The archive exposes six small HTTP tools. Each JSON endpoint mirrors a retrieval
+or memory operation the agent can call; each payload is deliberately small enough
+for an LLM to use in sequence.
 
 | Tool | Endpoint | What it returns |
 |---|---|---|
 | `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | Top results per source kind from BM25 + vector, fused with RRF and deduplicated |
-| `read_file` | `GET /api/v1/files/{id}/chunks/{chunk}?chunk_range=1` | A 1-based chunk window |
-| `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=14` | Up to five sampled events per kind, density, and skip counts |
+| `read_file` | `GET /api/v1/files/{file_id}/chunks/{chunk}?chunk_range=1` | A 1-based chunk window |
+| `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | Up to five sampled events per kind, density, and skip counts |
 | `read_path` | `GET /api/v1/paths?path=/history&path_depth=1&fuzzy_search=` | Directories and files, or fuzzy path matches |
 | `save_memory` | `POST /api/v1/memories` | A new memory, the deprecated memories it replaced, and any new summary |
-| `read_memory` | `GET /api/v1/memories/{id}?memory_range=1&trace_history=true` | Target, neighbours, supersedes, successor, and chain |
+| `read_memory` | `GET /api/v1/memories/{memory_id}?memory_range=1&trace_history=true` | Target, neighbours, supersedes, successor, and chain |
+
+The persistent archive agent exposes nine model tools: the six above plus
+`search_media`, `get_media`, and `present_resource`. The HTTP examples use
+explicit parameters; the HTTP server defaults are `result_number=2`,
+`chunk_range=1`, `day_range=1`, `path_depth=1`, and `memory_range=0`. The agent's
+tool schemas choose their own defaults, such as `result_number=8` and
+`day_range=7`. For external LLM callers, the separate `/api/v1/tools/*` facade
+renders the same services as compact XML; the persistent agent calls the
+services directly through its own registry.
+
+`present_resource` returns a viewer URL such as `/viewer/file/{id}?chunk={n}`,
+`/viewer/media/{id}`, or `/viewer/memory/{id}` and never fetches the resource.
+
+`save_memory` is a write action. The tool requires `user_confirmed=true` and the
+system prompt instructs the model to save only after an explicit user request
+and confirmed wording. The model supplies that flag; there is no separate
+approval dialog in the chat UI yet, so this is prompt-enforced rather than a
+human-in-the-loop gate.
 
 Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
-/api/v1/files/text`, `DELETE /api/v1/files/{id}`, `GET /api/v1/tree`,
-`POST /api/v1/summaries`, `GET /api/v1/stats`, `GET /api/v1/health`, `GET
-/api/v1/ai/status`, and `POST /api/v1/ask`.
+/api/v1/files/text`, `DELETE /api/v1/files/{file_id}`, `GET /api/v1/paths`,
+`GET /api/v1/tree`, `GET /api/v1/memories`, `POST /api/v1/memories`,
+`POST /api/v1/summaries`, `GET /api/v1/stats`, `POST /api/v1/demo/seed`,
+`GET /api/v1/health`, `GET /api/v1/ai/status`, and `POST /api/v1/ask`.
+
+### Agent conversations
+
+`/api/v1/agent` is a persistent, Pi-shaped multi-turn archive agent. It stores an
+immutable entry log instead of mutating a chat array:
+
+- `agent_conversation` — transcript scope, provider/model identity, and metadata.
+- `agent_entry` — immutable `pi.user`, `pi.assistant`, `pi.tool-result`,
+  `pi.system`, `pi.reset`, `pi.compaction`, and `ui.notice` entries. `model` is
+  exactly the provider payload; `data` is UI/diagnostics only.
+- `agent_run` — durable state for one submission (`request_id`, status, abort,
+  last entry, safe error). `agent_commit_seq` groups entries written in one
+  transaction.
+
+The first entry is a frozen `pi.system` prompt and tool snapshot. The context
+builder replays entries deterministically: it honors `head_entry_id` and `edits`,
+keeps system entries, moves tool results directly after their assistant call,
+synthesizes missing results, drops orphan results, and excludes failed assistant
+attempts. Tool calls are validated and returned as structured results; a tool
+failure never becomes an HTTP 500.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/v1/agent/conversations` | Create a conversation and its system entry |
+| `GET` | `/api/v1/agent/conversations` | List active/archived conversations, newest activity first |
+| `GET` | `/api/v1/agent/conversations/{conversation_id}` | Metadata plus the first entry page |
+| `GET` | `/api/v1/agent/conversations/{conversation_id}/entries?after_id=&limit=` | Ascending entry page |
+| `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | Rename, archive, or restore |
+| `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | Soft delete; entries stay for audit |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | Append a user entry and run the loop |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry the latest failed/cancelled run |
+| `GET` | `/api/v1/agent/tools` | Current tool catalog plus prompt/tools versions |
+
+`POST /api/v1/agent/conversations/{conversation_id}/messages` accepts
+`{content, request_id?}` and `.../retry` accepts
+`{request_id?}`. Both stream `text/event-stream` by default. The event names are
+`run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
+`tool_end`, `run_end`, and `error`. `message_start` has `entry_id=null` because
+the assistant entry is persisted only at `message_end`; deltas are transport-only.
+Send `Accept: application/json` for the completed turn instead. SSE responses set
+`Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, and
+Starlette's GZip middleware excludes `text/event-stream`.
+
+The agent allows one active run per conversation, at most 8 model steps, 6 tool
+calls per user turn, 24k tokens, and 12k result characters per tool (24k total).
+A failed or cancelled run can be retried without duplicating the user entry. The
+backend retry endpoint is tested; the chat UI does not yet render a Retry action.
+Conversation detail returns the first entry page, and the UI loads later pages
+with **Load more entries**.
+
+Tests inject a deterministic `FakeChatGenerator` from
+`app/module/agent/test/fake_chat_generator.py` by setting
+`app.state.agent_chat_generator` or overriding `get_agent_chat_generator`; no
+DeepSeek call is made.
+
+### Chat reading room
+
+`/chat` and `/chat/:conversationId` are the persistent reading room for the
+agent. The thread rail lists active and archived conversations and supports
+rename, archive/restore, delete, and a new thread; the sheet renders immutable
+entries as keeper marginalia, archive sheets, field-note tool results, and
+structured resource cards. The composer streams over SSE, supports
+Cmd/Ctrl+Enter and a stop action, and refreshes the thread list plus the active
+transcript when the run settles (other conversations are not refetched).
+
+The UI uses the generated Orval hooks for conversation metadata and lifecycle,
+and a small `agent-stream.ts` client for `text/event-stream` because generated
+hooks resolve normal JSON responses. Markdown is rendered with `skipHtml`;
+citations link only to known viewer paths. `/ask` remains available as Quick ask.
+
+Chat appears in the **Studio** navigation and the command palette. On mobile the
+bottom tabs remain Overview, Search, Timeline, Library, and More; Chat and the
+thread rail are reached from the navigation drawer.
+
+### Resource viewer
+
+`/viewer/file/:fileId`, `/viewer/media/:mediaId`, and
+`/viewer/memory/:memoryId` are standalone routes outside `AppShell`; they own
+their top bar and safe-area layout so a resource can open in a new tab.
+
+| Resource | Renderer |
+|---|---|
+| PDF | `react-pdf` 11 + bundled `pdfjs-dist` 6, page navigation, zoom, fit width, text layer |
+| DOCX | `docx-preview` inside a script-disabled sandbox |
+| Image | native image with zoom/pan, plus a `yet-another-react-lightbox` gallery |
+| Text / JSON / Markdown / CSV | archive sheet with wrap/copy/download, pretty JSON, GFM Markdown |
+| Memory | pressed-record memory leaf with lineage and trace link |
+
+`GET /api/v1/files/{file_id}/content` serves originals inline with `nosniff`, a
+sandboxing CSP, ETag/Last-Modified, and single-range HTTP Range support
+(`206`/`416`; `If-None-Match` returns `304`). `/download` stays an attachment.
+Text-only records have `has_original=false` and fall back to indexed chunks.
+
+PDF.js CMaps and standard fonts are copied from the pinned `pdfjs-dist` package
+into `frontend/public/pdfjs/` by `bun run pdf-assets`, which `dev` and `build`
+run automatically. Vite emits them into `frontend/dist/pdfjs/`; because the
+Docker image copies the committed `frontend/dist` and does not run a frontend
+build, those emitted assets must be committed with the rest of `dist/`. They are
+served locally and never fetched from a CDN.
 
 ### Account and sessions
 
@@ -183,9 +336,10 @@ token. The cookie is HttpOnly, SameSite=Lax, and Secure when
 | `POST` | `/api/v1/auth/logout` | Delete the session and clear the cookie |
 | `GET` | `/api/v1/auth/me` | Current owner (requires a session) |
 
-Every knowledge, media, and settings endpoint requires the session; only
-`/api/v1/health`, `/api/v1/auth/*`, `/docs`, and the SPA shell are public.
-Tool endpoints need the session cookie too.
+Every knowledge, media, settings, and agent endpoint requires the session; only
+`/api/v1/health`, `/health`, `/api/v1/auth/*`, `/docs`, `/redoc`,
+`/openapi.json`, and the SPA shell are public. Tool endpoints need the session
+cookie too.
 
 Standalone media API:
 
@@ -195,9 +349,9 @@ Standalone media API:
 | `GET` | `/api/v1/media` | List current media |
 | `GET` | `/api/v1/media/search?query=` | Text → image over caption/OCR/tags |
 | `POST` | `/api/v1/media/search/image` | Image → image visual similarity |
-| `GET` | `/api/v1/media/{id}/content` | Original image bytes |
-| `POST` | `/api/v1/media/{id}/describe` | Re-run AI caption/OCR |
-| `DELETE` | `/api/v1/media/{id}` | Soft-delete the media asset |
+| `GET` | `/api/v1/media/{media_id}/content` | Original image bytes |
+| `POST` | `/api/v1/media/{media_id}/describe` | Re-run AI caption/OCR |
+| `DELETE` | `/api/v1/media/{media_id}` | Soft-delete the media asset |
 
 Document intake (`POST /api/v1/files`) supports:
 
@@ -352,9 +506,12 @@ memory_summary ───┘
   encrypted API key, a safe hint, and the active model/base URL/dimension.
 - `media_asset` / `media_ngram`: the standalone visual archive, its OCR/caption
   text, and the n-gram index used for text → image search.
+- `agent_conversation` / `agent_entry` / `agent_run`: the persistent agent's
+  transcript scope, immutable entry log, and per-submission run state.
+  `agent_commit_seq` groups entries written in one transaction.
 
-The complete local design notes live under `docs/plan/` (gitignored, Chinese).
-The committed code, comments, UI copy, and documentation are English.
+The complete local design notes live under `docs/plan/` (gitignored). The
+committed code, comments, UI copy, and documentation are English.
 
 ## Development checks
 
@@ -397,16 +554,22 @@ backend/
       schema/                   Pydantic contracts
       exception/                stable error codes
     module/media/               standalone image archive and visual retrieval
+    module/agent/               persistent transcript, context builder, tools, SSE
   alembic/                      migrations
   tests/                        ten integration tests
 frontend/
   src/app/
     component/                  shared archive UI
     generated-apis-types/       committed Orval client
+    chat/                       persistent reading room
+    viewer/                     file, media, and memory viewers
     home/ search/ timeline/ library/ tree/ media/ memory/ ask/ ...
-  src/apis/fetch-client.ts      the only fetch mutator
+  src/apis/fetch-client.ts      the only JSON mutator
+  src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting
   src/styles/                   paper / night archive tokens
+  scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
+  dist/                         committed production build served by FastAPI
 docker-compose.yml              normal deployment
 docker-compose.dev.yml          local dependencies
 docker-compose.cloudflare.yml   tunnel deployment
@@ -415,18 +578,23 @@ docker/caddy/                   non-root reverse proxy for the tunnel
 
 ## Security and privacy
 
-- No authentication is included. The normal Compose file binds the API to
-  `127.0.0.1`; the Cloudflare file publishes no host port.
+- One owner account protects the archive. Passwords are hashed with Argon2;
+  session tokens are stored only as SHA-256 hashes in `user_session`. The cookie
+  is HttpOnly, SameSite=Lax, and Secure when `DENDRO_COOKIE_SECURE=true`.
+- The normal Compose file binds the API to `127.0.0.1`; the Cloudflare file
+  publishes no host port. Login throttling is in-memory and therefore
+  single-process.
 - Paths reject traversal segments, backslashes, control characters, and
   over-long values. Uploads are capped at 10 MB and restricted to an extension
   allowlist.
-- HTML from files and memories is rendered as text through React. The UI never
+- HTML from files and memories is rendered as text through React. Agent Markdown
+  uses `skipHtml`; DOCX previews run in a script-disabled sandbox. The UI never
   uses `dangerouslySetInnerHTML`.
 - The DeepSeek key lives in `.secrets/deepseek.env` or the environment. It is
   never logged, returned, or committed. Keys saved from the Settings page are
   encrypted in PostgreSQL and returned only as a four-character hint.
-- AI calls happen only for summaries and `POST /ask`. If the provider fails, the
-  API returns a stable error instead of inventing an answer.
+- AI calls happen for summaries, `POST /ask`, and agent turns. If the provider
+  fails, the API returns a stable error instead of inventing an answer.
 
 ## License
 
