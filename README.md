@@ -167,6 +167,26 @@ Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 `POST /api/v1/summaries`, `GET /api/v1/stats`, `GET /api/v1/health`, `GET
 /api/v1/ai/status`, and `POST /api/v1/ask`.
 
+### Account and sessions
+
+On the first visit the app asks you to create the single owner account. There is
+no default password, no email recovery, and no second account. Passwords are
+hashed with Argon2; the database stores only a SHA-256 hash of each session
+token. The cookie is HttpOnly, SameSite=Lax, and Secure when
+`DENDRO_COOKIE_SECURE=true` (the Cloudflare compose sets it).
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/auth/status` | First-run state and current session |
+| `POST` | `/api/v1/auth/setup` | Create the owner account (first run only) |
+| `POST` | `/api/v1/auth/login` | Verify a password and set the session cookie |
+| `POST` | `/api/v1/auth/logout` | Delete the session and clear the cookie |
+| `GET` | `/api/v1/auth/me` | Current owner (requires a session) |
+
+Every knowledge, media, and settings endpoint requires the session; only
+`/api/v1/health`, `/api/v1/auth/*`, `/docs`, and the SPA shell are public.
+Tool endpoints need the session cookie too.
+
 Standalone media API:
 
 | Method | Path | Purpose |

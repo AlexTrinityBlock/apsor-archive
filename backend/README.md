@@ -36,6 +36,15 @@ memory summaries. The default model is `deepseek-flash`. Without a key:
 - summaries use the deterministic extractive fallback (`generator=extractive`);
 - `/api/v1/ask` returns `503 ai_not_configured`.
 
+## Account and sessions
+
+The first visit creates the single owner account through
+`POST /api/v1/auth/setup`. Passwords are hashed with Argon2; sessions are opaque
+cookies whose SHA-256 hash is stored in `user_session`. The cookie is HttpOnly and
+SameSite=Lax; set `DENDRO_COOKIE_SECURE=true` behind HTTPS. Every knowledge and
+media endpoint requires the session; `/api/v1/health` and `/api/v1/auth/*` are
+public. There is no password recovery, by design.
+
 ## Database
 
 Alembic owns the schema. The initial migration creates `pg_trgm` and the seven

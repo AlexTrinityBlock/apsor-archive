@@ -5,11 +5,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 
+from app.dependency.auth import require_authenticated
 from app.infrastructure.ai.provider_factory import (
     ProviderFactory,
     provider_defaults_from_settings,
@@ -22,9 +23,12 @@ from app.infrastructure.database.session import Database
 from app.infrastructure.files.local_storage import LocalFileStorage
 from app.infrastructure.logger.logging import configure_logging
 from app.infrastructure.security.secret_cipher import SecretCipher
+from app.module.auth.exception.handler import register_exceptions as register_auth_exceptions
+from app.module.auth.router.auth_router import router as auth_router
 from app.module.knowledge.exception.handler import register_exceptions
 from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
 from app.module.knowledge.router import router as knowledge_router
+from app.module.knowledge.router.health_router import router as health_router
 from app.module.media.exception.handler import register_exceptions as register_media_exceptions
 from app.module.media.router.media_router import router as media_router
 from app.shared.exception.registry import ExceptionRegistry
@@ -87,6 +91,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     register_exceptions()
     register_media_exceptions()
+    register_auth_exceptions()
     ExceptionRegistry.setup_app(app)
 
     if resolved_settings.cors_origins:
@@ -102,8 +107,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         minimum_size=resolved_settings.gzip_minimum_size,
     )
 
-    app.include_router(knowledge_router)
-    app.include_router(media_router, prefix="/api/v1")
+    app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(health_router, prefix="/api/v1")
+    app.include_router(
+        knowledge_router,
+        dependencies=[Depends(require_authenticated)],
+    )
+    app.include_router(
+        media_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_authenticated)],
+    )
 
     @app.get("/health", include_in_schema=False)
     async def root_health() -> dict[str, str]:

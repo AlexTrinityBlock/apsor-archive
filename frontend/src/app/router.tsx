@@ -1,6 +1,7 @@
 import { lazy } from "react";
 import { createBrowserRouter } from "react-router-dom";
 
+import { AuthGate } from "./auth/AuthGate";
 import { AppShell } from "./component/AppShell";
 import { NotFoundPage } from "./not-found/page";
 
@@ -42,19 +43,24 @@ const SettingsPage = lazy(() =>
 export const router = createBrowserRouter([
   {
     path: "/",
-    element: <AppShell />,
+    element: <AuthGate />,
     children: [
-      { index: true, element: <HomePage /> },
-      { path: "search", element: <SearchPage /> },
-      { path: "timeline", element: <TimelinePage /> },
-      { path: "library", element: <LibraryPage /> },
-      { path: "tree", element: <TreePage /> },
-      { path: "media", element: <MediaPage /> },
-      { path: "memory/:memoryId", element: <MemoryPage /> },
-      { path: "ask", element: <AskPage /> },
-      { path: "method", element: <MethodPage /> },
-      { path: "settings", element: <SettingsPage /> },
-      { path: "*", element: <NotFoundPage /> },
+      {
+        element: <AppShell />,
+        children: [
+          { index: true, element: <HomePage /> },
+          { path: "search", element: <SearchPage /> },
+          { path: "timeline", element: <TimelinePage /> },
+          { path: "library", element: <LibraryPage /> },
+          { path: "tree", element: <TreePage /> },
+          { path: "media", element: <MediaPage /> },
+          { path: "memory/:memoryId", element: <MemoryPage /> },
+          { path: "ask", element: <AskPage /> },
+          { path: "method", element: <MethodPage /> },
+          { path: "settings", element: <SettingsPage /> },
+          { path: "*", element: <NotFoundPage /> },
+        ],
+      },
     ],
   },
 ]);

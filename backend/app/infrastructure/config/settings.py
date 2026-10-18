@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Taipei"
     gzip_minimum_size: int = 500
 
+    # Cookie session for the single owner account.
+    session_ttl_hours: int = 24 * 30
+    cookie_name: str = "dendro_session"
+    cookie_secure: bool = False
+    login_attempt_limit: int = 10
+    login_window_minutes: int = 5
+
 
 @lru_cache
 def get_settings() -> Settings:

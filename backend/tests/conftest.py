@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, text
 
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
+from app.module.auth import model as auth_model  # noqa: F401
 from app.module.knowledge.model import Base
 from app.module.media import model as media_model  # noqa: F401
 
@@ -18,8 +19,12 @@ TEST_DATABASE_NAME = "dendromatrix_test"
 
 TRUNCATE_STATEMENT = (
     "TRUNCATE TABLE chunk_ngram, chunk, tree_node, file, memory_summary, memory, "
-    "media_ngram, media_asset, ai_provider_config RESTART IDENTITY CASCADE"
+    "media_ngram, media_asset, ai_provider_config, user_session, app_user "
+    "RESTART IDENTITY CASCADE"
 )
+
+OWNER_USERNAME = "owner"
+OWNER_PASSWORD = "correct-horse-battery"
 
 
 def _ensure_database() -> None:
@@ -76,11 +81,28 @@ def settings(tmp_path: Path) -> Settings:
         auto_summary_threshold=999,
         gzip_minimum_size=1,
         embedding_provider="hashing",
+        cookie_secure=False,
+        login_attempt_limit=100,
     )
 
 
 @pytest.fixture
-def client(settings: Settings) -> Iterator[TestClient]:
-    """A TestClient whose lifespan creates the async engine."""
+def anonymous_client(settings: Settings) -> Iterator[TestClient]:
+    """A TestClient with no owner account and no session."""
     with TestClient(create_app(settings)) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def client(anonymous_client: TestClient) -> Iterator[TestClient]:
+    """A TestClient with the owner account created and signed in."""
+    response = anonymous_client.post(
+        "/api/v1/auth/setup",
+        json={
+            "username": OWNER_USERNAME,
+            "password": OWNER_PASSWORD,
+            "confirm_password": OWNER_PASSWORD,
+        },
+    )
+    assert response.status_code == 201, response.text
+    yield anonymous_client

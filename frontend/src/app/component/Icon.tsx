@@ -38,7 +38,8 @@ export type IconName =
   | "plus"
   | "history"
   | "filter"
-  | "ring";
+  | "ring"
+  | "logout";
 
 const ICONS: Record<IconName, ReactNode> = {
   overview: (
@@ -229,6 +230,13 @@ const ICONS: Record<IconName, ReactNode> = {
       <circle cx="12" cy="12" r="8.5" />
       <circle cx="12" cy="12" r="5.2" />
       <circle cx="12" cy="12" r="1.8" />
+    </>
+  ),
+  logout: (
+    <>
+      <path d="M9.5 4H5.8A1.8 1.8 0 0 0 4 5.8v12.4A1.8 1.8 0 0 0 5.8 20h3.7" />
+      <path d="M16 8l4 4-4 4" />
+      <path d="M20 12H9.5" />
     </>
   ),
 };
