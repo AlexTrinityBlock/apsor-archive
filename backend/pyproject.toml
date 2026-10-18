@@ -1,0 +1,87 @@
+[project]
+name = "dendromatrix-backend"
+version = "0.1.0"
+description = "DendroMatrix: a tree-indexed knowledge and memory system with hybrid retrieval and AI."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "alembic>=1.16.0",
+    "argon2-cffi>=25.1.0",
+    "cryptography>=50.0.2",
+    "fastapi>=0.121.0",
+    "httpx>=0.28.1",
+    "pillow>=13.0.0",
+    "psycopg[binary]>=3.2.10",
+    "pydantic>=2.12.0",
+    "pydantic-settings>=2.12.0",
+    "pypdf>=6.1.0",
+    "pypdfium2>=5.14.0",
+    "python-docx>=1.2.0",
+    "python-multipart>=0.0.20",
+    "redis>=6.4.0",
+    "sqlalchemy[asyncio]>=2.0.44",
+    "uvicorn[standard]>=0.38.0",
+]
+
+[project.scripts]
+dendromatrix = "app.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[dependency-groups]
+dev = [
+    "bandit[toml]>=1.8.6",
+    "httpx2>=2.13.1",
+    "mypy>=1.18.0",
+    "pip-audit>=2.9.0",
+    "pytest>=8.4.0",
+    "ruff>=0.14.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+"app/module/knowledge/test/**" = ["B011"]
+"app/module/knowledge/dependencies.py" = ["B008"]
+"app/module/knowledge/router/**" = ["B008"]
+"app/module/media/dependencies.py" = ["B008"]
+"app/module/media/router/**" = ["B008"]
+"app/module/auth/dependencies.py" = ["B008"]
+"app/module/auth/router/**" = ["B008"]
+"app/dependency/**" = ["B008"]
+"alembic/versions/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.13"
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+filterwarnings = ["error"]

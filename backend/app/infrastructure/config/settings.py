@@ -1,0 +1,110 @@
+"""Application settings loaded from environment variables and local env files."""
+
+import logging
+from functools import lru_cache
+from pathlib import Path
+from typing import Literal
+
+from pydantic import Field, SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_ROOT = Path(__file__).resolve().parents[3]
+REPOSITORY_ROOT = BACKEND_ROOT.parent
+logger = logging.getLogger(__name__)
+
+
+class Settings(BaseSettings):
+    """Runtime configuration for the DendroMatrix API."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="DENDRO_",
+        env_file=(
+            ".env",
+            "../.env",
+            ".secrets/deepseek.env",
+            "../.secrets/deepseek.env",
+            ".secrets/openai.env",
+            "../.secrets/openai.env",
+        ),
+        env_file_encoding="utf-8",
+        extra="ignore",
+        populate_by_name=True,
+    )
+
+    app_name: str = "DendroMatrix"
+    version: str = "0.1.0"
+    environment: str = "local"
+    debug: bool = False
+
+    database_url: str = "postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendromatrix"
+    data_dir: Path = BACKEND_ROOT / "data"
+    static_dir: Path = REPOSITORY_ROOT / "frontend" / "dist"
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://127.0.0.1:5173", "http://localhost:5173"]
+    )
+
+    cache_url: str = "redis://127.0.0.1:56379/0"
+    cache_ttl_seconds: int = 120
+
+    max_upload_bytes: int = 10 * 1024 * 1024
+    max_text_bytes: int = 2 * 1024 * 1024
+    max_chunks_per_file: int = 500
+    vision_max_pages: int = 10
+    pdf_text_threshold: int = 80
+
+    chunk_target_chars: int = 800
+    chunk_overlap_chars: int = 120
+
+    search_candidate_limit: int = 200
+    search_vector_scan_limit: int = 20_000
+    timeline_max_day_range: int = 366
+
+    embedding_provider: Literal["hashing", "openai", "none"] = "hashing"
+    embedding_dimension: int = 384
+    embedding_model: str = "dendro-hash-384"
+    embedding_base_url: str | None = None
+    embedding_api_key: SecretStr | None = None
+    embedding_timeout_seconds: float = 30.0
+
+    deepseek_api_key: SecretStr | None = None
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-flash"
+    deepseek_timeout_seconds: float = 60.0
+    deepseek_max_tokens: int = 1800
+    deepseek_temperature: float = 0.2
+
+    # Master key for encrypting API keys stored in the database. When unset, a
+    # 0600 key file is created under the data directory.
+    secret_key: SecretStr | None = None
+
+    ai_summary_enabled: bool = True
+    auto_summary_threshold: int = 10
+    summary_min_memories: int = 2
+
+    seed_demo: bool = False
+    run_migrations: bool = True
+    timezone: str = "Asia/Taipei"
+    gzip_minimum_size: int = 500
+
+    # Cookie session for the single owner account.
+    session_ttl_hours: int = 24 * 30
+    cookie_name: str = "dendro_session"
+    cookie_secure: bool = False
+    login_attempt_limit: int = 10
+    login_window_minutes: int = 5
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Return the process-wide settings instance.
+
+    A mounted secret file can be present but unreadable (for example, a 0600
+    bind mount read by a non-root container user). In that case the API still
+    starts with AI disabled and logs one clear warning, instead of failing to
+    boot with an opaque traceback.
+    """
+    try:
+        return Settings()
+    except OSError as exc:
+        logger.warning("Could not read an environment file; continuing without it: %s", exc)
+        return Settings(_env_file=None)

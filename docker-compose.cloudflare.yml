@@ -1,0 +1,93 @@
+name: dendromatrix-cloudflare
+
+# Cloudflare Tunnel deployment. No service publishes a host port. The tunnel
+# ingress should point at `http://caddy:80` for DENDRO_PUBLIC_HOST.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: dendro
+      POSTGRES_PASSWORD: dendro
+      POSTGRES_DB: dendromatrix
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - max_connections=50
+    volumes:
+      - dendro-cloudflare-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dendro -d dendromatrix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  cache:
+    image: valkey/valkey:8-alpine
+    command:
+      - valkey-server
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+    environment:
+      DENDRO_DATABASE_URL: postgresql+psycopg://dendro:dendro@db:5432/dendromatrix
+      DENDRO_CACHE_URL: redis://cache:6379/0
+      DENDRO_DATA_DIR: /data
+      DENDRO_STATIC_DIR: /app/frontend/dist
+      DENDRO_TIMEZONE: Asia/Taipei
+      DENDRO_COOKIE_SECURE: "true"
+    volumes:
+      - dendro-cloudflare-data:/data
+      - ./.secrets:/app/backend/.secrets:ro
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    build:
+      context: ./docker/caddy
+    environment:
+      DENDRO_PUBLIC_HOST: ${DENDRO_PUBLIC_HOST:-api.example.com}
+    expose:
+      - "80"
+    volumes:
+      - caddy-logs:/var/log/caddy
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  cloudflare-tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token-file /run/secrets/cf_token
+    secrets:
+      - cf_token
+    depends_on:
+      - caddy
+    restart: unless-stopped
+
+secrets:
+  cf_token:
+    file: ./secrets/cf_token.txt
+
+volumes:
+  dendro-cloudflare-postgres:
+  dendro-cloudflare-data:
+  caddy-logs:

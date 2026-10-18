@@ -1,0 +1,146 @@
+/* ==========================================================================
+   Design tokens: the paper archive and the night archive.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* Type */
+  --font-display: "Fraunces", "Noto Serif TC", "Songti TC", "Source Han Serif TC",
+    Georgia, serif;
+  --font-ui: "IBM Plex Sans", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei",
+    sans-serif;
+  --font-mono: "IBM Plex Mono", "Noto Sans Mono CJK TC", ui-monospace, SFMono-Regular,
+    Menlo, monospace;
+
+  /* Paper */
+  --paper: #f3edde;
+  --paper-soft: #eee5d2;
+  --paper-deep: #e7dbc2;
+  --surface: #f8f3e7;
+  --surface-raised: #fbf7ee;
+  --surface-inset: #eee6d5;
+
+  /* Ink */
+  --ink: #213126;
+  --ink-strong: #15231a;
+  --body: #465443;
+  --muted: #5b5c47;
+  --faint: #625d48;
+
+  /* Lines */
+  --line: rgba(33, 49, 38, 0.16);
+  --line-strong: rgba(33, 49, 38, 0.33);
+  --line-soft: rgba(33, 49, 38, 0.08);
+
+  /* Archive green */
+  --moss: #5d7150;
+  --moss-bright: #89996a;
+  --moss-wash: rgba(93, 113, 80, 0.11);
+  --moss-deep: #41533a;
+  --moss-ink: #3f5138;
+
+  /* Accents */
+  --vermilion: #b7462c;
+  --vermilion-deep: #94371f;
+  --vermilion-wash: rgba(183, 70, 44, 0.1);
+  --vermilion-ink: #8e3420;
+  --ochre: #b9892f;
+  --ochre-deep: #8d671f;
+  --ochre-wash: rgba(185, 137, 47, 0.13);
+  --ochre-ink: #775718;
+
+  /* Sidebar */
+  --sidebar: #17251c;
+  --sidebar-deep: #101b14;
+  --sidebar-soft: #203126;
+  --sidebar-ink: #f0e9d7;
+  --sidebar-body: #b9b9a4;
+  --sidebar-muted: #858e7b;
+  --sidebar-line: rgba(240, 233, 215, 0.13);
+  --sidebar-line-strong: rgba(240, 233, 215, 0.26);
+
+  /* Focus and selection */
+  --focus: #8a5e17;
+  --selection-bg: #b7462c;
+  --selection-ink: #fbf7ee;
+
+  /* Shape */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --sidebar-width: 260px;
+  --content-max: 1280px;
+  --mobile-bar-height: 58px;
+  --mobile-tabs-height: 64px;
+
+  /* Depth */
+  --shadow-sheet: 0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 22px 48px -40px rgba(43, 42, 24, 0.55);
+  --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.4) inset,
+    0 26px 46px -32px rgba(43, 42, 24, 0.42);
+  --shadow-modal: 0 48px 100px -32px rgba(12, 18, 13, 0.6),
+    0 0 0 1px rgba(20, 30, 22, 0.18);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --speed-fast: 160ms;
+  --speed-base: 260ms;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --paper: #10160f;
+  --paper-soft: #0d130c;
+  --paper-deep: #090e09;
+  --surface: #151d14;
+  --surface-raised: #1a2418;
+  --surface-inset: #111a11;
+
+  --ink: #eae3d0;
+  --ink-strong: #f4eedc;
+  --body: #c2c1ac;
+  --muted: #9ba087;
+  --faint: #8a907d;
+
+  --line: rgba(234, 227, 208, 0.15);
+  --line-strong: rgba(234, 227, 208, 0.32);
+  --line-soft: rgba(234, 227, 208, 0.07);
+
+  --moss: #94a97b;
+  --moss-bright: #b0c08f;
+  --moss-wash: rgba(148, 169, 123, 0.12);
+  --moss-deep: #c0cfa6;
+  --moss-ink: #c1d0a7;
+
+  --vermilion: #d56a50;
+  --vermilion-deep: #e28770;
+  --vermilion-wash: rgba(213, 106, 80, 0.14);
+  --vermilion-ink: #e59079;
+  --ochre: #cda44d;
+  --ochre-deep: #dfba6d;
+  --ochre-wash: rgba(205, 164, 77, 0.12);
+  --ochre-ink: #e2c17c;
+
+  --sidebar: #090f0a;
+  --sidebar-deep: #060a07;
+  --sidebar-soft: #111b12;
+  --sidebar-ink: #f1ead9;
+  --sidebar-body: #b5b7a1;
+  --sidebar-muted: #7e8673;
+  --sidebar-line: rgba(241, 234, 217, 0.12);
+  --sidebar-line-strong: rgba(241, 234, 217, 0.24);
+
+  --focus: #d7b369;
+  --selection-bg: #cda44d;
+  --selection-ink: #10160f;
+
+  --shadow-sheet: 0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 24px 52px -42px rgba(0, 0, 0, 0.9);
+  --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 28px 48px -34px rgba(0, 0, 0, 0.85);
+  --shadow-modal: 0 52px 110px -28px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(234, 227, 208, 0.12);
+}
