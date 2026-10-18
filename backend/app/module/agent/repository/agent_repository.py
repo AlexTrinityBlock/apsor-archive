@@ -19,6 +19,7 @@ from app.module.agent.domain.agent_domain import (
     ACTIVE_RUN_STATUSES,
     CONVERSATION_ACTIVE,
     CONVERSATION_ARCHIVED,
+    KIND_PAGE_CONTEXT,
     KIND_SYSTEM,
     RUN_CANCELLED,
     RUN_COMPLETED,
@@ -249,9 +250,16 @@ class AgentRepository:
         *,
         conversation_id: int,
         draft: EntryDraft,
+        page_context_draft: EntryDraft | None,
+        page_context_key: str | None,
         request_id: str | None,
         now: datetime,
-    ) -> tuple[AgentConversationModel, AgentEntryModel, AgentRunModel]:
+    ) -> tuple[
+        AgentConversationModel,
+        AgentEntryModel,
+        AgentRunModel,
+        AgentEntryModel | None,
+    ]:
         async with self._transaction() as session:
             conversation = await self._lock_conversation(session, conversation_id)
             if conversation.status != CONVERSATION_ACTIVE:
@@ -281,6 +289,35 @@ class AgentRepository:
                     raise AgentRequestDuplicateError(request_id)
 
             commit_seq = await self._next_commit_seq(session)
+            page_context_entry: AgentEntryModel | None = None
+            if page_context_draft is not None and page_context_key is not None:
+                previous = await session.execute(
+                    select(AgentEntryModel.data)
+                    .where(
+                        AgentEntryModel.conversation_id == conversation_id,
+                        AgentEntryModel.kind == KIND_PAGE_CONTEXT,
+                    )
+                    .order_by(AgentEntryModel.id.desc())
+                    .limit(1)
+                )
+                previous_data = previous.scalar_one_or_none()
+                previous_key = (
+                    previous_data.get("page_key")
+                    if isinstance(previous_data, dict)
+                    else None
+                )
+                if previous_key != page_context_key:
+                    page_context_entry = AgentEntryModel(
+                        conversation_id=conversation_id,
+                        commit_seq=commit_seq,
+                        kind=page_context_draft.kind,
+                        model=page_context_draft.messages,
+                        data=page_context_draft.data,
+                        created_at=now,
+                    )
+                    session.add(page_context_entry)
+                    await session.flush()
+
             entry = AgentEntryModel(
                 conversation_id=conversation_id,
                 commit_seq=commit_seq,
@@ -304,9 +341,11 @@ class AgentRepository:
             session.add(run)
             await session.flush()
             entry.by_run_id = run.id
+            if page_context_entry is not None:
+                page_context_entry.by_run_id = run.id
             conversation.last_entry_at = entry.created_at
             await session.flush()
-            return conversation, entry, run
+            return conversation, entry, run, page_context_entry
 
     async def create_run(
         self,
@@ -577,6 +616,23 @@ class AgentRepository:
                 AgentEntryModel.conversation_id == conversation_id
             )
             return int((await session.execute(statement)).scalar_one())
+
+    async def last_page_context_key(self, conversation_id: int) -> str | None:
+        async with self._read() as session:
+            statement = (
+                select(AgentEntryModel.data)
+                .where(
+                    AgentEntryModel.conversation_id == conversation_id,
+                    AgentEntryModel.kind == KIND_PAGE_CONTEXT,
+                )
+                .order_by(AgentEntryModel.id.desc())
+                .limit(1)
+            )
+            data = (await session.execute(statement)).scalar_one_or_none()
+            if not isinstance(data, dict):
+                return None
+            key = data.get("page_key")
+            return key if isinstance(key, str) and key else None
 
     async def is_abort_requested(self, conversation_id: int, run_id: int) -> bool:
         async with self._read() as session:

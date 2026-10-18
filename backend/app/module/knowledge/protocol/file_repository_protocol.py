@@ -12,6 +12,14 @@ class FileRepositoryProtocol(Protocol):
 
     async def mark_not_current(self, file: FileModel) -> None: ...
 
+    async def update_location(
+        self,
+        file: FileModel,
+        *,
+        path: str,
+        file_name: str,
+    ) -> None: ...
+
     async def get_by_id(self, file_id: int) -> FileModel | None: ...
 
     async def get_current_by_path(self, path: str) -> FileModel | None: ...

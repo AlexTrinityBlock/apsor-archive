@@ -7,6 +7,18 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** Text creation ceiling enforced by the API, mirrored here for a faster hint. */
 export const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 
+/** The two presentations of the same shelf. */
+export type LibraryView = "board" | "list";
+
+/** One file in the drag-and-drop intake tray. */
+export interface LibraryUploadTask {
+  readonly id: number;
+  readonly name: string;
+  readonly targetPath: string;
+  readonly status: "queued" | "uploading" | "done" | "error";
+  readonly message?: string;
+}
+
 export const ACCEPTED_FILE_TYPES =
   ".md,.markdown,.txt,.csv,.json,.log,.pdf,.docx,.jpg,.jpeg,.png,.webp";
 
@@ -76,6 +88,38 @@ export function isAcceptedFileName(name: string): boolean {
   const lower = name.toLowerCase();
   return ALLOWED_EXTENSIONS.some((extension) => lower.endsWith(extension));
 }
+
+/** Rejects a browser file name that could escape the chosen folder. */
+export function isSafeUploadName(name: string): boolean {
+  const trimmed = name.trim();
+  return (
+    trimmed.length > 0 &&
+    trimmed === name &&
+    !trimmed.includes("/") &&
+    !trimmed.includes("\\") &&
+    trimmed !== "." &&
+    trimmed !== ".."
+  );
+}
+
+/** Joins a folder path and a file name into one absolute archive path. */
+export function joinArchivePath(folderPath: string, fileName: string): string {
+  const folder = normalizeArchivePath(folderPath);
+  const name = fileName.replace(/^\/+/, "");
+  if (!name) {
+    return folder;
+  }
+  return folder === "/" ? `/${name}` : `${folder}/${name}`;
+}
+
+/** Compares two archive paths after tolerant normalization. */
+export function sameArchivePath(left: string, right: string): boolean {
+  return normalizeArchivePath(left) === normalizeArchivePath(right);
+}
+
+/** The allowed-type hint shared by the intake dialog and drag-and-drop tray. */
+export const ACCEPTED_FILE_HINT =
+  ".md, .markdown, .txt, .csv, .json, .log, .pdf, .docx, .jpg, .jpeg, .png, .webp";
 
 /** The compact kind label shown in the file table. */
 export function fileKindLabel(rawPath: string): string {

@@ -65,9 +65,16 @@ class AgentRepositoryProtocol(Protocol):
         *,
         conversation_id: int,
         draft: EntryDraft,
+        page_context_draft: EntryDraft | None,
+        page_context_key: str | None,
         request_id: str | None,
         now: datetime,
-    ) -> tuple[AgentConversationModel, AgentEntryModel, AgentRunModel]: ...
+    ) -> tuple[
+        AgentConversationModel,
+        AgentEntryModel,
+        AgentRunModel,
+        AgentEntryModel | None,
+    ]: ...
 
     async def create_run(
         self,
@@ -152,6 +159,8 @@ class AgentRepositoryProtocol(Protocol):
     ) -> tuple[list[AgentEntryModel], bool]: ...
 
     async def count_entries(self, conversation_id: int) -> int: ...
+
+    async def last_page_context_key(self, conversation_id: int) -> str | None: ...
 
     async def is_abort_requested(self, conversation_id: int, run_id: int) -> bool: ...
 

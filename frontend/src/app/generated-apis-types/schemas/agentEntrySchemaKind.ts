@@ -12,6 +12,7 @@ export const AgentEntrySchemaKind = {
   piuser: 'pi.user',
   piassistant: 'pi.assistant',
   'pitool-result': 'pi.tool-result',
+  'pipage-context': 'pi.page-context',
   pisystem: 'pi.system',
   pireset: 'pi.reset',
   picompaction: 'pi.compaction',

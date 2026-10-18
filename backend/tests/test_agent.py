@@ -32,8 +32,21 @@ SECOND_USAGE = {
     "prompt_cache_hit_tokens": 56,
     "prompt_cache_miss_tokens": 8,
 }
-PROMPT_VERSION = "archive-agent-v1"
+READ_USAGE = {
+    "prompt_tokens": 29,
+    "completion_tokens": 8,
+    "total_tokens": 37,
+    "prompt_cache_hit_tokens": 22,
+    "prompt_cache_miss_tokens": 7,
+}
+PROMPT_VERSION = "archive-agent-v2"
 TOOLS_VERSION = "archive-tools-v1"
+PAGE_KEY = "/library"
+PAGE_PATH = "/library"
+PAGE_TITLE = "File Library"
+PAGE_TEXT = "File Library\nWrench notes and the archive overview."
+SECOND_PAGE_KEY = "/timeline"
+SECOND_PAGE_TEXT = "Timeline\nA sparse chronology."
 TOOL_NAMES = [
     "search_knowledge",
     "read_file",
@@ -59,6 +72,8 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
     final_answer = f"The archive documents the wrench [file:{file_id}#1]."
     second_question = "Summarize that for the timeline."
     second_answer = f"The wrench remains a hand tool [file:{file_id}#1]."
+    third_question = "What changed on the timeline?"
+    third_answer = "The timeline remains sparse."
 
     fake = FakeChatGenerator(
         [
@@ -68,8 +83,15 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
                 call_id="call_search_1",
                 usage=TOOL_USAGE,
             ),
+            tool_call_result(
+                "read_file",
+                {"file_id": file_id, "chunk": 1},
+                call_id="call_read_1",
+                usage=READ_USAGE,
+            ),
             text_result(final_answer, usage=ANSWER_USAGE),
             text_result(second_answer, usage=SECOND_USAGE),
+            text_result(third_answer, usage=SECOND_USAGE),
         ]
     )
     client.app.state.agent_chat_generator = fake
@@ -97,6 +119,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
     assert "# Identity" in prompt
     assert "# Instructions" in prompt
     assert "# Context protocol" in prompt
+    assert "<page_context>" in prompt
 
     system_data = system_entry["data"]
     assert system_data["prompt_version"] == PROMPT_VERSION
@@ -111,7 +134,16 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
 
     first_turn = client.post(
         f"/api/v1/agent/conversations/{conversation_id}/messages",
-        json={"content": first_question, "request_id": "turn-1"},
+        json={
+            "content": first_question,
+            "request_id": "turn-1",
+            "page_context": {
+                "key": PAGE_KEY,
+                "path": PAGE_PATH,
+                "title": PAGE_TITLE,
+                "text": PAGE_TEXT,
+            },
+        },
         headers={"Accept": "application/json"},
     )
     assert first_turn.status_code == 200, first_turn.text
@@ -123,22 +155,43 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
 
     entries = turn["entries"]
     assert [entry["kind"] for entry in entries] == [
+        "pi.page-context",
         "pi.user",
+        "pi.assistant",
+        "pi.tool-result",
         "pi.assistant",
         "pi.tool-result",
         "pi.assistant",
     ]
     ids = [entry["id"] for entry in entries]
     assert ids == sorted(ids)
-    assert ids[0] == turn["user_entry"]["id"]
-    assert entries[0]["model"] == [{"role": "user", "content": first_question}]
+    assert ids[1] == turn["user_entry"]["id"]
+    assert entries[0]["kind"] == "pi.page-context"
+    assert entries[0]["commit_seq"] == entries[1]["commit_seq"]
+    assert entries[0]["data"] == {
+        "page_key": PAGE_KEY,
+        "path": PAGE_PATH,
+        "title": PAGE_TITLE,
+        "text_chars": len(PAGE_TEXT),
+        "truncated": False,
+    }
+    assert entries[0]["model"] == [
+        {
+            "role": "user",
+            "content": (
+                f'<page_context key="{PAGE_KEY}" path="{PAGE_PATH}" '
+                f'title="{PAGE_TITLE}"><text>{PAGE_TEXT}</text></page_context>'
+            ),
+        }
+    ]
+    assert entries[1]["model"] == [{"role": "user", "content": first_question}]
 
-    tool_call_entry = entries[1]
+    tool_call_entry = entries[2]
     tool_calls = tool_call_entry["model"][0]["tool_calls"]
     assert tool_calls[0]["id"] == "call_search_1"
     assert tool_calls[0]["function"]["name"] == "search_knowledge"
 
-    tool_result_entry = entries[2]
+    tool_result_entry = entries[3]
     assert tool_result_entry["kind"] == "pi.tool-result"
     tool_message = tool_result_entry["model"][0]
     assert tool_message["role"] == "tool"
@@ -154,33 +207,68 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
         "query": "wrench",
         "result_number": 2,
     }
-    assert turn["tool_results"] == [tool_result_entry]
+    file_results = tool_result_entry["data"]["file_results"]
+    assert file_results[0]["viewer_url"] == f"/viewer/file/{file_id}?chunk=1"
+    assert file_results[0]["excerpt"].startswith("The wrench is a hand tool")
 
-    final_entry = entries[3]
+    read_call_entry = entries[4]
+    read_calls = read_call_entry["model"][0]["tool_calls"]
+    assert read_calls[0]["id"] == "call_read_1"
+    assert read_calls[0]["function"]["name"] == "read_file"
+    read_result_entry = entries[5]
+    assert read_result_entry["data"]["tool"] == "read_file"
+    assert read_result_entry["data"]["viewer_url"] == (
+        f"/viewer/file/{file_id}?chunk=1"
+    )
+    assert read_result_entry["data"]["chunks"][0]["excerpt"].startswith(
+        "The wrench is a hand tool"
+    )
+    assert turn["tool_results"] == [tool_result_entry, read_result_entry]
+
+    final_entry = entries[6]
     assert final_entry["model"][0]["content"] == final_answer
     assert turn["assistant_entry"] == final_entry
 
     assistant_entries = [
         entry for entry in entries if entry["kind"] == "pi.assistant"
     ]
-    assert [entry["data"]["step"] for entry in assistant_entries] == [1, 2]
+    assert [entry["data"]["step"] for entry in assistant_entries] == [1, 2, 3]
     assert assistant_entries[0]["data"]["usage"] == TOOL_USAGE
-    assert assistant_entries[1]["data"]["usage"] == ANSWER_USAGE
+    assert assistant_entries[1]["data"]["usage"] == READ_USAGE
+    assert assistant_entries[2]["data"]["usage"] == ANSWER_USAGE
     assert (
         assistant_entries[0]["data"]["usage"]["prompt_cache_hit_tokens"]
         == TOOL_USAGE["prompt_cache_hit_tokens"]
     )
     assert (
-        assistant_entries[1]["data"]["usage"]["prompt_cache_miss_tokens"]
+        assistant_entries[2]["data"]["usage"]["prompt_cache_miss_tokens"]
         == ANSWER_USAGE["prompt_cache_miss_tokens"]
     )
     assert (
         assistant_entries[0]["data"]["cache_prefix_hash"]
-        == assistant_entries[1]["data"]["cache_prefix_hash"]
+        == assistant_entries[2]["data"]["cache_prefix_hash"]
     )
     assert turn["usage"] == {
-        key: TOOL_USAGE[key] + ANSWER_USAGE[key] for key in TOOL_USAGE
+        key: TOOL_USAGE[key] + READ_USAGE[key] + ANSWER_USAGE[key]
+        for key in TOOL_USAGE
     }
+
+    first_request = fake.requests[0]
+    assert [message["role"] for message in first_request.messages] == [
+        "system",
+        "user",
+        "user",
+    ]
+    assert first_request.messages[1]["content"].startswith(
+        f'<page_context key="{PAGE_KEY}"'
+    )
+    assert PAGE_TEXT in first_request.messages[1]["content"]
+    assert first_request.messages[2]["content"] == first_question
+
+    first_detail = client.get(
+        f"/api/v1/agent/conversations/{conversation_id}"
+    ).json()
+    assert first_detail["last_page_context_key"] == PAGE_KEY
 
     first_page = client.get(
         f"/api/v1/agent/conversations/{conversation_id}/entries",
@@ -188,7 +276,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
     )
     assert first_page.status_code == 200
     page = first_page.json()
-    assert page["total_results"] == 5
+    assert page["total_results"] == 8
     assert page["has_more"] is True
     assert [entry["id"] for entry in page["entries"]] == [
         system_entry["id"],
@@ -214,9 +302,24 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
         params={"after_id": second_page.json()["next_after_id"], "limit": 2},
     )
     assert third_page.status_code == 200
-    assert [entry["id"] for entry in third_page.json()["entries"]] == [ids[3]]
-    assert third_page.json()["has_more"] is False
-    assert third_page.json()["next_after_id"] is None
+    assert [entry["id"] for entry in third_page.json()["entries"]] == [
+        ids[3],
+        ids[4],
+    ]
+    assert third_page.json()["next_after_id"] == ids[4]
+    assert third_page.json()["has_more"] is True
+
+    fourth_page = client.get(
+        f"/api/v1/agent/conversations/{conversation_id}/entries",
+        params={"after_id": third_page.json()["next_after_id"], "limit": 2},
+    )
+    assert fourth_page.status_code == 200
+    assert [entry["id"] for entry in fourth_page.json()["entries"]] == [
+        ids[5],
+        ids[6],
+    ]
+    assert fourth_page.json()["has_more"] is False
+    assert fourth_page.json()["next_after_id"] is None
 
     full_page = client.get(
         f"/api/v1/agent/conversations/{conversation_id}/entries",
@@ -227,7 +330,10 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
     assert [entry["id"] for entry in all_entries] == [system_entry["id"], *ids]
     assert [entry["kind"] for entry in all_entries] == [
         "pi.system",
+        "pi.page-context",
         "pi.user",
+        "pi.assistant",
+        "pi.tool-result",
         "pi.assistant",
         "pi.tool-result",
         "pi.assistant",
@@ -266,7 +372,15 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
 
     second_turn = client.post(
         f"/api/v1/agent/conversations/{conversation_id}/messages",
-        json={"content": second_question},
+        json={
+            "content": second_question,
+            "page_context": {
+                "key": PAGE_KEY,
+                "path": PAGE_PATH,
+                "title": PAGE_TITLE,
+                "text": PAGE_TEXT,
+            },
+        },
         headers={"Accept": "application/json"},
     )
     assert second_turn.status_code == 200, second_turn.text
@@ -277,26 +391,112 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
         "pi.user",
         "pi.assistant",
     ]
-    assert fake.remaining == 0
-    assert len(fake.requests) == 3
+    assert all(
+        entry["kind"] != "pi.page-context"
+        for entry in second_body["entries"]
+    )
+    assert len(fake.requests) == 4
+    same_page_request = fake.requests[3]
+    same_page_context_messages = [
+        message
+        for message in same_page_request.messages
+        if message.get("role") == "user"
+        and str(message.get("content", "")).startswith("<page_context")
+    ]
+    assert len(same_page_context_messages) == 1
+    assert same_page_context_messages[0]["content"].startswith(
+        f'<page_context key="{PAGE_KEY}"'
+    )
+    assert PAGE_TEXT in same_page_context_messages[0]["content"]
 
-    first_request = fake.requests[0]
+    after_same_page = client.get(
+        f"/api/v1/agent/conversations/{conversation_id}"
+    ).json()
+    assert after_same_page["last_page_context_key"] == PAGE_KEY
+    assert after_same_page["entries_total"] == 10
+
+    third_turn = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/messages",
+        json={
+            "content": third_question,
+            "page_context": {
+                "key": SECOND_PAGE_KEY,
+                "path": "/timeline",
+                "title": "Timeline",
+                "text": SECOND_PAGE_TEXT,
+            },
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert third_turn.status_code == 200, third_turn.text
+    third_body = third_turn.json()
+    assert third_body["run"]["status"] == "completed"
+    assert third_body["answer"] == third_answer
+    assert [entry["kind"] for entry in third_body["entries"]] == [
+        "pi.page-context",
+        "pi.user",
+        "pi.assistant",
+    ]
+    assert third_body["entries"][0]["data"]["page_key"] == SECOND_PAGE_KEY
+    assert (
+        third_body["entries"][0]["commit_seq"]
+        == third_body["entries"][1]["commit_seq"]
+    )
+    assert third_body["entries"][0]["id"] < third_body["entries"][1]["id"]
+
+    after_second_page = client.get(
+        f"/api/v1/agent/conversations/{conversation_id}"
+    ).json()
+    assert after_second_page["last_page_context_key"] == SECOND_PAGE_KEY
+    assert after_second_page["entries_total"] == 13
+
+    assert fake.remaining == 0
+    assert len(fake.requests) == 5
+
     final_request = fake.requests[-1]
     assert first_request.messages[0] == final_request.messages[0]
     assert first_request.tools == final_request.tools
     assert [message["role"] for message in final_request.messages] == [
         "system",
         "user",
+        "user",
+        "assistant",
+        "tool",
         "assistant",
         "tool",
         "assistant",
         "user",
+        "assistant",
+        "user",
+        "user",
     ]
-    assert final_request.messages[1]["content"] == first_question
-    assert final_request.messages[2]["tool_calls"][0]["id"] == "call_search_1"
-    assert final_request.messages[3]["tool_call_id"] == "call_search_1"
-    assert final_request.messages[4]["content"] == final_answer
-    assert final_request.messages[5]["content"] == second_question
+    final_page_context_messages = [
+        message
+        for message in final_request.messages
+        if message.get("role") == "user"
+        and str(message.get("content", "")).startswith("<page_context")
+    ]
+    assert len(final_page_context_messages) == 2
+    assert final_page_context_messages[0]["content"].startswith(
+        f'<page_context key="{PAGE_KEY}"'
+    )
+    assert final_page_context_messages[1]["content"].startswith(
+        f'<page_context key="{SECOND_PAGE_KEY}"'
+    )
+    assert PAGE_TEXT in final_request.messages[1]["content"]
+    assert final_request.messages[2]["content"] == first_question
+    assert final_request.messages[3]["tool_calls"][0]["id"] == "call_search_1"
+    assert final_request.messages[4]["tool_call_id"] == "call_search_1"
+    assert final_request.messages[5]["tool_calls"][0]["id"] == "call_read_1"
+    assert final_request.messages[6]["tool_call_id"] == "call_read_1"
+    assert final_request.messages[7]["content"] == final_answer
+    assert final_request.messages[8]["content"] == second_question
+    assert final_request.messages[9]["content"] == second_answer
+    assert final_request.messages[10]["content"].startswith(
+        f'<page_context key="{SECOND_PAGE_KEY}"'
+    )
+    assert SECOND_PAGE_TEXT in final_request.messages[10]["content"]
+    assert final_request.messages[11]["content"] == third_question
     assert final_request.model == conversation["model"]
 
     archived = client.patch(

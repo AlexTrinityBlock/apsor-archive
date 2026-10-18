@@ -134,6 +134,28 @@ function rendererFor(file: FileSchema): ReactNode {
   }
 }
 
+interface FileRendererProps {
+  readonly file: FileSchema;
+  readonly chunk?: number | null;
+}
+
+/**
+ * The reusable body of a file viewer: cited chunk plus the actual renderer.
+ *
+ * Dock inspectors use this without the standalone `ViewerShell`; the viewer
+ * page composes the same component so both surfaces read one implementation.
+ */
+export function FileRenderer({ file, chunk = null }: FileRendererProps) {
+  return (
+    <>
+      {chunk !== null ? <CitedChunk fileId={file.id} chunk={chunk} /> : null}
+      <Suspense fallback={<ViewerLoading label="Preparing the renderer" />}>
+        {rendererFor(file)}
+      </Suspense>
+    </>
+  );
+}
+
 /**
  * The standalone file viewer for `/viewer/file/:fileId`.
  *
@@ -250,11 +272,7 @@ export function FileViewer({ fileId }: { readonly fileId: number }) {
         </div>
       ) : null}
 
-      {chunk !== null ? <CitedChunk fileId={file.id} chunk={chunk} /> : null}
-
-      <Suspense fallback={<ViewerLoading label="Preparing the renderer" />}>
-        {rendererFor(file)}
-      </Suspense>
+      <FileRenderer file={file} chunk={chunk} />
     </ViewerShell>
   );
 }

@@ -165,18 +165,26 @@ export function TextSheet({ file }: TextSheetProps) {
   const [wrap, setWrap] = useState(mode !== "json" && mode !== "csv");
   const [copied, setCopied] = useState(false);
 
+  const hasStoredOriginal = file.has_original;
   const contentQuery = useQuery({
     queryKey: ["viewer", "file-text", file.id],
     queryFn: ({ signal }) => fetchViewerText(fileContentUrl(file.id), signal),
+    enabled: hasStoredOriginal,
     retry: false,
     staleTime: 5 * 60_000,
   });
 
-  const unavailable = isUnavailable(contentQuery.error);
+  // Text-only records skip the original probe entirely. A 404 from a record
+  // that claims to have an original still falls back to the indexed chunks.
+  const unavailable = !hasStoredOriginal || isUnavailable(contentQuery.error);
   const chunksQuery = useChunkedText(file.id, file.total_chunks, unavailable);
   const usingChunks = unavailable && chunksQuery.data !== undefined;
-  const content = contentQuery.data ?? (usingChunks ? chunksQuery.data?.text : undefined) ?? "";
-  const loading = contentQuery.isLoading || (unavailable && chunksQuery.isLoading);
+  const originalText = hasStoredOriginal ? contentQuery.data : undefined;
+  const chunkText = usingChunks ? chunksQuery.data?.text : undefined;
+  const content = originalText ?? chunkText ?? "";
+  const loading =
+    (hasStoredOriginal && contentQuery.isLoading) ||
+    (unavailable && chunksQuery.isLoading);
   const lineCount = countLines(content);
 
   useEffect(() => {
