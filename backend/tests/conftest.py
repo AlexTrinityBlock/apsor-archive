@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, text
 
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
+from app.module.agent import model as agent_model  # noqa: F401
 from app.module.auth import model as auth_model  # noqa: F401
 from app.module.knowledge.model import Base
 from app.module.media import model as media_model  # noqa: F401
@@ -18,7 +19,8 @@ TEST_DATABASE_URL = "postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendroma
 TEST_DATABASE_NAME = "dendromatrix_test"
 
 TRUNCATE_STATEMENT = (
-    "TRUNCATE TABLE chunk_ngram, chunk, tree_node, file, memory_summary, memory, "
+    "TRUNCATE TABLE agent_entry, agent_run, agent_conversation, "
+    "chunk_ngram, chunk, tree_node, file, memory_summary, memory, "
     "media_ngram, media_asset, ai_provider_config, user_session, app_user "
     "RESTART IDENTITY CASCADE"
 )
@@ -48,6 +50,7 @@ def test_database() -> Iterator[None]:
         connection.execute(text("DROP SCHEMA public CASCADE"))
         connection.execute(text("CREATE SCHEMA public"))
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+        connection.execute(text("CREATE SEQUENCE agent_commit_seq"))
     Base.metadata.create_all(engine)
     engine.dispose()
     yield
@@ -59,6 +62,7 @@ def clean_database(test_database: None, tmp_path: Path) -> Iterator[None]:
     engine = create_engine(TEST_DATABASE_URL)
     with engine.begin() as connection:
         connection.execute(text(TRUNCATE_STATEMENT))
+        connection.execute(text("ALTER SEQUENCE agent_commit_seq RESTART WITH 1"))
     engine.dispose()
     yield
 

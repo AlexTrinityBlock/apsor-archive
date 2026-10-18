@@ -21,6 +21,7 @@ class FileSchema(BaseModel):
     supersedes_file_id: int | None
     is_current: bool
     total_chunks: int
+    has_original: bool
     ai_summary: str | None
     ai_tags: list[str]
     document_type: str

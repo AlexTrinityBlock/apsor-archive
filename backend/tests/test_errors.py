@@ -32,3 +32,14 @@ def test_validation_and_error_envelope(client: TestClient) -> None:
     )
     assert missing_ai.status_code == 503
     assert missing_ai.json()["error"] == "ai_not_configured"
+
+    conversation = client.post("/api/v1/agent/conversations", json={})
+    assert conversation.status_code == 201
+    conversation_id = conversation.json()["id"]
+    missing_agent = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/messages",
+        json={"content": "What is in the library?"},
+        headers={"Accept": "application/json"},
+    )
+    assert missing_agent.status_code == 503
+    assert missing_agent.json()["error"] == "agent_not_configured"
