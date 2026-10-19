@@ -846,12 +846,6 @@
             "title": "Max Total Tokens",
             "type": "integer"
           },
-          "max_total_tool_result_chars": {
-            "maximum": 200000.0,
-            "minimum": 1000.0,
-            "title": "Max Total Tool Result Chars",
-            "type": "integer"
-          },
           "parallel_tools_enabled": {
             "title": "Parallel Tools Enabled",
             "type": "boolean"
@@ -864,7 +858,6 @@
           "max_tool_calls_per_turn",
           "max_parallel_tools",
           "max_tool_result_chars",
-          "max_total_tool_result_chars",
           "max_page_context_chars",
           "max_compaction_summary_chars",
           "max_compaction_last_user_chars",
@@ -936,12 +929,6 @@
             "title": "Max Total Tokens",
             "type": "integer"
           },
-          "max_total_tool_result_chars": {
-            "maximum": 200000.0,
-            "minimum": 1000.0,
-            "title": "Max Total Tool Result Chars",
-            "type": "integer"
-          },
           "parallel_tools_enabled": {
             "title": "Parallel Tools Enabled",
             "type": "boolean"
@@ -954,7 +941,6 @@
           "max_tool_calls_per_turn",
           "max_parallel_tools",
           "max_tool_result_chars",
-          "max_total_tool_result_chars",
           "max_page_context_chars",
           "max_compaction_summary_chars",
           "max_compaction_last_user_chars",

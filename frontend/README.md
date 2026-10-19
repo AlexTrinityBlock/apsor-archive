@@ -91,7 +91,7 @@ citations become viewer links only for `/viewer/file|media|memory/...`.
 
 `RetryBar` appears for the latest failed or cancelled assistant entry, a
 trailing hard-limit tool result (`step_limit`, `token_limit`, `tool_call_limit`,
-or `tool_result_budget_exhausted`), or a stream failure before an assistant entry
+or legacy `tool_result_budget_exhausted` entries), or a stream failure before an assistant entry
 was persisted. The decision lives in `readRetryState()` in `chat/types.ts`; an
 ordinary tool error followed by a successful assistant answer is not retryable.
 
@@ -100,7 +100,7 @@ existing retry endpoint with only a generated `request_id`. It reuses the same
 user entry, does not append a duplicate user message, and is disabled while a
 stream is active. A `409 agent_run_not_retryable` response refetches the
 transcript so the stale action disappears. A retry may hit the same token, step,
-or tool budget again.
+or tool-call budget again.
 
 ### Compact and clear
 
@@ -218,16 +218,16 @@ configuration remains in the existing AI provider panels.
 The panel shows a Database/Defaults badge, the last `updated_at`, and a token
 budget meter for the compaction threshold as a share of `max_total_tokens` with
 remaining headroom. Every numeric field displays its default and valid range.
-The twelve runtime values are grouped into context budget, tool execution, and
+The eleven runtime values are grouped into context budget, tool execution, and
 compaction detail; auto compaction and parallel tools are toggles.
 
 Validation happens before saving: integer/range checks plus the cross-field
-rules (threshold below total tokens, per-result chars within the total result
-budget, parallel width within tool calls per turn). Save is disabled for an
-invalid or unchanged draft. The server repeats validation and the app maps
-failures to `400 invalid_request`; the panel shows the returned detail inline.
+rules (threshold below total tokens, parallel width within tool calls per turn).
+Save is disabled for an invalid or unchanged draft. The server repeats
+validation and the app maps failures to `400 invalid_request`; the panel shows
+the returned detail inline.
 
-Save sends a full twelve-field `PUT`. **Reset defaults** uses a two-step
+Save sends a full eleven-field `PUT`. **Reset defaults** uses a two-step
 confirmation and persists the defaults through `POST .../settings/reset`; it is
 not only a local form reset. The panel implements loading skeletons and an
 inline error with a Retry action. Changes apply to new runs; an active SSE stream

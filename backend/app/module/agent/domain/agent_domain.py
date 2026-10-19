@@ -74,7 +74,6 @@ COMPACTION_THRESHOLD_TOKENS = 48_000
 # Tool output stays on its own, smaller budget: every tool result is capped at
 # 12k chars and each turn may emit at most 24k characters across all results.
 MAX_TOOL_RESULT_CHARS = 12_000
-MAX_TOTAL_TOOL_RESULT_CHARS = 24_000
 MAX_COMPACTION_SUMMARY_CHARS = 6_000
 MAX_COMPACTION_LAST_USER_CHARS = 4_000
 AUTO_COMPACTION_ENABLED = True
