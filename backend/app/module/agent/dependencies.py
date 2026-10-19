@@ -23,8 +23,10 @@ from app.module.agent.protocol.tool_service_protocol import (
 )
 from app.module.agent.repository.agent_config_repository import AgentConfigRepository
 from app.module.agent.repository.agent_repository import AgentRepository
+from app.module.agent.repository.saved_question_repository import SavedQuestionRepository
 from app.module.agent.service.agent_service import AgentService
 from app.module.agent.service.agent_settings_service import AgentSettingsService
+from app.module.agent.service.saved_question_service import SavedQuestionService
 from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.knowledge.dependencies import (
     get_file_service,
@@ -137,10 +139,38 @@ def get_agent_settings_service(
     return AgentSettingsService(AgentConfigRepository(session))
 
 
+def get_saved_question_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> SavedQuestionService:
+    """Build saved-question CRUD on the request transaction.
+
+    CRUD deliberately does not resolve the chat generator, so questions can be
+    captured and edited while the AI provider is not configured.
+    """
+    return SavedQuestionService(repository=SavedQuestionRepository(session))
+
+
+def get_saved_question_ask_service(
+    session: AsyncSession = Depends(get_db_session),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> SavedQuestionService:
+    """Build the ask orchestrator; a missing provider raises the existing 503.
+
+    ``ask`` is a regular JSON request, so holding the request session while the
+    agent runs does not hold a connection for an SSE stream.
+    """
+    return SavedQuestionService(
+        repository=SavedQuestionRepository(session),
+        agent_service=agent_service,
+    )
+
+
 __all__ = [
     "ToolServiceScopeProtocol",
     "get_agent_chat_generator",
     "get_agent_runtime_config",
     "get_agent_service",
     "get_agent_settings_service",
+    "get_saved_question_ask_service",
+    "get_saved_question_service",
 ]

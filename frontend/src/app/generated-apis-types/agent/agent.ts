@@ -40,7 +40,12 @@ import type {
   HTTPValidationError,
   ListAgentConversationsParams,
   ListAgentEntriesParams,
-  ListResponseSchemaAgentConversationSchema
+  ListResponseSchemaAgentConversationSchema,
+  ListSavedQuestionsParams,
+  SavedQuestionCreateSchema,
+  SavedQuestionListSchema,
+  SavedQuestionReadSchema,
+  SavedQuestionUpdateSchema
 } from '../schemas';
 
 import { apiFetch } from '../../../apis/fetch-client';
@@ -984,6 +989,443 @@ export const useRetryAgentRun = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getRetryAgentRunMutationOptions(options), queryClient);
+    }
+    export const getListSavedQuestionsUrl = (params?: ListSavedQuestionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/agent/questions?${stringifiedParams}` : `/api/v1/agent/questions`
+}
+
+/**
+ * List saved questions newest first with explicit pagination.
+ * @summary List Saved Questions
+ */
+export const listSavedQuestions = async (params?: ListSavedQuestionsParams, options?: Parameters<typeof apiFetch>[1]): Promise<SavedQuestionListSchema> => {
+
+  return apiFetch<SavedQuestionListSchema>(getListSavedQuestionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSavedQuestionsQueryKey = (params?: ListSavedQuestionsParams,) => {
+    return [
+    `/api/v1/agent/questions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSavedQuestionsQueryOptions = <TData = Awaited<ReturnType<typeof listSavedQuestions>>, TError = HTTPValidationError>(params?: ListSavedQuestionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSavedQuestions>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSavedQuestionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSavedQuestions>>> = ({ signal }) => listSavedQuestions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSavedQuestions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListSavedQuestionsQueryResult = NonNullable<Awaited<ReturnType<typeof listSavedQuestions>>>
+export type ListSavedQuestionsQueryError = HTTPValidationError
+
+
+export function useListSavedQuestions<TData = Awaited<ReturnType<typeof listSavedQuestions>>, TError = HTTPValidationError>(
+ params: undefined |  ListSavedQuestionsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSavedQuestions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listSavedQuestions>>,
+          TError,
+          Awaited<ReturnType<typeof listSavedQuestions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListSavedQuestions<TData = Awaited<ReturnType<typeof listSavedQuestions>>, TError = HTTPValidationError>(
+ params?: ListSavedQuestionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSavedQuestions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listSavedQuestions>>,
+          TError,
+          Awaited<ReturnType<typeof listSavedQuestions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListSavedQuestions<TData = Awaited<ReturnType<typeof listSavedQuestions>>, TError = HTTPValidationError>(
+ params?: ListSavedQuestionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSavedQuestions>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Saved Questions
+ */
+
+export function useListSavedQuestions<TData = Awaited<ReturnType<typeof listSavedQuestions>>, TError = HTTPValidationError>(
+ params?: ListSavedQuestionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSavedQuestions>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListSavedQuestionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getCreateSavedQuestionUrl = () => {
+
+
+
+
+  return `/api/v1/agent/questions`
+}
+
+/**
+ * Capture a question that can be asked later; the answer starts empty.
+ * @summary Create Saved Question
+ */
+export const createSavedQuestion = async (savedQuestionCreateSchema: SavedQuestionCreateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<SavedQuestionReadSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<SavedQuestionReadSchema>(getCreateSavedQuestionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(savedQuestionCreateSchema)
+  }
+);}
+
+
+
+
+
+export const getCreateSavedQuestionMutationKey = () => ['createSavedQuestion'] as const;
+
+export const getCreateSavedQuestionMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSavedQuestion>>, TError,CreateSavedQuestionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSavedQuestion>>, TError,CreateSavedQuestionMutationVariables, TContext> => {
+
+const mutationKey = getCreateSavedQuestionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSavedQuestion>>, CreateSavedQuestionMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSavedQuestion(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSavedQuestionMutationResult = NonNullable<Awaited<ReturnType<typeof createSavedQuestion>>>
+    export type CreateSavedQuestionMutationBody = SavedQuestionCreateSchema
+    export type CreateSavedQuestionMutationError = HTTPValidationError
+    export type CreateSavedQuestionMutationVariables = {data: SavedQuestionCreateSchema}
+
+    /**
+ * @summary Create Saved Question
+ */
+export const useCreateSavedQuestion = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSavedQuestion>>, TError,CreateSavedQuestionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createSavedQuestion>>,
+        TError,
+        CreateSavedQuestionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateSavedQuestionMutationOptions(options), queryClient);
+    }
+    export const getDeleteSavedQuestionUrl = (questionId: number,) => {
+
+
+
+
+  return `/api/v1/agent/questions/${questionId}`
+}
+
+/**
+ * Delete a saved question and its stored answer.
+ * @summary Delete Saved Question
+ */
+export const deleteSavedQuestion = async (questionId: number, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+
+  return apiFetch<void>(getDeleteSavedQuestionUrl(questionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteSavedQuestionMutationKey = () => ['deleteSavedQuestion'] as const;
+
+export const getDeleteSavedQuestionMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSavedQuestion>>, TError,DeleteSavedQuestionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSavedQuestion>>, TError,DeleteSavedQuestionMutationVariables, TContext> => {
+
+const mutationKey = getDeleteSavedQuestionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSavedQuestion>>, DeleteSavedQuestionMutationVariables> = (props) => {
+          const {questionId} = props ?? {};
+
+          return  deleteSavedQuestion(questionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSavedQuestionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSavedQuestion>>>
+
+    export type DeleteSavedQuestionMutationError = HTTPValidationError
+    export type DeleteSavedQuestionMutationVariables = {questionId: number}
+
+    /**
+ * @summary Delete Saved Question
+ */
+export const useDeleteSavedQuestion = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSavedQuestion>>, TError,DeleteSavedQuestionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSavedQuestion>>,
+        TError,
+        DeleteSavedQuestionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteSavedQuestionMutationOptions(options), queryClient);
+    }
+    export const getUpdateSavedQuestionUrl = (questionId: number,) => {
+
+
+
+
+  return `/api/v1/agent/questions/${questionId}`
+}
+
+/**
+ * Edit the question and clear any answer derived from the old text.
+ * @summary Update Saved Question
+ */
+export const updateSavedQuestion = async (questionId: number,
+    savedQuestionUpdateSchema: SavedQuestionUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<SavedQuestionReadSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<SavedQuestionReadSchema>(getUpdateSavedQuestionUrl(questionId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(savedQuestionUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateSavedQuestionMutationKey = () => ['updateSavedQuestion'] as const;
+
+export const getUpdateSavedQuestionMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSavedQuestion>>, TError,UpdateSavedQuestionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSavedQuestion>>, TError,UpdateSavedQuestionMutationVariables, TContext> => {
+
+const mutationKey = getUpdateSavedQuestionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSavedQuestion>>, UpdateSavedQuestionMutationVariables> = (props) => {
+          const {questionId,data} = props ?? {};
+
+          return  updateSavedQuestion(questionId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSavedQuestionMutationResult = NonNullable<Awaited<ReturnType<typeof updateSavedQuestion>>>
+    export type UpdateSavedQuestionMutationBody = SavedQuestionUpdateSchema
+    export type UpdateSavedQuestionMutationError = HTTPValidationError
+    export type UpdateSavedQuestionMutationVariables = {questionId: number;data: SavedQuestionUpdateSchema}
+
+    /**
+ * @summary Update Saved Question
+ */
+export const useUpdateSavedQuestion = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSavedQuestion>>, TError,UpdateSavedQuestionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateSavedQuestion>>,
+        TError,
+        UpdateSavedQuestionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateSavedQuestionMutationOptions(options), queryClient);
+    }
+    export const getAskSavedQuestionUrl = (questionId: number,) => {
+
+
+
+
+  return `/api/v1/agent/questions/${questionId}/ask`
+}
+
+/**
+ * Run one JSON agent turn and persist its answer, citations, and status.
+ *
+ * A provider/tool failure is returned as HTTP 200 with ``run_status="failed"``
+ * so the saved question survives; a missing provider configuration still uses
+ * the existing 503 error envelope.
+ * @summary Ask Saved Question
+ */
+export const askSavedQuestion = async (questionId: number, options?: Parameters<typeof apiFetch>[1]): Promise<SavedQuestionReadSchema> => {
+
+  return apiFetch<SavedQuestionReadSchema>(getAskSavedQuestionUrl(questionId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAskSavedQuestionMutationKey = () => ['askSavedQuestion'] as const;
+
+export const getAskSavedQuestionMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askSavedQuestion>>, TError,AskSavedQuestionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof askSavedQuestion>>, TError,AskSavedQuestionMutationVariables, TContext> => {
+
+const mutationKey = getAskSavedQuestionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof askSavedQuestion>>, AskSavedQuestionMutationVariables> = (props) => {
+          const {questionId} = props ?? {};
+
+          return  askSavedQuestion(questionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AskSavedQuestionMutationResult = NonNullable<Awaited<ReturnType<typeof askSavedQuestion>>>
+
+    export type AskSavedQuestionMutationError = HTTPValidationError
+    export type AskSavedQuestionMutationVariables = {questionId: number}
+
+    /**
+ * @summary Ask Saved Question
+ */
+export const useAskSavedQuestion = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askSavedQuestion>>, TError,AskSavedQuestionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof askSavedQuestion>>,
+        TError,
+        AskSavedQuestionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAskSavedQuestionMutationOptions(options), queryClient);
     }
     export const getGetAgentSettingsUrl = () => {
 

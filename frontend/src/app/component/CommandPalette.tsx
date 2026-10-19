@@ -88,6 +88,14 @@ const PALETTE_PAGES: readonly PalettePage[] = [
     keywords: ["conversation", "transcript", "agent", "thread", "citations"],
   },
   {
+    to: "/questions",
+    label: "Questions",
+    description: "Saved questions, answers, and citations",
+    group: "Studio",
+    icon: "quote",
+    keywords: ["saved", "book", "ask later", "question bank"],
+  },
+  {
     to: "/ask",
     label: "Quick ask",
     description: "One grounded answer with citations",

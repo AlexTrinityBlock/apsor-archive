@@ -2913,6 +2913,191 @@
         "title": "PathListingSchema",
         "type": "object"
       },
+      "SavedQuestionCreateSchema": {
+        "additionalProperties": false,
+        "description": "Capture a question without accepting an answer from the client.",
+        "properties": {
+          "question": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "SavedQuestionCreateSchema",
+        "type": "object"
+      },
+      "SavedQuestionListSchema": {
+        "description": "Pagination envelope for the saved-question library.",
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/SavedQuestionReadSchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resources",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "SavedQuestionListSchema",
+        "type": "object"
+      },
+      "SavedQuestionReadSchema": {
+        "description": "A saved question plus its latest ask outcome.",
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "citations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_asked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Asked At"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "run_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "running",
+                  "waiting",
+                  "completed",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Status"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "question",
+          "answer",
+          "citations",
+          "conversation_id",
+          "run_status",
+          "error_code",
+          "error_detail",
+          "created_at",
+          "updated_at",
+          "last_asked_at"
+        ],
+        "title": "SavedQuestionReadSchema",
+        "type": "object"
+      },
+      "SavedQuestionUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Edit the question text only; answers are written by the agent.",
+        "properties": {
+          "question": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "SavedQuestionUpdateSchema",
+        "type": "object"
+      },
       "SearchResponseSchema": {
         "description": "The search_knowledge tool result.",
         "properties": {
@@ -4311,6 +4496,233 @@
           }
         },
         "summary": "Retry Run",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/questions": {
+      "get": {
+        "description": "List saved questions newest first with explicit pagination.",
+        "operationId": "listSavedQuestions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuestionListSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Saved Questions",
+        "tags": [
+          "agent"
+        ]
+      },
+      "post": {
+        "description": "Capture a question that can be asked later; the answer starts empty.",
+        "operationId": "createSavedQuestion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedQuestionCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuestionReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Saved Question",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/questions/{question_id}": {
+      "delete": {
+        "description": "Delete a saved question and its stored answer.",
+        "operationId": "deleteSavedQuestion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Saved Question",
+        "tags": [
+          "agent"
+        ]
+      },
+      "patch": {
+        "description": "Edit the question and clear any answer derived from the old text.",
+        "operationId": "updateSavedQuestion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavedQuestionUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuestionReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Saved Question",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/questions/{question_id}/ask": {
+      "post": {
+        "description": "Run one JSON agent turn and persist its answer, citations, and status.\n\nA provider/tool failure is returned as HTTP 200 with ``run_status=\"failed\"``\nso the saved question survives; a missing provider configuration still uses\nthe existing 503 error envelope.",
+        "operationId": "askSavedQuestion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SavedQuestionReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ask Saved Question",
         "tags": [
           "agent"
         ]

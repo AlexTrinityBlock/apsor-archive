@@ -19,8 +19,8 @@ TEST_DATABASE_URL = "postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendroma
 TEST_DATABASE_NAME = "dendromatrix_test"
 
 TRUNCATE_STATEMENT = (
-    "TRUNCATE TABLE agent_entry, agent_run, agent_conversation, agent_config, "
-    "chunk_ngram, chunk, tree_node, file, memory_summary, memory, "
+    "TRUNCATE TABLE saved_question, agent_entry, agent_run, agent_conversation, "
+    "agent_config, chunk_ngram, chunk, tree_node, file, memory_summary, memory, "
     "media_ngram, media_asset, ai_provider_config, user_session, app_user "
     "RESTART IDENTITY CASCADE"
 )
