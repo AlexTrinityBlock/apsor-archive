@@ -189,6 +189,22 @@ uses the same conversation id. On mobile, `collapsed` opens a full-height sheet;
 the expanded surface switches to Correspondence / Workbench pane tabs, and the
 layout must not produce horizontal overflow.
 
+### Panel height
+
+Panel mode has a resize handle on its top edge. Drag the grip, or focus the
+handle and use Arrow Up / Arrow Down (Shift for larger steps, Home / End for the
+limits), to change the panel height. The chosen height is stored in localStorage
+(`dendromatrix.agentDock.panelHeight`) and restored on reload; if storage is
+unavailable the panel keeps the CSS default and the resize still works for the
+session.
+
+The handle clamps to 320 px minimum and to the viewport above the panel's bottom
+anchor, so it never covers the mobile tabs or safe-area inset. It is hidden at
+640 px and below, where panel mode is a full-height sheet, and the stored height
+is ignored on that sheet. The handle exposes separator, value, minimum, maximum,
+and a screen-reader description, and text selection is suppressed only while
+dragging.
+
 The dock reuses `RetryBar` and the same `readRetryState()` decision as `/chat`.
 Retry is available in both the panel and expanded desk, disabled while streaming,
 and never appends a duplicate user entry. Compact and clear live on the full
@@ -338,12 +354,21 @@ remains the compact table fallback.
   id at version 1 with rebuilt chunks. Both records remain current.
 - **Dialogs** — `MoveCopyDialog` is the touch and keyboard path; it accepts a
   destination folder and file name. `NewFolderDialog` creates a branch in place.
+- **Batch move** — **Select** in the toolbar enters selection mode. Check any
+  files, or use **Select all visible**, then choose **Move selected**. The action
+  bar shows the count and stays outside the board and list, so the same flow
+  works in both views. `BatchMoveDialog` sends the generated `moveFile` calls
+  sequentially to one destination folder; each file is reported separately.
+  Successful moves are kept when another file collides, failed files stay
+  selected for a retry, and the page invalidates queries and summarises the
+  result in toasts. Single-file move/copy, drag/drop, and Alt-drop are unchanged.
 - **Conflicts and extensions** — a changed extension is `422 invalid_path`; an
   occupied target is `409 tree_path_conflict`. The board reports both without
   optimistic movement.
 - **Mobile** — drag is never the only path. Each file card exposes **Move** and
   **Copy** actions from its menu, and the destination is chosen in the dialog.
-  The layout must not overflow at 390 px.
+  Selection mode and **Move selected** also work in the mobile list view, which
+  is the default below 761 px. The layout must not overflow at 390 px.
 
 ### Ingestion progress
 
