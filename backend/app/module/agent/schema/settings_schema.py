@@ -29,6 +29,7 @@ class AgentSettingsValuesSchema(BaseModel):
     max_compaction_last_user_chars: int = Field(ge=500, le=10_000)
     auto_compaction_enabled: bool
     parallel_tools_enabled: bool
+    save_memory_requires_approval: bool
 
     @model_validator(mode="after")
     def _cross_field_ranges(self) -> Self:

@@ -81,6 +81,10 @@ MAX_COMPACTION_SUMMARY_CHARS = 6_000
 MAX_COMPACTION_LAST_USER_CHARS = 4_000
 AUTO_COMPACTION_ENABLED = True
 PARALLEL_TOOLS_ENABLED = True
+# Memory writes wait for an explicit user decision by default. The waiting and
+# approval flow lives in the approval feature; this flag only stores whether the
+# owner wants that gate enabled.
+SAVE_MEMORY_REQUIRES_APPROVAL = True
 
 EditAction = Literal["omit", "replace"]
 
