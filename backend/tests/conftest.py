@@ -19,7 +19,8 @@ TEST_DATABASE_URL = "postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendroma
 TEST_DATABASE_NAME = "dendromatrix_test"
 
 TRUNCATE_STATEMENT = (
-    "TRUNCATE TABLE saved_question, agent_entry, agent_run, agent_conversation, "
+    "TRUNCATE TABLE saved_question, file_ingest_job, agent_entry, agent_run, "
+    "agent_conversation, "
     "agent_config, chunk_ngram, chunk, tree_node, file, memory_summary, memory, "
     "media_ngram, media_asset, ai_provider_config, user_session, app_user "
     "RESTART IDENTITY CASCADE"
@@ -87,6 +88,7 @@ def settings(tmp_path: Path) -> Settings:
         embedding_provider="hashing",
         cookie_secure=False,
         login_attempt_limit=100,
+        ingest_worker_enabled=False,
     )
 
 

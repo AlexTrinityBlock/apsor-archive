@@ -55,6 +55,20 @@ class Settings(BaseSettings):
     chunk_target_chars: int = 4_000
     chunk_overlap_chars: int = 500
 
+    # Durable ingestion worker. The lifespan task is a convenience for local
+    # single-process development; production can run ``python -m app.worker``
+    # (or ``dendromatrix worker``) as a dedicated service.
+    ingest_worker_enabled: bool = True
+    ingest_poll_seconds: float = 1.0
+    ingest_extract_workers: int = 2
+    ingest_max_in_flight_jobs: int = 2
+    ingest_job_stale_seconds: int = 300
+    ingest_job_max_attempts: int = 3
+    ingest_embedding_batch_size: int = 16
+    ingest_embedding_concurrency: int = 6
+    ingest_embedding_max_attempts: int = 3
+    ingest_embedding_retry_seconds: float = 0.25
+
     search_candidate_limit: int = 200
     search_vector_scan_limit: int = 20_000
     timeline_max_day_range: int = 366

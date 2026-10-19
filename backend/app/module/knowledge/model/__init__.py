@@ -15,6 +15,22 @@ from app.module.knowledge.model.chunk_model import (
     ChunkModel,
 )
 from app.module.knowledge.model.file_model import FileModel
+from app.module.knowledge.model.ingest_job_model import (
+    INGEST_ACTIVE_STATUSES,
+    INGEST_PROCESSING_STATUSES,
+    INGEST_SOURCE_TEXT,
+    INGEST_SOURCE_UPLOAD,
+    INGEST_SOURCES,
+    INGEST_STATUS_CHUNKING,
+    INGEST_STATUS_EMBEDDING,
+    INGEST_STATUS_FAILED,
+    INGEST_STATUS_PARSING,
+    INGEST_STATUS_QUEUED,
+    INGEST_STATUS_READY,
+    INGEST_STATUS_SUMMARIZING,
+    INGEST_STATUSES,
+    FileIngestJobModel,
+)
 from app.module.knowledge.model.memory_model import (
     MEMORY_ACTIVE,
     MEMORY_DEPRECATED,
@@ -30,6 +46,19 @@ from app.module.knowledge.model.summary_model import MemorySummaryModel
 from app.module.knowledge.model.tree_model import NODE_KIND_FILE, NODE_KIND_FOLDER, TreeNodeModel
 
 __all__ = [
+    "INGEST_ACTIVE_STATUSES",
+    "INGEST_PROCESSING_STATUSES",
+    "INGEST_SOURCES",
+    "INGEST_SOURCE_TEXT",
+    "INGEST_SOURCE_UPLOAD",
+    "INGEST_STATUSES",
+    "INGEST_STATUS_CHUNKING",
+    "INGEST_STATUS_EMBEDDING",
+    "INGEST_STATUS_FAILED",
+    "INGEST_STATUS_PARSING",
+    "INGEST_STATUS_QUEUED",
+    "INGEST_STATUS_READY",
+    "INGEST_STATUS_SUMMARIZING",
     "MEMORY_ACTIVE",
     "MEMORY_DEPRECATED",
     "MEMORY_SOURCES",
@@ -50,6 +79,7 @@ __all__ = [
     "Base",
     "ChunkModel",
     "ChunkNgramModel",
+    "FileIngestJobModel",
     "FileModel",
     "MemoryModel",
     "MemorySummaryModel",
