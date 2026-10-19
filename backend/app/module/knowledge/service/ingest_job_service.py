@@ -22,8 +22,9 @@ in-flight jobs per worker (two by default); embedding has its own async limit.
 import asyncio
 import logging
 import mimetypes
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
 from uuid import uuid4
@@ -31,6 +32,7 @@ from uuid import uuid4
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.module.knowledge.domain.ingest_config_domain import IngestRuntimeConfig
 from app.module.knowledge.domain.path_domain import extension
 from app.module.knowledge.exception.domain_error import (
     AiProviderError,
@@ -98,6 +100,22 @@ def ingest_error_code(exc: BaseException) -> str:
         if isinstance(exc, exc_type):
             return code
     return "ingest_failed"
+
+
+FileServiceFactory = Callable[
+    [AsyncSession, IngestRuntimeConfig, asyncio.Semaphore, asyncio.Semaphore],
+    FileService,
+]
+
+
+@dataclass(frozen=True)
+class _WorkerRuntime:
+    """One immutable settings snapshot plus the gates it owns."""
+
+    config: IngestRuntimeConfig
+    extract_semaphore: asyncio.Semaphore
+    embedding_semaphore: asyncio.Semaphore
+    job_slots: asyncio.Semaphore
 
 
 def _to_schema(job: FileIngestJobModel) -> IngestJobSchema:
@@ -327,31 +345,66 @@ class IngestWorker:
         self,
         *,
         session_factory: async_sessionmaker[AsyncSession],
-        file_service_factory: Callable[[AsyncSession], FileService],
+        file_service_factory: FileServiceFactory,
         storage: FileStorageProtocol,
         max_attempts: int,
-        poll_seconds: float = 1.0,
+        runtime_config: IngestRuntimeConfig,
+        config_provider: Callable[[], Awaitable[IngestRuntimeConfig]] | None = None,
         stale_seconds: int = 300,
         extract_pool: ThreadPoolExecutor | None = None,
-        extract_workers: int = 2,
-        max_in_flight_jobs: int = 2,
+        extract_semaphore: asyncio.Semaphore | None = None,
         embedding_semaphore: asyncio.Semaphore | None = None,
-        embedding_concurrency: int = 6,
     ) -> None:
         self.session_factory = session_factory
         self.file_service_factory = file_service_factory
         self.storage = storage
         self.max_attempts = max(1, max_attempts)
-        self.poll_seconds = max(0.1, poll_seconds)
         self.stale_seconds = max(1, stale_seconds)
         self.extract_pool = extract_pool
-        self.extract_workers = max(1, extract_workers)
-        self.max_in_flight_jobs = max(1, max_in_flight_jobs)
-        self.embedding_concurrency = max(1, embedding_concurrency)
+        self.config_provider = config_provider
+        self.runtime_config = runtime_config
+        self.poll_seconds = runtime_config.poll_seconds
+        self.extract_workers = runtime_config.extract_workers
+        self.max_in_flight_jobs = runtime_config.max_inflight_jobs
+        self.embedding_concurrency = runtime_config.embedding_concurrency
+        self.extract_semaphore = extract_semaphore or asyncio.Semaphore(
+            self.extract_workers
+        )
         self.embedding_semaphore = embedding_semaphore or asyncio.Semaphore(
             self.embedding_concurrency
         )
         self._job_slots = asyncio.Semaphore(self.max_in_flight_jobs)
+
+    def _runtime(self) -> _WorkerRuntime:
+        """Capture one immutable runtime bundle for a newly claimed job."""
+        return _WorkerRuntime(
+            config=self.runtime_config,
+            extract_semaphore=self.extract_semaphore,
+            embedding_semaphore=self.embedding_semaphore,
+            job_slots=self._job_slots,
+        )
+
+    async def _refresh_runtime(self) -> None:
+        """Pick up database settings without disturbing in-flight jobs."""
+        if self.config_provider is None:
+            return
+        try:
+            config = await self.config_provider()
+        except Exception:
+            logger.exception("Could not refresh ingestion runtime settings")
+            return
+        previous = self.runtime_config
+        if config.extract_workers != previous.extract_workers:
+            self.extract_semaphore = asyncio.Semaphore(config.extract_workers)
+        if config.embedding_concurrency != previous.embedding_concurrency:
+            self.embedding_semaphore = asyncio.Semaphore(config.embedding_concurrency)
+        if config.max_inflight_jobs != previous.max_inflight_jobs:
+            self._job_slots = asyncio.Semaphore(config.max_inflight_jobs)
+        self.runtime_config = config
+        self.poll_seconds = config.poll_seconds
+        self.extract_workers = config.extract_workers
+        self.max_in_flight_jobs = config.max_inflight_jobs
+        self.embedding_concurrency = config.embedding_concurrency
 
     def close(self) -> None:
         """Release extraction threads without waiting on a stopped event loop."""
@@ -365,10 +418,17 @@ class IngestWorker:
         a restart cannot leave invisible rows behind. Terminal recoveries also
         remove their stored payloads.
         """
+        await self._refresh_runtime()
+        runtime = self._runtime()
         stale_before = utcnow() - timedelta(seconds=self.stale_seconds)
         async with self.session_factory() as session:
             repository = IngestJobRepository(session)
-            file_service = self.file_service_factory(session)
+            file_service = self.file_service_factory(
+                session,
+                runtime.config,
+                runtime.extract_semaphore,
+                runtime.embedding_semaphore,
+            )
             for job in await repository.list_stale(stale_before=stale_before):
                 if job.file_id is None:
                     continue
@@ -410,10 +470,11 @@ class IngestWorker:
 
     async def run_once(self) -> bool:
         """Claim and fully process at most one queued job."""
+        await self._refresh_runtime()
         job_id = await self._claim_next()
         if job_id is None:
             return False
-        await self._process_claimed(job_id)
+        await self._process_claimed(job_id, self._runtime())
         return True
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
@@ -427,9 +488,11 @@ class IngestWorker:
         tasks: set[asyncio.Task[None]] = set()
         try:
             while stop_event is None or not stop_event.is_set():
+                await self._refresh_runtime()
+                runtime = self._runtime()
                 for finished in {task for task in tasks if task.done()}:
                     tasks.discard(finished)
-                while len(tasks) < self.max_in_flight_jobs:
+                while len(tasks) < runtime.config.max_inflight_jobs:
                     try:
                         job_id = await self._claim_next()
                     except Exception:
@@ -439,7 +502,7 @@ class IngestWorker:
                         break
                     tasks.add(
                         asyncio.create_task(
-                            self._process_with_slot(job_id),
+                            self._process_with_slot(job_id, runtime),
                             name=f"ingest-job-{job_id}",
                         )
                     )
@@ -470,22 +533,27 @@ class IngestWorker:
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _process_with_slot(self, job_id: int) -> None:
+    async def _process_with_slot(
+        self,
+        job_id: int,
+        runtime: _WorkerRuntime,
+    ) -> None:
         """Hold one in-flight slot for the whole job pipeline."""
         try:
-            async with self._job_slots:
-                await self._process_claimed(job_id)
+            async with runtime.job_slots:
+                await self._process_claimed(job_id, runtime)
         except Exception:
             logger.exception("Ingestion job %d crashed", job_id)
 
     async def process_job(self, job_id: int) -> IngestJobSchema | None:
         """Claim and process one specific queued job (tests and ``--once``)."""
+        await self._refresh_runtime()
         async with self.session_factory() as session:
             job = await IngestJobRepository(session).claim(job_id)
             await session.commit()
         if job is None:
             return None
-        await self._process_claimed(job_id)
+        await self._process_claimed(job_id, self._runtime())
         return await self.get_job(job_id)
 
     async def get_job(self, job_id: int) -> IngestJobSchema | None:
@@ -511,7 +579,11 @@ class IngestWorker:
             await session.commit()
         return job_id
 
-    async def _process_claimed(self, job_id: int) -> None:
+    async def _process_claimed(
+        self,
+        job_id: int,
+        runtime: _WorkerRuntime,
+    ) -> None:
         job = await self._load_job(job_id)
         if job is None:
             return
@@ -523,7 +595,12 @@ class IngestWorker:
             data = await self.storage.read(job.storage_key)
 
             async with self.session_factory() as session:
-                file_service = self.file_service_factory(session)
+                file_service = self.file_service_factory(
+                    session,
+                    runtime.config,
+                    runtime.extract_semaphore,
+                    runtime.embedding_semaphore,
+                )
                 extracted = await file_service.prepare_job_document(
                     source_kind=job.source_kind,
                     path=job.path,
@@ -561,7 +638,12 @@ class IngestWorker:
                 progress_pct=95,
             )
             async with self.session_factory() as session:
-                file_service = self.file_service_factory(session)
+                file_service = self.file_service_factory(
+                    session,
+                    runtime.config,
+                    runtime.extract_semaphore,
+                    runtime.embedding_semaphore,
+                )
                 await file_service.publish_pending(file_schema.id)
                 ready_job = await IngestJobRepository(session).get(job_id)
                 if ready_job is not None:
@@ -577,7 +659,12 @@ class IngestWorker:
                 await self._delete_payload(job.storage_key)
         except Exception as exc:
             logger.exception("Ingestion job %d failed", job_id)
-            await self._fail(job_id, exc, progress.file_id or staged_file_id)
+            await self._fail(
+                job_id,
+                exc,
+                runtime,
+                progress.file_id or staged_file_id,
+            )
 
     async def _load_job(self, job_id: int) -> FileIngestJobModel | None:
         async with self.session_factory() as session:
@@ -587,6 +674,7 @@ class IngestWorker:
         self,
         job_id: int,
         exc: BaseException,
+        runtime: _WorkerRuntime,
         staged_file_id: int | None = None,
     ) -> None:
         job = await self._load_job(job_id)
@@ -599,7 +687,12 @@ class IngestWorker:
             # so deleting the staged file would otherwise delete the job too.
             await self.update_job(job_id, file_id=None)
             async with self.session_factory() as session:
-                file_service = self.file_service_factory(session)
+                file_service = self.file_service_factory(
+                    session,
+                    runtime.config,
+                    runtime.extract_semaphore,
+                    runtime.embedding_semaphore,
+                )
                 discarded = await file_service.discard_pending(file_id)
                 await session.commit()
         can_delete_payload = file_id is None or discarded

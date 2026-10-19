@@ -37,7 +37,11 @@ from app.infrastructure.database.session import Database
 from app.infrastructure.files.local_storage import LocalFileStorage
 from app.infrastructure.logger.logging import configure_logging
 from app.infrastructure.security.secret_cipher import SecretCipher
-from app.module.knowledge.dependencies import build_ingest_worker
+from app.module.knowledge.dependencies import (
+    build_ingest_worker,
+    ingest_runtime_defaults,
+    load_ingest_runtime_config,
+)
 from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
 
 logger = logging.getLogger(__name__)
@@ -82,7 +86,21 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
         state.secret_cipher = cipher
         state.ai_runtime = runtime
 
-        worker = build_ingest_worker(state, database.session_factory, settings)
+        ingest_defaults = ingest_runtime_defaults(settings)
+        ingest_config = await load_ingest_runtime_config(
+            database.session_factory,
+            ingest_defaults,
+        )
+        worker = build_ingest_worker(
+            state,
+            database.session_factory,
+            settings,
+            runtime_config=ingest_config,
+            config_provider=lambda: load_ingest_runtime_config(
+                database.session_factory,
+                ingest_defaults,
+            ),
+        )
         try:
             await worker.startup()
 

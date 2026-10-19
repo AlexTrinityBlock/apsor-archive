@@ -25,12 +25,16 @@ import type {
 
 import type {
   BodyUploadFile,
+  BodyUploadFileAsync,
   FileChunksSchema,
   FileCopySchema,
   FileMoveSchema,
   FileSchema,
   FileTextCreateSchema,
   HTTPValidationError,
+  IngestJobListSchema,
+  IngestJobSchema,
+  ListIngestJobsParams,
   ReadFileParams
 } from '../schemas';
 
@@ -136,6 +140,372 @@ export const useUploadFile = <TError = HTTPValidationError,
       > => {
       return useMutation(getUploadFileMutationOptions(options), queryClient);
     }
+    export const getUploadFileAsyncUrl = () => {
+
+
+
+
+  return `/api/v1/files/async`
+}
+
+/**
+ * Store one upload and return immediately with a durable job.
+ *
+ * The synchronous ``POST /files`` endpoint remains available for clients that
+ * need the fully indexed file in the same response.
+ * @summary Upload File Async
+ */
+export const uploadFileAsync = async (bodyUploadFileAsync: BodyUploadFileAsync, options?: Parameters<typeof apiFetch>[1]): Promise<IngestJobSchema> => {
+    const formData = new FormData();
+formData.append(`file`, bodyUploadFileAsync.file);
+if(bodyUploadFileAsync.occurred_at !== undefined && bodyUploadFileAsync.occurred_at !== null) {
+ formData.append(`occurred_at`, bodyUploadFileAsync.occurred_at);
+ }
+formData.append(`path`, bodyUploadFileAsync.path);
+
+  return apiFetch<IngestJobSchema>(getUploadFileAsyncUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getUploadFileAsyncMutationKey = () => ['uploadFileAsync'] as const;
+
+export const getUploadFileAsyncMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadFileAsync>>, TError,UploadFileAsyncMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadFileAsync>>, TError,UploadFileAsyncMutationVariables, TContext> => {
+
+const mutationKey = getUploadFileAsyncMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadFileAsync>>, UploadFileAsyncMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  uploadFileAsync(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadFileAsyncMutationResult = NonNullable<Awaited<ReturnType<typeof uploadFileAsync>>>
+    export type UploadFileAsyncMutationBody = BodyUploadFileAsync
+    export type UploadFileAsyncMutationError = HTTPValidationError
+    export type UploadFileAsyncMutationVariables = {data: BodyUploadFileAsync}
+
+    /**
+ * @summary Upload File Async
+ */
+export const useUploadFileAsync = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadFileAsync>>, TError,UploadFileAsyncMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof uploadFileAsync>>,
+        TError,
+        UploadFileAsyncMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUploadFileAsyncMutationOptions(options), queryClient);
+    }
+    export const getListIngestJobsUrl = (params?: ListIngestJobsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/files/ingest-jobs?${stringifiedParams}` : `/api/v1/files/ingest-jobs`
+}
+
+/**
+ * List active and recent ingestion jobs, newest first.
+ * @summary List Ingest Jobs
+ */
+export const listIngestJobs = async (params?: ListIngestJobsParams, options?: Parameters<typeof apiFetch>[1]): Promise<IngestJobListSchema> => {
+
+  return apiFetch<IngestJobListSchema>(getListIngestJobsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListIngestJobsQueryKey = (params?: ListIngestJobsParams,) => {
+    return [
+    `/api/v1/files/ingest-jobs`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListIngestJobsQueryOptions = <TData = Awaited<ReturnType<typeof listIngestJobs>>, TError = HTTPValidationError>(params?: ListIngestJobsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listIngestJobs>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListIngestJobsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listIngestJobs>>> = ({ signal }) => listIngestJobs(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listIngestJobs>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListIngestJobsQueryResult = NonNullable<Awaited<ReturnType<typeof listIngestJobs>>>
+export type ListIngestJobsQueryError = HTTPValidationError
+
+
+export function useListIngestJobs<TData = Awaited<ReturnType<typeof listIngestJobs>>, TError = HTTPValidationError>(
+ params: undefined |  ListIngestJobsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listIngestJobs>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listIngestJobs>>,
+          TError,
+          Awaited<ReturnType<typeof listIngestJobs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListIngestJobs<TData = Awaited<ReturnType<typeof listIngestJobs>>, TError = HTTPValidationError>(
+ params?: ListIngestJobsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listIngestJobs>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listIngestJobs>>,
+          TError,
+          Awaited<ReturnType<typeof listIngestJobs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListIngestJobs<TData = Awaited<ReturnType<typeof listIngestJobs>>, TError = HTTPValidationError>(
+ params?: ListIngestJobsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listIngestJobs>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Ingest Jobs
+ */
+
+export function useListIngestJobs<TData = Awaited<ReturnType<typeof listIngestJobs>>, TError = HTTPValidationError>(
+ params?: ListIngestJobsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listIngestJobs>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListIngestJobsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetIngestJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/v1/files/ingest-jobs/${jobId}`
+}
+
+/**
+ * Return one job's status and chunking/embedding progress.
+ * @summary Get Ingest Job
+ */
+export const getIngestJob = async (jobId: number, options?: Parameters<typeof apiFetch>[1]): Promise<IngestJobSchema> => {
+
+  return apiFetch<IngestJobSchema>(getGetIngestJobUrl(jobId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetIngestJobQueryKey = (jobId: number,) => {
+    return [
+    `/api/v1/files/ingest-jobs/${jobId}`
+    ] as const;
+    }
+
+
+export const getGetIngestJobQueryOptions = <TData = Awaited<ReturnType<typeof getIngestJob>>, TError = HTTPValidationError>(jobId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestJob>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetIngestJobQueryKey(jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getIngestJob>>> = ({ signal }) => getIngestJob(jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getIngestJob>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetIngestJobQueryResult = NonNullable<Awaited<ReturnType<typeof getIngestJob>>>
+export type GetIngestJobQueryError = HTTPValidationError
+
+
+export function useGetIngestJob<TData = Awaited<ReturnType<typeof getIngestJob>>, TError = HTTPValidationError>(
+ jobId: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestJob>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getIngestJob>>,
+          TError,
+          Awaited<ReturnType<typeof getIngestJob>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetIngestJob<TData = Awaited<ReturnType<typeof getIngestJob>>, TError = HTTPValidationError>(
+ jobId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestJob>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getIngestJob>>,
+          TError,
+          Awaited<ReturnType<typeof getIngestJob>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetIngestJob<TData = Awaited<ReturnType<typeof getIngestJob>>, TError = HTTPValidationError>(
+ jobId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestJob>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Ingest Job
+ */
+
+export function useGetIngestJob<TData = Awaited<ReturnType<typeof getIngestJob>>, TError = HTTPValidationError>(
+ jobId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestJob>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetIngestJobQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getRetryIngestJobUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/v1/files/ingest-jobs/${jobId}/retry`
+}
+
+/**
+ * Return a failed job to the queue when its attempt budget allows.
+ * @summary Retry Ingest Job
+ */
+export const retryIngestJob = async (jobId: number, options?: Parameters<typeof apiFetch>[1]): Promise<IngestJobSchema> => {
+
+  return apiFetch<IngestJobSchema>(getRetryIngestJobUrl(jobId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRetryIngestJobMutationKey = () => ['retryIngestJob'] as const;
+
+export const getRetryIngestJobMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryIngestJob>>, TError,RetryIngestJobMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryIngestJob>>, TError,RetryIngestJobMutationVariables, TContext> => {
+
+const mutationKey = getRetryIngestJobMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryIngestJob>>, RetryIngestJobMutationVariables> = (props) => {
+          const {jobId} = props ?? {};
+
+          return  retryIngestJob(jobId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryIngestJobMutationResult = NonNullable<Awaited<ReturnType<typeof retryIngestJob>>>
+
+    export type RetryIngestJobMutationError = HTTPValidationError
+    export type RetryIngestJobMutationVariables = {jobId: number}
+
+    /**
+ * @summary Retry Ingest Job
+ */
+export const useRetryIngestJob = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryIngestJob>>, TError,RetryIngestJobMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof retryIngestJob>>,
+        TError,
+        RetryIngestJobMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRetryIngestJobMutationOptions(options), queryClient);
+    }
     export const getCreateTextFileUrl = () => {
 
 
@@ -223,6 +593,94 @@ export const useCreateTextFile = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getCreateTextFileMutationOptions(options), queryClient);
+    }
+    export const getCreateTextFileAsyncUrl = () => {
+
+
+
+
+  return `/api/v1/files/text/async`
+}
+
+/**
+ * Queue direct text without waiting for chunking and embedding.
+ * @summary Create Text File Async
+ */
+export const createTextFileAsync = async (fileTextCreateSchema: FileTextCreateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<IngestJobSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<IngestJobSchema>(getCreateTextFileAsyncUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(fileTextCreateSchema)
+  }
+);}
+
+
+
+
+
+export const getCreateTextFileAsyncMutationKey = () => ['createTextFileAsync'] as const;
+
+export const getCreateTextFileAsyncMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTextFileAsync>>, TError,CreateTextFileAsyncMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTextFileAsync>>, TError,CreateTextFileAsyncMutationVariables, TContext> => {
+
+const mutationKey = getCreateTextFileAsyncMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTextFileAsync>>, CreateTextFileAsyncMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTextFileAsync(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTextFileAsyncMutationResult = NonNullable<Awaited<ReturnType<typeof createTextFileAsync>>>
+    export type CreateTextFileAsyncMutationBody = FileTextCreateSchema
+    export type CreateTextFileAsyncMutationError = HTTPValidationError
+    export type CreateTextFileAsyncMutationVariables = {data: FileTextCreateSchema}
+
+    /**
+ * @summary Create Text File Async
+ */
+export const useCreateTextFileAsync = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTextFileAsync>>, TError,CreateTextFileAsyncMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createTextFileAsync>>,
+        TError,
+        CreateTextFileAsyncMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateTextFileAsyncMutationOptions(options), queryClient);
     }
     export const getDeleteFileUrl = (fileId: number,) => {
 

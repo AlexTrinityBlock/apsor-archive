@@ -28,7 +28,9 @@ import type {
   AiSettingsReadSchema,
   AiTestResultSchema,
   EmbeddingReindexSchema,
-  HTTPValidationError
+  HTTPValidationError,
+  IngestSettingsReadSchema,
+  IngestSettingsUpdateSchema
 } from '../schemas';
 
 import { apiFetch } from '../../../apis/fetch-client';
@@ -464,4 +466,267 @@ export const useTestAiProvider = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getTestAiProviderMutationOptions(options), queryClient);
+    }
+    export const getGetIngestSettingsUrl = () => {
+
+
+
+
+  return `/api/v1/settings/ingest`
+}
+
+/**
+ * Return the effective worker settings and the defaults.
+ * @summary Get Ingest Settings
+ */
+export const getIngestSettings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<IngestSettingsReadSchema> => {
+
+  return apiFetch<IngestSettingsReadSchema>(getGetIngestSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetIngestSettingsQueryKey = () => {
+    return [
+    `/api/v1/settings/ingest`
+    ] as const;
+    }
+
+
+export const getGetIngestSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getIngestSettings>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetIngestSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getIngestSettings>>> = ({ signal }) => getIngestSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getIngestSettings>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetIngestSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getIngestSettings>>>
+export type GetIngestSettingsQueryError = unknown
+
+
+export function useGetIngestSettings<TData = Awaited<ReturnType<typeof getIngestSettings>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestSettings>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getIngestSettings>>,
+          TError,
+          Awaited<ReturnType<typeof getIngestSettings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetIngestSettings<TData = Awaited<ReturnType<typeof getIngestSettings>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestSettings>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getIngestSettings>>,
+          TError,
+          Awaited<ReturnType<typeof getIngestSettings>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetIngestSettings<TData = Awaited<ReturnType<typeof getIngestSettings>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Ingest Settings
+ */
+
+export function useGetIngestSettings<TData = Awaited<ReturnType<typeof getIngestSettings>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetIngestSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getUpdateIngestSettingsUrl = () => {
+
+
+
+
+  return `/api/v1/settings/ingest`
+}
+
+/**
+ * Replace every worker setting with one validated snapshot.
+ * @summary Update Ingest Settings
+ */
+export const updateIngestSettings = async (ingestSettingsUpdateSchema: IngestSettingsUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<IngestSettingsReadSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<IngestSettingsReadSchema>(getUpdateIngestSettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(ingestSettingsUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateIngestSettingsMutationKey = () => ['updateIngestSettings'] as const;
+
+export const getUpdateIngestSettingsMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIngestSettings>>, TError,UpdateIngestSettingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateIngestSettings>>, TError,UpdateIngestSettingsMutationVariables, TContext> => {
+
+const mutationKey = getUpdateIngestSettingsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateIngestSettings>>, UpdateIngestSettingsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateIngestSettings(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateIngestSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof updateIngestSettings>>>
+    export type UpdateIngestSettingsMutationBody = IngestSettingsUpdateSchema
+    export type UpdateIngestSettingsMutationError = HTTPValidationError
+    export type UpdateIngestSettingsMutationVariables = {data: IngestSettingsUpdateSchema}
+
+    /**
+ * @summary Update Ingest Settings
+ */
+export const useUpdateIngestSettings = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIngestSettings>>, TError,UpdateIngestSettingsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateIngestSettings>>,
+        TError,
+        UpdateIngestSettingsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateIngestSettingsMutationOptions(options), queryClient);
+    }
+    export const getResetIngestSettingsUrl = () => {
+
+
+
+
+  return `/api/v1/settings/ingest/reset`
+}
+
+/**
+ * Restore and persist the environment-seeded defaults.
+ * @summary Reset Ingest Settings
+ */
+export const resetIngestSettings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<IngestSettingsReadSchema> => {
+
+  return apiFetch<IngestSettingsReadSchema>(getResetIngestSettingsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getResetIngestSettingsMutationKey = () => ['resetIngestSettings'] as const;
+
+export const getResetIngestSettingsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetIngestSettings>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetIngestSettings>>, TError,void, TContext> => {
+
+const mutationKey = getResetIngestSettingsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetIngestSettings>>, void> = () => {
+
+
+          return  resetIngestSettings(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetIngestSettingsMutationResult = NonNullable<Awaited<ReturnType<typeof resetIngestSettings>>>
+
+    export type ResetIngestSettingsMutationError = unknown
+
+
+    /**
+ * @summary Reset Ingest Settings
+ */
+export const useResetIngestSettings = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetIngestSettings>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resetIngestSettings>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getResetIngestSettingsMutationOptions(options), queryClient);
     }
