@@ -81,6 +81,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert defaults == {
         "max_total_tokens": 100_000,
         "compaction_threshold_tokens": 75_000,
+        "context_window_tokens": 1_000_000,
         "max_steps": 24,
         "max_tool_calls_per_turn": 6,
         "max_parallel_tools": 6,
@@ -112,8 +113,21 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert invalid_parallel.status_code == 400
     assert invalid_parallel.json()["error"] == "invalid_request"
 
+    for invalid_context_window in (7_999, 2_000_001):
+        invalid_context = client.put(
+            "/api/v1/agent/settings",
+            json={
+                **defaults,
+                "context_window_tokens": invalid_context_window,
+            },
+        )
+        assert invalid_context.status_code == 400
+        assert invalid_context.json()["error"] == "invalid_request"
+        assert "context_window_tokens" in invalid_context.json()["detail"]
+
     non_default_settings = {
         **defaults,
+        "context_window_tokens": 1_500_000,
         "max_steps": 4,
         "max_tool_calls_per_turn": 4,
         "max_parallel_tools": 2,
