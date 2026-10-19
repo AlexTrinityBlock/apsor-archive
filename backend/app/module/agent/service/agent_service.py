@@ -6,7 +6,7 @@ import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
@@ -430,7 +430,6 @@ class AgentService:
         terminal = False
         total_usage: dict[str, int] = {}
         tool_calls_used = 0
-        tool_result_chars = 0
 
         try:
             yield AgentStreamEvent(
@@ -747,35 +746,15 @@ class AgentService:
                     ):
                         planned[index] = (calls[index], outcome)
 
-                # Give each independent call its own chance to run, then apply
-                # the turn-wide character budget in deterministic call order.
+                # Each executed outcome was already clipped to the per-result
+                # cap by the tool registry. Calls over the per-turn call limit
+                # carry a small synthetic limit outcome; no result is dropped
+                # or summarized with a second model call.
                 outcomes: list[tuple[ChatToolCall, ToolOutcome]] = []
-                executed_indices = set(eligible_indices)
-                for index, call in enumerate(calls):
+                for index, _call in enumerate(calls):
                     planned_outcome = planned[index]
                     assert planned_outcome is not None
-                    call, outcome = planned_outcome
-                    if index in executed_indices:
-                        remaining_chars = (
-                            self.config.max_total_tool_result_chars
-                            - tool_result_chars
-                        )
-                        if remaining_chars <= 0:
-                            outcome = _limit_outcome(
-                                call.name,
-                                "tool_result_budget_exhausted",
-                                "The tool-result budget was exhausted for this turn.",
-                            )
-                        else:
-                            outcome = _clip_tool_outcome(
-                                outcome,
-                                min(
-                                    self.config.max_tool_result_chars,
-                                    remaining_chars,
-                                ),
-                            )
-                            tool_result_chars += len(outcome.content)
-                    outcomes.append((call, outcome))
+                    outcomes.append(planned_outcome)
 
                 try:
                     result_entries = await self.repository.append_tool_results(
@@ -1385,14 +1364,6 @@ def _tool_end_event(
     if outcome.resource is not None:
         data["resource"] = outcome.resource
     return AgentStreamEvent("tool_end", data)
-
-
-def _clip_tool_outcome(outcome: ToolOutcome, max_chars: int) -> ToolOutcome:
-    """Apply the per-call/turn-wide character cap to one finished outcome."""
-    if len(outcome.content) <= max_chars:
-        return outcome
-    data = {**outcome.data, "truncated": True}
-    return replace(outcome, content=clip(outcome.content, max_chars), data=data)
 
 
 def _limit_outcome(name: str, code: str, detail: str) -> ToolOutcome:

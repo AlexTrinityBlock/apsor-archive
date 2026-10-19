@@ -158,13 +158,13 @@ AI settings API:
 
 The **Agent runtime** panel on `/settings` edits the singleton `agent_config`
 row (`id=1`). Provider and model selection stay in the AI settings above, so
-there is still one source of truth for which model answers. All twelve runtime
+there is still one source of truth for which model answers. All eleven runtime
 values are stored in PostgreSQL and apply to new runs without a restart.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | Effective config, defaults, source, `updated_at` |
-| `PUT` | `/api/v1/agent/settings` | Full replacement; all twelve fields are required |
+| `PUT` | `/api/v1/agent/settings` | Full replacement; all eleven fields are required |
 | `POST` | `/api/v1/agent/settings/reset` | Persist and return the built-in defaults |
 
 The generated operations are `getAgentSettings`, `updateAgentSettings`, and
@@ -183,19 +183,17 @@ fields are rejected.
 | `max_tool_calls_per_turn` | 6 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
 | `max_tool_result_chars` | 12,000 | 1,000–100,000 |
-| `max_total_tool_result_chars` | 24,000 | 1,000–200,000 |
 | `max_page_context_chars` | 6,000 | 500–50,000 |
 | `max_compaction_summary_chars` | 6,000 | 1,000–20,000 |
 | `max_compaction_last_user_chars` | 4,000 | 500–10,000 |
 | `auto_compaction_enabled` | `true` | boolean |
 | `parallel_tools_enabled` | `true` | boolean |
 
-Pydantic and matching PostgreSQL check constraints enforce the ranges and three
+Pydantic and matching PostgreSQL check constraints enforce the ranges and two
 cross-field rules: the compaction threshold must be lower than the total token
-budget, per-tool result characters must not exceed the total result budget, and
-the parallel width must not exceed tool calls per turn. The app's global
-validation envelope maps request validation failures to `400 invalid_request`
-rather than 422.
+budget, and the parallel width must not exceed tool calls per turn. The app's
+global validation envelope maps request validation failures to `400
+invalid_request` rather than 422.
 
 A request loads one immutable runtime snapshot in a short-lived database session.
 An active SSE run keeps the snapshot it started with; later runs use changed
@@ -384,8 +382,10 @@ Starlette's GZip middleware excludes `text/event-stream`.
 
 Each conversation allows one active run at a time. The defaults allow 8 model
 steps, 6 tool calls per user turn, 6 parallel tools, 64,000 total tokens per turn
-(cumulative across model steps), 12,000 result characters per tool, and 24,000
-result characters per turn.
+(cumulative across model steps), and 12,000 result characters per tool. Each
+result is clipped independently at that per-result cap with a visible
+`[truncated]` marker; there is no turn-wide result budget or second summarization
+call. A 12,000-character cap spans roughly fifteen 800-character chunks.
 These are runtime settings, not code constants; see **Agent runtime settings**
 above. Eligible tool calls start together and execute through `asyncio.gather`
 when parallel tools are enabled. Result persistence and `tool_end` order follow

@@ -23,7 +23,6 @@ class AgentSettingsValuesSchema(BaseModel):
     max_tool_calls_per_turn: int = Field(ge=1, le=24)
     max_parallel_tools: int = Field(ge=1, le=24)
     max_tool_result_chars: int = Field(ge=1_000, le=100_000)
-    max_total_tool_result_chars: int = Field(ge=1_000, le=200_000)
     max_page_context_chars: int = Field(ge=500, le=50_000)
     max_compaction_summary_chars: int = Field(ge=1_000, le=20_000)
     max_compaction_last_user_chars: int = Field(ge=500, le=10_000)
@@ -36,10 +35,6 @@ class AgentSettingsValuesSchema(BaseModel):
         if self.compaction_threshold_tokens >= self.max_total_tokens:
             raise ValueError(
                 "compaction_threshold_tokens must be less than max_total_tokens."
-            )
-        if self.max_tool_result_chars > self.max_total_tool_result_chars:
-            raise ValueError(
-                "max_tool_result_chars must not exceed max_total_tool_result_chars."
             )
         if self.max_parallel_tools > self.max_tool_calls_per_turn:
             raise ValueError(

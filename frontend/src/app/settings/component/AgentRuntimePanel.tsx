@@ -21,7 +21,6 @@ export interface AgentRuntimeValues {
   readonly max_tool_calls_per_turn: number;
   readonly max_parallel_tools: number;
   readonly max_tool_result_chars: number;
-  readonly max_total_tool_result_chars: number;
   readonly max_page_context_chars: number;
   readonly max_compaction_summary_chars: number;
   readonly max_compaction_last_user_chars: number;
@@ -50,7 +49,6 @@ export const AGENT_RUNTIME_DEFAULTS: AgentRuntimeValues = {
   max_tool_calls_per_turn: 6,
   max_parallel_tools: 6,
   max_tool_result_chars: 12000,
-  max_total_tool_result_chars: 24000,
   max_page_context_chars: 6000,
   max_compaction_summary_chars: 6000,
   max_compaction_last_user_chars: 4000,
@@ -146,15 +144,6 @@ const TOOL_FIELDS: readonly NumericFieldSpec[] = [
     step: 500,
     hint: "Longer results are trimmed before they reach the model.",
   },
-  {
-    key: "max_total_tool_result_chars",
-    label: "Total tool-result chars",
-    unit: "chars",
-    min: 1000,
-    max: 200000,
-    step: 1000,
-    hint: "Combined result budget across the turn.",
-  },
 ];
 
 const COMPACTION_FIELDS: readonly NumericFieldSpec[] = [
@@ -191,7 +180,6 @@ const VALUE_KEYS: readonly (keyof AgentRuntimeValues)[] = [
   "max_tool_calls_per_turn",
   "max_parallel_tools",
   "max_tool_result_chars",
-  "max_total_tool_result_chars",
   "max_page_context_chars",
   "max_compaction_summary_chars",
   "max_compaction_last_user_chars",
@@ -207,7 +195,6 @@ function toDraft(values: AgentRuntimeValues): DraftValues {
     max_tool_calls_per_turn: String(values.max_tool_calls_per_turn),
     max_parallel_tools: String(values.max_parallel_tools),
     max_tool_result_chars: String(values.max_tool_result_chars),
-    max_total_tool_result_chars: String(values.max_total_tool_result_chars),
     max_page_context_chars: String(values.max_page_context_chars),
     max_compaction_summary_chars: String(values.max_compaction_summary_chars),
     max_compaction_last_user_chars: String(values.max_compaction_last_user_chars),
@@ -224,7 +211,6 @@ function fromDraft(draft: DraftValues): AgentRuntimeValues {
     max_tool_calls_per_turn: Number(draft.max_tool_calls_per_turn),
     max_parallel_tools: Number(draft.max_parallel_tools),
     max_tool_result_chars: Number(draft.max_tool_result_chars),
-    max_total_tool_result_chars: Number(draft.max_total_tool_result_chars),
     max_page_context_chars: Number(draft.max_page_context_chars),
     max_compaction_summary_chars: Number(draft.max_compaction_summary_chars),
     max_compaction_last_user_chars: Number(draft.max_compaction_last_user_chars),
@@ -288,17 +274,6 @@ function validateDraft(draft: DraftValues): ValidationResult {
     fieldErrors.compaction_threshold_tokens === undefined
   ) {
     fieldErrors.compaction_threshold_tokens = `Must be lower than the max total (${formatNumber(totalTokens)}).`;
-  }
-
-  const toolResultChars = numbers.max_tool_result_chars;
-  const totalToolResultChars = numbers.max_total_tool_result_chars;
-  if (
-    toolResultChars !== undefined &&
-    totalToolResultChars !== undefined &&
-    toolResultChars > totalToolResultChars &&
-    fieldErrors.max_tool_result_chars === undefined
-  ) {
-    fieldErrors.max_tool_result_chars = `Must not exceed the total tool-result budget (${formatNumber(totalToolResultChars)}).`;
   }
 
   const parallelTools = numbers.max_parallel_tools;
@@ -734,16 +709,6 @@ export function AgentRuntimePanel({
                 error={validation.fieldErrors.max_tool_result_chars}
                 onValueChange={(next) =>
                   updateNumber("max_tool_result_chars", next)
-                }
-              />
-              <RuntimeNumberField
-                spec={TOOL_FIELDS[3]}
-                value={draft.max_total_tool_result_chars}
-                defaultValue={defaults.max_total_tool_result_chars}
-                disabled={saving}
-                error={validation.fieldErrors.max_total_tool_result_chars}
-                onValueChange={(next) =>
-                  updateNumber("max_total_tool_result_chars", next)
                 }
               />
             </div>
