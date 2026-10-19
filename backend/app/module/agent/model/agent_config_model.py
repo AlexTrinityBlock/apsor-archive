@@ -9,6 +9,7 @@ from app.infrastructure.database.base import Base
 from app.module.agent.domain.agent_domain import (
     AUTO_COMPACTION_ENABLED,
     COMPACTION_THRESHOLD_TOKENS,
+    CONTEXT_WINDOW_TOKENS,
     MAX_COMPACTION_LAST_USER_CHARS,
     MAX_COMPACTION_SUMMARY_CHARS,
     MAX_PAGE_CONTEXT_CHARS,
@@ -39,6 +40,10 @@ class AgentConfigModel(Base):
         CheckConstraint(
             "compaction_threshold_tokens BETWEEN 1000 AND 200000",
             name="compaction_threshold_tokens_range",
+        ),
+        CheckConstraint(
+            "context_window_tokens BETWEEN 8000 AND 2000000",
+            name="context_window_tokens_range",
         ),
         CheckConstraint("max_steps BETWEEN 1 AND 32", name="max_steps_range"),
         CheckConstraint(
@@ -87,6 +92,12 @@ class AgentConfigModel(Base):
         nullable=False,
         default=COMPACTION_THRESHOLD_TOKENS,
         server_default=text(str(COMPACTION_THRESHOLD_TOKENS)),
+    )
+    context_window_tokens: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=CONTEXT_WINDOW_TOKENS,
+        server_default=text(str(CONTEXT_WINDOW_TOKENS)),
     )
     max_steps: Mapped[int] = mapped_column(
         Integer,

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from app.module.agent.domain.agent_domain import (
     AUTO_COMPACTION_ENABLED,
     COMPACTION_THRESHOLD_TOKENS,
+    CONTEXT_WINDOW_TOKENS,
     MAX_COMPACTION_LAST_USER_CHARS,
     MAX_COMPACTION_SUMMARY_CHARS,
     MAX_PAGE_CONTEXT_CHARS,
@@ -32,6 +33,7 @@ class AgentRuntimeConfig:
 
     max_total_tokens: int = MAX_TOTAL_TOKENS
     compaction_threshold_tokens: int = COMPACTION_THRESHOLD_TOKENS
+    context_window_tokens: int = CONTEXT_WINDOW_TOKENS
     max_steps: int = MAX_STEPS
     max_tool_calls_per_turn: int = MAX_TOOL_CALLS_PER_TURN
     max_parallel_tools: int = MAX_PARALLEL_TOOLS
@@ -51,6 +53,12 @@ class AgentRuntimeConfig:
                 self.compaction_threshold_tokens,
                 1_000,
                 200_000,
+            ),
+            (
+                "context_window_tokens",
+                self.context_window_tokens,
+                8_000,
+                2_000_000,
             ),
             ("max_steps", self.max_steps, 1, 32),
             (

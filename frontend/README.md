@@ -261,11 +261,18 @@ AgentRuntimePanel.tsx`) backed by the generated `useGetAgentSettings`,
 `useUpdateAgentSettings`, and `useResetAgentSettings` hooks. Provider/model
 configuration remains in the existing AI provider panels.
 
-The panel shows a Database/Defaults badge, the last `updated_at`, and a token
-budget meter for the compaction threshold as a share of `max_total_tokens` with
+The panel shows a Database/Defaults badge, the last `updated_at`, and a summary
+with model context, turn budget, and compaction side by side. A token budget
+meter shows the compaction threshold as a share of `max_total_tokens` with
 remaining headroom. Every numeric field displays its default and valid range.
-The eleven runtime values are grouped into context budget, tool execution, and
+The twelve runtime values are grouped into context budget, tool execution, and
 compaction detail; auto compaction and parallel tools are toggles.
+
+The context budget group labels **Model context window** separately from
+**Turn token budget** and **Auto-compaction threshold**. The context window is
+provider/model metadata (default 1,000,000, range 8,000–2,000,000); changing it
+never raises the 100,000-token turn budget or moves the 75,000-token compaction
+threshold.
 
 Validation happens before saving: integer/range checks plus the cross-field
 rules (threshold below total tokens, parallel width within tool calls per turn).
@@ -273,7 +280,7 @@ Save is disabled for an invalid or unchanged draft. The server repeats
 validation and the app maps failures to `400 invalid_request`; the panel shows
 the returned detail inline.
 
-Save sends a full eleven-field `PUT`. **Reset defaults** uses a two-step
+Save sends a full twelve-field `PUT`. **Reset defaults** uses a two-step
 confirmation and persists the defaults through `POST .../settings/reset`; it is
 not only a local form reset. The panel implements loading skeletons and an
 inline error with a Retry action. Changes apply to new runs; an active SSE stream

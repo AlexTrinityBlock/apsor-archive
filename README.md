@@ -56,9 +56,10 @@ result carries its source, chunk number, and time.
 - **Page context respects the cache.** A plain-text snapshot of the current page
   is appended only when the page key changes, in the same commit as the user
   message, so earlier entries and the KV-cache prefix stay untouched.
-- **Agent limits are database-backed.** The turn budget, compaction threshold,
-  step and tool caps, parallel width, and result budgets live in one validated
-  `agent_config` row and apply to new runs without a restart.
+- **Agent limits are database-backed.** The model context window, turn budget,
+  compaction threshold, step and tool caps, parallel width, and result budgets
+  live in one validated `agent_config` row and apply to new runs without a
+  restart. The context window is model metadata, not the turn budget.
 - **Long threads can be folded or cleared.** Compaction writes a summary
   boundary; clear starts an empty active context. The full transcript remains
   readable in both cases.
@@ -167,13 +168,13 @@ AI settings API:
 
 The **Agent runtime** panel on `/settings` edits the singleton `agent_config`
 row (`id=1`). Provider and model selection stay in the AI settings above, so
-there is still one source of truth for which model answers. All eleven runtime
+there is still one source of truth for which model answers. All twelve runtime
 values are stored in PostgreSQL and apply to new runs without a restart.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | Effective config, defaults, source, `updated_at` |
-| `PUT` | `/api/v1/agent/settings` | Full replacement; all eleven fields are required |
+| `PUT` | `/api/v1/agent/settings` | Full replacement; all twelve fields are required |
 | `POST` | `/api/v1/agent/settings/reset` | Persist and return the built-in defaults |
 
 The generated operations are `getAgentSettings`, `updateAgentSettings`, and
@@ -188,6 +189,7 @@ fields are rejected.
 |---|---|---|
 | `max_total_tokens` | 100,000 | 8,000–200,000 |
 | `compaction_threshold_tokens` | 75,000 (~75%) | 1,000–200,000 |
+| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model metadata, not a turn budget |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 6 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
@@ -200,8 +202,9 @@ fields are rejected.
 
 Pydantic and matching PostgreSQL check constraints enforce the ranges and two
 cross-field rules: the compaction threshold must be lower than the total token
-budget, and the parallel width must not exceed tool calls per turn. The app's
-global validation envelope maps request validation failures to `400
+budget, and the parallel width must not exceed tool calls per turn. The context
+window is independent of both; changing it never raises the turn budget. The
+app's global validation envelope maps request validation failures to `400
 invalid_request` rather than 422.
 
 A request loads one immutable runtime snapshot in a short-lived database session.
@@ -461,7 +464,10 @@ Starlette's GZip middleware excludes `text/event-stream`.
 
 Each conversation allows one active run at a time. The defaults allow 24 model
 steps, 6 tool calls per user turn, 6 parallel tools, 100,000 total tokens per turn
-(cumulative across model steps), and 100,000 result characters per tool. Each
+(cumulative across model steps), 75,000 tokens before auto compaction, and
+100,000 result characters per tool. A separate 1,000,000-token model context
+window records provider capacity; it is metadata and does not raise the turn
+budget or change compaction. Each
 result is clipped independently at that per-result cap with a visible
 `[truncated]` marker; there is no turn-wide result budget or second summarization
 call. A 100,000-character cap spans roughly twenty-five 4,000-character chunks.
@@ -1009,7 +1015,7 @@ the `conversation_id` `ON DELETE SET NULL` behavior. Page-context
 deduplication and ordering, and folder creation plus move/copy coverage, extend
 existing tests rather than adding new functions.
 
-The latest migration is `d4b8e6f1a2c7`, after `d1e2f3a4b5c6`. The migrations
+The latest migration is `b3e5c7d9f1a2`, after `d4b8e6f1a2c7`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1022,7 +1028,9 @@ after `agent_config` on this branch are:
 - `d1e2f3a4b5c6` creates `file_ingest_job` with its status/source/range checks,
   active-path unique index, and file FK;
 - `d4b8e6f1a2c7` creates the singleton `ingest_config`, enforces its ranges and
-  overlap rule, and seeds row `1`.
+  overlap rule, and seeds row `1`;
+- `b3e5c7d9f1a2` adds `context_window_tokens` to `agent_config` with a
+  1,000,000 server default and an 8,000–2,000,000 check constraint.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so

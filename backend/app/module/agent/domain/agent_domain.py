@@ -67,7 +67,10 @@ ERROR_FINISH_REASONS = frozenset({"error", "aborted", "cancelled", "canceled"})
 MAX_STEPS = 24
 MAX_TOOL_CALLS_PER_TURN = 6
 MAX_PARALLEL_TOOLS = 6
-# One turn may use up to 64k provider tokens. Auto compaction triggers before a
+# Model capability metadata, not a cost guard. The turn budget below remains the
+# limit the loop enforces; compaction is still measured against that budget.
+CONTEXT_WINDOW_TOKENS = 1_000_000
+# One turn may use up to 100k provider tokens. Auto compaction triggers before a
 # new user turn once the estimated active context reaches 75% of that budget.
 MAX_TOTAL_TOKENS = 100_000
 COMPACTION_THRESHOLD_TOKENS = 75_000
