@@ -1,9 +1,12 @@
+import type { ReactNode } from "react";
+
 import { formatTime } from "../../../lib/format";
 
 interface UserMarginaliaProps {
   readonly text: string;
   readonly createdAt?: string;
   readonly pending?: boolean;
+  readonly action?: ReactNode;
 }
 
 /** The keeper's side of the desk: a pencil note in the margin. */
@@ -11,6 +14,7 @@ export function UserMarginalia({
   text,
   createdAt,
   pending = false,
+  action,
 }: UserMarginaliaProps) {
   return (
     <article className={pending ? "chat-user is-pending" : "chat-user"}>
@@ -28,6 +32,7 @@ export function UserMarginalia({
         ) : (
           <span className="chat-user__time">now</span>
         )}
+        {action}
       </header>
       <p className="chat-user__text">{text}</p>
     </article>
