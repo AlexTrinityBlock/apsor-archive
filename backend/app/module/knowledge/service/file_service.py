@@ -1,13 +1,16 @@
 """File Library orchestration: multimodal intake, chunk reads, and paths."""
 
+import asyncio
 import hashlib
 import json
 import logging
 import mimetypes
 import zipfile
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
+from typing import Any, TypeVar, cast
 from uuid import uuid4
 
 import pypdfium2 as pdfium
@@ -46,6 +49,7 @@ from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.chunk_repository_protocol import ChunkRepositoryProtocol
 from app.module.knowledge.protocol.file_repository_protocol import FileRepositoryProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
+from app.module.knowledge.protocol.ingest_progress_protocol import IngestProgressProtocol
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 from app.module.knowledge.protocol.tree_repository_protocol import TreeRepositoryProtocol
 from app.module.knowledge.protocol.vision_extractor_protocol import (
@@ -64,6 +68,10 @@ from app.module.knowledge.service.indexer_service import IndexerService
 from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
+
+IngestCheckpoint = Callable[[], Awaitable[None]]
+CpuRunner = Callable[..., Awaitable[Any]]
+T = TypeVar("T")
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 DOCUMENT_EXTENSIONS = {".pdf", ".docx"}
@@ -125,6 +133,7 @@ class FileService:
         max_text_bytes: int,
         vision_max_pages: int,
         pdf_text_threshold: int,
+        cpu_runner: CpuRunner | None = None,
     ) -> None:
         self.file_repository = file_repository
         self.tree_repository = tree_repository
@@ -141,6 +150,16 @@ class FileService:
         self.max_text_bytes = max_text_bytes
         self.vision_max_pages = vision_max_pages
         self.pdf_text_threshold = pdf_text_threshold
+        self.cpu_runner: CpuRunner = cpu_runner or asyncio.to_thread
+
+    async def _run_cpu(
+        self,
+        func: Callable[..., T],
+        *args: Any,
+        **kwargs: Any,
+    ) -> T:
+        """Run parsing or chunking on the caller-supplied bounded executor."""
+        return cast(T, await self.cpu_runner(func, *args, **kwargs))
 
     @staticmethod
     def _to_schema(file: FileModel) -> FileSchema:
@@ -183,6 +202,11 @@ class FileService:
         except InvalidPathValueError as exc:
             raise InvalidPathError(str(exc)) from exc
 
+    @classmethod
+    def normalize_path(cls, raw: str) -> str:
+        """Validate and normalize one logical file path."""
+        return cls._normalized_path(raw)
+
     @staticmethod
     def _normalized_directory(raw: str) -> str:
         try:
@@ -200,6 +224,21 @@ class FileService:
     @staticmethod
     def _new_storage_key(suffix: str) -> str:
         return f"files/{uuid4().hex[:2]}/{uuid4().hex}{suffix}"
+
+    @classmethod
+    def new_storage_key(cls, suffix: str) -> str:
+        """Return an opaque key for a new stored original."""
+        return cls._new_storage_key(suffix)
+
+    @staticmethod
+    def _pdf_text(data: bytes) -> str:
+        """Extract PDF text synchronously; callers run this in a thread."""
+        try:
+            reader = PdfReader(BytesIO(data))
+            pages = [page.extract_text() or "" for page in reader.pages]
+            return "\n\n".join(page for page in pages if page.strip())
+        except Exception:
+            return ""
 
     @staticmethod
     def _decode_text(data: bytes) -> str:
@@ -280,6 +319,22 @@ class FileService:
             language=str(body.get("language") or ""),
         )
 
+    @staticmethod
+    def _render_pdf_pages(data: bytes, max_pages: int) -> list[bytes]:
+        """Render PDF pages to PNG bytes; callers run this in a thread."""
+        images: list[bytes] = []
+        pdf = pdfium.PdfDocument(data)
+        try:
+            for index in range(min(len(pdf), max_pages)):
+                bitmap = pdf[index].render(scale=2.0)
+                image = bitmap.to_pil()
+                buffer = BytesIO()
+                image.save(buffer, format="PNG")
+                images.append(buffer.getvalue())
+        finally:
+            pdf.close()
+        return images
+
     async def _vision_pdf(self, data: bytes) -> tuple[str, str | None, list[str], str]:
         """Render up to N PDF pages and OCR them with the vision provider."""
         texts: list[str] = []
@@ -287,15 +342,13 @@ class FileService:
         tags: list[str] = []
         document_type = "scanned_pdf"
         try:
-            pdf = pdfium.PdfDocument(data)
-            page_count = min(len(pdf), self.vision_max_pages)
-            for index in range(page_count):
-                page = pdf[index]
-                bitmap = page.render(scale=2.0)
-                image = bitmap.to_pil()
-                buffer = BytesIO()
-                image.save(buffer, format="PNG")
-                vision = await self.vision_extractor.extract(buffer.getvalue(), "image/png")
+            pages = await self._run_cpu(
+                self._render_pdf_pages,
+                data,
+                self.vision_max_pages,
+            )
+            for page in pages:
+                vision = await self.vision_extractor.extract(page, "image/png")
                 if vision.text.strip():
                     texts.append(vision.text.strip())
                 elif vision.caption.strip():
@@ -303,7 +356,6 @@ class FileService:
                 summary = summary or vision.summary or None
                 tags.extend(vision.tags)
                 document_type = vision.document_type or document_type
-            pdf.close()
         except VisionExtractionError:
             raise
         except Exception as exc:
@@ -364,7 +416,7 @@ class FileService:
         suffix = extension(path)
         file_name_value = file_name(path)
         if suffix in TEXT_EXTENSIONS:
-            text = self._decode_text(data)
+            text = await self._run_cpu(self._decode_text, data)
             analysis = await self._analyze_text(
                 text,
                 file_name_value=file_name_value,
@@ -378,12 +430,7 @@ class FileService:
                 ai_tags=analysis.tags,
             )
         if suffix == ".pdf":
-            try:
-                reader = PdfReader(BytesIO(data))
-                pages = [page.extract_text() or "" for page in reader.pages]
-                text = "\n\n".join(page for page in pages if page.strip())
-            except Exception:
-                text = ""
+            text = await self._run_cpu(self._pdf_text, data)
             analysis = await self._analyze_text(
                 text,
                 file_name_value=file_name_value,
@@ -417,7 +464,7 @@ class FileService:
             )
         if suffix == ".docx":
             try:
-                text = self._docx_text(data)
+                text = await self._run_cpu(self._docx_text, data)
             except Exception as exc:
                 raise EmptyContentError() from exc
             analysis = await self._analyze_text(
@@ -429,7 +476,7 @@ class FileService:
                 (not analysis.has_meaningful_text or analysis.use_vision)
                 and self.vision_extractor.configured
             ):
-                images = self._docx_images(data)
+                images = await self._run_cpu(self._docx_images, data)
                 if images:
                     vision_text, summary, tags, document_type = await self._vision_images(
                         images
@@ -489,7 +536,7 @@ class FileService:
             directory_path = "/" + "/".join(segments[:index])
             node = await self.tree_repository.get_current_by_path(directory_path)
             if node is None:
-                node = await self.tree_repository.add(
+                node = await self.tree_repository.add_folder_if_absent(
                     TreeNodeModel(
                         parent_id=parent_id,
                         path=directory_path,
@@ -498,7 +545,7 @@ class FileService:
                         depth=index,
                     )
                 )
-            elif node.kind != NODE_KIND_FOLDER:
+            if node.kind != NODE_KIND_FOLDER:
                 raise TreePathConflictError(directory_path)
             parent_id = node.id
             current = node
@@ -521,8 +568,20 @@ class FileService:
         ai_tags: list[str] | None = None,
         document_type: str = "text",
         extraction_method: str = "text",
+        publish: bool = True,
+        progress: IngestProgressProtocol | None = None,
+        checkpoint: IngestCheckpoint | None = None,
     ) -> FileSchema:
-        drafts = chunk_text(
+        """Chunk, stage or publish a file version, and index its chunks.
+
+        The synchronous API keeps ``publish=True``: old rows stop being current
+        before the new version is inserted. The durable worker passes
+        ``publish=False`` so a crash or embedding failure never exposes a
+        partial file; ``publish_pending`` flips the staged rows visible once
+        the job succeeds.
+        """
+        drafts = await self._run_cpu(
+            chunk_text,
             text,
             target_chars=self.target_chars,
             overlap_chars=self.overlap_chars,
@@ -531,16 +590,18 @@ class FileService:
             raise EmptyContentError()
         if len(drafts) > self.max_chunks:
             raise TooManyChunksError(len(drafts), self.max_chunks)
+        if progress is not None:
+            await progress.chunked(len(drafts))
 
         existing = await self.file_repository.get_current_by_path(path)
         existing_node = await self.tree_repository.get_current_by_path(path)
         if existing_node is not None and existing_node.kind != NODE_KIND_FILE:
             raise TreePathConflictError(path)
 
-        if existing is not None:
+        if publish and existing is not None:
             await self.file_repository.mark_not_current(existing)
             await self.chunk_repository.mark_source_not_current(SOURCE_FILE, existing.id)
-        if existing_node is not None:
+        if publish and existing_node is not None:
             await self.tree_repository.mark_not_current(existing_node)
 
         timestamp = occurred_at or utcnow()
@@ -559,7 +620,7 @@ class FileService:
                 extraction_method=extraction_method,
                 version=existing.version + 1 if existing is not None else 1,
                 supersedes_file_id=existing.id if existing is not None else None,
-                is_current=True,
+                is_current=publish,
                 total_chunks=len(drafts),
                 created_at=timestamp,
                 updated_at=timestamp,
@@ -575,21 +636,141 @@ class FileService:
                 kind=NODE_KIND_FILE,
                 file_id=file.id,
                 depth=len(path_segments(path)),
+                is_current=publish,
             )
         )
-        if existing_node is not None:
+        if publish and existing_node is not None:
             await self.tree_repository.mark_not_current(
                 existing_node,
                 superseded_by_id=node.id,
             )
 
+        if checkpoint is not None:
+            await checkpoint()
+        if progress is not None:
+            await progress.file_created(file.id)
         await self.indexer.index_chunks(
             source_kind=SOURCE_FILE,
             source_id=file.id,
             drafts=drafts,
+            is_current=publish,
+            progress=progress.embedded if progress is not None else None,
+            checkpoint=checkpoint,
         )
+        if publish:
+            await self.cache.bump_version()
+        return self._to_schema(file)
+
+    async def ingest_extracted(
+        self,
+        *,
+        path: str,
+        data: bytes,
+        extracted: ExtractedDocument,
+        mime_type: str,
+        storage_key: str | None,
+        occurred_at: datetime | None,
+        publish: bool = True,
+        progress: IngestProgressProtocol | None = None,
+        checkpoint: IngestCheckpoint | None = None,
+    ) -> FileSchema:
+        """Persist an already-extracted document through the shared pipeline."""
+        return await self._ingest(
+            path=path,
+            data=data,
+            text=extracted.text,
+            mime_type=mime_type,
+            storage_key=storage_key,
+            occurred_at=occurred_at,
+            ai_summary=extracted.ai_summary,
+            ai_tags=extracted.ai_tags,
+            document_type=extracted.document_type,
+            extraction_method=extracted.extraction_method,
+            publish=publish,
+            progress=progress,
+            checkpoint=checkpoint,
+        )
+
+    async def publish_pending(self, file_id: int) -> FileSchema:
+        """Make a staged file version, its tree node, and chunks current at once."""
+        file = await self.file_repository.get_by_id(file_id)
+        if file is None:
+            raise FileRecordNotFoundError(file_id)
+        if file.is_current:
+            return self._to_schema(file)
+        node = await self.tree_repository.get_latest_by_file_id(file.id)
+        if node is None:
+            raise FileRecordNotFoundError(file_id)
+
+        existing = await self.file_repository.get_current_by_path(file.raw_file_path)
+        if existing is not None and existing.id != file.id:
+            await self.file_repository.mark_not_current(existing)
+            await self.chunk_repository.mark_source_not_current(SOURCE_FILE, existing.id)
+        existing_node = await self.tree_repository.get_current_by_path(file.raw_file_path)
+        if (
+            existing_node is not None
+            and existing_node.id != node.id
+            and existing_node.kind == NODE_KIND_FILE
+        ):
+            await self.tree_repository.mark_not_current(
+                existing_node,
+                superseded_by_id=node.id,
+            )
+
+        now = utcnow()
+        file.is_current = True
+        file.updated_at = now
+        node.is_current = True
+        node.updated_at = now
+        await self.chunk_repository.mark_source_current(SOURCE_FILE, file.id)
+        await self.file_repository.flush()
         await self.cache.bump_version()
         return self._to_schema(file)
+
+    async def discard_pending(self, file_id: int) -> bool:
+        """Delete an unpublished file, node, and chunks after a failed job.
+
+        Returns true only when a staged row was removed. A published file is
+        left untouched so a late worker error cannot erase a visible version.
+        """
+        file = await self.file_repository.get_by_id(file_id)
+        if file is None or file.is_current:
+            return False
+        node = await self.tree_repository.get_latest_by_file_id(file.id)
+        if node is not None:
+            await self.tree_repository.delete(node)
+        await self.chunk_repository.delete_source(SOURCE_FILE, file.id)
+        await self.file_repository.delete(file)
+        return True
+
+    async def extract_upload(self, *, path: str, data: bytes) -> ExtractedDocument:
+        """Validate and extract one uploaded document for a queued job."""
+        normalized = self._normalized_path(path)
+        suffix = extension(normalized)
+        if suffix not in ALLOWED_EXTENSIONS:
+            raise UnsupportedFileTypeError(suffix)
+        if len(data) > self.max_upload_bytes:
+            raise FileTooLargeError(len(data), self.max_upload_bytes)
+        return await self._extract_document(normalized, data)
+
+    async def prepare_job_document(
+        self,
+        *,
+        source_kind: str,
+        path: str,
+        data: bytes,
+    ) -> ExtractedDocument:
+        """Extract the payload referenced by a durable ingestion job."""
+        if source_kind == "text":
+            text = await self._run_cpu(self._decode_text, data)
+            return ExtractedDocument(
+                text=text,
+                document_type=extension(path).lstrip(".") or "text",
+                extraction_method="text",
+                ai_summary=None,
+                ai_tags=[],
+            )
+        return await self.extract_upload(path=path, data=data)
 
     async def ingest_text(
         self,

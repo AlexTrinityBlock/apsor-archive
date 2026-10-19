@@ -3,7 +3,7 @@
 import math
 from collections.abc import Sequence
 
-from sqlalchemy import func, insert, select, update
+from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.module.knowledge.model.chunk_model import ChunkModel
@@ -45,6 +45,36 @@ class ChunkRepository:
                 ChunkModel.is_current.is_(True),
             )
             .values(is_current=False)
+        )
+
+    async def mark_source_current(self, source_kind: str, source_id: int) -> None:
+        """Publish the chunks of a staged file after its job succeeds."""
+        await self.session.execute(
+            update(ChunkModel)
+            .where(
+                ChunkModel.source_kind == source_kind,
+                ChunkModel.source_id == source_id,
+            )
+            .values(is_current=True, updated_at=func.now())
+        )
+
+    async def delete_source(self, source_kind: str, source_id: int) -> None:
+        """Delete staged chunks and their n-grams after a failed ingestion."""
+        await self.session.execute(
+            delete(ChunkNgramModel).where(
+                ChunkNgramModel.chunk_id.in_(
+                    select(ChunkModel.id).where(
+                        ChunkModel.source_kind == source_kind,
+                        ChunkModel.source_id == source_id,
+                    )
+                )
+            )
+        )
+        await self.session.execute(
+            delete(ChunkModel).where(
+                ChunkModel.source_kind == source_kind,
+                ChunkModel.source_id == source_id,
+            )
         )
 
     async def get_source_chunks(self, source_kind: str, source_id: int) -> list[ChunkModel]:
