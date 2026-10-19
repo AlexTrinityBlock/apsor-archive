@@ -1,7 +1,7 @@
 """agent approvals for confirmation-required writes
 
 Revision ID: f2b3c4d5e6a7
-Revises: d4b8e6f1a2c7
+Revises: c8f2a4b6d9e1
 Create Date: 2026-10-19 21:00:00.000000
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "f2b3c4d5e6a7"
-down_revision: str | None = "d4b8e6f1a2c7"
+down_revision: str | None = "c8f2a4b6d9e1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

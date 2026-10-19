@@ -744,6 +744,7 @@ class AgentService:
                 ] * batch_size
                 eligible_indices: list[int] = []
                 approval_specs: list[tuple[int, ChatToolCall, dict[str, Any]]] = []
+                backend_approved_indices: set[int] = set()
                 for index, call in enumerate(calls):
                     yield AgentStreamEvent(
                         "tool_start",
@@ -769,20 +770,25 @@ class AgentService:
                         continue
                     tool_calls_used += 1
                     if self.tool_registry.requires_confirmation(call.name):
-                        validated, validation_error = (
-                            self.tool_registry.validate_arguments(
-                                call.name,
-                                call.arguments,
-                                parse_error=call.parse_error,
+                        if self.config.save_memory_requires_approval:
+                            validated, validation_error = (
+                                self.tool_registry.validate_arguments(
+                                    call.name,
+                                    call.arguments,
+                                    parse_error=call.parse_error,
+                                )
                             )
-                        )
-                        if validation_error is not None:
-                            planned[index] = (call, validation_error)
-                        else:
-                            approval_specs.append(
-                                (index, call, validated or {})
-                            )
-                        continue
+                            if validation_error is not None:
+                                planned[index] = (call, validation_error)
+                            else:
+                                approval_specs.append(
+                                    (index, call, validated or {})
+                                )
+                            continue
+                        # The human gate is disabled for this run snapshot. The
+                        # backend authorizes the write itself; a model-supplied
+                        # user_confirmed never participates in this decision.
+                        backend_approved_indices.add(index)
                     eligible_indices.append(index)
 
                 if eligible_indices:
@@ -790,11 +796,17 @@ class AgentService:
                         executed = await self._gather_tools(
                             calls,
                             eligible_indices,
+                            backend_approved_indices,
                         )
                     else:
                         executed = []
                         for index in eligible_indices:
-                            executed.append(await self._execute_tool(calls[index]))
+                            executed.append(
+                                await self._execute_tool(
+                                    calls[index],
+                                    approved=index in backend_approved_indices,
+                                )
+                            )
                     for index, outcome in zip(
                         eligible_indices,
                         executed,
@@ -1213,20 +1225,32 @@ class AgentService:
             pass
         return await self.collect_turn(approval_turn.turn)
 
-    async def _execute_tool(self, call: ChatToolCall) -> ToolOutcome:
-        """Execute one call with the snapshot's per-result character cap."""
+    async def _execute_tool(
+        self,
+        call: ChatToolCall,
+        *,
+        approved: bool = False,
+    ) -> ToolOutcome:
+        """Execute one call with the snapshot's per-result character cap.
+
+        ``approved`` is true only when the backend itself authorized a
+        confirmation-required write for this snapshot; it never comes from the
+        model's tool arguments.
+        """
         return await self.tool_registry.execute(
             call.name,
             call.arguments,
             call_id=call.call_id,
             max_chars=self.config.max_tool_result_chars,
             parse_error=call.parse_error,
+            approved=approved,
         )
 
     async def _gather_tools(
         self,
         calls: list[ChatToolCall],
         indices: list[int],
+        approved_indices: set[int],
     ) -> list[ToolOutcome]:
         """Run eligible calls concurrently, bounded by max_parallel_tools.
 
@@ -1237,7 +1261,10 @@ class AgentService:
 
         async def run(index: int) -> ToolOutcome:
             async with semaphore:
-                return await self._execute_tool(calls[index])
+                return await self._execute_tool(
+                    calls[index],
+                    approved=index in approved_indices,
+                )
 
         return list(await asyncio.gather(*(run(index) for index in indices)))
 

@@ -1621,3 +1621,149 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert archived_resolution.status_code == 409
     assert archived_resolution.json()["error"] == "agent_conversation_archived"
     assert memory_count() == approved_memories
+
+    # ------------------------------------------------------------------
+    # save_memory_requires_approval=false: the backend authorizes the write
+    # immediately. No waiting run or approval row is created, and the model's
+    # own user_confirmed=false does not prevent it because authorization is
+    # backend-side.
+    # ------------------------------------------------------------------
+    current_settings = client.get("/api/v1/agent/settings").json()["config"]
+    disabled_settings = {
+        **current_settings,
+        "save_memory_requires_approval": False,
+    }
+    disabled_response = client.put(
+        "/api/v1/agent/settings",
+        json=disabled_settings,
+    )
+    assert disabled_response.status_code == 200, disabled_response.text
+    assert (
+        disabled_response.json()["config"]["save_memory_requires_approval"] is False
+    )
+
+    direct_content = "Direct memory with the approval gate disabled."
+    direct_fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "save_memory",
+                {"content": direct_content, "user_confirmed": False},
+                call_id="call_direct_memory",
+            ),
+            text_result("Saved directly with backend authorization."),
+        ]
+    )
+    client.app.state.agent_chat_generator = direct_fake
+    direct_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Direct memory write"},
+    ).json()
+    before_direct_memories = memory_count()
+    direct_turn = client.post(
+        f"/api/v1/agent/conversations/{direct_conversation['id']}/messages",
+        json={"content": "Save this memory directly."},
+        headers={"Accept": "application/json"},
+    )
+    assert direct_turn.status_code == 200, direct_turn.text
+    direct_body = direct_turn.json()
+    assert direct_body["run"]["status"] == "completed"
+    assert direct_body["pending_approvals"] == []
+    assert direct_body["answer"] == "Saved directly with backend authorization."
+    assert [entry["kind"] for entry in direct_body["entries"]] == [
+        "pi.user",
+        "pi.assistant",
+        "pi.tool-result",
+        "pi.assistant",
+    ]
+    direct_results = [
+        entry
+        for entry in direct_body["tool_results"]
+        if entry["data"]["tool"] == "save_memory"
+    ]
+    assert len(direct_results) == 1
+    assert direct_results[0]["data"]["status"] == "ok"
+    assert direct_results[0]["data"]["memory_id"] > 0
+    assert direct_results[0]["model"][0]["tool_call_id"] == "call_direct_memory"
+    assert memory_count() == before_direct_memories + 1
+    direct_approvals = client.get(
+        f"/api/v1/agent/conversations/{direct_conversation['id']}/approvals"
+    )
+    assert direct_approvals.status_code == 200, direct_approvals.text
+    assert direct_approvals.json()["resources"] == []
+
+    # Turning the setting off never resolves an already-pending approval. The
+    # row stays explicit, its card data remains available, and no write occurs
+    # until a human approves it.
+    restored_settings = client.put(
+        "/api/v1/agent/settings",
+        json=current_settings,
+    )
+    assert restored_settings.status_code == 200, restored_settings.text
+    assert (
+        restored_settings.json()["config"]["save_memory_requires_approval"] is True
+    )
+
+    pending_fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "save_memory",
+                {
+                    "content": "Pending memory across a toggle change.",
+                    "user_confirmed": True,
+                },
+                call_id="call_pending_toggle",
+            ),
+            text_result("The pending memory was approved."),
+        ]
+    )
+    client.app.state.agent_chat_generator = pending_fake
+    pending_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Pending across toggle"},
+    ).json()
+    pending_waiting = client.post(
+        f"/api/v1/agent/conversations/{pending_conversation['id']}/messages",
+        json={"content": "Save the pending memory."},
+        headers={"Accept": "application/json"},
+    )
+    assert pending_waiting.status_code == 200, pending_waiting.text
+    pending_body = pending_waiting.json()
+    assert pending_body["run"]["status"] == "waiting"
+    pending_approval_id = pending_body["pending_approvals"][0]["id"]
+    before_pending_memories = memory_count()
+
+    disable_again = client.put(
+        "/api/v1/agent/settings",
+        json=disabled_settings,
+    )
+    assert disable_again.status_code == 200, disable_again.text
+    still_pending = client.get(
+        f"/api/v1/agent/conversations/{pending_conversation['id']}/approvals"
+    )
+    assert still_pending.status_code == 200, still_pending.text
+    still_pending_body = still_pending.json()
+    assert [item["id"] for item in still_pending_body["resources"]] == [
+        pending_approval_id
+    ]
+    assert still_pending_body["resources"][0]["status"] == "pending"
+    assert memory_count() == before_pending_memories
+
+    enable_again = client.put(
+        "/api/v1/agent/settings",
+        json=current_settings,
+    )
+    assert enable_again.status_code == 200, enable_again.text
+    pending_approved = client.post(
+        f"/api/v1/agent/approvals/{pending_approval_id}/approve",
+        headers={"Accept": "application/json"},
+    )
+    assert pending_approved.status_code == 200, pending_approved.text
+    assert pending_approved.json()["run"]["status"] == "completed"
+    assert memory_count() == before_pending_memories + 1
+
+    # Leave the singleton setting at its documented default.
+    final_settings_reset = client.post("/api/v1/agent/settings/reset")
+    assert final_settings_reset.status_code == 200, final_settings_reset.text
+    final_settings_body = final_settings_reset.json()
+    assert final_settings_body["config"] == defaults
+    assert final_settings_body["config"]["save_memory_requires_approval"] is True

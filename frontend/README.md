@@ -318,10 +318,12 @@ the returned detail inline.
 
 The **Tool execution** group also has **Require manual approval for memory
 writes**, an accessible switch that defaults to on. When on, a `save_memory`
-request waits for the user's Approve/Reject decision; when off, the agent may
-save only after its existing prompt-level confirmation. This panel persists the
-preference and includes it in dirty/reset/save behavior; the waiting and
-approval flow itself is provided by the approval feature.
+request waits for the user's Approve/Reject decision. When off, no waiting run
+or approval row is created: the backend authorizes the validated write directly
+and the turn completes normally. This panel persists the preference and includes
+it in dirty/reset/save behavior. The setting applies to new calls only; pending
+approval cards created while it was on remain visible and still need an explicit
+Approve/Reject.
 
 Save sends a full thirteen-field `PUT`. **Reset defaults** uses a two-step
 confirmation and persists the defaults through `POST .../settings/reset`; it is

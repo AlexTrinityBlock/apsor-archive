@@ -514,14 +514,21 @@ after that error so a stale Retry action disappears.
 
 #### Human approval for `save_memory`
 
-`save_memory` never writes from the model loop. A valid confirmation call
-persists `agent_approval` with the conversation, run, tool-call id, validated
-arguments, a safe preview, and a resume snapshot; safe calls in the same batch
-still run and their results are appended. The run becomes `waiting`, the SSE
-stream ends with `approval_required` plus `run_end {status: "waiting"}`, and the
-assistant tool call remains in the transcript. A batch with multiple
-confirmation calls creates one approval per call; resolutions must follow
-approval id order, and the loop resumes after the last pending row is resolved.
+With `save_memory_requires_approval=true` (the default), a valid confirmation
+call never writes from the model loop. It persists `agent_approval` with the
+conversation, run, tool-call id, validated arguments, a safe preview, and a
+resume snapshot; safe calls in the same batch still run and their results are
+appended. The run becomes `waiting`, the SSE stream ends with
+`approval_required` plus `run_end {status: "waiting"}`, and the assistant tool
+call remains in the transcript. A batch with multiple confirmation calls creates
+one approval per call; resolutions must follow approval id order, and the loop
+resumes after the last pending row is resolved.
+
+With the setting off, the validated call executes immediately with backend
+authorization (`approved=True`), no `agent_approval` row is created, and the run
+completes normally. The model's `user_confirmed` argument never authorizes a
+write in either mode. Turning the setting off does not resolve approvals that
+already exist; their cards remain and need an explicit decision.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -1077,8 +1084,10 @@ HTTP surface and database. The agent test covers runtime settings defaults,
 full PUT/reset, validation, the runtime snapshot used by later runs, auto and
 manual compaction, clear, page-context reattachment at a boundary, retry,
 parallel/sequential tool execution, human save-memory approval (no write before
-approval, restart survival, exactly-once approve, reject, and orphan/archived
-fail-closed recovery), and the saved-question library. The
+approval, restart survival, exactly-once approve, reject, orphan/archived
+fail-closed recovery), the approval toggle (default waiting path, direct
+backend-authorized write when off, and pending rows surviving a toggle change),
+and the saved-question library. The
 saved-question coverage includes create/list/pagination, ask success, a failed
 ask that keeps the row, edit clearing the answer, delete, not-found errors, and
 the `conversation_id` `ON DELETE SET NULL` behavior. Page-context
