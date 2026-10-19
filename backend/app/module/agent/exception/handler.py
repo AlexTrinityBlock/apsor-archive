@@ -1,6 +1,9 @@
 """Register agent-domain errors with the global exception registry."""
 
 from app.module.agent.exception.domain_error import (
+    AgentApprovalNotFoundError,
+    AgentApprovalNotPendingError,
+    AgentApprovalOutOfOrderError,
     AgentConversationArchivedError,
     AgentConversationBusyError,
     AgentConversationNotFoundError,
@@ -29,5 +32,8 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(AgentNotConfiguredError, 503, "agent_not_configured")
     ExceptionRegistry.register(AgentProviderError, 502, "agent_provider_error")
     ExceptionRegistry.register(AgentInvalidEntryError, 422, "agent_invalid_entry")
+    ExceptionRegistry.register(AgentApprovalNotFoundError, 404, "agent_approval_not_found")
+    ExceptionRegistry.register(AgentApprovalNotPendingError, 409, "agent_approval_not_pending")
+    ExceptionRegistry.register(AgentApprovalOutOfOrderError, 409, "agent_approval_out_of_order")
     ExceptionRegistry.register(SavedQuestionNotFoundError, 404, "saved_question_not_found")
     ExceptionRegistry.register(AgentError, 500, "agent_error")

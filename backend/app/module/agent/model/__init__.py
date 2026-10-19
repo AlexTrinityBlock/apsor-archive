@@ -3,6 +3,7 @@
 from app.module.agent.model.agent_config_model import AgentConfigModel
 from app.module.agent.model.agent_model import (
     AGENT_COMMIT_SEQUENCE,
+    AgentApprovalModel,
     AgentConversationModel,
     AgentEntryModel,
     AgentRunModel,
@@ -11,6 +12,7 @@ from app.module.agent.model.saved_question_model import SavedQuestionModel
 
 __all__ = [
     "AGENT_COMMIT_SEQUENCE",
+    "AgentApprovalModel",
     "AgentConfigModel",
     "AgentConversationModel",
     "AgentEntryModel",

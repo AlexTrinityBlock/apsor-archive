@@ -12,6 +12,7 @@ import {
   listAgentEntries,
   useCreateAgentConversation,
   useGetAgentConversation,
+  useListAgentApprovals,
   useListAgentConversations,
 } from "../generated-apis-types/agent/agent";
 import type { AgentEntrySchema } from "../generated-apis-types/schemas";
@@ -146,13 +147,24 @@ export function AgentDock() {
     { limit: 200 },
     { query: { enabled: mode !== "collapsed" && selectedId !== null, retry: false } },
   );
+  const approvalsQuery = useListAgentApprovals(
+    selectedId ?? 0,
+    { status: "pending" },
+    {
+      query: {
+        enabled: mode !== "collapsed" && selectedId !== null,
+        retry: false,
+      },
+    },
+  );
   const createConversation = useCreateAgentConversation();
 
   const handleStreamError = useCallback((message: string) => {
     stickRef.current = true;
     setLastError(message);
   }, []);
-  const { stream, isStreaming, start, retry, stop } = useChatStream(handleStreamError);
+  const { stream, isStreaming, start, retry, resolveApproval, stop } =
+    useChatStream(handleStreamError);
   const activeStream = stream?.conversationId === selectedId ? stream : null;
 
   const conversation = conversationQuery.data ?? null;
@@ -191,6 +203,13 @@ export function AgentDock() {
   const retryState = useMemo(
     () => readRetryState(entries, lastError ? { detail: lastError } : null),
     [entries, lastError],
+  );
+  const pendingApprovals = useMemo(
+    () =>
+      selectedId === null || approvalsQuery.data === undefined
+        ? []
+        : approvalsQuery.data.resources,
+    [approvalsQuery.data, selectedId],
   );
 
   useScrollLock(mode === "expanded" || (mode === "panel" && sheet));
@@ -231,6 +250,7 @@ export function AgentDock() {
   }, [
     entries.length,
     lastError,
+    pendingApprovals.length,
     selectedId,
     stream?.assistantText.length,
     stream?.toolCalls.length,
@@ -494,6 +514,18 @@ export function AgentDock() {
     void retry(selectedId, retryState.lastUserText);
   }, [retry, retryState.lastUserText, retryState.retryable, selectedId]);
 
+  const resolveApprovalForThread = useCallback(
+    (approvalId: number, decision: "approve" | "reject") => {
+      if (selectedId === null) {
+        return Promise.resolve(false);
+      }
+      stickRef.current = true;
+      setLastError(null);
+      return resolveApproval(selectedId, approvalId, decision);
+    },
+    [resolveApproval, selectedId],
+  );
+
   const applyContextBoundary = useCallback(
     (entry: AgentEntrySchema) => {
       if (selectedId === null) {
@@ -548,6 +580,9 @@ export function AgentDock() {
     retryState,
     retryDisabled: isStreaming || creating || archived,
     onRetryRun: retryRun,
+    approvals: pendingApprovals,
+    approvalsDisabled: isStreaming,
+    onResolveApproval: resolveApprovalForThread,
     onContextApplied: applyContextBoundary,
     scrollRef,
     endRef,

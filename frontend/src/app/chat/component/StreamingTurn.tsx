@@ -55,7 +55,14 @@ export const StreamingTurn = memo(function StreamingTurn({
   const total = stream.usage.total_tokens;
 
   let liveBody: ReactNode = null;
-  if (stream.assistantText.length > 0) {
+  if (stream.status === "waiting") {
+    liveBody = (
+      <p className="chat-sheet__silent chat-sheet__silent--live" role="status">
+        <span className="chat-sheet__pulse" aria-hidden="true" />
+        Waiting for your approval before the write can continue.
+      </p>
+    );
+  } else if (stream.assistantText.length > 0) {
     liveBody = <MarkdownBody markdown={stream.assistantText} />;
   } else if (!stream.error) {
     liveBody = (

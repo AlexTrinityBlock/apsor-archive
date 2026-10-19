@@ -1,6 +1,100 @@
 {
   "components": {
     "schemas": {
+      "AgentApprovalSchema": {
+        "description": "A durable human decision awaiting resolution.\n\n``arguments`` and ``preview`` are intentionally bounded, validated copies of\nthe proposed write. ``resume_state`` never leaves the repository.",
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "preview": {
+            "additionalProperties": true,
+            "title": "Preview",
+            "type": "object"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by_entry_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By Entry Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "tool_call_id": {
+            "title": "Tool Call Id",
+            "type": "string"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "run_id",
+          "tool_call_id",
+          "tool_name",
+          "status",
+          "arguments",
+          "preview",
+          "resolved_by_entry_id",
+          "requested_at",
+          "resolved_at",
+          "created_at"
+        ],
+        "title": "AgentApprovalSchema",
+        "type": "object"
+      },
       "AgentConversationCreateSchema": {
         "additionalProperties": false,
         "description": "Create a transcript scope with one frozen system entry.",
@@ -1083,6 +1177,13 @@
               }
             ],
             "title": "Error Detail"
+          },
+          "pending_approvals": {
+            "items": {
+              "$ref": "#/components/schemas/AgentApprovalSchema"
+            },
+            "title": "Pending Approvals",
+            "type": "array"
           },
           "run": {
             "$ref": "#/components/schemas/AgentRunSchema"
@@ -2593,6 +2694,37 @@
           "chunk_overlap_chars"
         ],
         "title": "IngestSettingsValuesSchema",
+        "type": "object"
+      },
+      "ListResponseSchema_AgentApprovalSchema_": {
+        "properties": {
+          "items_per_page": {
+            "title": "Items Per Page",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/AgentApprovalSchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "start_index": {
+            "title": "Start Index",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "start_index",
+          "items_per_page",
+          "resources"
+        ],
+        "title": "ListResponseSchema[AgentApprovalSchema]",
         "type": "object"
       },
       "ListResponseSchema_AgentConversationSchema_": {
@@ -4350,6 +4482,134 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/agent/approvals/{approval_id}/approve": {
+      "post": {
+        "description": "Execute the approved write once and resume the waiting run.",
+        "operationId": "approveAgentApproval",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Accept",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTurnResultSchema"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "A server-sent event stream. Send Accept: application/json for JSON."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Approval",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/approvals/{approval_id}/reject": {
+      "post": {
+        "description": "Append a rejection result and resume without writing memory.",
+        "operationId": "rejectAgentApproval",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "approval_id",
+            "required": true,
+            "schema": {
+              "title": "Approval Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Accept",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTurnResultSchema"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "A server-sent event stream. Send Accept: application/json for JSON."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Approval",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
     "/api/v1/agent/conversations": {
       "get": {
         "description": "List active and archived conversations, newest activity first.",
@@ -4602,6 +4862,72 @@
           }
         },
         "summary": "Update Conversation",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/conversations/{conversation_id}/approvals": {
+      "get": {
+        "description": "Return durable approvals for one conversation, oldest first.",
+        "operationId": "listAgentApprovals",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "approved",
+                    "rejected",
+                    "expired"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "pending",
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_AgentApprovalSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Approvals",
         "tags": [
           "agent"
         ]

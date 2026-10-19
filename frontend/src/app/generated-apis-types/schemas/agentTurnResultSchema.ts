@@ -4,6 +4,7 @@
  * DendroMatrix
  * OpenAPI spec version: 0.1.0
  */
+import type { AgentApprovalSchema } from './agentApprovalSchema';
 import type { AgentEntrySchema } from './agentEntrySchema';
 import type { AgentRunSchema } from './agentRunSchema';
 import type { AgentTurnResultSchemaUsage } from './agentTurnResultSchemaUsage';
@@ -17,6 +18,7 @@ export interface AgentTurnResultSchema {
   entries: AgentEntrySchema[];
   error_code: string | null;
   error_detail: string | null;
+  pending_approvals?: AgentApprovalSchema[];
   run: AgentRunSchema;
   tool_results: AgentEntrySchema[];
   usage: AgentTurnResultSchemaUsage;

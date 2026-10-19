@@ -72,7 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resolved_settings.database_url,
             echo=resolved_settings.debug,
         )
-        await AgentRepository(app.state.db.session_factory).mark_interrupted_runs(
+        await AgentRepository(app.state.db.session_factory).recover_stale_runs(
             now=utcnow()
         )
         app.state.cache = build_cache(resolved_settings.cache_url)

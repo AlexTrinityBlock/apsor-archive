@@ -9,6 +9,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import {
   getGetAgentConversationQueryKey,
+  getListAgentApprovalsQueryKey,
   getListAgentConversationsQueryKey,
   getListAgentEntriesQueryKey,
 } from "../generated-apis-types/agent/agent";
@@ -29,6 +30,9 @@ export function invalidateConversationDetail(
     }),
     client.invalidateQueries({
       queryKey: getListAgentEntriesQueryKey(conversationId),
+    }),
+    client.invalidateQueries({
+      queryKey: getListAgentApprovalsQueryKey(conversationId),
     }),
   ]).then(() => undefined);
 }

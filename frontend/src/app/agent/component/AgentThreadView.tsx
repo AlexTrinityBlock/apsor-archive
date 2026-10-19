@@ -2,10 +2,12 @@ import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
 import type {
+  AgentApprovalSchema,
   AgentConversationDetailSchema,
   AgentEntrySchema,
 } from "../../generated-apis-types/schemas";
 import { ChatThread } from "../../chat/component/ChatThread";
+import { ApprovalStack } from "../../chat/component/ApprovalCard";
 import { RetryBar } from "../../chat/component/RetryBar";
 import { StreamingTurn } from "../../chat/component/StreamingTurn";
 import type { ChatStreamView } from "../../chat/hook/useChatStream";
@@ -26,6 +28,13 @@ interface AgentThreadViewProps {
   readonly retryState?: RetryState;
   readonly retryDisabled?: boolean;
   readonly onRetryRun?: () => void;
+  readonly approvals?: readonly AgentApprovalSchema[];
+  readonly approvalsDisabled?: boolean;
+  readonly archived?: boolean;
+  readonly onResolveApproval?: (
+    approvalId: number,
+    decision: "approve" | "reject",
+  ) => Promise<boolean>;
 }
 
 function describeError(error: unknown): string {
@@ -72,6 +81,10 @@ export function AgentThreadView({
   retryState,
   retryDisabled = false,
   onRetryRun,
+  approvals = [],
+  approvalsDisabled = false,
+  archived = false,
+  onResolveApproval,
 }: AgentThreadViewProps) {
   if (conversationId === null) {
     return <AgentIntro />;
@@ -102,6 +115,14 @@ export function AgentThreadView({
   return (
     <>
       <ChatThread entries={entries ?? conversation.entries} conversation={conversation} />
+      {onResolveApproval ? (
+        <ApprovalStack
+          approvals={approvals}
+          disabled={approvalsDisabled}
+          archived={archived}
+          onResolve={onResolveApproval}
+        />
+      ) : null}
       {stream ? <StreamingTurn stream={stream} /> : null}
       {retryState?.retryable && onRetryRun ? (
         <RetryBar

@@ -359,14 +359,27 @@ Persisted `pi.tool-result` entries also carry UI-only `data`: bounded excerpts,
 dimensions, tags, and viewer URLs for the expanded inspector. This payload never
 enters the provider message; the model still sees only the XML tool result.
 
-`save_memory` is a write action. The tool requires `user_confirmed=true` and the
-system prompt instructs the model to save only after an explicit user request
-and confirmed wording. The `save_memory_requires_approval` runtime setting
-(default `true`, editable in **Settings → Agent runtime → Tool execution**)
-records whether a write waits for an in-chat Approve/Reject decision. When the
-setting is off, the agent may save after prompt-level confirmation only. The
-waiting and approval flow itself is provided by the approval feature; the
-expanded inspector shows the resulting receipt rather than approving the write.
+`save_memory` is a write action. The `save_memory_requires_approval` runtime
+setting (default `true`, editable in **Settings → Agent runtime → Tool
+execution**) controls how it is authorized:
+
+- **On (default):** the loop does not execute the write. It persists a durable
+  `agent_approval` row, appends no tool result yet, moves the run to `waiting`,
+  and emits `approval_required` with a bounded preview. `POST
+  /api/v1/agent/approvals/{approval_id}/approve` is the only path that executes
+  the write; `.../reject` appends a `memory_rejected` tool result and resumes
+  without writing. The model's `user_confirmed` argument is ignored for
+  authorization.
+- **Off:** no waiting run or approval row is created. The backend authorizes the
+  validated write itself (`approved=True` in the tool registry) and the call
+  completes in the same turn. Model-supplied `user_confirmed` still never
+  authorizes a write.
+
+Duplicate or stale resolutions return `409 agent_approval_not_pending`, and
+archived or deleted conversations fail closed. Disabling the setting does not
+approve or cancel approvals that already exist; they remain explicit pending
+rows and their cards keep rendering. The expanded inspector still renders the
+resulting receipt after a write.
 
 Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 /api/v1/files/text`, `DELETE /api/v1/files/{file_id}`, `GET /api/v1/paths`,
@@ -425,6 +438,9 @@ immutable entry log instead of mutating a chat array:
 - `agent_run` — durable state for one submission (`request_id`, status, abort,
   last entry, safe error). `agent_commit_seq` groups entries written in one
   transaction.
+- `agent_approval` — one durable pending/approved/rejected/expired human decision
+  for a confirmation-required tool call, including validated arguments, a safe
+  preview, and the loop snapshot used to resume the waiting run.
 - `agent_config` — the singleton runtime configuration (`id=1`) holding the
   validated token, step, tool, page-context, and compaction limits.
 
@@ -447,15 +463,19 @@ failure never becomes an HTTP 500.
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | Append a reset boundary; transcript is preserved |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | Append a user entry and run the loop |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry the latest failed/cancelled run |
+| `GET` | `/api/v1/agent/conversations/{conversation_id}/approvals?status=` | Durable approvals, oldest first (default `pending`) |
+| `POST` | `/api/v1/agent/approvals/{approval_id}/approve` | Execute once, append the tool result, resume |
+| `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | Append `memory_rejected`, resume without writing |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog plus prompt/tools versions |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` accepts
 `{content, request_id?, page_context?}` and `.../retry` accepts
 `{request_id?}`. Both stream `text/event-stream` by default. The event names are
 `run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
-`tool_end`, `run_end`, and `error`. `run_start` reports
-`page_context_entry_id` (or `null`) and `page_context_attached` so the client can
-mark whether a new snapshot was written. `tool_start` and `tool_end` also carry
+`tool_end`, `approval_required`, `run_end`, and `error`. `run_start` reports
+`page_context_entry_id` (or `null`), `page_context_attached`, and `resumed` so
+the client can mark whether a new snapshot was written and whether the stream
+continues a durable waiting run. `tool_start` and `tool_end` also carry
 `parallel`, `batch_size`, and `parallel_index` for the assistant call batch.
 `tool_end` carries the persisted tool-result `data` payload plus `duration_ms`
 and `error_code`, so the inspector can render previews before the transcript
@@ -491,6 +511,45 @@ retry can hit the same context or token budget again if the transcript is still
 too long. The endpoint returns `409 agent_run_not_retryable` when the latest run
 is completed or otherwise not failed/cancelled; the UI refetches the transcript
 after that error so a stale Retry action disappears.
+
+#### Human approval for `save_memory`
+
+With `save_memory_requires_approval=true` (the default), a valid confirmation
+call never writes from the model loop. It persists `agent_approval` with the
+conversation, run, tool-call id, validated arguments, a safe preview, and a
+resume snapshot; safe calls in the same batch still run and their results are
+appended. The run becomes `waiting`, the SSE stream ends with
+`approval_required` plus `run_end {status: "waiting"}`, and the assistant tool
+call remains in the transcript. A batch with multiple confirmation calls creates
+one approval per call; resolutions must follow approval id order, and the loop
+resumes after the last pending row is resolved.
+
+With the setting off, the validated call executes immediately with backend
+authorization (`approved=True`), no `agent_approval` row is created, and the run
+completes normally. The model's `user_confirmed` argument never authorizes a
+write in either mode. Turning the setting off does not resolve approvals that
+already exist; their cards remain and need an explicit decision.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/agent/conversations/{id}/approvals?status=pending` | Pending approvals, oldest first |
+| `POST` | `/api/v1/agent/approvals/{approval_id}/approve` | Execute once, append the result, resume |
+| `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | Append `memory_rejected`, resume without writing |
+
+Both resolution endpoints accept `Accept: application/json` or stream the
+resumed turn as SSE. They begin with `run_start {resumed: true}`, then a
+`tool_end` for the resolved result; if another approval remains they end with
+`approval_required` and `run_end {status: "waiting"}`, otherwise the normal loop
+continues. Approving after the row is resolved, expired, or orphaned returns
+`409 agent_approval_not_pending`; an archived conversation returns `409
+agent_conversation_archived`.
+
+On API restart, stale `running` runs fail with `interrupted`. A `waiting` run
+with a valid pending approval survives and remains visible from the approvals
+endpoint. A waiting run without a valid pending approval fails closed with
+`approval_orphaned`. The pause is append-only: only `agent_run`/`agent_approval`
+operational columns change, and the real tool result is appended when the
+decision arrives.
 
 Conversation detail returns the first entry page, and the UI loads later pages
 with **Load more entries**. It also returns `last_page_context_key`, read from the
@@ -572,12 +631,12 @@ DeepSeek call is made.
 - Retry starts a fresh run with the same runtime snapshot policy but does not
   increase any budget. A transcript that already exhausted the token or tool
   result budget can reach the same limit again.
-- `save_memory` remains prompt-enforced when
-  `save_memory_requires_approval=false`. With the default `true`, the preference
-  is stored, but the actual waiting/approval flow is provided by the approval
-  feature.
-- `agent_run.waiting` is reserved for the approval flow; without that feature
-  the current loop emits only running, completed, failed, and cancelled.
+- Approval resolutions are single-writer. A process crash after an approval is
+  claimed but before its tool result is appended fails the waiting run closed on
+  the next startup rather than retrying the write automatically.
+- Turning `save_memory_requires_approval` off only affects new calls. Pending
+  approvals created while it was on stay pending until explicitly approved or
+  rejected; they are never auto-approved by the setting change.
 
 ### Saved questions
 
@@ -643,6 +702,14 @@ before an assistant entry. Retry calls the existing retry endpoint, reuses the
 same user entry, does not append a duplicate message, and is disabled while a
 stream is active. A `409 agent_run_not_retryable` response triggers a transcript
 refetch so the stale action disappears; a retry may hit the same budget again.
+
+When a run pauses for `save_memory`, a persisted approval card appears in the
+thread and in the dock. It shows the proposed memory, supersedes/occurred-at
+context, the write risk, and **Approve write** / **Reject** actions. The card is
+loaded from the durable approvals endpoint, so it survives a reload, and it is
+disabled while a resolution streams or the thread is archived. Approve resumes
+the run and appends the real tool result; Reject appends `memory_rejected` and
+never writes.
 
 The same desk exposes **Compact** and **Clear** for the active context. Compact
 is immediate; Clear asks for one inline confirmation. Both are disabled while a
@@ -970,6 +1037,9 @@ memory_summary ───┘
   transcript scope, immutable entry log, and per-submission run state.
   `agent_commit_seq` groups entries written in one transaction. Page snapshots
   are `pi.page-context` entries in the same log, not a separate table.
+- `agent_approval`: durable pending/approved/rejected/expired human decisions for
+  confirmation-required writes, with validated arguments, a safe preview, and
+  the loop snapshot used to resume the waiting run.
 - `agent_config`: one row (`id=1`) with the validated runtime limits used by the
   agent loop and the settings API.
 - `saved_question`: the Q&A library. `question` is owner-authored; `answer`,
@@ -1013,14 +1083,18 @@ table between tests. There are exactly ten tests; each one exercises the real
 HTTP surface and database. The agent test covers runtime settings defaults,
 full PUT/reset, validation, the runtime snapshot used by later runs, auto and
 manual compaction, clear, page-context reattachment at a boundary, retry,
-parallel/sequential tool execution, and the saved-question library. The
+parallel/sequential tool execution, human save-memory approval (no write before
+approval, restart survival, exactly-once approve, reject, orphan/archived
+fail-closed recovery), the approval toggle (default waiting path, direct
+backend-authorized write when off, and pending rows surviving a toggle change),
+and the saved-question library. The
 saved-question coverage includes create/list/pagination, ask success, a failed
 ask that keeps the row, edit clearing the answer, delete, not-found errors, and
 the `conversation_id` `ON DELETE SET NULL` behavior. Page-context
 deduplication and ordering, and folder creation plus move/copy coverage, extend
 existing tests rather than adding new functions.
 
-The latest migration is `c8f2a4b6d9e1`, after `b3e5c7d9f1a2`. The migrations
+The latest migration is `f2b3c4d5e6a7`, after `c8f2a4b6d9e1`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1037,7 +1111,10 @@ after `agent_config` on this branch are:
 - `b3e5c7d9f1a2` adds `context_window_tokens` to `agent_config` with a
   1,000,000 server default and an 8,000–2,000,000 check constraint;
 - `c8f2a4b6d9e1` adds the non-null `save_memory_requires_approval` boolean to
-  `agent_config` with a `true` server default; existing rows receive `true`.
+  `agent_config` with a `true` server default; existing rows receive `true`;
+- `f2b3c4d5e6a7` (current head) creates `agent_approval` with its status check,
+  conversation/run/entry foreign keys, status indexes, and the partial unique
+  pending `(run_id, tool_call_id)` index.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so

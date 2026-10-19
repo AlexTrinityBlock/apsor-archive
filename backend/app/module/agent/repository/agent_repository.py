@@ -21,14 +21,20 @@ from app.module.agent.domain.agent_domain import (
     CONVERSATION_ARCHIVED,
     KIND_PAGE_CONTEXT,
     KIND_SYSTEM,
+    KIND_TOOL_RESULT,
     RUN_CANCELLED,
     RUN_COMPLETED,
     RUN_FAILED,
     RUN_RUNNING,
+    RUN_WAITING,
     TERMINAL_RUN_STATUSES,
+    ApprovalDraft,
     EntryDraft,
 )
 from app.module.agent.exception.domain_error import (
+    AgentApprovalNotFoundError,
+    AgentApprovalNotPendingError,
+    AgentApprovalOutOfOrderError,
     AgentConversationArchivedError,
     AgentConversationBusyError,
     AgentConversationNotFoundError,
@@ -38,6 +44,7 @@ from app.module.agent.exception.domain_error import (
 )
 from app.module.agent.model.agent_model import (
     AGENT_COMMIT_SEQUENCE,
+    AgentApprovalModel,
     AgentConversationModel,
     AgentEntryModel,
     AgentRunModel,
@@ -46,7 +53,6 @@ from app.module.agent.model.agent_model import (
 
 class AgentRepository:
     """Repository with one transaction per public mutation."""
-
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 
@@ -204,6 +210,30 @@ class AgentRepository:
             if status is not None:
                 if status == CONVERSATION_ARCHIVED and conversation.status != CONVERSATION_ARCHIVED:
                     conversation.archived_at = now
+                    # Archiving fails closed: no pending write may survive, and
+                    # no active run may keep the conversation busy.
+                    await session.execute(
+                        update(AgentApprovalModel)
+                        .where(
+                            AgentApprovalModel.conversation_id == conversation_id,
+                            AgentApprovalModel.status == "pending",
+                        )
+                        .values(status="expired", resolved_at=now)
+                    )
+                    await session.execute(
+                        update(AgentRunModel)
+                        .where(
+                            AgentRunModel.conversation_id == conversation_id,
+                            AgentRunModel.status.in_(ACTIVE_RUN_STATUSES),
+                        )
+                        .values(
+                            status=RUN_CANCELLED,
+                            abort_requested=True,
+                            error_code="aborted",
+                            error_detail="The conversation was archived.",
+                            finished_at=now,
+                        )
+                    )
                 if status == CONVERSATION_ACTIVE:
                     conversation.archived_at = None
                 conversation.status = status
@@ -229,6 +259,14 @@ class AgentRepository:
             conversation.archived_at = conversation.archived_at or now
             conversation.status = CONVERSATION_ARCHIVED
             conversation.updated_at = now
+            await session.execute(
+                update(AgentApprovalModel)
+                .where(
+                    AgentApprovalModel.conversation_id == conversation_id,
+                    AgentApprovalModel.status == "pending",
+                )
+                .values(status="expired", resolved_at=now)
+            )
             await session.execute(
                 update(AgentRunModel)
                 .where(
@@ -557,6 +595,245 @@ class AgentRepository:
                 conversation.last_entry_at = entries[-1].created_at
             return entries
 
+    async def pause_run_with_approvals(
+        self,
+        *,
+        conversation_id: int,
+        run_id: int,
+        result_drafts: list[EntryDraft],
+        approval_drafts: list[ApprovalDraft],
+        last_entry_id: int | None,
+        now: datetime,
+    ) -> tuple[list[AgentEntryModel], list[AgentApprovalModel]]:
+        """Append safe tool results, persist pending approvals, and wait.
+
+        The assistant tool-call entry is already durable. Confirmation-required
+        calls deliberately have no result yet; the approved or rejected result is
+        appended later by :meth:`record_approval_result`.
+        """
+        if not approval_drafts:
+            raise ValueError("pause_run_with_approvals requires at least one approval")
+        async with self._transaction() as session:
+            conversation = await self._lock_conversation(session, conversation_id)
+            run = await self._lock_active_run(session, conversation_id, run_id)
+            commit_seq = await self._next_commit_seq(session)
+            entries: list[AgentEntryModel] = []
+            for draft in result_drafts:
+                entry = AgentEntryModel(
+                    conversation_id=conversation_id,
+                    commit_seq=commit_seq,
+                    kind=draft.kind,
+                    model=draft.messages,
+                    data=draft.data,
+                    by_run_id=run.id,
+                    created_at=now,
+                )
+                session.add(entry)
+                entries.append(entry)
+            await session.flush()
+
+            approvals: list[AgentApprovalModel] = []
+            for approval_draft in approval_drafts:
+                approval = AgentApprovalModel(
+                    conversation_id=conversation_id,
+                    run_id=run.id,
+                    tool_call_id=approval_draft.tool_call_id,
+                    tool_name=approval_draft.tool_name,
+                    status="pending",
+                    arguments=approval_draft.arguments,
+                    preview=approval_draft.preview,
+                    resume_state=approval_draft.resume_state,
+                    requested_at=now,
+                    created_at=now,
+                )
+                session.add(approval)
+                approvals.append(approval)
+            await session.flush()
+
+            run.status = RUN_WAITING
+            if entries:
+                run.last_entry_id = entries[-1].id
+                conversation.last_entry_at = entries[-1].created_at
+            elif last_entry_id is not None:
+                run.last_entry_id = last_entry_id
+            return entries, approvals
+
+    async def list_approvals(
+        self,
+        conversation_id: int,
+        *,
+        status: str | None,
+    ) -> list[AgentApprovalModel]:
+        async with self._read() as session:
+            statement = select(AgentApprovalModel).where(
+                AgentApprovalModel.conversation_id == conversation_id
+            )
+            if status is not None:
+                statement = statement.where(AgentApprovalModel.status == status)
+            statement = statement.order_by(AgentApprovalModel.id.asc())
+            return list((await session.execute(statement)).scalars().all())
+
+    async def get_approval(self, approval_id: int) -> AgentApprovalModel | None:
+        async with self._read() as session:
+            return await session.get(AgentApprovalModel, approval_id)
+
+    async def list_pending_approvals(self, run_id: int) -> list[AgentApprovalModel]:
+        async with self._read() as session:
+            statement = (
+                select(AgentApprovalModel)
+                .where(
+                    AgentApprovalModel.run_id == run_id,
+                    AgentApprovalModel.status == "pending",
+                )
+                .order_by(AgentApprovalModel.id.asc())
+            )
+            return list((await session.execute(statement)).scalars().all())
+
+    async def claim_approval(
+        self,
+        *,
+        approval_id: int,
+        approved: bool,
+        now: datetime,
+    ) -> tuple[AgentApprovalModel, AgentRunModel, AgentConversationModel]:
+        """Claim one pending approval exactly once.
+
+        Resolution requires the earliest pending approval for the run, so a
+        multi-call batch always appends tool results in source order.
+        """
+        async with self._transaction() as session:
+            approval = (
+                await session.execute(
+                    select(AgentApprovalModel)
+                    .where(AgentApprovalModel.id == approval_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if approval is None:
+                raise AgentApprovalNotFoundError(approval_id)
+            conversation = await self._lock_conversation(
+                session,
+                approval.conversation_id,
+            )
+            if conversation.status != CONVERSATION_ACTIVE:
+                raise AgentConversationArchivedError(conversation.id)
+            if approval.status != "pending":
+                raise AgentApprovalNotPendingError(approval.status)
+
+            run = (
+                await session.execute(
+                    select(AgentRunModel)
+                    .where(
+                        AgentRunModel.id == approval.run_id,
+                        AgentRunModel.conversation_id == approval.conversation_id,
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if run is None:
+                raise AgentRunNotFoundError(approval.run_id)
+            if run.status != RUN_WAITING or run.abort_requested:
+                raise AgentApprovalNotPendingError(run.status)
+
+            earliest = (
+                await session.execute(
+                    select(func.min(AgentApprovalModel.id)).where(
+                        AgentApprovalModel.run_id == run.id,
+                        AgentApprovalModel.status == "pending",
+                    )
+                )
+            ).scalar_one_or_none()
+            if earliest != approval.id:
+                raise AgentApprovalOutOfOrderError()
+
+            approval.status = "approved" if approved else "rejected"
+            approval.resolved_at = now
+            return approval, run, conversation
+
+    async def record_approval_result(
+        self,
+        *,
+        approval_id: int,
+        draft: EntryDraft,
+        now: datetime,
+    ) -> tuple[
+        AgentEntryModel,
+        AgentRunModel,
+        AgentConversationModel,
+        list[AgentApprovalModel],
+    ]:
+        """Append the resolved tool result and resume when no approvals remain."""
+        async with self._transaction() as session:
+            approval = (
+                await session.execute(
+                    select(AgentApprovalModel)
+                    .where(AgentApprovalModel.id == approval_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if approval is None:
+                raise AgentApprovalNotFoundError(approval_id)
+            conversation = await self._lock_conversation(
+                session,
+                approval.conversation_id,
+            )
+            if conversation.status != CONVERSATION_ACTIVE:
+                raise AgentConversationArchivedError(conversation.id)
+            if (
+                approval.status not in {"approved", "rejected"}
+                or approval.resolved_by_entry_id is not None
+            ):
+                raise AgentApprovalNotPendingError(approval.status)
+
+            run = (
+                await session.execute(
+                    select(AgentRunModel)
+                    .where(
+                        AgentRunModel.id == approval.run_id,
+                        AgentRunModel.conversation_id == approval.conversation_id,
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if run is None:
+                raise AgentRunNotFoundError(approval.run_id)
+            if run.status != RUN_WAITING:
+                raise AgentApprovalNotPendingError(run.status)
+
+            commit_seq = await self._next_commit_seq(session)
+            entry = AgentEntryModel(
+                conversation_id=approval.conversation_id,
+                commit_seq=commit_seq,
+                kind=KIND_TOOL_RESULT,
+                model=draft.messages,
+                data=draft.data,
+                by_run_id=run.id,
+                created_at=now,
+            )
+            session.add(entry)
+            await session.flush()
+            approval.resolved_by_entry_id = entry.id
+            run.last_entry_id = entry.id
+            conversation.last_entry_at = entry.created_at
+
+            remaining = list(
+                (
+                    await session.execute(
+                        select(AgentApprovalModel)
+                        .where(
+                            AgentApprovalModel.run_id == run.id,
+                            AgentApprovalModel.status == "pending",
+                        )
+                        .order_by(AgentApprovalModel.id.asc())
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if not remaining:
+                run.status = RUN_RUNNING
+            return entry, run, conversation, remaining
+
     async def complete_run(
         self,
         *,
@@ -750,11 +1027,39 @@ class AgentRepository:
             status, abort_requested = row
             return bool(abort_requested) or status in TERMINAL_RUN_STATUSES
 
-    async def mark_interrupted_runs(self, *, now: datetime) -> int:
+    async def recover_stale_runs(self, *, now: datetime) -> int:
+        """Recover runs orphaned by an API restart.
+
+        A stale ``running`` run failed mid-flight and is marked ``failed`` with
+        ``interrupted``. A ``waiting`` run is resumable only while it still has a
+        valid pending approval; otherwise it fails closed with a readable
+        ``approval_orphaned`` error. Pending approvals on terminal runs or
+        inactive conversations are expired.
+        """
         async with self._transaction() as session:
-            result = await session.execute(
+            await session.execute(
+                text(
+                    """
+                    UPDATE agent_approval AS approval
+                    SET status = 'expired', resolved_at = :now
+                    WHERE approval.status = 'pending'
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM agent_run AS run
+                          JOIN agent_conversation AS conversation
+                            ON conversation.id = run.conversation_id
+                          WHERE run.id = approval.run_id
+                            AND run.status = 'waiting'
+                            AND conversation.status = 'active'
+                            AND conversation.deleted_at IS NULL
+                      )
+                    """
+                ),
+                {"now": now},
+            )
+            interrupted = await session.execute(
                 update(AgentRunModel)
-                .where(AgentRunModel.status.in_(ACTIVE_RUN_STATUSES))
+                .where(AgentRunModel.status == RUN_RUNNING)
                 .values(
                     status=RUN_FAILED,
                     error_code="interrupted",
@@ -762,7 +1067,40 @@ class AgentRepository:
                     finished_at=now,
                 )
             )
-            return int(getattr(result, "rowcount", 0) or 0)
+            orphaned = 0
+            waiting_runs = list(
+                (
+                    await session.execute(
+                        select(AgentRunModel)
+                        .where(AgentRunModel.status == RUN_WAITING)
+                        .with_for_update()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for run in waiting_runs:
+                pending = (
+                    await session.execute(
+                        select(func.count())
+                        .select_from(AgentApprovalModel)
+                        .where(
+                            AgentApprovalModel.run_id == run.id,
+                            AgentApprovalModel.status == "pending",
+                        )
+                    )
+                ).scalar_one()
+                if int(pending) > 0:
+                    continue
+                run.status = RUN_FAILED
+                run.error_code = "approval_orphaned"
+                run.error_detail = (
+                    "The run was waiting for approval, but no valid pending "
+                    "approval was found."
+                )
+                run.finished_at = now
+                orphaned += 1
+            return int(getattr(interrupted, "rowcount", 0) or 0) + orphaned
 
 
 __all__ = ["AgentRepository"]

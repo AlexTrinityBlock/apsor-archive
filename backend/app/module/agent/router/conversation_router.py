@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from app.module.agent.dependencies import get_agent_service
 from app.module.agent.domain.agent_domain import AgentStreamEvent
 from app.module.agent.schema.agent_schema import (
+    AgentApprovalSchema,
+    AgentApprovalStatus,
     AgentConversationCreateSchema,
     AgentConversationDetailSchema,
     AgentConversationPatchSchema,
@@ -170,6 +172,32 @@ async def clear_conversation(
 ) -> AgentEntrySchema:
     """Append a reset boundary without deleting the transcript."""
     return await agent_service.clear_conversation(conversation_id)
+
+
+@router.get(
+    "/{conversation_id}/approvals",
+    response_model=ListResponseSchema[AgentApprovalSchema],
+    operation_id="listAgentApprovals",
+)
+async def list_approvals(
+    conversation_id: int,
+    status_filter: AgentApprovalStatus | None = Query(
+        default="pending",
+        alias="status",
+    ),
+    agent_service: AgentService = Depends(get_agent_service),
+) -> ListResponseSchema[AgentApprovalSchema]:
+    """Return durable approvals for one conversation, oldest first."""
+    resources = await agent_service.list_approvals(
+        conversation_id,
+        status=status_filter,
+    )
+    return ListResponseSchema[AgentApprovalSchema](
+        total_results=len(resources),
+        start_index=1 if resources else 0,
+        items_per_page=len(resources),
+        resources=resources,
+    )
 
 
 @router.post(

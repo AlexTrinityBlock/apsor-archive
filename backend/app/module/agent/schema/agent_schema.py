@@ -19,6 +19,7 @@ AgentEntryKind = Literal[
     "ui.notice",
 ]
 AgentRunStatus = Literal["running", "waiting", "completed", "failed", "cancelled"]
+AgentApprovalStatus = Literal["pending", "approved", "rejected", "expired"]
 
 
 class AgentConversationCreateSchema(BaseModel):
@@ -147,6 +148,29 @@ class AgentRunSchema(BaseModel):
     created_at: datetime
 
 
+class AgentApprovalSchema(BaseModel):
+    """A durable human decision awaiting resolution.
+
+    ``arguments`` and ``preview`` are intentionally bounded, validated copies of
+    the proposed write. ``resume_state`` never leaves the repository.
+    """
+
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    id: int
+    conversation_id: int
+    run_id: int
+    tool_call_id: str
+    tool_name: str
+    status: AgentApprovalStatus
+    arguments: dict[str, Any]
+    preview: dict[str, Any]
+    resolved_by_entry_id: int | None
+    requested_at: datetime
+    resolved_at: datetime | None
+    created_at: datetime
+
+
 class AgentTurnResultSchema(BaseModel):
     """The completed turn returned by the JSON fallback."""
 
@@ -161,6 +185,7 @@ class AgentTurnResultSchema(BaseModel):
     usage: dict[str, int]
     error_code: str | None
     error_detail: str | None
+    pending_approvals: list[AgentApprovalSchema] = Field(default_factory=list)
 
 
 class AgentToolSchema(BaseModel):

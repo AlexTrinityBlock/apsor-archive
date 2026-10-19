@@ -132,6 +132,17 @@ class EntryDraft:
 
 
 @dataclass(frozen=True)
+class ApprovalDraft:
+    """A pending confirmation write and the snapshot needed to resume its run."""
+
+    tool_call_id: str
+    tool_name: str
+    arguments: dict[str, Any]
+    preview: dict[str, Any]
+    resume_state: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class AgentStreamEvent:
     """One transport event in an agent turn stream."""
 

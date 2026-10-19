@@ -38,8 +38,10 @@ import type {
   AgentTurnResultSchema,
   GetAgentConversationParams,
   HTTPValidationError,
+  ListAgentApprovalsParams,
   ListAgentConversationsParams,
   ListAgentEntriesParams,
+  ListResponseSchemaAgentApprovalSchema,
   ListResponseSchemaAgentConversationSchema,
   ListSavedQuestionsParams,
   SavedQuestionCreateSchema,
@@ -70,7 +72,155 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getListAgentConversationsUrl = (params?: ListAgentConversationsParams,) => {
+export const getApproveAgentApprovalUrl = (approvalId: number,) => {
+
+
+
+
+  return `/api/v1/agent/approvals/${approvalId}/approve`
+}
+
+/**
+ * Execute the approved write once and resume the waiting run.
+ * @summary Approve Approval
+ */
+export const approveAgentApproval = async (approvalId: number, options?: Parameters<typeof apiFetch>[1]): Promise<AgentTurnResultSchema | string> => {
+
+  return apiFetch<AgentTurnResultSchema | string>(getApproveAgentApprovalUrl(approvalId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getApproveAgentApprovalMutationKey = () => ['approveAgentApproval'] as const;
+
+export const getApproveAgentApprovalMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAgentApproval>>, TError,ApproveAgentApprovalMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof approveAgentApproval>>, TError,ApproveAgentApprovalMutationVariables, TContext> => {
+
+const mutationKey = getApproveAgentApprovalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof approveAgentApproval>>, ApproveAgentApprovalMutationVariables> = (props) => {
+          const {approvalId} = props ?? {};
+
+          return  approveAgentApproval(approvalId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApproveAgentApprovalMutationResult = NonNullable<Awaited<ReturnType<typeof approveAgentApproval>>>
+
+    export type ApproveAgentApprovalMutationError = HTTPValidationError
+    export type ApproveAgentApprovalMutationVariables = {approvalId: number}
+
+    /**
+ * @summary Approve Approval
+ */
+export const useApproveAgentApproval = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof approveAgentApproval>>, TError,ApproveAgentApprovalMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof approveAgentApproval>>,
+        TError,
+        ApproveAgentApprovalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getApproveAgentApprovalMutationOptions(options), queryClient);
+    }
+    export const getRejectAgentApprovalUrl = (approvalId: number,) => {
+
+
+
+
+  return `/api/v1/agent/approvals/${approvalId}/reject`
+}
+
+/**
+ * Append a rejection result and resume without writing memory.
+ * @summary Reject Approval
+ */
+export const rejectAgentApproval = async (approvalId: number, options?: Parameters<typeof apiFetch>[1]): Promise<AgentTurnResultSchema | string> => {
+
+  return apiFetch<AgentTurnResultSchema | string>(getRejectAgentApprovalUrl(approvalId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRejectAgentApprovalMutationKey = () => ['rejectAgentApproval'] as const;
+
+export const getRejectAgentApprovalMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectAgentApproval>>, TError,RejectAgentApprovalMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof rejectAgentApproval>>, TError,RejectAgentApprovalMutationVariables, TContext> => {
+
+const mutationKey = getRejectAgentApprovalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof rejectAgentApproval>>, RejectAgentApprovalMutationVariables> = (props) => {
+          const {approvalId} = props ?? {};
+
+          return  rejectAgentApproval(approvalId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RejectAgentApprovalMutationResult = NonNullable<Awaited<ReturnType<typeof rejectAgentApproval>>>
+
+    export type RejectAgentApprovalMutationError = HTTPValidationError
+    export type RejectAgentApprovalMutationVariables = {approvalId: number}
+
+    /**
+ * @summary Reject Approval
+ */
+export const useRejectAgentApproval = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof rejectAgentApproval>>, TError,RejectAgentApprovalMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof rejectAgentApproval>>,
+        TError,
+        RejectAgentApprovalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRejectAgentApprovalMutationOptions(options), queryClient);
+    }
+    export const getListAgentConversationsUrl = (params?: ListAgentConversationsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
@@ -545,7 +695,123 @@ export const useUpdateAgentConversation = <TError = HTTPValidationError,
       > => {
       return useMutation(getUpdateAgentConversationMutationOptions(options), queryClient);
     }
-    export const getClearAgentConversationUrl = (conversationId: number,) => {
+    export const getListAgentApprovalsUrl = (conversationId: number,
+    params?: ListAgentApprovalsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/agent/conversations/${conversationId}/approvals?${stringifiedParams}` : `/api/v1/agent/conversations/${conversationId}/approvals`
+}
+
+/**
+ * Return durable approvals for one conversation, oldest first.
+ * @summary List Approvals
+ */
+export const listAgentApprovals = async (conversationId: number,
+    params?: ListAgentApprovalsParams, options?: Parameters<typeof apiFetch>[1]): Promise<ListResponseSchemaAgentApprovalSchema> => {
+
+  return apiFetch<ListResponseSchemaAgentApprovalSchema>(getListAgentApprovalsUrl(conversationId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentApprovalsQueryKey = (conversationId: number,
+    params?: ListAgentApprovalsParams,) => {
+    return [
+    `/api/v1/agent/conversations/${conversationId}/approvals`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAgentApprovalsQueryOptions = <TData = Awaited<ReturnType<typeof listAgentApprovals>>, TError = HTTPValidationError>(conversationId: number,
+    params?: ListAgentApprovalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentApprovals>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentApprovalsQueryKey(conversationId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentApprovals>>> = ({ signal }) => listAgentApprovals(conversationId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentApprovals>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListAgentApprovalsQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentApprovals>>>
+export type ListAgentApprovalsQueryError = HTTPValidationError
+
+
+export function useListAgentApprovals<TData = Awaited<ReturnType<typeof listAgentApprovals>>, TError = HTTPValidationError>(
+ conversationId: number,
+    params: undefined |  ListAgentApprovalsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentApprovals>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAgentApprovals>>,
+          TError,
+          Awaited<ReturnType<typeof listAgentApprovals>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAgentApprovals<TData = Awaited<ReturnType<typeof listAgentApprovals>>, TError = HTTPValidationError>(
+ conversationId: number,
+    params?: ListAgentApprovalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentApprovals>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAgentApprovals>>,
+          TError,
+          Awaited<ReturnType<typeof listAgentApprovals>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAgentApprovals<TData = Awaited<ReturnType<typeof listAgentApprovals>>, TError = HTTPValidationError>(
+ conversationId: number,
+    params?: ListAgentApprovalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentApprovals>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Approvals
+ */
+
+export function useListAgentApprovals<TData = Awaited<ReturnType<typeof listAgentApprovals>>, TError = HTTPValidationError>(
+ conversationId: number,
+    params?: ListAgentApprovalsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentApprovals>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListAgentApprovalsQueryOptions(conversationId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getClearAgentConversationUrl = (conversationId: number,) => {
 
 
 
