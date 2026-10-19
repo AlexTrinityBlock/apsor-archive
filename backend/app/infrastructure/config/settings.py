@@ -58,10 +58,13 @@ class Settings(BaseSettings):
     # Durable ingestion worker. The lifespan task is a convenience for local
     # single-process development; production can run ``python -m app.worker``
     # (or ``dendromatrix worker``) as a dedicated service.
+    #
+    # These values seed the database-backed singleton on a fresh installation;
+    # the worker reads the database row and uses these only as a fallback.
     ingest_worker_enabled: bool = True
     ingest_poll_seconds: float = 1.0
     ingest_extract_workers: int = 2
-    ingest_max_in_flight_jobs: int = 2
+    ingest_max_inflight_jobs: int = 2
     ingest_job_stale_seconds: int = 300
     ingest_job_max_attempts: int = 3
     ingest_embedding_batch_size: int = 16

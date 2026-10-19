@@ -5,6 +5,9 @@ from fastapi import APIRouter
 from app.module.knowledge.router.ai_router import router as ai_router
 from app.module.knowledge.router.file_router import router as file_router
 from app.module.knowledge.router.folder_router import router as folder_router
+from app.module.knowledge.router.ingest_settings_router import (
+    router as ingest_settings_router,
+)
 from app.module.knowledge.router.memory_router import router as memory_router
 from app.module.knowledge.router.search_router import router as search_router
 from app.module.knowledge.router.settings_router import router as settings_router
@@ -23,4 +26,5 @@ router.include_router(timeline_router)
 router.include_router(ai_router)
 router.include_router(system_router)
 router.include_router(settings_router)
+router.include_router(ingest_settings_router)
 router.include_router(tool_router)

@@ -15,6 +15,7 @@ from app.module.knowledge.model.chunk_model import (
     ChunkModel,
 )
 from app.module.knowledge.model.file_model import FileModel
+from app.module.knowledge.model.ingest_config_model import IngestConfigModel
 from app.module.knowledge.model.ingest_job_model import (
     INGEST_ACTIVE_STATUSES,
     INGEST_PROCESSING_STATUSES,
@@ -81,6 +82,7 @@ __all__ = [
     "ChunkNgramModel",
     "FileIngestJobModel",
     "FileModel",
+    "IngestConfigModel",
     "MemoryModel",
     "MemorySummaryModel",
     "TreeNodeModel",

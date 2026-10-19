@@ -28,7 +28,11 @@ from app.module.agent.repository.agent_repository import AgentRepository
 from app.module.agent.router import router as agent_router
 from app.module.auth.exception.handler import register_exceptions as register_auth_exceptions
 from app.module.auth.router.auth_router import router as auth_router
-from app.module.knowledge.dependencies import build_ingest_worker
+from app.module.knowledge.dependencies import (
+    build_ingest_worker,
+    ingest_runtime_defaults,
+    load_ingest_runtime_config,
+)
 from app.module.knowledge.exception.handler import register_exceptions
 from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
 from app.module.knowledge.router import router as knowledge_router
@@ -83,10 +87,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await runtime.reload(AiProviderConfigRepository(session))
         app.state.secret_cipher = cipher
         app.state.ai_runtime = runtime
+        ingest_defaults = ingest_runtime_defaults(resolved_settings)
+        ingest_config = ingest_defaults
+        if resolved_settings.ingest_worker_enabled:
+            ingest_config = await load_ingest_runtime_config(
+                app.state.db.session_factory,
+                ingest_defaults,
+            )
         app.state.ingest_worker = build_ingest_worker(
             app.state,
             app.state.db.session_factory,
             resolved_settings,
+            runtime_config=ingest_config,
+            config_provider=(
+                (
+                    lambda: load_ingest_runtime_config(
+                        app.state.db.session_factory,
+                        ingest_defaults,
+                    )
+                )
+                if resolved_settings.ingest_worker_enabled
+                else None
+            ),
         )
         worker_task: asyncio.Task[None] | None = None
         if resolved_settings.ingest_worker_enabled:
