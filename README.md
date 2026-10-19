@@ -168,13 +168,13 @@ AI settings API:
 
 The **Agent runtime** panel on `/settings` edits the singleton `agent_config`
 row (`id=1`). Provider and model selection stay in the AI settings above, so
-there is still one source of truth for which model answers. All twelve runtime
+there is still one source of truth for which model answers. All thirteen runtime
 values are stored in PostgreSQL and apply to new runs without a restart.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | Effective config, defaults, source, `updated_at` |
-| `PUT` | `/api/v1/agent/settings` | Full replacement; all twelve fields are required |
+| `PUT` | `/api/v1/agent/settings` | Full replacement; all thirteen fields are required |
 | `POST` | `/api/v1/agent/settings/reset` | Persist and return the built-in defaults |
 
 The generated operations are `getAgentSettings`, `updateAgentSettings`, and
@@ -199,6 +199,7 @@ fields are rejected.
 | `max_compaction_last_user_chars` | 4,000 | 500–10,000 |
 | `auto_compaction_enabled` | `true` | boolean |
 | `parallel_tools_enabled` | `true` | boolean |
+| `save_memory_requires_approval` | `true` | boolean; manual approval for `save_memory` |
 
 Pydantic and matching PostgreSQL check constraints enforce the ranges and two
 cross-field rules: the compaction threshold must be lower than the total token
@@ -360,10 +361,12 @@ enters the provider message; the model still sees only the XML tool result.
 
 `save_memory` is a write action. The tool requires `user_confirmed=true` and the
 system prompt instructs the model to save only after an explicit user request
-and confirmed wording. The model supplies that flag; there is no separate
-approval dialog in the chat UI yet, so this is prompt-enforced rather than a
-human-in-the-loop gate. The expanded inspector shows the resulting receipt; it
-does not approve the write.
+and confirmed wording. The `save_memory_requires_approval` runtime setting
+(default `true`, editable in **Settings → Agent runtime → Tool execution**)
+records whether a write waits for an in-chat Approve/Reject decision. When the
+setting is off, the agent may save after prompt-level confirmation only. The
+waiting and approval flow itself is provided by the approval feature; the
+expanded inspector shows the resulting receipt rather than approving the write.
 
 Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 /api/v1/files/text`, `DELETE /api/v1/files/{file_id}`, `GET /api/v1/paths`,
@@ -569,10 +572,12 @@ DeepSeek call is made.
 - Retry starts a fresh run with the same runtime snapshot policy but does not
   increase any budget. A transcript that already exhausted the token or tool
   result budget can reach the same limit again.
-- `save_memory` is still prompt-enforced. The `user_confirmed=true` flag is
-  supplied by the model; there is no separate human approval dialog.
-- `agent_run.waiting` remains reserved for a future resume/approval flow; the
-  current loop emits only running, completed, failed, and cancelled.
+- `save_memory` remains prompt-enforced when
+  `save_memory_requires_approval=false`. With the default `true`, the preference
+  is stored, but the actual waiting/approval flow is provided by the approval
+  feature.
+- `agent_run.waiting` is reserved for the approval flow; without that feature
+  the current loop emits only running, completed, failed, and cancelled.
 
 ### Saved questions
 
@@ -1015,7 +1020,7 @@ the `conversation_id` `ON DELETE SET NULL` behavior. Page-context
 deduplication and ordering, and folder creation plus move/copy coverage, extend
 existing tests rather than adding new functions.
 
-The latest migration is `b3e5c7d9f1a2`, after `d4b8e6f1a2c7`. The migrations
+The latest migration is `c8f2a4b6d9e1`, after `b3e5c7d9f1a2`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1030,7 +1035,9 @@ after `agent_config` on this branch are:
 - `d4b8e6f1a2c7` creates the singleton `ingest_config`, enforces its ranges and
   overlap rule, and seeds row `1`;
 - `b3e5c7d9f1a2` adds `context_window_tokens` to `agent_config` with a
-  1,000,000 server default and an 8,000–2,000,000 check constraint.
+  1,000,000 server default and an 8,000–2,000,000 check constraint;
+- `c8f2a4b6d9e1` adds the non-null `save_memory_requires_approval` boolean to
+  `agent_config` with a `true` server default; existing rows receive `true`.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so

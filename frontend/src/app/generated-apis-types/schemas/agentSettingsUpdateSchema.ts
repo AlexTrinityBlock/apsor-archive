@@ -61,4 +61,5 @@ export interface AgentSettingsUpdateSchema {
      */
   max_total_tokens: number;
   parallel_tools_enabled: boolean;
+  save_memory_requires_approval: boolean;
 }

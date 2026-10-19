@@ -19,6 +19,7 @@ from app.module.agent.domain.agent_domain import (
     MAX_TOOL_RESULT_CHARS,
     MAX_TOTAL_TOKENS,
     PARALLEL_TOOLS_ENABLED,
+    SAVE_MEMORY_REQUIRES_APPROVAL,
 )
 from app.shared.time import utcnow
 
@@ -152,6 +153,14 @@ class AgentConfigModel(Base):
         nullable=False,
         default=PARALLEL_TOOLS_ENABLED,
         server_default=text("true" if PARALLEL_TOOLS_ENABLED else "false"),
+    )
+    save_memory_requires_approval: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=SAVE_MEMORY_REQUIRES_APPROVAL,
+        server_default=text(
+            "true" if SAVE_MEMORY_REQUIRES_APPROVAL else "false"
+        ),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

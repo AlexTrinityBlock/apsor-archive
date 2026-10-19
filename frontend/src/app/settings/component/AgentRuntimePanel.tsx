@@ -27,6 +27,7 @@ export interface AgentRuntimeValues {
   readonly max_compaction_last_user_chars: number;
   readonly auto_compaction_enabled: boolean;
   readonly parallel_tools_enabled: boolean;
+  readonly save_memory_requires_approval: boolean;
 }
 
 /** Props for the presentational runtime panel; persistence stays with the page. */
@@ -56,14 +57,15 @@ export const AGENT_RUNTIME_DEFAULTS: AgentRuntimeValues = {
   max_compaction_last_user_chars: 4000,
   auto_compaction_enabled: true,
   parallel_tools_enabled: true,
+  save_memory_requires_approval: true,
 };
 
-type NumericField = Exclude<
-  keyof AgentRuntimeValues,
-  "auto_compaction_enabled" | "parallel_tools_enabled"
->;
+type BooleanField =
+  | "auto_compaction_enabled"
+  | "parallel_tools_enabled"
+  | "save_memory_requires_approval";
 
-type BooleanField = "auto_compaction_enabled" | "parallel_tools_enabled";
+type NumericField = Exclude<keyof AgentRuntimeValues, BooleanField>;
 
 type DraftValues = { readonly [Key in NumericField]: string } & {
   readonly [Key in BooleanField]: boolean;
@@ -197,6 +199,7 @@ const VALUE_KEYS: readonly (keyof AgentRuntimeValues)[] = [
   "max_compaction_last_user_chars",
   "auto_compaction_enabled",
   "parallel_tools_enabled",
+  "save_memory_requires_approval",
 ];
 
 function toDraft(values: AgentRuntimeValues): DraftValues {
@@ -213,6 +216,7 @@ function toDraft(values: AgentRuntimeValues): DraftValues {
     max_compaction_last_user_chars: String(values.max_compaction_last_user_chars),
     auto_compaction_enabled: values.auto_compaction_enabled,
     parallel_tools_enabled: values.parallel_tools_enabled,
+    save_memory_requires_approval: values.save_memory_requires_approval,
   };
 }
 
@@ -230,6 +234,7 @@ function fromDraft(draft: DraftValues): AgentRuntimeValues {
     max_compaction_last_user_chars: Number(draft.max_compaction_last_user_chars),
     auto_compaction_enabled: draft.auto_compaction_enabled,
     parallel_tools_enabled: draft.parallel_tools_enabled,
+    save_memory_requires_approval: draft.save_memory_requires_approval,
   };
 }
 
@@ -248,7 +253,9 @@ function draftMatchesValues(
   return (
     numbersMatch &&
     draft.auto_compaction_enabled === values.auto_compaction_enabled &&
-    draft.parallel_tools_enabled === values.parallel_tools_enabled
+    draft.parallel_tools_enabled === values.parallel_tools_enabled &&
+    draft.save_memory_requires_approval ===
+      values.save_memory_requires_approval
   );
 }
 
@@ -403,6 +410,7 @@ function RuntimeToggle({
           id={fieldId}
           className="agent-runtime-toggle__input"
           type="checkbox"
+          role="switch"
           checked={checked}
           disabled={disabled}
           aria-describedby={hintId}
@@ -692,6 +700,17 @@ export function AgentRuntimePanel({
                   disabled={saving}
                   onChange={(next) =>
                     updateBoolean("parallel_tools_enabled", next)
+                  }
+                />
+              </div>
+              <div className="agent-runtime-field agent-runtime-field--wide">
+                <RuntimeToggle
+                  label="Require manual approval for memory writes"
+                  hint="When on, the agent's save_memory request waits for your Approve/Reject decision. When off, the agent may save only after its existing prompt-level confirmation. Manual approval is on by default."
+                  checked={draft.save_memory_requires_approval}
+                  disabled={saving}
+                  onChange={(next) =>
+                    updateBoolean("save_memory_requires_approval", next)
                   }
                 />
               </div>

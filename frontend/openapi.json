@@ -855,6 +855,10 @@
           "parallel_tools_enabled": {
             "title": "Parallel Tools Enabled",
             "type": "boolean"
+          },
+          "save_memory_requires_approval": {
+            "title": "Save Memory Requires Approval",
+            "type": "boolean"
           }
         },
         "required": [
@@ -869,7 +873,8 @@
           "max_compaction_summary_chars",
           "max_compaction_last_user_chars",
           "auto_compaction_enabled",
-          "parallel_tools_enabled"
+          "parallel_tools_enabled",
+          "save_memory_requires_approval"
         ],
         "title": "AgentSettingsUpdateSchema",
         "type": "object"
@@ -945,6 +950,10 @@
           "parallel_tools_enabled": {
             "title": "Parallel Tools Enabled",
             "type": "boolean"
+          },
+          "save_memory_requires_approval": {
+            "title": "Save Memory Requires Approval",
+            "type": "boolean"
           }
         },
         "required": [
@@ -959,7 +968,8 @@
           "max_compaction_summary_chars",
           "max_compaction_last_user_chars",
           "auto_compaction_enabled",
-          "parallel_tools_enabled"
+          "parallel_tools_enabled",
+          "save_memory_requires_approval"
         ],
         "title": "AgentSettingsValuesSchema",
         "type": "object"

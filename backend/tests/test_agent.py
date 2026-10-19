@@ -91,6 +91,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "max_compaction_last_user_chars": 4_000,
         "auto_compaction_enabled": True,
         "parallel_tools_enabled": True,
+        "save_memory_requires_approval": True,
     }
 
     invalid_threshold = client.put(
@@ -134,6 +135,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "max_page_context_chars": 5_000,
         "max_compaction_summary_chars": 5_000,
         "max_compaction_last_user_chars": 3_000,
+        "save_memory_requires_approval": False,
     }
     stored_settings = client.put(
         "/api/v1/agent/settings",
@@ -143,6 +145,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     stored_body = stored_settings.json()
     assert stored_body["source"] == "database"
     assert stored_body["config"] == non_default_settings
+    assert stored_body["config"]["save_memory_requires_approval"] is False
     assert stored_body["updated_at"] is not None
     persisted_settings = client.get("/api/v1/agent/settings")
     assert persisted_settings.status_code == 200
@@ -154,6 +157,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     reset_body = reset_settings.json()
     assert reset_body["source"] == "database"
     assert reset_body["config"] == defaults
+    assert reset_body["config"]["save_memory_requires_approval"] is True
 
     first_question = "What do we know about the wrench?"
     final_answer = f"The archive documents the wrench [file:{file_id}#1]."
