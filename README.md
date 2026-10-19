@@ -249,7 +249,9 @@ docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 ```
 
 Point the tunnel ingress for `archive.example.com` at `http://caddy:80`. The
-token file is gitignored. See `secrets/README.md` for permissions.
+token file is gitignored. See `secrets/README.md` for permissions and
+[`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md) for the complete
+English deployment, backup, security, and troubleshooting guide.
 
 ## Tool surface
 
@@ -971,6 +973,7 @@ frontend/
 docker-compose.yml              normal deployment
 docker-compose.dev.yml          local dependencies
 docker-compose.cloudflare-tunnel.yml   Cloudflare Tunnel deployment
+docs/cloudflare-tunnel.md       Tunnel deployment, backup, and security guide
 docker/caddy/                   non-root reverse proxy for the tunnel
 ```
 
