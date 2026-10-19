@@ -350,9 +350,10 @@ tray. It shows the stage, a bar from `progress_pct`, and `Embedding x / y` from
 `chunks_embedded` / `chunks_total`; queued, parsing, and chunking stay
 indeterminate until a count exists. On failure the dialog shows
 `error_detail` (or `error_code`) and offers **Retry ingest** through
-`useRetryIngestJob`; the tray shows the failure message. On ready the library
-queries are invalidated and the new file opens. Closing the dialog or leaving
-the page stops local polling but does not cancel the durable job.
+`useRetryIngestJob`; the tray shows the failure message. When a dialog upload is
+ready, the published file is fetched and opened; the tray invalidates the
+library queries without hijacking the reader. Closing the dialog or leaving the
+page stops local polling but does not cancel the durable job.
 
 The progress UI lives in the intake dialog and the drag-and-drop tray; there are
 no per-file ingestion cards on the library board.
