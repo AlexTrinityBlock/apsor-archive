@@ -44,7 +44,7 @@ down:
 	docker compose down
 
 tunnel:
-	docker compose -f docker-compose.cloudflare.yml up -d --build
+	docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 
 seed:
 	curl -sS -X POST http://127.0.0.1:8000/api/v1/demo/seed
