@@ -234,8 +234,10 @@ serves the API and committed client at <http://127.0.0.1:8000>.
 
 ### Cloudflare Tunnel
 
-The Cloudflare variant publishes no host port. `cloudflared` connects to a
-non-root Caddy reverse proxy, which forwards to the API.
+This is the **Tunnel** deployment variant. A future pure Cloudflare Serverless
+deployment should use its own compose file; the tunnel stack stays in
+`docker-compose.cloudflare-tunnel.yml`. It publishes no host port. `cloudflared`
+connects to a non-root Caddy reverse proxy, which forwards to the API.
 
 ```bash
 mkdir -p secrets
@@ -243,7 +245,7 @@ mkdir -p secrets
 printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
 chmod 644 secrets/cf_token.txt
 export DENDRO_PUBLIC_HOST=archive.example.com
-docker compose -f docker-compose.cloudflare.yml up -d --build
+docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 ```
 
 Point the tunnel ingress for `archive.example.com` at `http://caddy:80`. The
@@ -968,7 +970,7 @@ frontend/
   dist/                         committed production build served by FastAPI
 docker-compose.yml              normal deployment
 docker-compose.dev.yml          local dependencies
-docker-compose.cloudflare.yml   tunnel deployment
+docker-compose.cloudflare-tunnel.yml   Cloudflare Tunnel deployment
 docker/caddy/                   non-root reverse proxy for the tunnel
 ```
 
