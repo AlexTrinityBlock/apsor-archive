@@ -17,6 +17,7 @@ import { Panel } from "../../component/Panel";
 export interface AgentRuntimeValues {
   readonly max_total_tokens: number;
   readonly compaction_threshold_tokens: number;
+  readonly context_window_tokens: number;
   readonly max_steps: number;
   readonly max_tool_calls_per_turn: number;
   readonly max_parallel_tools: number;
@@ -45,6 +46,7 @@ export interface AgentRuntimePanelProps {
 export const AGENT_RUNTIME_DEFAULTS: AgentRuntimeValues = {
   max_total_tokens: 100000,
   compaction_threshold_tokens: 75000,
+  context_window_tokens: 1000000,
   max_steps: 24,
   max_tool_calls_per_turn: 6,
   max_parallel_tools: 6,
@@ -79,22 +81,31 @@ interface NumericFieldSpec {
 
 const CONTEXT_FIELDS: readonly NumericFieldSpec[] = [
   {
+    key: "context_window_tokens",
+    label: "Model context window",
+    unit: "tokens",
+    min: 8000,
+    max: 2000000,
+    step: 50000,
+    hint: "Provider/model input capacity, separate from the turn budget. DeepSeek V4.1 Flash is about 1,000,000 input tokens.",
+  },
+  {
     key: "max_total_tokens",
-    label: "Max total tokens",
+    label: "Turn token budget",
     unit: "tokens",
     min: 8000,
     max: 200000,
     step: 5000,
-    hint: "Ceiling for one agent turn, including tool results.",
+    hint: "Cumulative model-step budget for one agent turn, including tool results. It does not raise the model context window.",
   },
   {
     key: "compaction_threshold_tokens",
-    label: "Compaction threshold",
+    label: "Auto-compaction threshold",
     unit: "tokens",
     min: 1000,
     max: 200000,
     step: 5000,
-    hint: "Auto compaction starts once the transcript passes this size.",
+    hint: "Auto compaction starts before a new turn once the transcript passes this share of the turn budget.",
   },
   {
     key: "max_steps",
@@ -176,6 +187,7 @@ const ALL_FIELD_SPECS: readonly NumericFieldSpec[] = [
 const VALUE_KEYS: readonly (keyof AgentRuntimeValues)[] = [
   "max_total_tokens",
   "compaction_threshold_tokens",
+  "context_window_tokens",
   "max_steps",
   "max_tool_calls_per_turn",
   "max_parallel_tools",
@@ -191,6 +203,7 @@ function toDraft(values: AgentRuntimeValues): DraftValues {
   return {
     max_total_tokens: String(values.max_total_tokens),
     compaction_threshold_tokens: String(values.compaction_threshold_tokens),
+    context_window_tokens: String(values.context_window_tokens),
     max_steps: String(values.max_steps),
     max_tool_calls_per_turn: String(values.max_tool_calls_per_turn),
     max_parallel_tools: String(values.max_parallel_tools),
@@ -207,6 +220,7 @@ function fromDraft(draft: DraftValues): AgentRuntimeValues {
   return {
     max_total_tokens: Number(draft.max_total_tokens),
     compaction_threshold_tokens: Number(draft.compaction_threshold_tokens),
+    context_window_tokens: Number(draft.context_window_tokens),
     max_steps: Number(draft.max_steps),
     max_tool_calls_per_turn: Number(draft.max_tool_calls_per_turn),
     max_parallel_tools: Number(draft.max_parallel_tools),
@@ -292,18 +306,6 @@ function validateDraft(draft: DraftValues): ValidationResult {
     fieldErrors,
     parsed: hasErrors ? null : fromDraft(draft),
   };
-}
-
-function formatTokenBudget(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) {
-    return "—";
-  }
-  if (value < 1000) {
-    return formatNumber(value);
-  }
-  const thousands = value / 1000;
-  const rounded = Number.isInteger(thousands) ? String(thousands) : thousands.toFixed(1);
-  return `${rounded}k`;
 }
 
 function positiveNumber(raw: string): number | null {
@@ -560,9 +562,9 @@ export function AgentRuntimePanel({
           )}
         </span>
         <span className="agent-runtime-status__summary">
-          {formatTokenBudget(values.max_total_tokens)} turn budget ·{" "}
-          {formatTokenBudget(values.compaction_threshold_tokens)} compaction
-          threshold
+          {formatNumber(values.context_window_tokens)} model context ·{" "}
+          {formatNumber(values.max_total_tokens)} turn budget ·{" "}
+          {formatNumber(values.compaction_threshold_tokens)} compaction
         </span>
         {isDirty ? (
           <span className="agent-runtime-status__draft">Unsaved draft</span>
@@ -572,7 +574,7 @@ export function AgentRuntimePanel({
       <div className="agent-runtime-budget">
         <div className="agent-runtime-budget__head">
           <span className="agent-runtime-budget__label">
-            Compaction threshold
+            Auto-compaction threshold
           </span>
           <span className="agent-runtime-budget__value">
             {formatNumber(draftThreshold)} / {formatNumber(draftTotal)} tokens
@@ -611,11 +613,21 @@ export function AgentRuntimePanel({
               slot="Group 01"
               title="Context budget"
               scope={contextId}
-              description="The ceiling for a single turn, when older material is folded away, and how much page text the agent may read."
+              description="The model's input capacity, the ceiling for a single turn, when older material is folded away, and how much page text the agent may read. The context window is model metadata; it is not the turn budget."
             />
             <div className="agent-runtime-grid">
               <RuntimeNumberField
                 spec={CONTEXT_FIELDS[0]}
+                value={draft.context_window_tokens}
+                defaultValue={defaults.context_window_tokens}
+                disabled={saving}
+                error={validation.fieldErrors.context_window_tokens}
+                onValueChange={(next) =>
+                  updateNumber("context_window_tokens", next)
+                }
+              />
+              <RuntimeNumberField
+                spec={CONTEXT_FIELDS[1]}
                 value={draft.max_total_tokens}
                 defaultValue={defaults.max_total_tokens}
                 disabled={saving}
@@ -623,7 +635,7 @@ export function AgentRuntimePanel({
                 onValueChange={(next) => updateNumber("max_total_tokens", next)}
               />
               <RuntimeNumberField
-                spec={CONTEXT_FIELDS[1]}
+                spec={CONTEXT_FIELDS[2]}
                 value={draft.compaction_threshold_tokens}
                 defaultValue={defaults.compaction_threshold_tokens}
                 disabled={saving}
@@ -644,7 +656,7 @@ export function AgentRuntimePanel({
                 />
               </div>
               <RuntimeNumberField
-                spec={CONTEXT_FIELDS[2]}
+                spec={CONTEXT_FIELDS[3]}
                 value={draft.max_steps}
                 defaultValue={defaults.max_steps}
                 disabled={saving}
@@ -652,7 +664,7 @@ export function AgentRuntimePanel({
                 onValueChange={(next) => updateNumber("max_steps", next)}
               />
               <RuntimeNumberField
-                spec={CONTEXT_FIELDS[3]}
+                spec={CONTEXT_FIELDS[4]}
                 value={draft.max_page_context_chars}
                 defaultValue={defaults.max_page_context_chars}
                 disabled={saving}

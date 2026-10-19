@@ -19,6 +19,7 @@ class AgentSettingsValuesSchema(BaseModel):
 
     max_total_tokens: int = Field(ge=8_000, le=200_000)
     compaction_threshold_tokens: int = Field(ge=1_000, le=200_000)
+    context_window_tokens: int = Field(ge=8_000, le=2_000_000)
     max_steps: int = Field(ge=1, le=32)
     max_tool_calls_per_turn: int = Field(ge=1, le=24)
     max_parallel_tools: int = Field(ge=1, le=24)
