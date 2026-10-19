@@ -93,7 +93,6 @@ def _config_from_model(row: AgentConfigModel) -> AgentRuntimeConfig:
         max_tool_calls_per_turn=row.max_tool_calls_per_turn,
         max_parallel_tools=row.max_parallel_tools,
         max_tool_result_chars=row.max_tool_result_chars,
-        max_total_tool_result_chars=row.max_total_tool_result_chars,
         max_page_context_chars=row.max_page_context_chars,
         max_compaction_summary_chars=row.max_compaction_summary_chars,
         max_compaction_last_user_chars=row.max_compaction_last_user_chars,
@@ -114,7 +113,6 @@ def _apply_config(
     row.max_tool_calls_per_turn = config.max_tool_calls_per_turn
     row.max_parallel_tools = config.max_parallel_tools
     row.max_tool_result_chars = config.max_tool_result_chars
-    row.max_total_tool_result_chars = config.max_total_tool_result_chars
     row.max_page_context_chars = config.max_page_context_chars
     row.max_compaction_summary_chars = config.max_compaction_summary_chars
     row.max_compaction_last_user_chars = config.max_compaction_last_user_chars
@@ -131,7 +129,6 @@ def _values_schema(config: AgentRuntimeConfig) -> AgentSettingsValuesSchema:
         max_tool_calls_per_turn=config.max_tool_calls_per_turn,
         max_parallel_tools=config.max_parallel_tools,
         max_tool_result_chars=config.max_tool_result_chars,
-        max_total_tool_result_chars=config.max_total_tool_result_chars,
         max_page_context_chars=config.max_page_context_chars,
         max_compaction_summary_chars=config.max_compaction_summary_chars,
         max_compaction_last_user_chars=config.max_compaction_last_user_chars,

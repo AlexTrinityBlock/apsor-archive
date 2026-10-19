@@ -55,10 +55,5 @@ export interface AgentSettingsUpdateSchema {
      * @maximum 200000
      */
   max_total_tokens: number;
-  /**
-     * @minimum 1000
-     * @maximum 200000
-     */
-  max_total_tool_result_chars: number;
   parallel_tools_enabled: boolean;
 }

@@ -119,7 +119,10 @@ export function AssistantEntry({ entry, toolResults }: AssistantEntryProps) {
             <div className="chat-sheet__citations">
               <span className="chat-sheet__foot-label">Sources</span>
               {citations.map((token) => (
-                <CitationChip key={`${token.kind}:${token.id}`} token={token} />
+                <CitationChip
+                  key={`${token.kind}:${token.id}:${token.chunk ?? ""}`}
+                  token={token}
+                />
               ))}
             </div>
           ) : null}
