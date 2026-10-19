@@ -1550,6 +1550,39 @@
         "title": "Body_uploadFile",
         "type": "object"
       },
+      "Body_uploadFileAsync": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "path": {
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "file"
+        ],
+        "title": "Body_uploadFileAsync",
+        "type": "object"
+      },
       "Body_uploadMedia": {
         "properties": {
           "caption": {
@@ -2181,6 +2214,361 @@
           "embedding_provider"
         ],
         "title": "HealthSchema",
+        "type": "object"
+      },
+      "IngestJobListSchema": {
+        "description": "A page of active and recent ingestion jobs.",
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/IngestJobSchema"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "jobs"
+        ],
+        "title": "IngestJobListSchema",
+        "type": "object"
+      },
+      "IngestJobSchema": {
+        "description": "Durable ingestion job state and progress for one file path.",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "chunks_embedded": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunks Embedded"
+          },
+          "chunks_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunks Total"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Detail"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "mime_type": {
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "progress_pct": {
+            "title": "Progress Pct",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "source_kind": {
+            "enum": [
+              "upload",
+              "text"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "parsing",
+              "chunking",
+              "embedding",
+              "summarizing",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "file_id",
+          "source_kind",
+          "path",
+          "file_name",
+          "mime_type",
+          "size_bytes",
+          "occurred_at",
+          "status",
+          "stage",
+          "progress_pct",
+          "chunks_total",
+          "chunks_embedded",
+          "error_code",
+          "error_detail",
+          "attempts",
+          "created_at",
+          "updated_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "IngestJobSchema",
+        "type": "object"
+      },
+      "IngestSettingsReadSchema": {
+        "description": "The effective config, the defaults, and where the config came from.",
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/IngestSettingsValuesSchema"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/IngestSettingsValuesSchema"
+          },
+          "source": {
+            "enum": [
+              "database",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "config",
+          "defaults",
+          "source",
+          "updated_at"
+        ],
+        "title": "IngestSettingsReadSchema",
+        "type": "object"
+      },
+      "IngestSettingsUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace the whole stored worker configuration.",
+        "properties": {
+          "chunk_overlap_chars": {
+            "maximum": 5000.0,
+            "minimum": 0.0,
+            "title": "Chunk Overlap Chars",
+            "type": "integer"
+          },
+          "chunk_target_chars": {
+            "maximum": 20000.0,
+            "minimum": 1000.0,
+            "title": "Chunk Target Chars",
+            "type": "integer"
+          },
+          "embedding_concurrency": {
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Embedding Concurrency",
+            "type": "integer"
+          },
+          "extract_workers": {
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Extract Workers",
+            "type": "integer"
+          },
+          "max_inflight_jobs": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Max Inflight Jobs",
+            "type": "integer"
+          },
+          "poll_seconds": {
+            "maximum": 30.0,
+            "minimum": 0.25,
+            "title": "Poll Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "poll_seconds",
+          "extract_workers",
+          "max_inflight_jobs",
+          "embedding_concurrency",
+          "chunk_target_chars",
+          "chunk_overlap_chars"
+        ],
+        "title": "IngestSettingsUpdateSchema",
+        "type": "object"
+      },
+      "IngestSettingsValuesSchema": {
+        "additionalProperties": false,
+        "description": "One complete, validated set of ingestion worker settings.\n\nEvery field is required so ``PUT /api/v1/settings/ingest`` always writes a\nfull snapshot instead of silently resetting omitted fields to defaults.",
+        "properties": {
+          "chunk_overlap_chars": {
+            "maximum": 5000.0,
+            "minimum": 0.0,
+            "title": "Chunk Overlap Chars",
+            "type": "integer"
+          },
+          "chunk_target_chars": {
+            "maximum": 20000.0,
+            "minimum": 1000.0,
+            "title": "Chunk Target Chars",
+            "type": "integer"
+          },
+          "embedding_concurrency": {
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Embedding Concurrency",
+            "type": "integer"
+          },
+          "extract_workers": {
+            "maximum": 8.0,
+            "minimum": 1.0,
+            "title": "Extract Workers",
+            "type": "integer"
+          },
+          "max_inflight_jobs": {
+            "maximum": 4.0,
+            "minimum": 1.0,
+            "title": "Max Inflight Jobs",
+            "type": "integer"
+          },
+          "poll_seconds": {
+            "maximum": 30.0,
+            "minimum": 0.25,
+            "title": "Poll Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "poll_seconds",
+          "extract_workers",
+          "max_inflight_jobs",
+          "embedding_concurrency",
+          "chunk_target_chars",
+          "chunk_overlap_chars"
+        ],
+        "title": "IngestSettingsValuesSchema",
         "type": "object"
       },
       "ListResponseSchema_AgentConversationSchema_": {
@@ -5104,6 +5492,191 @@
         ]
       }
     },
+    "/api/v1/files/async": {
+      "post": {
+        "description": "Store one upload and return immediately with a durable job.\n\nThe synchronous ``POST /files`` endpoint remains available for clients that\nneed the fully indexed file in the same response.",
+        "operationId": "uploadFileAsync",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_uploadFileAsync"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestJobSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload File Async",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/ingest-jobs": {
+      "get": {
+        "description": "List active and recent ingestion jobs, newest first.",
+        "operationId": "listIngestJobs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestJobListSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Ingest Jobs",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/ingest-jobs/{job_id}": {
+      "get": {
+        "description": "Return one job's status and chunking/embedding progress.",
+        "operationId": "getIngestJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestJobSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ingest Job",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/ingest-jobs/{job_id}/retry": {
+      "post": {
+        "description": "Return a failed job to the queue when its attempt budget allows.",
+        "operationId": "retryIngestJob",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestJobSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Ingest Job",
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/api/v1/files/text": {
       "post": {
         "description": "Create a text file directly; useful for the UI editor and automation.",
@@ -5141,6 +5714,48 @@
           }
         },
         "summary": "Create Text File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/text/async": {
+      "post": {
+        "description": "Queue direct text without waiting for chunking and embedding.",
+        "operationId": "createTextFileAsync",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileTextCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestJobSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Text File Async",
         "tags": [
           "files"
         ]
@@ -6417,6 +7032,90 @@
           }
         },
         "summary": "Test Ai Provider",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/ingest": {
+      "get": {
+        "description": "Return the effective worker settings and the defaults.",
+        "operationId": "getIngestSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ingest Settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Replace every worker setting with one validated snapshot.",
+        "operationId": "updateIngestSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestSettingsUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Ingest Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/ingest/reset": {
+      "post": {
+        "description": "Restore and persist the environment-seeded defaults.",
+        "operationId": "resetIngestSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reset Ingest Settings",
         "tags": [
           "settings"
         ]

@@ -1,7 +1,7 @@
 """Composition root for the knowledge slice."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Any, cast
@@ -16,7 +16,8 @@ from app.infrastructure.ai.vision_extractor import (
     NullVisionExtractor,
 )
 from app.infrastructure.config.settings import Settings
-from app.infrastructure.database.session import get_db_session
+from app.infrastructure.database.session import Database, get_db_session
+from app.module.knowledge.domain.ingest_config_domain import IngestRuntimeConfig
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
@@ -26,6 +27,9 @@ from app.module.knowledge.protocol.vision_extractor_protocol import VisionExtrac
 from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
 from app.module.knowledge.repository.chunk_repository import ChunkRepository
 from app.module.knowledge.repository.file_repository import FileRepository
+from app.module.knowledge.repository.ingest_config_repository import (
+    IngestConfigRepository,
+)
 from app.module.knowledge.repository.ingest_job_repository import IngestJobRepository
 from app.module.knowledge.repository.memory_repository import MemoryRepository
 from app.module.knowledge.repository.stats_repository import StatsRepository
@@ -37,6 +41,7 @@ from app.module.knowledge.service.demo_service import DemoService
 from app.module.knowledge.service.file_service import CpuRunner, FileService
 from app.module.knowledge.service.indexer_service import IndexerService
 from app.module.knowledge.service.ingest_job_service import IngestJobService, IngestWorker
+from app.module.knowledge.service.ingest_settings_service import IngestSettingsService
 from app.module.knowledge.service.memory_service import MemoryService
 from app.module.knowledge.service.search_service import SearchService
 from app.module.knowledge.service.stats_service import StatsService
@@ -91,8 +96,17 @@ def _vision_extractor_for_state(state: State) -> VisionExtractorProtocol:
     return NullVisionExtractor()
 
 
-def _make_cpu_runner(pool: ThreadPoolExecutor) -> CpuRunner:
-    """Adapt a bounded thread pool to the file service's async CPU hook."""
+def _make_cpu_runner(
+    pool: ThreadPoolExecutor,
+    slots: asyncio.Semaphore,
+) -> CpuRunner:
+    """Adapt a bounded thread pool to the file service's async CPU hook.
+
+    The pool may be sized above the current setting so it can be reused after a
+    database setting change; ``slots`` is the per-worker concurrency gate that
+    actually limits extraction work. New jobs get the current gate while jobs
+    already in flight finish with the gate they started with.
+    """
 
     async def run_cpu(
         func: Callable[..., Any],
@@ -100,7 +114,8 @@ def _make_cpu_runner(pool: ThreadPoolExecutor) -> CpuRunner:
         **kwargs: Any,
     ) -> Any:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(pool, partial(func, *args, **kwargs))
+        async with slots:
+            return await loop.run_in_executor(pool, partial(func, *args, **kwargs))
 
     return run_cpu
 
@@ -109,6 +124,7 @@ def build_file_service_for_state(
     state: State,
     session: AsyncSession,
     *,
+    runtime_config: IngestRuntimeConfig | None = None,
     cpu_runner: CpuRunner | None = None,
     embedding_semaphore: asyncio.Semaphore | None = None,
     fail_on_embedding_error: bool = False,
@@ -121,7 +137,11 @@ def build_file_service_for_state(
         chunk_repository,
         runtime.embedder,
         embedding_batch_size=settings.ingest_embedding_batch_size,
-        embedding_concurrency=settings.ingest_embedding_concurrency,
+        embedding_concurrency=(
+            runtime_config.embedding_concurrency
+            if runtime_config is not None
+            else settings.ingest_embedding_concurrency
+        ),
         embedding_semaphore=embedding_semaphore,
         embedding_max_attempts=settings.ingest_embedding_max_attempts,
         embedding_retry_seconds=settings.ingest_embedding_retry_seconds,
@@ -136,8 +156,16 @@ def build_file_service_for_state(
         cache=cast(CacheProtocol, state.cache),
         text_generator=runtime.text_generator,
         vision_extractor=_vision_extractor_for_state(state),
-        target_chars=settings.chunk_target_chars,
-        overlap_chars=settings.chunk_overlap_chars,
+        target_chars=(
+            runtime_config.chunk_target_chars
+            if runtime_config is not None
+            else settings.chunk_target_chars
+        ),
+        overlap_chars=(
+            runtime_config.chunk_overlap_chars
+            if runtime_config is not None
+            else settings.chunk_overlap_chars
+        ),
         max_chunks=settings.max_chunks_per_file,
         max_upload_bytes=settings.max_upload_bytes,
         max_text_bytes=settings.max_text_bytes,
@@ -151,37 +179,54 @@ def build_ingest_worker(
     state: State,
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
+    *,
+    runtime_config: IngestRuntimeConfig | None = None,
+    config_provider: Callable[[], Awaitable[IngestRuntimeConfig]] | None = None,
 ) -> IngestWorker:
     """Build the shared worker used by lifespan mode and the CLI entrypoint.
 
-    Extraction and chunking share one bounded ``ThreadPoolExecutor`` per worker
-    process. Two jobs may be in flight, but the pool never grows past
-    ``ingest_extract_workers`` threads.
+    Extraction/chunking share one ``ThreadPoolExecutor`` sized for the maximum
+    supported setting. A per-runtime semaphore enforces the current database
+    value, so lowering or raising ``extract_workers`` affects newly claimed jobs
+    without replacing the process. The same pattern applies to embedding
+    concurrency and the in-flight job cap.
     """
+    initial_config = runtime_config or ingest_runtime_defaults(settings)
     extract_pool = ThreadPoolExecutor(
-        max_workers=max(1, settings.ingest_extract_workers),
+        max_workers=8,
         thread_name_prefix="ingest-extract",
     )
-    cpu_runner = _make_cpu_runner(extract_pool)
-    embedding_slots = asyncio.Semaphore(max(1, settings.ingest_embedding_concurrency))
-    return IngestWorker(
-        session_factory=session_factory,
-        file_service_factory=lambda session: build_file_service_for_state(
+    extract_slots = asyncio.Semaphore(max(1, initial_config.extract_workers))
+    embedding_slots = asyncio.Semaphore(
+        max(1, initial_config.embedding_concurrency)
+    )
+
+    def file_service_factory(
+        session: AsyncSession,
+        config: IngestRuntimeConfig,
+        current_extract_slots: asyncio.Semaphore,
+        current_embedding_slots: asyncio.Semaphore,
+    ) -> FileService:
+        return build_file_service_for_state(
             state,
             session,
-            cpu_runner=cpu_runner,
-            embedding_semaphore=embedding_slots,
+            runtime_config=config,
+            cpu_runner=_make_cpu_runner(extract_pool, current_extract_slots),
+            embedding_semaphore=current_embedding_slots,
             fail_on_embedding_error=True,
-        ),
+        )
+
+    return IngestWorker(
+        session_factory=session_factory,
+        file_service_factory=file_service_factory,
         storage=cast(FileStorageProtocol, state.storage),
         max_attempts=settings.ingest_job_max_attempts,
-        poll_seconds=settings.ingest_poll_seconds,
+        runtime_config=initial_config,
+        config_provider=config_provider,
         stale_seconds=settings.ingest_job_stale_seconds,
         extract_pool=extract_pool,
-        extract_workers=max(1, settings.ingest_extract_workers),
-        max_in_flight_jobs=max(1, settings.ingest_max_in_flight_jobs),
+        extract_semaphore=extract_slots,
         embedding_semaphore=embedding_slots,
-        embedding_concurrency=max(1, settings.ingest_embedding_concurrency),
     )
 
 
@@ -382,3 +427,57 @@ def get_ai_config_service(
         chunk_repository=ChunkRepository(session),
         cache=get_cache(request),
     )
+
+
+def ingest_runtime_defaults(settings: Settings) -> IngestRuntimeConfig:
+    """Build the fresh-install defaults from the application environment.
+
+    The chunk sizes intentionally reuse the existing ``chunk_target_chars`` and
+    ``chunk_overlap_chars`` environment names so the synchronous ingestion path
+    and the worker share one default until the database row is edited.
+    """
+    return IngestRuntimeConfig(
+        poll_seconds=settings.ingest_poll_seconds,
+        extract_workers=settings.ingest_extract_workers,
+        max_inflight_jobs=settings.ingest_max_inflight_jobs,
+        embedding_concurrency=settings.ingest_embedding_concurrency,
+        chunk_target_chars=settings.chunk_target_chars,
+        chunk_overlap_chars=settings.chunk_overlap_chars,
+    )
+
+
+def get_ingest_settings_service(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> IngestSettingsService:
+    """Build settings CRUD on the request transaction."""
+    return IngestSettingsService(
+        IngestConfigRepository(session),
+        defaults=ingest_runtime_defaults(get_app_settings(request)),
+    )
+
+
+async def load_ingest_runtime_config(
+    session_factory: async_sessionmaker[AsyncSession],
+    defaults: IngestRuntimeConfig,
+) -> IngestRuntimeConfig:
+    """Load one immutable snapshot using a short-lived worker session."""
+    async with session_factory() as session:
+        service = IngestSettingsService(
+            IngestConfigRepository(session),
+            defaults=defaults,
+        )
+        config = await service.get_runtime_config()
+        await session.commit()
+    return config
+
+
+async def get_ingest_runtime_config(request: Request) -> IngestRuntimeConfig:
+    """Load one immutable snapshot for a worker loop or job.
+
+    The read uses its own short-lived session instead of the request session so
+    a streaming or long-lived worker caller never holds a connection open.
+    """
+    database = cast(Database, request.app.state.db)
+    defaults = ingest_runtime_defaults(get_app_settings(request))
+    return await load_ingest_runtime_config(database.session_factory, defaults)
