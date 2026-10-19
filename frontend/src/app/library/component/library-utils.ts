@@ -1,5 +1,13 @@
 import { ApiError } from "../../../apis/fetch-client";
 import { basename, humanFileKind } from "../../../lib/format";
+import {
+  getFile,
+  getIngestJob,
+} from "../../generated-apis-types/files/files";
+import type {
+  FileSchema,
+  IngestJobSchema,
+} from "../../generated-apis-types/schemas";
 
 /** Upload ceiling enforced by the API, mirrored here for a faster hint. */
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -10,13 +18,205 @@ export const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 /** The two presentations of the same shelf. */
 export type LibraryView = "board" | "list";
 
+/** The durable ingestion stages reported by `IngestJobSchema.status`. */
+export type IngestStage =
+  | "queued"
+  | "parsing"
+  | "chunking"
+  | "embedding"
+  | "summarizing"
+  | "ready"
+  | "failed";
+
+/** Short editorial labels for the durable job stages. */
+export const INGEST_STAGE_LABELS: Record<IngestStage, string> = {
+  queued: "Queued",
+  parsing: "Parsing",
+  chunking: "Chunking",
+  embedding: "Embedding",
+  summarizing: "Summarizing",
+  ready: "Ready",
+  failed: "Failed",
+};
+
+/** Resolves a stage label, with a useful fallback for pre-job work. */
+export function ingestStageLabel(
+  stage: IngestStage | null | undefined,
+  fallback = "Preparing",
+): string {
+  return stage ? INGEST_STAGE_LABELS[stage] : fallback;
+}
+
+/** The lifecycle of one file in the drag-and-drop intake tray. */
+export type LibraryUploadStatus = "queued" | "uploading" | "processing" | "done" | "error";
+
 /** One file in the drag-and-drop intake tray. */
 export interface LibraryUploadTask {
   readonly id: number;
   readonly name: string;
   readonly targetPath: string;
-  readonly status: "queued" | "uploading" | "done" | "error";
+  readonly status: LibraryUploadStatus;
   readonly message?: string;
+  readonly rejected?: boolean;
+  readonly jobId?: number;
+  readonly stage?: IngestStage;
+  readonly progressPct?: number;
+  readonly chunksTotal?: number | null;
+  readonly chunksEmbedded?: number | null;
+  readonly fileId?: number | null;
+}
+
+/** Copies the durable job's progress fields onto a tray task. */
+export function taskProgressFromJob(
+  job: IngestJobSchema,
+): Pick<
+  LibraryUploadTask,
+  "jobId" | "stage" | "progressPct" | "chunksTotal" | "chunksEmbedded" | "fileId"
+> {
+  return {
+    jobId: job.id,
+    stage: job.status,
+    progressPct: job.progress_pct,
+    chunksTotal: job.chunks_total,
+    chunksEmbedded: job.chunks_embedded,
+    fileId: job.file_id,
+  };
+}
+
+/** How often the UI asks the durable job endpoint for progress. */
+export const INGEST_POLL_INTERVAL_MS = 1000;
+
+/** The UI stops waiting after half an hour; the job itself keeps running. */
+export const INGEST_POLL_TIMEOUT_MS = 30 * 60 * 1000;
+
+/** Readable failure text for a job: `error_detail`, then `error_code`. */
+export function ingestJobFailureMessage(job: IngestJobSchema): string {
+  return (
+    job.error_detail?.trim() ||
+    job.error_code ||
+    "The archive could not finish ingesting this file."
+  );
+}
+
+/** A failed ingest job, carrying the readable detail shown in the UI. */
+export class IngestJobFailureError extends Error {
+  readonly code: string;
+
+  readonly job: IngestJobSchema;
+
+  constructor(job: IngestJobSchema) {
+    super(ingestJobFailureMessage(job));
+    this.name = "IngestJobFailureError";
+    this.code = job.error_code ?? "ingest_failed";
+    this.job = job;
+  }
+}
+
+/** The job outlived the UI polling window; it may still finish server-side. */
+export class IngestPollTimeoutError extends Error {
+  readonly job: IngestJobSchema;
+
+  constructor(job: IngestJobSchema) {
+    super("This file is still processing. You can close the dialog and check the library later.");
+    this.name = "IngestPollTimeoutError";
+    this.job = job;
+  }
+}
+
+/** Recognises the abort surfaced by `fetch` and the polling delay. */
+export function isAbortError(error: unknown): boolean {
+  return (
+    (typeof DOMException !== "undefined" &&
+      error instanceof DOMException &&
+      error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
+
+function abortError(): DOMException {
+  return new DOMException("Ingest polling was cancelled.", "AbortError");
+}
+
+function waitForPoll(intervalMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) {
+    return Promise.reject(abortError());
+  }
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    }, intervalMs);
+    function handleAbort() {
+      window.clearTimeout(timer);
+      reject(abortError());
+    }
+    signal?.addEventListener("abort", handleAbort, { once: true });
+  });
+}
+
+export interface WaitForIngestJobOptions {
+  readonly signal?: AbortSignal;
+  readonly intervalMs?: number;
+  readonly timeoutMs?: number;
+  readonly onUpdate?: (job: IngestJobSchema) => void;
+}
+
+async function readIngestJob(jobId: number, signal?: AbortSignal): Promise<IngestJobSchema> {
+  return getIngestJob(jobId, { signal });
+}
+
+/**
+ * Polls one durable ingestion job until it is ready, fails, or exceeds the
+ * wait budget. Every iteration awaits both the request and the delay, so there
+ * are never overlapping timers.
+ *
+ * @param jobId - Durable job returned by the async upload endpoints.
+ * @param options - Cancellation signal, cadence, deadline, and progress sink.
+ * @returns The terminal job, whose `file_id` points at the published file.
+ * @throws {IngestJobFailureError} When the job reports `failed`.
+ * @throws {IngestPollTimeoutError} When the UI wait budget expires.
+ */
+export async function waitForIngestJob(
+  jobId: number,
+  options: WaitForIngestJobOptions = {},
+): Promise<IngestJobSchema> {
+  const deadline = Date.now() + (options.timeoutMs ?? INGEST_POLL_TIMEOUT_MS);
+  const intervalMs = options.intervalMs ?? INGEST_POLL_INTERVAL_MS;
+  let job = await readIngestJob(jobId, options.signal);
+
+  for (;;) {
+    options.onUpdate?.(job);
+    if (job.status === "ready") {
+      return job;
+    }
+    if (job.status === "failed") {
+      throw new IngestJobFailureError(job);
+    }
+    if (Date.now() >= deadline) {
+      throw new IngestPollTimeoutError(job);
+    }
+    await waitForPoll(intervalMs, options.signal);
+    job = await readIngestJob(jobId, options.signal);
+  }
+}
+
+/**
+ * Waits for a job and then loads the published file. The extra request is only
+ * made once the backend has marked the job ready.
+ *
+ * @param jobId - Durable job returned by the async upload endpoints.
+ * @param options - The same options accepted by `waitForIngestJob`.
+ * @returns The fully indexed file.
+ */
+export async function waitForIngestedFile(
+  jobId: number,
+  options: WaitForIngestJobOptions = {},
+): Promise<FileSchema> {
+  const job = await waitForIngestJob(jobId, options);
+  if (job.file_id === null) {
+    throw new Error("The ingest job finished without a file.");
+  }
+  return getFile(job.file_id, { signal: options.signal });
 }
 
 export const ACCEPTED_FILE_TYPES =
