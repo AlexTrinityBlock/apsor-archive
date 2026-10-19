@@ -79,12 +79,12 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     defaults = settings_body["defaults"]
     assert settings_body["config"] == defaults
     assert defaults == {
-        "max_total_tokens": 64_000,
-        "compaction_threshold_tokens": 48_000,
+        "max_total_tokens": 100_000,
+        "compaction_threshold_tokens": 75_000,
         "max_steps": 8,
         "max_tool_calls_per_turn": 6,
         "max_parallel_tools": 6,
-        "max_tool_result_chars": 12_000,
+        "max_tool_result_chars": 100_000,
         "max_page_context_chars": 6_000,
         "max_compaction_summary_chars": 6_000,
         "max_compaction_last_user_chars": 4_000,

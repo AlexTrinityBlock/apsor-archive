@@ -106,7 +106,7 @@ entry id arrives at `message_end`, and deltas are never persisted.
 Starlette's GZip middleware excludes `text/event-stream`.
 
 The runtime defaults cap a turn at 8 model steps, 6 tool calls, 6 parallel
-tools, 64,000 total tokens, and 12,000 characters per tool result. Each result
+tools, 100,000 total tokens, and 100,000 characters per tool result. Each result
 is clipped independently with a visible truncation marker; there is no
 turn-wide result budget. All of these come from the immutable
 `agent_config` snapshot, not from module constants. The loop uses
@@ -136,12 +136,12 @@ replacement rather than a patch.
 
 | Field | Default | Constraint |
 |---|---|---|
-| `max_total_tokens` | 64,000 | 8,000–200,000; cumulative across model steps |
-| `compaction_threshold_tokens` | 48,000 | 1,000–200,000; `< max_total_tokens` |
+| `max_total_tokens` | 100,000 | 8,000–200,000; cumulative across model steps |
+| `compaction_threshold_tokens` | 75,000 | 1,000–200,000; `< max_total_tokens` |
 | `max_steps` | 8 | 1–32 |
 | `max_tool_calls_per_turn` | 6 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24; `<= max_tool_calls_per_turn` |
-| `max_tool_result_chars` | 12,000 | 1,000–100,000 |
+| `max_tool_result_chars` | 100,000 | 1,000–200,000 |
 | `max_page_context_chars` | 6,000 | 500–50,000 |
 | `max_compaction_summary_chars` | 6,000 | 1,000–20,000 |
 | `max_compaction_last_user_chars` | 4,000 | 500–10,000 |

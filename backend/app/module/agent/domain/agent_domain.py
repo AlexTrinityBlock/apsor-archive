@@ -69,11 +69,11 @@ MAX_TOOL_CALLS_PER_TURN = 6
 MAX_PARALLEL_TOOLS = 6
 # One turn may use up to 64k provider tokens. Auto compaction triggers before a
 # new user turn once the estimated active context reaches 75% of that budget.
-MAX_TOTAL_TOKENS = 64_000
-COMPACTION_THRESHOLD_TOKENS = 48_000
+MAX_TOTAL_TOKENS = 100_000
+COMPACTION_THRESHOLD_TOKENS = 75_000
 # Tool output stays on its own, smaller budget: every tool result is capped at
 # 12k chars and each turn may emit at most 24k characters across all results.
-MAX_TOOL_RESULT_CHARS = 12_000
+MAX_TOOL_RESULT_CHARS = 100_000
 MAX_COMPACTION_SUMMARY_CHARS = 6_000
 MAX_COMPACTION_LAST_USER_CHARS = 4_000
 AUTO_COMPACTION_ENABLED = True

@@ -195,7 +195,7 @@ async def get_file(
 async def read_file(
     file_id: int,
     chunk: int,
-    chunk_range: int = Query(default=1, ge=0, le=5),
+    chunk_range: int = Query(default=1, ge=0, le=25),
     file_service: FileService = Depends(get_file_service),
 ) -> FileChunksSchema:
     """Read one chunk and its neighbors (the read_file tool)."""
