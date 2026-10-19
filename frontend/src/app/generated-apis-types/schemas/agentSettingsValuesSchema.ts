@@ -19,6 +19,11 @@ export interface AgentSettingsValuesSchema {
      */
   compaction_threshold_tokens: number;
   /**
+     * @minimum 8000
+     * @maximum 2000000
+     */
+  context_window_tokens: number;
+  /**
      * @minimum 500
      * @maximum 10000
      */

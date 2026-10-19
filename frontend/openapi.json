@@ -798,6 +798,12 @@
             "title": "Compaction Threshold Tokens",
             "type": "integer"
           },
+          "context_window_tokens": {
+            "maximum": 2000000.0,
+            "minimum": 8000.0,
+            "title": "Context Window Tokens",
+            "type": "integer"
+          },
           "max_compaction_last_user_chars": {
             "maximum": 10000.0,
             "minimum": 500.0,
@@ -854,6 +860,7 @@
         "required": [
           "max_total_tokens",
           "compaction_threshold_tokens",
+          "context_window_tokens",
           "max_steps",
           "max_tool_calls_per_turn",
           "max_parallel_tools",
@@ -881,6 +888,12 @@
             "title": "Compaction Threshold Tokens",
             "type": "integer"
           },
+          "context_window_tokens": {
+            "maximum": 2000000.0,
+            "minimum": 8000.0,
+            "title": "Context Window Tokens",
+            "type": "integer"
+          },
           "max_compaction_last_user_chars": {
             "maximum": 10000.0,
             "minimum": 500.0,
@@ -937,6 +950,7 @@
         "required": [
           "max_total_tokens",
           "compaction_threshold_tokens",
+          "context_window_tokens",
           "max_steps",
           "max_tool_calls_per_turn",
           "max_parallel_tools",

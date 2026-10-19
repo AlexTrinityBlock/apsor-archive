@@ -191,7 +191,7 @@ Endpoints (all require the session cookie):
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry latest failed/cancelled run |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog + versions |
 | `GET` | `/api/v1/agent/settings` | Effective runtime config + defaults + source |
-| `PUT` | `/api/v1/agent/settings` | Replace all eleven runtime fields |
+| `PUT` | `/api/v1/agent/settings` | Replace all twelve runtime fields |
 | `POST` | `/api/v1/agent/settings/reset` | Persist the built-in defaults |
 | `GET` | `/api/v1/agent/questions?limit=&offset=` | List saved questions newest first |
 | `POST` | `/api/v1/agent/questions` | Save a question (`201`); question only |
@@ -217,7 +217,9 @@ Starlette's GZip middleware excludes `text/event-stream`.
 The runtime defaults cap a turn at 24 model steps, 6 tool calls, 6 parallel
 tools, 100,000 total tokens, and 100,000 characters per tool result. Each result
 is clipped independently with a visible truncation marker; there is no
-turn-wide result budget. All of these come from the immutable
+turn-wide result budget. `context_window_tokens` (default 1,000,000) records
+the provider/model input capacity separately; it is metadata and never triggers
+the turn abort or changes compaction. All of these come from the immutable
 `agent_config` snapshot, not from module constants. The loop uses
 `app.state.db.session_factory()` for appends and a short-lived session for each
 tool call, so the stream does not hold the request session.
@@ -240,13 +242,14 @@ adapters over `AgentSettingsService` with operation ids `getAgentSettings`,
 
 `source` is `default` only when the service had to create or repair the row from
 the built-in defaults; a normal read of the stored row returns `database`.
-`PUT` requires all eleven fields and uses `extra=forbid`, so it is a full
+`PUT` requires all twelve fields and uses `extra=forbid`, so it is a full
 replacement rather than a patch.
 
 | Field | Default | Constraint |
 |---|---|---|
 | `max_total_tokens` | 100,000 | 8,000–200,000; cumulative across model steps |
 | `compaction_threshold_tokens` | 75,000 | 1,000–200,000; `< max_total_tokens` |
+| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model context metadata, not a turn budget |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 6 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24; `<= max_tool_calls_per_turn` |
@@ -259,7 +262,9 @@ replacement rather than a patch.
 
 Pydantic validates the request and `AgentRuntimeConfig` repeats the same
 cross-field checks; PostgreSQL check constraints enforce the ranges and all
-three cross-field rules. The global validation handler maps request validation
+three cross-field rules. There is deliberately no `context_window_tokens` versus
+`max_total_tokens` rule: the context window is provider metadata, while the turn
+budget is the cost guard. The global validation handler maps request validation
 failures to `400 invalid_request`, not 422.
 
 `get_agent_runtime_config` loads one snapshot in a short-lived session and
@@ -589,9 +594,11 @@ and seeds row `id=1` with the defaults. Later migrations in order:
 - `d1e2f3a4b5c6` (after `e2b7c4d9a6f1`) creates the durable `file_ingest_job`
   queue with status/source/range checks, the active-path unique index, and the
   `file` foreign key;
-- `d4b8e6f1a2c7` (after `d1e2f3a4b5c6`, the current head) creates the singleton
-  `ingest_config` table, its range and overlap constraints, and seeds row
-  `id=1`.
+- `d4b8e6f1a2c7` (after `d1e2f3a4b5c6`) creates the singleton `ingest_config`
+  table, its range and overlap constraints, and seeds row `id=1`;
+- `b3e5c7d9f1a2` (after `d4b8e6f1a2c7`, the current head) adds
+  `context_window_tokens` with a 1,000,000 server default and an
+  8,000–2,000,000 check constraint; existing rows receive the default.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
