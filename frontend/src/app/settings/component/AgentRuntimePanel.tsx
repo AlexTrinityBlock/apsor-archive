@@ -45,7 +45,7 @@ export interface AgentRuntimePanelProps {
 export const AGENT_RUNTIME_DEFAULTS: AgentRuntimeValues = {
   max_total_tokens: 100000,
   compaction_threshold_tokens: 75000,
-  max_steps: 8,
+  max_steps: 24,
   max_tool_calls_per_turn: 6,
   max_parallel_tools: 6,
   max_tool_result_chars: 100000,
@@ -103,7 +103,7 @@ const CONTEXT_FIELDS: readonly NumericFieldSpec[] = [
     min: 1,
     max: 32,
     step: 1,
-    hint: "Think-and-act rounds allowed in a single turn.",
+    hint: "Think-and-act rounds allowed in a single turn; 24 is the default, 32 the max."
   },
   {
     key: "max_page_context_chars",

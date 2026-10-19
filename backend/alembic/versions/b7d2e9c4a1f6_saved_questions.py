@@ -1,13 +1,8 @@
 """saved questions Q&A library
 
 Revision ID: b7d2e9c4a1f6
-Revises: e7a1c4b9d2f6
+Revises: c9f1a2b3d4e5
 Create Date: 2026-10-19 18:00:00.000000
-
-This branch starts from ``e7a1c4b9d2f6``. A separate fix branch adds
-``f3c8d5a1b7e2`` before this feature; when main rebases the two branches, this
-migration should be re-parented to ``down_revision = "f3c8d5a1b7e2"``. Do not
-edit the fix branch migration to point at this revision.
 """
 
 from collections.abc import Sequence
@@ -18,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision: str = "b7d2e9c4a1f6"
-down_revision: str | None = "e7a1c4b9d2f6"
+down_revision: str | None = "c9f1a2b3d4e5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

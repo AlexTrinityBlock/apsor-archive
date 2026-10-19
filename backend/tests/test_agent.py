@@ -81,7 +81,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert defaults == {
         "max_total_tokens": 100_000,
         "compaction_threshold_tokens": 75_000,
-        "max_steps": 8,
+        "max_steps": 24,
         "max_tool_calls_per_turn": 6,
         "max_parallel_tools": 6,
         "max_tool_result_chars": 100_000,
@@ -1131,7 +1131,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert asked_first["id"] == saved_first_id
     assert asked_first["question"] == saved_first_question
     assert asked_first["answer"] == saved_answer
-    assert asked_first["citations"] == [f"file:{file_id}#1"]
+    assert asked_first["citations"] == [f"[file:{file_id}#1]"]
     assert asked_first["conversation_id"] is not None
     assert asked_first["run_status"] == "completed"
     assert asked_first["error_code"] is None
@@ -1178,7 +1178,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         item for item in after_ask_library["resources"] if item["id"] == saved_first_id
     )
     assert stored_first["answer"] == saved_answer
-    assert stored_first["citations"] == [f"file:{file_id}#1"]
+    assert stored_first["citations"] == [f"[file:{file_id}#1]"]
 
     edited_saved_first = client.patch(
         f"/api/v1/agent/questions/{saved_first_id}",
@@ -1233,7 +1233,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert asked_saved_third.status_code == 200, asked_saved_third.text
     asked_third = asked_saved_third.json()
     assert asked_third["answer"] == saved_third_answer
-    assert asked_third["citations"] == ["media:7"]
+    assert asked_third["citations"] == ["[media:7]"]
     assert asked_third["conversation_id"] is not None
     doomed_conversation_id = asked_third["conversation_id"]
 
@@ -1263,7 +1263,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert preserved_third["conversation_id"] is None
     assert preserved_third["question"] == saved_third_question
     assert preserved_third["answer"] == saved_third_answer
-    assert preserved_third["citations"] == ["media:7"]
+    assert preserved_third["citations"] == ["[media:7]"]
     assert preserved_library["total"] == 3
 
     missing_question_id = 999_999
