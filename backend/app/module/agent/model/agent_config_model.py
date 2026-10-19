@@ -50,7 +50,7 @@ class AgentConfigModel(Base):
             name="max_parallel_tools_range",
         ),
         CheckConstraint(
-            "max_tool_result_chars BETWEEN 1000 AND 100000",
+            "max_tool_result_chars BETWEEN 1000 AND 200000",
             name="max_tool_result_chars_range",
         ),
         CheckConstraint(

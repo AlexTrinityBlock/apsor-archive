@@ -97,7 +97,7 @@ async def search_knowledge_tool(
 async def read_file_tool(
     file_id: int,
     chunk: int = Query(ge=1),
-    chunk_range: int = Query(default=1, ge=0, le=5),
+    chunk_range: int = Query(default=1, ge=0, le=25),
     file_service: FileService = Depends(get_file_service),
 ) -> PlainTextResponse:
     """Return one chunk window as XML."""

@@ -815,8 +815,8 @@ class FileService:
     ) -> FileChunksSchema:
         if chunk < 1:
             raise InvalidChunkWindowError("chunk must be at least 1.")
-        if chunk_range < 0 or chunk_range > 5:
-            raise InvalidChunkWindowError("chunk_range must be between 0 and 5.")
+        if chunk_range < 0 or chunk_range > 25:
+            raise InvalidChunkWindowError("chunk_range must be between 0 and 25.")
         file = await self.file_repository.get_by_id(file_id)
         if file is None:
             raise FileRecordNotFoundError(file_id)

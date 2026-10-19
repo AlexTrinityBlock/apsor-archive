@@ -60,7 +60,7 @@ class AgentRuntimeConfig:
                 24,
             ),
             ("max_parallel_tools", self.max_parallel_tools, 1, 24),
-            ("max_tool_result_chars", self.max_tool_result_chars, 1_000, 100_000),
+            ("max_tool_result_chars", self.max_tool_result_chars, 1_000, 200_000),
             ("max_page_context_chars", self.max_page_context_chars, 500, 50_000),
             (
                 "max_compaction_summary_chars",

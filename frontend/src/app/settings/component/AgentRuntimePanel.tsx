@@ -43,12 +43,12 @@ export interface AgentRuntimePanelProps {
 
 /** Server-side defaults, exported so the settings page can seed the panel. */
 export const AGENT_RUNTIME_DEFAULTS: AgentRuntimeValues = {
-  max_total_tokens: 64000,
-  compaction_threshold_tokens: 48000,
+  max_total_tokens: 100000,
+  compaction_threshold_tokens: 75000,
   max_steps: 8,
   max_tool_calls_per_turn: 6,
   max_parallel_tools: 6,
-  max_tool_result_chars: 12000,
+  max_tool_result_chars: 100000,
   max_page_context_chars: 6000,
   max_compaction_summary_chars: 6000,
   max_compaction_last_user_chars: 4000,
@@ -84,7 +84,7 @@ const CONTEXT_FIELDS: readonly NumericFieldSpec[] = [
     unit: "tokens",
     min: 8000,
     max: 200000,
-    step: 1000,
+    step: 5000,
     hint: "Ceiling for one agent turn, including tool results.",
   },
   {
@@ -93,7 +93,7 @@ const CONTEXT_FIELDS: readonly NumericFieldSpec[] = [
     unit: "tokens",
     min: 1000,
     max: 200000,
-    step: 1000,
+    step: 5000,
     hint: "Auto compaction starts once the transcript passes this size.",
   },
   {
@@ -140,9 +140,9 @@ const TOOL_FIELDS: readonly NumericFieldSpec[] = [
     label: "Chars per tool result",
     unit: "chars",
     min: 1000,
-    max: 100000,
-    step: 500,
-    hint: "Longer results are trimmed before they reach the model.",
+    max: 200000,
+    step: 5000,
+    hint: "Each result is clipped independently; 100k fits about 25 four-kilochar chunks.",
   },
 ];
 
