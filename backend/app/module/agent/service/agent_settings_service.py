@@ -99,6 +99,7 @@ def _config_from_model(row: AgentConfigModel) -> AgentRuntimeConfig:
         max_compaction_last_user_chars=row.max_compaction_last_user_chars,
         auto_compaction_enabled=row.auto_compaction_enabled,
         parallel_tools_enabled=row.parallel_tools_enabled,
+        save_memory_requires_approval=row.save_memory_requires_approval,
     )
 
 
@@ -120,6 +121,7 @@ def _apply_config(
     row.max_compaction_last_user_chars = config.max_compaction_last_user_chars
     row.auto_compaction_enabled = config.auto_compaction_enabled
     row.parallel_tools_enabled = config.parallel_tools_enabled
+    row.save_memory_requires_approval = config.save_memory_requires_approval
     row.updated_at = now
 
 
@@ -137,6 +139,7 @@ def _values_schema(config: AgentRuntimeConfig) -> AgentSettingsValuesSchema:
         max_compaction_last_user_chars=config.max_compaction_last_user_chars,
         auto_compaction_enabled=config.auto_compaction_enabled,
         parallel_tools_enabled=config.parallel_tools_enabled,
+        save_memory_requires_approval=config.save_memory_requires_approval,
     )
 
 

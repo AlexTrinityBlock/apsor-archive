@@ -261,9 +261,11 @@ and result payload for rendering; it does not surface a separate parallel
 badge. Transcript and tool-result order always follows assistant call order,
 even when eligible calls execute through `asyncio.gather`.
 
-The `save_memory` panel is a wax-seal receipt for an appended memory. It is not
-a human approval dialog: the `user_confirmed=true` flag is still model-supplied
-and prompt-enforced, and the UI does not ask the keeper to approve a write.
+The `save_memory` panel is a wax-seal receipt for an appended memory, not the
+approval control. The **Require manual approval for memory writes** setting in
+Agent runtime defaults to on; when it is off, the `user_confirmed=true` flag
+remains model-supplied and prompt-enforced. The Approve/Reject waiting flow is
+provided by the approval feature, not by this panel.
 
 `AgentDock` and the inspector panels are mounted by `AppShell` on archive pages.
 The production build is committed under `dist/`; rebuild and commit `dist/` (and
@@ -281,8 +283,9 @@ The panel shows a Database/Defaults badge, the last `updated_at`, and a summary
 with model context, turn budget, and compaction side by side. A token budget
 meter shows the compaction threshold as a share of `max_total_tokens` with
 remaining headroom. Every numeric field displays its default and valid range.
-The twelve runtime values are grouped into context budget, tool execution, and
-compaction detail; auto compaction and parallel tools are toggles.
+The thirteen runtime values are grouped into context budget, tool execution, and
+compaction detail; auto compaction, parallel tools, and memory-write approval
+are toggles.
 
 The context budget group labels **Model context window** separately from
 **Turn token budget** and **Auto-compaction threshold**. The context window is
@@ -296,7 +299,14 @@ Save is disabled for an invalid or unchanged draft. The server repeats
 validation and the app maps failures to `400 invalid_request`; the panel shows
 the returned detail inline.
 
-Save sends a full twelve-field `PUT`. **Reset defaults** uses a two-step
+The **Tool execution** group also has **Require manual approval for memory
+writes**, an accessible switch that defaults to on. When on, a `save_memory`
+request waits for the user's Approve/Reject decision; when off, the agent may
+save only after its existing prompt-level confirmation. This panel persists the
+preference and includes it in dirty/reset/save behavior; the waiting and
+approval flow itself is provided by the approval feature.
+
+Save sends a full thirteen-field `PUT`. **Reset defaults** uses a two-step
 confirmation and persists the defaults through `POST .../settings/reset`; it is
 not only a local form reset. The panel implements loading skeletons and an
 inline error with a Retry action. Changes apply to new runs; an active SSE stream

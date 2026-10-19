@@ -191,7 +191,7 @@ Endpoints (all require the session cookie):
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry latest failed/cancelled run |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog + versions |
 | `GET` | `/api/v1/agent/settings` | Effective runtime config + defaults + source |
-| `PUT` | `/api/v1/agent/settings` | Replace all twelve runtime fields |
+| `PUT` | `/api/v1/agent/settings` | Replace all thirteen runtime fields |
 | `POST` | `/api/v1/agent/settings/reset` | Persist the built-in defaults |
 | `GET` | `/api/v1/agent/questions?limit=&offset=` | List saved questions newest first |
 | `POST` | `/api/v1/agent/questions` | Save a question (`201`); question only |
@@ -242,7 +242,7 @@ adapters over `AgentSettingsService` with operation ids `getAgentSettings`,
 
 `source` is `default` only when the service had to create or repair the row from
 the built-in defaults; a normal read of the stored row returns `database`.
-`PUT` requires all twelve fields and uses `extra=forbid`, so it is a full
+`PUT` requires all thirteen fields and uses `extra=forbid`, so it is a full
 replacement rather than a patch.
 
 | Field | Default | Constraint |
@@ -259,6 +259,7 @@ replacement rather than a patch.
 | `max_compaction_last_user_chars` | 4,000 | 500–10,000 |
 | `auto_compaction_enabled` | `true` | boolean |
 | `parallel_tools_enabled` | `true` | boolean |
+| `save_memory_requires_approval` | `true` | boolean; waits for user approval before `save_memory` writes |
 
 Pydantic validates the request and `AgentRuntimeConfig` repeats the same
 cross-field checks; PostgreSQL check constraints enforce the ranges and all
@@ -452,10 +453,12 @@ payload in `model`.
 Tool names: `search_knowledge`, `read_file`, `read_timeline`, `read_path`,
 `read_memory`, `save_memory`, `search_media`, `get_media`, `present_resource`.
 `save_memory` is a write action and requires `user_confirmed=true`; the system
-prompt also requires an explicit user request and confirmed wording. The flag is
-model-supplied, and there is no separate approval dialog in the frontend yet.
-The expanded inspector renders the resulting receipt; it does not approve the
-write.
+prompt also requires an explicit user request and confirmed wording. The
+`save_memory_requires_approval` setting (default `true`) records whether a write
+waits for an in-chat Approve/Reject decision; the waiting and approval flow
+itself belongs to the approval feature. When the setting is off, the agent may
+save after prompt-level confirmation only. The expanded inspector renders the
+resulting receipt; it does not approve the write.
 `present_resource` returns `/viewer/file/{id}?chunk={n}`, `/viewer/media/{id}`,
 or `/viewer/memory/{id}` and does not fetch or open the resource.
 
@@ -596,9 +599,12 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   `file` foreign key;
 - `d4b8e6f1a2c7` (after `d1e2f3a4b5c6`) creates the singleton `ingest_config`
   table, its range and overlap constraints, and seeds row `id=1`;
-- `b3e5c7d9f1a2` (after `d4b8e6f1a2c7`, the current head) adds
-  `context_window_tokens` with a 1,000,000 server default and an
-  8,000–2,000,000 check constraint; existing rows receive the default.
+- `b3e5c7d9f1a2` (after `d4b8e6f1a2c7`) adds `context_window_tokens` with a
+  1,000,000 server default and an 8,000–2,000,000 check constraint; existing
+  rows receive the default;
+- `c8f2a4b6d9e1` (after `b3e5c7d9f1a2`, the current head) adds the non-null
+  `save_memory_requires_approval` boolean with a `true` server default;
+  existing rows receive `true`.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

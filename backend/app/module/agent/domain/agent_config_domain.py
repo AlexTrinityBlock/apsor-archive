@@ -24,6 +24,7 @@ from app.module.agent.domain.agent_domain import (
     MAX_TOOL_RESULT_CHARS,
     MAX_TOTAL_TOKENS,
     PARALLEL_TOOLS_ENABLED,
+    SAVE_MEMORY_REQUIRES_APPROVAL,
 )
 
 
@@ -43,6 +44,7 @@ class AgentRuntimeConfig:
     max_compaction_last_user_chars: int = MAX_COMPACTION_LAST_USER_CHARS
     auto_compaction_enabled: bool = AUTO_COMPACTION_ENABLED
     parallel_tools_enabled: bool = PARALLEL_TOOLS_ENABLED
+    save_memory_requires_approval: bool = SAVE_MEMORY_REQUIRES_APPROVAL
 
     def __post_init__(self) -> None:
         """Reject values the database constraints also reject."""
