@@ -31,6 +31,9 @@ const MemoryPage = lazy(() =>
 const ChatPage = lazy(() =>
   import("./chat/page").then((module) => ({ default: module.ChatPage })),
 );
+const QuestionsPage = lazy(() =>
+  import("./questions/page").then((module) => ({ default: module.QuestionsPage })),
+);
 const AskPage = lazy(() =>
   import("./ask/page").then((module) => ({ default: module.AskPage })),
 );
@@ -71,6 +74,7 @@ export const router = createBrowserRouter([
           { path: "memory/:memoryId", element: <MemoryPage /> },
           { path: "chat", element: <ChatPage /> },
           { path: "chat/:conversationId", element: <ChatPage /> },
+          { path: "questions", element: <QuestionsPage /> },
           { path: "ask", element: <AskPage /> },
           { path: "method", element: <MethodPage /> },
           { path: "settings", element: <SettingsPage /> },

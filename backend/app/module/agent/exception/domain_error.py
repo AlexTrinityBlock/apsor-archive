@@ -58,3 +58,8 @@ class AgentProviderError(AgentError):
 class AgentInvalidEntryError(AgentError):
     def __init__(self, detail: str) -> None:
         super().__init__(detail)
+
+
+class SavedQuestionNotFoundError(AgentError):
+    def __init__(self, question_id: int) -> None:
+        super().__init__(f"Saved question {question_id} was not found.")
