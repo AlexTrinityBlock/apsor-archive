@@ -54,7 +54,7 @@ is deliberately not a mutable chat log:
 - `agent_run` stores one submission's operational state. `agent_commit_seq`
   assigns one sequence value to every entry written in the same transaction.
 - `agent_config` is the singleton runtime-limit row (`id=1`). It stores the
-  twelve validated limits used by the loop; provider/model identity stays in
+  eleven validated limits used by the loop; provider/model identity stays in
   the AI settings table.
 
 Conversation creation appends one frozen `pi.system` entry with ordered prompt
@@ -87,7 +87,7 @@ Endpoints (all require the session cookie):
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry latest failed/cancelled run |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog + versions |
 | `GET` | `/api/v1/agent/settings` | Effective runtime config + defaults + source |
-| `PUT` | `/api/v1/agent/settings` | Replace all twelve runtime fields |
+| `PUT` | `/api/v1/agent/settings` | Replace all eleven runtime fields |
 | `POST` | `/api/v1/agent/settings/reset` | Persist the built-in defaults |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` takes
@@ -106,8 +106,9 @@ entry id arrives at `message_end`, and deltas are never persisted.
 Starlette's GZip middleware excludes `text/event-stream`.
 
 The runtime defaults cap a turn at 8 model steps, 6 tool calls, 6 parallel
-tools, 64,000 total tokens, 12,000 characters per tool result, and 24,000
-tool-result characters overall. All of these come from the immutable
+tools, 64,000 total tokens, and 12,000 characters per tool result. Each result
+is clipped independently with a visible truncation marker; there is no
+turn-wide result budget. All of these come from the immutable
 `agent_config` snapshot, not from module constants. The loop uses
 `app.state.db.session_factory()` for appends and a short-lived session for each
 tool call, so the stream does not hold the request session.
@@ -130,7 +131,7 @@ adapters over `AgentSettingsService` with operation ids `getAgentSettings`,
 
 `source` is `default` only when the service had to create or repair the row from
 the built-in defaults; a normal read of the stored row returns `database`.
-`PUT` requires all twelve fields and uses `extra=forbid`, so it is a full
+`PUT` requires all eleven fields and uses `extra=forbid`, so it is a full
 replacement rather than a patch.
 
 | Field | Default | Constraint |
@@ -140,8 +141,7 @@ replacement rather than a patch.
 | `max_steps` | 8 | 1–32 |
 | `max_tool_calls_per_turn` | 6 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24; `<= max_tool_calls_per_turn` |
-| `max_tool_result_chars` | 12,000 | 1,000–100,000; `<= total` |
-| `max_total_tool_result_chars` | 24,000 | 1,000–200,000 |
+| `max_tool_result_chars` | 12,000 | 1,000–100,000 |
 | `max_page_context_chars` | 6,000 | 500–50,000 |
 | `max_compaction_summary_chars` | 6,000 | 1,000–20,000 |
 | `max_compaction_last_user_chars` | 4,000 | 500–10,000 |

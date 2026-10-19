@@ -17,7 +17,6 @@ from app.module.agent.domain.agent_domain import (
     MAX_TOOL_CALLS_PER_TURN,
     MAX_TOOL_RESULT_CHARS,
     MAX_TOTAL_TOKENS,
-    MAX_TOTAL_TOOL_RESULT_CHARS,
     PARALLEL_TOOLS_ENABLED,
 )
 from app.shared.time import utcnow
@@ -55,10 +54,6 @@ class AgentConfigModel(Base):
             name="max_tool_result_chars_range",
         ),
         CheckConstraint(
-            "max_total_tool_result_chars BETWEEN 1000 AND 200000",
-            name="max_total_tool_result_chars_range",
-        ),
-        CheckConstraint(
             "max_page_context_chars BETWEEN 500 AND 50000",
             name="max_page_context_chars_range",
         ),
@@ -73,10 +68,6 @@ class AgentConfigModel(Base):
         CheckConstraint(
             "compaction_threshold_tokens < max_total_tokens",
             name="compaction_below_total",
-        ),
-        CheckConstraint(
-            "max_tool_result_chars <= max_total_tool_result_chars",
-            name="tool_result_within_total",
         ),
         CheckConstraint(
             "max_parallel_tools <= max_tool_calls_per_turn",
@@ -120,12 +111,6 @@ class AgentConfigModel(Base):
         nullable=False,
         default=MAX_TOOL_RESULT_CHARS,
         server_default=text(str(MAX_TOOL_RESULT_CHARS)),
-    )
-    max_total_tool_result_chars: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=MAX_TOTAL_TOOL_RESULT_CHARS,
-        server_default=text(str(MAX_TOTAL_TOOL_RESULT_CHARS)),
     )
     max_page_context_chars: Mapped[int] = mapped_column(
         Integer,
