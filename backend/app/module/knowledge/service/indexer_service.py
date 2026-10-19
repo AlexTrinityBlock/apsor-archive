@@ -21,12 +21,13 @@ class IndexerService:
     """Persist chunks, n-grams, and optional vectors for any source kind.
 
     Embedding calls run in bounded batches. A shared semaphore caps concurrent
-    provider calls when several jobs use the same worker; the sequential path
-    uses one batch at a time because the surrounding SQLAlchemy session is not
-    concurrency-safe. Transient provider failures get a small bounded retry with
-    exponential backoff. Strict callers (the durable ingestion worker) surface
-    the error after the retry budget; other callers keep the legacy text-only
-    fallback.
+    provider calls when several jobs use the same worker. Provider calls run
+    concurrently up to that limit, while chunk persistence, checkpoints, and
+    progress updates stay serialized on the caller's event loop because the
+    SQLAlchemy session is not concurrency-safe. Transient provider failures get a
+    small bounded retry with exponential backoff. Strict callers (the durable
+    ingestion worker) surface the error after the retry budget; other callers
+    keep the legacy text-only fallback.
     """
 
     def __init__(
@@ -111,34 +112,60 @@ class IndexerService:
         total = len(drafts)
         if total == 0:
             return 0
+
+        batches = [
+            drafts[start : start + self.embedding_batch_size]
+            for start in range(0, total, self.embedding_batch_size)
+        ]
+        tasks = {
+            asyncio.create_task(
+                self._embeddings([draft.content for draft in batch])
+            ): batch
+            for batch in batches
+        }
+        pending = set(tasks)
         processed = 0
-        for start in range(0, total, self.embedding_batch_size):
-            batch = drafts[start : start + self.embedding_batch_size]
-            embeddings = await self._embeddings([draft.content for draft in batch])
-            for draft, embedding in zip(batch, embeddings, strict=True):
-                chunk = ChunkModel(
-                    source_kind=source_kind,
-                    source_id=source_id,
-                    chunk_index=draft.index,
-                    content=draft.content,
-                    char_count=draft.char_count,
-                    token_count=draft.token_count,
-                    embedding=embedding,
-                    embedding_model=(
-                        self.embedder.model_name if embedding is not None else None
-                    ),
-                    is_current=is_current,
+        try:
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
-                await self.chunk_repository.add(chunk)
-                await self.chunk_repository.add_ngrams(
-                    chunk.id,
-                    dict(term_frequencies(draft.content)),
-                )
-            processed += len(batch)
-            if checkpoint is not None:
-                await checkpoint()
-            if progress is not None:
-                await progress(processed, total)
+                for task in done:
+                    batch = tasks[task]
+                    embeddings = task.result()
+                    for draft, embedding in zip(batch, embeddings, strict=True):
+                        chunk = ChunkModel(
+                            source_kind=source_kind,
+                            source_id=source_id,
+                            chunk_index=draft.index,
+                            content=draft.content,
+                            char_count=draft.char_count,
+                            token_count=draft.token_count,
+                            embedding=embedding,
+                            embedding_model=(
+                                self.embedder.model_name
+                                if embedding is not None
+                                else None
+                            ),
+                            is_current=is_current,
+                        )
+                        await self.chunk_repository.add(chunk)
+                        await self.chunk_repository.add_ngrams(
+                            chunk.id,
+                            dict(term_frequencies(draft.content)),
+                        )
+                    processed += len(batch)
+                    if checkpoint is not None:
+                        await checkpoint()
+                    if progress is not None:
+                        await progress(processed, total)
+        except BaseException:
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            raise
         return total
 
     async def index_single(
