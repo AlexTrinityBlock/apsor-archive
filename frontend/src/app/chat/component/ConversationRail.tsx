@@ -15,6 +15,7 @@ import { Loader } from "../../component/Loader";
 import { useToast } from "../../component/Toast";
 import {
   useDeleteAgentConversation,
+  useForkAgentConversation,
   useUpdateAgentConversation,
 } from "../../generated-apis-types/agent/agent";
 import type { AgentConversationSchema } from "../../generated-apis-types/schemas";
@@ -51,7 +52,9 @@ interface RailItemProps {
   readonly editing: boolean;
   readonly title: string;
   readonly busy: boolean;
+  readonly forking: boolean;
   readonly confirmingDelete: boolean;
+  readonly onFork: () => void;
   readonly onTitleChange: (value: string) => void;
   readonly onEdit: () => void;
   readonly onCancelEdit: () => void;
@@ -63,13 +66,54 @@ interface RailItemProps {
   readonly onClose: () => void;
 }
 
+function ForkActionButton({
+  conversation,
+  busy,
+  forking,
+  onFork,
+}: {
+  readonly conversation: AgentConversationSchema;
+  readonly busy: boolean;
+  readonly forking: boolean;
+  readonly onFork: () => void;
+}) {
+  const archived = conversation.status === "archived";
+  return (
+    <button
+      type="button"
+      className="chat-thread-link__action"
+      onClick={onFork}
+      aria-label={
+        archived
+          ? `${conversation.title} is archived and cannot be forked`
+          : `Fork ${conversation.title}`
+      }
+      title={
+        archived
+          ? "Archived threads cannot be forked. Restore the thread first."
+          : "Fork thread"
+      }
+      disabled={busy || forking || archived}
+      aria-busy={forking || undefined}
+    >
+      {forking ? (
+        <Loader size={12} label="Forking thread" />
+      ) : (
+        <Icon name="branch" size={13} />
+      )}
+    </button>
+  );
+}
+
 function RailItem({
   conversation,
   active,
   editing,
   title,
   busy,
+  forking,
   confirmingDelete,
+  onFork,
   onTitleChange,
   onEdit,
   onCancelEdit,
@@ -145,12 +189,26 @@ function RailItem({
                 <span className="chat-thread-link__archived">archived</span>
               </>
             ) : null}
+            {conversation.parent_conversation_id !== null ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="chat-thread-link__fork">
+                  fork of #{conversation.parent_conversation_id}
+                </span>
+              </>
+            ) : null}
           </span>
         </Link>
       )}
 
       {!editing && !confirmingDelete ? (
         <div className="chat-thread-link__actions">
+          <ForkActionButton
+            conversation={conversation}
+            busy={busy}
+            forking={forking}
+            onFork={onFork}
+          />
           <button
             type="button"
             className="chat-thread-link__action"
@@ -228,11 +286,13 @@ export const ConversationRail = memo(function ConversationRail({
   const toast = useToast();
   const updateConversation = useUpdateAgentConversation();
   const deleteConversation = useDeleteAgentConversation();
+  const forkConversation = useForkAgentConversation();
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [forkingId, setForkingId] = useState<number | null>(null);
 
   const active = useMemo(
     () => conversations.filter((conversation) => conversation.status === "active"),
@@ -260,7 +320,7 @@ export const ConversationRail = memo(function ConversationRail({
   };
 
   const saveTitle = async (conversation: AgentConversationSchema) => {
-    if (busyId !== null) {
+    if (busyId !== null || forkingId !== null) {
       return;
     }
     const nextTitle = editTitle.trim();
@@ -285,7 +345,7 @@ export const ConversationRail = memo(function ConversationRail({
   };
 
   const toggleStatus = async (conversation: AgentConversationSchema) => {
-    if (busyId !== null) {
+    if (busyId !== null || forkingId !== null) {
       return;
     }
     const nextStatus =
@@ -312,7 +372,7 @@ export const ConversationRail = memo(function ConversationRail({
   };
 
   const removeConversation = async (conversation: AgentConversationSchema) => {
-    if (busyId !== null) {
+    if (busyId !== null || forkingId !== null) {
       return;
     }
     setBusyId(conversation.id);
@@ -334,6 +394,31 @@ export const ConversationRail = memo(function ConversationRail({
     }
   };
 
+  const forkThread = async (conversation: AgentConversationSchema) => {
+    if (
+      busyId !== null ||
+      forkingId !== null ||
+      conversation.status !== "active"
+    ) {
+      return;
+    }
+    setForkingId(conversation.id);
+    try {
+      const forked = await forkConversation.mutateAsync({
+        conversationId: conversation.id,
+        data: {},
+      });
+      await invalidateConversationList(queryClient);
+      toast.success(`Forked “${conversation.title}”.`);
+      navigate(`/chat/${forked.id}`);
+      onClose();
+    } catch (caught) {
+      toast.error(describeError(caught));
+    } finally {
+      setForkingId(null);
+    }
+  };
+
   const renderItem = (conversation: AgentConversationSchema) => (
     <RailItem
       key={conversation.id}
@@ -341,8 +426,12 @@ export const ConversationRail = memo(function ConversationRail({
       active={conversation.id === activeId}
       editing={editingId === conversation.id}
       title={editTitle}
-      busy={busyId === conversation.id}
+      busy={busyId === conversation.id || forkingId === conversation.id}
+      forking={forkingId === conversation.id}
       confirmingDelete={pendingDeleteId === conversation.id}
+      onFork={() => {
+        void forkThread(conversation);
+      }}
       onTitleChange={setEditTitle}
       onEdit={() => startRename(conversation)}
       onCancelEdit={() => setEditingId(null)}
@@ -409,6 +498,9 @@ export const ConversationRail = memo(function ConversationRail({
               <span className="chat-rail__archived-count">{archived.length}</span>
               <Icon name="chevron-down" size={13} />
             </summary>
+            <p className="chat-rail__archived-note">
+              Restore a thread to fork it or write another note.
+            </p>
             <ul className="chat-rail__list">{archived.map(renderItem)}</ul>
           </details>
         ) : null}

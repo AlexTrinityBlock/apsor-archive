@@ -191,6 +191,7 @@ Endpoints (all require the session cookie):
 | `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | Soft delete |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/compact` | Append a manual compaction boundary |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | Append a reset boundary |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/fork` | Copy entries through an inclusive cutoff |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | Append user entry + run |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry latest failed/cancelled run |
 | `GET` | `/api/v1/agent/conversations/{conversation_id}/approvals?status=` | Durable approvals, oldest first (default `pending`) |
@@ -210,6 +211,20 @@ Endpoints (all require the session cookie):
 `{content, request_id?, page_context?}`; `POST .../retry` takes
 `{request_id?}`. Retry creates a new run for the same user entry, so it never
 duplicates the user message. The latest run must be `failed` or `cancelled`.
+
+`POST .../fork` accepts an optional `{at_entry_id?, title?}` body and returns
+`201 AgentConversationSchema`. `at_entry_id` is an inclusive cutoff that must
+belong to the source conversation and defaults to its latest entry. The fork is
+active, has a new `provider_session_id`, records `parent_conversation_id` and
+`fork_at_entry_id`, and copies entries through the cutoff in order with new ids
+and `commit_seq` values. Copied entries keep their kind/model/data and original
+timestamps, get `by_run_id=null`, and have `head_entry_id`/`edits` remapped to
+copied ids (out-of-range references are dropped). Runs and approval state are
+not copied, and the source transcript is untouched. The default title is
+`Fork of {source.title}` clipped to 200 characters. Errors are
+`404 agent_conversation_not_found`, `409 agent_conversation_archived`,
+`409 agent_conversation_busy`, and `400 agent_fork_entry_invalid` for a cutoff
+outside the source.
 
 Messages and retry stream `text/event-stream` by default; send
 `Accept: application/json` for the completed turn. Event names are `run_start`,
@@ -729,18 +744,20 @@ The agent test injects a deterministic `FakeChatGenerator` by assigning
 It also covers runtime settings defaults, full PUT and reset, validation
 failures (`400 invalid_request`), runtime snapshot handling for later runs, auto
 and manual compaction, clear, the page-context boundary and same-page
-reattachment, retry, parallel versus sequential tool execution, human
-save-memory approval, the approval toggle, and the saved-question library.
-Approval coverage asserts that the default `true` path creates a waiting run and
-pending row with no memory write before approval, model `user_confirmed=true`
-does not bypass it, a valid waiting run survives a fresh app lifespan, approve
-writes exactly once and appends the result, duplicate approve/reject returns
-`409`, reject writes nothing, an orphaned waiting run fails closed on restart,
-and an archived conversation fails closed. Toggle coverage asserts that
-`false` skips the waiting run and approval row, saves memory directly with
-backend authorization even when the model sends `user_confirmed=false`,
-completes the run, and that changing the setting never resolves an existing
-pending row. Saved-question coverage includes
+reattachment, retry, forking at the latest and at a specific entry (parent
+fields, new provider session id, entry isolation, head/edit remapping, source
+immutability, archived/busy/cutoff validation), parallel versus sequential tool
+execution, human save-memory approval, the approval toggle, and the
+saved-question library. Approval coverage asserts that the default `true` path
+creates a waiting run and pending row with no memory write before approval,
+model `user_confirmed=true` does not bypass it, a valid waiting run survives a
+fresh app lifespan, approve writes exactly once and appends the result,
+duplicate approve/reject returns `409`, reject writes nothing, an orphaned
+waiting run fails closed on restart, and an archived conversation fails closed.
+Toggle coverage asserts that `false` skips the waiting run and approval row,
+saves memory directly with backend authorization even when the model sends
+`user_confirmed=false`, completes the run, and that changing the setting never
+resolves an existing pending row. Saved-question coverage includes
 create/list/pagination, ask success, a failed ask that keeps the row with
 `run_status="failed"` and error detail, edit resetting the answer and
 conversation link, delete, not-found errors, and the `conversation_id`

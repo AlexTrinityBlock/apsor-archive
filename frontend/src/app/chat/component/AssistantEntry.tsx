@@ -19,6 +19,7 @@ import { finishReasonTone } from "./status";
 interface AssistantEntryProps {
   readonly entry: AgentEntrySchema;
   readonly toolResults: ReadonlyMap<string, ToolResultInfo>;
+  readonly action?: ReactNode;
 }
 
 function usageRows(
@@ -35,7 +36,11 @@ function usageRows(
 }
 
 /** An archive sheet: Markdown prose, tool steps, citations, and usage. */
-export function AssistantEntry({ entry, toolResults }: AssistantEntryProps) {
+export function AssistantEntry({
+  entry,
+  toolResults,
+  action,
+}: AssistantEntryProps) {
   const meta = readAssistantMeta(entry);
   const text = assistantText(entry);
   const calls = readToolCalls(entry);
@@ -83,9 +88,12 @@ export function AssistantEntry({ entry, toolResults }: AssistantEntryProps) {
               .join(" · ")}
           </p>
         </div>
-        <Badge tone={finishReasonTone(meta.finishReason)}>
-          {meta.finishReason ?? "recorded"}
-        </Badge>
+        <div className="chat-sheet__head-actions">
+          <Badge tone={finishReasonTone(meta.finishReason)}>
+            {meta.finishReason ?? "recorded"}
+          </Badge>
+          {action}
+        </div>
       </header>
 
       {body}

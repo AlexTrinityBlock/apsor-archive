@@ -64,6 +64,7 @@ from app.module.agent.schema.agent_schema import (
     AgentApprovalSchema,
     AgentConversationCreateSchema,
     AgentConversationDetailSchema,
+    AgentConversationForkSchema,
     AgentConversationPatchSchema,
     AgentConversationSchema,
     AgentEntryPageSchema,
@@ -171,6 +172,31 @@ class AgentService:
             now=now,
         )
         return _conversation_schema(conversation)
+
+    async def fork_conversation(
+        self,
+        conversation_id: int,
+        payload: AgentConversationForkSchema,
+    ) -> AgentConversationSchema:
+        """Copy a transcript through an inclusive entry cutoff.
+
+        The new conversation is active, gets a fresh provider session id, and
+        owns independent entry rows. Runs and approval state are not copied;
+        the next user message starts a new run against the copied context.
+        """
+        source = await self.repository.get_conversation(conversation_id)
+        if source is None:
+            raise AgentConversationNotFoundError(conversation_id)
+        title = (payload.title or "").strip() or f"Fork of {source.title}"
+        title = title[:200]
+        forked = await self.repository.fork_conversation(
+            source_id=conversation_id,
+            at_entry_id=payload.at_entry_id,
+            title=title,
+            provider_session_id=uuid4(),
+            now=utcnow(),
+        )
+        return _conversation_schema(forked)
 
     async def list_conversations(
         self,
