@@ -47,7 +47,7 @@ export interface AgentSettingsUpdateSchema {
   max_tool_calls_per_turn: number;
   /**
      * @minimum 1000
-     * @maximum 100000
+     * @maximum 200000
      */
   max_tool_result_chars: number;
   /**

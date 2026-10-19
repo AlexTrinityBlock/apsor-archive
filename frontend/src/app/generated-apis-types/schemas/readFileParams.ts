@@ -8,7 +8,7 @@
 export type ReadFileParams = {
 /**
  * @minimum 0
- * @maximum 5
+ * @maximum 25
  */
 chunk_range?: number;
 };
