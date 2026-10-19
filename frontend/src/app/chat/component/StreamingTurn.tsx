@@ -70,7 +70,9 @@ export const StreamingTurn = memo(function StreamingTurn({
 
   return (
     <div className="chat-stream-turn" aria-busy={stream.status === "running"}>
-      <UserMarginalia text={stream.userContent} pending />
+      {stream.userContent.length > 0 ? (
+        <UserMarginalia text={stream.userContent} pending />
+      ) : null}
       <article className="chat-sheet chat-sheet--live">
         <header className="chat-sheet__head">
           <div className="chat-sheet__heading">

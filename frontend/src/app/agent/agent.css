@@ -1,4 +1,5 @@
 @import "../viewer/viewer.css";
+@import "../chat/chat.css";
 
 /* ==========================================================================
    Agent dock: the floating keeper seal, docked correspondence panel, and the
@@ -118,6 +119,14 @@
 .pi-agent-controls {
   display: flex;
   min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.pi-agent-controls__row {
+  display: flex;
+  min-width: 0;
   align-items: center;
   gap: 6px;
 }
@@ -146,6 +155,26 @@
 
 .pi-agent-controls__desk {
   white-space: nowrap;
+}
+
+.pi-agent-controls .context-actions {
+  justify-content: flex-end;
+}
+
+.pi-agent-controls .context-actions .btn {
+  color: var(--muted);
+}
+
+.pi-agent-controls .context-actions .btn:hover:not(:disabled) {
+  color: var(--ink-strong);
+}
+
+.pi-agent-controls .context-actions__confirm {
+  margin-left: auto;
+}
+
+.pi-agent-controls .context-actions__error {
+  text-align: left;
 }
 
 .pi-agent-desk-link {
@@ -3137,4 +3166,106 @@
 .pi-trace__summary::-webkit-details-marker,
 .pi-inspector__args summary::-webkit-details-marker {
   display: none;
+}
+
+/* Retry notice ------------------------------------------------------------ */
+
+.chat-retry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background:
+    linear-gradient(100deg, var(--ochre-wash), transparent 64%),
+    var(--surface);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--ochre);
+  border-radius: var(--radius-xs);
+}
+
+.chat-retry__mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  color: var(--ochre-ink);
+  background: var(--ochre-wash);
+  border: 1px solid color-mix(in srgb, var(--ochre) 28%, transparent);
+  border-radius: 50%;
+}
+
+.chat-retry__copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-retry__copy .eyebrow {
+  color: var(--ochre-ink);
+}
+
+.chat-retry__copy strong {
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.chat-retry__body {
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.chat-retry__detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.chat-retry__detail span {
+  min-width: 0;
+  color: var(--body);
+  overflow-wrap: anywhere;
+  font-size: 10px;
+}
+
+.chat-retry__note {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  line-height: 1.5;
+}
+
+.chat-retry__action {
+  flex: none;
+  margin-top: 2px;
+}
+
+.pi-agent-panel .chat-retry,
+.pi-agent-workspace .chat-retry {
+  margin: 10px 0 4px;
+}
+
+.pi-agent-panel .chat-retry {
+  flex-wrap: wrap;
+}
+
+.pi-agent-panel .chat-retry__action {
+  margin-left: 40px;
+}
+
+@media (max-width: 520px) {
+  .chat-retry {
+    flex-wrap: wrap;
+  }
+
+  .chat-retry__action {
+    margin-left: 40px;
+  }
 }

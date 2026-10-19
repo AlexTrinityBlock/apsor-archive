@@ -33,8 +33,9 @@ path, sample a season, press a new memory, or trace a superseded one. Every
 result carries its source, chunk number, and time.
 
 > Status: v0.1.0 — file/memory/media archive, owner login, persistent
-> Pi-shaped agent, SSE chat, dedicated PDF/DOCX/image/text viewers, a folder
-> workspace, and a three-state agent dock.
+> Pi-shaped agent with database-backed runtime limits, compaction, parallel
+> tools, SSE chat, dedicated PDF/DOCX/image/text viewers, a folder workspace,
+> and a three-state agent dock.
 
 ## Highlights
 
@@ -50,6 +51,12 @@ result carries its source, chunk number, and time.
 - **Page context respects the cache.** A plain-text snapshot of the current page
   is appended only when the page key changes, in the same commit as the user
   message, so earlier entries and the KV-cache prefix stay untouched.
+- **Agent limits are database-backed.** The turn budget, compaction threshold,
+  step and tool caps, parallel width, and result budgets live in one validated
+  `agent_config` row and apply to new runs without a restart.
+- **Long threads can be folded or cleared.** Compaction writes a summary
+  boundary; clear starts an empty active context. The full transcript remains
+  readable in both cases.
 - **Memories are linear and traceable.** A new belief can supersede an old one.
   The old memory leaves the search surface but stays readable through its chain.
 - **Search is hybrid.** BM25 over CJK bigrams and Latin tokens runs beside vector
@@ -137,7 +144,7 @@ rewrite existing vectors; `reindex_required` warns you. Run **Re-embed library**
 (or `POST /api/v1/settings/ai/embedding/reindex`) to refresh current chunks.
 Vector search skips chunks whose dimension does not match the current embedder.
 
-Settings API:
+AI settings API:
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -146,6 +153,53 @@ Settings API:
 | `POST` | `/api/v1/settings/ai/{purpose}/test` | One small provider request + latency |
 | `DELETE` | `/api/v1/settings/ai/{purpose}/key` | Remove the stored key |
 | `POST` | `/api/v1/settings/ai/embedding/reindex` | Re-embed every current chunk with the active provider |
+
+### Agent runtime settings
+
+The **Agent runtime** panel on `/settings` edits the singleton `agent_config`
+row (`id=1`). Provider and model selection stay in the AI settings above, so
+there is still one source of truth for which model answers. All twelve runtime
+values are stored in PostgreSQL and apply to new runs without a restart.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/agent/settings` | Effective config, defaults, source, `updated_at` |
+| `PUT` | `/api/v1/agent/settings` | Full replacement; all twelve fields are required |
+| `POST` | `/api/v1/agent/settings/reset` | Persist and return the built-in defaults |
+
+The generated operations are `getAgentSettings`, `updateAgentSettings`, and
+`resetAgentSettings`.
+
+The read shape is `{config, defaults, source, updated_at}`, where `source` is
+`database` for a stored row or `default` when the API had to create or repair the
+row from defaults. `PUT` requires a complete snapshot: omitted fields and extra
+fields are rejected.
+
+| Field | Default | Range |
+|---|---|---|
+| `max_total_tokens` | 64,000 | 8,000–200,000 |
+| `compaction_threshold_tokens` | 48,000 (~75%) | 1,000–200,000 |
+| `max_steps` | 8 | 1–32 |
+| `max_tool_calls_per_turn` | 6 | 1–24 |
+| `max_parallel_tools` | 6 | 1–24 |
+| `max_tool_result_chars` | 12,000 | 1,000–100,000 |
+| `max_total_tool_result_chars` | 24,000 | 1,000–200,000 |
+| `max_page_context_chars` | 6,000 | 500–50,000 |
+| `max_compaction_summary_chars` | 6,000 | 1,000–20,000 |
+| `max_compaction_last_user_chars` | 4,000 | 500–10,000 |
+| `auto_compaction_enabled` | `true` | boolean |
+| `parallel_tools_enabled` | `true` | boolean |
+
+Pydantic and matching PostgreSQL check constraints enforce the ranges and three
+cross-field rules: the compaction threshold must be lower than the total token
+budget, per-tool result characters must not exceed the total result budget, and
+the parallel width must not exceed tool calls per turn. The app's global
+validation envelope maps request validation failures to `400 invalid_request`
+rather than 422.
+
+A request loads one immutable runtime snapshot in a short-lived database session.
+An active SSE run keeps the snapshot it started with; later runs use changed
+settings. The backend contract is described in `backend/README.md`.
 
 ### Local development
 
@@ -288,6 +342,8 @@ immutable entry log instead of mutating a chat array:
 - `agent_run` — durable state for one submission (`request_id`, status, abort,
   last entry, safe error). `agent_commit_seq` groups entries written in one
   transaction.
+- `agent_config` — the singleton runtime configuration (`id=1`) holding the
+  validated token, step, tool, page-context, and compaction limits.
 
 The first entry is a frozen `pi.system` prompt and tool snapshot. The context
 builder replays entries deterministically: it honors `head_entry_id` and `edits`,
@@ -304,6 +360,8 @@ failure never becomes an HTTP 500.
 | `GET` | `/api/v1/agent/conversations/{conversation_id}/entries?after_id=&limit=` | Ascending entry page |
 | `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | Rename, archive, or restore |
 | `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | Soft delete; entries stay for audit |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/compact` | Append a manual compaction boundary |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | Append a reset boundary; transcript is preserved |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | Append a user entry and run the loop |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry the latest failed/cancelled run |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog plus prompt/tools versions |
@@ -314,23 +372,67 @@ failure never becomes an HTTP 500.
 `run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
 `tool_end`, `run_end`, and `error`. `run_start` reports
 `page_context_entry_id` (or `null`) and `page_context_attached` so the client can
-mark whether a new snapshot was written. `tool_end` carries the persisted
-tool-result `data` payload plus `duration_ms` and `error_code`, so the inspector
-can render previews before the transcript refetch settles. `message_start` has
-`entry_id=null` because the assistant entry is persisted only at `message_end`;
-deltas are transport-only. Send `Accept: application/json` for the completed turn
-instead. SSE responses set `Cache-Control: no-cache, no-transform` and
-`X-Accel-Buffering: no`, and Starlette's GZip middleware excludes
-`text/event-stream`.
+mark whether a new snapshot was written. `tool_start` and `tool_end` also carry
+`parallel`, `batch_size`, and `parallel_index` for the assistant call batch.
+`tool_end` carries the persisted tool-result `data` payload plus `duration_ms`
+and `error_code`, so the inspector can render previews before the transcript
+refetch settles. `message_start` has `entry_id=null` because the assistant entry
+is persisted only at `message_end`; deltas are transport-only. Send
+`Accept: application/json` for the completed turn instead. SSE responses set
+`Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, and
+Starlette's GZip middleware excludes `text/event-stream`.
 
-The agent allows one active run per conversation, at most 8 model steps, 6 tool
-calls per user turn, 24k tokens, and 12k result characters per tool (24k total).
+Each conversation allows one active run at a time. The defaults allow 8 model
+steps, 6 tool calls per user turn, 6 parallel tools, 64,000 total tokens per turn
+(cumulative across model steps), 12,000 result characters per tool, and 24,000
+result characters per turn.
+These are runtime settings, not code constants; see **Agent runtime settings**
+above. Eligible tool calls start together and execute through `asyncio.gather`
+when parallel tools are enabled. Result persistence and `tool_end` order follow
+assistant call order, not completion order. When parallel tools are disabled,
+execution is sequential and the events report `parallel=false`.
+
 A failed or cancelled run can be retried without duplicating the user entry. The
-backend retry endpoint is tested; the chat UI does not yet render a Retry action.
+chat desk and the docked agent expose a Retry action when the latest entry is a
+failed/cancelled assistant answer, a trailing hard-limit tool result
+(`step_limit`, `token_limit`, `tool_call_limit`, or
+`tool_result_budget_exhausted`), or the last stream failed before an assistant
+entry was recorded. Retry starts a new run for the same user entry; the UI does
+not append a second message and disables the action while a stream is active. A
+retry can hit the same context or token budget again if the transcript is still
+too long. The endpoint returns `409 agent_run_not_retryable` when the latest run
+is completed or otherwise not failed/cancelled; the UI refetches the transcript
+after that error so a stale Retry action disappears.
+
 Conversation detail returns the first entry page, and the UI loads later pages
 with **Load more entries**. It also returns `last_page_context_key`, read from the
 entry log rather than from browser storage, so a reloaded conversation still
 knows which page snapshot was attached last.
+
+#### Compaction and clearing
+
+When `auto_compaction_enabled` is true and the estimated active context exceeds
+`compaction_threshold_tokens` before a new user turn, the turn first appends a
+`pi.compaction` entry:
+
+- The entry sets `head_entry_id` to its own id, so older entries stay immutable
+  but fall outside the new active context.
+- Its provider message starts with `<compaction>` and carries
+  `<last_user_input>` (the last user input before compaction) and `<summary>`.
+- The same transaction writes compaction → page context (when the page is
+  reattached) → user, so the model sees the summary before the new request.
+
+This starts a new KV-cache lineage. The system prompt and tool snapshot stay
+frozen, and the old transcript remains readable in `/chat` and the dock.
+
+`POST .../compact` appends the same boundary manually from the current active
+context. `POST .../clear` appends `pi.reset` with a self `head_entry_id` and no
+provider message; the transcript is preserved but the next turn starts from an
+empty active context. Their operation ids are `compactAgentConversation` and
+`clearAgentConversation`. Both endpoints return `409 agent_conversation_busy`
+while a run is active and reject archived conversations with
+`409 agent_conversation_archived`. Transcript cards label the boundary and
+state that older rows remain preserved but hidden from the active context.
 
 #### Page context and the KV cache
 
@@ -351,14 +453,19 @@ The system prompt marks that envelope as data, never as an instruction.
 
 Page context is append-only and cache-preserving:
 
-- `begin_message` compares the incoming key with the newest existing
-  `pi.page-context` entry in the same conversation.
+- `begin_message` compares the incoming key with the newest
+  `pi.page-context` entry at or after the newest context boundary (compaction or
+  reset). Dedupe and `last_page_context_key` are scoped to that active segment.
 - Only a different key appends a new snapshot. Asking again from the same page
   does not repeat it.
+- A compaction or clear boundary hides earlier snapshots, so the same page can
+  be reattached after the boundary.
 - The snapshot entry and the user entry share one `commit_seq`; the snapshot is
-  ordered immediately before the user entry.
+  ordered immediately before the user entry, after an auto-compaction entry
+  when both are written for the same turn.
 - Earlier entries are never rewritten, so the stable system/tool prefix and the
-  previous conversation prefix remain a valid KV-cache lineage.
+  previous conversation prefix remain a valid KV-cache lineage. A compaction or
+  reset boundary deliberately starts a new lineage.
 
 The composer shows an expandable **Current page context** preview, and the
 transcript renders the snapshot as a compact context card rather than as a user
@@ -372,6 +479,16 @@ Tests inject a deterministic `FakeChatGenerator` from
 `app.state.agent_chat_generator` or overriding `get_agent_chat_generator`; no
 DeepSeek call is made.
 
+#### Known limitations
+
+- Retry starts a fresh run with the same runtime snapshot policy but does not
+  increase any budget. A transcript that already exhausted the token or tool
+  result budget can reach the same limit again.
+- `save_memory` is still prompt-enforced. The `user_confirmed=true` flag is
+  supplied by the model; there is no separate human approval dialog.
+- `agent_run.waiting` remains reserved for a future resume/approval flow; the
+  current loop emits only running, completed, failed, and cancelled.
+
 ### Chat reading room
 
 `/chat` and `/chat/:conversationId` are the persistent reading room for the
@@ -381,6 +498,22 @@ entries as keeper marginalia, archive sheets, field-note tool results, and
 structured resource cards. The composer streams over SSE, supports
 Cmd/Ctrl+Enter and a stop action, and refreshes the thread list plus the active
 transcript when the run settles (other conversations are not refetched).
+
+The thread card shows **Retry** for the latest failed/cancelled assistant, a
+trailing hard-limit tool result (`step_limit`, `token_limit`,
+`tool_call_limit`, or `tool_result_budget_exhausted`), or a stream failure
+before an assistant entry. Retry calls the existing retry endpoint, reuses the
+same user entry, does not append a duplicate message, and is disabled while a
+stream is active. A `409 agent_run_not_retryable` response triggers a transcript
+refetch so the stale action disappears; a retry may hit the same budget again.
+
+The same desk exposes **Compact** and **Clear** for the active context. Compact
+is immediate; Clear asks for one inline confirmation. Both are disabled while a
+stream runs and on archived threads. A `409 agent_conversation_busy` response
+shows the stable error message and refetches the thread. The following
+compaction/reset boundary renders as a context card instead of a user message,
+and the card states that older transcript rows are preserved but hidden from the
+model's active context.
 
 The UI uses the generated Orval hooks for conversation metadata and lifecycle,
 and a small `agent-stream.ts` client for `text/event-stream` because generated
@@ -410,6 +543,10 @@ panel opens the same conversation in the split desk instead of starting a new
 thread; `/chat` remains the full-page reading room. On mobile the collapsed
 state opens a full-height sheet, and the layout must not introduce horizontal
 overflow.
+
+The dock uses the same retry decision and `RetryBar` as `/chat`, so a failed or
+hard-limited latest turn can be retried from either surface without appending a
+second user entry. Compact and clear controls live on the full `/chat` desk.
 
 Status bubbles describe observable work, not hidden chain-of-thought:
 orienting, searching, reading, comparing, composing, saving, sealed, and error.
@@ -538,9 +675,10 @@ make api-check
 
 It re-exports the schema, regenerates the client, and fails on any diff. This
 keeps the convenience of a committed client without letting it drift silently.
-The committed client includes the folder, move, and copy operations and the
-page-context request, detail, and entry-kind contracts; the library board calls
-the generated hooks directly.
+The committed client includes the folder, move, and copy operations, the
+page-context request/detail/entry-kind contracts, agent runtime settings, and
+conversation compact/clear operations; the library board, settings panel, and
+chat desk call the generated hooks directly.
 
 ### Load a real corpus
 
@@ -665,6 +803,8 @@ memory_summary ───┘
   transcript scope, immutable entry log, and per-submission run state.
   `agent_commit_seq` groups entries written in one transaction. Page snapshots
   are `pi.page-context` entries in the same log, not a separate table.
+- `agent_config`: one row (`id=1`) with the validated runtime limits used by the
+  agent loop and the settings API.
 
 The complete local design notes live under `docs/plan/` (gitignored). The
 committed code, comments, UI copy, and documentation are English.
@@ -691,16 +831,17 @@ bun audit
 The integration suite uses one real PostgreSQL test database
 (`dendromatrix_test`) on the same instance, runs sequentially, and resets every
 table between tests. There are exactly ten tests; each one exercises the real
-HTTP surface and database. Page-context deduplication and ordering extend the
-existing agent test, and folder creation plus move/copy coverage extend the
-existing file-library test. Neither adds an eleventh test function.
+HTTP surface and database. The agent test covers runtime settings defaults,
+full PUT/reset, validation, the runtime snapshot used by later runs, auto and
+manual compaction, clear, page-context reattachment at a boundary, retry, and
+parallel/sequential tool execution. Page-context deduplication and ordering, and
+folder creation plus move/copy coverage, extend existing tests rather than
+adding new functions.
 
-Current validation: `ruff`, `mypy`, `bandit`, `pip-audit`, and the ten
-sequential tests pass. Migration `c4f1a9e2b7d3` upgrades and downgrades on the
-real development database. Frontend typecheck, lint, build, and audit pass.
-Playwright passed 34 deterministic checks plus a 6-check focused re-check,
-including the `save_memory` receipt panel. A clean Docker Compose smoke passed
-once.
+The latest migration is `e7a1c4b9d2f6`, after `c4f1a9e2b7d3`. It creates the
+singleton `agent_config` table and seeds row `1`. The integration suite builds
+tables from SQLAlchemy metadata, so migration upgrade/downgrade is validated
+separately against the development database.
 
 ## Project layout
 
@@ -719,7 +860,7 @@ backend/
       schema/                   Pydantic contracts
       exception/                stable error codes
     module/media/               standalone image archive and visual retrieval
-    module/agent/               persistent transcript, page context, tools, SSE
+    module/agent/               transcript, runtime settings, compaction, tools, SSE
   alembic/                      migrations
   tests/                        ten integration tests
 frontend/
@@ -727,7 +868,8 @@ frontend/
     component/                  shared archive UI
     generated-apis-types/       committed Orval client
     agent/                      global dock, page capture, inspector panels
-    chat/                       persistent reading room
+    chat/                       reading room, retry, context actions
+    settings/                   provider and agent runtime panels
     viewer/                     file, media, and memory viewers
     library/                    folder workspace board and list
     home/ search/ timeline/ tree/ media/ memory/ ask/ ...

@@ -93,8 +93,9 @@ export function MethodDisclosure({
           </div>
         </dl>
         <p className="chat-method__note">
-          System, reset, and compaction entries are hidden from this reading
-          view. The frozen prompt and tool snapshot remain in the transcript.
+          System entries are hidden from this reading view. Compaction and reset
+          boundaries appear as cards in the transcript. The frozen prompt and
+          tool snapshot remain in the transcript.
         </p>
         {toolBody}
         <Link className="chat-method__link" to="/method">

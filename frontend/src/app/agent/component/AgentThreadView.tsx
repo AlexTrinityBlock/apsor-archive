@@ -6,8 +6,10 @@ import type {
   AgentEntrySchema,
 } from "../../generated-apis-types/schemas";
 import { ChatThread } from "../../chat/component/ChatThread";
+import { RetryBar } from "../../chat/component/RetryBar";
 import { StreamingTurn } from "../../chat/component/StreamingTurn";
 import type { ChatStreamView } from "../../chat/hook/useChatStream";
+import type { RetryState } from "../../chat/types";
 
 interface AgentThreadViewProps {
   readonly conversationId: number | null;
@@ -21,6 +23,9 @@ interface AgentThreadViewProps {
   readonly loadingMore?: boolean;
   readonly loadMoreError?: string | null;
   readonly onLoadMore?: () => void;
+  readonly retryState?: RetryState;
+  readonly retryDisabled?: boolean;
+  readonly onRetryRun?: () => void;
 }
 
 function describeError(error: unknown): string {
@@ -64,6 +69,9 @@ export function AgentThreadView({
   loadingMore = false,
   loadMoreError = null,
   onLoadMore,
+  retryState,
+  retryDisabled = false,
+  onRetryRun,
 }: AgentThreadViewProps) {
   if (conversationId === null) {
     return <AgentIntro />;
@@ -95,6 +103,13 @@ export function AgentThreadView({
     <>
       <ChatThread entries={entries ?? conversation.entries} conversation={conversation} />
       {stream ? <StreamingTurn stream={stream} /> : null}
+      {retryState?.retryable && onRetryRun ? (
+        <RetryBar
+          state={retryState}
+          disabled={retryDisabled}
+          onRetry={onRetryRun}
+        />
+      ) : null}
       {hasMoreEntries && onLoadMore ? (
         <div className="pi-agent-more">
           <Button

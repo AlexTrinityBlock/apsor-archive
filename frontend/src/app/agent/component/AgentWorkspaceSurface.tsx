@@ -37,8 +37,12 @@ export function AgentWorkspaceSurface(props: AgentDockSurfaceProps) {
     loadingMore,
     hasMoreEntries,
     onLoadMore,
+    retryState,
+    retryDisabled,
+    onRetryRun,
     onDismissError,
     onDraftChange,
+    onContextApplied,
     onFollow,
     onMode,
     onNewThread,
@@ -129,8 +133,12 @@ export function AgentWorkspaceSurface(props: AgentDockSurfaceProps) {
           conversations={conversations}
           selectedId={selectedId}
           loading={listLoading}
+          streaming={streaming}
+          archived={archived}
+          disabled={disabled || conversationLoading}
           onSelect={onSelectThread}
           onNew={onNewThread}
+          onContextApplied={onContextApplied}
         />
         <span className="pi-agent-workspace__context">
           page context only moves when the page changes
@@ -164,6 +172,9 @@ export function AgentWorkspaceSurface(props: AgentDockSurfaceProps) {
               loadingMore={loadingMore}
               loadMoreError={loadMoreError}
               onLoadMore={onLoadMore}
+              retryState={retryState}
+              retryDisabled={retryDisabled}
+              onRetryRun={onRetryRun}
             />
             <div ref={endRef} className="pi-agent-end" />
           </div>
