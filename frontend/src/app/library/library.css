@@ -1874,6 +1874,220 @@ button.library-card__name:hover {
 }
 
 /* --------------------------------------------------------------------------
+   Ingestion progress: shared by the intake dialog and the upload tray
+   -------------------------------------------------------------------------- */
+
+.ingest-progress {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ingest-progress__head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 3px 10px;
+}
+
+.ingest-progress__stage {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.ingest-progress__percent {
+  flex: none;
+  color: var(--moss);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.03em;
+}
+
+.ingest-progress__track {
+  position: relative;
+  height: 5px;
+  overflow: hidden;
+  background: var(--surface-inset);
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+}
+
+.ingest-progress__fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--moss), var(--ochre));
+  border-radius: inherit;
+  transition: width 320ms var(--ease-soft);
+}
+
+.ingest-progress.is-indeterminate .ingest-progress__fill {
+  width: 38%;
+  animation: ingest-progress-slide 1.5s var(--ease-soft) infinite;
+}
+
+.ingest-progress__count {
+  overflow-wrap: anywhere;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.ingest-progress--large {
+  gap: 7px;
+}
+
+.ingest-progress--large .ingest-progress__stage {
+  color: var(--ink);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+}
+
+.ingest-progress--large .ingest-progress__percent {
+  color: var(--moss-deep);
+  font-size: 10px;
+}
+
+.ingest-progress--large .ingest-progress__track {
+  height: 9px;
+}
+
+.ingest-progress--large .ingest-progress__count {
+  font-size: 8.5px;
+}
+
+.ingest-progress.is-ready .ingest-progress__fill {
+  background: var(--moss);
+}
+
+.ingest-progress.is-ready .ingest-progress__stage,
+.ingest-progress.is-ready .ingest-progress__percent {
+  color: var(--moss-deep);
+}
+
+.ingest-progress.is-failed .ingest-progress__fill {
+  background: var(--vermilion);
+}
+
+.ingest-progress.is-failed .ingest-progress__stage,
+.ingest-progress.is-failed .ingest-progress__percent,
+.ingest-progress.is-failed .ingest-progress__count {
+  color: var(--vermilion);
+}
+
+@keyframes ingest-progress-slide {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.library-upload-task__progress {
+  margin-top: 4px;
+  gap: 3px;
+}
+
+.library-upload-task__progress .ingest-progress__track {
+  height: 4px;
+}
+
+.library-upload-task.is-processing .library-upload-task__mark {
+  color: var(--ochre-deep);
+  background: var(--ochre-wash);
+}
+
+.library-intake__progress {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--ochre);
+  border-radius: var(--radius-xs);
+}
+
+.library-intake__progress-file {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+}
+
+.library-intake__progress-file svg {
+  flex: none;
+  color: var(--ochre-deep);
+}
+
+.library-intake__progress-name {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.library-intake__progress-job {
+  flex: none;
+  padding: 1px 5px;
+  color: var(--muted);
+  background: var(--surface-inset);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.03em;
+}
+
+.library-intake__progress-path {
+  overflow-wrap: anywhere;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.library-intake__progress-note {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  line-height: 1.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ingest-progress__fill {
+    transition: none;
+  }
+
+  .ingest-progress.is-indeterminate .ingest-progress__fill {
+    width: 100%;
+    opacity: 0.45;
+    animation: none;
+  }
+
+  .library-upload-task__spinner {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
    Move/copy and new-folder dialogs
    -------------------------------------------------------------------------- */
 

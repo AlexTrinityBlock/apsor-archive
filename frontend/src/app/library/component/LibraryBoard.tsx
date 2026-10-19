@@ -25,8 +25,10 @@ import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { EmptyState } from "../../component/EmptyState";
 import { Icon } from "../../component/Icon";
+import { IngestProgress } from "./IngestProgress";
 import {
   fileKindLabel,
+  ingestStageLabel,
   sameArchivePath,
   type LibraryUploadTask,
 } from "./library-utils";
@@ -182,12 +184,22 @@ function uploadStatusLabel(task: LibraryUploadTask): string {
     return "Queued";
   }
   if (task.status === "uploading") {
-    return "Uploading";
+    return "Uploading…";
   }
   if (task.status === "done") {
-    return "Archived";
+    return "Ready";
   }
-  return "Rejected";
+  if (task.status === "error") {
+    return task.rejected ? "Rejected" : "Failed";
+  }
+  if (
+    task.stage === "embedding" &&
+    typeof task.chunksTotal === "number" &&
+    typeof task.chunksEmbedded === "number"
+  ) {
+    return `Embedding ${task.chunksEmbedded}/${task.chunksTotal}`;
+  }
+  return ingestStageLabel(task.stage, "Processing");
 }
 
 function FileCard({
@@ -577,26 +589,59 @@ function UploadTaskMark({ task }: { readonly task: LibraryUploadTask }) {
   );
 }
 
+function uploadLiveSummary(task: LibraryUploadTask): string {
+  if (task.status === "done") {
+    return `${task.name} ready`;
+  }
+  if (task.status === "error") {
+    return `${task.name} ${task.rejected ? "rejected" : "failed"}`;
+  }
+  if (task.status === "uploading") {
+    return `${task.name} uploading`;
+  }
+  if (task.status === "queued") {
+    return `${task.name} queued`;
+  }
+  return `${task.name} ${ingestStageLabel(task.stage, "processing")}`;
+}
+
 function UploadTray({ tasks, onDismiss }: UploadTrayProps) {
   if (tasks.length === 0) {
     return null;
   }
   const active = tasks.some(
-    (task) => task.status === "queued" || task.status === "uploading",
+    (task) =>
+      task.status === "queued" ||
+      task.status === "uploading" ||
+      task.status === "processing",
   );
+  const activeCount = tasks.filter(
+    (task) =>
+      task.status === "queued" ||
+      task.status === "uploading" ||
+      task.status === "processing",
+  ).length;
   const finished = tasks.filter((task) => task.status === "done").length;
+  // Only status/stage changes reach the live region; the one-second percentage
+  // updates stay visual and never trigger a screen-reader announcement.
+  const liveSummary = tasks.map(uploadLiveSummary).join(". ");
 
   return (
-    <section className="library-upload-tray" aria-live="polite" aria-busy={active}>
+    <section className="library-upload-tray" aria-busy={active}>
+      <p className="visually-hidden" aria-live="polite">
+        {liveSummary}
+      </p>
       <header className="library-upload-tray__head">
         <div>
           <p className="eyebrow">Intake queue</p>
           <span className="library-upload-tray__count">
-            {finished}/{tasks.length} archived
+            {finished}/{tasks.length} ready
           </span>
         </div>
         {active ? (
-          <span className="library-upload-tray__busy">Uploading sequentially…</span>
+          <span className="library-upload-tray__busy">
+            {activeCount} {activeCount === 1 ? "file" : "files"} processing…
+          </span>
         ) : (
           <Button variant="ghost" size="sm" onClick={onDismiss}>
             Clear tray
@@ -610,6 +655,19 @@ function UploadTray({ tasks, onDismiss }: UploadTrayProps) {
             <span className="library-upload-task__body">
               <span className="library-upload-task__name">{task.name}</span>
               <code className="library-upload-task__path">{task.targetPath}</code>
+              {task.status === "queued" ||
+              task.status === "uploading" ||
+              task.status === "processing" ? (
+                <IngestProgress
+                  className="library-upload-task__progress"
+                  variant="compact"
+                  stage={task.stage ?? null}
+                  progressPct={task.progressPct ?? null}
+                  chunksTotal={task.chunksTotal ?? null}
+                  chunksEmbedded={task.chunksEmbedded ?? null}
+                  label={task.status === "uploading" ? "Uploading" : undefined}
+                />
+              ) : null}
               {task.message ? (
                 <span className="library-upload-task__message">{task.message}</span>
               ) : null}

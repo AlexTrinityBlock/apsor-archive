@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import "./library.css";
 
 import type { FileSchema, PathFileSchema } from "../generated-apis-types/schemas";
-import { copyFile, moveFile, uploadFile } from "../generated-apis-types/files/files";
+import { copyFile, moveFile, uploadFileAsync } from "../generated-apis-types/files/files";
 import { useSeedDemo } from "../generated-apis-types/system/system";
 import { useReadPath } from "../generated-apis-types/tree/tree";
 import { parentPath, pathSegments } from "../../lib/format";
@@ -28,7 +28,9 @@ import {
   ACCEPTED_FILE_HINT,
   MAX_UPLOAD_BYTES,
   describeError,
+  ingestJobFailureMessage,
   isAcceptedFileName,
+  isAbortError,
   isNotFoundError,
   isSafeUploadName,
   joinArchivePath,
@@ -37,8 +39,10 @@ import {
   pathParamValue,
   readerBackLabel,
   sameArchivePath,
+  taskProgressFromJob,
   type LibraryUploadTask,
   type LibraryView,
+  waitForIngestJob,
 } from "./component/library-utils";
 import { useMediaQuery } from "./hook/useMediaQuery";
 
@@ -72,6 +76,7 @@ export function LibraryPage() {
   const toast = useToast();
   const isDesktop = useMediaQuery("(min-width: 761px)");
   const nextUploadId = useRef(1);
+  const uploadControllers = useRef<Map<number, AbortController>>(new Map());
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadTarget, setUploadTarget] = useState("/");
@@ -102,6 +107,18 @@ export function LibraryPage() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [path, fileId]);
+
+  // Closing the library page stops local polling; the durable jobs keep
+  // running on the server and can be picked up again later.
+  useEffect(() => {
+    const controllers = uploadControllers.current;
+    return () => {
+      for (const controller of controllers.values()) {
+        controller.abort();
+      }
+      controllers.clear();
+    };
+  }, []);
 
   const seedMutation = useSeedDemo({
     mutation: {
@@ -229,9 +246,73 @@ export function LibraryPage() {
     [],
   );
 
+  const runUploadTask = useCallback(
+    async (
+      id: number,
+      file: File,
+      targetFolder: string,
+      targetPath: string,
+    ): Promise<boolean> => {
+      const controller = new AbortController();
+      uploadControllers.current.set(id, controller);
+      updateUploadTask(id, { status: "uploading", message: undefined });
+      try {
+        const job = await uploadFileAsync({ path: targetPath, file });
+        if (controller.signal.aborted) {
+          return false;
+        }
+        updateUploadTask(id, {
+          ...taskProgressFromJob(job),
+          status: "processing",
+          message: undefined,
+        });
+
+        const finalJob = await waitForIngestJob(job.id, {
+          signal: controller.signal,
+          onUpdate: (snapshot) => {
+            updateUploadTask(id, {
+              ...taskProgressFromJob(snapshot),
+              status: snapshot.status === "failed" ? "error" : "processing",
+              message:
+                snapshot.status === "failed"
+                  ? ingestJobFailureMessage(snapshot)
+                  : undefined,
+            });
+          },
+        });
+        if (controller.signal.aborted) {
+          return false;
+        }
+        updateUploadTask(id, {
+          ...taskProgressFromJob(finalJob),
+          status: "done",
+          message: `Archived in ${targetFolder}`,
+        });
+        void queryClient.invalidateQueries();
+        return true;
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) {
+          return false;
+        }
+        updateUploadTask(id, {
+          status: "error",
+          message: describeError(error),
+        });
+        return false;
+      } finally {
+        uploadControllers.current.delete(id);
+      }
+    },
+    [queryClient, updateUploadTask],
+  );
+
   const handleFilesDropped = useCallback(
     async (files: readonly File[], targetFolder: string) => {
-      const accepted: Array<{ readonly id: number; readonly file: File }> = [];
+      const accepted: Array<{
+        readonly id: number;
+        readonly file: File;
+        readonly targetPath: string;
+      }> = [];
       const rejected: LibraryUploadTask[] = [];
 
       for (const file of files) {
@@ -244,6 +325,7 @@ export function LibraryPage() {
             name: file.name || "Unnamed file",
             targetPath,
             status: "error",
+            rejected: true,
             message: `Allowed types: ${ACCEPTED_FILE_HINT}.`,
           });
           continue;
@@ -254,18 +336,20 @@ export function LibraryPage() {
             name: file.name,
             targetPath,
             status: "error",
+            rejected: true,
             message: "Larger than the 10 MB upload limit.",
           });
           continue;
         }
-        accepted.push({ id, file });
+        accepted.push({ id, file, targetPath });
       }
 
-      const queued: LibraryUploadTask[] = accepted.map(({ id, file }) => ({
+      const queued: LibraryUploadTask[] = accepted.map(({ id, file, targetPath }) => ({
         id,
         name: file.name,
-        targetPath: joinArchivePath(targetFolder, file.name),
+        targetPath,
         status: "queued",
+        stage: "queued",
       }));
 
       if (queued.length > 0 || rejected.length > 0) {
@@ -280,35 +364,20 @@ export function LibraryPage() {
         return;
       }
 
-      let archived = 0;
-      for (const item of accepted) {
-        updateUploadTask(item.id, { status: "uploading" });
-        try {
-          await uploadFile({
-            path: joinArchivePath(targetFolder, item.file.name),
-            file: item.file,
-          });
-          archived += 1;
-          updateUploadTask(item.id, {
-            status: "done",
-            message: `Archived in ${targetFolder}`,
-          });
-        } catch (error) {
-          updateUploadTask(item.id, {
-            status: "error",
-            message: describeError(error),
-          });
-        }
-      }
-
+      const results = await Promise.all(
+        accepted.map(({ id, file, targetPath }) =>
+          runUploadTask(id, file, targetFolder, targetPath),
+        ),
+      );
       await queryClient.invalidateQueries();
+      const archived = results.filter(Boolean).length;
       if (archived > 0) {
         toast.success(
           `${archived} ${archived === 1 ? "file" : "files"} archived in ${targetFolder}.`,
         );
       }
     },
-    [queryClient, toast, updateUploadTask],
+    [queryClient, runUploadTask, toast],
   );
 
   const handleOperationDone = useCallback(
