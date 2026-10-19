@@ -64,7 +64,7 @@ CONVERSATION_STATUSES = (CONVERSATION_ACTIVE, CONVERSATION_ARCHIVED)
 
 ERROR_FINISH_REASONS = frozenset({"error", "aborted", "cancelled", "canceled"})
 
-MAX_STEPS = 8
+MAX_STEPS = 24
 MAX_TOOL_CALLS_PER_TURN = 6
 MAX_PARALLEL_TOOLS = 6
 # One turn may use up to 64k provider tokens. Auto compaction triggers before a
