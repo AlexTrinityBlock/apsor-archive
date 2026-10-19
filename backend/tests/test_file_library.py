@@ -280,7 +280,7 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert worker.embedding_semaphore is not None
     assert client.app.state.settings.ingest_poll_seconds == 1.0
     assert client.app.state.settings.ingest_extract_workers == 2
-    assert client.app.state.settings.ingest_max_in_flight_jobs == 2
+    assert client.app.state.settings.ingest_max_inflight_jobs == 2
     assert client.app.state.settings.ingest_embedding_concurrency == 6
 
     async_text_path = "/history/async/quasar.md"
@@ -393,3 +393,59 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
         "Synchronous ingestion still works. " * 80,
     )
     assert int(sync_text["total_chunks"]) >= 1
+
+    # Ingestion runtime settings live in a singleton row and start from the
+    # environment-seeded defaults when the fresh test database has no row.
+    ingest_settings = client.get("/api/v1/settings/ingest")
+    assert ingest_settings.status_code == 200, ingest_settings.text
+    ingest_body = ingest_settings.json()
+    assert ingest_body["source"] == "default"
+    ingest_defaults = ingest_body["defaults"]
+    assert ingest_defaults == {
+        "poll_seconds": 1.0,
+        "extract_workers": 2,
+        "max_inflight_jobs": 2,
+        "embedding_concurrency": 6,
+        "chunk_target_chars": 4_000,
+        "chunk_overlap_chars": 500,
+    }
+    assert ingest_body["config"] == ingest_defaults
+    assert ingest_body["updated_at"] is not None
+
+    invalid_ingest = client.put(
+        "/api/v1/settings/ingest",
+        json={**ingest_defaults, "chunk_overlap_chars": 4_000},
+    )
+    assert invalid_ingest.status_code == 400
+    assert invalid_ingest.json()["error"] == "invalid_request"
+    assert "chunk_overlap_chars" in invalid_ingest.json()["detail"]
+
+    non_default_ingest = {
+        **ingest_defaults,
+        "poll_seconds": 2.5,
+        "extract_workers": 4,
+        "max_inflight_jobs": 3,
+        "embedding_concurrency": 12,
+        "chunk_target_chars": 8_000,
+        "chunk_overlap_chars": 1_000,
+    }
+    stored_ingest = client.put(
+        "/api/v1/settings/ingest",
+        json=non_default_ingest,
+    )
+    assert stored_ingest.status_code == 200, stored_ingest.text
+    stored_ingest_body = stored_ingest.json()
+    assert stored_ingest_body["source"] == "database"
+    assert stored_ingest_body["config"] == non_default_ingest
+    assert stored_ingest_body["updated_at"] is not None
+
+    persisted_ingest = client.get("/api/v1/settings/ingest")
+    assert persisted_ingest.status_code == 200
+    assert persisted_ingest.json()["source"] == "database"
+    assert persisted_ingest.json()["config"] == non_default_ingest
+
+    reset_ingest = client.post("/api/v1/settings/ingest/reset")
+    assert reset_ingest.status_code == 200, reset_ingest.text
+    reset_ingest_body = reset_ingest.json()
+    assert reset_ingest_body["source"] == "database"
+    assert reset_ingest_body["config"] == ingest_defaults
