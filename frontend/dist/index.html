@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-theme-preference="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="DendroMatrix is a local-first knowledge archive where files branch by path and memories grow by time."
+    />
+    <meta name="theme-color" content="#f3edde" />
+    <title>DendroMatrix — The Annual Ring Archive</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!--
+      Fraunces carries the archival display voice. IBM Plex Sans and Mono handle
+      interface and metadata. Noto Serif TC / Noto Sans TC remain later in the
+      font stacks as CJK fallbacks so user-authored Chinese content renders well.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <script>
+      // Resolve the archive's light or dark palette before first paint. The
+      // default is the paper archive; "system" follows the OS preference.
+      (function () {
+        try {
+          var stored = localStorage.getItem("dendromatrix.theme");
+          var preference =
+            stored === "light" || stored === "dark" || stored === "system" ? stored : "light";
+          var resolved = preference;
+          if (preference === "system") {
+            resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+          document.documentElement.dataset.theme = resolved;
+          document.documentElement.dataset.themePreference = preference;
+        } catch (error) {
+          document.documentElement.dataset.theme = "light";
+          document.documentElement.dataset.themePreference = "light";
+        }
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-DMW0-Zlb.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/jsx-runtime-BMsyJmCf.js">
+    <link rel="modulepreload" crossorigin href="/assets/Button-CcyyK2hS.js">
+    <link rel="modulepreload" crossorigin href="/assets/fetch-client-BXWFrkl0.js">
+    <link rel="modulepreload" crossorigin href="/assets/useMutation-D00Mc2AU.js">
+    <link rel="modulepreload" crossorigin href="/assets/files-C_DJJpjy.js">
+    <link rel="modulepreload" crossorigin href="/assets/useTheme-CpDcnMG2.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-Dbvf-au2.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

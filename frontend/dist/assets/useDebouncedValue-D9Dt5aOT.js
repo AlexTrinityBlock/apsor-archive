@@ -1,0 +1,1 @@
+import{n as e,o as t}from"./jsx-runtime-BMsyJmCf.js";var n=t(e(),1);function r(e,t=250){let[r,i]=(0,n.useState)(e);return(0,n.useEffect)(()=>{let n=window.setTimeout(()=>i(e),t);return()=>window.clearTimeout(n)},[t,e]),r}export{r as t};
