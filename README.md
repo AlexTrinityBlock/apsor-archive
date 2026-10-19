@@ -34,13 +34,18 @@ result carries its source, chunk number, and time.
 
 > Status: v0.1.0 — file/memory/media archive, owner login, persistent
 > Pi-shaped agent with database-backed runtime limits, compaction, parallel
-> tools, SSE chat, a saved-question Q&A library, dedicated PDF/DOCX/image/text
-> viewers, a folder workspace, and a three-state agent dock.
+> tools, SSE chat, a saved-question Q&A library, durable async ingestion,
+> dedicated PDF/DOCX/image/text viewers, a folder workspace, and a three-state
+> agent dock.
 
 ## Highlights
 
 - **Files have lineage.** A path is a branch, not an overwrite. Re-uploading a
   file grows a new leaf; the previous edition remains addressable as history.
+- **Ingestion is durable.** An upload or direct text can return a
+  `file_ingest_job` immediately while a bounded worker parses, chunks, embeds,
+  and publishes it. The queue survives restarts, reports progress, and never
+  exposes a half-indexed file.
 - **The library is a folder workspace.** Folders are first-class: create them in
   place, drop files onto a folder card to upload, drag a file card onto another
   folder to move it, and use an explicit Copy action when you want an
@@ -202,6 +207,72 @@ invalid_request` rather than 422.
 A request loads one immutable runtime snapshot in a short-lived database session.
 An active SSE run keeps the snapshot it started with; later runs use changed
 settings. The backend contract is described in `backend/README.md`.
+
+### Ingestion runtime
+
+The synchronous `POST /api/v1/files` and `POST /api/v1/files/text` endpoints
+remain, but the UI can enqueue work instead. The async routes store the payload
+and return `202` with an `IngestJobSchema`:
+
+| Method | Path | Operation |
+|---|---|---|
+| `POST` | `/api/v1/files/async` | `uploadFileAsync` |
+| `POST` | `/api/v1/files/text/async` | `createTextFileAsync` |
+| `GET` | `/api/v1/files/ingest-jobs?limit=&offset=` | `listIngestJobs` |
+| `GET` | `/api/v1/files/ingest-jobs/{id}` | `getIngestJob` |
+| `POST` | `/api/v1/files/ingest-jobs/{id}/retry` | `retryIngestJob` |
+
+A job moves through `queued(0)`, `parsing(5)`, `chunking(15–20)`,
+`embedding(25–90)`, `summarizing(95)`, and `ready(100)`, or ends as `failed`.
+`progress_pct`, `chunks_total`, and `chunks_embedded` are durable, so a reloaded
+page can resume the same display. Staged file and chunk rows are published only
+when the job is ready; a failed job keeps its error but exposes no partial
+current file.
+
+One worker process polls the database every second while idle and claims queued
+rows with `SELECT ... FOR UPDATE SKIP LOCKED`. It runs two extraction threads
+and at most two in-flight jobs, with global async embedding concurrency of six
+and batched progress updates. Stale jobs are requeued after a crash, and
+embedding retries are bounded. The API lifespan starts one worker for local use;
+run a dedicated process in production:
+
+```bash
+cd backend
+uv run dendromatrix worker
+# or
+uv run python -m app.worker
+# process at most one job, then exit
+uv run python -m app.worker --once
+```
+
+The standard and Cloudflare Compose stacks run this as a dedicated `worker`
+service and set `DENDRO_INGEST_WORKER_ENABLED=false` on the API, so exactly one
+process owns the queue.
+
+The **Ingestion runtime** panel on `/settings` edits the singleton
+`ingest_config` row. It is a full replacement, not a patch, and the read body
+carries `{config, defaults, source, updated_at}` with a Database/Defaults badge.
+
+| Method | Path | Operation |
+|---|---|---|
+| `GET` | `/api/v1/settings/ingest` | `getIngestSettings` |
+| `PUT` | `/api/v1/settings/ingest` | `updateIngestSettings` |
+| `POST` | `/api/v1/settings/ingest/reset` | `resetIngestSettings` |
+
+| Field | Default | Range |
+|---|---|---|
+| `poll_seconds` | 1.0 | 0.25–30 |
+| `extract_workers` | 2 | 1–8 |
+| `max_inflight_jobs` | 2 | 1–4 |
+| `embedding_concurrency` | 6 | 1–32 |
+| `chunk_target_chars` | 4,000 | 1,000–20,000 |
+| `chunk_overlap_chars` | 500 | 0–5,000; below target |
+
+The worker reads a fresh database snapshot each loop and job, so saved worker
+changes apply without a restart; a job already running keeps its snapshot.
+Environment values seed a fresh install and remain the fallback. Changing chunk
+sizes affects only future ingests. The backend contract is described in
+`backend/README.md`.
 
 ### Local development
 
@@ -708,6 +779,11 @@ Document intake (`POST /api/v1/files`) supports:
 - **TXT / MD / CSV / JSON / LOG** — direct text plus AI structured metadata
   (title, summary, tags, document_type).
 
+The same intake is available asynchronously through
+`POST /api/v1/files/async` and `POST /api/v1/files/text/async`; poll
+`GET /api/v1/files/ingest-jobs/{id}` for stage and chunk progress. See
+**Ingestion runtime** above.
+
 Interactive docs: <http://127.0.0.1:8000/docs>. The OpenAPI schema is the source
 for the committed Orval client.
 
@@ -732,9 +808,9 @@ It re-exports the schema, regenerates the client, and fails on any diff. This
 keeps the convenience of a committed client without letting it drift silently.
 The committed client includes the folder, move, and copy operations, the
 page-context request/detail/entry-kind contracts, agent runtime settings,
-conversation compact/clear operations, and saved-question CRUD/ask operations;
-the library board, settings panel, question book, and chat desk call the
-generated hooks directly.
+conversation compact/clear operations, saved-question CRUD/ask operations, and
+the async ingest-job and ingestion-settings operations; the library board,
+settings panel, question book, and chat desk call the generated hooks directly.
 
 ### Load a real corpus
 
@@ -768,6 +844,13 @@ Chinese novel. This is a validation example, not a committed fixture or test:
 - Answers carried citations such as `[file:27#...]`; no truncation was reported
   at the current tool-result limits.
 
+A separate manual check exercised the durable queue. The job advanced through
+`queued`, `parsing`, `chunking`, `embedding` with an `Embedding x / y` count,
+`summarizing`, and `ready`; the file did not appear in search until it was
+ready. Changed worker values saved in Settings were read by the next worker
+loop without a restart, and a changed chunk target affected only subsequent
+ingests.
+
 The integration suite remains provider-free and is not extended with this
 corpus.
 
@@ -789,8 +872,10 @@ corpus.
    finds the passage that answers a full question instead of only the passages
    that repeat its nouns.
 
-If vector recall is unavailable, search still returns BM25 results. If an
-embedding call fails during ingestion, the chunk is stored text-only.
+If vector recall is unavailable, search still returns BM25 results. Synchronous
+ingestion keeps a chunk text-only when its embedding call fails within the
+retry budget; the durable worker treats an exhausted embedding retry as a job
+failure, so no partial file is published.
 
 ### Do I need an embedding model key?
 
@@ -880,6 +965,14 @@ memory_summary ───┘
   `citations`, `conversation_id`, and the run status/error fields are written
   only by an ask. `conversation_id` uses `ON DELETE SET NULL`, and
   `last_asked_at` records the most recent attempt.
+- `file_ingest_job`: the durable intake queue. It stores the source kind, path,
+  payload key, status/stage, `progress_pct`, chunk counts, bounded error fields,
+  and attempt/timestamps. A path can have only one active job. The job points at
+  its staged file, clears that link on failure, and the file and chunks become
+  current only when the job publishes them.
+- `ingest_config`: one row (`id=1`) with the validated worker poll, extraction,
+  in-flight, embedding, and chunk-size settings. It is not a chunk source; the
+  queue references the file that is eventually published.
 
 The complete local design notes live under `docs/plan/` (gitignored). The
 committed code, comments, UI copy, and documentation are English.
@@ -916,7 +1009,7 @@ the `conversation_id` `ON DELETE SET NULL` behavior. Page-context
 deduplication and ordering, and folder creation plus move/copy coverage, extend
 existing tests rather than adding new functions.
 
-The latest migration is `e2b7c4d9a6f1`, after `b7d2e9c4a1f6`. The migrations
+The latest migration is `d4b8e6f1a2c7`, after `d1e2f3a4b5c6`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -925,7 +1018,11 @@ after `agent_config` on this branch are:
   `compaction_threshold_tokens` to 75,000;
 - `b7d2e9c4a1f6` creates `saved_question` and its conversation FK/index;
 - `e2b7c4d9a6f1` raises the `max_steps` default from 8 to 24 and updates an
-  untouched default row.
+  untouched default row;
+- `d1e2f3a4b5c6` creates `file_ingest_job` with its status/source/range checks,
+  active-path unique index, and file FK;
+- `d4b8e6f1a2c7` creates the singleton `ingest_config`, enforces its ranges and
+  overlap rule, and seeds row `1`.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so
@@ -938,14 +1035,15 @@ database.
 backend/
   app/
     main.py                     API assembly, lifespan, gzip, SPA mount
+    worker.py                   dedicated durable-ingestion process
     shared/                     error registry and list envelope
     infrastructure/             config, database, cache, embeddings, AI, files
     module/knowledge/
       domain/                   chunking, n-grams, BM25 terms, timeline, summary
-      model/                    SQLAlchemy models
-      repository/               persistence and retrieval queries
-      service/                  orchestration and indexing
-      router/                   HTTP adapters
+      model/                    SQLAlchemy models incl. ingest jobs/config
+      repository/               persistence, retrieval, and job-queue queries
+      service/                  orchestration, indexing, ingest jobs/settings
+      router/                   HTTP adapters incl. file intake and settings
       schema/                   Pydantic contracts
       exception/                stable error codes
     module/media/               standalone image archive and visual retrieval
@@ -960,9 +1058,9 @@ frontend/
     agent/                      global dock, page capture, inspector panels
     chat/                       reading room, retry, context actions
     questions/                  saved-question Q&A library
-    settings/                   provider and agent runtime panels
+    settings/                   provider, agent, and ingestion runtime panels
     viewer/                     file, media, and memory viewers
-    library/                    folder workspace board and list
+    library/                    folder workspace board, list, intake progress
     home/ search/ timeline/ tree/ media/ memory/ ask/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
