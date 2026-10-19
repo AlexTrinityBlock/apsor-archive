@@ -730,12 +730,17 @@ It also covers runtime settings defaults, full PUT and reset, validation
 failures (`400 invalid_request`), runtime snapshot handling for later runs, auto
 and manual compaction, clear, the page-context boundary and same-page
 reattachment, retry, parallel versus sequential tool execution, human
-save-memory approval, and the saved-question library. Approval coverage asserts
-that model `user_confirmed=true` does not write memory before approval, a valid
-waiting run survives a fresh app lifespan, approve writes exactly once and
-appends the result, duplicate approve/reject returns `409`, reject writes
-nothing, an orphaned waiting run fails closed on restart, and an archived
-conversation fails closed. Saved-question coverage includes
+save-memory approval, the approval toggle, and the saved-question library.
+Approval coverage asserts that the default `true` path creates a waiting run and
+pending row with no memory write before approval, model `user_confirmed=true`
+does not bypass it, a valid waiting run survives a fresh app lifespan, approve
+writes exactly once and appends the result, duplicate approve/reject returns
+`409`, reject writes nothing, an orphaned waiting run fails closed on restart,
+and an archived conversation fails closed. Toggle coverage asserts that
+`false` skips the waiting run and approval row, saves memory directly with
+backend authorization even when the model sends `user_confirmed=false`,
+completes the run, and that changing the setting never resolves an existing
+pending row. Saved-question coverage includes
 create/list/pagination, ask success, a failed ask that keeps the row with
 `run_status="failed"` and error detail, edit resetting the answer and
 conversation link, delete, not-found errors, and the `conversation_id`
