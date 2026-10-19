@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../../apis/fetch-client";
 import {
+  streamAgentApproval,
   streamAgentMessage,
   streamAgentRetry,
   type AgentPageContextPayload,
@@ -39,7 +40,7 @@ export interface ChatStreamView {
   readonly pageContextEntryId: number | null;
   readonly pageContextAttached: boolean;
   readonly pageContextKey: string | null;
-  readonly status: "running" | "done" | "failed";
+  readonly status: "running" | "waiting" | "done" | "failed";
 }
 
 interface UseChatStreamResult {
@@ -51,6 +52,11 @@ interface UseChatStreamResult {
     pageContext?: AgentPageContextPayload,
   ) => Promise<void>;
   readonly retry: (conversationId: number, userContent?: string) => Promise<void>;
+  readonly resolveApproval: (
+    conversationId: number,
+    approvalId: number,
+    decision: "approve" | "reject",
+  ) => Promise<boolean>;
   readonly stop: () => void;
 }
 
@@ -149,15 +155,18 @@ function applyEvent(
           errorCode: event.data.error_code,
         }),
       };
-    case "run_end":
-      return {
-        ...state,
-        status:
-          event.data.status === "completed" ||
-          event.data.status === "cancelled"
-            ? "done"
-            : "failed",
-      };
+    case "approval_required":
+      return { ...state, status: "waiting" };
+    case "run_end": {
+      const status = event.data.status;
+      let mapped: ChatStreamView["status"] = "failed";
+      if (status === "completed" || status === "cancelled") {
+        mapped = "done";
+      } else if (status === "waiting") {
+        mapped = "waiting";
+      }
+      return { ...state, status: mapped };
+    }
     case "error":
       return { ...state, error: event.data, status: "failed" };
     default:
@@ -197,12 +206,13 @@ export function useChatStream(
         signal: AbortSignal,
         onEvent: (event: AgentStreamEvent) => void,
       ) => Promise<void>,
-    ) => {
+    ): Promise<boolean> => {
       if (activeRef.current) {
-        return;
+        return false;
       }
 
       activeRef.current = true;
+      let ok = true;
       const controller = new AbortController();
       controllerRef.current = controller;
       setStream({
@@ -223,6 +233,7 @@ export function useChatStream(
       let terminal = false;
       const handleEvent = (event: AgentStreamEvent) => {
         if (event.type === "error") {
+          ok = false;
           onErrorRef.current(event.data.detail);
         }
         if (event.type === "run_end" || event.type === "error") {
@@ -239,10 +250,12 @@ export function useChatStream(
       try {
         await execute(controller.signal, handleEvent);
         if (!terminal && !controller.signal.aborted) {
+          ok = false;
           onErrorRef.current("The stream closed before the run finished.");
         }
       } catch (error) {
         if (!controller.signal.aborted) {
+          ok = false;
           onErrorRef.current(describeError(error));
         }
       } finally {
@@ -258,6 +271,7 @@ export function useChatStream(
           }
         }
       }
+      return ok;
     },
     [queryClient],
   );
@@ -311,5 +325,27 @@ export function useChatStream(
     controllerRef.current?.abort();
   }, []);
 
-  return { stream, isStreaming: stream !== null, start, retry, stop };
+  const resolveApproval = useCallback(
+    async (
+      conversationId: number,
+      approvalId: number,
+      decision: "approve" | "reject",
+    ) => {
+      return runTurn(
+        conversationId,
+        "",
+        null,
+        (signal, onEvent) =>
+          streamAgentApproval({
+            approvalId,
+            decision,
+            signal,
+            onEvent,
+          }),
+      );
+    },
+    [runTurn],
+  );
+
+  return { stream, isStreaming: stream !== null, start, retry, resolveApproval, stop };
 }

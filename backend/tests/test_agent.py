@@ -3,13 +3,19 @@
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
+from app.infrastructure.config.settings import Settings
+from app.main import create_app
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
     text_result,
     tool_call_result,
     tool_calls_result,
 )
-from tests.conftest import TEST_DATABASE_URL
+from tests.conftest import (
+    OWNER_PASSWORD,
+    OWNER_USERNAME,
+    TEST_DATABASE_URL,
+)
 from tests.helpers import create_text
 
 TOOL_USAGE = {
@@ -63,6 +69,7 @@ TOOL_NAMES = [
 
 def test_agent_entry_log_tool_loop_and_cache_usage(
     client: TestClient,
+    settings: Settings,
 ) -> None:
     created_file = create_text(
         client,
@@ -1319,3 +1326,298 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         item["id"] != saved_second_id
         for item in after_delete_library["resources"]
     )
+
+
+    # ------------------------------------------------------------------
+    # save_memory requires a durable human approval. The model-supplied
+    # user_confirmed flag is deliberately true here and must not bypass it.
+    # ------------------------------------------------------------------
+    def memory_count() -> int:
+        engine = create_engine(TEST_DATABASE_URL)
+        with engine.connect() as connection:
+            total = connection.execute(
+                text("SELECT count(*) FROM memory")
+            ).scalar_one()
+        engine.dispose()
+        return int(total)
+
+    approval_content = "The wrench approval memory."
+    approval_fake = FakeChatGenerator(
+        [
+            tool_calls_result(
+                [
+                    ("search_knowledge", {"query": "wrench", "result_number": 1}),
+                    (
+                        "save_memory",
+                        {
+                            "content": approval_content,
+                            "supersedes": [],
+                            "user_confirmed": True,
+                        },
+                    ),
+                ],
+                call_ids=["call_approval_search", "call_approval_memory"],
+                usage=TOOL_USAGE,
+            ),
+            text_result("The approved memory is now archived.", usage=ANSWER_USAGE),
+        ]
+    )
+    client.app.state.agent_chat_generator = approval_fake
+    approval_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Memory approval"},
+    ).json()
+    approval_conversation_id = approval_conversation["id"]
+
+    before_approval_memories = memory_count()
+    waiting_turn = client.post(
+        f"/api/v1/agent/conversations/{approval_conversation_id}/messages",
+        json={"content": "Save the wrench note."},
+        headers={"Accept": "application/json"},
+    )
+    assert waiting_turn.status_code == 200, waiting_turn.text
+    waiting_body = waiting_turn.json()
+    assert waiting_body["run"]["status"] == "waiting"
+    assert waiting_body["answer"] is None
+    assert [entry["kind"] for entry in waiting_body["entries"]] == [
+        "pi.user",
+        "pi.assistant",
+        "pi.tool-result",
+    ]
+    assert waiting_body["tool_results"][0]["data"]["tool"] == "search_knowledge"
+    assert len(waiting_body["pending_approvals"]) == 1
+    approval = waiting_body["pending_approvals"][0]
+    approval_id = approval["id"]
+    assert approval["conversation_id"] == approval_conversation_id
+    assert approval["run_id"] == waiting_body["run"]["id"]
+    assert approval["tool_call_id"] == "call_approval_memory"
+    assert approval["tool_name"] == "save_memory"
+    assert approval["status"] == "pending"
+    assert approval["arguments"]["user_confirmed"] is True
+    assert approval["preview"]["content"] == approval_content
+    assert approval["preview"]["content_chars"] == len(approval_content)
+    assert approval["preview"]["supersedes"] == []
+    assert memory_count() == before_approval_memories
+
+    # The transcript stays readable: the assistant tool call is not dropped.
+    reloaded_detail = client.get(
+        f"/api/v1/agent/conversations/{approval_conversation_id}"
+    )
+    assert reloaded_detail.status_code == 200
+    reloaded_entries = reloaded_detail.json()["entries"]
+    assert [entry["kind"] for entry in reloaded_entries] == [
+        "pi.system",
+        "pi.user",
+        "pi.assistant",
+        "pi.tool-result",
+    ]
+    assert reloaded_entries[-2]["model"][0]["tool_calls"][0]["id"] == (
+        "call_approval_search"
+    )
+    assert [call["id"] for call in reloaded_entries[-2]["model"][0]["tool_calls"]] == [
+        "call_approval_search",
+        "call_approval_memory",
+    ]
+    pending_list = client.get(
+        f"/api/v1/agent/conversations/{approval_conversation_id}/approvals"
+    )
+    assert pending_list.status_code == 200, pending_list.text
+    assert [item["id"] for item in pending_list.json()["resources"]] == [approval_id]
+
+    # A fresh app lifespan (API restart) keeps a waiting run with a valid
+    # pending approval resumable.
+    with TestClient(create_app(settings)) as restarted_client:
+        login = restarted_client.post(
+            "/api/v1/auth/login",
+            json={"username": OWNER_USERNAME, "password": OWNER_PASSWORD},
+        )
+        assert login.status_code == 200, login.text
+        restarted_approvals = restarted_client.get(
+            f"/api/v1/agent/conversations/{approval_conversation_id}/approvals"
+        )
+        assert restarted_approvals.status_code == 200, restarted_approvals.text
+        assert [
+            item["id"] for item in restarted_approvals.json()["resources"]
+        ] == [approval_id]
+        engine = create_engine(TEST_DATABASE_URL)
+        with engine.connect() as connection:
+            restarted_run = connection.execute(
+                text(
+                    "SELECT status FROM agent_run WHERE id = :run_id"
+                ),
+                {"run_id": waiting_body["run"]["id"]},
+            ).scalar_one()
+        engine.dispose()
+        assert restarted_run == "waiting"
+
+    approved_turn = client.post(
+        f"/api/v1/agent/approvals/{approval_id}/approve",
+        headers={"Accept": "application/json"},
+    )
+    assert approved_turn.status_code == 200, approved_turn.text
+    approved_body = approved_turn.json()
+    assert approved_body["run"]["status"] == "completed"
+    assert approved_body["answer"] == "The approved memory is now archived."
+    approved_results = [
+        entry
+        for entry in approved_body["tool_results"]
+        if entry["data"]["tool"] == "save_memory"
+    ]
+    assert len(approved_results) == 1
+    assert approved_results[0]["data"]["status"] == "ok"
+    assert approved_results[0]["data"]["memory_id"] > 0
+    assert approved_results[0]["model"][0]["tool_call_id"] == "call_approval_memory"
+    assert memory_count() == before_approval_memories + 1
+    approved_memories = memory_count()
+
+    duplicate_approve = client.post(
+        f"/api/v1/agent/approvals/{approval_id}/approve",
+        headers={"Accept": "application/json"},
+    )
+    assert duplicate_approve.status_code == 409
+    assert duplicate_approve.json()["error"] == "agent_approval_not_pending"
+    assert memory_count() == approved_memories
+
+    # Rejecting appends a clear tool result and resumes without a write.
+    reject_fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "save_memory",
+                {
+                    "content": "This memory must be rejected.",
+                    "user_confirmed": True,
+                },
+                call_id="call_reject_memory",
+            ),
+            text_result("Understood. The memory was not saved."),
+        ]
+    )
+    client.app.state.agent_chat_generator = reject_fake
+    reject_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Memory rejection"},
+    ).json()
+    reject_waiting = client.post(
+        f"/api/v1/agent/conversations/{reject_conversation['id']}/messages",
+        json={"content": "Save this note."},
+        headers={"Accept": "application/json"},
+    )
+    assert reject_waiting.status_code == 200, reject_waiting.text
+    reject_body = reject_waiting.json()
+    assert reject_body["run"]["status"] == "waiting"
+    reject_approval_id = reject_body["pending_approvals"][0]["id"]
+
+    rejected_turn = client.post(
+        f"/api/v1/agent/approvals/{reject_approval_id}/reject",
+        headers={"Accept": "application/json"},
+    )
+    assert rejected_turn.status_code == 200, rejected_turn.text
+    rejected_body = rejected_turn.json()
+    assert rejected_body["run"]["status"] == "completed"
+    assert rejected_body["answer"] == "Understood. The memory was not saved."
+    rejected_results = [
+        entry
+        for entry in rejected_body["tool_results"]
+        if entry["data"]["tool"] == "save_memory"
+    ]
+    assert len(rejected_results) == 1
+    assert rejected_results[0]["data"]["status"] == "error"
+    assert rejected_results[0]["data"]["error_code"] == "memory_rejected"
+    assert "No memory was saved" in rejected_results[0]["model"][0]["content"]
+    assert memory_count() == approved_memories
+    duplicate_reject = client.post(
+        f"/api/v1/agent/approvals/{reject_approval_id}/reject",
+        headers={"Accept": "application/json"},
+    )
+    assert duplicate_reject.status_code == 409
+    assert duplicate_reject.json()["error"] == "agent_approval_not_pending"
+
+    # A waiting run whose approval was invalidated fails closed on restart.
+    orphan_fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "save_memory",
+                {"content": "Orphaned approval.", "user_confirmed": True},
+                call_id="call_orphan_memory",
+            )
+        ]
+    )
+    client.app.state.agent_chat_generator = orphan_fake
+    orphan_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Orphaned approval"},
+    ).json()
+    orphan_waiting = client.post(
+        f"/api/v1/agent/conversations/{orphan_conversation['id']}/messages",
+        json={"content": "Save the orphan note."},
+        headers={"Accept": "application/json"},
+    ).json()
+    assert orphan_waiting["run"]["status"] == "waiting"
+    orphan_approval_id = orphan_waiting["pending_approvals"][0]["id"]
+    orphan_run_id = orphan_waiting["run"]["id"]
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE agent_approval SET status = 'expired', resolved_at = now() "
+                "WHERE id = :approval_id"
+            ),
+            {"approval_id": orphan_approval_id},
+        )
+    engine.dispose()
+
+    with TestClient(create_app(settings)):
+        pass
+
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.connect() as connection:
+        orphan_status, orphan_error = connection.execute(
+            text(
+                "SELECT status, error_code FROM agent_run WHERE id = :run_id"
+            ),
+            {"run_id": orphan_run_id},
+        ).one()
+    engine.dispose()
+    assert orphan_status == "failed"
+    assert orphan_error == "approval_orphaned"
+    orphan_resolution = client.post(
+        f"/api/v1/agent/approvals/{orphan_approval_id}/approve",
+        headers={"Accept": "application/json"},
+    )
+    assert orphan_resolution.status_code == 409
+    assert orphan_resolution.json()["error"] == "agent_approval_not_pending"
+
+    # Archiving a conversation expires the pending write and fails closed.
+    archive_fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "save_memory",
+                {"content": "Archived approval.", "user_confirmed": True},
+                call_id="call_archived_memory",
+            )
+        ]
+    )
+    client.app.state.agent_chat_generator = archive_fake
+    archive_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Archived approval"},
+    ).json()
+    archive_waiting = client.post(
+        f"/api/v1/agent/conversations/{archive_conversation['id']}/messages",
+        json={"content": "Save the archived note."},
+        headers={"Accept": "application/json"},
+    ).json()
+    assert archive_waiting["run"]["status"] == "waiting"
+    archive_approval_id = archive_waiting["pending_approvals"][0]["id"]
+    archived_approval_conversation = client.patch(
+        f"/api/v1/agent/conversations/{archive_conversation['id']}",
+        json={"status": "archived"},
+    )
+    assert archived_approval_conversation.status_code == 200
+    archived_resolution = client.post(
+        f"/api/v1/agent/approvals/{archive_approval_id}/approve",
+        headers={"Accept": "application/json"},
+    )
+    assert archived_resolution.status_code == 409
+    assert archived_resolution.json()["error"] == "agent_conversation_archived"
+    assert memory_count() == approved_memories

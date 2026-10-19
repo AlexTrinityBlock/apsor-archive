@@ -5,6 +5,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './agentApprovalSchema';
+export * from './agentApprovalSchemaArguments';
+export * from './agentApprovalSchemaPreview';
+export * from './agentApprovalSchemaStatus';
 export * from './agentConversationCreateSchema';
 export * from './agentConversationCreateSchemaProvider';
 export * from './agentConversationDetailSchema';
@@ -78,12 +82,15 @@ export * from './ingestSettingsReadSchema';
 export * from './ingestSettingsReadSchemaSource';
 export * from './ingestSettingsUpdateSchema';
 export * from './ingestSettingsValuesSchema';
+export * from './listAgentApprovalsParams';
+export * from './listAgentApprovalsStatus';
 export * from './listAgentConversationsParams';
 export * from './listAgentConversationsStatus';
 export * from './listAgentEntriesParams';
 export * from './listIngestJobsParams';
 export * from './listMediaParams';
 export * from './listMemoriesParams';
+export * from './listResponseSchemaAgentApprovalSchema';
 export * from './listResponseSchemaAgentConversationSchema';
 export * from './listResponseSchemaMediaSchema';
 export * from './listResponseSchemaMemorySchema';

@@ -66,6 +66,51 @@ class AgentToolRegistry:
         """Return the public tool catalog."""
         return tool_catalog()
 
+    @staticmethod
+    def requires_confirmation(name: str) -> bool:
+        """Return whether a tool must be approved by a human before writing."""
+        spec = _SPECS.get(name)
+        return bool(spec is not None and spec.requires_confirmation)
+
+    def validate_arguments(
+        self,
+        name: str,
+        arguments: dict[str, Any],
+        *,
+        parse_error: str | None = None,
+    ) -> tuple[dict[str, Any] | None, ToolOutcome | None]:
+        """Validate a confirmation call and return normalized arguments.
+
+        Invalid arguments produce an ordinary tool error result, not an
+        approval. Only validated arguments are persisted on the approval row.
+        """
+        started = time.perf_counter()
+        spec = _SPECS.get(name)
+        if spec is None:
+            return None, _error(
+                name,
+                "tool_unavailable",
+                f"Tool {name!r} is not available in this conversation.",
+                _elapsed_ms(started),
+            )
+        if parse_error is not None:
+            return None, _error(
+                name,
+                "invalid_tool_arguments",
+                parse_error,
+                _elapsed_ms(started),
+            )
+        try:
+            parsed = spec.args_model.model_validate(arguments)
+        except ValidationError as exc:
+            return None, _error(
+                name,
+                "invalid_tool_arguments",
+                _format_validation(exc),
+                _elapsed_ms(started),
+            )
+        return parsed.model_dump(mode="json"), None
+
     async def execute(
         self,
         name: str,
@@ -74,8 +119,13 @@ class AgentToolRegistry:
         call_id: str,
         max_chars: int,
         parse_error: str | None = None,
+        approved: bool = False,
     ) -> ToolOutcome:
-        """Execute one tool call and never raise for an expected failure."""
+        """Execute one tool call and never raise for an expected failure.
+
+        ``approved`` is set only by the backend after a human resolves a durable
+        approval. Model-supplied ``user_confirmed`` never authorizes a write.
+        """
         started = time.perf_counter()
         spec = _SPECS.get(name)
         if spec is None:
@@ -101,11 +151,11 @@ class AgentToolRegistry:
                 _format_validation(exc),
                 _elapsed_ms(started),
             )
-        if spec.requires_confirmation and not bool(getattr(parsed, "user_confirmed", False)):
+        if spec.requires_confirmation and not approved:
             return _error(
                 name,
                 "memory_confirmation_required",
-                "The user must explicitly confirm the memory before it is saved.",
+                "The user must approve this memory in the interface before it is saved.",
                 _elapsed_ms(started),
             )
 

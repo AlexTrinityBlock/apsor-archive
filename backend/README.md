@@ -157,6 +157,9 @@ is deliberately not a mutable chat log:
   `pi.system`, `pi.reset`, `pi.compaction`, and `ui.notice`.
 - `agent_run` stores one submission's operational state. `agent_commit_seq`
   assigns one sequence value to every entry written in the same transaction.
+- `agent_approval` stores a pending human decision for a confirmation-required
+  tool call: validated arguments, safe preview, and the loop snapshot used to
+  resume the waiting run.
 - `agent_config` is the singleton runtime-limit row (`id=1`). It stores the
   eleven validated limits used by the loop; provider/model identity stays in
   the AI settings table.
@@ -171,9 +174,10 @@ Tool results are XML-wrapped data; tool validation failures are structured
 results rather than HTTP 500s.
 
 `agent_run.status` declares `running`, `waiting`, `completed`, `failed`, and
-`cancelled`, but only the non-waiting states are emitted today. The unique index
-for an active run covers `status = 'running'`; `waiting` is reserved for a future
-resume/approval flow.
+`cancelled`. A confirmation-required tool call moves the run to `waiting` and
+creates an `agent_approval` row; the run survives an API restart while that row
+is pending. The unique index for an active run covers `status = 'running'`;
+the service enforces one active (`running`/`waiting`) run per conversation.
 
 Endpoints (all require the session cookie):
 
@@ -189,6 +193,9 @@ Endpoints (all require the session cookie):
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | Append a reset boundary |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | Append user entry + run |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry latest failed/cancelled run |
+| `GET` | `/api/v1/agent/conversations/{conversation_id}/approvals?status=` | Durable approvals, oldest first (default `pending`) |
+| `POST` | `/api/v1/agent/approvals/{approval_id}/approve` | Execute once, append result, resume |
+| `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | Append `memory_rejected`, resume without writing |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog + versions |
 | `GET` | `/api/v1/agent/settings` | Effective runtime config + defaults + source |
 | `PUT` | `/api/v1/agent/settings` | Replace all thirteen runtime fields |
@@ -207,12 +214,20 @@ duplicates the user message. The latest run must be `failed` or `cancelled`.
 Messages and retry stream `text/event-stream` by default; send
 `Accept: application/json` for the completed turn. Event names are `run_start`,
 `message_start`, `message_delta`, `message_end`, `tool_start`, `tool_end`,
-`run_end`, and `error`. `message_start` carries `entry_id=null`; the assistant
-entry id arrives at `message_end`, and deltas are never persisted.
-`tool_start` and `tool_end` include `parallel`, `batch_size`, and
-`parallel_index` for the current batch. SSE headers disable proxy buffering
+`approval_required`, `run_end`, and `error`. `message_start` carries
+`entry_id=null`; the assistant entry id arrives at `message_end`, and deltas are
+never persisted. `tool_start` and `tool_end` include `parallel`, `batch_size`,
+and `parallel_index` for the current batch. `approval_required` carries the
+approval id, tool-call id, safe preview, and requested time; the stream then
+ends with `run_end {status: "waiting"}`. SSE headers disable proxy buffering
 (`Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`) and
 Starlette's GZip middleware excludes `text/event-stream`.
+
+Both approval resolution endpoints accept the same JSON fallback. They claim
+the row before executing, append the real tool result, and resume at the next
+model step. A duplicate, expired, or orphaned resolution returns `409
+agent_approval_not_pending`; a non-earliest approval in a multi-call batch
+returns `409 agent_approval_out_of_order`.
 
 The runtime defaults cap a turn at 24 model steps, 6 tool calls, 6 parallel
 tools, 100,000 total tokens, and 100,000 characters per tool result. Each result
@@ -223,6 +238,11 @@ the turn abort or changes compaction. All of these come from the immutable
 `agent_config` snapshot, not from module constants. The loop uses
 `app.state.db.session_factory()` for appends and a short-lived session for each
 tool call, so the stream does not hold the request session.
+
+Startup recovery fails stale `running` runs with `interrupted`. It leaves a
+`waiting` run resumable only while a valid pending approval exists; otherwise
+the run fails closed with `approval_orphaned` and pending approvals on terminal
+runs or archived/deleted conversations are expired.
 
 ### Runtime settings
 
@@ -452,13 +472,22 @@ payload in `model`.
 
 Tool names: `search_knowledge`, `read_file`, `read_timeline`, `read_path`,
 `read_memory`, `save_memory`, `search_media`, `get_media`, `present_resource`.
-`save_memory` is a write action and requires `user_confirmed=true`; the system
-prompt also requires an explicit user request and confirmed wording. The
-`save_memory_requires_approval` setting (default `true`) records whether a write
-waits for an in-chat Approve/Reject decision; the waiting and approval flow
-itself belongs to the approval feature. When the setting is off, the agent may
-save after prompt-level confirmation only. The expanded inspector renders the
-resulting receipt; it does not approve the write.
+`save_memory` is a write action and never executes from a model-supplied
+confirmation. Its authorization depends on the run's
+`save_memory_requires_approval` snapshot:
+
+- **On (default):** valid arguments create a durable `agent_approval` row and
+  move the run to `waiting`; the model-supplied `user_confirmed` flag is ignored.
+  Only `POST /api/v1/agent/approvals/{id}/approve` executes the write, and it
+  passes `approved=True` to the registry. Reject appends a `memory_rejected`
+  error result and resumes without writing.
+- **Off:** the loop executes the validated call immediately with backend
+  authorization (`approved=True`) and the run completes normally. No waiting run
+  or approval row is created.
+
+Direct registry calls without that backend flag still return
+`memory_confirmation_required`. Disabling the setting does not resolve existing
+pending approvals; they remain explicit and their cards keep rendering.
 `present_resource` returns `/viewer/file/{id}?chunk={n}`, `/viewer/media/{id}`,
 or `/viewer/memory/{id}` and does not fetch or open the resource.
 
@@ -575,8 +604,9 @@ tables: `file`, `tree_node`, `chunk`, `chunk_ngram`, `memory`, and
 `memory_summary` (plus Alembic's own `alembic_version`). Later migrations add
 provider settings, standalone media, document analysis fields, account/session
 auth (`app_user`,
-`user_session`), the three agent tables (`agent_conversation`,
-`agent_entry`, `agent_run`) plus the `agent_commit_seq` sequence, and durable
+`user_session`), the agent tables (`agent_conversation`,
+`agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
+sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The agent
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
 `c4f1a9e2b7d3` follows it and updates the entry `kind` and `model` check
@@ -597,14 +627,19 @@ and seeds row `id=1` with the defaults. Later migrations in order:
 - `d1e2f3a4b5c6` (after `e2b7c4d9a6f1`) creates the durable `file_ingest_job`
   queue with status/source/range checks, the active-path unique index, and the
   `file` foreign key;
-- `d4b8e6f1a2c7` (after `d1e2f3a4b5c6`) creates the singleton `ingest_config`
-  table, its range and overlap constraints, and seeds row `id=1`;
+- `d4b8e6f1a2c7` (after `d1e2f3a4b5c6`) creates the singleton
+  `ingest_config` table, its range and overlap constraints, and seeds row
+  `id=1`;
 - `b3e5c7d9f1a2` (after `d4b8e6f1a2c7`) adds `context_window_tokens` with a
   1,000,000 server default and an 8,000–2,000,000 check constraint; existing
   rows receive the default;
-- `c8f2a4b6d9e1` (after `b3e5c7d9f1a2`, the current head) adds the non-null
+- `c8f2a4b6d9e1` (after `b3e5c7d9f1a2`) adds the non-null
   `save_memory_requires_approval` boolean with a `true` server default;
-  existing rows receive `true`.
+  existing rows receive `true`;
+- `f2b3c4d5e6a7` (after `c8f2a4b6d9e1`, the current head) creates
+  `agent_approval` with its status check, conversation/run/entry foreign keys,
+  status indexes, and the partial unique pending `(run_id, tool_call_id)`
+  index.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
@@ -694,11 +729,17 @@ The agent test injects a deterministic `FakeChatGenerator` by assigning
 It also covers runtime settings defaults, full PUT and reset, validation
 failures (`400 invalid_request`), runtime snapshot handling for later runs, auto
 and manual compaction, clear, the page-context boundary and same-page
-reattachment, retry, parallel versus sequential tool execution, and the
-saved-question library. Saved-question coverage includes create/list/pagination,
-ask success, a failed ask that keeps the row with `run_status="failed"` and
-error detail, edit resetting the answer and conversation link, delete,
-not-found errors, and the `conversation_id` `ON DELETE SET NULL` result. The
+reattachment, retry, parallel versus sequential tool execution, human
+save-memory approval, and the saved-question library. Approval coverage asserts
+that model `user_confirmed=true` does not write memory before approval, a valid
+waiting run survives a fresh app lifespan, approve writes exactly once and
+appends the result, duplicate approve/reject returns `409`, reject writes
+nothing, an orphaned waiting run fails closed on restart, and an archived
+conversation fails closed. Saved-question coverage includes
+create/list/pagination, ask success, a failed ask that keeps the row with
+`run_status="failed"` and error detail, edit resetting the answer and
+conversation link, delete, not-found errors, and the `conversation_id`
+`ON DELETE SET NULL` result. The
 file library test covers idempotent folder creation, in-place moves, independent
 copies, extension checks, and path conflicts. It also exercises the durable
 queue: async enqueue for text and upload, worker claim and processing, progress

@@ -33,6 +33,8 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
       : undefined;
   const {
     archived,
+    approvals,
+    approvalsDisabled,
     context,
     conversation,
     conversationError,
@@ -57,6 +59,7 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
     onContextApplied,
     onMode,
     onNewThread,
+    onResolveApproval,
     onRetryThread,
     onScroll,
     onSelectThread,
@@ -69,6 +72,7 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
     streaming,
   } = props;
   const archivedThread = archived;
+  const waitingForApproval = approvals.length > 0;
 
   return (
     <section
@@ -148,7 +152,7 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
         loading={listLoading}
         streaming={streaming}
         archived={archivedThread}
-        disabled={disabled || conversationLoading}
+        disabled={disabled || conversationLoading || waitingForApproval}
         onSelect={onSelectThread}
         onNew={onNewThread}
         onContextApplied={onContextApplied}
@@ -174,6 +178,10 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
           retryState={retryState}
           retryDisabled={retryDisabled}
           onRetryRun={onRetryRun}
+          approvals={approvals}
+          approvalsDisabled={approvalsDisabled}
+          archived={archivedThread}
+          onResolveApproval={onResolveApproval}
         />
         <div ref={endRef} className="pi-agent-end" />
       </div>
@@ -222,7 +230,7 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
           onSubmit={onSubmit}
           pending={pending}
           streaming={streaming}
-          disabled={disabled || archivedThread}
+          disabled={disabled || archivedThread || waitingForApproval}
           onStop={onStop}
         />
       </div>

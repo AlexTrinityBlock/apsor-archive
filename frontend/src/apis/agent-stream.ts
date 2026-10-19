@@ -20,6 +20,7 @@ export interface AgentRunStartData {
   readonly user_entry_id: number;
   readonly page_context_entry_id: number | null;
   readonly page_context_attached: boolean;
+  readonly resumed: boolean;
 }
 
 export interface AgentMessageStartData {
@@ -62,6 +63,17 @@ export interface AgentRunEndData {
   readonly status: string;
 }
 
+export interface AgentApprovalRequiredData {
+  readonly approval_id: number;
+  readonly conversation_id: number;
+  readonly run_id: number;
+  readonly tool_call_id: string;
+  readonly tool_name: string;
+  readonly status: string;
+  readonly preview: Readonly<Record<string, unknown>>;
+  readonly requested_at: string;
+}
+
 export interface AgentErrorData {
   readonly code: string;
   readonly detail: string;
@@ -75,6 +87,7 @@ export type AgentStreamEvent =
   | { readonly type: "message_end"; readonly data: AgentMessageEndData }
   | { readonly type: "tool_start"; readonly data: AgentToolStartData }
   | { readonly type: "tool_end"; readonly data: AgentToolEndData }
+  | { readonly type: "approval_required"; readonly data: AgentApprovalRequiredData }
   | { readonly type: "run_end"; readonly data: AgentRunEndData }
   | { readonly type: "error"; readonly data: AgentErrorData };
 
@@ -90,6 +103,13 @@ export interface StreamAgentMessageOptions {
 export interface StreamAgentRetryOptions {
   readonly conversationId: number;
   readonly requestId?: string;
+  readonly signal?: AbortSignal;
+  readonly onEvent: (event: AgentStreamEvent) => void;
+}
+
+export interface StreamAgentApprovalOptions {
+  readonly approvalId: number;
+  readonly decision: "approve" | "reject";
   readonly signal?: AbortSignal;
   readonly onEvent: (event: AgentStreamEvent) => void;
 }
@@ -219,6 +239,39 @@ function parseFrame(raw: string): SseFrame | null {
   return { event, data: dataLines.join("\n") };
 }
 
+/** Normalize one `approval_required` frame. */
+function toApprovalRequiredEvent(
+  parsed: UnknownRecord,
+): AgentStreamEvent | null {
+  const approvalId = numberValue(parsed.approval_id);
+  const conversationId = numberValue(parsed.conversation_id);
+  const runId = numberValue(parsed.run_id);
+  const toolCallId = stringValue(parsed.tool_call_id);
+  const toolName = stringValue(parsed.tool_name);
+  if (
+    approvalId === null ||
+    conversationId === null ||
+    runId === null ||
+    toolCallId === null ||
+    toolName === null
+  ) {
+    return null;
+  }
+  return {
+    type: "approval_required",
+    data: {
+      approval_id: approvalId,
+      conversation_id: conversationId,
+      run_id: runId,
+      tool_call_id: toolCallId,
+      tool_name: toolName,
+      status: stringValue(parsed.status) ?? "pending",
+      preview: isRecord(parsed.preview) ? parsed.preview : {},
+      requested_at: stringValue(parsed.requested_at) ?? "",
+    },
+  };
+}
+
 /** Normalize one SSE frame into the small event union the UI understands. */
 function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
   let parsed: unknown;
@@ -244,6 +297,7 @@ function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
         user_entry_id: userEntryId,
         page_context_entry_id: numberValue(parsed.page_context_entry_id),
         page_context_attached: parsed.page_context_attached === true,
+        resumed: parsed.resumed === true,
       },
     };
   }
@@ -317,6 +371,10 @@ function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
         error_code: stringValue(parsed.error_code),
       },
     };
+  }
+
+  if (frame.event === "approval_required") {
+    return toApprovalRequiredEvent(parsed);
   }
 
   if (frame.event === "run_end") {
@@ -482,6 +540,26 @@ export async function streamAgentRetry({
     body: {
       request_id: requestId ?? createRequestId(),
     },
+    signal,
+    onEvent,
+  });
+}
+
+/**
+ * Resolve one durable approval and stream the resumed turn.
+ *
+ * The backend claims the row before executing, so a duplicate call returns a
+ * clear 409 instead of writing a second memory.
+ */
+export async function streamAgentApproval({
+  approvalId,
+  decision,
+  signal,
+  onEvent,
+}: StreamAgentApprovalOptions): Promise<void> {
+  await openAgentStream({
+    path: `/api/v1/agent/approvals/${approvalId}/${decision}`,
+    body: {},
     signal,
     onEvent,
   });

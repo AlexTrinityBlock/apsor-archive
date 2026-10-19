@@ -107,6 +107,21 @@ stream is active. A `409 agent_run_not_retryable` response refetches the
 transcript so the stale action disappears. A retry may hit the same token, step,
 or tool-call budget again.
 
+### Approval cards
+
+`save_memory` is gated by a durable human approval. `ApprovalStack` in
+`chat/component/ApprovalCard.tsx` is shared by `/chat` and the Agent dock. It
+loads `GET /api/v1/agent/conversations/{id}/approvals?status=pending`, so the
+card reappears after a reload while the run is waiting. Each card shows the
+proposed memory, supersedes/occurred-at context, write risk, and accessible
+**Approve write** / **Reject** buttons with loading and error states. Resolution
+streams through `streamAgentApproval()` (`agent-stream.ts`); duplicate or stale
+resolutions surface the backend `409` and the approvals query refetches. The
+composer is disabled while an approval is pending, and a stream that ends with
+`run_end {status: "waiting"}` shows the waiting state instead of a generic
+failure. The durable rows come from backend migration `f2b3c4d5e6a7`
+(`agent_approval`).
+
 ### Compact and clear
 
 The `/chat` thread toolbar exposes **Compact** and **Clear** through
@@ -261,11 +276,13 @@ and result payload for rendering; it does not surface a separate parallel
 badge. Transcript and tool-result order always follows assistant call order,
 even when eligible calls execute through `asyncio.gather`.
 
-The `save_memory` panel is a wax-seal receipt for an appended memory, not the
-approval control. The **Require manual approval for memory writes** setting in
-Agent runtime defaults to on; when it is off, the `user_confirmed=true` flag
-remains model-supplied and prompt-enforced. The Approve/Reject waiting flow is
-provided by the approval feature, not by this panel.
+The `save_memory` panel remains a wax-seal receipt for an appended memory. The
+separate approval card is the human gate: the model cannot authorize a write, and
+the UI asks the keeper to approve or reject before the tool runs. The **Require
+manual approval for memory writes** setting (default on) controls future calls
+only; when it is off, no approval card appears and the backend authorizes the
+write directly. Pending cards created while the setting was on keep rendering
+and still require an explicit decision.
 
 `AgentDock` and the inspector panels are mounted by `AppShell` on archive pages.
 The production build is committed under `dist/`; rebuild and commit `dist/` (and
@@ -448,4 +465,4 @@ The checks above cover type safety, linting, the production build, and
 dependency audit. After frontend changes, rebuild and commit `dist/` (and
 `dist/pdfjs/` when it changes) because the Docker image serves the committed
 client and does not run a build. The `save_memory` receipt remains a record of
-the write, not a human approval dialog.
+the write; the shared approval card is the human gate that authorizes it.
