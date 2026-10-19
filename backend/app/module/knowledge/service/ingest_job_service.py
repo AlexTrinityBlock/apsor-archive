@@ -1,0 +1,629 @@
+"""Durable ingestion jobs: enqueue, progress tracking, and worker pipeline.
+
+The HTTP layer only validates the payload, stores the original (or a temporary
+text payload), and inserts a job row. A bounded worker claims queued rows with
+``SELECT ... FOR UPDATE SKIP LOCKED`` and advances them through parsing,
+chunking, embedding, and publishing.
+
+Two deployment shapes share this service:
+
+* the FastAPI lifespan starts one in-process worker for local development;
+* ``python -m app.worker`` / ``dendromatrix worker`` runs a dedicated process.
+
+The lifespan task is convenient but shares an event loop and process with the
+API. The dedicated process is preferred in production because parsing and
+embedding cannot starve request handlers, and it can restart independently.
+Both modes are single-loop workers; multiple API replicas should disable the
+lifespan task and run dedicated workers instead. Parsing and chunking run on a
+bounded ``ThreadPoolExecutor`` (two threads by default) while a semaphore caps
+in-flight jobs per worker (two by default); embedding has its own async limit.
+"""
+
+import asyncio
+import logging
+import mimetypes
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
+from typing import Any, cast
+from uuid import uuid4
+
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.module.knowledge.domain.path_domain import extension
+from app.module.knowledge.exception.domain_error import (
+    AiProviderError,
+    EmbeddingProviderError,
+    EmptyContentError,
+    FileTooLargeError,
+    IngestJobConflictError,
+    IngestJobNotFoundError,
+    IngestJobNotRetryableError,
+    InvalidPathError,
+    KnowledgeError,
+    TooManyChunksError,
+    TreePathConflictError,
+    UnsupportedFileTypeError,
+    VisionExtractionError,
+)
+from app.module.knowledge.model.ingest_job_model import (
+    INGEST_SOURCE_TEXT,
+    INGEST_SOURCE_UPLOAD,
+    INGEST_STATUS_CHUNKING,
+    INGEST_STATUS_EMBEDDING,
+    INGEST_STATUS_FAILED,
+    INGEST_STATUS_QUEUED,
+    INGEST_STATUS_READY,
+    INGEST_STATUS_SUMMARIZING,
+    FileIngestJobModel,
+)
+from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
+from app.module.knowledge.protocol.ingest_progress_protocol import IngestProgressProtocol
+from app.module.knowledge.repository.ingest_job_repository import IngestJobRepository
+from app.module.knowledge.schema.file_schema import (
+    IngestJobListSchema,
+    IngestJobSchema,
+    IngestJobStatus,
+    IngestSourceKind,
+)
+from app.module.knowledge.service.file_service import (
+    ALLOWED_EXTENSIONS,
+    FileService,
+)
+from app.shared.time import utcnow
+
+logger = logging.getLogger(__name__)
+
+TEMP_PREFIX = "ingest-tmp"
+
+_ERROR_CODES: tuple[tuple[type[BaseException], str], ...] = (
+    (EmptyContentError, "empty_content"),
+    (TooManyChunksError, "too_many_chunks"),
+    (UnsupportedFileTypeError, "unsupported_file_type"),
+    (FileTooLargeError, "file_too_large"),
+    (TreePathConflictError, "tree_path_conflict"),
+    (InvalidPathError, "invalid_path"),
+    (VisionExtractionError, "vision_extraction_failed"),
+    (AiProviderError, "ai_provider_error"),
+    (EmbeddingProviderError, "embedding_provider_error"),
+    (FileNotFoundError, "ingest_payload_missing"),
+    (KnowledgeError, "knowledge_error"),
+)
+
+
+def ingest_error_code(exc: BaseException) -> str:
+    """Map an ingestion exception to a stable, readable error code."""
+    for exc_type, code in _ERROR_CODES:
+        if isinstance(exc, exc_type):
+            return code
+    return "ingest_failed"
+
+
+def _to_schema(job: FileIngestJobModel) -> IngestJobSchema:
+    return IngestJobSchema(
+        id=job.id,
+        file_id=job.file_id,
+        source_kind=cast(IngestSourceKind, job.source_kind),
+        path=job.path,
+        file_name=job.file_name,
+        mime_type=job.mime_type,
+        size_bytes=job.size_bytes,
+        occurred_at=job.occurred_at,
+        status=cast(IngestJobStatus, job.status),
+        stage=job.stage,
+        progress_pct=job.progress_pct,
+        chunks_total=job.chunks_total,
+        chunks_embedded=job.chunks_embedded,
+        error_code=job.error_code,
+        error_detail=job.error_detail,
+        attempts=job.attempts,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+    )
+
+
+class IngestJobService:
+    """Request-scoped enqueue, lookup, and retry operations."""
+
+    def __init__(
+        self,
+        *,
+        repository: IngestJobRepository,
+        file_service: FileService,
+        max_attempts: int,
+    ) -> None:
+        self.repository = repository
+        self.file_service = file_service
+        self.max_attempts = max(1, max_attempts)
+
+    async def _discard_storage(self, storage_key: str) -> None:
+        try:
+            await self.file_service.storage.delete(storage_key)
+        except Exception:
+            logger.warning("Could not delete rejected ingestion payload %s", storage_key)
+
+    async def enqueue_upload(
+        self,
+        *,
+        path: str,
+        data: bytes,
+        content_type: str | None,
+        occurred_at: datetime | None,
+    ) -> IngestJobSchema:
+        """Store the original bytes and queue an upload for background ingest."""
+        normalized = self.file_service.normalize_path(path)
+        suffix = extension(normalized)
+        if suffix not in ALLOWED_EXTENSIONS:
+            raise UnsupportedFileTypeError(suffix)
+        if len(data) > self.file_service.max_upload_bytes:
+            raise FileTooLargeError(len(data), self.file_service.max_upload_bytes)
+        mime_type = (
+            content_type
+            or mimetypes.guess_type(normalized)[0]
+            or "application/octet-stream"
+        )
+        storage_key = self.file_service.new_storage_key(suffix)
+        await self.file_service.storage.save(storage_key, data)
+        job = FileIngestJobModel(
+            source_kind=INGEST_SOURCE_UPLOAD,
+            path=normalized,
+            storage_key=storage_key,
+            mime_type=mime_type,
+            file_name=normalized.rsplit("/", 1)[-1],
+            size_bytes=len(data),
+            occurred_at=occurred_at,
+            status=INGEST_STATUS_QUEUED,
+            stage="Queued",
+            progress_pct=0,
+        )
+        try:
+            await self.repository.add(job)
+        except IntegrityError as exc:
+            await self.repository.session.rollback()
+            await self._discard_storage(storage_key)
+            raise IngestJobConflictError(normalized) from exc
+        except Exception:
+            await self._discard_storage(storage_key)
+            raise
+        return _to_schema(job)
+
+    async def enqueue_text(
+        self,
+        *,
+        path: str,
+        content: str,
+        occurred_at: datetime | None,
+    ) -> IngestJobSchema:
+        """Store direct text in temporary storage and queue a background ingest."""
+        normalized = self.file_service.normalize_path(path)
+        encoded = content.encode("utf-8")
+        if len(encoded) > self.file_service.max_text_bytes:
+            raise FileTooLargeError(len(encoded), self.file_service.max_text_bytes)
+        mime_type = mimetypes.guess_type(normalized)[0] or "text/plain"
+        storage_key = f"{TEMP_PREFIX}/{uuid4().hex}.txt"
+        await self.file_service.storage.save(storage_key, encoded)
+        job = FileIngestJobModel(
+            source_kind=INGEST_SOURCE_TEXT,
+            path=normalized,
+            storage_key=storage_key,
+            mime_type=mime_type,
+            file_name=normalized.rsplit("/", 1)[-1],
+            size_bytes=len(encoded),
+            occurred_at=occurred_at,
+            status=INGEST_STATUS_QUEUED,
+            stage="Queued",
+            progress_pct=0,
+        )
+        try:
+            await self.repository.add(job)
+        except IntegrityError as exc:
+            await self.repository.session.rollback()
+            await self._discard_storage(storage_key)
+            raise IngestJobConflictError(normalized) from exc
+        except Exception:
+            await self._discard_storage(storage_key)
+            raise
+        return _to_schema(job)
+
+    async def get_job(self, job_id: int) -> IngestJobSchema:
+        job = await self.repository.get(job_id)
+        if job is None:
+            raise IngestJobNotFoundError(job_id)
+        return _to_schema(job)
+
+    async def list_jobs(self, *, limit: int, offset: int) -> IngestJobListSchema:
+        jobs = await self.repository.list_recent(limit=limit, offset=offset)
+        total = await self.repository.count()
+        return IngestJobListSchema(
+            total_results=total,
+            jobs=[_to_schema(job) for job in jobs],
+        )
+
+    async def retry_job(self, job_id: int) -> IngestJobSchema:
+        """Return a failed job to the queue without resetting its attempt count."""
+        job = await self.repository.get(job_id)
+        if job is None:
+            raise IngestJobNotFoundError(job_id)
+        if job.status != INGEST_STATUS_FAILED:
+            raise IngestJobNotRetryableError(job_id, "the job has not failed")
+        if job.attempts >= self.max_attempts:
+            raise IngestJobNotRetryableError(job_id, "the attempt limit was reached")
+        job.status = INGEST_STATUS_QUEUED
+        job.stage = "Retry queued"
+        job.progress_pct = 0
+        job.chunks_total = None
+        job.chunks_embedded = None
+        job.error_code = None
+        job.error_detail = None
+        job.finished_at = None
+        job.started_at = None
+        job.updated_at = utcnow()
+        try:
+            await self.repository.session.flush()
+        except IntegrityError as exc:
+            await self.repository.session.rollback()
+            raise IngestJobConflictError(job.path) from exc
+        return _to_schema(job)
+
+
+class _JobProgress(IngestProgressProtocol):
+    """Persist ingestion milestones in short, independent transactions.
+
+    ``file_created`` runs after the worker's file/node checkpoint, so the
+    staged file row is already committed when the job stores its foreign key.
+    """
+
+    def __init__(self, worker: "IngestWorker", job_id: int) -> None:
+        self.worker = worker
+        self.job_id = job_id
+        self.file_id: int | None = None
+        self.embedded_count: int | None = None
+
+    async def chunked(self, total: int) -> None:
+        await self.worker.update_job(
+            self.job_id,
+            status=INGEST_STATUS_CHUNKING,
+            stage="Splitting text into chunks",
+            progress_pct=20,
+            chunks_total=total,
+        )
+
+    async def file_created(self, file_id: int) -> None:
+        self.file_id = file_id
+        await self.worker.update_job(self.job_id, file_id=file_id)
+
+    async def embedded(self, done: int, total: int) -> None:
+        self.embedded_count = done
+        ratio = 0.0 if total <= 0 else done / total
+        progress_pct = min(90, 25 + int(65 * ratio))
+        await self.worker.update_job(
+            self.job_id,
+            status=INGEST_STATUS_EMBEDDING,
+            stage=f"Embedding chunks {done}/{total}",
+            progress_pct=progress_pct,
+            chunks_embedded=done,
+        )
+
+
+class IngestWorker:
+    """Bounded polling worker for the durable ingestion queue.
+
+    Every database touch uses a fresh short-lived session. Parsing and chunking
+    run through one bounded ``ThreadPoolExecutor`` shared by the worker's file
+    services; a job semaphore caps how many jobs are in flight. Embedding stays
+    async and is batched through one shared semaphore per worker, independent of
+    extraction threads. The worker never spawns one thread per upload.
+
+    Pure-Python CPU work still contends for the GIL even on threads. A process
+    pool can replace ``ThreadPoolExecutor`` later without changing the job or
+    progress contracts; this implementation deliberately keeps the deployment
+    and resource story simple.
+    """
+
+    def __init__(
+        self,
+        *,
+        session_factory: async_sessionmaker[AsyncSession],
+        file_service_factory: Callable[[AsyncSession], FileService],
+        storage: FileStorageProtocol,
+        max_attempts: int,
+        poll_seconds: float = 1.0,
+        stale_seconds: int = 300,
+        extract_pool: ThreadPoolExecutor | None = None,
+        extract_workers: int = 2,
+        max_in_flight_jobs: int = 2,
+        embedding_semaphore: asyncio.Semaphore | None = None,
+        embedding_concurrency: int = 6,
+    ) -> None:
+        self.session_factory = session_factory
+        self.file_service_factory = file_service_factory
+        self.storage = storage
+        self.max_attempts = max(1, max_attempts)
+        self.poll_seconds = max(0.1, poll_seconds)
+        self.stale_seconds = max(1, stale_seconds)
+        self.extract_pool = extract_pool
+        self.extract_workers = max(1, extract_workers)
+        self.max_in_flight_jobs = max(1, max_in_flight_jobs)
+        self.embedding_concurrency = max(1, embedding_concurrency)
+        self.embedding_semaphore = embedding_semaphore or asyncio.Semaphore(
+            self.embedding_concurrency
+        )
+        self._job_slots = asyncio.Semaphore(self.max_in_flight_jobs)
+
+    def close(self) -> None:
+        """Release extraction threads without waiting on a stopped event loop."""
+        if self.extract_pool is not None:
+            self.extract_pool.shutdown(wait=False, cancel_futures=True)
+
+    async def startup(self) -> int:
+        """Requeue jobs abandoned by a previous process before polling starts.
+
+        Staged file versions from the interrupted attempt are deleted first, so
+        a restart cannot leave invisible rows behind. Terminal recoveries also
+        remove their stored payloads.
+        """
+        stale_before = utcnow() - timedelta(seconds=self.stale_seconds)
+        async with self.session_factory() as session:
+            repository = IngestJobRepository(session)
+            file_service = self.file_service_factory(session)
+            for job in await repository.list_stale(stale_before=stale_before):
+                if job.file_id is None:
+                    continue
+                file_id = job.file_id
+                # Keep updated_at stale so the requeue query below still sees
+                # this row after the staged file is removed.
+                await repository.clear_file_id(job.id)
+                try:
+                    await file_service.discard_pending(file_id)
+                except Exception:
+                    logger.exception(
+                        "Could not discard staged file %d during startup recovery",
+                        file_id,
+                    )
+            await session.commit()
+
+        async with self.session_factory() as session:
+            recovered, terminal_payloads = await IngestJobRepository(
+                session
+            ).requeue_stale(
+                stale_before=stale_before,
+                max_attempts=self.max_attempts,
+            )
+            await session.commit()
+        for storage_key in terminal_payloads:
+            await self._delete_payload(storage_key)
+        if recovered:
+            logger.warning("Requeued %d interrupted ingestion job(s)", recovered)
+        return recovered
+
+    async def _delete_payload(self, storage_key: str | None) -> None:
+        """Remove a temporary or terminal payload without failing the job."""
+        if storage_key is None:
+            return
+        try:
+            await self.storage.delete(storage_key)
+        except Exception:
+            logger.warning("Could not delete ingestion payload %s", storage_key)
+
+    async def run_once(self) -> bool:
+        """Claim and fully process at most one queued job."""
+        job_id = await self._claim_next()
+        if job_id is None:
+            return False
+        await self._process_claimed(job_id)
+        return True
+
+    async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
+        """Poll immediately and keep up to ``max_in_flight_jobs`` jobs running.
+
+        A claimed job is started before the next poll, so a full queue drains
+        without extra delay while an empty queue waits ``poll_seconds`` (one
+        second by default). Progress updates remain per job because each task
+        owns its own sessions.
+        """
+        tasks: set[asyncio.Task[None]] = set()
+        try:
+            while stop_event is None or not stop_event.is_set():
+                for finished in {task for task in tasks if task.done()}:
+                    tasks.discard(finished)
+                while len(tasks) < self.max_in_flight_jobs:
+                    try:
+                        job_id = await self._claim_next()
+                    except Exception:
+                        logger.exception("Could not claim an ingestion job")
+                        break
+                    if job_id is None:
+                        break
+                    tasks.add(
+                        asyncio.create_task(
+                            self._process_with_slot(job_id),
+                            name=f"ingest-job-{job_id}",
+                        )
+                    )
+                if tasks:
+                    await asyncio.wait(
+                        tasks,
+                        timeout=self.poll_seconds,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    continue
+                if stop_event is not None:
+                    try:
+                        await asyncio.wait_for(
+                            stop_event.wait(),
+                            timeout=self.poll_seconds,
+                        )
+                    except TimeoutError:
+                        pass
+                else:
+                    await asyncio.sleep(self.poll_seconds)
+        finally:
+            if stop_event is not None and stop_event.is_set() and tasks:
+                # A signal asked for a graceful stop: let claimed jobs finish.
+                await asyncio.gather(*tasks, return_exceptions=True)
+            else:
+                for task in tasks:
+                    task.cancel()
+                if tasks:
+                    await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _process_with_slot(self, job_id: int) -> None:
+        """Hold one in-flight slot for the whole job pipeline."""
+        try:
+            async with self._job_slots:
+                await self._process_claimed(job_id)
+        except Exception:
+            logger.exception("Ingestion job %d crashed", job_id)
+
+    async def process_job(self, job_id: int) -> IngestJobSchema | None:
+        """Claim and process one specific queued job (tests and ``--once``)."""
+        async with self.session_factory() as session:
+            job = await IngestJobRepository(session).claim(job_id)
+            await session.commit()
+        if job is None:
+            return None
+        await self._process_claimed(job_id)
+        return await self.get_job(job_id)
+
+    async def get_job(self, job_id: int) -> IngestJobSchema | None:
+        async with self.session_factory() as session:
+            job = await IngestJobRepository(session).get(job_id)
+            return None if job is None else _to_schema(job)
+
+    async def update_job(self, job_id: int, **fields: Any) -> None:
+        """Apply one progress update in its own committed session."""
+        async with self.session_factory() as session:
+            job = await IngestJobRepository(session).get(job_id)
+            if job is None:
+                return
+            for name, value in fields.items():
+                setattr(job, name, value)
+            job.updated_at = utcnow()
+            await session.commit()
+
+    async def _claim_next(self) -> int | None:
+        async with self.session_factory() as session:
+            job = await IngestJobRepository(session).claim_next()
+            job_id = None if job is None else job.id
+            await session.commit()
+        return job_id
+
+    async def _process_claimed(self, job_id: int) -> None:
+        job = await self._load_job(job_id)
+        if job is None:
+            return
+        progress = _JobProgress(self, job_id)
+        staged_file_id: int | None = None
+        try:
+            if job.storage_key is None:
+                raise FileNotFoundError("The job payload is missing.")
+            data = await self.storage.read(job.storage_key)
+
+            async with self.session_factory() as session:
+                file_service = self.file_service_factory(session)
+                extracted = await file_service.prepare_job_document(
+                    source_kind=job.source_kind,
+                    path=job.path,
+                    data=data,
+                )
+                await self.update_job(
+                    job_id,
+                    status=INGEST_STATUS_CHUNKING,
+                    stage="Splitting text into chunks",
+                    progress_pct=15,
+                )
+                file_schema = await file_service.ingest_extracted(
+                    path=job.path,
+                    data=data,
+                    extracted=extracted,
+                    mime_type=job.mime_type,
+                    storage_key=(
+                        job.storage_key
+                        if job.source_kind == INGEST_SOURCE_UPLOAD
+                        else None
+                    ),
+                    occurred_at=job.occurred_at,
+                    publish=False,
+                    progress=progress,
+                    checkpoint=session.commit,
+                )
+                await session.commit()
+            staged_file_id = file_schema.id
+
+            await self.update_job(
+                job_id,
+                file_id=file_schema.id,
+                status=INGEST_STATUS_SUMMARIZING,
+                stage="Publishing file",
+                progress_pct=95,
+            )
+            async with self.session_factory() as session:
+                file_service = self.file_service_factory(session)
+                await file_service.publish_pending(file_schema.id)
+                ready_job = await IngestJobRepository(session).get(job_id)
+                if ready_job is not None:
+                    ready_job.status = INGEST_STATUS_READY
+                    ready_job.stage = "Ready"
+                    ready_job.progress_pct = 100
+                    ready_job.chunks_embedded = progress.embedded_count
+                    ready_job.file_id = file_schema.id
+                    ready_job.finished_at = utcnow()
+                    ready_job.updated_at = utcnow()
+                await session.commit()
+            if job.source_kind == INGEST_SOURCE_TEXT and job.storage_key is not None:
+                await self._delete_payload(job.storage_key)
+        except Exception as exc:
+            logger.exception("Ingestion job %d failed", job_id)
+            await self._fail(job_id, exc, progress.file_id or staged_file_id)
+
+    async def _load_job(self, job_id: int) -> FileIngestJobModel | None:
+        async with self.session_factory() as session:
+            return await IngestJobRepository(session).get(job_id)
+
+    async def _fail(
+        self,
+        job_id: int,
+        exc: BaseException,
+        staged_file_id: int | None = None,
+    ) -> None:
+        job = await self._load_job(job_id)
+        if job is None:
+            return
+        file_id = job.file_id if job.file_id is not None else staged_file_id
+        discarded = False
+        if file_id is not None:
+            # Clear the foreign key first: the file row uses ON DELETE CASCADE,
+            # so deleting the staged file would otherwise delete the job too.
+            await self.update_job(job_id, file_id=None)
+            async with self.session_factory() as session:
+                file_service = self.file_service_factory(session)
+                discarded = await file_service.discard_pending(file_id)
+                await session.commit()
+        can_delete_payload = file_id is None or discarded
+        if (
+            job.attempts >= self.max_attempts
+            and can_delete_payload
+            and job.storage_key is not None
+        ):
+            await self._delete_payload(job.storage_key)
+        detail = str(exc) or exc.__class__.__name__
+        await self.update_job(
+            job_id,
+            status=INGEST_STATUS_FAILED,
+            stage="Failed",
+            error_code=ingest_error_code(exc),
+            error_detail=detail[:2000],
+            file_id=None,
+            finished_at=utcnow(),
+        )
+
+
+__all__ = [
+    "TEMP_PREFIX",
+    "IngestJobService",
+    "IngestWorker",
+    "ingest_error_code",
+]

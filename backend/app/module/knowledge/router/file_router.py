@@ -22,6 +22,7 @@ from app.infrastructure.config.settings import Settings
 from app.module.knowledge.dependencies import (
     get_app_settings,
     get_file_service,
+    get_ingest_job_service,
 )
 from app.module.knowledge.schema.file_schema import (
     FileChunksSchema,
@@ -29,8 +30,11 @@ from app.module.knowledge.schema.file_schema import (
     FileMoveSchema,
     FileSchema,
     FileTextCreateSchema,
+    IngestJobListSchema,
+    IngestJobSchema,
 )
 from app.module.knowledge.service.file_service import FileOriginal, FileService
+from app.module.knowledge.service.ingest_job_service import IngestJobService
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -147,6 +151,92 @@ async def create_text_file(
         content=payload.content,
         occurred_at=payload.occurred_at,
     )
+
+
+@router.post(
+    "/async",
+    response_model=IngestJobSchema,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="uploadFileAsync",
+)
+async def upload_file_async(
+    path: Annotated[str, Form(min_length=1, max_length=1024)],
+    file: Annotated[UploadFile, File()],
+    occurred_at: Annotated[datetime | None, Form()] = None,
+    ingest_job_service: IngestJobService = Depends(get_ingest_job_service),
+    settings: Settings = Depends(get_app_settings),
+) -> IngestJobSchema:
+    """Store one upload and return immediately with a durable job.
+
+    The synchronous ``POST /files`` endpoint remains available for clients that
+    need the fully indexed file in the same response.
+    """
+    data = await file.read(settings.max_upload_bytes + 1)
+    return await ingest_job_service.enqueue_upload(
+        path=path,
+        data=data,
+        content_type=file.content_type,
+        occurred_at=occurred_at,
+    )
+
+
+@router.post(
+    "/text/async",
+    response_model=IngestJobSchema,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="createTextFileAsync",
+)
+async def create_text_file_async(
+    payload: FileTextCreateSchema,
+    ingest_job_service: IngestJobService = Depends(get_ingest_job_service),
+) -> IngestJobSchema:
+    """Queue direct text without waiting for chunking and embedding."""
+    return await ingest_job_service.enqueue_text(
+        path=payload.path,
+        content=payload.content,
+        occurred_at=payload.occurred_at,
+    )
+
+
+@router.get(
+    "/ingest-jobs",
+    response_model=IngestJobListSchema,
+    operation_id="listIngestJobs",
+)
+async def list_ingest_jobs(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    ingest_job_service: IngestJobService = Depends(get_ingest_job_service),
+) -> IngestJobListSchema:
+    """List active and recent ingestion jobs, newest first."""
+    return await ingest_job_service.list_jobs(limit=limit, offset=offset)
+
+
+@router.get(
+    "/ingest-jobs/{job_id}",
+    response_model=IngestJobSchema,
+    operation_id="getIngestJob",
+)
+async def get_ingest_job(
+    job_id: int,
+    ingest_job_service: IngestJobService = Depends(get_ingest_job_service),
+) -> IngestJobSchema:
+    """Return one job's status and chunking/embedding progress."""
+    return await ingest_job_service.get_job(job_id)
+
+
+@router.post(
+    "/ingest-jobs/{job_id}/retry",
+    response_model=IngestJobSchema,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="retryIngestJob",
+)
+async def retry_ingest_job(
+    job_id: int,
+    ingest_job_service: IngestJobService = Depends(get_ingest_job_service),
+) -> IngestJobSchema:
+    """Return a failed job to the queue when its attempt budget allows."""
+    return await ingest_job_service.retry_job(job_id)
 
 
 @router.post(

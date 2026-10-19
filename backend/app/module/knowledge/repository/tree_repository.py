@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.module.knowledge.model.tree_model import TreeNodeModel
@@ -20,6 +21,27 @@ class TreeRepository:
         await self.session.flush()
         return node
 
+    async def add_folder_if_absent(self, node: TreeNodeModel) -> TreeNodeModel:
+        """Insert a folder inside a savepoint and return the winning row.
+
+        Concurrent ingestion jobs may race to create the same ancestor folder.
+        The partial unique index rejects the loser; rolling back only the
+        savepoint keeps the rest of the job transaction usable.
+        """
+        try:
+            async with self.session.begin_nested():
+                self.session.add(node)
+                await self.session.flush()
+            return node
+        except IntegrityError:
+            existing = await self.get_current_by_path(node.path)
+            if existing is None:
+                raise
+            return existing
+
+    async def flush(self) -> None:
+        await self.session.flush()
+
     async def get_by_id(self, node_id: int) -> TreeNodeModel | None:
         return await self.session.get(TreeNodeModel, node_id)
 
@@ -28,6 +50,16 @@ class TreeRepository:
             TreeNodeModel.path == path,
             TreeNodeModel.is_current.is_(True),
             TreeNodeModel.deleted_at.is_(None),
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def get_latest_by_file_id(self, file_id: int) -> TreeNodeModel | None:
+        """Return the newest node for a file, including unpublished ones."""
+        statement = (
+            select(TreeNodeModel)
+            .where(TreeNodeModel.file_id == file_id)
+            .order_by(TreeNodeModel.id.desc())
+            .limit(1)
         )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
@@ -121,6 +153,11 @@ class TreeRepository:
         node.is_current = False
         node.deleted_at = now
         node.updated_at = now
+        await self.session.flush()
+
+    async def delete(self, node: TreeNodeModel) -> None:
+        """Remove a node created for an ingestion that never published."""
+        await self.session.delete(node)
         await self.session.flush()
 
     async def list_descendants(self, node: TreeNodeModel) -> Sequence[TreeNodeModel]:

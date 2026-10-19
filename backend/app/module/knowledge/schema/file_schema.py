@@ -5,6 +5,17 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+IngestJobStatus = Literal[
+    "queued",
+    "parsing",
+    "chunking",
+    "embedding",
+    "summarizing",
+    "ready",
+    "failed",
+]
+IngestSourceKind = Literal["upload", "text"]
+
 
 class FileSchema(BaseModel):
     """File metadata returned by the API."""
@@ -39,6 +50,42 @@ class FileTextCreateSchema(BaseModel):
     path: str = Field(min_length=1, max_length=1024)
     content: str = Field(min_length=1)
     occurred_at: datetime | None = None
+
+
+class IngestJobSchema(BaseModel):
+    """Durable ingestion job state and progress for one file path."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    file_id: int | None
+    source_kind: IngestSourceKind
+    path: str
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    occurred_at: datetime | None
+    status: IngestJobStatus
+    stage: str | None
+    progress_pct: int
+    chunks_total: int | None
+    chunks_embedded: int | None
+    error_code: str | None
+    error_detail: str | None
+    attempts: int
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class IngestJobListSchema(BaseModel):
+    """A page of active and recent ingestion jobs."""
+
+    model_config = ConfigDict(frozen=True)
+
+    total_results: int
+    jobs: list[IngestJobSchema]
 
 
 class FolderCreateSchema(BaseModel):
