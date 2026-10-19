@@ -21,6 +21,8 @@ export function AgentWorkspaceSurface(props: AgentDockSurfaceProps) {
   const titleId = useId();
   const {
     archived,
+    approvals,
+    approvalsDisabled,
     context,
     conversation,
     conversationError,
@@ -48,6 +50,7 @@ export function AgentWorkspaceSurface(props: AgentDockSurfaceProps) {
     onNewThread,
     onPane,
     onPin,
+    onResolveApproval,
     onRetryThread,
     onScroll,
     onSelectThread,
@@ -62,6 +65,7 @@ export function AgentWorkspaceSurface(props: AgentDockSurfaceProps) {
     streaming,
     trace,
   } = props;
+  const waitingForApproval = approvals.length > 0;
 
   return (
     <div
@@ -135,7 +139,7 @@ export function AgentWorkspaceSurface(props: AgentDockSurfaceProps) {
           loading={listLoading}
           streaming={streaming}
           archived={archived}
-          disabled={disabled || conversationLoading}
+          disabled={disabled || conversationLoading || waitingForApproval}
           onSelect={onSelectThread}
           onNew={onNewThread}
           onContextApplied={onContextApplied}
@@ -175,6 +179,10 @@ export function AgentWorkspaceSurface(props: AgentDockSurfaceProps) {
               retryState={retryState}
               retryDisabled={retryDisabled}
               onRetryRun={onRetryRun}
+              approvals={approvals}
+              approvalsDisabled={approvalsDisabled}
+              archived={archived}
+              onResolveApproval={onResolveApproval}
             />
             <div ref={endRef} className="pi-agent-end" />
           </div>
@@ -223,7 +231,7 @@ export function AgentWorkspaceSurface(props: AgentDockSurfaceProps) {
               onSubmit={onSubmit}
               pending={pending}
               streaming={streaming}
-              disabled={disabled || archived}
+              disabled={disabled || archived || waitingForApproval}
               onStop={onStop}
             />
           </div>

@@ -4,8 +4,9 @@ from datetime import datetime
 from typing import Any, Protocol
 from uuid import UUID
 
-from app.module.agent.domain.agent_domain import EntryDraft
+from app.module.agent.domain.agent_domain import ApprovalDraft, EntryDraft
 from app.module.agent.model.agent_model import (
+    AgentApprovalModel,
     AgentConversationModel,
     AgentEntryModel,
     AgentRunModel,
@@ -114,6 +115,49 @@ class AgentRepositoryProtocol(Protocol):
         now: datetime,
     ) -> list[AgentEntryModel]: ...
 
+    async def pause_run_with_approvals(
+        self,
+        *,
+        conversation_id: int,
+        run_id: int,
+        result_drafts: list[EntryDraft],
+        approval_drafts: list[ApprovalDraft],
+        last_entry_id: int | None,
+        now: datetime,
+    ) -> tuple[list[AgentEntryModel], list[AgentApprovalModel]]: ...
+
+    async def list_approvals(
+        self,
+        conversation_id: int,
+        *,
+        status: str | None,
+    ) -> list[AgentApprovalModel]: ...
+
+    async def get_approval(self, approval_id: int) -> AgentApprovalModel | None: ...
+
+    async def list_pending_approvals(self, run_id: int) -> list[AgentApprovalModel]: ...
+
+    async def claim_approval(
+        self,
+        *,
+        approval_id: int,
+        approved: bool,
+        now: datetime,
+    ) -> tuple[AgentApprovalModel, AgentRunModel, AgentConversationModel]: ...
+
+    async def record_approval_result(
+        self,
+        *,
+        approval_id: int,
+        draft: EntryDraft,
+        now: datetime,
+    ) -> tuple[
+        AgentEntryModel,
+        AgentRunModel,
+        AgentConversationModel,
+        list[AgentApprovalModel],
+    ]: ...
+
     async def complete_run(
         self,
         *,
@@ -174,4 +218,4 @@ class AgentRepositoryProtocol(Protocol):
 
     async def is_abort_requested(self, conversation_id: int, run_id: int) -> bool: ...
 
-    async def mark_interrupted_runs(self, *, now: datetime) -> int: ...
+    async def recover_stale_runs(self, *, now: datetime) -> int: ...

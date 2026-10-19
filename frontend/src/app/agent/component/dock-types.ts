@@ -2,6 +2,7 @@
 import type { RefObject, UIEventHandler } from "react";
 
 import type {
+  AgentApprovalSchema,
   AgentConversationDetailSchema,
   AgentConversationSchema,
   AgentEntrySchema,
@@ -45,6 +46,12 @@ export interface AgentDockSurfaceProps {
   readonly retryState: RetryState;
   readonly retryDisabled: boolean;
   readonly onRetryRun: () => void;
+  readonly approvals: readonly AgentApprovalSchema[];
+  readonly approvalsDisabled: boolean;
+  readonly onResolveApproval: (
+    approvalId: number,
+    decision: "approve" | "reject",
+  ) => Promise<boolean>;
   readonly onContextApplied: (entry: AgentEntrySchema) => void;
   readonly scrollRef: RefObject<HTMLDivElement | null>;
   readonly endRef: RefObject<HTMLDivElement | null>;

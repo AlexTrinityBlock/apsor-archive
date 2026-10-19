@@ -19,6 +19,7 @@ import {
   listAgentEntries,
   useCreateAgentConversation,
   useGetAgentConversation,
+  useListAgentApprovals,
   useListAgentConversations,
   useUpdateAgentConversation,
 } from "../generated-apis-types/agent/agent";
@@ -30,6 +31,7 @@ import { formatRelative } from "../../lib/format";
 import { ChatComposer } from "./component/ChatComposer";
 import { ChatIntro } from "./component/ChatIntro";
 import { ChatThread } from "./component/ChatThread";
+import { ApprovalStack } from "./component/ApprovalCard";
 import { ContextActions } from "./component/ContextActions";
 import { ConversationRail } from "./component/ConversationRail";
 import { RetryBar } from "./component/RetryBar";
@@ -208,6 +210,16 @@ export function ChatPage() {
       },
     },
   );
+  const approvalsQuery = useListAgentApprovals(
+    conversationId ?? 0,
+    { status: "pending" },
+    {
+      query: {
+        enabled: conversationId !== null,
+        retry: false,
+      },
+    },
+  );
   const createConversation = useCreateAgentConversation();
   const updateConversation = useUpdateAgentConversation();
 
@@ -215,7 +227,8 @@ export function ChatPage() {
     stickToBottomRef.current = true;
     setLastError(message);
   }, []);
-  const { stream, isStreaming, start, retry, stop } = useChatStream(handleStreamError);
+  const { stream, isStreaming, start, retry, resolveApproval, stop } =
+    useChatStream(handleStreamError);
 
   // Abort any open run when the selected thread changes or the page unmounts.
   useEffect(() => {
@@ -301,6 +314,25 @@ export function ChatPage() {
     () => readRetryState(entries, lastError ? { detail: lastError } : null),
     [entries, lastError],
   );
+  const pendingApprovals = useMemo(
+    () =>
+      conversationId === null || approvalsQuery.data === undefined
+        ? []
+        : approvalsQuery.data.resources,
+    [approvalsQuery.data, conversationId],
+  );
+  const waitingForApproval = pendingApprovals.length > 0;
+  const handleResolveApproval = useCallback(
+    (approvalId: number, decision: "approve" | "reject") => {
+      if (conversationId === null) {
+        return Promise.resolve(false);
+      }
+      stickToBottomRef.current = true;
+      setLastError(null);
+      return resolveApproval(conversationId, approvalId, decision);
+    },
+    [conversationId, resolveApproval],
+  );
 
   const applyContextBoundary = useCallback(
     (entry: AgentEntrySchema) => {
@@ -343,6 +375,7 @@ export function ChatPage() {
     conversationId,
     entries.length,
     lastError,
+    pendingApprovals.length,
     streamingActive,
     streamTextLength,
     streamToolCount,
@@ -515,6 +548,12 @@ export function ChatPage() {
     return (
       <>
         <ChatThread entries={entries} conversation={conversation} />
+        <ApprovalStack
+          approvals={pendingApprovals}
+          disabled={isStreaming}
+          archived={archived}
+          onResolve={handleResolveApproval}
+        />
         {stream ? <StreamingTurn stream={stream} /> : null}
         {hasMore ? (
           <div className="chat-thread__more">
@@ -595,7 +634,11 @@ export function ChatPage() {
           onSubmit={(value) => void submit(value)}
           pending={creating || isStreaming}
           streaming={isStreaming}
-          disabled={creating || (conversationId !== null && conversationQuery.isError)}
+          disabled={
+            creating ||
+            waitingForApproval ||
+            (conversationId !== null && conversationQuery.isError)
+          }
           onStop={stop}
         />
       </>
@@ -617,7 +660,9 @@ export function ChatPage() {
             archived={archived}
             disabled={
               conversationId !== null &&
-              (conversationQuery.isLoading || conversationQuery.isError)
+              (conversationQuery.isLoading ||
+                conversationQuery.isError ||
+                waitingForApproval)
             }
             onApplied={applyContextBoundary}
           />

@@ -61,10 +61,11 @@ class SaveMemoryArgs(_ToolArgs):
     supersedes: list[int] = Field(default_factory=list, max_length=50)
     occurred_at: datetime | None = None
     user_confirmed: bool = Field(
+        default=False,
         description=(
-            "Set to true only after the user explicitly asked to save this memory "
-            "and confirmed the content in the current conversation."
-        )
+            "Legacy model-supplied hint. It never authorizes a write; the backend "
+            "records an explicit human approval before executing save_memory."
+        ),
     )
 
 
