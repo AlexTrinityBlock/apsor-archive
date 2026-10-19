@@ -22,7 +22,7 @@ class AgentSettingsValuesSchema(BaseModel):
     max_steps: int = Field(ge=1, le=32)
     max_tool_calls_per_turn: int = Field(ge=1, le=24)
     max_parallel_tools: int = Field(ge=1, le=24)
-    max_tool_result_chars: int = Field(ge=1_000, le=100_000)
+    max_tool_result_chars: int = Field(ge=1_000, le=200_000)
     max_page_context_chars: int = Field(ge=500, le=50_000)
     max_compaction_summary_chars: int = Field(ge=1_000, le=20_000)
     max_compaction_last_user_chars: int = Field(ge=500, le=10_000)

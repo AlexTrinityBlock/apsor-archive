@@ -177,12 +177,12 @@ fields are rejected.
 
 | Field | Default | Range |
 |---|---|---|
-| `max_total_tokens` | 64,000 | 8,000–200,000 |
-| `compaction_threshold_tokens` | 48,000 (~75%) | 1,000–200,000 |
+| `max_total_tokens` | 100,000 | 8,000–200,000 |
+| `compaction_threshold_tokens` | 75,000 (~75%) | 1,000–200,000 |
 | `max_steps` | 8 | 1–32 |
 | `max_tool_calls_per_turn` | 6 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
-| `max_tool_result_chars` | 12,000 | 1,000–100,000 |
+| `max_tool_result_chars` | 100,000 | 1,000–200,000 |
 | `max_page_context_chars` | 6,000 | 500–50,000 |
 | `max_compaction_summary_chars` | 6,000 | 1,000–20,000 |
 | `max_compaction_last_user_chars` | 4,000 | 500–10,000 |
@@ -263,7 +263,7 @@ for an LLM to use in sequence.
 The persistent archive agent exposes nine model tools: the six above plus
 `search_media`, `get_media`, and `present_resource`. The HTTP examples use
 explicit parameters; the HTTP server defaults are `result_number=2`,
-`chunk_range=1`, `day_range=1`, `path_depth=1`, and `memory_range=0`. The agent's
+`chunk_range=1`, `day_range=1`, `path_depth=1`, and `memory_range=0`. Text is chunked at about 4,000 characters with a 500-character overlap; existing files keep their original chunk boundaries until re-ingested. The agent's
 tool schemas choose their own defaults, such as `result_number=8` and
 `day_range=7`. For external LLM callers, the separate `/api/v1/tools/*` facade
 renders the same services as compact XML; the persistent agent calls the
@@ -381,11 +381,11 @@ is persisted only at `message_end`; deltas are transport-only. Send
 Starlette's GZip middleware excludes `text/event-stream`.
 
 Each conversation allows one active run at a time. The defaults allow 8 model
-steps, 6 tool calls per user turn, 6 parallel tools, 64,000 total tokens per turn
-(cumulative across model steps), and 12,000 result characters per tool. Each
+steps, 6 tool calls per user turn, 6 parallel tools, 100,000 total tokens per turn
+(cumulative across model steps), and 100,000 result characters per tool. Each
 result is clipped independently at that per-result cap with a visible
 `[truncated]` marker; there is no turn-wide result budget or second summarization
-call. A 12,000-character cap spans roughly fifteen 800-character chunks.
+call. A 100,000-character cap spans roughly twenty-five 4,000-character chunks.
 These are runtime settings, not code constants; see **Agent runtime settings**
 above. Eligible tool calls start together and execute through `asyncio.gather`
 when parallel tools are enabled. Result persistence and `tool_end` order follow

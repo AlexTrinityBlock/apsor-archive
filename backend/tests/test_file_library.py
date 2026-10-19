@@ -6,7 +6,7 @@ from tests.helpers import create_text
 
 
 def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
-    content = "Automobile engineering notes. " * 80
+    content = "Automobile engineering notes. " * 300
     created = create_text(
         client,
         "/history/industry/car.md",

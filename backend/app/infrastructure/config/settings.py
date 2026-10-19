@@ -52,8 +52,8 @@ class Settings(BaseSettings):
     vision_max_pages: int = 10
     pdf_text_threshold: int = 80
 
-    chunk_target_chars: int = 800
-    chunk_overlap_chars: int = 120
+    chunk_target_chars: int = 4_000
+    chunk_overlap_chars: int = 500
 
     search_candidate_limit: int = 200
     search_vector_scan_limit: int = 20_000

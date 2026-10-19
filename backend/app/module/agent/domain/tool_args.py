@@ -25,7 +25,7 @@ class ReadFileArgs(_ToolArgs):
 
     file_id: int = Field(gt=0)
     chunk: int = Field(default=1, ge=1)
-    chunk_range: int = Field(default=1, ge=0, le=5)
+    chunk_range: int = Field(default=1, ge=0, le=25)
 
 
 class ReadTimelineArgs(_ToolArgs):
