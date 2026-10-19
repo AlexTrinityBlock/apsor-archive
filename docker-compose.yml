@@ -50,6 +50,9 @@ services:
       DENDRO_DATA_DIR: /data
       DENDRO_STATIC_DIR: /app/frontend/dist
       DENDRO_TIMEZONE: Asia/Taipei
+      # The dedicated worker service owns ingestion; keep the API lifespan
+      # fallback off so only one process drains the queue.
+      DENDRO_INGEST_WORKER_ENABLED: "false"
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -72,6 +75,25 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+    command: ["/app/backend/.venv/bin/dendromatrix", "worker"]
+    environment:
+      DENDRO_DATABASE_URL: postgresql+psycopg://dendro:dendro@db:5432/dendromatrix
+      DENDRO_CACHE_URL: redis://cache:6379/0
+      DENDRO_DATA_DIR: /data
+      DENDRO_TIMEZONE: Asia/Taipei
+    volumes:
+      - dendro-data:/data
+      - ./.secrets:/app/backend/.secrets:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

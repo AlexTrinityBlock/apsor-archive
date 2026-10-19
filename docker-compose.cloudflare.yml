@@ -49,11 +49,34 @@ services:
       DENDRO_STATIC_DIR: /app/frontend/dist
       DENDRO_TIMEZONE: Asia/Taipei
       DENDRO_COOKIE_SECURE: "true"
+      # The dedicated worker service owns ingestion; keep the API lifespan
+      # fallback off so only one process drains the queue.
+      DENDRO_INGEST_WORKER_ENABLED: "false"
     volumes:
       - dendro-cloudflare-data:/data
       - ./.secrets:/app/backend/.secrets:ro
     expose:
       - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+    command: ["/app/backend/.venv/bin/dendromatrix", "worker"]
+    environment:
+      DENDRO_DATABASE_URL: postgresql+psycopg://dendro:dendro@db:5432/dendromatrix
+      DENDRO_CACHE_URL: redis://cache:6379/0
+      DENDRO_DATA_DIR: /data
+      DENDRO_TIMEZONE: Asia/Taipei
+      DENDRO_COOKIE_SECURE: "true"
+    volumes:
+      - dendro-cloudflare-data:/data
+      - ./.secrets:/app/backend/.secrets:ro
     depends_on:
       db:
         condition: service_healthy
