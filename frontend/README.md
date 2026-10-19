@@ -64,7 +64,9 @@ bun run api:generate:live
 ```
 
 The generated hooks cover normal JSON routes, including `createFolder`,
-`moveFile`, and `copyFile`. Two deliberate exceptions use same-origin `fetch`
+`moveFile`, `copyFile`, `getAgentSettings`, `updateAgentSettings`,
+`resetAgentSettings`, `compactAgentConversation`, and
+`clearAgentConversation`. Two deliberate exceptions use same-origin `fetch`
 directly: `src/apis/agent-stream.ts` for `text/event-stream`, and the viewer
 text/binary loaders in `src/app/viewer/component/viewer-utils.ts`. Viewer URLs
 still come from the generated `getGetFileContentUrl` / `getDownloadFileUrl`
@@ -84,6 +86,38 @@ streams over SSE with Cmd/Ctrl+Enter, a stop action, and a live turn view;
 completed entries replace the optimistic view after the scoped query
 invalidation. Markdown uses `react-markdown` + `remark-gfm` with `skipHtml`, and
 citations become viewer links only for `/viewer/file|media|memory/...`.
+
+### Retry
+
+`RetryBar` appears for the latest failed or cancelled assistant entry, a
+trailing hard-limit tool result (`step_limit`, `token_limit`, `tool_call_limit`,
+or `tool_result_budget_exhausted`), or a stream failure before an assistant entry
+was persisted. The decision lives in `readRetryState()` in `chat/types.ts`; an
+ordinary tool error followed by a successful assistant answer is not retryable.
+
+Retry calls `streamAgentRetry()` from `agent-stream.ts`, which posts to the
+existing retry endpoint with only a generated `request_id`. It reuses the same
+user entry, does not append a duplicate user message, and is disabled while a
+stream is active. A `409 agent_run_not_retryable` response refetches the
+transcript so the stale action disappears. A retry may hit the same token, step,
+or tool budget again.
+
+### Compact and clear
+
+The `/chat` thread toolbar exposes **Compact** and **Clear** through
+`ContextActions`. Compact is immediate; Clear asks for one inline confirmation
+because it changes the active model context. Both actions are disabled while a
+stream is active and on archived threads. A `409 agent_conversation_busy`
+response shows a stable message and refetches the thread; an archived thread
+shows the archived error instead.
+
+The returned `pi.compaction` or `pi.reset` entry is merged immediately and the
+conversation is invalidated. `ContextBoundaryCard` renders either boundary as a
+context card, not as a user question: it states that older transcript rows are
+preserved in the reading view but hidden from the model's active context. The
+compaction card shows the reason, folded-entry count, summary character count,
+last user input, and an expandable summary. The reset card starts a new empty
+active context.
 
 Chat is in the **Studio** sidebar and the command palette. Mobile bottom tabs
 stay Overview, Search, Timeline, Library, and More; Chat is reached through the
@@ -108,6 +142,11 @@ current conversation in the split view; `/chat` remains the full-page desk and
 uses the same conversation id. On mobile, `collapsed` opens a full-height sheet;
 the expanded surface switches to Correspondence / Workbench pane tabs, and the
 layout must not produce horizontal overflow.
+
+The dock reuses `RetryBar` and the same `readRetryState()` decision as `/chat`.
+Retry is available in both the panel and expanded desk, disabled while streaming,
+and never appends a duplicate user entry. Compact and clear live on the full
+`/chat` desk rather than in the dock.
 
 ### Page context
 
@@ -154,6 +193,12 @@ preview payload persisted on the `pi.tool-result` entry, so the live inspector
 can render excerpts, tags, dimensions, memory previews, and viewer links
 immediately. Provider-facing XML content is not reused as UI data.
 
+`tool_start` and `tool_end` also include `parallel`, `batch_size`, and
+`parallel_index`. The current `agent-stream.ts` normalizer keeps call identity
+and result payload for rendering; it does not surface a separate parallel
+badge. Transcript and tool-result order always follows assistant call order,
+even when eligible calls execute through `asyncio.gather`.
+
 The `save_memory` panel is a wax-seal receipt for an appended memory. It is not
 a human approval dialog: the `user_confirmed=true` flag is still model-supplied
 and prompt-enforced, and the UI does not ask the keeper to approve a write.
@@ -162,6 +207,31 @@ and prompt-enforced, and the UI does not ask the keeper to approve a write.
 The production build is committed under `dist/`; rebuild and commit `dist/` (and
 `dist/pdfjs/` when it changes) after frontend changes, because the Docker image
 does not run a frontend build.
+
+## Settings
+
+`/settings` includes an **Agent runtime** panel (`settings/component/
+AgentRuntimePanel.tsx`) backed by the generated `useGetAgentSettings`,
+`useUpdateAgentSettings`, and `useResetAgentSettings` hooks. Provider/model
+configuration remains in the existing AI provider panels.
+
+The panel shows a Database/Defaults badge, the last `updated_at`, and a token
+budget meter for the compaction threshold as a share of `max_total_tokens` with
+remaining headroom. Every numeric field displays its default and valid range.
+The twelve runtime values are grouped into context budget, tool execution, and
+compaction detail; auto compaction and parallel tools are toggles.
+
+Validation happens before saving: integer/range checks plus the cross-field
+rules (threshold below total tokens, per-result chars within the total result
+budget, parallel width within tool calls per turn). Save is disabled for an
+invalid or unchanged draft. The server repeats validation and the app maps
+failures to `400 invalid_request`; the panel shows the returned detail inline.
+
+Save sends a full twelve-field `PUT`. **Reset defaults** uses a two-step
+confirmation and persists the defaults through `POST .../settings/reset`; it is
+not only a local form reset. The panel implements loading skeletons and an
+inline error with a Retry action. Changes apply to new runs; an active SSE stream
+keeps the immutable snapshot it started with.
 
 ## Folder workspace
 
@@ -242,11 +312,8 @@ bun run build
 bun audit
 ```
 
-Current validation: typecheck, lint, build, and
-audit pass; the committed `dist/` is the rebuilt production client. Playwright
-passed 34 deterministic checks at 1440×1000 and 390×844, covering the dock
-states, page-context dedupe, workspace move/copy/upload, and mobile pane
-switching. A focused re-check then passed 6/6: multi-chunk search keys,
-text-only `/content` behavior, stored-original loading, legacy-404 fallback,
-390px Workbench tabs, and the `save_memory` wax-seal receipt. The receipt is
-still not a human approval dialog.
+The checks above cover type safety, linting, the production build, and
+dependency audit. After frontend changes, rebuild and commit `dist/` (and
+`dist/pdfjs/` when it changes) because the Docker image serves the committed
+client and does not run a build. The `save_memory` receipt remains a record of
+the write, not a human approval dialog.

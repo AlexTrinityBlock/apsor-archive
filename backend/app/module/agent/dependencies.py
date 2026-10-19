@@ -10,16 +10,21 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import cast
 
 from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.ai.runtime import AiRuntime
+from app.infrastructure.database.session import Database, get_db_session
+from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
 from app.module.agent.exception.domain_error import AgentNotConfiguredError
 from app.module.agent.protocol.chat_generator_protocol import ChatGeneratorProtocol
 from app.module.agent.protocol.tool_service_protocol import (
     AgentToolServices,
     ToolServiceScopeProtocol,
 )
+from app.module.agent.repository.agent_config_repository import AgentConfigRepository
 from app.module.agent.repository.agent_repository import AgentRepository
 from app.module.agent.service.agent_service import AgentService
+from app.module.agent.service.agent_settings_service import AgentSettingsService
 from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.knowledge.dependencies import (
     get_file_service,
@@ -85,17 +90,34 @@ class _ToolServiceScope:
                 raise
 
 
+async def get_agent_runtime_config(request: Request) -> AgentRuntimeConfig:
+    """Load one immutable config snapshot in a short-lived session.
+
+    This dependency deliberately does not use the request-scoped session: the
+    snapshot is read and committed before an SSE response starts, so no database
+    connection is held for the lifetime of the stream. Repositories used by the
+    run loop remain session-factory backed.
+    """
+    database = cast(Database, request.app.state.db)
+    async with database.session_factory() as session:
+        service = AgentSettingsService(AgentConfigRepository(session))
+        config = await service.get_runtime_config()
+        await session.commit()
+    return config
+
+
 def get_agent_service(
     request: Request,
     chat_generator: ChatGeneratorProtocol = Depends(get_agent_chat_generator),
+    config: AgentRuntimeConfig = Depends(get_agent_runtime_config),
 ) -> AgentService:
     """Build the agent service with a session-factory-backed repository."""
     runtime = cast(AiRuntime, request.app.state.ai_runtime)
-    config = runtime.chat_config
-    provider = config.provider
+    chat_config = runtime.chat_config
+    provider = chat_config.provider
     if provider not in {"deepseek", "openai-compatible"}:
         provider = "deepseek"
-    model = config.model or "deepseek-flash"
+    model = chat_config.model or "deepseek-flash"
     repository = AgentRepository(request.app.state.db.session_factory)
     tool_registry = AgentToolRegistry(_ToolServiceScope(request))
     return AgentService(
@@ -104,7 +126,21 @@ def get_agent_service(
         tool_registry=tool_registry,
         default_provider=provider,
         default_model=model,
+        config=config,
     )
 
 
-__all__ = ["ToolServiceScopeProtocol", "get_agent_chat_generator", "get_agent_service"]
+def get_agent_settings_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> AgentSettingsService:
+    """Build settings CRUD on the request transaction; never used for SSE."""
+    return AgentSettingsService(AgentConfigRepository(session))
+
+
+__all__ = [
+    "ToolServiceScopeProtocol",
+    "get_agent_chat_generator",
+    "get_agent_runtime_config",
+    "get_agent_service",
+    "get_agent_settings_service",
+]

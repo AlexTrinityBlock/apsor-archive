@@ -745,6 +745,225 @@
         "title": "AgentRunSchema",
         "type": "object"
       },
+      "AgentSettingsReadSchema": {
+        "description": "The effective config, the defaults, and where the config came from.",
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/AgentSettingsValuesSchema"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/AgentSettingsValuesSchema"
+          },
+          "source": {
+            "enum": [
+              "database",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "config",
+          "defaults",
+          "source",
+          "updated_at"
+        ],
+        "title": "AgentSettingsReadSchema",
+        "type": "object"
+      },
+      "AgentSettingsUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace the whole stored runtime configuration.",
+        "properties": {
+          "auto_compaction_enabled": {
+            "title": "Auto Compaction Enabled",
+            "type": "boolean"
+          },
+          "compaction_threshold_tokens": {
+            "maximum": 200000.0,
+            "minimum": 1000.0,
+            "title": "Compaction Threshold Tokens",
+            "type": "integer"
+          },
+          "max_compaction_last_user_chars": {
+            "maximum": 10000.0,
+            "minimum": 500.0,
+            "title": "Max Compaction Last User Chars",
+            "type": "integer"
+          },
+          "max_compaction_summary_chars": {
+            "maximum": 20000.0,
+            "minimum": 1000.0,
+            "title": "Max Compaction Summary Chars",
+            "type": "integer"
+          },
+          "max_page_context_chars": {
+            "maximum": 50000.0,
+            "minimum": 500.0,
+            "title": "Max Page Context Chars",
+            "type": "integer"
+          },
+          "max_parallel_tools": {
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Max Parallel Tools",
+            "type": "integer"
+          },
+          "max_steps": {
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "max_tool_calls_per_turn": {
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Max Tool Calls Per Turn",
+            "type": "integer"
+          },
+          "max_tool_result_chars": {
+            "maximum": 100000.0,
+            "minimum": 1000.0,
+            "title": "Max Tool Result Chars",
+            "type": "integer"
+          },
+          "max_total_tokens": {
+            "maximum": 200000.0,
+            "minimum": 8000.0,
+            "title": "Max Total Tokens",
+            "type": "integer"
+          },
+          "max_total_tool_result_chars": {
+            "maximum": 200000.0,
+            "minimum": 1000.0,
+            "title": "Max Total Tool Result Chars",
+            "type": "integer"
+          },
+          "parallel_tools_enabled": {
+            "title": "Parallel Tools Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "max_total_tokens",
+          "compaction_threshold_tokens",
+          "max_steps",
+          "max_tool_calls_per_turn",
+          "max_parallel_tools",
+          "max_tool_result_chars",
+          "max_total_tool_result_chars",
+          "max_page_context_chars",
+          "max_compaction_summary_chars",
+          "max_compaction_last_user_chars",
+          "auto_compaction_enabled",
+          "parallel_tools_enabled"
+        ],
+        "title": "AgentSettingsUpdateSchema",
+        "type": "object"
+      },
+      "AgentSettingsValuesSchema": {
+        "additionalProperties": false,
+        "description": "One complete, validated set of agent runtime limits.\n\nEvery field is required so ``PUT /api/v1/agent/settings`` always writes a\nfull snapshot instead of silently resetting omitted fields to defaults.",
+        "properties": {
+          "auto_compaction_enabled": {
+            "title": "Auto Compaction Enabled",
+            "type": "boolean"
+          },
+          "compaction_threshold_tokens": {
+            "maximum": 200000.0,
+            "minimum": 1000.0,
+            "title": "Compaction Threshold Tokens",
+            "type": "integer"
+          },
+          "max_compaction_last_user_chars": {
+            "maximum": 10000.0,
+            "minimum": 500.0,
+            "title": "Max Compaction Last User Chars",
+            "type": "integer"
+          },
+          "max_compaction_summary_chars": {
+            "maximum": 20000.0,
+            "minimum": 1000.0,
+            "title": "Max Compaction Summary Chars",
+            "type": "integer"
+          },
+          "max_page_context_chars": {
+            "maximum": 50000.0,
+            "minimum": 500.0,
+            "title": "Max Page Context Chars",
+            "type": "integer"
+          },
+          "max_parallel_tools": {
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Max Parallel Tools",
+            "type": "integer"
+          },
+          "max_steps": {
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "max_tool_calls_per_turn": {
+            "maximum": 24.0,
+            "minimum": 1.0,
+            "title": "Max Tool Calls Per Turn",
+            "type": "integer"
+          },
+          "max_tool_result_chars": {
+            "maximum": 100000.0,
+            "minimum": 1000.0,
+            "title": "Max Tool Result Chars",
+            "type": "integer"
+          },
+          "max_total_tokens": {
+            "maximum": 200000.0,
+            "minimum": 8000.0,
+            "title": "Max Total Tokens",
+            "type": "integer"
+          },
+          "max_total_tool_result_chars": {
+            "maximum": 200000.0,
+            "minimum": 1000.0,
+            "title": "Max Total Tool Result Chars",
+            "type": "integer"
+          },
+          "parallel_tools_enabled": {
+            "title": "Parallel Tools Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "max_total_tokens",
+          "compaction_threshold_tokens",
+          "max_steps",
+          "max_tool_calls_per_turn",
+          "max_parallel_tools",
+          "max_tool_result_chars",
+          "max_total_tool_result_chars",
+          "max_page_context_chars",
+          "max_compaction_summary_chars",
+          "max_compaction_last_user_chars",
+          "auto_compaction_enabled",
+          "parallel_tools_enabled"
+        ],
+        "title": "AgentSettingsValuesSchema",
+        "type": "object"
+      },
       "AgentToolCatalogSchema": {
         "description": "The frozen catalog version and its tools.",
         "properties": {
@@ -3805,6 +4024,92 @@
         ]
       }
     },
+    "/api/v1/agent/conversations/{conversation_id}/clear": {
+      "post": {
+        "description": "Append a reset boundary without deleting the transcript.",
+        "operationId": "clearAgentConversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentEntrySchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Conversation",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/conversations/{conversation_id}/compact": {
+      "post": {
+        "description": "Append a deterministic compaction boundary to the active context.",
+        "operationId": "compactAgentConversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentEntrySchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compact Conversation",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
     "/api/v1/agent/conversations/{conversation_id}/entries": {
       "get": {
         "description": "Read entries in ascending id order after an exclusive cursor.",
@@ -4020,6 +4325,90 @@
           }
         },
         "summary": "Retry Run",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/settings": {
+      "get": {
+        "description": "Return the effective runtime limits and the domain defaults.",
+        "operationId": "getAgentSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Agent Settings",
+        "tags": [
+          "agent"
+        ]
+      },
+      "put": {
+        "description": "Replace every runtime limit with one validated snapshot.",
+        "operationId": "updateAgentSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSettingsUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Agent Settings",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/settings/reset": {
+      "post": {
+        "description": "Restore and persist the domain defaults.",
+        "operationId": "resetAgentSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reset Agent Settings",
         "tags": [
           "agent"
         ]

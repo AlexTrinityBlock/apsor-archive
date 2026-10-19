@@ -53,6 +53,9 @@ is deliberately not a mutable chat log:
   `pi.system`, `pi.reset`, `pi.compaction`, and `ui.notice`.
 - `agent_run` stores one submission's operational state. `agent_commit_seq`
   assigns one sequence value to every entry written in the same transaction.
+- `agent_config` is the singleton runtime-limit row (`id=1`). It stores the
+  twelve validated limits used by the loop; provider/model identity stays in
+  the AI settings table.
 
 Conversation creation appends one frozen `pi.system` entry with ordered prompt
 sections, the complete tool snapshot, and prompt/tools versions. The context
@@ -78,9 +81,14 @@ Endpoints (all require the session cookie):
 | `GET` | `/api/v1/agent/conversations/{conversation_id}/entries?after_id=&limit=` | Ascending entry page |
 | `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | Rename, archive, or restore |
 | `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | Soft delete |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/compact` | Append a manual compaction boundary |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | Append a reset boundary |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | Append user entry + run |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry latest failed/cancelled run |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog + versions |
+| `GET` | `/api/v1/agent/settings` | Effective runtime config + defaults + source |
+| `PUT` | `/api/v1/agent/settings` | Replace all twelve runtime fields |
+| `POST` | `/api/v1/agent/settings/reset` | Persist the built-in defaults |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` takes
 `{content, request_id?, page_context?}`; `POST .../retry` takes
@@ -91,13 +99,93 @@ Messages and retry stream `text/event-stream` by default; send
 `Accept: application/json` for the completed turn. Event names are `run_start`,
 `message_start`, `message_delta`, `message_end`, `tool_start`, `tool_end`,
 `run_end`, and `error`. `message_start` carries `entry_id=null`; the assistant
-entry id arrives at `message_end`, and deltas are never persisted. SSE headers
-disable proxy buffering (`Cache-Control: no-cache, no-transform`,
-`X-Accel-Buffering: no`) and Starlette's GZip middleware excludes
-`text/event-stream`. The loop caps at 8 model steps, 6 tool calls per user turn,
-24k tokens, and 12k characters per tool result (24k total). It uses
+entry id arrives at `message_end`, and deltas are never persisted.
+`tool_start` and `tool_end` include `parallel`, `batch_size`, and
+`parallel_index` for the current batch. SSE headers disable proxy buffering
+(`Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`) and
+Starlette's GZip middleware excludes `text/event-stream`.
+
+The runtime defaults cap a turn at 8 model steps, 6 tool calls, 6 parallel
+tools, 64,000 total tokens, 12,000 characters per tool result, and 24,000
+tool-result characters overall. All of these come from the immutable
+`agent_config` snapshot, not from module constants. The loop uses
 `app.state.db.session_factory()` for appends and a short-lived session for each
 tool call, so the stream does not hold the request session.
+
+### Runtime settings
+
+`agent_config` is a singleton row (`id=1`). `GET /api/v1/agent/settings`,
+`PUT /api/v1/agent/settings`, and `POST /api/v1/agent/settings/reset` are thin
+adapters over `AgentSettingsService` with operation ids `getAgentSettings`,
+`updateAgentSettings`, and `resetAgentSettings`. The read body is:
+
+```json
+{
+  "config": {"max_total_tokens": 64000, "...": "..."},
+  "defaults": {"max_total_tokens": 64000, "...": "..."},
+  "source": "database",
+  "updated_at": "2026-10-19T15:00:00Z"
+}
+```
+
+`source` is `default` only when the service had to create or repair the row from
+the built-in defaults; a normal read of the stored row returns `database`.
+`PUT` requires all twelve fields and uses `extra=forbid`, so it is a full
+replacement rather than a patch.
+
+| Field | Default | Constraint |
+|---|---|---|
+| `max_total_tokens` | 64,000 | 8,000–200,000; cumulative across model steps |
+| `compaction_threshold_tokens` | 48,000 | 1,000–200,000; `< max_total_tokens` |
+| `max_steps` | 8 | 1–32 |
+| `max_tool_calls_per_turn` | 6 | 1–24 |
+| `max_parallel_tools` | 6 | 1–24; `<= max_tool_calls_per_turn` |
+| `max_tool_result_chars` | 12,000 | 1,000–100,000; `<= total` |
+| `max_total_tool_result_chars` | 24,000 | 1,000–200,000 |
+| `max_page_context_chars` | 6,000 | 500–50,000 |
+| `max_compaction_summary_chars` | 6,000 | 1,000–20,000 |
+| `max_compaction_last_user_chars` | 4,000 | 500–10,000 |
+| `auto_compaction_enabled` | `true` | boolean |
+| `parallel_tools_enabled` | `true` | boolean |
+
+Pydantic validates the request and `AgentRuntimeConfig` repeats the same
+cross-field checks; PostgreSQL check constraints enforce the ranges and all
+three cross-field rules. The global validation handler maps request validation
+failures to `400 invalid_request`, not 422.
+
+`get_agent_runtime_config` loads one snapshot in a short-lived session and
+returns a frozen dataclass. The dependency runs before an SSE response starts;
+an already active run keeps its snapshot, while a later run reads the current
+row. Provider and model still come from `/api/v1/settings/ai`.
+
+### Compaction and clearing
+
+Auto compaction runs before a new user turn when
+`auto_compaction_enabled` is true, the active context has at least one user
+entry, and the estimated context exceeds `compaction_threshold_tokens`.
+`estimate_context_tokens` uses a conservative character estimate and the latest
+valid assistant usage, whichever is larger.
+
+The service appends one `pi.compaction` entry with `head_entry_id` set to its own
+id. Its provider message is a user-role envelope:
+
+```xml
+<compaction><last_user_input>...</last_user_input><summary>...</summary></compaction>
+```
+
+The summary and last-user text are clipped by the active snapshot's
+`max_compaction_summary_chars` and `max_compaction_last_user_chars`. The same
+transaction writes compaction → page context (if the page is reattached) → user,
+all with one `commit_seq` and `by_run_id`. Older entries remain immutable but
+fall outside the new active context.
+
+`POST .../compact` builds the same deterministic summary manually (`reason:
+"manual"`, `auto: false`) without a provider call. `POST .../clear` appends
+`pi.reset` with a self `head_entry_id`, empty provider messages, and `data:
+{"reason": "manual_clear"}`. Operation ids are `compactAgentConversation` and
+`clearAgentConversation`. Clear preserves every transcript row while starting an
+empty active context. Both endpoints return `409 agent_conversation_busy` when a
+run is active and `409 agent_conversation_archived` for an archived thread.
 
 ### Page context
 
@@ -143,22 +231,28 @@ it appears only when the page changes.
 
 `begin_message` writes the snapshot and the user entry in one transaction:
 
-1. Lock the conversation and resolve the run request id.
-2. Read the newest `pi.page-context` entry's `data.page_key`.
-3. If the incoming key differs, insert the snapshot before the user entry.
-4. Assign both entries the same `commit_seq` and link both to the new run.
-5. Append the user entry and create the run.
+1. Lock the conversation, reject an active run, and resolve the request id.
+2. Build an auto-compaction draft when the active context crossed the threshold.
+3. Find the newest boundary and read the newest `pi.page-context` entry at or
+   after it.
+4. If the incoming key differs, insert the snapshot after any compaction entry
+   and before the user entry.
+5. Append the compaction, snapshot, and user entries with one `commit_seq`, link
+   them to the new run, and create the run.
 
 The comparison is against the database entry log, not localStorage, so it still
-works after a reload. The same page never adds a second snapshot. The behavior is
-strictly append-only: no earlier entry is rewritten, which keeps the
-system/tool prefix and the prior transcript prefix stable for KV-cache reuse.
+works after a reload. Dedupe is scoped to the newest compaction/reset boundary,
+so the same page can be reattached after a boundary. The behavior is strictly
+append-only: no earlier entry is rewritten, which keeps the system/tool prefix
+and the prior transcript prefix stable for KV-cache reuse. A compaction or reset
+boundary starts a new lineage deliberately.
 
 `run_start` exposes `page_context_entry_id` (integer or `null`) and
 `page_context_attached` (boolean). Conversation detail exposes
-`last_page_context_key`, derived from the newest snapshot entry. A snapshot is a
-normal entry: it appears in entry pages and `entries_total`, and clients should
-render it as a context card rather than as a user message.
+`last_page_context_key`, derived from the newest snapshot at or after the active
+boundary. A snapshot is a normal entry: it appears in entry pages and
+`entries_total`, and clients should render it as a context card rather than as a
+user message.
 
 ### Tool result preview data
 
@@ -181,11 +275,13 @@ entries, 50 timeline events).
 | `present_resource` | `resource` descriptor |
 
 The live `tool_end` SSE event carries `entry_id`, `tool_call_id`, `name`,
-`status`, optional `resource`, and the UI-only `data`, `duration_ms`, and
-`error_code` fields. `data` mirrors the persisted `pi.tool-result` payload, so a
-live inspector can render the same excerpts, dimensions, tags, memory previews,
-and viewer URLs without waiting for a transcript refetch. Provider-facing tool
-content remains the separate XML payload in `model`.
+`status`, optional `resource`, the UI-only `data`, `duration_ms`, and
+`error_code` fields, plus `parallel`, `batch_size`, and `parallel_index`. The
+matching `tool_start` carries the same batch fields. `data` mirrors the persisted
+`pi.tool-result` payload, so a live inspector can render the same excerpts,
+dimensions, tags, memory previews, and viewer URLs without waiting for a
+transcript refetch. Provider-facing tool content remains the separate XML
+payload in `model`.
 
 Tool names: `search_knowledge`, `read_file`, `read_timeline`, `read_path`,
 `read_memory`, `save_memory`, `search_media`, `get_media`, `present_resource`.
@@ -315,14 +411,17 @@ auth (`app_user`,
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
 `c4f1a9e2b7d3` follows it and updates the entry `kind` and `model` check
 constraints to include `pi.page-context`; it does not add a table or column.
+The runtime-config migration `e7a1c4b9d2f6` follows `c4f1a9e2b7d3`, creates the
+singleton `agent_config` table with all range and cross-field check constraints,
+and seeds row `id=1` with the defaults.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
 Alembic/PostgreSQL identifiers that `a7c41e9d2b60` created. The application test
 suite builds tables from SQLAlchemy metadata (`Base.metadata.create_all`), so it
 does not execute Alembic and would not catch a bad constraint name by itself.
-The migration has been applied to the real development database and
-round-tripped through upgrade and downgrade.
+Validate migration upgrade/downgrade separately against the development
+database.
 
 ```bash
 uv run alembic revision --autogenerate -m "change"
@@ -354,20 +453,22 @@ app/
     dependencies.py        composition root
   module/media/            standalone image library and visual search
   module/agent/
-    domain/                replay/context builder, page-context envelope, tool args
-    model/                 conversation, immutable entry, run
-    protocol/              chat-generator, repository, and tool-service protocols
-    repository/            transaction + commit-sequence repository
-    service/               agent loop, context projection, tool registry
-    router/                conversation, message/retry, tools
-    schema/                request/response contracts
+    domain/                replay builder, compaction, runtime config, envelopes
+    model/                 conversation, immutable entry, run, agent_config
+    protocol/              chat, repository, settings-repository protocols
+    repository/            transaction, commit-sequence, config persistence
+    service/               agent loop, settings, context projection, tool registry
+    router/                conversation, compact/clear, settings, tools
+    schema/                request/response and settings contracts
     exception/             stable agent errors
     test/                  FakeChatGenerator (no collected tests)
-    dependencies.py        composition root + fake-provider seam
+    dependencies.py        composition root + snapshot + fake-provider seam
 ```
 
 The agent uses `app.state.db.session_factory()` rather than the request session,
-so an SSE response never holds a request-scoped session. The test seam is
+so an SSE response never holds a request-scoped session. Runtime settings use a
+separate short-lived session in `get_agent_runtime_config`, which returns one
+frozen `AgentRuntimeConfig` per request. The test seam is
 `app.state.agent_chat_generator` or an override of
 `get_agent_chat_generator`.
 
@@ -398,15 +499,16 @@ as errors. There are exactly ten collected tests:
 
 The agent test injects a deterministic `FakeChatGenerator` by assigning
 `client.app.state.agent_chat_generator`; no DeepSeek or OpenAI request is made.
-It also covers page-context ordering, same-commit sequencing, same-page dedupe,
-page-key change, `last_page_context_key`, and the prompt envelope. The file
-library test covers idempotent folder creation, in-place moves, independent
-copies, extension checks, and path conflicts. The former two search tests are
-merged into `test_hybrid_search_and_union_query`, which is what keeps the suite
-at ten collected functions.
+It also covers runtime settings defaults, full PUT and reset, validation
+failures (`400 invalid_request`), runtime snapshot handling for later runs, auto
+and manual compaction, clear, the page-context boundary and same-page
+reattachment, retry, and parallel versus sequential tool execution. The file library test
+covers idempotent folder creation, in-place moves, independent copies, extension
+checks, and path conflicts. The former two search tests are merged into
+`test_hybrid_search_and_union_query`, which is what keeps the suite at ten
+collected functions.
 
-Current validation: `ruff`, `mypy`, `bandit`,
-`pip-audit`, and the ten sequential pytest tests pass; the page-context
-migration upgrades and downgrades on the real development database; and a clean
-Docker Compose smoke passed once. The test suite does not execute migrations, so
-the migration round trip is separate evidence.
+The suite does not execute migrations; upgrade and downgrade are separate
+checks against the development database. Runtime settings and compaction are
+validated by Pydantic, the frozen `AgentRuntimeConfig`, and PostgreSQL check
+constraints.

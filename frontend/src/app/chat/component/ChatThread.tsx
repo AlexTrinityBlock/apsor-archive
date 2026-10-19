@@ -13,12 +13,13 @@ import {
 import { PageContextCard } from "../../agent/component/PageContextCard";
 import { isPageContextEntry } from "../../agent/page-context";
 import { AssistantEntry } from "./AssistantEntry";
+import { ContextBoundaryCard } from "./ContextBoundaryCard";
 import { MethodDisclosure } from "./MethodDisclosure";
 import { NoticeEntry } from "./NoticeEntry";
 import { ToolResultCard } from "./ToolResultCard";
 import { UserMarginalia } from "./UserMarginalia";
 
-const HIDDEN_KINDS = new Set(["pi.system", "pi.reset", "pi.compaction"]);
+const HIDDEN_KINDS = new Set(["pi.system"]);
 
 interface ChatThreadProps {
   readonly entries: readonly AgentEntrySchema[];
@@ -42,6 +43,9 @@ function ThreadEntry({
       return <AssistantEntry entry={entry} toolResults={toolResults} />;
     case "pi.tool-result":
       return <ToolResultCard entry={entry} />;
+    case "pi.compaction":
+    case "pi.reset":
+      return <ContextBoundaryCard entry={entry} />;
     case "ui.notice":
       return <NoticeEntry entry={entry} />;
     default:

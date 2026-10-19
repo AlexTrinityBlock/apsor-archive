@@ -128,22 +128,55 @@ def tool_call_result(
     usage: dict[str, int] | None = None,
 ) -> ChatResult:
     """Build a tool-call-only assistant result."""
-    raw_arguments = json.dumps(
-        arguments,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return ChatResult(
+    return tool_calls_result(
+        [(name, arguments)],
+        call_ids=[call_id],
         text=text,
-        tool_calls=[
+        usage=usage,
+    )
+
+
+def tool_calls_result(
+    calls: Sequence[tuple[str, dict[str, Any]]],
+    *,
+    call_ids: Sequence[str] | None = None,
+    text: str = "",
+    usage: dict[str, int] | None = None,
+) -> ChatResult:
+    """Build one assistant result that requests multiple tools in order."""
+    resolved_ids = list(call_ids or [f"call_{index}" for index in range(1, len(calls) + 1)])
+    if len(resolved_ids) != len(calls):
+        raise ValueError("call_ids must match the number of tool calls.")
+    tool_calls: list[ChatToolCall] = []
+    raw_tool_calls: list[dict[str, Any]] = []
+    for call_id, (name, arguments) in zip(resolved_ids, calls, strict=True):
+        raw_arguments = json.dumps(
+            arguments,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        tool_calls.append(
             ChatToolCall(
                 call_id=call_id,
                 name=name,
                 arguments=arguments,
                 raw_arguments=raw_arguments,
             )
-        ],
+        )
+        raw_tool_calls.append(
+            {
+                "id": call_id,
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": raw_arguments,
+                },
+            }
+        )
+    return ChatResult(
+        text=text,
+        tool_calls=tool_calls,
         finish_reason="tool_calls",
         model="fake-chat",
         usage=usage
@@ -157,16 +190,7 @@ def tool_call_result(
         raw_assistant_message={
             "role": "assistant",
             "content": text,
-            "tool_calls": [
-                {
-                    "id": call_id,
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "arguments": raw_arguments,
-                    },
-                }
-            ],
+            "tool_calls": raw_tool_calls,
         },
     )
 
@@ -178,4 +202,5 @@ __all__ = [
     "TextDeltaCallback",
     "text_result",
     "tool_call_result",
+    "tool_calls_result",
 ]

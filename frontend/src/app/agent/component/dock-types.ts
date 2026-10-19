@@ -7,6 +7,7 @@ import type {
   AgentEntrySchema,
 } from "../../generated-apis-types/schemas";
 import type { ChatStreamView } from "../../chat/hook/useChatStream";
+import type { RetryState } from "../../chat/types";
 import type { PageContextSnapshot } from "../page-context";
 import type { WorkTraceModel } from "../trace";
 
@@ -41,6 +42,10 @@ export interface AgentDockSurfaceProps {
   readonly loadingMore: boolean;
   readonly loadMoreError: string | null;
   readonly onLoadMore: () => void;
+  readonly retryState: RetryState;
+  readonly retryDisabled: boolean;
+  readonly onRetryRun: () => void;
+  readonly onContextApplied: (entry: AgentEntrySchema) => void;
   readonly scrollRef: RefObject<HTMLDivElement | null>;
   readonly endRef: RefObject<HTMLDivElement | null>;
   readonly onScroll: UIEventHandler<HTMLDivElement>;

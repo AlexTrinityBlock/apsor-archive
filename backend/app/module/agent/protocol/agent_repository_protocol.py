@@ -65,6 +65,7 @@ class AgentRepositoryProtocol(Protocol):
         *,
         conversation_id: int,
         draft: EntryDraft,
+        compaction_draft: EntryDraft | None,
         page_context_draft: EntryDraft | None,
         page_context_key: str | None,
         request_id: str | None,
@@ -74,7 +75,16 @@ class AgentRepositoryProtocol(Protocol):
         AgentEntryModel,
         AgentRunModel,
         AgentEntryModel | None,
+        AgentEntryModel | None,
     ]: ...
+
+    async def append_boundary_entry(
+        self,
+        *,
+        conversation_id: int,
+        draft: EntryDraft,
+        now: datetime,
+    ) -> AgentEntryModel: ...
 
     async def create_run(
         self,
