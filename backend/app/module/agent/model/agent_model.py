@@ -150,6 +150,73 @@ class AgentEntryModel(Base):
     )
 
 
+class AgentApprovalModel(Base):
+    """One pending human decision for a confirmation-required tool call.
+
+    The row is durable operational state, not transcript content. It stores the
+    validated arguments, a safe UI preview, and the loop snapshot needed to
+    resume the same run after an explicit approve or reject. The transcript
+    remains append-only: the assistant tool call is already persisted, and the
+    real tool result is appended only when the approval is resolved.
+    """
+
+    __tablename__ = "agent_approval"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'expired')",
+            name="status_valid",
+        ),
+        Index(
+            "ix_agent_approval_conversation_status",
+            "conversation_id",
+            "status",
+            "id",
+        ),
+        Index("ix_agent_approval_run_status", "run_id", "status"),
+        Index(
+            "uq_agent_approval_pending_call",
+            "run_id",
+            "tool_call_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("agent_conversation.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_id: Mapped[int] = mapped_column(
+        ForeignKey("agent_run.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tool_call_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+    )
+    arguments: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    preview: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    resume_state: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    resolved_by_entry_id: Mapped[int | None] = mapped_column(
+        ForeignKey("agent_entry.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+
 class AgentRunModel(Base):
     """Durable operational state for one user submission."""
 

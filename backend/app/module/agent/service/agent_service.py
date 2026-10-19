@@ -21,7 +21,9 @@ from app.module.agent.domain.agent_domain import (
     RUN_CANCELLED,
     RUN_COMPLETED,
     RUN_FAILED,
+    RUN_WAITING,
     AgentStreamEvent,
+    ApprovalDraft,
     EntryDraft,
     ProviderContext,
     ToolOutcome,
@@ -37,6 +39,7 @@ from app.module.agent.domain.context_domain import build_context, render_tool_re
 from app.module.agent.domain.tool_catalog import PROMPT_VERSION, TOOLS_VERSION
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
 from app.module.agent.exception.domain_error import (
+    AgentApprovalNotFoundError,
     AgentConversationArchivedError,
     AgentConversationNotFoundError,
     AgentInvalidEntryError,
@@ -46,6 +49,7 @@ from app.module.agent.exception.domain_error import (
     AgentRunNotRetryableError,
 )
 from app.module.agent.model.agent_model import (
+    AgentApprovalModel,
     AgentConversationModel,
     AgentEntryModel,
     AgentRunModel,
@@ -57,6 +61,7 @@ from app.module.agent.protocol.chat_generator_protocol import (
     ChatToolCall,
 )
 from app.module.agent.schema.agent_schema import (
+    AgentApprovalSchema,
     AgentConversationCreateSchema,
     AgentConversationDetailSchema,
     AgentConversationPatchSchema,
@@ -95,6 +100,19 @@ class AgentTurnState:
     user_entry: AgentEntrySchema
     cutoff_entry_id: int
     page_context_entry_id: int | None = None
+
+
+@dataclass(frozen=True)
+class AgentApprovalTurn:
+    """A resolved approval plus the loop snapshot used to resume its run."""
+
+    turn: AgentTurnState
+    approval: AgentApprovalSchema
+    call: ChatToolCall
+    outcome: ToolOutcome
+    tool_entry: AgentEntrySchema
+    remaining: list[AgentApprovalSchema]
+    resume_state: dict[str, Any]
 
 
 @dataclass
@@ -424,26 +442,48 @@ class AgentService:
 
     async def stream_turn(self, turn: AgentTurnState) -> AsyncIterator[AgentStreamEvent]:
         """Run the model/tool loop and yield transport-only events."""
+        async for event in self._run_loop(
+            turn,
+            start_step=1,
+            total_usage={},
+            tool_calls_used=0,
+            last_entry_id=turn.cutoff_entry_id,
+            resumed=False,
+            emit_start=True,
+        ):
+            yield event
+
+    async def _run_loop(
+        self,
+        turn: AgentTurnState,
+        *,
+        start_step: int,
+        total_usage: dict[str, int],
+        tool_calls_used: int,
+        last_entry_id: int,
+        resumed: bool,
+        emit_start: bool,
+    ) -> AsyncIterator[AgentStreamEvent]:
+        """Continue one durable turn from a deterministic loop snapshot."""
         conversation_id = turn.conversation.id
         run_id = turn.run.id
-        last_entry_id = turn.cutoff_entry_id
         terminal = False
-        total_usage: dict[str, int] = {}
-        tool_calls_used = 0
 
         try:
-            yield AgentStreamEvent(
-                "run_start",
-                {
-                    "run_id": run_id,
-                    "user_entry_id": turn.user_entry.id,
-                    "page_context_entry_id": turn.page_context_entry_id,
-                    "page_context_attached": turn.page_context_entry_id is not None,
-                },
-            )
-            context = await self._context(conversation_id, turn.cutoff_entry_id)
+            if emit_start:
+                yield AgentStreamEvent(
+                    "run_start",
+                    {
+                        "run_id": run_id,
+                        "user_entry_id": turn.user_entry.id,
+                        "page_context_entry_id": turn.page_context_entry_id,
+                        "page_context_attached": turn.page_context_entry_id is not None,
+                        "resumed": resumed,
+                    },
+                )
+            context = await self._context(conversation_id, last_entry_id)
 
-            for step in range(1, self.config.max_steps + 1):
+            for step in range(start_step, self.config.max_steps + 1):
                 if await self.repository.is_abort_requested(conversation_id, run_id):
                     await self._best_effort_cancel(turn, last_entry_id)
                     terminal = True
@@ -703,6 +743,7 @@ class AgentService:
                     None
                 ] * batch_size
                 eligible_indices: list[int] = []
+                approval_specs: list[tuple[int, ChatToolCall, dict[str, Any]]] = []
                 for index, call in enumerate(calls):
                     yield AgentStreamEvent(
                         "tool_start",
@@ -726,8 +767,23 @@ class AgentService:
                             ),
                         )
                         continue
-                    eligible_indices.append(index)
                     tool_calls_used += 1
+                    if self.tool_registry.requires_confirmation(call.name):
+                        validated, validation_error = (
+                            self.tool_registry.validate_arguments(
+                                call.name,
+                                call.arguments,
+                                parse_error=call.parse_error,
+                            )
+                        )
+                        if validation_error is not None:
+                            planned[index] = (call, validation_error)
+                        else:
+                            approval_specs.append(
+                                (index, call, validated or {})
+                            )
+                        continue
+                    eligible_indices.append(index)
 
                 if eligible_indices:
                     if self.config.parallel_tools_enabled:
@@ -746,15 +802,148 @@ class AgentService:
                     ):
                         planned[index] = (calls[index], outcome)
 
+                # Hard turn limits end the run; pending writes must not outlive a
+                # failed run, so confirmation calls receive the same limit result.
+                limit_codes = {
+                    outcome[1].error_code
+                    for outcome in planned
+                    if outcome is not None
+                    and outcome[1].error_code in LIMIT_CODES
+                }
+                if limit_codes:
+                    code = sorted(limit_codes)[0]
+                    detail = "A turn limit was reached."
+                    if approval_specs:
+                        for index, call, _arguments in approval_specs:
+                            planned[index] = (
+                                call,
+                                _limit_outcome(call.name, code, detail),
+                            )
+                    outcomes = _planned_outcomes(calls, planned)
+                    try:
+                        result_entries = await self.repository.append_tool_results(
+                            conversation_id=conversation_id,
+                            run_id=run_id,
+                            drafts=[
+                                _tool_result_draft(call, outcome)
+                                for call, outcome in outcomes
+                            ],
+                            now=utcnow(),
+                        )
+                    except AgentRunNotActiveError:
+                        await self._best_effort_cancel(turn, last_entry_id)
+                        terminal = True
+                        yield AgentStreamEvent(
+                            "run_end",
+                            {"run_id": run_id, "status": RUN_CANCELLED},
+                        )
+                        return
+                    last_entry_id = (
+                        result_entries[-1].id if result_entries else last_entry_id
+                    )
+                    for index, ((call, outcome), entry) in enumerate(
+                        zip(outcomes, result_entries, strict=True)
+                    ):
+                        yield _tool_end_event(
+                            call,
+                            outcome,
+                            entry.id,
+                            parallel=parallel,
+                            batch_size=batch_size,
+                            parallel_index=index,
+                        )
+                    await self._fail_run(turn, last_entry_id, code, detail)
+                    terminal = True
+                    yield AgentStreamEvent("error", {"code": code, "detail": detail})
+                    yield AgentStreamEvent(
+                        "run_end",
+                        {"run_id": run_id, "status": RUN_FAILED},
+                    )
+                    return
+
+                if approval_specs:
+                    # Batch rule: every non-confirmation call runs normally;
+                    # each valid confirmation call becomes a pending approval
+                    # in assistant call order. No result is invented for a
+                    # pending call. Resolutions must follow approval id order,
+                    # so tool results still append in source order.
+                    result_indices = [
+                        index for index, value in enumerate(planned) if value is not None
+                    ]
+                    result_drafts: list[EntryDraft] = []
+                    result_pairs: list[tuple[ChatToolCall, ToolOutcome]] = []
+                    for index in result_indices:
+                        planned_outcome = planned[index]
+                        assert planned_outcome is not None
+                        result_pairs.append(planned_outcome)
+                        result_drafts.append(_tool_result_draft(*planned_outcome))
+                    approval_drafts = [
+                        ApprovalDraft(
+                            tool_call_id=call.call_id,
+                            tool_name=call.name,
+                            arguments=arguments,
+                            preview=_approval_preview(call.name, arguments),
+                            resume_state={
+                                "step": step,
+                                "total_usage": dict(total_usage),
+                                "tool_calls_used": tool_calls_used,
+                                "assistant_entry_id": assistant_entry.id,
+                                "batch_size": batch_size,
+                                "parallel": parallel,
+                                "parallel_index": index,
+                            },
+                        )
+                        for index, call, arguments in approval_specs
+                    ]
+                    try:
+                        result_entries, approvals = (
+                            await self.repository.pause_run_with_approvals(
+                                conversation_id=conversation_id,
+                                run_id=run_id,
+                                result_drafts=result_drafts,
+                                approval_drafts=approval_drafts,
+                                last_entry_id=last_entry_id,
+                                now=utcnow(),
+                            )
+                        )
+                    except AgentRunNotActiveError:
+                        await self._best_effort_cancel(turn, last_entry_id)
+                        terminal = True
+                        yield AgentStreamEvent(
+                            "run_end",
+                            {"run_id": run_id, "status": RUN_CANCELLED},
+                        )
+                        return
+                    if result_entries:
+                        last_entry_id = result_entries[-1].id
+                    for index, (call, outcome), entry in zip(
+                        result_indices,
+                        result_pairs,
+                        result_entries,
+                        strict=True,
+                    ):
+                        yield _tool_end_event(
+                            call,
+                            outcome,
+                            entry.id,
+                            parallel=parallel,
+                            batch_size=batch_size,
+                            parallel_index=index,
+                        )
+                    for approval in approvals:
+                        yield _approval_required_event(_approval_schema(approval))
+                    terminal = True
+                    yield AgentStreamEvent(
+                        "run_end",
+                        {"run_id": run_id, "status": RUN_WAITING},
+                    )
+                    return
+
                 # Each executed outcome was already clipped to the per-result
                 # cap by the tool registry. Calls over the per-turn call limit
                 # carry a small synthetic limit outcome; no result is dropped
                 # or summarized with a second model call.
-                outcomes: list[tuple[ChatToolCall, ToolOutcome]] = []
-                for index, _call in enumerate(calls):
-                    planned_outcome = planned[index]
-                    assert planned_outcome is not None
-                    outcomes.append(planned_outcome)
+                outcomes = _planned_outcomes(calls, planned)
 
                 try:
                     result_entries = await self.repository.append_tool_results(
@@ -788,23 +977,6 @@ class AgentService:
                         batch_size=batch_size,
                         parallel_index=index,
                     )
-
-                limit_codes = {
-                    outcome.error_code
-                    for _call, outcome in outcomes
-                    if outcome.error_code in LIMIT_CODES
-                }
-                if limit_codes:
-                    code = sorted(limit_codes)[0]
-                    detail = "A turn limit was reached."
-                    await self._fail_run(turn, last_entry_id, code, detail)
-                    terminal = True
-                    yield AgentStreamEvent("error", {"code": code, "detail": detail})
-                    yield AgentStreamEvent(
-                        "run_end",
-                        {"run_id": run_id, "status": RUN_FAILED},
-                    )
-                    return
 
                 context = await self._context(conversation_id, last_entry_id)
 
@@ -872,6 +1044,7 @@ class AgentService:
         tool_results = [
             entry for entry in entries if entry.kind == KIND_TOOL_RESULT
         ]
+        pending = await self.repository.list_pending_approvals(run.id)
         return AgentTurnResultSchema(
             run=_run_schema(run),
             user_entry=turn.user_entry,
@@ -882,7 +1055,163 @@ class AgentService:
             usage=_usage_from_entries(entries),
             error_code=run.error_code,
             error_detail=run.error_detail,
+            pending_approvals=[_approval_schema(item) for item in pending],
         )
+
+    async def list_approvals(
+        self,
+        conversation_id: int,
+        *,
+        status: str | None,
+    ) -> list[AgentApprovalSchema]:
+        """Return durable approvals for one conversation, oldest first."""
+        conversation = await self.repository.get_conversation(conversation_id)
+        if conversation is None:
+            raise AgentConversationNotFoundError(conversation_id)
+        rows = await self.repository.list_approvals(
+            conversation_id,
+            status=status,
+        )
+        return [_approval_schema(row) for row in rows]
+
+    async def resolve_approval(
+        self,
+        approval_id: int,
+        *,
+        approved: bool,
+    ) -> AgentApprovalTurn:
+        """Resolve exactly one pending approval and prepare its resumed loop.
+
+        The approval row is claimed before the write executes, so a duplicate or
+        concurrent resolution can never double-write. A rejected write appends a
+        clear error tool result and resumes without touching memory.
+        """
+        approval = await self.repository.get_approval(approval_id)
+        if approval is None:
+            raise AgentApprovalNotFoundError(approval_id)
+        conversation_row = await self.repository.get_conversation(
+            approval.conversation_id
+        )
+        if conversation_row is None:
+            raise AgentConversationNotFoundError(approval.conversation_id)
+        if conversation_row.status != "active":
+            raise AgentConversationArchivedError(approval.conversation_id)
+
+        claimed, run, conversation = await self.repository.claim_approval(
+            approval_id=approval_id,
+            approved=approved,
+            now=utcnow(),
+        )
+        call = ChatToolCall(
+            call_id=claimed.tool_call_id,
+            name=claimed.tool_name,
+            arguments=claimed.arguments,
+            raw_arguments=json.dumps(
+                claimed.arguments,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+        )
+        if approved:
+            outcome = await self.tool_registry.execute(
+                call.name,
+                call.arguments,
+                call_id=call.call_id,
+                max_chars=self.config.max_tool_result_chars,
+                approved=True,
+            )
+        else:
+            outcome = _rejection_outcome(call.name, approval_id)
+
+        tool_entry, run, conversation, remaining = (
+            await self.repository.record_approval_result(
+                approval_id=approval_id,
+                draft=_tool_result_draft(call, outcome),
+                now=utcnow(),
+            )
+        )
+        user_entry = await self.repository.get_entry(run.user_entry_id)
+        if user_entry is None:
+            raise AgentRunNotFoundError(run.id)
+        latest = await self.repository.get_approval(approval_id)
+        if latest is None:
+            raise AgentApprovalNotFoundError(approval_id)
+
+        resume_state = dict(claimed.resume_state)
+        return AgentApprovalTurn(
+            turn=AgentTurnState(
+                conversation=_conversation_schema(conversation),
+                run=_run_schema(run),
+                user_entry=_entry_schema(user_entry),
+                cutoff_entry_id=run.last_entry_id or tool_entry.id,
+                page_context_entry_id=None,
+            ),
+            approval=_approval_schema(latest),
+            call=call,
+            outcome=outcome,
+            tool_entry=_entry_schema(tool_entry),
+            remaining=[_approval_schema(item) for item in remaining],
+            resume_state=resume_state,
+        )
+
+    async def stream_approval(
+        self,
+        approval_turn: AgentApprovalTurn,
+    ) -> AsyncIterator[AgentStreamEvent]:
+        """Stream the resolution and, when no approvals remain, the resume."""
+        run_id = approval_turn.turn.run.id
+        yield AgentStreamEvent(
+            "run_start",
+            {
+                "run_id": run_id,
+                "user_entry_id": approval_turn.turn.user_entry.id,
+                "page_context_entry_id": None,
+                "page_context_attached": False,
+                "resumed": True,
+            },
+        )
+        yield _tool_end_event(
+            approval_turn.call,
+            approval_turn.outcome,
+            approval_turn.tool_entry.id,
+        )
+        if approval_turn.remaining:
+            for approval in approval_turn.remaining:
+                yield _approval_required_event(approval)
+            yield AgentStreamEvent(
+                "run_end",
+                {"run_id": run_id, "status": RUN_WAITING},
+            )
+            return
+
+        start_step = int(approval_turn.resume_state.get("step", 0)) + 1
+        usage = approval_turn.resume_state.get("total_usage")
+        total_usage = (
+            {str(key): int(value) for key, value in usage.items()}
+            if isinstance(usage, dict)
+            else {}
+        )
+        tool_calls_used = int(approval_turn.resume_state.get("tool_calls_used", 0))
+        async for event in self._run_loop(
+            approval_turn.turn,
+            start_step=start_step,
+            total_usage=total_usage,
+            tool_calls_used=tool_calls_used,
+            last_entry_id=approval_turn.turn.cutoff_entry_id,
+            resumed=True,
+            emit_start=False,
+        ):
+            yield event
+
+    async def collect_approval(
+        self,
+        approval_turn: AgentApprovalTurn,
+    ) -> AgentTurnResultSchema:
+        """Consume an approval resolution and return the final durable turn."""
+        async for _event in self.stream_approval(approval_turn):
+            pass
+        return await self.collect_turn(approval_turn.turn)
 
     async def _execute_tool(self, call: ChatToolCall) -> ToolOutcome:
         """Execute one call with the snapshot's per-result character cap."""
@@ -1311,6 +1640,85 @@ def _normalize_finish(result: ChatResult) -> str | None:
     if finish in {"", "stop", "length"}:
         return finish or "stop"
     return None
+
+
+def _planned_outcomes(
+    calls: list[ChatToolCall],
+    planned: list[tuple[ChatToolCall, ToolOutcome] | None],
+) -> list[tuple[ChatToolCall, ToolOutcome]]:
+    """Return every call with a concrete outcome, preserving source order."""
+    outcomes: list[tuple[ChatToolCall, ToolOutcome]] = []
+    for index, _call in enumerate(calls):
+        planned_outcome = planned[index]
+        assert planned_outcome is not None
+        outcomes.append(planned_outcome)
+    return outcomes
+
+
+def _approval_preview(
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a bounded, human-readable preview for the approval card."""
+    raw_content = arguments.get("content")
+    content = raw_content if isinstance(raw_content, str) else ""
+    raw_supersedes = arguments.get("supersedes")
+    supersedes = (
+        [value for value in raw_supersedes if isinstance(value, int)]
+        if isinstance(raw_supersedes, list)
+        else []
+    )
+    raw_occurred_at = arguments.get("occurred_at")
+    return {
+        "tool": tool_name,
+        "content": content,
+        "content_chars": len(content),
+        "supersedes": supersedes,
+        "occurred_at": (
+            raw_occurred_at if isinstance(raw_occurred_at, str) else None
+        ),
+        "risk": (
+            "Approving appends a durable memory to the archive. Rejecting "
+            "writes nothing and tells the agent the write was declined."
+        ),
+    }
+
+
+def _approval_schema(model: AgentApprovalModel) -> AgentApprovalSchema:
+    return AgentApprovalSchema.model_validate(model)
+
+
+def _approval_required_event(approval: AgentApprovalSchema) -> AgentStreamEvent:
+    return AgentStreamEvent(
+        "approval_required",
+        {
+            "approval_id": approval.id,
+            "conversation_id": approval.conversation_id,
+            "run_id": approval.run_id,
+            "tool_call_id": approval.tool_call_id,
+            "tool_name": approval.tool_name,
+            "status": approval.status,
+            "preview": approval.preview,
+            "requested_at": approval.requested_at.isoformat(),
+        },
+    )
+
+
+def _rejection_outcome(tool_name: str, approval_id: int) -> ToolOutcome:
+    detail = "The user rejected the proposed memory write. No memory was saved."
+    return ToolOutcome(
+        content=f"<error{attributes({'code': 'memory_rejected'})}>"
+        f"{xml_text(detail)}</error>",
+        data={
+            "tool": tool_name,
+            "status": "error",
+            "error_code": "memory_rejected",
+            "detail": detail,
+            "approval_id": approval_id,
+        },
+        status="error",
+        error_code="memory_rejected",
+    )
 
 
 def _tool_result_draft(call: ChatToolCall, outcome: ToolOutcome) -> EntryDraft:

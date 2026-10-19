@@ -60,6 +60,23 @@ class AgentInvalidEntryError(AgentError):
         super().__init__(detail)
 
 
+class AgentApprovalNotFoundError(AgentError):
+    def __init__(self, approval_id: int) -> None:
+        super().__init__(f"Agent approval {approval_id} was not found.")
+
+
+class AgentApprovalNotPendingError(AgentError):
+    def __init__(self, status: str) -> None:
+        super().__init__(f"The agent approval is {status} and cannot be resolved again.")
+
+
+class AgentApprovalOutOfOrderError(AgentError):
+    def __init__(self) -> None:
+        super().__init__(
+            "An earlier approval for this run is still pending; resolve it first."
+        )
+
+
 class SavedQuestionNotFoundError(AgentError):
     def __init__(self, question_id: int) -> None:
         super().__init__(f"Saved question {question_id} was not found.")
