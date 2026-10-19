@@ -115,6 +115,21 @@ class TreePathConflictError(KnowledgeError):
         super().__init__(f"Path {path} is already occupied by a different node kind.")
 
 
+class IngestJobNotFoundError(KnowledgeError):
+    def __init__(self, job_id: int) -> None:
+        super().__init__(f"Ingestion job {job_id} was not found.")
+
+
+class IngestJobConflictError(KnowledgeError):
+    def __init__(self, path: str) -> None:
+        super().__init__(f"Path {path} already has an active ingestion job.")
+
+
+class IngestJobNotRetryableError(KnowledgeError):
+    def __init__(self, job_id: int, detail: str) -> None:
+        super().__init__(f"Ingestion job {job_id} cannot be retried: {detail}")
+
+
 class DemoAlreadySeededError(KnowledgeError):
     def __init__(self) -> None:
         super().__init__("Demo data can only be seeded into an empty library.")

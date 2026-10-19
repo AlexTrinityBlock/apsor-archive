@@ -9,6 +9,9 @@ from app.module.knowledge.exception.domain_error import (
     FileContentUnavailableError,
     FileRecordNotFoundError,
     FileTooLargeError,
+    IngestJobConflictError,
+    IngestJobNotFoundError,
+    IngestJobNotRetryableError,
     InvalidChunkWindowError,
     InvalidPathError,
     InvalidProviderConfigError,
@@ -53,5 +56,8 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(AiProviderError, 502, "ai_provider_error")
     ExceptionRegistry.register(EmbeddingProviderError, 502, "embedding_provider_error")
     ExceptionRegistry.register(TreePathConflictError, 409, "tree_path_conflict")
+    ExceptionRegistry.register(IngestJobNotFoundError, 404, "ingest_job_not_found")
+    ExceptionRegistry.register(IngestJobConflictError, 409, "ingest_job_conflict")
+    ExceptionRegistry.register(IngestJobNotRetryableError, 409, "ingest_job_not_retryable")
     ExceptionRegistry.register(DemoAlreadySeededError, 409, "demo_already_seeded")
     ExceptionRegistry.register(KnowledgeError, 500, "knowledge_error")

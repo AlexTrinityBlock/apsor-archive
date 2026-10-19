@@ -267,3 +267,129 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert copy_extension.status_code == 422
     assert copy_extension.json()["error"] == "invalid_path"
     assert int(target_occupied["id"]) > copied_id
+
+    # Durable async ingestion: the HTTP call only enqueues, a worker advances
+    # the job through parsing/chunking/embedding, and the file becomes visible
+    # only when the job publishes it.
+    worker = client.app.state.ingest_worker
+    assert worker.poll_seconds == 1.0
+    assert worker.extract_workers == 2
+    assert worker.max_in_flight_jobs == 2
+    assert worker.embedding_concurrency == 6
+    assert worker.extract_pool is not None
+    assert worker.embedding_semaphore is not None
+    assert client.app.state.settings.ingest_poll_seconds == 1.0
+    assert client.app.state.settings.ingest_extract_workers == 2
+    assert client.app.state.settings.ingest_max_in_flight_jobs == 2
+    assert client.app.state.settings.ingest_embedding_concurrency == 6
+
+    async_text_path = "/history/async/quasar.md"
+    async_text_content = "Quasar bearing maintenance guide. " * 220
+    queued_text = client.post(
+        "/api/v1/files/text/async",
+        json={"path": async_text_path, "content": async_text_content},
+    )
+    assert queued_text.status_code == 202, queued_text.text
+    text_job = queued_text.json()
+    assert text_job["status"] == "queued"
+    assert text_job["progress_pct"] == 0
+    assert text_job["file_id"] is None
+    assert text_job["chunks_total"] is None
+    listed_jobs = client.get("/api/v1/files/ingest-jobs")
+    assert listed_jobs.status_code == 200
+    assert any(job["id"] == text_job["id"] for job in listed_jobs.json()["jobs"])
+
+    not_ready = client.get(
+        "/api/v1/search",
+        params={"query": "quasar bearing", "result_number": 5},
+    )
+    assert not_ready.status_code == 200
+    assert all(
+        item["raw_file_path"] != async_text_path
+        for item in not_ready.json()["file_results"]
+    )
+
+    assert client.portal is not None
+    processed_text = client.portal.call(worker.process_job, text_job["id"])
+    assert processed_text is not None
+    assert processed_text.status == "ready"
+
+    ready_text = client.get(f"/api/v1/files/ingest-jobs/{text_job['id']}")
+    assert ready_text.status_code == 200
+    text_state = ready_text.json()
+    text_file_id = int(text_state["file_id"])
+    assert text_state["status"] == "ready"
+    assert text_state["progress_pct"] == 100
+    assert int(text_state["chunks_total"]) >= 1
+    assert text_state["chunks_embedded"] == text_state["chunks_total"]
+    assert text_state["finished_at"] is not None
+    assert text_state["error_code"] is None
+
+    text_window = client.get(f"/api/v1/files/{text_file_id}/chunks/1")
+    assert text_window.status_code == 200
+    ready_search = client.get(
+        "/api/v1/search",
+        params={"query": "quasar bearing", "result_number": 5},
+    )
+    assert ready_search.status_code == 200
+    assert any(
+        item["file_id"] == text_file_id for item in ready_search.json()["file_results"]
+    )
+
+    # The same queue drives uploaded originals; the original bytes keep the
+    # inline viewer working after the job publishes.
+    async_payload = b"Supercapacitor calibration notes for the workshop.\n" * 120
+    queued_upload = client.post(
+        "/api/v1/files/async",
+        data={"path": "/history/async/supercapacitor.txt"},
+        files={"file": ("supercapacitor.txt", async_payload, "text/plain")},
+    )
+    assert queued_upload.status_code == 202, queued_upload.text
+    upload_job = queued_upload.json()
+    assert upload_job["source_kind"] == "upload"
+    assert upload_job["file_id"] is None
+    assert client.portal.call(worker.run_once) is True
+    upload_state = client.get(
+        f"/api/v1/files/ingest-jobs/{upload_job['id']}"
+    ).json()
+    assert upload_state["status"] == "ready"
+    assert upload_state["chunks_embedded"] == upload_state["chunks_total"]
+    upload_content = client.get(f"/api/v1/files/{int(upload_state['file_id'])}/content")
+    assert upload_content.status_code == 200
+    assert upload_content.content == async_payload
+
+    # Failed extraction keeps the job readable and never publishes a partial
+    # current file or chunks.
+    broken = client.post(
+        "/api/v1/files/async",
+        data={"path": "/history/async/broken.pdf"},
+        files={"file": ("broken.pdf", b"not a real pdf", "application/pdf")},
+    )
+    assert broken.status_code == 202, broken.text
+    broken_job = broken.json()
+    assert client.portal.call(worker.process_job, broken_job["id"]) is not None
+    broken_state = client.get(
+        f"/api/v1/files/ingest-jobs/{broken_job['id']}"
+    ).json()
+    assert broken_state["status"] == "failed"
+    assert broken_state["error_code"] == "empty_content"
+    assert broken_state["error_detail"]
+    assert broken_state["file_id"] is None
+    assert broken_state["progress_pct"] < 100
+    after_failure = client.get(
+        "/api/v1/paths",
+        params={"path": "/history/async", "path_depth": 1},
+    )
+    assert after_failure.status_code == 200
+    assert all(
+        item["raw_file_path"] != "/history/async/broken.pdf"
+        for item in after_failure.json()["files"]
+    )
+
+    # The synchronous endpoints still return a fully indexed file.
+    sync_text = create_text(
+        client,
+        "/history/async/sync.md",
+        "Synchronous ingestion still works. " * 80,
+    )
+    assert int(sync_text["total_chunks"]) >= 1

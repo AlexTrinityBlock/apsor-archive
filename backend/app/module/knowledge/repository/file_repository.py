@@ -21,9 +21,17 @@ class FileRepository:
         await self.session.flush()
         return file
 
+    async def flush(self) -> None:
+        await self.session.flush()
+
     async def mark_not_current(self, file: FileModel) -> None:
         file.is_current = False
         file.updated_at = utcnow()
+        await self.session.flush()
+
+    async def delete(self, file: FileModel) -> None:
+        """Remove an unpublished file row after a failed ingestion."""
+        await self.session.delete(file)
         await self.session.flush()
 
     async def update_location(

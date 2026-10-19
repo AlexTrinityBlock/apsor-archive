@@ -2,7 +2,7 @@
 
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -28,6 +28,7 @@ from app.module.agent.repository.agent_repository import AgentRepository
 from app.module.agent.router import router as agent_router
 from app.module.auth.exception.handler import register_exceptions as register_auth_exceptions
 from app.module.auth.router.auth_router import router as auth_router
+from app.module.knowledge.dependencies import build_ingest_worker
 from app.module.knowledge.exception.handler import register_exceptions
 from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
 from app.module.knowledge.router import router as knowledge_router
@@ -82,9 +83,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await runtime.reload(AiProviderConfigRepository(session))
         app.state.secret_cipher = cipher
         app.state.ai_runtime = runtime
+        app.state.ingest_worker = build_ingest_worker(
+            app.state,
+            app.state.db.session_factory,
+            resolved_settings,
+        )
+        worker_task: asyncio.Task[None] | None = None
+        if resolved_settings.ingest_worker_enabled:
+            await app.state.ingest_worker.startup()
+            worker_task = asyncio.create_task(
+                app.state.ingest_worker.run_forever(),
+                name="ingest-worker",
+            )
         try:
             yield
         finally:
+            if worker_task is not None:
+                worker_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await worker_task
+            app.state.ingest_worker.close()
             await app.state.cache.close()
             await app.state.db.dispose()
 
