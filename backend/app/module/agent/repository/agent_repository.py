@@ -8,6 +8,7 @@ it for every entry written in that transaction.
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -38,6 +39,7 @@ from app.module.agent.exception.domain_error import (
     AgentConversationArchivedError,
     AgentConversationBusyError,
     AgentConversationNotFoundError,
+    AgentForkEntryInvalidError,
     AgentRequestDuplicateError,
     AgentRunNotActiveError,
     AgentRunNotFoundError,
@@ -148,6 +150,126 @@ class AgentRepository:
             await session.flush()
             conversation.last_entry_at = entry.created_at
             return conversation, entry
+
+    async def fork_conversation(
+        self,
+        source_id: int,
+        *,
+        at_entry_id: int | None,
+        title: str,
+        provider_session_id: UUID,
+        now: datetime,
+    ) -> AgentConversationModel:
+        """Copy the source transcript through an inclusive cutoff.
+
+        The source conversation and its entries are never changed. Runs are
+        operational state and are deliberately not copied, so copied entries
+        have ``by_run_id=None`` and start a fresh run history. Head markers and
+        context edits are remapped to the copied entry ids; references outside
+        the copied range are dropped.
+        """
+        async with self._transaction() as session:
+            source = await self._lock_conversation(session, source_id)
+            if source.status != CONVERSATION_ACTIVE:
+                raise AgentConversationArchivedError(source_id)
+
+            active = await session.execute(
+                select(AgentRunModel.id)
+                .where(
+                    AgentRunModel.conversation_id == source_id,
+                    AgentRunModel.status.in_(ACTIVE_RUN_STATUSES),
+                )
+                .limit(1)
+            )
+            if active.scalar_one_or_none() is not None:
+                raise AgentConversationBusyError(source_id)
+
+            cutoff_entry_id = await self._resolve_fork_cutoff(
+                session,
+                source_id,
+                at_entry_id=at_entry_id,
+            )
+            statement = (
+                select(AgentEntryModel)
+                .where(
+                    AgentEntryModel.conversation_id == source_id,
+                    AgentEntryModel.id <= cutoff_entry_id,
+                )
+                .order_by(AgentEntryModel.id.asc())
+            )
+            source_entries = list(
+                (await session.execute(statement)).scalars().all()
+            )
+
+            forked = AgentConversationModel(
+                parent_conversation_id=source.id,
+                fork_at_entry_id=cutoff_entry_id,
+                title=title,
+                provider=source.provider,
+                model=source.model,
+                provider_session_id=provider_session_id,
+                status=CONVERSATION_ACTIVE,
+                created_at=now,
+                updated_at=now,
+                last_entry_at=now,
+            )
+            session.add(forked)
+            await session.flush()
+
+            copies: list[tuple[AgentEntryModel, AgentEntryModel]] = []
+            for source_entry in source_entries:
+                commit_seq = await self._next_commit_seq(session)
+                copy = AgentEntryModel(
+                    conversation_id=forked.id,
+                    commit_seq=commit_seq,
+                    kind=source_entry.kind,
+                    model=deepcopy(source_entry.model),
+                    data=deepcopy(source_entry.data),
+                    by_run_id=None,
+                    created_at=source_entry.created_at,
+                )
+                session.add(copy)
+                copies.append((source_entry, copy))
+            await session.flush()
+
+            id_map = {
+                source_entry.id: copy.id
+                for source_entry, copy in copies
+            }
+            for source_entry, copy in copies:
+                copy.head_entry_id = (
+                    id_map.get(source_entry.head_entry_id)
+                    if source_entry.head_entry_id is not None
+                    else None
+                )
+                edited = _remap_edits(source_entry.edits, id_map)
+                if edited is not None:
+                    copy.edits = edited
+            await session.flush()
+            return forked
+
+    @staticmethod
+    async def _resolve_fork_cutoff(
+        session: AsyncSession,
+        conversation_id: int,
+        *,
+        at_entry_id: int | None,
+    ) -> int:
+        if at_entry_id is None:
+            latest = await session.execute(
+                select(func.max(AgentEntryModel.id)).where(
+                    AgentEntryModel.conversation_id == conversation_id
+                )
+            )
+            cutoff_entry_id = latest.scalar_one_or_none()
+            if cutoff_entry_id is None:
+                raise AgentForkEntryInvalidError(conversation_id, 0)
+            return int(cutoff_entry_id)
+
+        entry = await session.get(AgentEntryModel, at_entry_id)
+        if entry is None or entry.conversation_id != conversation_id:
+            raise AgentForkEntryInvalidError(conversation_id, at_entry_id)
+        return entry.id
 
     async def get_conversation(
         self,
@@ -1101,6 +1223,27 @@ class AgentRepository:
                 run.finished_at = now
                 orphaned += 1
             return int(getattr(interrupted, "rowcount", 0) or 0) + orphaned
+
+
+def _remap_edits(
+    raw: object,
+    id_map: dict[int, int],
+) -> list[dict[str, Any]] | None:
+    """Remap context-edit targets and drop references outside the fork range."""
+    if not isinstance(raw, list):
+        return None
+    remapped: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        target = item.get("target_entry_id")
+        if not isinstance(target, int) or isinstance(target, bool):
+            continue
+        mapped = id_map.get(target)
+        if mapped is None:
+            continue
+        remapped.append({**deepcopy(item), "target_entry_id": mapped})
+    return remapped or None
 
 
 __all__ = ["AgentRepository"]

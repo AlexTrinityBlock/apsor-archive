@@ -139,6 +139,20 @@ compaction card shows the reason, folded-entry count, summary character count,
 last user input, and an expandable summary. The reset card starts a new empty
 active context.
 
+### Forking
+
+The thread rail exposes a **Fork** action on active conversations; archived
+threads show the action disabled with an explanation to restore the thread
+first. User and assistant entries expose **Fork from here**, which sends their
+entry id as `at_entry_id` to the generated `useForkAgentConversation` hook.
+Both paths show a toast, invalidate the conversation list, and navigate to
+`/chat/{newId}`. A `409 agent_conversation_busy` or
+`409 agent_conversation_archived` response is surfaced as an error and leaves
+the current thread in place. Forked conversations show `Forked from #<id>` in
+the masthead with a link to the source, and the rail labels them
+`fork of #<id>`. Forking copies transcript entries only; runs, retry state, and
+approval state are not copied.
+
 Chat is in the **Studio** sidebar and the command palette. Mobile bottom tabs
 stay Overview, Search, Timeline, Library, and More; Chat is reached through the
 navigation drawer.

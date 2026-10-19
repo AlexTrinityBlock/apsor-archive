@@ -1,5 +1,7 @@
 """Pi-shaped agent transcript, tool loop, cache usage, and lifecycle."""
 
+import json
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
@@ -598,6 +600,252 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert final_request.messages[11]["content"] == third_question
     assert final_request.model == conversation["model"]
 
+    cleared = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/clear"
+    )
+    assert cleared.status_code == 200, cleared.text
+    clear_entry = cleared.json()
+    assert clear_entry["kind"] == "pi.reset"
+    assert clear_entry["head_entry_id"] == clear_entry["id"]
+
+    source_detail = client.get(
+        f"/api/v1/agent/conversations/{conversation_id}"
+    ).json()
+    source_entries = source_detail["entries"]
+    assert source_entries[-1]["id"] == clear_entry["id"]
+    first_user_entry = next(
+        entry for entry in source_entries if entry["kind"] == "pi.user"
+    )
+    first_page_context = next(
+        entry for entry in source_entries if entry["kind"] == "pi.page-context"
+    )
+
+    # Store one valid and one out-of-range edit to exercise fork remapping.
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE agent_entry SET edits = CAST(:edits AS jsonb) "
+                "WHERE id = :entry_id"
+            ),
+            {
+                "edits": json.dumps(
+                    [
+                        {
+                            "target_entry_id": first_page_context["id"],
+                            "action": "omit",
+                        },
+                        {"target_entry_id": 999_999, "action": "omit"},
+                    ]
+                ),
+                "entry_id": source_entries[0]["id"],
+            },
+        )
+    engine.dispose()
+
+    source_detail = client.get(
+        f"/api/v1/agent/conversations/{conversation_id}"
+    ).json()
+    source_entries = source_detail["entries"]
+    source_entry_ids = {entry["id"] for entry in source_entries}
+    first_user_index = next(
+        index
+        for index, entry in enumerate(source_entries)
+        if entry["kind"] == "pi.user"
+    )
+    source_updated_at = source_detail["updated_at"]
+    source_last_entry_at = source_detail["last_entry_at"]
+
+    forked_latest_response = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/fork",
+        json={"title": "  Forked latest  "},
+    )
+    assert forked_latest_response.status_code == 201, forked_latest_response.text
+    forked_latest = forked_latest_response.json()
+    assert forked_latest["id"] != conversation_id
+    assert forked_latest["parent_conversation_id"] == conversation_id
+    assert forked_latest["fork_at_entry_id"] == clear_entry["id"]
+    assert forked_latest["title"] == "Forked latest"
+    assert forked_latest["status"] == "active"
+    assert forked_latest["provider"] == source_detail["provider"]
+    assert forked_latest["model"] == source_detail["model"]
+    assert (
+        forked_latest["provider_session_id"]
+        != source_detail["provider_session_id"]
+    )
+    assert forked_latest["archived_at"] is None
+    assert forked_latest["deleted_at"] is None
+
+    forked_at_response = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/fork",
+        json={"at_entry_id": first_user_entry["id"]},
+    )
+    assert forked_at_response.status_code == 201, forked_at_response.text
+    forked_at = forked_at_response.json()
+    assert forked_at["id"] != forked_latest["id"]
+    assert forked_at["parent_conversation_id"] == conversation_id
+    assert forked_at["fork_at_entry_id"] == first_user_entry["id"]
+    assert forked_at["title"] == "Fork of Wrench research"
+    assert (
+        forked_at["provider_session_id"]
+        != source_detail["provider_session_id"]
+    )
+
+    forked_latest_detail = client.get(
+        f"/api/v1/agent/conversations/{forked_latest['id']}"
+    ).json()
+    forked_latest_entries = forked_latest_detail["entries"]
+    assert len(forked_latest_entries) == len(source_entries)
+    assert [entry["kind"] for entry in forked_latest_entries] == [
+        entry["kind"] for entry in source_entries
+    ]
+    assert all(
+        entry["id"] not in source_entry_ids
+        for entry in forked_latest_entries
+    )
+    assert len({entry["id"] for entry in forked_latest_entries}) == len(
+        forked_latest_entries
+    )
+    assert all(entry["by_run_id"] is None for entry in forked_latest_entries)
+    assert [entry["commit_seq"] for entry in forked_latest_entries] == sorted(
+        entry["commit_seq"] for entry in forked_latest_entries
+    )
+    for source_entry, copied_entry in zip(
+        source_entries, forked_latest_entries, strict=True
+    ):
+        assert copied_entry["kind"] == source_entry["kind"]
+        assert copied_entry["model"] == source_entry["model"]
+        assert copied_entry["data"] == source_entry["data"]
+
+    copied_page_context = next(
+        entry
+        for entry in forked_latest_entries
+        if entry["kind"] == "pi.page-context"
+    )
+    assert forked_latest_entries[0]["edits"] == [
+        {"target_entry_id": copied_page_context["id"], "action": "omit"}
+    ]
+    copied_clear = forked_latest_entries[-1]
+    assert copied_clear["kind"] == "pi.reset"
+    assert copied_clear["head_entry_id"] == copied_clear["id"]
+    assert source_entries[-1]["head_entry_id"] == source_entries[-1]["id"]
+
+    forked_at_detail = client.get(
+        f"/api/v1/agent/conversations/{forked_at['id']}"
+    ).json()
+    forked_at_entries = forked_at_detail["entries"]
+    assert len(forked_at_entries) == first_user_index + 1
+    assert [entry["kind"] for entry in forked_at_entries] == [
+        entry["kind"] for entry in source_entries[: first_user_index + 1]
+    ]
+    assert forked_at_entries[-1]["kind"] == "pi.user"
+    assert forked_at_entries[-1]["model"] == first_user_entry["model"]
+    assert all(
+        entry["id"] not in source_entry_ids for entry in forked_at_entries
+    )
+
+    fork_fake = FakeChatGenerator.from_texts("The fork continues.")
+    client.app.state.agent_chat_generator = fork_fake
+    fork_turn = client.post(
+        f"/api/v1/agent/conversations/{forked_at['id']}/messages",
+        json={"content": "Continue in the fork."},
+        headers={"Accept": "application/json"},
+    )
+    assert fork_turn.status_code == 200, fork_turn.text
+    fork_turn_body = fork_turn.json()
+    assert fork_turn_body["run"]["status"] == "completed"
+    assert fork_turn_body["assistant_entry"]["conversation_id"] == forked_at["id"]
+    assert fork_turn_body["user_entry"]["conversation_id"] == forked_at["id"]
+    assert len(fork_fake.requests) == 1
+    fork_request = fork_fake.requests[0]
+    assert fork_request.messages[0]["role"] == "system"
+    assert "You are DendroMatrix" in fork_request.messages[0]["content"]
+    assert any(
+        message.get("role") == "user"
+        and message.get("content") == first_question
+        for message in fork_request.messages
+    )
+    assert fork_request.messages[-1]["content"] == "Continue in the fork."
+
+    source_after = client.get(
+        f"/api/v1/agent/conversations/{conversation_id}"
+    ).json()
+    assert source_after["entries"] == source_entries
+    assert source_after["updated_at"] == source_updated_at
+    assert source_after["last_entry_at"] == source_last_entry_at
+    assert source_after["title"] == source_detail["title"]
+
+    cutoff_helper = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Fork cutoff helper"},
+    )
+    assert cutoff_helper.status_code == 201, cutoff_helper.text
+    cutoff_helper_id = cutoff_helper.json()["id"]
+    cutoff_helper_entry_id = client.get(
+        f"/api/v1/agent/conversations/{cutoff_helper_id}"
+    ).json()["entries"][0]["id"]
+    foreign_cutoff = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/fork",
+        json={"at_entry_id": cutoff_helper_entry_id},
+    )
+    assert foreign_cutoff.status_code == 400
+    assert foreign_cutoff.json()["error"] == "agent_fork_entry_invalid"
+    missing_cutoff = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/fork",
+        json={"at_entry_id": 999_999},
+    )
+    assert missing_cutoff.status_code == 400
+    assert missing_cutoff.json()["error"] == "agent_fork_entry_invalid"
+    assert client.delete(
+        f"/api/v1/agent/conversations/{cutoff_helper_id}"
+    ).status_code == 204
+
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.begin() as connection:
+        busy_run_id = connection.execute(
+            text(
+                "INSERT INTO agent_run (conversation_id, user_entry_id, status, "
+                "abort_requested, last_entry_id, started_at, created_at) "
+                "VALUES (:conversation_id, :user_entry_id, 'running', false, "
+                ":user_entry_id, now(), now()) RETURNING id"
+            ),
+            {
+                "conversation_id": conversation_id,
+                "user_entry_id": first_user_entry["id"],
+            },
+        ).scalar_one()
+    busy_fork = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/fork",
+        json={},
+    )
+    assert busy_fork.status_code == 409
+    assert busy_fork.json()["error"] == "agent_conversation_busy"
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM agent_run WHERE id = :run_id"),
+            {"run_id": busy_run_id},
+        )
+    engine.dispose()
+
+    long_title = "W" * 200
+    renamed_source = client.patch(
+        f"/api/v1/agent/conversations/{conversation_id}",
+        json={"title": long_title},
+    )
+    assert renamed_source.status_code == 200
+    clipped_fork = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/fork",
+        json={},
+    )
+    assert clipped_fork.status_code == 201, clipped_fork.text
+    assert clipped_fork.json()["title"] == f"Fork of {long_title}"[:200]
+    assert len(clipped_fork.json()["title"]) == 200
+    restored_title = client.patch(
+        f"/api/v1/agent/conversations/{conversation_id}",
+        json={"title": "Wrench research"},
+    )
+    assert restored_title.status_code == 200
+
     archived = client.patch(
         f"/api/v1/agent/conversations/{conversation_id}",
         json={"title": "Wrench archive", "status": "archived"},
@@ -606,6 +854,13 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert archived.json()["status"] == "archived"
     assert archived.json()["archived_at"] is not None
     assert archived.json()["title"] == "Wrench archive"
+
+    archived_fork = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/fork",
+        json={},
+    )
+    assert archived_fork.status_code == 409
+    assert archived_fork.json()["error"] == "agent_conversation_archived"
 
     blocked = client.post(
         f"/api/v1/agent/conversations/{conversation_id}/messages",
@@ -632,6 +887,12 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         ).status_code
         == 404
     )
+    missing_source_fork = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/fork",
+        json={},
+    )
+    assert missing_source_fork.status_code == 404
+    assert missing_source_fork.json()["error"] == "agent_conversation_not_found"
     listed = client.get("/api/v1/agent/conversations")
     assert listed.status_code == 200
     assert all(

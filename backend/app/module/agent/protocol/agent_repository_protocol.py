@@ -28,6 +28,16 @@ class AgentRepositoryProtocol(Protocol):
         now: datetime,
     ) -> tuple[AgentConversationModel, AgentEntryModel]: ...
 
+    async def fork_conversation(
+        self,
+        source_id: int,
+        *,
+        at_entry_id: int | None,
+        title: str,
+        provider_session_id: UUID,
+        now: datetime,
+    ) -> AgentConversationModel: ...
+
     async def get_conversation(
         self,
         conversation_id: int,
