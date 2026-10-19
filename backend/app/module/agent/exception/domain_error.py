@@ -20,6 +20,14 @@ class AgentConversationBusyError(AgentError):
         super().__init__(f"Agent conversation {conversation_id} already has an active run.")
 
 
+class AgentForkEntryInvalidError(AgentError):
+    def __init__(self, conversation_id: int, entry_id: int) -> None:
+        super().__init__(
+            f"Entry {entry_id} does not belong to agent conversation "
+            f"{conversation_id}."
+        )
+
+
 class AgentRequestDuplicateError(AgentError):
     def __init__(self, request_id: str) -> None:
         super().__init__(f"Request id {request_id} was already used in this conversation.")

@@ -8,6 +8,7 @@ from app.module.agent.exception.domain_error import (
     AgentConversationBusyError,
     AgentConversationNotFoundError,
     AgentError,
+    AgentForkEntryInvalidError,
     AgentInvalidEntryError,
     AgentNotConfiguredError,
     AgentProviderError,
@@ -25,6 +26,7 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(AgentConversationNotFoundError, 404, "agent_conversation_not_found")
     ExceptionRegistry.register(AgentConversationArchivedError, 409, "agent_conversation_archived")
     ExceptionRegistry.register(AgentConversationBusyError, 409, "agent_conversation_busy")
+    ExceptionRegistry.register(AgentForkEntryInvalidError, 400, "agent_fork_entry_invalid")
     ExceptionRegistry.register(AgentRequestDuplicateError, 409, "agent_request_duplicate")
     ExceptionRegistry.register(AgentRunNotFoundError, 404, "agent_run_not_found")
     ExceptionRegistry.register(AgentRunNotRetryableError, 409, "agent_run_not_retryable")

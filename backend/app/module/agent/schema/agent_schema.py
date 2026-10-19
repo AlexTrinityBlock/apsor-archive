@@ -41,6 +41,15 @@ class AgentConversationPatchSchema(BaseModel):
     status: AgentConversationStatus | None = None
 
 
+class AgentConversationForkSchema(BaseModel):
+    """Create an independent copy of a transcript through an inclusive cutoff."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    at_entry_id: int | None = Field(default=None, gt=0)
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+
+
 class AgentPageContextSchema(BaseModel):
     """A plain-text snapshot of the page the user is currently viewing."""
 

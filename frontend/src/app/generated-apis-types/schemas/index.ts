@@ -13,6 +13,7 @@ export * from './agentConversationCreateSchema';
 export * from './agentConversationCreateSchemaProvider';
 export * from './agentConversationDetailSchema';
 export * from './agentConversationDetailSchemaStatus';
+export * from './agentConversationForkSchema';
 export * from './agentConversationPatchSchema';
 export * from './agentConversationPatchSchemaStatus';
 export * from './agentConversationSchema';

@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react";
 
+import { Icon } from "../../component/Icon";
 import type {
   AgentConversationDetailSchema,
   AgentEntrySchema,
@@ -24,23 +25,84 @@ const HIDDEN_KINDS = new Set(["pi.system"]);
 interface ChatThreadProps {
   readonly entries: readonly AgentEntrySchema[];
   readonly conversation: AgentConversationDetailSchema;
+  readonly onForkEntry?: (entryId: number) => void;
+  readonly forkingEntryId?: number | null;
+  readonly forkDisabled?: boolean;
+}
+
+function ForkEntryAction({
+  entryId,
+  disabled,
+  forking,
+  onFork,
+}: {
+  readonly entryId: number;
+  readonly disabled: boolean;
+  readonly forking: boolean;
+  readonly onFork: (entryId: number) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="chat-entry__fork"
+      onClick={() => onFork(entryId)}
+      disabled={disabled}
+      title={
+        disabled
+          ? "Forking is unavailable while the thread is archived or busy."
+          : "Fork a new thread from this entry"
+      }
+      aria-label={`Fork conversation from entry ${entryId}`}
+      aria-busy={forking || undefined}
+    >
+      <Icon name="branch" size={12} />
+      {forking ? "Forking…" : "Fork from here"}
+    </button>
+  );
 }
 
 function ThreadEntry({
   entry,
   toolResults,
+  onForkEntry,
+  forkingEntryId,
+  forkDisabled,
 }: {
   readonly entry: AgentEntrySchema;
   readonly toolResults: ReadonlyMap<string, ToolResultInfo>;
+  readonly onForkEntry?: (entryId: number) => void;
+  readonly forkingEntryId?: number | null;
+  readonly forkDisabled?: boolean;
 }) {
   if (isPageContextEntry(entry)) {
     return <PageContextCard entry={entry} />;
   }
+  const forkAction =
+    onForkEntry && (entry.kind === "pi.user" || entry.kind === "pi.assistant") ? (
+      <ForkEntryAction
+        entryId={entry.id}
+        disabled={forkDisabled === true || forkingEntryId === entry.id}
+        forking={forkingEntryId === entry.id}
+        onFork={onForkEntry}
+      />
+    ) : null;
   switch (entry.kind) {
     case "pi.user":
-      return <UserMarginalia text={userText(entry)} createdAt={entry.created_at} />;
+      return (
+        <UserMarginalia
+          text={userText(entry)}
+          createdAt={entry.created_at}
+          action={forkAction}
+        />
+      );
     case "pi.assistant":
-      return <AssistantEntry entry={entry} toolResults={toolResults} />;
+      return (
+        <AssistantEntry
+          entry={entry}
+          toolResults={toolResults}
+          action={forkAction}
+        />
+      );
     case "pi.tool-result":
       return <ToolResultCard entry={entry} />;
     case "pi.compaction":
@@ -57,6 +119,9 @@ function ThreadEntry({
 export const ChatThread = memo(function ChatThread({
   entries,
   conversation,
+  onForkEntry,
+  forkingEntryId = null,
+  forkDisabled = false,
 }: ChatThreadProps) {
   const toolResults = useMemo(() => {
     const result = new Map<string, ToolResultInfo>();
@@ -97,7 +162,13 @@ export const ChatThread = memo(function ChatThread({
         <div className="chat-thread__list">
           {visible.map((entry) => (
             <div className="chat-entry" key={entry.id}>
-              <ThreadEntry entry={entry} toolResults={toolResults} />
+              <ThreadEntry
+                entry={entry}
+                toolResults={toolResults}
+                onForkEntry={onForkEntry}
+                forkingEntryId={forkingEntryId}
+                forkDisabled={forkDisabled}
+              />
             </div>
           ))}
         </div>

@@ -304,6 +304,39 @@
         "title": "AgentConversationDetailSchema",
         "type": "object"
       },
+      "AgentConversationForkSchema": {
+        "additionalProperties": false,
+        "description": "Create an independent copy of a transcript through an inclusive cutoff.",
+        "properties": {
+          "at_entry_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Entry Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "AgentConversationForkSchema",
+        "type": "object"
+      },
       "AgentConversationPatchSchema": {
         "additionalProperties": false,
         "description": "Rename or archive a conversation; metadata only.",
@@ -5086,6 +5119,66 @@
           }
         },
         "summary": "List Entries",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/conversations/{conversation_id}/fork": {
+      "post": {
+        "description": "Copy the immutable transcript through an inclusive entry cutoff.",
+        "operationId": "forkAgentConversation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/AgentConversationForkSchema"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentConversationSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fork Conversation",
         "tags": [
           "agent"
         ]

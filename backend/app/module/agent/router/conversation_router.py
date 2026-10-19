@@ -14,6 +14,7 @@ from app.module.agent.schema.agent_schema import (
     AgentApprovalStatus,
     AgentConversationCreateSchema,
     AgentConversationDetailSchema,
+    AgentConversationForkSchema,
     AgentConversationPatchSchema,
     AgentConversationSchema,
     AgentConversationStatus,
@@ -146,6 +147,24 @@ async def delete_conversation(
     """Soft-delete a conversation; entries remain for audit."""
     await agent_service.delete_conversation(conversation_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{conversation_id}/fork",
+    response_model=AgentConversationSchema,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="forkAgentConversation",
+)
+async def fork_conversation(
+    conversation_id: int,
+    payload: AgentConversationForkSchema | None = None,
+    agent_service: AgentService = Depends(get_agent_service),
+) -> AgentConversationSchema:
+    """Copy the immutable transcript through an inclusive entry cutoff."""
+    return await agent_service.fork_conversation(
+        conversation_id,
+        payload or AgentConversationForkSchema(),
+    )
 
 
 @router.post(

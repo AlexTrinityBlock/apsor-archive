@@ -7,17 +7,19 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../../apis/fetch-client";
 import { Badge } from "../component/Badge";
 import { Button, ButtonLink } from "../component/Button";
 import { Icon } from "../component/Icon";
 import { Loader } from "../component/Loader";
+import { useToast } from "../component/Toast";
 import { useScrollLock } from "../hook/useScrollLock";
 import {
   listAgentEntries,
   useCreateAgentConversation,
+  useForkAgentConversation,
   useGetAgentConversation,
   useListAgentApprovals,
   useListAgentConversations,
@@ -108,6 +110,22 @@ function ConversationHeader({
                 <>
                   <span aria-hidden="true">·</span>
                   <span>updated {formatRelative(updated)}</span>
+                </>
+              ) : null}
+              {conversation.parent_conversation_id !== null ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="chat-masthead__fork">
+                    Forked from{" "}
+                    <Link
+                      to={`/chat/${conversation.parent_conversation_id}`}
+                    >
+                      #{conversation.parent_conversation_id}
+                    </Link>
+                    {conversation.fork_at_entry_id !== null ? (
+                      <span> at entry {conversation.fork_at_entry_id}</span>
+                    ) : null}
+                  </span>
                 </>
               ) : null}
               {archived ? <Badge tone="ochre">Archived</Badge> : null}
@@ -222,6 +240,9 @@ export function ChatPage() {
   );
   const createConversation = useCreateAgentConversation();
   const updateConversation = useUpdateAgentConversation();
+  const forkConversation = useForkAgentConversation();
+  const toast = useToast();
+  const [forkingEntryId, setForkingEntryId] = useState<number | null>(null);
 
   const handleStreamError = useCallback((message: string) => {
     stickToBottomRef.current = true;
@@ -332,6 +353,49 @@ export function ChatPage() {
       return resolveApproval(conversationId, approvalId, decision);
     },
     [conversationId, resolveApproval],
+  );
+
+  const forkAtEntry = useCallback(
+    async (entryId: number) => {
+      if (
+        conversationId === null ||
+        archived ||
+        isStreaming ||
+        forkingEntryId !== null
+      ) {
+        return;
+      }
+      setForkingEntryId(entryId);
+      try {
+        const forked = await forkConversation.mutateAsync({
+          conversationId,
+          data: { at_entry_id: entryId },
+        });
+        await invalidateConversationList(queryClient);
+        toast.success(`Forked from entry ${entryId}.`);
+        navigate(`/chat/${forked.id}`);
+      } catch (error) {
+        toast.error(describeError(error));
+      } finally {
+        setForkingEntryId(null);
+      }
+    },
+    [
+      archived,
+      conversationId,
+      forkConversation,
+      forkingEntryId,
+      isStreaming,
+      navigate,
+      queryClient,
+      toast,
+    ],
+  );
+  const handleForkEntry = useCallback(
+    (entryId: number) => {
+      void forkAtEntry(entryId);
+    },
+    [forkAtEntry],
   );
 
   const applyContextBoundary = useCallback(
@@ -547,7 +611,13 @@ export function ChatPage() {
 
     return (
       <>
-        <ChatThread entries={entries} conversation={conversation} />
+        <ChatThread
+          entries={entries}
+          conversation={conversation}
+          onForkEntry={handleForkEntry}
+          forkingEntryId={forkingEntryId}
+          forkDisabled={archived || isStreaming || forkingEntryId !== null}
+        />
         <ApprovalStack
           approvals={pendingApprovals}
           disabled={isStreaming}

@@ -461,6 +461,7 @@ failure never becomes an HTTP 500.
 | `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | Soft delete; entries stay for audit |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/compact` | Append a manual compaction boundary |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | Append a reset boundary; transcript is preserved |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/fork` | Copy entries through an inclusive cutoff into a new thread |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | Append a user entry and run the loop |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry the latest failed/cancelled run |
 | `GET` | `/api/v1/agent/conversations/{conversation_id}/approvals?status=` | Durable approvals, oldest first (default `pending`) |
@@ -580,6 +581,29 @@ empty active context. Their operation ids are `compactAgentConversation` and
 while a run is active and reject archived conversations with
 `409 agent_conversation_archived`. Transcript cards label the boundary and
 state that older rows remain preserved but hidden from the active context.
+
+#### Forking
+
+`POST .../fork` accepts an optional `{at_entry_id?, title?}` body and returns
+`201` with the new conversation. `at_entry_id` is an inclusive cutoff that must
+belong to the source thread; it defaults to the latest entry. The default title
+is `Fork of {source.title}`, clipped to 200 characters. The fork is always
+active, gets a new `provider_session_id`, records `parent_conversation_id` and
+`fork_at_entry_id`, and copies the immutable entries through the cutoff with new
+ids and `commit_seq` values. Head markers and context edits are remapped to the
+copied entries; references outside the cutoff are dropped. The source
+conversation and its entries are never modified.
+
+Forking copies transcript entries only. Runs, retry state, and approval state
+are not copied, so the next user message starts a fresh run against the copied
+context. An archived source returns `409 agent_conversation_archived`; an active
+run returns `409 agent_conversation_busy`; a cutoff from another conversation
+returns `400 agent_fork_entry_invalid`; a missing or soft-deleted source returns
+`404 agent_conversation_not_found`. In the UI, the thread rail has a **Fork**
+action for active threads (disabled with an explanation for archived threads),
+and user/assistant entries expose **Fork from here**. Success shows a toast,
+invalidates the thread list, and navigates to the new thread; the masthead shows
+`Forked from #<id>` with a link to the source.
 
 #### Page context and the KV cache
 
