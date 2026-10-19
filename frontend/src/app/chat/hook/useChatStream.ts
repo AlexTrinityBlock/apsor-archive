@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "../../../apis/fetch-client";
 import {
   streamAgentMessage,
+  streamAgentRetry,
   type AgentPageContextPayload,
   type AgentStreamEvent,
 } from "../../../apis/agent-stream";
@@ -49,6 +50,7 @@ interface UseChatStreamResult {
     content: string,
     pageContext?: AgentPageContextPayload,
   ) => Promise<void>;
+  readonly retry: (conversationId: number, userContent?: string) => Promise<void>;
   readonly stop: () => void;
 }
 
@@ -186,14 +188,17 @@ export function useChatStream(
     };
   }, []);
 
-  const start = useCallback(
+  const runTurn = useCallback(
     async (
       conversationId: number,
-      content: string,
-      pageContext?: AgentPageContextPayload,
+      userContent: string,
+      pageContextKey: string | null,
+      execute: (
+        signal: AbortSignal,
+        onEvent: (event: AgentStreamEvent) => void,
+      ) => Promise<void>,
     ) => {
-      const trimmed = content.trim();
-      if (trimmed.length === 0 || activeRef.current) {
+      if (activeRef.current) {
         return;
       }
 
@@ -202,7 +207,7 @@ export function useChatStream(
       controllerRef.current = controller;
       setStream({
         conversationId,
-        userContent: trimmed,
+        userContent,
         assistantText: "",
         toolCalls: [],
         usage: {},
@@ -211,7 +216,7 @@ export function useChatStream(
         runId: null,
         pageContextEntryId: null,
         pageContextAttached: false,
-        pageContextKey: pageContext?.key ?? null,
+        pageContextKey,
         status: "running",
       });
 
@@ -232,13 +237,7 @@ export function useChatStream(
       };
 
       try {
-        await streamAgentMessage({
-          conversationId,
-          content: trimmed,
-          pageContext,
-          signal: controller.signal,
-          onEvent: handleEvent,
-        });
+        await execute(controller.signal, handleEvent);
         if (!terminal && !controller.signal.aborted) {
           onErrorRef.current("The stream closed before the run finished.");
         }
@@ -263,9 +262,54 @@ export function useChatStream(
     [queryClient],
   );
 
+  const start = useCallback(
+    async (
+      conversationId: number,
+      content: string,
+      pageContext?: AgentPageContextPayload,
+    ) => {
+      const trimmed = content.trim();
+      if (trimmed.length === 0) {
+        return;
+      }
+      await runTurn(
+        conversationId,
+        trimmed,
+        pageContext?.key ?? null,
+        (signal, onEvent) =>
+          streamAgentMessage({
+            conversationId,
+            content: trimmed,
+            pageContext,
+            signal,
+            onEvent,
+          }),
+      );
+    },
+    [runTurn],
+  );
+
+  const retry = useCallback(
+    async (conversationId: number, userContent?: string) => {
+      const content = userContent?.trim() ?? "";
+      await runTurn(
+        conversationId,
+        content,
+        null,
+        (signal, onEvent) =>
+          streamAgentRetry({
+            conversationId,
+            signal,
+            onEvent,
+          }),
+      );
+    },
+    [runTurn],
+  );
+
   const stop = useCallback(() => {
     controllerRef.current?.abort();
   }, []);
 
-  return { stream, isStreaming: stream !== null, start, stop };
+  return { stream, isStreaming: stream !== null, start, retry, stop };
 }

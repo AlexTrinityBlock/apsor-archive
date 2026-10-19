@@ -4,7 +4,9 @@ The rules mirror PiAgent's context derivation: a head marker selects the active
 range, edits are context-only overrides, tool results are moved directly after
 their assistant call in call order, missing results are synthesized, orphan
 results are dropped, and failed assistant attempts are excluded from future
-requests.
+requests. A self-headed compaction or reset entry starts a new active range and
+therefore a new provider cache prefix without changing the frozen system prompt,
+the tools, or any earlier row.
 """
 
 import hashlib
@@ -80,6 +82,13 @@ def build_context(
         source_entry_ids=list(dict.fromkeys(source_entry_ids)),
         cache_prefix_hash=_prefix_hash(system_message, tools_list),
     )
+
+
+def active_start_entry_id(entries: Sequence[TranscriptEntry]) -> int | None:
+    """Return the id where the newest context boundary starts, if any."""
+    if not entries:
+        return None
+    return _active_start(entries)
 
 
 def _active_start(entries: Sequence[TranscriptEntry]) -> int:
@@ -345,4 +354,4 @@ def _prefix_hash(system_message: Mapping[str, Any], tools: Sequence[Mapping[str,
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-__all__ = ["build_context", "render_tool_result"]
+__all__ = ["active_start_entry_id", "build_context", "render_tool_result"]

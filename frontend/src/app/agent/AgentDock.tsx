@@ -17,7 +17,11 @@ import {
 import type { AgentEntrySchema } from "../generated-apis-types/schemas";
 import { TreeMark } from "../component/TreeMark";
 import { invalidateConversationList } from "../chat/query";
-import { lastPageContextKey, mergeEntries } from "../chat/types";
+import {
+  lastPageContextKey,
+  mergeEntries,
+  readRetryState,
+} from "../chat/types";
 import { titleFromMessage } from "../chat/format";
 import { useChatStream } from "../chat/hook/useChatStream";
 import { usePageContext } from "./hook/usePageContext";
@@ -148,7 +152,7 @@ export function AgentDock() {
     stickRef.current = true;
     setLastError(message);
   }, []);
-  const { stream, isStreaming, start, stop } = useChatStream(handleStreamError);
+  const { stream, isStreaming, start, retry, stop } = useChatStream(handleStreamError);
   const activeStream = stream?.conversationId === selectedId ? stream : null;
 
   const conversation = conversationQuery.data ?? null;
@@ -183,6 +187,10 @@ export function AgentDock() {
   const trace = useMemo(
     () => mergeWorkTrace(persistedTrace, activeStream),
     [activeStream, persistedTrace],
+  );
+  const retryState = useMemo(
+    () => readRetryState(entries, lastError ? { detail: lastError } : null),
+    [entries, lastError],
   );
 
   useScrollLock(mode === "expanded" || (mode === "panel" && sheet));
@@ -477,6 +485,34 @@ export function AgentDock() {
     setPinnedId(null);
   }, []);
 
+  const retryRun = useCallback(() => {
+    if (selectedId === null || !retryState.retryable) {
+      return;
+    }
+    stickRef.current = true;
+    setLastError(null);
+    void retry(selectedId, retryState.lastUserText);
+  }, [retry, retryState.lastUserText, retryState.retryable, selectedId]);
+
+  const applyContextBoundary = useCallback(
+    (entry: AgentEntrySchema) => {
+      if (selectedId === null) {
+        return;
+      }
+      setExtraFor(selectedId);
+      setExtraError(null);
+      if (extraForCurrent && extraLoaded) {
+        setExtraEntries((current) => mergeEntries(current, [entry]));
+        return;
+      }
+      setExtraEntries([entry]);
+      setExtraCursor(conversation?.entries_next_after_id ?? null);
+      setExtraHasMore(conversation?.entries_has_more ?? false);
+      setExtraLoaded(true);
+    },
+    [conversation, extraForCurrent, extraLoaded, selectedId],
+  );
+
   const surfaceProps: AgentDockSurfaceProps = {
     conversations: conversationsQuery.data?.resources ?? [],
     listLoading: conversationsQuery.isLoading,
@@ -509,6 +545,10 @@ export function AgentDock() {
     loadingMore,
     loadMoreError,
     onLoadMore: () => void loadMore(),
+    retryState,
+    retryDisabled: isStreaming || creating || archived,
+    onRetryRun: retryRun,
+    onContextApplied: applyContextBoundary,
     scrollRef,
     endRef,
     onScroll: handleScroll,

@@ -87,6 +87,13 @@ export interface StreamAgentMessageOptions {
   readonly onEvent: (event: AgentStreamEvent) => void;
 }
 
+export interface StreamAgentRetryOptions {
+  readonly conversationId: number;
+  readonly requestId?: string;
+  readonly signal?: AbortSignal;
+  readonly onEvent: (event: AgentStreamEvent) => void;
+}
+
 type UnknownRecord = Record<string, unknown>;
 
 interface SseFrame {
@@ -335,55 +342,17 @@ function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
   return null;
 }
 
-/**
- * POST one user message and consume its SSE turn stream.
- *
- * The promise resolves when the server closes the stream. Aborting `signal`
- * rejects the fetch, which the server treats as a client disconnect and a
- * cancellation request. Completed entries remain in the transcript.
- */
-export async function streamAgentMessage({
-  conversationId,
-  content,
-  pageContext,
-  requestId,
-  signal,
-  onEvent,
-}: StreamAgentMessageOptions): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(
-      `/api/v1/agent/conversations/${conversationId}/messages`,
-      {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-          Accept: "text/event-stream",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          content,
-          request_id: requestId ?? createRequestId(),
-          ...(pageContext ? { page_context: pageContext } : {}),
-        }),
-        signal,
-      },
-    );
-  } catch (error) {
-    if (isAbortError(error)) {
-      throw error;
-    }
-    throw new ApiError(
-      0,
-      "network_error",
-      "The archive could not be reached.",
-      null,
-    );
-  }
+interface AgentStreamRequest {
+  readonly path: string;
+  readonly body: Readonly<Record<string, unknown>>;
+  readonly signal?: AbortSignal;
+  readonly onEvent: (event: AgentStreamEvent) => void;
+}
 
-  if (!response.ok) {
-    throw await readFailure(response);
-  }
+async function readTurnStream(
+  response: Response,
+  onEvent: (event: AgentStreamEvent) => void,
+): Promise<void> {
   if (!response.body) {
     throw new ApiError(
       502,
@@ -429,4 +398,91 @@ export async function streamAgentMessage({
   } finally {
     reader.releaseLock();
   }
+}
+
+/**
+ * Open one agent turn and consume its SSE response with the shared parser.
+ *
+ * The promise resolves when the server closes the stream. Aborting `signal`
+ * rejects the fetch, which the server treats as a client disconnect and a
+ * cancellation request. Completed entries remain in the transcript.
+ */
+async function openAgentStream({
+  path,
+  body,
+  signal,
+  onEvent,
+}: AgentStreamRequest): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "text/event-stream",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw new ApiError(
+      0,
+      "network_error",
+      "The archive could not be reached.",
+      null,
+    );
+  }
+
+  if (!response.ok) {
+    throw await readFailure(response);
+  }
+  await readTurnStream(response, onEvent);
+}
+
+/** Append one user message and stream its agent turn. */
+export async function streamAgentMessage({
+  conversationId,
+  content,
+  pageContext,
+  requestId,
+  signal,
+  onEvent,
+}: StreamAgentMessageOptions): Promise<void> {
+  await openAgentStream({
+    path: `/api/v1/agent/conversations/${conversationId}/messages`,
+    body: {
+      content,
+      request_id: requestId ?? createRequestId(),
+      ...(pageContext ? { page_context: pageContext } : {}),
+    },
+    signal,
+    onEvent,
+  });
+}
+
+/**
+ * Retry the latest failed or cancelled run for a conversation.
+ *
+ * The server reuses the original user entry, so this request deliberately has
+ * no `content` or page context. A 409 `agent_run_not_retryable` response means
+ * the caller's transcript is stale or the run already completed.
+ */
+export async function streamAgentRetry({
+  conversationId,
+  requestId,
+  signal,
+  onEvent,
+}: StreamAgentRetryOptions): Promise<void> {
+  await openAgentStream({
+    path: `/api/v1/agent/conversations/${conversationId}/retry`,
+    body: {
+      request_id: requestId ?? createRequestId(),
+    },
+    signal,
+    onEvent,
+  });
 }

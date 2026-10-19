@@ -250,6 +250,7 @@ class AgentRepository:
         *,
         conversation_id: int,
         draft: EntryDraft,
+        compaction_draft: EntryDraft | None,
         page_context_draft: EntryDraft | None,
         page_context_key: str | None,
         request_id: str | None,
@@ -258,6 +259,7 @@ class AgentRepository:
         AgentConversationModel,
         AgentEntryModel,
         AgentRunModel,
+        AgentEntryModel | None,
         AgentEntryModel | None,
     ]:
         async with self._transaction() as session:
@@ -289,16 +291,32 @@ class AgentRepository:
                     raise AgentRequestDuplicateError(request_id)
 
             commit_seq = await self._next_commit_seq(session)
+            compaction_entry: AgentEntryModel | None = None
+            if compaction_draft is not None:
+                compaction_entry = await self._append_boundary_entry(
+                    session,
+                    conversation_id=conversation_id,
+                    commit_seq=commit_seq,
+                    draft=compaction_draft,
+                    now=now,
+                )
+
             page_context_entry: AgentEntryModel | None = None
             if page_context_draft is not None and page_context_key is not None:
-                previous = await session.execute(
-                    select(AgentEntryModel.data)
-                    .where(
-                        AgentEntryModel.conversation_id == conversation_id,
-                        AgentEntryModel.kind == KIND_PAGE_CONTEXT,
+                boundary_id = await self._active_boundary_id(
+                    session,
+                    conversation_id,
+                )
+                previous_statement = select(AgentEntryModel.data).where(
+                    AgentEntryModel.conversation_id == conversation_id,
+                    AgentEntryModel.kind == KIND_PAGE_CONTEXT,
+                )
+                if boundary_id is not None:
+                    previous_statement = previous_statement.where(
+                        AgentEntryModel.id >= boundary_id
                     )
-                    .order_by(AgentEntryModel.id.desc())
-                    .limit(1)
+                previous = await session.execute(
+                    previous_statement.order_by(AgentEntryModel.id.desc()).limit(1)
                 )
                 previous_data = previous.scalar_one_or_none()
                 previous_key = (
@@ -343,9 +361,96 @@ class AgentRepository:
             entry.by_run_id = run.id
             if page_context_entry is not None:
                 page_context_entry.by_run_id = run.id
+            if compaction_entry is not None:
+                compaction_entry.by_run_id = run.id
             conversation.last_entry_at = entry.created_at
             await session.flush()
-            return conversation, entry, run, page_context_entry
+            return (
+                conversation,
+                entry,
+                run,
+                page_context_entry,
+                compaction_entry,
+            )
+
+    async def append_boundary_entry(
+        self,
+        *,
+        conversation_id: int,
+        draft: EntryDraft,
+        now: datetime,
+    ) -> AgentEntryModel:
+        """Append one standalone compaction/reset boundary and activate it."""
+        async with self._transaction() as session:
+            conversation = await self._lock_conversation(session, conversation_id)
+            if conversation.status != CONVERSATION_ACTIVE:
+                raise AgentConversationArchivedError(conversation_id)
+            active = await session.execute(
+                select(AgentRunModel.id)
+                .where(
+                    AgentRunModel.conversation_id == conversation_id,
+                    AgentRunModel.status.in_(ACTIVE_RUN_STATUSES),
+                )
+                .limit(1)
+            )
+            if active.scalar_one_or_none() is not None:
+                raise AgentConversationBusyError(conversation_id)
+
+            commit_seq = await self._next_commit_seq(session)
+            entry = await self._append_boundary_entry(
+                session,
+                conversation_id=conversation_id,
+                commit_seq=commit_seq,
+                draft=draft,
+                now=now,
+            )
+            conversation.last_entry_at = entry.created_at
+            return entry
+
+    @staticmethod
+    async def _append_boundary_entry(
+        session: AsyncSession,
+        *,
+        conversation_id: int,
+        commit_seq: int,
+        draft: EntryDraft,
+        now: datetime,
+    ) -> AgentEntryModel:
+        """Insert a boundary entry and point its head at itself.
+
+        The self-head starts a new active context and KV-cache lineage while
+        leaving every earlier transcript row untouched.
+        """
+        entry = AgentEntryModel(
+            conversation_id=conversation_id,
+            commit_seq=commit_seq,
+            kind=draft.kind,
+            model=draft.messages,
+            data=draft.data,
+            created_at=now,
+        )
+        session.add(entry)
+        await session.flush()
+        entry.head_entry_id = entry.id
+        await session.flush()
+        return entry
+
+    @staticmethod
+    async def _active_boundary_id(
+        session: AsyncSession,
+        conversation_id: int,
+    ) -> int | None:
+        """Return the head id from the newest boundary marker, if any."""
+        statement = (
+            select(AgentEntryModel.head_entry_id)
+            .where(
+                AgentEntryModel.conversation_id == conversation_id,
+                AgentEntryModel.head_entry_id.is_not(None),
+            )
+            .order_by(AgentEntryModel.id.desc())
+            .limit(1)
+        )
+        return (await session.execute(statement)).scalar_one_or_none()
 
     async def create_run(
         self,
@@ -619,15 +724,14 @@ class AgentRepository:
 
     async def last_page_context_key(self, conversation_id: int) -> str | None:
         async with self._read() as session:
-            statement = (
-                select(AgentEntryModel.data)
-                .where(
-                    AgentEntryModel.conversation_id == conversation_id,
-                    AgentEntryModel.kind == KIND_PAGE_CONTEXT,
-                )
-                .order_by(AgentEntryModel.id.desc())
-                .limit(1)
+            boundary_id = await self._active_boundary_id(session, conversation_id)
+            statement = select(AgentEntryModel.data).where(
+                AgentEntryModel.conversation_id == conversation_id,
+                AgentEntryModel.kind == KIND_PAGE_CONTEXT,
             )
+            if boundary_id is not None:
+                statement = statement.where(AgentEntryModel.id >= boundary_id)
+            statement = statement.order_by(AgentEntryModel.id.desc()).limit(1)
             data = (await session.execute(statement)).scalar_one_or_none()
             if not isinstance(data, dict):
                 return None

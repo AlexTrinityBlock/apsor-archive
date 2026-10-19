@@ -224,6 +224,172 @@ export function readToolResultInfo(entry: AgentEntrySchema): ToolResultInfo {
   };
 }
 
+export type RetryReason =
+  | "assistant_failure"
+  | "limit_error"
+  | "stream_failure";
+
+export interface RetryFailureFallback {
+  readonly code?: string | null;
+  readonly detail: string;
+}
+
+export interface RetryState {
+  readonly retryable: boolean;
+  readonly lastUserText: string;
+  readonly errorCode: string | null;
+  readonly errorDetail: string | null;
+  readonly reason: RetryReason | null;
+}
+
+// Mirrors the backend's retryable finish reasons.
+const RETRY_FINISH_REASONS = new Set(["error", "aborted", "cancelled", "canceled"]);
+
+// Only hard run limits make a trailing tool error retryable. Ordinary tool
+// failures are followed by a successful assistant answer and must stay quiet.
+const RETRY_LIMIT_CODES = new Set([
+  "step_limit",
+  "token_limit",
+  "tool_call_limit",
+  "tool_result_budget_exhausted",
+]);
+
+function latestUserEntry(entries: readonly AgentEntrySchema[]): {
+  readonly index: number;
+  readonly text: string;
+} {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry.kind === "pi.user") {
+      return { index, text: userText(entry) };
+    }
+  }
+  return { index: -1, text: "" };
+}
+
+function hasAssistantAfter(
+  entries: readonly AgentEntrySchema[],
+  userIndex: number,
+): boolean {
+  for (let index = userIndex + 1; index < entries.length; index += 1) {
+    if (entries[index].kind === "pi.assistant") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function idleRetryState(lastUserText: string): RetryState {
+  return {
+    retryable: false,
+    lastUserText,
+    errorCode: null,
+    errorDetail: null,
+    reason: null,
+  };
+}
+
+function assistantRetryState(
+  entry: AgentEntrySchema,
+  lastUserText: string,
+): RetryState | null {
+  if (entry.kind !== "pi.assistant") {
+    return null;
+  }
+  const meta = readAssistantMeta(entry);
+  const finishReason = meta.finishReason?.toLowerCase() ?? "";
+  if (!RETRY_FINISH_REASONS.has(finishReason)) {
+    return null;
+  }
+  return {
+    retryable: true,
+    lastUserText,
+    errorCode: meta.error?.code ?? null,
+    errorDetail:
+      meta.error?.detail ??
+      (meta.finishReason ? `The run finished with ${meta.finishReason}.` : null),
+    reason: "assistant_failure",
+  };
+}
+
+function toolLimitRetryState(
+  entry: AgentEntrySchema,
+  lastUserText: string,
+): RetryState | null {
+  if (entry.kind !== "pi.tool-result") {
+    return null;
+  }
+  const meta = readToolResultMeta(entry);
+  const code = meta.errorCode?.toLowerCase() ?? null;
+  if (
+    meta.status?.toLowerCase() !== "error" ||
+    code === null ||
+    !RETRY_LIMIT_CODES.has(code)
+  ) {
+    return null;
+  }
+  return {
+    retryable: true,
+    lastUserText,
+    errorCode: code,
+    errorDetail: meta.detail ?? "The run stopped at a tool or token limit.",
+    reason: "limit_error",
+  };
+}
+
+function streamRetryState(
+  entries: readonly AgentEntrySchema[],
+  latestUserIndex: number,
+  lastUserText: string,
+  fallback: RetryFailureFallback | null,
+): RetryState | null {
+  if (
+    fallback === null ||
+    fallback.detail.trim().length === 0 ||
+    latestUserIndex < 0 ||
+    hasAssistantAfter(entries, latestUserIndex)
+  ) {
+    return null;
+  }
+  return {
+    retryable: true,
+    lastUserText,
+    errorCode: fallback.code ?? null,
+    errorDetail: fallback.detail,
+    reason: "stream_failure",
+  };
+}
+
+/**
+ * Decide whether the latest persisted turn can be retried.
+ *
+ * The assistant/tool checks look only at the newest entry, so a successful
+ * assistant answer after an ordinary tool error is never marked retryable.
+ * The fallback covers a stream failure whose failure entry has not been
+ * refetched yet, and only when the latest user entry still has no assistant.
+ */
+export function readRetryState(
+  entries: readonly AgentEntrySchema[],
+  fallback: RetryFailureFallback | null = null,
+): RetryState {
+  const latestUser = latestUserEntry(entries);
+  const latest = entries.at(-1);
+  if (latest) {
+    const assistant = assistantRetryState(latest, latestUser.text);
+    if (assistant) {
+      return assistant;
+    }
+    const toolLimit = toolLimitRetryState(latest, latestUser.text);
+    if (toolLimit) {
+      return toolLimit;
+    }
+  }
+  return (
+    streamRetryState(entries, latestUser.index, latestUser.text, fallback) ??
+    idleRetryState(latestUser.text)
+  );
+}
+
 export function readResource(value: unknown): ResourceMeta | null {
   const record = asRecord(value);
   if (!record) {

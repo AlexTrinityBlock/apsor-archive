@@ -16,6 +16,7 @@ from app.module.agent.schema.agent_schema import (
     AgentConversationSchema,
     AgentConversationStatus,
     AgentEntryPageSchema,
+    AgentEntrySchema,
     AgentMessageCreateSchema,
     AgentRetrySchema,
     AgentTurnResultSchema,
@@ -143,6 +144,32 @@ async def delete_conversation(
     """Soft-delete a conversation; entries remain for audit."""
     await agent_service.delete_conversation(conversation_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{conversation_id}/compact",
+    response_model=AgentEntrySchema,
+    operation_id="compactAgentConversation",
+)
+async def compact_conversation(
+    conversation_id: int,
+    agent_service: AgentService = Depends(get_agent_service),
+) -> AgentEntrySchema:
+    """Append a deterministic compaction boundary to the active context."""
+    return await agent_service.compact_conversation(conversation_id)
+
+
+@router.post(
+    "/{conversation_id}/clear",
+    response_model=AgentEntrySchema,
+    operation_id="clearAgentConversation",
+)
+async def clear_conversation(
+    conversation_id: int,
+    agent_service: AgentService = Depends(get_agent_service),
+) -> AgentEntrySchema:
+    """Append a reset boundary without deleting the transcript."""
+    return await agent_service.clear_conversation(conversation_id)
 
 
 @router.post(
