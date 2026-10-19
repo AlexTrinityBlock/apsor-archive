@@ -40,6 +40,110 @@ provider:
 - `/api/v1/ask` returns `503 ai_not_configured`;
 - agent messages return `503 agent_not_configured`.
 
+## File ingestion
+
+Uploads and direct text can be queued as durable `file_ingest_job` rows. The
+synchronous `POST /api/v1/files` and `POST /api/v1/files/text` endpoints remain
+for clients that want a fully indexed file in the response. The async routes
+store the payload and return `202` with an `IngestJobSchema`:
+
+| Method | Path | Operation |
+|---|---|---|
+| `POST` | `/api/v1/files/async` | `uploadFileAsync` |
+| `POST` | `/api/v1/files/text/async` | `createTextFileAsync` |
+| `GET` | `/api/v1/files/ingest-jobs?limit=&offset=` | `listIngestJobs` |
+| `GET` | `/api/v1/files/ingest-jobs/{id}` | `getIngestJob` |
+| `POST` | `/api/v1/files/ingest-jobs/{id}/retry` | `retryIngestJob` |
+
+The list returns `{total_results, jobs}`, newest first. `limit` is 1–100
+(default 20) and `offset` starts at 0. Retry accepts only a failed job whose
+attempt budget is not exhausted and returns it to `queued` with `202`.
+Missing jobs are `404 ingest_job_not_found`; a path already held by an active
+job is `409 ingest_job_conflict`; an ineligible retry is
+`409 ingest_job_not_retryable`.
+
+A job reports its durable stage and percentage:
+
+| Status | `progress_pct` | Meaning |
+|---|---|---|
+| `queued` | 0 | Payload stored; waiting for a worker |
+| `parsing` | 5 | Reading and extracting text |
+| `chunking` | 15–20 | Splitting text; `chunks_total` may be set |
+| `embedding` | 25–90 | Embedding chunks; `chunks_embedded` advances |
+| `summarizing` | 95 | Publishing the staged file |
+| `ready` | 100 | File and chunks are current and searchable |
+| `failed` | — | `error_code` and bounded `error_detail` are set |
+
+`chunks_total` and `chunks_embedded` let a client show `Embedding x / y`.
+
+### Worker lifecycle
+
+One worker process drains the queue. It polls the database every
+`poll_seconds` (one second by default) while idle and claims the oldest queued
+job with `SELECT ... FOR UPDATE SKIP LOCKED`. Parsing and chunking use a shared
+`ThreadPoolExecutor` with two extraction threads, and the worker holds at most
+two in-flight jobs. Embedding is async with a global concurrency of six and
+batched progress updates; it does not consume extraction threads.
+
+The worker writes a staged file, tree node, chunks, and embeddings, then
+publishes them only after embedding and summary complete. A failed job discards
+its staged rows and clears `file_id`, so an unfinished path never appears as a
+partial current file or chunk set. On startup, jobs whose heartbeat is older
+than the stale window (300 seconds by default) are requeued after their staged
+rows are removed; a job over its attempt limit becomes a terminal
+`ingest_worker_lost` failure. Embedding retries are bounded by the configured
+attempt count and backoff.
+
+The FastAPI lifespan starts one in-process worker by default. For production,
+run a dedicated process so parsing and embedding cannot starve request
+handlers:
+
+```bash
+uv run dendromatrix worker
+# or
+uv run python -m app.worker
+# process at most one queued job, then exit
+uv run python -m app.worker --once
+```
+
+Both shapes use the same queue and leases. Multiple API replicas should disable
+the lifespan worker (`DENDRO_INGEST_WORKER_ENABLED=false`) and run one or more
+dedicated workers.
+
+### Runtime settings
+
+`ingest_config` is a singleton row (`id=1`). The worker reads a fresh database
+snapshot at the start of each loop and each claimed job, so a saved change
+applies to the next claim without a restart; a job already running keeps the
+snapshot it started with.
+
+| Method | Path | Operation |
+|---|---|---|
+| `GET` | `/api/v1/settings/ingest` | `getIngestSettings` |
+| `PUT` | `/api/v1/settings/ingest` | `updateIngestSettings` |
+| `POST` | `/api/v1/settings/ingest/reset` | `resetIngestSettings` |
+
+The read body is `{config, defaults, source, updated_at}`. `source` is
+`default` only when the service created or repaired the row; a stored row
+returns `database`. `PUT` requires all six fields and uses `extra=forbid`, so it
+is a full replacement.
+
+| Field | Default | Constraint |
+|---|---|---|
+| `poll_seconds` | 1.0 | 0.25–30 |
+| `extract_workers` | 2 | 1–8 |
+| `max_inflight_jobs` | 2 | 1–4 |
+| `embedding_concurrency` | 6 | 1–32 |
+| `chunk_target_chars` | 4,000 | 1,000–20,000 |
+| `chunk_overlap_chars` | 500 | 0–5,000; `< chunk_target_chars` |
+
+Environment values seed a fresh installation and remain the fallback when the
+row is absent. Changing chunk sizes applies only to future ingests; existing
+files keep their current boundaries until they are re-ingested. Pydantic,
+`IngestRuntimeConfig`, and matching PostgreSQL check constraints enforce the
+ranges and the overlap rule; request validation failures map to
+`400 invalid_request`.
+
 ## Agent conversations
 
 `/api/v1/agent` is a persistent, Pi-shaped multi-turn archive agent. The schema
@@ -463,8 +567,9 @@ tables: `file`, `tree_node`, `chunk`, `chunk_ngram`, `memory`, and
 `memory_summary` (plus Alembic's own `alembic_version`). Later migrations add
 provider settings, standalone media, document analysis fields, account/session
 auth (`app_user`,
-`user_session`), and the three agent tables (`agent_conversation`,
-`agent_entry`, `agent_run`) plus the `agent_commit_seq` sequence. The agent
+`user_session`), the three agent tables (`agent_conversation`,
+`agent_entry`, `agent_run`) plus the `agent_commit_seq` sequence, and durable
+ingestion (`file_ingest_job`, `ingest_config`). The agent
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
 `c4f1a9e2b7d3` follows it and updates the entry `kind` and `model` check
 constraints to include `pi.page-context`; it does not add a table or column.
@@ -479,8 +584,14 @@ and seeds row `id=1` with the defaults. Later migrations in order:
 - `b7d2e9c4a1f6` (after `c9f1a2b3d4e5`) creates `saved_question`, including
   its JSONB citation array, check constraints, conversation FK with
   `ON DELETE SET NULL`, and conversation-id index;
-- `e2b7c4d9a6f1` (after `b7d2e9c4a1f6`, the current head) raises the
-  `max_steps` default from 8 to 24 and updates an untouched default row.
+- `e2b7c4d9a6f1` (after `b7d2e9c4a1f6`) raises the `max_steps` default from 8
+  to 24 and updates an untouched default row;
+- `d1e2f3a4b5c6` (after `e2b7c4d9a6f1`) creates the durable `file_ingest_job`
+  queue with status/source/range checks, the active-path unique index, and the
+  `file` foreign key;
+- `d4b8e6f1a2c7` (after `d1e2f3a4b5c6`, the current head) creates the singleton
+  `ingest_config` table, its range and overlap constraints, and seeds row
+  `id=1`.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
@@ -500,6 +611,7 @@ uv run alembic upgrade head
 ```text
 app/
   main.py
+  worker.py                dedicated durable-ingestion process
   shared/                  error registry, list envelope
   infrastructure/
     ai/                    DeepSeek client
@@ -510,11 +622,11 @@ app/
     files/                 local original-byte storage
     logger/
   module/knowledge/
-    domain/                pure chunking, n-gram, timeline, summary logic
-    model/                 SQLAlchemy models
-    repository/            SQL and retrieval queries
-    service/               orchestration
-    router/                HTTP adapters (including folder_router.py)
+    domain/                chunking, n-grams, timeline, summary, ingest config
+    model/                 SQLAlchemy models (files, chunks, ingest jobs/config)
+    repository/            SQL, retrieval, and job-queue queries
+    service/               orchestration, indexing, ingest jobs/settings
+    router/                HTTP adapters (folders, files, ingest settings)
     schema/                Pydantic request/response contracts
     exception/             stable domain errors
     dependencies.py        composition root
@@ -575,7 +687,12 @@ ask success, a failed ask that keeps the row with `run_status="failed"` and
 error detail, edit resetting the answer and conversation link, delete,
 not-found errors, and the `conversation_id` `ON DELETE SET NULL` result. The
 file library test covers idempotent folder creation, in-place moves, independent
-copies, extension checks, and path conflicts. The former two search tests are
+copies, extension checks, and path conflicts. It also exercises the durable
+queue: async enqueue for text and upload, worker claim and processing, progress
+fields through `ready`/`failed`, the rule that a failed job publishes no
+current file or chunks, the synchronous fallback, and the ingestion settings
+read/PUT/reset contract. The retry endpoint was also exercised manually against
+a failed job. The former two search tests are
 merged into `test_hybrid_search_and_union_query`, which is what keeps the suite
 at ten collected functions.
 
