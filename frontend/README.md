@@ -34,7 +34,7 @@ src/
     type/                       UI types and local demo shapes
     agent/                      global dock, page context, inspector panels
     home/ search/ timeline/     route pages
-    library/                    folder workspace board + list view
+    library/                    folder workspace board + list, intake progress
     tree/ memory/
     chat/                       persistent agent reading room
     questions/                  saved-question Q&A library
@@ -68,8 +68,10 @@ The generated hooks cover normal JSON routes, including `createFolder`,
 `moveFile`, `copyFile`, `getAgentSettings`, `updateAgentSettings`,
 `resetAgentSettings`, `compactAgentConversation`,
 `clearAgentConversation`, `listSavedQuestions`, `createSavedQuestion`,
-`updateSavedQuestion`, `deleteSavedQuestion`, and `askSavedQuestion`. Two
-deliberate exceptions use same-origin `fetch`
+`updateSavedQuestion`, `deleteSavedQuestion`, `askSavedQuestion`,
+`uploadFileAsync`, `createTextFileAsync`, `getIngestJob`, `listIngestJobs`,
+`retryIngestJob`, `getIngestSettings`, `updateIngestSettings`, and
+`resetIngestSettings`. Two deliberate exceptions use same-origin `fetch`
 directly: `src/apis/agent-stream.ts` for `text/event-stream`, and the viewer
 text/binary loaders in `src/app/viewer/component/viewer-utils.ts`. Viewer URLs
 still come from the generated `getGetFileContentUrl` / `getDownloadFileUrl`
@@ -277,6 +279,29 @@ not only a local form reset. The panel implements loading skeletons and an
 inline error with a Retry action. Changes apply to new runs; an active SSE stream
 keeps the immutable snapshot it started with.
 
+### Ingestion runtime
+
+The **Ingestion runtime** panel follows Agent runtime on `/settings`
+(`settings/component/IngestRuntimePanel.tsx`) and is backed by the generated
+`useGetIngestSettings`, `useUpdateIngestSettings`, and
+`useResetIngestSettings` hooks. It edits the singleton `ingest_config` row, not
+browser storage.
+
+The panel shows a Database/Defaults badge, the last `updated_at`, and a short
+summary of the active values. Six fields are grouped into **Worker** (poll
+seconds, extract threads, max in-flight jobs, embedding concurrency) and
+**Chunking** (target chars, overlap chars); each shows its default and valid
+range. Validation runs before saving: whole-number and range checks plus the
+rule that overlap must stay below the chunk target. Save is disabled for an
+invalid or unchanged draft and sends a full six-field `PUT`. **Reset defaults**
+uses a two-step confirmation and persists the defaults through the reset
+endpoint.
+
+A warning states that worker values apply to the next loop or job, and that
+changing chunk sizes affects only future ingests; existing files must be
+re-ingested before their chunk boundaries match. The server repeats validation
+and maps failures to `400 invalid_request`.
+
 ## Folder workspace
 
 `/library` is a folder-first board backed by `useReadPath`. The breadcrumb and
@@ -295,8 +320,9 @@ remains the compact table fallback.
 - **Drag upload** — files dropped from the desktop onto a folder card upload
   directly into that folder. The board rejects unsafe names and unsupported
   types before upload, enforces the 10 MB limit, and shows an intake tray with
-  queued, uploading, archived, and rejected states. The same extension
-  allowlist as `UploadDialog` applies in the browser and on the server.
+  queued, uploading, processing, ready, and failed/rejected states. The same
+  extension allowlist as `UploadDialog` applies in the browser and on the
+  server.
 - **Move** — a normal drop onto a folder moves the file. The board shows an
   explicit drop target and copy/move intent while dragging and invalidates the
   source and target paths after success. A move keeps the file id, so open
@@ -311,6 +337,25 @@ remains the compact table fallback.
 - **Mobile** — drag is never the only path. Each file card exposes **Move** and
   **Copy** actions from its menu, and the destination is chosen in the dialog.
   The layout must not overflow at 390 px.
+
+### Ingestion progress
+
+The upload dialog's file and text tabs call `useUploadFileAsync` and
+`useCreateTextFileAsync`. Both return a durable job, and the page then polls
+`getIngestJob` through `waitForIngestJob()` once per second until the job is
+`ready` or `failed`. Progress is polled, not streamed over SSE.
+
+`IngestProgress` is shared by the intake dialog and the drag-and-drop upload
+tray. It shows the stage, a bar from `progress_pct`, and `Embedding x / y` from
+`chunks_embedded` / `chunks_total`; queued, parsing, and chunking stay
+indeterminate until a count exists. On failure the dialog shows
+`error_detail` (or `error_code`) and offers **Retry ingest** through
+`useRetryIngestJob`; the tray shows the failure message. On ready the library
+queries are invalidated and the new file opens. Closing the dialog or leaving
+the page stops local polling but does not cancel the durable job.
+
+The progress UI lives in the intake dialog and the drag-and-drop tray; there are
+no per-file ingestion cards on the library board.
 
 The backend contract and status codes are documented in `backend/README.md`.
 The board, dialogs, and generated folder/move/copy hooks are in the source tree
