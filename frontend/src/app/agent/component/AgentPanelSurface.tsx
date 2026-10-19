@@ -34,8 +34,12 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
     loadingMore,
     hasMoreEntries,
     onLoadMore,
+    retryState,
+    retryDisabled,
+    onRetryRun,
     onDismissError,
     onDraftChange,
+    onContextApplied,
     onMode,
     onNewThread,
     onRetryThread,
@@ -98,8 +102,12 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
         conversations={conversations}
         selectedId={selectedId}
         loading={listLoading}
+        streaming={streaming}
+        archived={archivedThread}
+        disabled={disabled || conversationLoading}
         onSelect={onSelectThread}
         onNew={onNewThread}
+        onContextApplied={onContextApplied}
       />
 
       <div
@@ -119,6 +127,9 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
           loadingMore={loadingMore}
           loadMoreError={loadMoreError}
           onLoadMore={onLoadMore}
+          retryState={retryState}
+          retryDisabled={retryDisabled}
+          onRetryRun={onRetryRun}
         />
         <div ref={endRef} className="pi-agent-end" />
       </div>

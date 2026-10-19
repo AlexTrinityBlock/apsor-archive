@@ -6,22 +6,18 @@ import logging
 import re
 from collections.abc import AsyncIterator
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid4
 
+from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
 from app.module.agent.domain.agent_domain import (
     ERROR_FINISH_REASONS,
     KIND_ASSISTANT,
     KIND_PAGE_CONTEXT,
+    KIND_RESET,
     KIND_TOOL_RESULT,
     KIND_USER,
-    MAX_PAGE_CONTEXT_CHARS,
-    MAX_STEPS,
-    MAX_TOOL_CALLS_PER_TURN,
-    MAX_TOOL_RESULT_CHARS,
-    MAX_TOTAL_TOKENS,
-    MAX_TOTAL_TOOL_RESULT_CHARS,
     RUN_CANCELLED,
     RUN_COMPLETED,
     RUN_FAILED,
@@ -31,6 +27,11 @@ from app.module.agent.domain.agent_domain import (
     ToolOutcome,
     TranscriptEntry,
     parse_edits,
+)
+from app.module.agent.domain.compaction_domain import (
+    build_compaction_draft,
+    compactable_context_entries,
+    estimate_context_tokens,
 )
 from app.module.agent.domain.context_domain import build_context, render_tool_result
 from app.module.agent.domain.tool_catalog import PROMPT_VERSION, TOOLS_VERSION
@@ -105,7 +106,14 @@ class _CompletionOutcome:
 
 
 class AgentService:
-    """Own conversation CRUD and the durable multi-step turn loop."""
+    """Own conversation CRUD and the durable multi-step turn loop.
+
+    Provider and model selection come from the existing database-backed AI
+    runtime settings (``/api/v1/settings/ai``). Run-loop limits come from the
+    immutable ``AgentRuntimeConfig`` snapshot passed by the dependency. A new
+    request loads a fresh snapshot, while an already running SSE stream keeps the
+    snapshot it started with.
+    """
 
     def __init__(
         self,
@@ -115,12 +123,14 @@ class AgentService:
         tool_registry: AgentToolRegistry,
         default_provider: str,
         default_model: str,
+        config: AgentRuntimeConfig,
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
         self.tool_registry = tool_registry
         self.default_provider = default_provider
         self.default_model = default_model
+        self.config = config
 
     async def create_conversation(
         self,
@@ -254,14 +264,17 @@ class AgentService:
         data: dict[str, Any] | None = None
         if payload.request_id is not None:
             data = {"request_id": payload.request_id}
+        compaction_draft = await self._auto_compaction_draft(conversation_id)
         page_context_draft, page_context_key = _page_context_draft(
-            payload.page_context
+            payload.page_context,
+            max_chars=self.config.max_page_context_chars,
         )
         (
             conversation_model,
             user_entry,
             run,
             page_context_entry,
+            _compaction_entry,
         ) = await self.repository.append_user_and_run(
             conversation_id=conversation_id,
             draft=EntryDraft(
@@ -269,6 +282,7 @@ class AgentService:
                 messages=[{"role": "user", "content": content}],
                 data=data,
             ),
+            compaction_draft=compaction_draft,
             page_context_draft=page_context_draft,
             page_context_key=page_context_key,
             request_id=payload.request_id,
@@ -321,6 +335,93 @@ class AgentService:
             page_context_entry_id=None,
         )
 
+    async def compact_conversation(
+        self,
+        conversation_id: int,
+    ) -> AgentEntrySchema:
+        """Append a deterministic manual compaction boundary.
+
+        The summary is built from the current active context; no provider call is
+        made. The new entry points its head at itself, which starts a new context
+        and KV-cache segment without changing any earlier row. An empty active
+        context still yields a small explicit entry instead of an error.
+        """
+        conversation = await self.repository.get_conversation(conversation_id)
+        if conversation is None:
+            raise AgentConversationNotFoundError(conversation_id)
+        if conversation.status != "active":
+            raise AgentConversationArchivedError(conversation_id)
+        rows = await self.repository.load_context_entries(
+            conversation_id,
+            cutoff_entry_id=None,
+        )
+        draft = build_compaction_draft(
+            _transcript_from_rows(rows),
+            reason="manual",
+            auto=False,
+            max_summary_chars=self.config.max_compaction_summary_chars,
+            max_last_user_chars=self.config.max_compaction_last_user_chars,
+        )
+        entry = await self.repository.append_boundary_entry(
+            conversation_id=conversation_id,
+            draft=draft,
+            now=utcnow(),
+        )
+        return _entry_schema(entry)
+
+    async def clear_conversation(self, conversation_id: int) -> AgentEntrySchema:
+        """Append a manual reset boundary; the transcript itself is preserved."""
+        conversation = await self.repository.get_conversation(conversation_id)
+        if conversation is None:
+            raise AgentConversationNotFoundError(conversation_id)
+        if conversation.status != "active":
+            raise AgentConversationArchivedError(conversation_id)
+        entry = await self.repository.append_boundary_entry(
+            conversation_id=conversation_id,
+            draft=EntryDraft(
+                kind=KIND_RESET,
+                messages=[],
+                data={"reason": "manual_clear"},
+            ),
+            now=utcnow(),
+        )
+        return _entry_schema(entry)
+
+    async def _auto_compaction_draft(
+        self,
+        conversation_id: int,
+    ) -> EntryDraft | None:
+        """Return a compaction draft when the active context crosses the limit.
+
+        Auto compaction is skipped for a new/empty conversation and whenever no
+        user turn exists in the active segment, because the compacted message
+        must carry the last user input.
+        """
+        if not self.config.auto_compaction_enabled:
+            return None
+        rows = await self.repository.load_context_entries(
+            conversation_id,
+            cutoff_entry_id=None,
+        )
+        transcript = _transcript_from_rows(rows)
+        compactable = compactable_context_entries(transcript)
+        if not compactable:
+            return None
+        if not any(entry.kind == KIND_USER for entry in compactable):
+            return None
+        if (
+            estimate_context_tokens(transcript)
+            <= self.config.compaction_threshold_tokens
+        ):
+            return None
+        return build_compaction_draft(
+            transcript,
+            reason="auto_context_threshold",
+            auto=True,
+            max_summary_chars=self.config.max_compaction_summary_chars,
+            max_last_user_chars=self.config.max_compaction_last_user_chars,
+        )
+
     async def stream_turn(self, turn: AgentTurnState) -> AsyncIterator[AgentStreamEvent]:
         """Run the model/tool loop and yield transport-only events."""
         conversation_id = turn.conversation.id
@@ -343,7 +444,7 @@ class AgentService:
             )
             context = await self._context(conversation_id, turn.cutoff_entry_id)
 
-            for step in range(1, MAX_STEPS + 1):
+            for step in range(1, self.config.max_steps + 1):
                 if await self.repository.is_abort_requested(conversation_id, run_id):
                     await self._best_effort_cancel(turn, last_entry_id)
                     terminal = True
@@ -353,7 +454,7 @@ class AgentService:
                     )
                     return
 
-                if _token_total(total_usage) >= MAX_TOTAL_TOKENS:
+                if _token_total(total_usage) >= self.config.max_total_tokens:
                     last_entry_id = await self._append_failure_assistant(
                         turn,
                         last_entry_id,
@@ -520,7 +621,7 @@ class AgentService:
                     return
 
                 calls = result.tool_calls
-                if step >= MAX_STEPS:
+                if step >= self.config.max_steps:
                     limit_entries, limit_events = await self._limit_tool_batch(
                         turn,
                         calls,
@@ -557,7 +658,7 @@ class AgentService:
                     )
                     return
 
-                if _token_total(total_usage) >= MAX_TOTAL_TOKENS:
+                if _token_total(total_usage) >= self.config.max_total_tokens:
                     limit_entries, limit_events = await self._limit_tool_batch(
                         turn,
                         calls,
@@ -597,8 +698,13 @@ class AgentService:
                     )
                     return
 
-                outcomes: list[tuple[ChatToolCall, ToolOutcome]] = []
-                for call in calls:
+                batch_size = len(calls)
+                parallel = self.config.parallel_tools_enabled and batch_size > 1
+                planned: list[tuple[ChatToolCall, ToolOutcome] | None] = [
+                    None
+                ] * batch_size
+                eligible_indices: list[int] = []
+                for index, call in enumerate(calls):
                     yield AgentStreamEvent(
                         "tool_start",
                         {
@@ -606,31 +712,69 @@ class AgentService:
                             "tool_call_id": call.call_id,
                             "name": call.name,
                             "arguments": call.arguments,
+                            "parallel": parallel,
+                            "batch_size": batch_size,
+                            "parallel_index": index,
                         },
                     )
-                    remaining_chars = MAX_TOTAL_TOOL_RESULT_CHARS - tool_result_chars
-                    if tool_calls_used >= MAX_TOOL_CALLS_PER_TURN:
-                        outcome = _limit_outcome(
-                            call.name,
-                            "tool_call_limit",
-                            "The tool-call limit was reached for this turn.",
+                    if tool_calls_used >= self.config.max_tool_calls_per_turn:
+                        planned[index] = (
+                            call,
+                            _limit_outcome(
+                                call.name,
+                                "tool_call_limit",
+                                "The tool-call limit was reached for this turn.",
+                            ),
                         )
-                    elif remaining_chars <= 0:
-                        outcome = _limit_outcome(
-                            call.name,
-                            "tool_result_budget_exhausted",
-                            "The tool-result budget was exhausted for this turn.",
+                        continue
+                    eligible_indices.append(index)
+                    tool_calls_used += 1
+
+                if eligible_indices:
+                    if self.config.parallel_tools_enabled:
+                        executed = await self._gather_tools(
+                            calls,
+                            eligible_indices,
                         )
                     else:
-                        outcome = await self.tool_registry.execute(
-                            call.name,
-                            call.arguments,
-                            call_id=call.call_id,
-                            max_chars=min(MAX_TOOL_RESULT_CHARS, remaining_chars),
-                            parse_error=call.parse_error,
+                        executed = []
+                        for index in eligible_indices:
+                            executed.append(await self._execute_tool(calls[index]))
+                    for index, outcome in zip(
+                        eligible_indices,
+                        executed,
+                        strict=True,
+                    ):
+                        planned[index] = (calls[index], outcome)
+
+                # Give each independent call its own chance to run, then apply
+                # the turn-wide character budget in deterministic call order.
+                outcomes: list[tuple[ChatToolCall, ToolOutcome]] = []
+                executed_indices = set(eligible_indices)
+                for index, call in enumerate(calls):
+                    planned_outcome = planned[index]
+                    assert planned_outcome is not None
+                    call, outcome = planned_outcome
+                    if index in executed_indices:
+                        remaining_chars = (
+                            self.config.max_total_tool_result_chars
+                            - tool_result_chars
                         )
-                        tool_calls_used += 1
-                        tool_result_chars += len(outcome.content)
+                        if remaining_chars <= 0:
+                            outcome = _limit_outcome(
+                                call.name,
+                                "tool_result_budget_exhausted",
+                                "The tool-result budget was exhausted for this turn.",
+                            )
+                        else:
+                            outcome = _clip_tool_outcome(
+                                outcome,
+                                min(
+                                    self.config.max_tool_result_chars,
+                                    remaining_chars,
+                                ),
+                            )
+                            tool_result_chars += len(outcome.content)
                     outcomes.append((call, outcome))
 
                 try:
@@ -654,12 +798,17 @@ class AgentService:
                 last_entry_id = (
                     result_entries[-1].id if result_entries else last_entry_id
                 )
-                for (call, outcome), entry in zip(
-                    outcomes,
-                    result_entries,
-                    strict=True,
+                for index, ((call, outcome), entry) in enumerate(
+                    zip(outcomes, result_entries, strict=True)
                 ):
-                    yield _tool_end_event(call, outcome, entry.id)
+                    yield _tool_end_event(
+                        call,
+                        outcome,
+                        entry.id,
+                        parallel=parallel,
+                        batch_size=batch_size,
+                        parallel_index=index,
+                    )
 
                 limit_codes = {
                     outcome.error_code
@@ -685,7 +834,7 @@ class AgentService:
                 last_entry_id,
                 "step_limit",
                 "The step limit was reached.",
-                MAX_STEPS + 1,
+                self.config.max_steps + 1,
             )
             await self._fail_run(
                 turn,
@@ -756,6 +905,34 @@ class AgentService:
             error_detail=run.error_detail,
         )
 
+    async def _execute_tool(self, call: ChatToolCall) -> ToolOutcome:
+        """Execute one call with the snapshot's per-result character cap."""
+        return await self.tool_registry.execute(
+            call.name,
+            call.arguments,
+            call_id=call.call_id,
+            max_chars=self.config.max_tool_result_chars,
+            parse_error=call.parse_error,
+        )
+
+    async def _gather_tools(
+        self,
+        calls: list[ChatToolCall],
+        indices: list[int],
+    ) -> list[ToolOutcome]:
+        """Run eligible calls concurrently, bounded by max_parallel_tools.
+
+        ``asyncio.gather`` returns results in input order, so the persisted tool
+        results (and their tool_end events) stay deterministic.
+        """
+        semaphore = asyncio.Semaphore(self.config.max_parallel_tools)
+
+        async def run(index: int) -> ToolOutcome:
+            async with semaphore:
+                return await self._execute_tool(calls[index])
+
+        return list(await asyncio.gather(*(run(index) for index in indices)))
+
     async def _completion_events(
         self,
         context: ProviderContext,
@@ -821,24 +998,7 @@ class AgentService:
             conversation_id,
             cutoff_entry_id=cutoff_entry_id,
         )
-        transcript: list[TranscriptEntry] = []
-        for row in rows:
-            try:
-                edits = parse_edits(row.edits)
-            except ValueError as exc:
-                raise AgentInvalidEntryError(str(exc)) from exc
-            transcript.append(
-                TranscriptEntry(
-                    id=row.id,
-                    kind=row.kind,
-                    messages=tuple(row.model or []),
-                    data=row.data,
-                    head_entry_id=row.head_entry_id,
-                    edits=edits,
-                    by_run_id=row.by_run_id,
-                )
-            )
-        return build_context(transcript)
+        return build_context(_transcript_from_rows(rows))
 
     async def _append_failure_assistant(
         self,
@@ -931,8 +1091,17 @@ class AgentService:
         except AgentRunNotActiveError:
             return None, events
         events.extend(
-            _tool_end_event(call, outcome, entry.id)
-            for call, outcome, entry in zip(calls, outcomes, entries, strict=True)
+            _tool_end_event(
+                call,
+                outcome,
+                entry.id,
+                parallel=len(calls) > 1,
+                batch_size=len(calls),
+                parallel_index=index,
+            )
+            for index, (call, outcome, entry) in enumerate(
+                zip(calls, outcomes, entries, strict=True)
+            )
         )
         return entries, events
 
@@ -989,14 +1158,37 @@ class AgentService:
             raise AgentNotConfiguredError()
 
 
+def _transcript_from_rows(rows: list[AgentEntryModel]) -> list[TranscriptEntry]:
+    transcript: list[TranscriptEntry] = []
+    for row in rows:
+        try:
+            edits = parse_edits(row.edits)
+        except ValueError as exc:
+            raise AgentInvalidEntryError(str(exc)) from exc
+        transcript.append(
+            TranscriptEntry(
+                id=row.id,
+                kind=row.kind,
+                messages=tuple(row.model or []),
+                data=row.data,
+                head_entry_id=row.head_entry_id,
+                edits=edits,
+                by_run_id=row.by_run_id,
+            )
+        )
+    return transcript
+
+
 def _page_context_draft(
     context: AgentPageContextSchema | None,
+    *,
+    max_chars: int,
 ) -> tuple[EntryDraft | None, str | None]:
     """Build the UI payload and provider message for one page snapshot.
 
     Page context is append-only data. It is sent as a user-role message so the
     model sees it next to the question, but the visible user entry always keeps
-    exactly the user's own text.
+    exactly the user's own text. ``max_chars`` comes from the runtime snapshot.
     """
     if context is None:
         return None, None
@@ -1009,9 +1201,9 @@ def _page_context_draft(
     if not key or not path or not text:
         return None, None
 
-    truncated = len(text) > MAX_PAGE_CONTEXT_CHARS
+    truncated = len(text) > max_chars
     if truncated:
-        text = clip(text, MAX_PAGE_CONTEXT_CHARS)
+        text = clip(text, max_chars)
     values: dict[str, object] = {"key": key, "path": path}
     if title:
         values["title"] = title
@@ -1173,6 +1365,10 @@ def _tool_end_event(
     call: ChatToolCall,
     outcome: ToolOutcome,
     entry_id: int,
+    *,
+    parallel: bool = False,
+    batch_size: int = 1,
+    parallel_index: int = 0,
 ) -> AgentStreamEvent:
     data: dict[str, Any] = {
         "entry_id": entry_id,
@@ -1182,10 +1378,21 @@ def _tool_end_event(
         "error_code": outcome.error_code,
         "duration_ms": outcome.data.get("duration_ms"),
         "data": outcome.data,
+        "parallel": parallel,
+        "batch_size": batch_size,
+        "parallel_index": parallel_index,
     }
     if outcome.resource is not None:
         data["resource"] = outcome.resource
     return AgentStreamEvent("tool_end", data)
+
+
+def _clip_tool_outcome(outcome: ToolOutcome, max_chars: int) -> ToolOutcome:
+    """Apply the per-call/turn-wide character cap to one finished outcome."""
+    if len(outcome.content) <= max_chars:
+        return outcome
+    data = {**outcome.data, "truncated": True}
+    return replace(outcome, content=clip(outcome.content, max_chars), data=data)
 
 
 def _limit_outcome(name: str, code: str, detail: str) -> ToolOutcome:

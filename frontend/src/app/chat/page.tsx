@@ -30,11 +30,13 @@ import { formatRelative } from "../../lib/format";
 import { ChatComposer } from "./component/ChatComposer";
 import { ChatIntro } from "./component/ChatIntro";
 import { ChatThread } from "./component/ChatThread";
+import { ContextActions } from "./component/ContextActions";
 import { ConversationRail } from "./component/ConversationRail";
+import { RetryBar } from "./component/RetryBar";
 import { StreamingTurn } from "./component/StreamingTurn";
 import { useChatStream } from "./hook/useChatStream";
 import { invalidateConversation, invalidateConversationList } from "./query";
-import { isRecord, mergeEntries } from "./types";
+import { isRecord, mergeEntries, readRetryState } from "./types";
 import { titleFromMessage } from "./format";
 import "./chat.css";
 
@@ -74,11 +76,13 @@ function ConversationHeader({
   archived,
   onOpenRail,
   onNew,
+  contextActions,
 }: {
   readonly conversation: AgentConversationDetailSchema | null;
   readonly archived: boolean;
   readonly onOpenRail: () => void;
   readonly onNew: () => void;
+  readonly contextActions: ReactNode;
 }) {
   const updated =
     conversation === null
@@ -126,6 +130,7 @@ function ConversationHeader({
           <Icon name="plus" size={14} />
           New
         </Button>
+        {contextActions}
       </div>
     </header>
   );
@@ -210,7 +215,7 @@ export function ChatPage() {
     stickToBottomRef.current = true;
     setLastError(message);
   }, []);
-  const { stream, isStreaming, start, stop } = useChatStream(handleStreamError);
+  const { stream, isStreaming, start, retry, stop } = useChatStream(handleStreamError);
 
   // Abort any open run when the selected thread changes or the page unmounts.
   useEffect(() => {
@@ -292,6 +297,28 @@ export function ChatPage() {
     () => mergeEntries(baseEntries, currentExtraEntries),
     [baseEntries, currentExtraEntries],
   );
+  const retryState = useMemo(
+    () => readRetryState(entries, lastError ? { detail: lastError } : null),
+    [entries, lastError],
+  );
+
+  const applyContextBoundary = useCallback(
+    (entry: AgentEntrySchema) => {
+      if (conversationId === null) {
+        return;
+      }
+      setExtraStateId(conversationId);
+      if (extraForCurrent && extraLoaded) {
+        setExtraEntries((current) => mergeEntries(current, [entry]));
+        return;
+      }
+      setExtraEntries([entry]);
+      setExtraCursor(conversation?.entries_next_after_id ?? null);
+      setExtraHasMore(conversation?.entries_has_more ?? false);
+      setExtraLoaded(true);
+    },
+    [conversation, conversationId, extraForCurrent, extraLoaded],
+  );
 
   const hasMore =
     extraForCurrent && extraLoaded
@@ -353,6 +380,15 @@ export function ChatPage() {
 
     sendMessage(conversationId, trimmed);
   };
+
+  const handleRetryRun = useCallback(() => {
+    if (conversationId === null || !retryState.retryable) {
+      return;
+    }
+    stickToBottomRef.current = true;
+    setLastError(null);
+    void retry(conversationId, retryState.lastUserText);
+  }, [conversationId, retry, retryState.lastUserText, retryState.retryable]);
 
   const loadMore = async () => {
     if (
@@ -541,15 +577,28 @@ export function ChatPage() {
     }
 
     return (
-      <ChatComposer
-        value={draft}
-        onChange={setDraft}
-        onSubmit={(value) => void submit(value)}
-        pending={creating || isStreaming}
-        streaming={isStreaming}
-        disabled={creating || (conversationId !== null && conversationQuery.isError)}
-        onStop={stop}
-      />
+      <>
+        {retryState.retryable ? (
+          <RetryBar
+            state={retryState}
+            disabled={
+              isStreaming ||
+              creating ||
+              (conversationId !== null && conversationQuery.isError)
+            }
+            onRetry={handleRetryRun}
+          />
+        ) : null}
+        <ChatComposer
+          value={draft}
+          onChange={setDraft}
+          onSubmit={(value) => void submit(value)}
+          pending={creating || isStreaming}
+          streaming={isStreaming}
+          disabled={creating || (conversationId !== null && conversationQuery.isError)}
+          onStop={stop}
+        />
+      </>
     );
   };
 
@@ -560,6 +609,19 @@ export function ChatPage() {
         archived={archived}
         onOpenRail={openRail}
         onNew={startNewConversation}
+        contextActions={
+          <ContextActions
+            key={`${conversationId ?? "new"}:${archived ? "archived" : "active"}`}
+            conversationId={conversationId}
+            streaming={isStreaming}
+            archived={archived}
+            disabled={
+              conversationId !== null &&
+              (conversationQuery.isLoading || conversationQuery.isError)
+            }
+            onApplied={applyContextBoundary}
+          />
+        }
       />
 
       <div className="chat-room">

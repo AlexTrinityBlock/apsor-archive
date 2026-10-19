@@ -12,19 +12,24 @@ import { Icon } from "../component/Icon";
 import { PageHeader } from "../component/PageHeader";
 import { Panel } from "../component/Panel";
 import { useToast } from "../component/Toast";
+import { AgentRuntimePanel } from "./component/AgentRuntimePanel";
 import {
+  getGetAgentSettingsQueryKey,
   getGetAiSettingsQueryKey,
   getGetAiStatusQueryKey,
   getGetHealthQueryKey,
   getGetStatsQueryKey,
   useClearAiProviderKey,
+  useGetAgentSettings,
   useGetAiSettings,
   useGetAiStatus,
   useGetHealth,
   useGetStats,
   useReindexEmbeddings,
+  useResetAgentSettings,
   useSeedDemo,
   useTestAiProvider,
+  useUpdateAgentSettings,
   useUpdateAiProvider,
 } from "../generated-apis-types";
 import type {
@@ -921,6 +926,127 @@ function ModelProvidersPanel() {
   );
 }
 
+function AgentRuntimeSettingsPanel() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [panelRevision, setPanelRevision] = useState(0);
+
+  const settingsQuery = useGetAgentSettings({ query: { staleTime: 60_000 } });
+
+  const refreshSettings = async (): Promise<void> => {
+    await queryClient.invalidateQueries({
+      queryKey: getGetAgentSettingsQueryKey(),
+      refetchType: "active",
+    });
+  };
+
+  const updateSettings = useUpdateAgentSettings({
+    mutation: {
+      onSuccess: async (settings) => {
+        queryClient.setQueryData(getGetAgentSettingsQueryKey(), settings);
+        setMutationError(null);
+        toast.success("Agent runtime settings saved to the database.");
+        await refreshSettings();
+      },
+      onError: (error) => {
+        setMutationError(apiErrorMessage(error));
+      },
+    },
+  });
+
+  const resetSettings = useResetAgentSettings({
+    mutation: {
+      onSuccess: async (settings) => {
+        queryClient.setQueryData(getGetAgentSettingsQueryKey(), settings);
+        setMutationError(null);
+        setPanelRevision((current) => current + 1);
+        toast.success("Agent runtime settings reset to defaults.");
+        await refreshSettings();
+      },
+      onError: (error) => {
+        setMutationError(apiErrorMessage(error));
+      },
+    },
+  });
+
+  const settings = settingsQuery.data;
+
+  if (settingsQuery.isPending) {
+    return (
+      <Panel
+        eyebrow="Agent · database-backed"
+        title="Agent runtime"
+        className="settings-panel settings-panel--wide reveal reveal-2"
+      >
+        <div
+          className="settings-runtime-loading"
+          role="status"
+          aria-busy="true"
+          aria-label="Reading agent runtime settings"
+        >
+          <span className="settings-skeleton settings-skeleton--line" />
+          <span className="settings-skeleton settings-skeleton--line is-short" />
+          <span className="settings-skeleton settings-skeleton--field" />
+          <span className="settings-skeleton settings-skeleton--field" />
+        </div>
+      </Panel>
+    );
+  }
+
+  if (settingsQuery.isError || !settings) {
+    return (
+      <Panel
+        eyebrow="Agent · database-backed"
+        title="Agent runtime"
+        className="settings-panel settings-panel--wide reveal reveal-2"
+      >
+        <div className="settings-inline-error" role="alert">
+          <Icon name="info" size={16} />
+          <div>
+            <strong>Agent runtime settings did not answer.</strong>
+            <p>{apiErrorMessage(settingsQuery.error)}</p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="settings-inline-error__retry"
+              onClick={() => void settingsQuery.refetch()}
+              disabled={settingsQuery.isFetching}
+            >
+              <Icon name="ring" size={14} />
+              {settingsQuery.isFetching ? "Retrying…" : "Retry"}
+            </Button>
+          </div>
+        </div>
+      </Panel>
+    );
+  }
+
+  const saving = updateSettings.isPending || resetSettings.isPending;
+
+  return (
+    <AgentRuntimePanel
+      key={panelRevision}
+      className="settings-panel--wide reveal reveal-2"
+      values={settings.config}
+      defaults={settings.defaults}
+      source={settings.source}
+      updatedAt={settings.updated_at}
+      saving={saving}
+      error={mutationError}
+      onSave={(values) => {
+        setMutationError(null);
+        updateSettings.mutate({ data: values });
+      }}
+      onReset={() => {
+        setMutationError(null);
+        resetSettings.mutate();
+      }}
+    />
+  );
+}
+
 /** Preferences, provider configuration, live service state, and archive controls. */
 export function SettingsPage() {
   const { preference, setPreference } = useTheme();
@@ -1006,8 +1132,8 @@ export function SettingsPage() {
       <PageHeader
         eyebrow="Settings · reading room"
         title="Tune the archive."
-        description="Choose the light you read by, configure model providers, inspect the live service state, and find the contract that binds the frontend to the archive."
-        meta={<span>Theme stored in this browser · service state from /api/v1/health</span>}
+        description="Choose the light you read by, configure model providers and database-backed agent runtime limits, inspect the live service state, and find the contract that binds the frontend to the archive."
+        meta={<span>Theme in this browser · agent runtime in PostgreSQL · service state from /api/v1/health</span>}
         actions={
           <>
             <Button
@@ -1030,6 +1156,8 @@ export function SettingsPage() {
 
       <div className="settings-grid">
         <ModelProvidersPanel />
+
+        <AgentRuntimeSettingsPanel />
 
         <Panel
           eyebrow="Appearance"

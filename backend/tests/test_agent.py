@@ -7,6 +7,7 @@ from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
     text_result,
     tool_call_result,
+    tool_calls_result,
 )
 from tests.conftest import TEST_DATABASE_URL
 from tests.helpers import create_text
@@ -39,7 +40,7 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v2"
+PROMPT_VERSION = "archive-agent-v3"
 TOOLS_VERSION = "archive-tools-v1"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
@@ -60,7 +61,9 @@ TOOL_NAMES = [
 ]
 
 
-def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
+def test_agent_entry_log_tool_loop_and_cache_usage(
+    client: TestClient,
+) -> None:
     created_file = create_text(
         client,
         "/agent/wrench.md",
@@ -68,6 +71,77 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
         "2026-09-05T09:00:00Z",
     )
     file_id = int(created_file["id"])
+
+    settings_response = client.get("/api/v1/agent/settings")
+    assert settings_response.status_code == 200, settings_response.text
+    settings_body = settings_response.json()
+    assert settings_body["source"] == "default"
+    defaults = settings_body["defaults"]
+    assert settings_body["config"] == defaults
+    assert defaults == {
+        "max_total_tokens": 64_000,
+        "compaction_threshold_tokens": 48_000,
+        "max_steps": 8,
+        "max_tool_calls_per_turn": 6,
+        "max_parallel_tools": 6,
+        "max_tool_result_chars": 12_000,
+        "max_total_tool_result_chars": 24_000,
+        "max_page_context_chars": 6_000,
+        "max_compaction_summary_chars": 6_000,
+        "max_compaction_last_user_chars": 4_000,
+        "auto_compaction_enabled": True,
+        "parallel_tools_enabled": True,
+    }
+
+    invalid_threshold = client.put(
+        "/api/v1/agent/settings",
+        json={
+            **defaults,
+            "compaction_threshold_tokens": defaults["max_total_tokens"],
+        },
+    )
+    assert invalid_threshold.status_code == 400
+    assert invalid_threshold.json()["error"] == "invalid_request"
+    assert "compaction_threshold_tokens" in invalid_threshold.json()["detail"]
+    invalid_parallel = client.put(
+        "/api/v1/agent/settings",
+        json={
+            **defaults,
+            "max_parallel_tools": defaults["max_tool_calls_per_turn"] + 1,
+        },
+    )
+    assert invalid_parallel.status_code == 400
+    assert invalid_parallel.json()["error"] == "invalid_request"
+
+    non_default_settings = {
+        **defaults,
+        "max_steps": 4,
+        "max_tool_calls_per_turn": 4,
+        "max_parallel_tools": 2,
+        "max_page_context_chars": 5_000,
+        "max_compaction_summary_chars": 5_000,
+        "max_compaction_last_user_chars": 3_000,
+    }
+    stored_settings = client.put(
+        "/api/v1/agent/settings",
+        json=non_default_settings,
+    )
+    assert stored_settings.status_code == 200, stored_settings.text
+    stored_body = stored_settings.json()
+    assert stored_body["source"] == "database"
+    assert stored_body["config"] == non_default_settings
+    assert stored_body["updated_at"] is not None
+    persisted_settings = client.get("/api/v1/agent/settings")
+    assert persisted_settings.status_code == 200
+    assert persisted_settings.json()["source"] == "database"
+    assert persisted_settings.json()["config"] == non_default_settings
+
+    reset_settings = client.post("/api/v1/agent/settings/reset")
+    assert reset_settings.status_code == 200, reset_settings.text
+    reset_body = reset_settings.json()
+    assert reset_body["source"] == "database"
+    assert reset_body["config"] == defaults
+
     first_question = "What do we know about the wrench?"
     final_answer = f"The archive documents the wrench [file:{file_id}#1]."
     second_question = "Summarize that for the timeline."
@@ -120,6 +194,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
     assert "# Instructions" in prompt
     assert "# Context protocol" in prompt
     assert "<page_context>" in prompt
+    assert "<compaction>" in prompt
 
     system_data = system_entry["data"]
     assert system_data["prompt_version"] == PROMPT_VERSION
@@ -599,3 +674,359 @@ def test_agent_entry_log_tool_loop_and_cache_usage(client: TestClient) -> None:
         "pi.assistant",
         "pi.assistant",
     ]
+
+    parallel_fake = FakeChatGenerator(
+        [
+            tool_calls_result(
+                [
+                    ("search_knowledge", {"query": "wrench", "result_number": 1}),
+                    ("read_file", {"file_id": file_id, "chunk": 1}),
+                ],
+                call_ids=["call_parallel_search", "call_parallel_read"],
+                usage=TOOL_USAGE,
+            ),
+            text_result("Parallel tool batch complete.", usage=ANSWER_USAGE),
+        ]
+    )
+    client.app.state.agent_chat_generator = parallel_fake
+    parallel_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Parallel tools"},
+    ).json()
+    parallel_turn = client.post(
+        f"/api/v1/agent/conversations/{parallel_conversation['id']}/messages",
+        json={"content": "Search and read the wrench in parallel."},
+        headers={"Accept": "application/json"},
+    )
+    assert parallel_turn.status_code == 200, parallel_turn.text
+    parallel_body = parallel_turn.json()
+    assert [entry["kind"] for entry in parallel_body["entries"]] == [
+        "pi.user",
+        "pi.assistant",
+        "pi.tool-result",
+        "pi.tool-result",
+        "pi.assistant",
+    ]
+    parallel_calls = parallel_body["entries"][1]["model"][0]["tool_calls"]
+    assert [call["id"] for call in parallel_calls] == [
+        "call_parallel_search",
+        "call_parallel_read",
+    ]
+    assert [
+        entry["model"][0]["tool_call_id"]
+        for entry in parallel_body["tool_results"]
+    ] == ["call_parallel_search", "call_parallel_read"]
+    assert [
+        entry["data"]["tool"] for entry in parallel_body["tool_results"]
+    ] == ["search_knowledge", "read_file"]
+
+    sequential_settings = {**defaults, "parallel_tools_enabled": False}
+    sequential_update = client.put(
+        "/api/v1/agent/settings",
+        json=sequential_settings,
+    )
+    assert sequential_update.status_code == 200, sequential_update.text
+    assert sequential_update.json()["config"]["parallel_tools_enabled"] is False
+
+    sequential_fake = FakeChatGenerator(
+        [
+            tool_calls_result(
+                [
+                    ("search_knowledge", {"query": "wrench", "result_number": 1}),
+                    ("read_file", {"file_id": file_id, "chunk": 1}),
+                ],
+                call_ids=["call_sequential_search", "call_sequential_read"],
+                usage=TOOL_USAGE,
+            ),
+            text_result("Sequential tool batch complete.", usage=ANSWER_USAGE),
+        ]
+    )
+    client.app.state.agent_chat_generator = sequential_fake
+    sequential_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Sequential tools"},
+    ).json()
+    sequential_turn = client.post(
+        f"/api/v1/agent/conversations/{sequential_conversation['id']}/messages",
+        json={"content": "Search and read the wrench sequentially."},
+        headers={"Accept": "application/json"},
+    )
+    assert sequential_turn.status_code == 200, sequential_turn.text
+    sequential_body = sequential_turn.json()
+    assert [entry["kind"] for entry in sequential_body["entries"]] == [
+        "pi.user",
+        "pi.assistant",
+        "pi.tool-result",
+        "pi.tool-result",
+        "pi.assistant",
+    ]
+    assert [
+        entry["model"][0]["tool_call_id"]
+        for entry in sequential_body["tool_results"]
+    ] == ["call_sequential_search", "call_sequential_read"]
+    assert [
+        entry["data"]["tool"] for entry in sequential_body["tool_results"]
+    ] == ["search_knowledge", "read_file"]
+    assert sequential_body["answer"] == "Sequential tool batch complete."
+
+    restore_settings = client.post("/api/v1/agent/settings/reset")
+    assert restore_settings.status_code == 200, restore_settings.text
+    assert restore_settings.json()["config"] == defaults
+
+    compact_fake = FakeChatGenerator.from_texts(
+        "First compact answer.",
+        "Second compact answer.",
+        "Third compact answer.",
+        "Answer after clear.",
+        "Answer with compaction disabled.",
+    )
+    client.app.state.agent_chat_generator = compact_fake
+    compact_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Compaction path"},
+    ).json()
+    compact_conversation_id = compact_conversation["id"]
+    first_compact_question = "First compact question."
+    second_compact_question = "Second compact question."
+    third_compact_question = "Third compact question."
+    fourth_compact_question = "Question after clear."
+
+    first_compact_turn = client.post(
+        f"/api/v1/agent/conversations/{compact_conversation_id}/messages",
+        json={
+            "content": first_compact_question,
+            "page_context": {
+                "key": PAGE_KEY,
+                "path": PAGE_PATH,
+                "title": PAGE_TITLE,
+                "text": PAGE_TEXT,
+            },
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert first_compact_turn.status_code == 200, first_compact_turn.text
+    first_compact_body = first_compact_turn.json()
+    first_compact_user_id = first_compact_body["user_entry"]["id"]
+
+    compact_runtime = {
+        **defaults,
+        "max_total_tokens": 8_000,
+        "compaction_threshold_tokens": 1_000,
+    }
+    compact_update = client.put(
+        "/api/v1/agent/settings",
+        json=compact_runtime,
+    )
+    assert compact_update.status_code == 200, compact_update.text
+    assert compact_update.json()["source"] == "database"
+    assert compact_update.json()["config"]["compaction_threshold_tokens"] == 1_000
+
+    second_compact_turn = client.post(
+        f"/api/v1/agent/conversations/{compact_conversation_id}/messages",
+        json={
+            "content": second_compact_question,
+            "page_context": {
+                "key": PAGE_KEY,
+                "path": PAGE_PATH,
+                "title": PAGE_TITLE,
+                "text": PAGE_TEXT,
+            },
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert second_compact_turn.status_code == 200, second_compact_turn.text
+    second_compact_body = second_compact_turn.json()
+    assert [entry["kind"] for entry in second_compact_body["entries"]] == [
+        "pi.compaction",
+        "pi.page-context",
+        "pi.user",
+        "pi.assistant",
+    ]
+    auto_compaction = second_compact_body["entries"][0]
+    auto_page_context = second_compact_body["entries"][1]
+    second_compact_user = second_compact_body["entries"][2]
+    assert auto_compaction["head_entry_id"] == auto_compaction["id"]
+    assert auto_compaction["data"]["auto"] is True
+    assert auto_compaction["data"]["reason"] == "auto_context_threshold"
+    assert auto_compaction["data"]["summary_chars"] > 0
+    assert auto_compaction["data"]["last_user_entry_id"] == first_compact_user_id
+    assert auto_compaction["data"]["source_entry_ids"]
+    assert (
+        auto_compaction["commit_seq"]
+        == auto_page_context["commit_seq"]
+        == second_compact_user["commit_seq"]
+    )
+    assert (
+        auto_compaction["by_run_id"]
+        == auto_page_context["by_run_id"]
+        == second_compact_user["by_run_id"]
+    )
+    auto_content = auto_compaction["model"][0]["content"]
+    assert auto_compaction["model"][0]["role"] == "user"
+    assert auto_content.startswith("<compaction>")
+    assert first_compact_question in auto_content
+    assert "Assistant:" in auto_content
+
+    auto_request = compact_fake.requests[1]
+    assert [message["role"] for message in auto_request.messages] == [
+        "system",
+        "user",
+        "user",
+        "user",
+    ]
+    assert auto_request.messages[1]["content"].startswith("<compaction>")
+    assert first_compact_question in auto_request.messages[1]["content"]
+    assert auto_page_context["model"][0]["content"].startswith("<page_context")
+    assert auto_request.messages[2]["content"] == auto_page_context["model"][0]["content"]
+    assert auto_request.messages[3]["content"] == second_compact_question
+
+    manual_compaction = client.post(
+        f"/api/v1/agent/conversations/{compact_conversation_id}/compact"
+    )
+    assert manual_compaction.status_code == 200, manual_compaction.text
+    manual_compaction_entry = manual_compaction.json()
+    assert manual_compaction_entry["kind"] == "pi.compaction"
+    assert manual_compaction_entry["head_entry_id"] == manual_compaction_entry["id"]
+    assert manual_compaction_entry["data"]["auto"] is False
+    assert manual_compaction_entry["data"]["reason"] == "manual"
+    assert (
+        manual_compaction_entry["data"]["last_user_entry_id"]
+        == second_compact_user["id"]
+    )
+    assert second_compact_question in manual_compaction_entry["model"][0]["content"]
+
+    compacted_detail = client.get(
+        f"/api/v1/agent/conversations/{compact_conversation_id}"
+    ).json()
+    assert compacted_detail["last_page_context_key"] is None
+
+    restored_compact_settings = client.post("/api/v1/agent/settings/reset")
+    assert restored_compact_settings.status_code == 200
+    assert restored_compact_settings.json()["config"] == defaults
+
+    third_compact_turn = client.post(
+        f"/api/v1/agent/conversations/{compact_conversation_id}/messages",
+        json={
+            "content": third_compact_question,
+            "page_context": {
+                "key": PAGE_KEY,
+                "path": PAGE_PATH,
+                "title": PAGE_TITLE,
+                "text": PAGE_TEXT,
+            },
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert third_compact_turn.status_code == 200, third_compact_turn.text
+    third_compact_body = third_compact_turn.json()
+    assert [entry["kind"] for entry in third_compact_body["entries"]] == [
+        "pi.page-context",
+        "pi.user",
+        "pi.assistant",
+    ]
+    fresh_page_context = third_compact_body["entries"][0]
+    assert fresh_page_context["data"]["page_key"] == PAGE_KEY
+    assert fresh_page_context["id"] > manual_compaction_entry["id"]
+    assert fresh_page_context["commit_seq"] == third_compact_body["entries"][1]["commit_seq"]
+    assert (
+        client.get(
+            f"/api/v1/agent/conversations/{compact_conversation_id}"
+        ).json()["last_page_context_key"]
+        == PAGE_KEY
+    )
+    post_compaction_request = compact_fake.requests[2]
+    assert post_compaction_request.messages[1]["content"].startswith("<compaction>")
+    assert second_compact_question in post_compaction_request.messages[1]["content"]
+    assert post_compaction_request.messages[2]["content"].startswith("<page_context")
+    assert post_compaction_request.messages[3]["content"] == third_compact_question
+
+    cleared = client.post(
+        f"/api/v1/agent/conversations/{compact_conversation_id}/clear"
+    )
+    assert cleared.status_code == 200, cleared.text
+    clear_entry = cleared.json()
+    assert clear_entry["kind"] == "pi.reset"
+    assert clear_entry["head_entry_id"] == clear_entry["id"]
+    assert clear_entry["data"] == {"reason": "manual_clear"}
+    assert clear_entry["model"] == []
+    cleared_detail = client.get(
+        f"/api/v1/agent/conversations/{compact_conversation_id}"
+    ).json()
+    assert cleared_detail["last_page_context_key"] is None
+
+    fourth_compact_turn = client.post(
+        f"/api/v1/agent/conversations/{compact_conversation_id}/messages",
+        json={
+            "content": fourth_compact_question,
+            "page_context": {
+                "key": PAGE_KEY,
+                "path": PAGE_PATH,
+                "title": PAGE_TITLE,
+                "text": PAGE_TEXT,
+            },
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert fourth_compact_turn.status_code == 200, fourth_compact_turn.text
+    fourth_compact_body = fourth_compact_turn.json()
+    assert [entry["kind"] for entry in fourth_compact_body["entries"]] == [
+        "pi.page-context",
+        "pi.user",
+        "pi.assistant",
+    ]
+    assert fourth_compact_body["entries"][0]["id"] > clear_entry["id"]
+    assert (
+        fourth_compact_body["entries"][0]["data"]["page_key"] == PAGE_KEY
+    )
+    after_clear_request = compact_fake.requests[3]
+    assert [message["role"] for message in after_clear_request.messages] == [
+        "system",
+        "user",
+        "user",
+    ]
+    assert after_clear_request.messages[1]["content"].startswith("<page_context")
+    assert after_clear_request.messages[2]["content"] == fourth_compact_question
+    history = [
+        message.get("content")
+        for message in after_clear_request.messages[1:]
+        if isinstance(message.get("content"), str)
+    ]
+    assert all("First compact answer." not in item for item in history)
+
+    disabled_compaction_settings = {
+        **defaults,
+        "max_total_tokens": 8_000,
+        "compaction_threshold_tokens": 1_000,
+        "auto_compaction_enabled": False,
+    }
+    disabled_update = client.put(
+        "/api/v1/agent/settings",
+        json=disabled_compaction_settings,
+    )
+    assert disabled_update.status_code == 200, disabled_update.text
+    assert disabled_update.json()["config"]["auto_compaction_enabled"] is False
+
+    disabled_turn = client.post(
+        f"/api/v1/agent/conversations/{compact_conversation_id}/messages",
+        json={
+            "content": "Do not compact this turn.",
+            "page_context": {
+                "key": PAGE_KEY,
+                "path": PAGE_PATH,
+                "title": PAGE_TITLE,
+                "text": PAGE_TEXT,
+            },
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert disabled_turn.status_code == 200, disabled_turn.text
+    disabled_body = disabled_turn.json()
+    assert [entry["kind"] for entry in disabled_body["entries"]] == [
+        "pi.user",
+        "pi.assistant",
+    ]
+    assert disabled_body["answer"] == "Answer with compaction disabled."
+
+    final_reset = client.post("/api/v1/agent/settings/reset")
+    assert final_reset.status_code == 200, final_reset.text
+    assert final_reset.json()["config"] == defaults
