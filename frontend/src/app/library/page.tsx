@@ -18,8 +18,10 @@ import { QueryState } from "../component/QueryState";
 import { useToast } from "../component/Toast";
 import { useDebouncedValue } from "../hook/useDebouncedValue";
 import { FileReader } from "./component/FileReader";
+import { BatchMoveDialog, type BatchMoveResult } from "./component/BatchMoveDialog";
 import { LibraryBoard } from "./component/LibraryBoard";
 import { LibraryResults } from "./component/LibraryResults";
+import { LibrarySelectionBar } from "./component/LibrarySelectionBar";
 import { LibraryToolbar } from "./component/LibraryToolbar";
 import { MoveCopyDialog } from "./component/MoveCopyDialog";
 import { NewFolderDialog } from "./component/NewFolderDialog";
@@ -52,6 +54,8 @@ interface ParamUpdates {
 
 type FileOperationMode = "move" | "copy";
 
+const EMPTY_SELECTED_FILE_IDS: ReadonlySet<number> = new Set<number>();
+
 interface MoveCopyRequest {
   readonly file: PathFileSchema;
   readonly mode: FileOperationMode;
@@ -83,6 +87,12 @@ export function LibraryPage() {
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [moveCopyRequest, setMoveCopyRequest] = useState<MoveCopyRequest | null>(null);
   const [uploadTasks, setUploadTasks] = useState<readonly LibraryUploadTask[]>([]);
+  const [selecting, setSelecting] = useState(false);
+  const [selectedFileIds, setSelectedFileIds] = useState<ReadonlySet<number>>(
+    () => new Set<number>(),
+  );
+  const [selectionPath, setSelectionPath] = useState<string | null>(null);
+  const [batchMoveFiles, setBatchMoveFiles] = useState<readonly PathFileSchema[] | null>(null);
 
   const path = normalizeLibraryPath(searchParams.get("path"));
   const fileId = parsePositiveInt(searchParams.get("file"));
@@ -155,6 +165,9 @@ export function LibraryPage() {
 
   const openFolder = useCallback(
     (folderPath: string) => {
+      setSelecting(false);
+      setSelectedFileIds(new Set<number>());
+      setSelectionPath(null);
       updateParams({
         path: pathParamValue(folderPath || "/"),
         file: null,
@@ -169,6 +182,9 @@ export function LibraryPage() {
     (nextFileId: number) => {
       // Keep the current browse path and query so closing the reader returns
       // to the same directory or fuzzy result set.
+      setSelecting(false);
+      setSelectedFileIds(new Set<number>());
+      setSelectionPath(null);
       updateParams({ file: nextFileId, chunk: 1 });
     },
     [updateParams],
@@ -185,6 +201,9 @@ export function LibraryPage() {
   const openCreatedFile = useCallback(
     (file: FileSchema) => {
       setUploadOpen(false);
+      setSelecting(false);
+      setSelectedFileIds(new Set<number>());
+      setSelectionPath(null);
       toast.success(`“${file.file_name}” archived as version ${file.version}.`);
       void queryClient.invalidateQueries();
       updateParams({
@@ -432,6 +451,91 @@ export function LibraryPage() {
   const folderCount = activeQuery ? 0 : (listing?.directories.length ?? 0);
   const fileCount = listing?.files.length ?? 0;
   const settling = query !== activeQuery;
+  const visibleFiles = useMemo(() => browseQuery.data?.files ?? [], [browseQuery.data?.files]);
+  const activeSelectedFileIds =
+    selectionPath === path ? selectedFileIds : EMPTY_SELECTED_FILE_IDS;
+  const selectedFiles = useMemo(
+    () => visibleFiles.filter((file) => activeSelectedFileIds.has(file.file_id)),
+    [activeSelectedFileIds, visibleFiles],
+  );
+
+  const toggleSelecting = useCallback(() => {
+    setSelecting((current) => !current);
+    setSelectedFileIds(new Set<number>());
+    setSelectionPath(path);
+  }, [path]);
+
+  const toggleSelected = useCallback(
+    (fileId: number) => {
+      setSelectedFileIds((current) => {
+        const next = new Set(selectionPath === path ? current : []);
+        if (next.has(fileId)) {
+          next.delete(fileId);
+        } else {
+          next.add(fileId);
+        }
+        return next;
+      });
+      setSelectionPath(path);
+    },
+    [path, selectionPath],
+  );
+
+  const selectAllVisible = useCallback(() => {
+    setSelectedFileIds(new Set(visibleFiles.map((file) => file.file_id)));
+    setSelectionPath(path);
+  }, [path, visibleFiles]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedFileIds(new Set<number>());
+  }, []);
+
+  const exitSelection = useCallback(() => {
+    setSelecting(false);
+    setSelectedFileIds(new Set<number>());
+  }, []);
+
+  const requestBatchMove = useCallback(() => {
+    if (selectedFiles.length === 0) {
+      return;
+    }
+    setBatchMoveFiles(selectedFiles);
+  }, [selectedFiles]);
+
+  const handleBatchMoveFinished = useCallback(
+    (result: BatchMoveResult) => {
+      void queryClient.invalidateQueries();
+      const moved = new Set(result.movedIds);
+      setSelectedFileIds((current) => {
+        const next = new Set([...current].filter((id) => !moved.has(id)));
+        return next.size === current.size ? current : next;
+      });
+      if (result.movedIds.length > 0) {
+        toast.success(
+          `Moved ${result.movedIds.length} ${
+            result.movedIds.length === 1 ? "file" : "files"
+          } to ${result.targetFolder}.`,
+        );
+      }
+      if (result.skipped > 0) {
+        toast.info(
+          `${result.skipped} ${
+            result.skipped === 1 ? "file was" : "files were"
+          } already in ${result.targetFolder}.`,
+        );
+      }
+      if (result.failures.length > 0) {
+        toast.error(
+          `${result.failures.length} ${
+            result.failures.length === 1 ? "file could" : "files could"
+          } not be moved. See the move dialog for details.`,
+        );
+      } else {
+        setBatchMoveFiles(null);
+      }
+    },
+    [queryClient, toast],
+  );
 
   const folderSuggestions = useMemo(() => {
     const suggestions: string[] = [];
@@ -506,7 +610,20 @@ export function LibraryPage() {
             onQuerySubmit={handleQuerySubmit}
             onClearQuery={clearQuery}
             onViewChange={handleViewChange}
+            selecting={selecting}
+            onToggleSelecting={toggleSelecting}
           />
+
+          {selecting ? (
+            <LibrarySelectionBar
+              selectedCount={selectedFiles.length}
+              visibleCount={visibleFiles.length}
+              onSelectAll={selectAllVisible}
+              onClear={clearSelection}
+              onMoveSelected={requestBatchMove}
+              onExit={exitSelection}
+            />
+          ) : null}
 
           {browseQuery.error && isNotFoundError(browseQuery.error) ? (
             <Panel tone="plain" className="library-not-found reveal reveal-3">
@@ -535,6 +652,9 @@ export function LibraryPage() {
                   query={activeQuery}
                   seeding={seedMutation.isPending}
                   uploads={uploadTasks}
+                  selecting={selecting}
+                  selectedFileIds={activeSelectedFileIds}
+                  onToggleSelected={toggleSelected}
                   onOpenFolder={openFolder}
                   onOpenFile={selectFile}
                   onUpload={() => openUpload()}
@@ -557,6 +677,9 @@ export function LibraryPage() {
                   listing={listing}
                   query={activeQuery}
                   seeding={seedMutation.isPending}
+                  selecting={selecting}
+                  selectedFileIds={activeSelectedFileIds}
+                  onToggleSelected={toggleSelected}
                   onOpenFolder={openFolder}
                   onOpenFile={selectFile}
                   onUpload={() => openUpload()}
@@ -593,6 +716,16 @@ export function LibraryPage() {
           suggestions={folderSuggestions}
           onClose={() => setMoveCopyRequest(null)}
           onDone={handleOperationDone}
+        />
+      ) : null}
+
+      {batchMoveFiles ? (
+        <BatchMoveDialog
+          files={batchMoveFiles}
+          currentPath={path}
+          suggestions={folderSuggestions}
+          onClose={() => setBatchMoveFiles(null)}
+          onFinished={handleBatchMoveFinished}
         />
       ) : null}
     </div>

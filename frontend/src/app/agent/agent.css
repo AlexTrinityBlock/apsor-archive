@@ -199,7 +199,7 @@
   display: flex;
   width: min(430px, calc(100vw - 32px));
   height: min(680px, calc(100dvh - 72px));
-  min-height: 380px;
+  min-height: 320px;
   flex-direction: column;
   overflow: hidden;
   color: var(--body);
@@ -221,12 +221,61 @@
   outline: none;
 }
 
+/* Resize handle ------------------------------------------------------------ */
+
+.pi-agent-panel__resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  height: 12px;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.pi-agent-panel__resize::before {
+  content: "";
+  position: absolute;
+  inset: -4px 0 0;
+}
+
+.pi-agent-panel__resize-grip {
+  width: 46px;
+  height: 3px;
+  background: color-mix(in srgb, var(--ochre) 46%, transparent);
+  border-radius: 999px;
+  transition:
+    width var(--speed-fast) var(--ease-out),
+    background var(--speed-fast) var(--ease-soft);
+}
+
+.pi-agent-panel__resize:hover .pi-agent-panel__resize-grip,
+.pi-agent-panel.is-resizing .pi-agent-panel__resize-grip {
+  width: 62px;
+  background: var(--ochre);
+}
+
+.pi-agent-panel__resize:focus-visible {
+  outline: 2px solid var(--ochre);
+  outline-offset: -2px;
+}
+
+body.pi-agent-resizing,
+body.pi-agent-resizing * {
+  cursor: ns-resize !important;
+  user-select: none !important;
+}
+
 .pi-agent-panel__head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 14px 9px;
+  padding: 15px 14px 9px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -2963,6 +3012,10 @@
     border-radius: 0;
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .pi-agent-panel__resize {
+    display: none;
   }
 
   .pi-agent-panel__head {

@@ -18,6 +18,8 @@ interface LibraryToolbarProps {
   readonly onQuerySubmit: (value: string) => void;
   readonly onClearQuery: () => void;
   readonly onViewChange: (view: LibraryView) => void;
+  readonly selecting: boolean;
+  readonly onToggleSelecting: () => void;
 }
 
 type SearchStatusProps = Pick<
@@ -82,6 +84,8 @@ export function LibraryToolbar({
   onClearQuery,
   view,
   onViewChange,
+  selecting,
+  onToggleSelecting,
 }: LibraryToolbarProps) {
   return (
     <div className="library-toolbar reveal reveal-2">
@@ -127,6 +131,17 @@ export function LibraryToolbar({
               List
             </button>
           </div>
+          <button
+            type="button"
+            className={selecting ? "library-select-toggle is-active" : "library-select-toggle"}
+            aria-pressed={selecting}
+            aria-label={selecting ? "Exit batch selection" : "Select files for batch move"}
+            onClick={onToggleSelecting}
+            disabled={!selecting && fileCount === 0}
+          >
+            <Icon name="check" size={13} />
+            {selecting ? "Selecting" : "Select"}
+          </button>
         </div>
       </div>
     </div>
