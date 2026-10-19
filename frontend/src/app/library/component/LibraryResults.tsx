@@ -11,6 +11,9 @@ interface LibraryResultsProps {
   readonly listing: PathListingSchema;
   readonly query: string;
   readonly seeding: boolean;
+  readonly selecting: boolean;
+  readonly selectedFileIds: ReadonlySet<number>;
+  readonly onToggleSelected: (fileId: number) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onOpenFile: (fileId: number, rawPath: string) => void;
   readonly onUpload: () => void;
@@ -21,11 +24,22 @@ interface LibraryResultsProps {
 interface LibraryTableProps {
   readonly listing: PathListingSchema;
   readonly query: string;
+  readonly selecting: boolean;
+  readonly selectedFileIds: ReadonlySet<number>;
+  readonly onToggleSelected: (fileId: number) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onOpenFile: (fileId: number, rawPath: string) => void;
 }
 
-function LibraryTable({ listing, query, onOpenFolder, onOpenFile }: LibraryTableProps) {
+function LibraryTable({
+  listing,
+  query,
+  selecting,
+  selectedFileIds,
+  onToggleSelected,
+  onOpenFolder,
+  onOpenFile,
+}: LibraryTableProps) {
   const folderCount = query ? 0 : listing.directories.length;
   const entryCount = folderCount + listing.files.length;
 
@@ -46,6 +60,11 @@ function LibraryTable({ listing, query, onOpenFolder, onOpenFile }: LibraryTable
         <table className="library-table">
           <thead>
             <tr>
+              {selecting ? (
+                <th scope="col" className="library-row__select-head">
+                  <span className="visually-hidden">Select</span>
+                </th>
+              ) : null}
               <th scope="col">Name</th>
               <th scope="col">Kind</th>
               <th scope="col">Chunks</th>
@@ -57,6 +76,7 @@ function LibraryTable({ listing, query, onOpenFolder, onOpenFile }: LibraryTable
           <tbody>
             {listing.directories.map((folder) => (
               <tr className="library-row library-row--folder" key={folder.path}>
+                {selecting ? <td className="library-row__select" aria-hidden="true" /> : null}
                 <td className="library-row__name" data-label="Name">
                   <button
                     type="button"
@@ -94,7 +114,29 @@ function LibraryTable({ listing, query, onOpenFolder, onOpenFile }: LibraryTable
               </tr>
             ))}
             {listing.files.map((file) => (
-              <tr className="library-row library-row--file" key={file.file_id}>
+              <tr
+                className={
+                  selectedFileIds.has(file.file_id)
+                    ? "library-row library-row--file is-selected"
+                    : "library-row library-row--file"
+                }
+                key={file.file_id}
+              >
+                {selecting ? (
+                  <td className="library-row__select" data-label="Select">
+                    <label className="library-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={selectedFileIds.has(file.file_id)}
+                        onChange={() => onToggleSelected(file.file_id)}
+                        aria-label={`Select ${file.file_name}`}
+                      />
+                      <span className="library-checkbox__box" aria-hidden="true">
+                        <Icon name="check" size={12} />
+                      </span>
+                    </label>
+                  </td>
+                ) : null}
                 <td className="library-row__name" data-label="Name">
                   <button
                     type="button"
@@ -223,6 +265,9 @@ export function LibraryResults({
   listing,
   query,
   seeding,
+  selecting,
+  selectedFileIds,
+  onToggleSelected,
   onOpenFolder,
   onOpenFile,
   onUpload,
@@ -237,6 +282,9 @@ export function LibraryResults({
       <LibraryTable
         listing={listing}
         query={query}
+        selecting={selecting}
+        selectedFileIds={selectedFileIds}
+        onToggleSelected={onToggleSelected}
         onOpenFolder={onOpenFolder}
         onOpenFile={onOpenFile}
       />
@@ -254,6 +302,9 @@ export function LibraryResults({
     <LibraryTable
       listing={listing}
       query={query}
+      selecting={selecting}
+      selectedFileIds={selectedFileIds}
+      onToggleSelected={onToggleSelected}
       onOpenFolder={onOpenFolder}
       onOpenFile={onOpenFile}
     />

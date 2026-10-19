@@ -1,8 +1,10 @@
-import { useId } from "react";
+import { useId, useRef } from "react";
 
 import { ButtonLink } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { ChatComposer } from "../../chat/component/ChatComposer";
+import { useMediaQuery } from "../hook/useMediaQuery";
+import { usePanelResize } from "../hook/usePanelResize";
 import { AgentThreadControls } from "./AgentThreadControls";
 import { AgentThreadView } from "./AgentThreadView";
 import { PageContextBar } from "./PageContextBar";
@@ -16,6 +18,19 @@ import type { AgentDockSurfaceProps } from "./dock-types";
  */
 export function AgentPanelSurface(props: AgentDockSurfaceProps) {
   const titleId = useId();
+  const panelId = useId();
+  const resizeHintId = useId();
+  const panelRef = useRef<HTMLElement | null>(null);
+  const sheet = useMediaQuery("(max-width: 640px)");
+  const resizeEnabled = !sheet;
+  const resize = usePanelResize(resizeEnabled, panelRef);
+  const panelStyle =
+    resizeEnabled
+      ? {
+          height: resize.height !== null ? `${resize.height}px` : undefined,
+          minHeight: `${resize.minHeight}px`,
+        }
+      : undefined;
   const {
     archived,
     context,
@@ -57,11 +72,40 @@ export function AgentPanelSurface(props: AgentDockSurfaceProps) {
 
   return (
     <section
-      className="pi-agent-panel"
+      id={panelId}
+      ref={panelRef}
+      className={["pi-agent-panel", resize.resizing ? "is-resizing" : null]
+        .filter(Boolean)
+        .join(" ")}
+      style={panelStyle}
       role="dialog"
       aria-labelledby={titleId}
       tabIndex={-1}
     >
+      {resizeEnabled ? (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize agent panel height"
+          aria-describedby={resizeHintId}
+          aria-controls={panelId}
+          aria-valuemin={resize.minHeight}
+          aria-valuemax={resize.maxHeight}
+          aria-valuenow={Math.round(resize.resolvedHeight)}
+          aria-valuetext={`${Math.round(resize.resolvedHeight)} pixels`}
+          tabIndex={0}
+          className="pi-agent-panel__resize"
+          data-agent-panel-resize
+          {...resize.handleProps}
+        >
+          <span className="pi-agent-panel__resize-grip" aria-hidden="true" />
+          <span id={resizeHintId} className="visually-hidden">
+            Drag the top edge to resize, or press Arrow Up and Arrow Down. Home and End
+            set the minimum and maximum height.
+          </span>
+        </div>
+      ) : null}
+
       <header className="pi-agent-panel__head">
         <div className="pi-agent-panel__copy">
           <p className="eyebrow">Archive keeper · docked</p>

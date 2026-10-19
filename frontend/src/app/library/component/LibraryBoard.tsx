@@ -109,6 +109,9 @@ interface FileCardProps {
   readonly file: PathFileSchema;
   readonly dragging: boolean;
   readonly menuOpen: boolean;
+  readonly selecting: boolean;
+  readonly selected: boolean;
+  readonly onToggleSelected: (fileId: number) => void;
   readonly onOpen: (fileId: number) => void;
   readonly onToggleMenu: (fileId: number | null) => void;
   readonly onRequestMove: (file: PathFileSchema, mode: FileOperationMode) => void;
@@ -155,6 +158,9 @@ export interface LibraryBoardProps {
   readonly query: string;
   readonly seeding: boolean;
   readonly uploads: readonly LibraryUploadTask[];
+  readonly selecting: boolean;
+  readonly selectedFileIds: ReadonlySet<number>;
+  readonly onToggleSelected: (fileId: number) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onOpenFile: (fileId: number) => void;
   readonly onUpload: () => void;
@@ -206,6 +212,9 @@ function FileCard({
   file,
   dragging,
   menuOpen,
+  selecting,
+  selected,
+  onToggleSelected,
   onOpen,
   onToggleMenu,
   onRequestMove,
@@ -261,6 +270,7 @@ function FileCard({
     "library-file-card",
     dragging ? "is-dragging" : null,
     menuOpen ? "has-open-menu" : null,
+    selected ? "is-selected" : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -275,6 +285,19 @@ function FileCard({
       title="Drag onto a folder to move · hold Alt to copy"
     >
       <div className="library-card__top">
+        {selecting ? (
+          <label className="library-checkbox library-card__select">
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={() => onToggleSelected(file.file_id)}
+              aria-label={`Select ${file.file_name}`}
+            />
+            <span className="library-checkbox__box" aria-hidden="true">
+              <Icon name="check" size={12} />
+            </span>
+          </label>
+        ) : null}
         <span
           className={`library-card__icon library-card__icon--${fileTone(file.raw_file_path)}`}
           aria-hidden="true"
@@ -845,6 +868,9 @@ interface BoardSectionsProps {
   readonly uploads: readonly LibraryUploadTask[];
   readonly dragFile: PathFileSchema | null;
   readonly menuFileId: number | null;
+  readonly selecting: boolean;
+  readonly selectedFileIds: ReadonlySet<number>;
+  readonly onToggleSelected: (fileId: number) => void;
   readonly dropAllowed: boolean;
   readonly dropHandlers: DropHandlers;
   readonly dropLabelFor: (targetPath: string) => string | null;
@@ -870,6 +896,9 @@ function BoardSections({
   uploads,
   dragFile,
   menuFileId,
+  selecting,
+  selectedFileIds,
+  onToggleSelected,
   dropAllowed,
   dropHandlers,
   dropLabelFor,
@@ -889,6 +918,12 @@ function BoardSections({
   const folderCount = query ? 0 : listing.directories.length;
   const fileCount = listing.files.length;
   const entryCount = folderCount + fileCount;
+  let filesHint = "Drag a leaf to move it";
+  if (query) {
+    filesHint = "Paths matching the current search";
+  } else if (selecting) {
+    filesHint = "Check the leaves to move together";
+  }
 
   return (
     <>
@@ -944,7 +979,7 @@ function BoardSections({
                   {fileCount} {fileCount === 1 ? "file" : "files"}
                 </Badge>
                 <span className="library-board__section-hint">
-                  {query ? "Paths matching the current search" : "Drag a leaf to move it"}
+                  {filesHint}
                 </span>
               </div>
               <div className="library-board__grid library-board__grid--files">
@@ -954,6 +989,9 @@ function BoardSections({
                     file={file}
                     dragging={dragFile?.file_id === file.file_id}
                     menuOpen={menuFileId === file.file_id}
+                    selecting={selecting}
+                    selected={selectedFileIds.has(file.file_id)}
+                    onToggleSelected={onToggleSelected}
                     onOpen={onOpenFile}
                     onToggleMenu={onToggleMenu}
                     onRequestMove={onRequestMove}
@@ -981,6 +1019,9 @@ export function LibraryBoard({
   query,
   seeding,
   uploads,
+  selecting,
+  selectedFileIds,
+  onToggleSelected,
   onOpenFolder,
   onOpenFile,
   onUpload,
@@ -1170,6 +1211,9 @@ export function LibraryBoard({
           uploads={uploads}
           dragFile={dragFile}
           menuFileId={menuFileId}
+          selecting={selecting}
+          selectedFileIds={selectedFileIds}
+          onToggleSelected={onToggleSelected}
           dropAllowed={dropAllowed}
           dropHandlers={dropHandlers}
           dropLabelFor={dropLabelFor}
