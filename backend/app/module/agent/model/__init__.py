@@ -7,6 +7,7 @@ from app.module.agent.model.agent_model import (
     AgentEntryModel,
     AgentRunModel,
 )
+from app.module.agent.model.saved_question_model import SavedQuestionModel
 
 __all__ = [
     "AGENT_COMMIT_SEQUENCE",
@@ -14,4 +15,5 @@ __all__ = [
     "AgentConversationModel",
     "AgentEntryModel",
     "AgentRunModel",
+    "SavedQuestionModel",
 ]

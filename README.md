@@ -34,8 +34,8 @@ result carries its source, chunk number, and time.
 
 > Status: v0.1.0 — file/memory/media archive, owner login, persistent
 > Pi-shaped agent with database-backed runtime limits, compaction, parallel
-> tools, SSE chat, dedicated PDF/DOCX/image/text viewers, a folder workspace,
-> and a three-state agent dock.
+> tools, SSE chat, a saved-question Q&A library, dedicated PDF/DOCX/image/text
+> viewers, a folder workspace, and a three-state agent dock.
 
 ## Highlights
 
@@ -66,6 +66,10 @@ result carries its source, chunk number, and time.
 - **AI answers are grounded.** DeepSeek receives retrieved passages, not the
   whole library, and every claim must carry a citation. Without a key, the
   answer endpoint fails closed.
+- **Questions outlive the conversation.** Save a question before you have an
+  answer, ask it later, and keep the answer, its citations, the run status, and
+  a link to the conversation on the same row. Editing the question clears the
+  stale answer instead of leaving a mismatched pair on screen.
 - **Images have their own archive.** A standalone media index turns images into
   captions, OCR text, and visual fingerprints. Text search reaches the captions;
   image search compares visual descriptors. It never mixes with the text chunk
@@ -179,7 +183,7 @@ fields are rejected.
 |---|---|---|
 | `max_total_tokens` | 100,000 | 8,000–200,000 |
 | `compaction_threshold_tokens` | 75,000 (~75%) | 1,000–200,000 |
-| `max_steps` | 8 | 1–32 |
+| `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 6 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
 | `max_tool_result_chars` | 100,000 | 1,000–200,000 |
@@ -380,7 +384,7 @@ is persisted only at `message_end`; deltas are transport-only. Send
 `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, and
 Starlette's GZip middleware excludes `text/event-stream`.
 
-Each conversation allows one active run at a time. The defaults allow 8 model
+Each conversation allows one active run at a time. The defaults allow 24 model
 steps, 6 tool calls per user turn, 6 parallel tools, 100,000 total tokens per turn
 (cumulative across model steps), and 100,000 result characters per tool. Each
 result is clipped independently at that per-result cap with a visible
@@ -488,6 +492,53 @@ DeepSeek call is made.
   supplied by the model; there is no separate human approval dialog.
 - `agent_run.waiting` remains reserved for a future resume/approval flow; the
   current loop emits only running, completed, failed, and cancelled.
+
+### Saved questions
+
+`/api/v1/agent/questions` is a small Q&A library beside the conversation agent.
+A saved question can exist before any answer exists. Asking it creates a new
+conversation, runs one JSON agent turn, and writes the result back to the same
+row, so the question keeps a stable id and its latest answer.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/agent/questions?limit=&offset=` | List saved questions newest first; `limit` is 1–100 (default 50) |
+| `POST` | `/api/v1/agent/questions` | Save a question; `201`; accepts `question` only |
+| `PATCH` | `/api/v1/agent/questions/{question_id}` | Edit the question text |
+| `DELETE` | `/api/v1/agent/questions/{question_id}` | Delete the question and its stored answer; `204` |
+| `POST` | `/api/v1/agent/questions/{question_id}/ask` | Run one turn and persist its outcome |
+
+The list body is `{resources, total, limit, offset}`. All five operations require
+the owner session. Create and update reject unknown fields, so a client cannot
+supply an answer. `question` is trimmed and limited to 32,000 characters.
+
+The table (`saved_question`) stores:
+
+- `id`, `question`, nullable `answer`, and `citations` as a JSONB array;
+- nullable `conversation_id` with `ON DELETE SET NULL`, so deleting the
+  conversation keeps the saved answer;
+- `run_status`, `error_code`, and `error_detail` for the latest ask;
+- `created_at`, `updated_at`, and `last_asked_at`.
+
+`PATCH` compares the normalized text with the stored text. A changed question
+clears `answer`, `citations`, `conversation_id`, all run metadata, and
+`last_asked_at`; an unchanged edit only refreshes `updated_at`. This prevents an
+old answer from being shown against new wording.
+
+`POST .../ask` creates a new conversation titled from the question (up to 80
+characters), appends the user entry, runs exactly one agent turn with the
+existing runtime snapshot policy, and records the final answer, citation
+tokens, conversation id, and `run_status`. A provider or tool failure is still
+`200` with `run_status="failed"` and its `error_code`/`error_detail`, so the
+question survives. A missing AI configuration keeps the existing
+`503 agent_not_configured` response. Asking the same question again creates
+another conversation and replaces the answer on the same saved row.
+
+The `/questions` page under **Studio** uses the generated hooks and provides
+create, list, pagination, edit, delete, and ask actions. Each card shows its
+status, answer, citation chips, run error, last-asked time, and an **Open
+conversation** link when a conversation exists. Ask is a synchronous JSON
+request, so the card shows a pending state for the seconds the turn takes.
 
 ### Chat reading room
 
@@ -676,9 +727,10 @@ make api-check
 It re-exports the schema, regenerates the client, and fails on any diff. This
 keeps the convenience of a committed client without letting it drift silently.
 The committed client includes the folder, move, and copy operations, the
-page-context request/detail/entry-kind contracts, agent runtime settings, and
-conversation compact/clear operations; the library board, settings panel, and
-chat desk call the generated hooks directly.
+page-context request/detail/entry-kind contracts, agent runtime settings,
+conversation compact/clear operations, and saved-question CRUD/ask operations;
+the library board, settings panel, question book, and chat desk call the
+generated hooks directly.
 
 ### Load a real corpus
 
@@ -699,6 +751,21 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/ask \
   -d '{"question":"Who built the first practical automobile?","result_number":5}' | jq
 ```
 
+### Long-document validation
+
+The saved-question flow was also exercised manually against a full-length
+Chinese novel. This is a validation example, not a committed fixture or test:
+
+- 《紅樓夢》 (Dream of the Red Chamber) from Project Gutenberg, about 2.66 MB.
+- Ingested at 4,000-character chunks with 500-character overlap: 268 chunks.
+- Real `deepseek-flash` turns answered questions about Baoyu and Daiyu's
+  past-life debt and the 還淚 vow, the stone's descent and 通靈寶玉 in chapter
+  one, and the ending where 寶玉 leaves with the monk and the Taoist.
+- Answers carried citations such as `[file:27#...]`; no truncation was reported
+  at the current tool-result limits.
+
+The integration suite remains provider-free and is not extended with this
+corpus.
 
 ## How retrieval works
 
@@ -805,6 +872,10 @@ memory_summary ───┘
   are `pi.page-context` entries in the same log, not a separate table.
 - `agent_config`: one row (`id=1`) with the validated runtime limits used by the
   agent loop and the settings API.
+- `saved_question`: the Q&A library. `question` is owner-authored; `answer`,
+  `citations`, `conversation_id`, and the run status/error fields are written
+  only by an ask. `conversation_id` uses `ON DELETE SET NULL`, and
+  `last_asked_at` records the most recent attempt.
 
 The complete local design notes live under `docs/plan/` (gitignored). The
 committed code, comments, UI copy, and documentation are English.
@@ -833,15 +904,29 @@ The integration suite uses one real PostgreSQL test database
 table between tests. There are exactly ten tests; each one exercises the real
 HTTP surface and database. The agent test covers runtime settings defaults,
 full PUT/reset, validation, the runtime snapshot used by later runs, auto and
-manual compaction, clear, page-context reattachment at a boundary, retry, and
-parallel/sequential tool execution. Page-context deduplication and ordering, and
-folder creation plus move/copy coverage, extend existing tests rather than
-adding new functions.
+manual compaction, clear, page-context reattachment at a boundary, retry,
+parallel/sequential tool execution, and the saved-question library. The
+saved-question coverage includes create/list/pagination, ask success, a failed
+ask that keeps the row, edit clearing the answer, delete, not-found errors, and
+the `conversation_id` `ON DELETE SET NULL` behavior. Page-context
+deduplication and ordering, and folder creation plus move/copy coverage, extend
+existing tests rather than adding new functions.
 
-The latest migration is `e7a1c4b9d2f6`, after `c4f1a9e2b7d3`. It creates the
-singleton `agent_config` table and seeds row `1`. The integration suite builds
-tables from SQLAlchemy metadata, so migration upgrade/downgrade is validated
-separately against the development database.
+The latest migration is `e2b7c4d9a6f1`, after `b7d2e9c4a1f6`. The migrations
+after `agent_config` on this branch are:
+
+- `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
+- `a6e2f9c4d1b8` raises the per-result tool character cap to 100,000;
+- `c9f1a2b3d4e5` raises `max_total_tokens` to 100,000 and
+  `compaction_threshold_tokens` to 75,000;
+- `b7d2e9c4a1f6` creates `saved_question` and its conversation FK/index;
+- `e2b7c4d9a6f1` raises the `max_steps` default from 8 to 24 and updates an
+  untouched default row.
+
+Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
+row `1`. The integration suite builds tables from SQLAlchemy metadata, so
+migration upgrade/downgrade is validated separately against the development
+database.
 
 ## Project layout
 
@@ -860,7 +945,8 @@ backend/
       schema/                   Pydantic contracts
       exception/                stable error codes
     module/media/               standalone image archive and visual retrieval
-    module/agent/               transcript, runtime settings, compaction, tools, SSE
+    module/agent/               transcript, runtime settings, compaction, tools,
+                                saved questions, SSE
   alembic/                      migrations
   tests/                        ten integration tests
 frontend/
@@ -869,6 +955,7 @@ frontend/
     generated-apis-types/       committed Orval client
     agent/                      global dock, page capture, inspector panels
     chat/                       reading room, retry, context actions
+    questions/                  saved-question Q&A library
     settings/                   provider and agent runtime panels
     viewer/                     file, media, and memory viewers
     library/                    folder workspace board and list

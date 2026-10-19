@@ -37,6 +37,7 @@ src/
     library/                    folder workspace board + list view
     tree/ memory/
     chat/                       persistent agent reading room
+    questions/                  saved-question Q&A library
     viewer/                     file/media/memory viewers
     ask/ method/ settings/
   lib/                          formatting, safe text highlighting
@@ -65,8 +66,10 @@ bun run api:generate:live
 
 The generated hooks cover normal JSON routes, including `createFolder`,
 `moveFile`, `copyFile`, `getAgentSettings`, `updateAgentSettings`,
-`resetAgentSettings`, `compactAgentConversation`, and
-`clearAgentConversation`. Two deliberate exceptions use same-origin `fetch`
+`resetAgentSettings`, `compactAgentConversation`,
+`clearAgentConversation`, `listSavedQuestions`, `createSavedQuestion`,
+`updateSavedQuestion`, `deleteSavedQuestion`, and `askSavedQuestion`. Two
+deliberate exceptions use same-origin `fetch`
 directly: `src/apis/agent-stream.ts` for `text/event-stream`, and the viewer
 text/binary loaders in `src/app/viewer/component/viewer-utils.ts`. Viewer URLs
 still come from the generated `getGetFileContentUrl` / `getDownloadFileUrl`
@@ -76,7 +79,7 @@ clients.
 
 After a mutation, invalidate the related React Query keys (the pages use
 `queryClient.invalidateQueries()`), so the overview, search, timeline, tree,
-library, chat, and viewer stay consistent.
+library, questions, chat, and viewer stay consistent.
 
 ## Chat
 
@@ -122,6 +125,47 @@ active context.
 Chat is in the **Studio** sidebar and the command palette. Mobile bottom tabs
 stay Overview, Search, Timeline, Library, and More; Chat is reached through the
 navigation drawer.
+
+## Saved questions
+
+`/questions` is the question book under **Studio**, also reachable from the
+command palette. It uses the generated `useListSavedQuestions`,
+`useCreateSavedQuestion`, `useUpdateSavedQuestion`, `useDeleteSavedQuestion`,
+and `useAskSavedQuestion` hooks. No separate fetch client is added.
+
+- **Create** — the composer accepts plain text up to 32,000 characters and
+  sends only `question`. Creating a question does not create a conversation.
+- **List and paginate** — the page requests 50 rows per page with
+  `limit`/`offset`, shows `{resources, total, limit, offset}`, and offers
+  Previous/Next with an explicit range. Deleting the last row on a page steps
+  back one page.
+- **Edit** — inline editing saves with `PATCH`. Changing the text clears the
+  stored answer, citations, conversation link, run metadata, and last-asked
+  time; the UI says so before saving and confirms the reset in a toast.
+- **Delete** — a two-step inline confirmation calls `DELETE`; the row is removed
+  from the cached page and the list is invalidated.
+- **Ask** — **Ask agent** calls `POST .../ask` and waits for the returned saved
+  question. This is one synchronous JSON request, not an SSE stream, so the
+  card shows a pending message while the turn runs.
+- **Result** — the returned row replaces the card in the list cache. A
+  successful answer is rendered as text with `CitationChip` links for known
+  citation tokens, a status badge, the last-asked time, and an **Open
+  conversation** link to `/chat/{conversation_id}` when one exists.
+
+After an ask, the page invalidates the saved-question list, the conversation
+list, and (when present) the conversation detail and entry queries. A failed run
+is still `200` from the API: the card shows `run_status="failed"` with its
+`error_code`/`error_detail`, keeps the question, and shows an error toast. A
+cancelled run is shown the same way. A missing AI configuration arrives as
+`503 agent_not_configured` and is shown as an inline card error.
+
+The page implements loading skeletons, an empty book state, a list-level retry
+panel, an inline refresh error that preserves the current rows, a "past the
+last page" recovery action, and per-card pending/error states. Ask, edit, and
+delete are disabled while a card operation is in flight.
+
+Mobile keeps the same card layout without horizontal overflow; the page is
+reached through the navigation drawer rather than the bottom tabs.
 
 ## Agent dock
 

@@ -81,7 +81,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert defaults == {
         "max_total_tokens": 100_000,
         "compaction_threshold_tokens": 75_000,
-        "max_steps": 8,
+        "max_steps": 24,
         "max_tool_calls_per_turn": 6,
         "max_parallel_tools": 6,
         "max_tool_result_chars": 100_000,
@@ -1029,3 +1029,275 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     final_reset = client.post("/api/v1/agent/settings/reset")
     assert final_reset.status_code == 200, final_reset.text
     assert final_reset.json()["config"] == defaults
+
+    # Saved-question library: capture, ask, edit/reset, failure, pagination,
+    # deletion, and FK SET NULL when the source conversation row is removed.
+    saved_first_question = (
+        "What do we know about the wrench and the chassis repair notes "
+        "that were captured in the archive for later review?"
+    )
+    saved_second_question = "How should I recall a stored memory?"
+    saved_third_question = "Which media assets mention the wrench?"
+    saved_answer = f"The saved archive answer cites the wrench [file:{file_id}#1]."
+    saved_fake = FakeChatGenerator.from_texts(saved_answer)
+    client.app.state.agent_chat_generator = saved_fake
+
+    invalid_saved_question = client.post(
+        "/api/v1/agent/questions",
+        json={"question": "   "},
+    )
+    assert invalid_saved_question.status_code == 400
+    assert invalid_saved_question.json()["error"] == "invalid_request"
+    client_supplied_answer = client.post(
+        "/api/v1/agent/questions",
+        json={"question": "Do not accept this answer.", "answer": "client answer"},
+    )
+    assert client_supplied_answer.status_code == 400
+    assert client_supplied_answer.json()["error"] == "invalid_request"
+
+    created_saved_first = client.post(
+        "/api/v1/agent/questions",
+        json={"question": f"  {saved_first_question}  "},
+    )
+    assert created_saved_first.status_code == 201, created_saved_first.text
+    saved_first = created_saved_first.json()
+    saved_first_id = saved_first["id"]
+    assert saved_first["question"] == saved_first_question
+    assert saved_first["answer"] is None
+    assert saved_first["citations"] == []
+    assert saved_first["conversation_id"] is None
+    assert saved_first["run_status"] is None
+    assert saved_first["error_code"] is None
+    assert saved_first["error_detail"] is None
+    assert saved_first["last_asked_at"] is None
+    assert saved_first["updated_at"] >= saved_first["created_at"]
+
+    created_saved_second = client.post(
+        "/api/v1/agent/questions",
+        json={"question": saved_second_question},
+    )
+    assert created_saved_second.status_code == 201, created_saved_second.text
+    saved_second_id = created_saved_second.json()["id"]
+
+    created_saved_third = client.post(
+        "/api/v1/agent/questions",
+        json={"question": saved_third_question},
+    )
+    assert created_saved_third.status_code == 201, created_saved_third.text
+    saved_third_id = created_saved_third.json()["id"]
+
+    saved_page_one = client.get(
+        "/api/v1/agent/questions",
+        params={"limit": 2, "offset": 0},
+    )
+    assert saved_page_one.status_code == 200, saved_page_one.text
+    saved_page_one_body = saved_page_one.json()
+    assert saved_page_one_body["total"] == 3
+    assert saved_page_one_body["limit"] == 2
+    assert saved_page_one_body["offset"] == 0
+    assert [item["id"] for item in saved_page_one_body["resources"]] == [
+        saved_third_id,
+        saved_second_id,
+    ]
+    assert all(item["answer"] is None for item in saved_page_one_body["resources"])
+
+    saved_page_two = client.get(
+        "/api/v1/agent/questions",
+        params={"limit": 2, "offset": 2},
+    )
+    assert saved_page_two.status_code == 200
+    assert saved_page_two.json()["total"] == 3
+    assert saved_page_two.json()["limit"] == 2
+    assert saved_page_two.json()["offset"] == 2
+    assert [item["id"] for item in saved_page_two.json()["resources"]] == [saved_first_id]
+
+    saved_empty_page = client.get(
+        "/api/v1/agent/questions",
+        params={"limit": 50, "offset": 10},
+    )
+    assert saved_empty_page.status_code == 200
+    assert saved_empty_page.json()["total"] == 3
+    assert saved_empty_page.json()["resources"] == []
+
+    conversations_before_ask = client.get(
+        "/api/v1/agent/conversations",
+        params={"limit": 100},
+    ).json()
+    asked_saved_first = client.post(
+        f"/api/v1/agent/questions/{saved_first_id}/ask"
+    )
+    assert asked_saved_first.status_code == 200, asked_saved_first.text
+    asked_first = asked_saved_first.json()
+    assert asked_first["id"] == saved_first_id
+    assert asked_first["question"] == saved_first_question
+    assert asked_first["answer"] == saved_answer
+    assert asked_first["citations"] == [f"[file:{file_id}#1]"]
+    assert asked_first["conversation_id"] is not None
+    assert asked_first["run_status"] == "completed"
+    assert asked_first["error_code"] is None
+    assert asked_first["error_detail"] is None
+    assert asked_first["last_asked_at"] is not None
+    assert saved_fake.remaining == 0
+
+    conversations_after_ask = client.get(
+        "/api/v1/agent/conversations",
+        params={"limit": 100},
+    ).json()
+    assert (
+        conversations_after_ask["total_results"]
+        == conversations_before_ask["total_results"] + 1
+    )
+    asked_conversation_id = asked_first["conversation_id"]
+    asked_conversation = client.get(
+        f"/api/v1/agent/conversations/{asked_conversation_id}"
+    )
+    assert asked_conversation.status_code == 200
+    assert asked_conversation.json()["title"] == saved_first_question[:80].strip()
+    asked_conversation_entries = client.get(
+        f"/api/v1/agent/conversations/{asked_conversation_id}/entries",
+        params={"limit": 50},
+    ).json()["entries"]
+    asked_user_entries = [
+        entry for entry in asked_conversation_entries if entry["kind"] == "pi.user"
+    ]
+    assert [entry["model"][0]["content"] for entry in asked_user_entries] == [
+        saved_first_question
+    ]
+    assert saved_fake.requests[0].messages[-1]["content"] == saved_first_question
+
+    after_ask_library = client.get(
+        "/api/v1/agent/questions",
+        params={"limit": 100},
+    ).json()
+    assert after_ask_library["total"] == 3
+    assert (
+        sum(1 for item in after_ask_library["resources"] if item["id"] == saved_first_id)
+        == 1
+    )
+    stored_first = next(
+        item for item in after_ask_library["resources"] if item["id"] == saved_first_id
+    )
+    assert stored_first["answer"] == saved_answer
+    assert stored_first["citations"] == [f"[file:{file_id}#1]"]
+
+    edited_saved_first = client.patch(
+        f"/api/v1/agent/questions/{saved_first_id}",
+        json={"question": "  Edited wrench question.  "},
+    )
+    assert edited_saved_first.status_code == 200, edited_saved_first.text
+    edited_first = edited_saved_first.json()
+    assert edited_first["question"] == "Edited wrench question."
+    assert edited_first["answer"] is None
+    assert edited_first["citations"] == []
+    assert edited_first["conversation_id"] is None
+    assert edited_first["run_status"] is None
+    assert edited_first["error_code"] is None
+    assert edited_first["error_detail"] is None
+    assert edited_first["last_asked_at"] is None
+
+    client.app.state.agent_chat_generator = FakeChatGenerator([])
+    failed_saved_ask = client.post(
+        f"/api/v1/agent/questions/{saved_second_id}/ask"
+    )
+    assert failed_saved_ask.status_code == 200, failed_saved_ask.text
+    failed_saved = failed_saved_ask.json()
+    assert failed_saved["id"] == saved_second_id
+    assert failed_saved["question"] == saved_second_question
+    assert failed_saved["answer"] is None
+    assert failed_saved["citations"] == []
+    assert failed_saved["conversation_id"] is not None
+    assert failed_saved["run_status"] == "failed"
+    assert failed_saved["error_code"] == "provider_error"
+    assert failed_saved["error_detail"]
+    assert failed_saved["last_asked_at"] is not None
+
+    after_failure_library = client.get(
+        "/api/v1/agent/questions",
+        params={"limit": 100},
+    ).json()
+    assert after_failure_library["total"] == 3
+    retained_failure = next(
+        item for item in after_failure_library["resources"] if item["id"] == saved_second_id
+    )
+    assert retained_failure["question"] == saved_second_question
+    assert retained_failure["run_status"] == "failed"
+    assert retained_failure["error_detail"]
+
+    saved_third_answer = "The wrench appears in a media asset [media:7]."
+    client.app.state.agent_chat_generator = FakeChatGenerator.from_texts(
+        saved_third_answer
+    )
+    asked_saved_third = client.post(
+        f"/api/v1/agent/questions/{saved_third_id}/ask"
+    )
+    assert asked_saved_third.status_code == 200, asked_saved_third.text
+    asked_third = asked_saved_third.json()
+    assert asked_third["answer"] == saved_third_answer
+    assert asked_third["citations"] == ["[media:7]"]
+    assert asked_third["conversation_id"] is not None
+    doomed_conversation_id = asked_third["conversation_id"]
+
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM agent_run WHERE conversation_id = :conversation_id"),
+            {"conversation_id": doomed_conversation_id},
+        )
+        connection.execute(
+            text("DELETE FROM agent_entry WHERE conversation_id = :conversation_id"),
+            {"conversation_id": doomed_conversation_id},
+        )
+        connection.execute(
+            text("DELETE FROM agent_conversation WHERE id = :conversation_id"),
+            {"conversation_id": doomed_conversation_id},
+        )
+    engine.dispose()
+
+    preserved_library = client.get(
+        "/api/v1/agent/questions",
+        params={"limit": 100},
+    ).json()
+    preserved_third = next(
+        item for item in preserved_library["resources"] if item["id"] == saved_third_id
+    )
+    assert preserved_third["conversation_id"] is None
+    assert preserved_third["question"] == saved_third_question
+    assert preserved_third["answer"] == saved_third_answer
+    assert preserved_third["citations"] == ["[media:7]"]
+    assert preserved_library["total"] == 3
+
+    missing_question_id = 999_999
+    missing_update = client.patch(
+        f"/api/v1/agent/questions/{missing_question_id}",
+        json={"question": "Missing question"},
+    )
+    assert missing_update.status_code == 404
+    assert missing_update.json()["error"] == "saved_question_not_found"
+    missing_ask = client.post(
+        f"/api/v1/agent/questions/{missing_question_id}/ask"
+    )
+    assert missing_ask.status_code == 404
+    assert missing_ask.json()["error"] == "saved_question_not_found"
+    missing_delete = client.delete(
+        f"/api/v1/agent/questions/{missing_question_id}"
+    )
+    assert missing_delete.status_code == 404
+    assert missing_delete.json()["error"] == "saved_question_not_found"
+
+    deleted_saved_second = client.delete(
+        f"/api/v1/agent/questions/{saved_second_id}"
+    )
+    assert deleted_saved_second.status_code == 204
+    deleted_saved_second_again = client.delete(
+        f"/api/v1/agent/questions/{saved_second_id}"
+    )
+    assert deleted_saved_second_again.status_code == 404
+    after_delete_library = client.get(
+        "/api/v1/agent/questions",
+        params={"limit": 100},
+    ).json()
+    assert after_delete_library["total"] == 2
+    assert all(
+        item["id"] != saved_second_id
+        for item in after_delete_library["resources"]
+    )

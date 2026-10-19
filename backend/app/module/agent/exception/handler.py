@@ -12,6 +12,7 @@ from app.module.agent.exception.domain_error import (
     AgentRunNotActiveError,
     AgentRunNotFoundError,
     AgentRunNotRetryableError,
+    SavedQuestionNotFoundError,
 )
 from app.shared.exception.registry import ExceptionRegistry
 
@@ -28,4 +29,5 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(AgentNotConfiguredError, 503, "agent_not_configured")
     ExceptionRegistry.register(AgentProviderError, 502, "agent_provider_error")
     ExceptionRegistry.register(AgentInvalidEntryError, 422, "agent_invalid_entry")
+    ExceptionRegistry.register(SavedQuestionNotFoundError, 404, "saved_question_not_found")
     ExceptionRegistry.register(AgentError, 500, "agent_error")

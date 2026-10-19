@@ -89,6 +89,11 @@ Endpoints (all require the session cookie):
 | `GET` | `/api/v1/agent/settings` | Effective runtime config + defaults + source |
 | `PUT` | `/api/v1/agent/settings` | Replace all eleven runtime fields |
 | `POST` | `/api/v1/agent/settings/reset` | Persist the built-in defaults |
+| `GET` | `/api/v1/agent/questions?limit=&offset=` | List saved questions newest first |
+| `POST` | `/api/v1/agent/questions` | Save a question (`201`); question only |
+| `PATCH` | `/api/v1/agent/questions/{question_id}` | Edit the question text |
+| `DELETE` | `/api/v1/agent/questions/{question_id}` | Delete the saved question (`204`) |
+| `POST` | `/api/v1/agent/questions/{question_id}/ask` | Run one agent turn and persist its outcome |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` takes
 `{content, request_id?, page_context?}`; `POST .../retry` takes
@@ -105,7 +110,7 @@ entry id arrives at `message_end`, and deltas are never persisted.
 (`Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`) and
 Starlette's GZip middleware excludes `text/event-stream`.
 
-The runtime defaults cap a turn at 8 model steps, 6 tool calls, 6 parallel
+The runtime defaults cap a turn at 24 model steps, 6 tool calls, 6 parallel
 tools, 100,000 total tokens, and 100,000 characters per tool result. Each result
 is clipped independently with a visible truncation marker; there is no
 turn-wide result budget. All of these come from the immutable
@@ -122,8 +127,8 @@ adapters over `AgentSettingsService` with operation ids `getAgentSettings`,
 
 ```json
 {
-  "config": {"max_total_tokens": 64000, "...": "..."},
-  "defaults": {"max_total_tokens": 64000, "...": "..."},
+  "config": {"max_total_tokens": 100000, "...": "..."},
+  "defaults": {"max_total_tokens": 100000, "...": "..."},
   "source": "database",
   "updated_at": "2026-10-19T15:00:00Z"
 }
@@ -138,7 +143,7 @@ replacement rather than a patch.
 |---|---|---|
 | `max_total_tokens` | 100,000 | 8,000–200,000; cumulative across model steps |
 | `compaction_threshold_tokens` | 75,000 | 1,000–200,000; `< max_total_tokens` |
-| `max_steps` | 8 | 1–32 |
+| `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 6 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24; `<= max_tool_calls_per_turn` |
 | `max_tool_result_chars` | 100,000 | 1,000–200,000 |
@@ -253,6 +258,58 @@ boundary starts a new lineage deliberately.
 boundary. A snapshot is a normal entry: it appears in entry pages and
 `entries_total`, and clients should render it as a context card rather than as a
 user message.
+
+### Saved questions
+
+`saved_question` is the owner's Q&A library. It is separate from the immutable
+conversation log: a row can be created before an answer exists, and asking it
+writes only the latest outcome to that row.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | bigint identity | Primary key |
+| `question` | text | Required, trimmed, 1–32,000 characters |
+| `answer` | text, nullable | Written only by an ask |
+| `citations` | JSONB | Array of citation tokens, default `[]` |
+| `conversation_id` | bigint, nullable | FK to `agent_conversation`, `ON DELETE SET NULL` |
+| `run_status` | varchar(16), nullable | `running`, `waiting`, `completed`, `failed`, or `cancelled` |
+| `error_code` | varchar(64), nullable | Safe error code from the last ask |
+| `error_detail` | text, nullable | Safe error detail from the last ask |
+| `created_at` | timestamptz | Creation time |
+| `updated_at` | timestamptz | Updated by edits and asks |
+| `last_asked_at` | timestamptz, nullable | Most recent ask attempt |
+
+CRUD uses the request-scoped transaction and does not resolve the chat
+generator, so questions can be captured and edited while AI is not configured.
+`GET` returns `{resources, total, limit, offset}`; `limit` is 1–100 (default 50)
+and `offset` starts at 0. Rows are ordered by `created_at` descending, then `id`
+descending.
+
+`POST` accepts only `question` (`extra=forbid`) and returns `201` with an empty
+answer, empty citations, and null run fields. `PATCH` accepts only `question`.
+If the normalized text differs from the stored text, the service clears
+`answer`, `citations`, `conversation_id`, `run_status`, `error_code`,
+`error_detail`, and `last_asked_at`. An unchanged edit only refreshes
+`updated_at`. `DELETE` returns `204`; a missing row is
+`404 saved_question_not_found` for update, delete, and ask.
+
+`POST /{question_id}/ask` is a regular JSON request, so it may hold the request
+session while the turn runs; the agent loop still opens its own short-lived
+sessions. The service:
+
+1. Loads the saved question and validates that the chat generator is configured.
+2. Creates a new conversation titled from the first 80 characters of the
+   question.
+3. Appends the saved question as the user entry and calls `collect_turn`.
+4. Extracts citation tokens from the final assistant entry and records the
+   answer, citations, conversation id, run status, and error fields on the same
+   row, updating `last_asked_at`/`updated_at`.
+
+A provider or tool failure is `200` with `run_status="failed"` and its
+`error_code`/`error_detail`, so the saved question is retained. A missing AI
+configuration is still `503 agent_not_configured`, because the dependency
+cannot build the agent service. Asking again creates another conversation and
+replaces the stored answer on the same row.
 
 ### Tool result preview data
 
@@ -413,7 +470,17 @@ migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
 constraints to include `pi.page-context`; it does not add a table or column.
 The runtime-config migration `e7a1c4b9d2f6` follows `c4f1a9e2b7d3`, creates the
 singleton `agent_config` table with all range and cross-field check constraints,
-and seeds row `id=1` with the defaults.
+and seeds row `id=1` with the defaults. Later migrations in order:
+
+- `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
+- `a6e2f9c4d1b8` raises the per-result tool character cap to 100,000;
+- `c9f1a2b3d4e5` raises the default turn budget to 100,000 tokens and the
+  compaction threshold to 75,000;
+- `b7d2e9c4a1f6` (after `c9f1a2b3d4e5`) creates `saved_question`, including
+  its JSONB citation array, check constraints, conversation FK with
+  `ON DELETE SET NULL`, and conversation-id index;
+- `e2b7c4d9a6f1` (after `b7d2e9c4a1f6`, the current head) raises the
+  `max_steps` default from 8 to 24 and updates an untouched default row.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
@@ -454,12 +521,12 @@ app/
   module/media/            standalone image library and visual search
   module/agent/
     domain/                replay builder, compaction, runtime config, envelopes
-    model/                 conversation, immutable entry, run, agent_config
-    protocol/              chat, repository, settings-repository protocols
-    repository/            transaction, commit-sequence, config persistence
-    service/               agent loop, settings, context projection, tool registry
-    router/                conversation, compact/clear, settings, tools
-    schema/                request/response and settings contracts
+    model/                 conversation, entry, run, agent_config, saved_question
+    protocol/              chat, repository, settings, saved-question protocols
+    repository/            transaction, commit sequence, config, saved questions
+    service/               agent loop, settings, context, tools, saved questions
+    router/                conversation, compact/clear, settings, tools, questions
+    schema/                request/response, settings, saved-question contracts
     exception/             stable agent errors
     test/                  FakeChatGenerator (no collected tests)
     dependencies.py        composition root + snapshot + fake-provider seam
@@ -502,11 +569,22 @@ The agent test injects a deterministic `FakeChatGenerator` by assigning
 It also covers runtime settings defaults, full PUT and reset, validation
 failures (`400 invalid_request`), runtime snapshot handling for later runs, auto
 and manual compaction, clear, the page-context boundary and same-page
-reattachment, retry, and parallel versus sequential tool execution. The file library test
-covers idempotent folder creation, in-place moves, independent copies, extension
-checks, and path conflicts. The former two search tests are merged into
-`test_hybrid_search_and_union_query`, which is what keeps the suite at ten
-collected functions.
+reattachment, retry, parallel versus sequential tool execution, and the
+saved-question library. Saved-question coverage includes create/list/pagination,
+ask success, a failed ask that keeps the row with `run_status="failed"` and
+error detail, edit resetting the answer and conversation link, delete,
+not-found errors, and the `conversation_id` `ON DELETE SET NULL` result. The
+file library test covers idempotent folder creation, in-place moves, independent
+copies, extension checks, and path conflicts. The former two search tests are
+merged into `test_hybrid_search_and_union_query`, which is what keeps the suite
+at ten collected functions.
+
+A separate manual validation used the public-domain 《紅樓夢》 from Project
+Gutenberg (about 2.66 MB, 268 chunks at 4,000 characters / 500 overlap) against
+the real DeepSeek API. Turns answered questions about Baoyu and Daiyu's
+past-life debt and 還淚, the stone's descent and 通靈寶玉, and the ending where
+寶玉 leaves with the monk and the Taoist, with citations such as
+`[file:27#...]`. That run is evidence, not a committed test fixture.
 
 The suite does not execute migrations; upgrade and downgrade are separate
 checks against the development database. Runtime settings and compaction are
