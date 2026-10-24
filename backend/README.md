@@ -84,7 +84,8 @@ job with `SELECT ... FOR UPDATE SKIP LOCKED`. Parsing and chunking use a shared
 two in-flight jobs. Embedding is async with a global concurrency of six and
 batched progress updates; it does not consume extraction threads.
 
-The worker writes a staged file, tree node, chunks, and embeddings, then
+The worker writes a staged file and chunks, ensures its folder chain, embeds,
+then
 publishes them only after embedding and summary complete. A failed job discards
 its staged rows and clears `file_id`, so an unfinished path never appears as a
 partial current file or chunk set. On startup, jobs whose heartbeat is older
@@ -526,23 +527,22 @@ error.
 
 `create_folder` normalizes a directory path, rejects `/`, and creates every
 missing ancestor. Repeating the request, including with a trailing slash, returns
-the same folder and `201`. A path occupied by a file, or by a non-folder node,
-returns `409 tree_path_conflict`. The archive cache version is bumped only when
-a new folder is created.
+the same folder and `201`. A path occupied by a file returns
+`409 tree_path_conflict`. The archive cache version is bumped only when a new
+folder is created.
 
 ### Move
 
 `move_file` requires a current, non-deleted file id. It normalizes the target,
-requires the same extension, and rejects a target occupied by any current tree
-node or file with `409 tree_path_conflict`. Moving to the current path is an
+requires the same extension, and rejects a target occupied by any folder or
+current file with `409 tree_path_conflict`. Moving to the current path is an
 idempotent `200`.
 
-A move updates `file.raw_file_path` and `file.file_name` in place. It reuses the
-existing tree node when it is the file's current node and creates one otherwise.
-The file id, version, `is_current`, chunks, embeddings, storage key, original
-bytes, and history links are unchanged. The path/tree cache version is bumped.
-Search, timeline, citations, and viewer links keep working because the id does
-not change.
+A move updates `file.raw_file_path` and `file.file_name` in place. The file id,
+version, `is_current`, chunks, embeddings, storage key, original bytes, and
+history links are unchanged. The folder/file cache version is bumped. Search,
+timeline, citations, and viewer links keep working because the id does not
+change.
 
 ### Copy
 
@@ -567,7 +567,7 @@ persisting the new bytes delete the newly written storage object.
 | Error code | Status | Cause |
 |---|---|---|
 | `invalid_path` | 422 | Empty path, `/`, traversal, or changed extension |
-| `tree_path_conflict` | 409 | Target is occupied by another current node or file |
+| `tree_path_conflict` | 409 | Target is occupied by another folder or current file |
 | `file_not_found` | 404 | File id is missing, deleted, or not current |
 | `unsupported_file_type` | 422 | Upload extension is outside the allowlist |
 | `file_too_large` | 413 | Upload exceeds 10 MB, or text creation exceeds 2 MB |
@@ -613,7 +613,7 @@ shell are public. There is no password recovery, by design.
 ## Database
 
 Alembic owns the schema. The initial migration creates `pg_trgm` and six archive
-tables: `file`, `tree_node`, `chunk`, `chunk_ngram`, `memory`, and
+tables: `file`, `folder`, `chunk`, `chunk_ngram`, `memory`, and
 `memory_summary` (plus Alembic's own `alembic_version`). Later migrations add
 provider settings, the retired standalone media tables, document analysis
 fields, account/session auth (`app_user`,
@@ -652,9 +652,12 @@ and seeds row `id=1` with the defaults. Later migrations in order:
 - `f2b3c4d5e6a7` (after `c8f2a4b6d9e1`) creates `agent_approval` with its
   status check, conversation/run/entry foreign keys, status indexes, and the
   partial unique pending `(run_id, tool_call_id)` index;
-- `8f4b2c6d9e01` (after `f2b3c4d5e6a7`, the current head) drops the retired
-  `media_ngram` and `media_asset` tables. The downgrade recreates their original
-  schema and indexes.
+- `8f4b2c6d9e01` drops the retired `media_ngram` and `media_asset` tables. The
+  downgrade recreates their original schema and indexes;
+- `c4d8e2f6a1b9` (after `8f4b2c6d9e01`, the current head) creates the explicit
+  `folder` table, copies current folder rows with their ids, and drops
+  `tree_node`. File leaves are derived from `file.raw_file_path`. The downgrade
+  recreates current folders and current file leaves.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

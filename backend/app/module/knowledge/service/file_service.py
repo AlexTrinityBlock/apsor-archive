@@ -44,14 +44,14 @@ from app.module.knowledge.exception.domain_error import (
 )
 from app.module.knowledge.model.chunk_model import SOURCE_FILE, ChunkModel
 from app.module.knowledge.model.file_model import FileModel
-from app.module.knowledge.model.tree_model import NODE_KIND_FILE, NODE_KIND_FOLDER, TreeNodeModel
+from app.module.knowledge.model.folder_model import FolderModel
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.chunk_repository_protocol import ChunkRepositoryProtocol
 from app.module.knowledge.protocol.file_repository_protocol import FileRepositoryProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
+from app.module.knowledge.protocol.folder_repository_protocol import FolderRepositoryProtocol
 from app.module.knowledge.protocol.ingest_progress_protocol import IngestProgressProtocol
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
-from app.module.knowledge.protocol.tree_repository_protocol import TreeRepositoryProtocol
 from app.module.knowledge.protocol.vision_extractor_protocol import (
     DocumentAnalysis,
     VisionExtractorProtocol,
@@ -113,13 +113,13 @@ class FileOriginal:
 
 
 class FileService:
-    """Coordinate file storage, multimodal extraction, tree placement, and indexing."""
+    """Coordinate file storage, multimodal extraction, folder placement, and indexing."""
 
     def __init__(
         self,
         *,
         file_repository: FileRepositoryProtocol,
-        tree_repository: TreeRepositoryProtocol,
+        folder_repository: FolderRepositoryProtocol,
         chunk_repository: ChunkRepositoryProtocol,
         indexer: IndexerService,
         storage: FileStorageProtocol,
@@ -136,7 +136,7 @@ class FileService:
         cpu_runner: CpuRunner | None = None,
     ) -> None:
         self.file_repository = file_repository
-        self.tree_repository = tree_repository
+        self.folder_repository = folder_repository
         self.chunk_repository = chunk_repository
         self.indexer = indexer
         self.storage = storage
@@ -218,8 +218,8 @@ class FileService:
         return normalized
 
     @staticmethod
-    def _directory_schema(node: TreeNodeModel) -> DirectorySchema:
-        return DirectorySchema(path=node.path, name=node.name, depth=node.depth)
+    def _directory_schema(folder: FolderModel) -> DirectorySchema:
+        return DirectorySchema(path=folder.path, name=folder.name, depth=folder.depth)
 
     @staticmethod
     def _new_storage_key(suffix: str) -> str:
@@ -528,33 +528,32 @@ class FileService:
             )
         raise UnsupportedFileTypeError(suffix)
 
-    async def _ensure_folder_chain(self, directory: str) -> TreeNodeModel | None:
+    async def _ensure_folder_chain(self, directory: str) -> FolderModel | None:
         """Create every missing folder in ``directory`` and return the leaf folder."""
         parent_id: int | None = None
-        current: TreeNodeModel | None = None
+        current: FolderModel | None = None
         segments = path_segments(directory)
         for index, segment in enumerate(segments, start=1):
             directory_path = "/" + "/".join(segments[:index])
-            node = await self.tree_repository.get_current_by_path(directory_path)
-            if node is None:
-                node = await self.tree_repository.add_folder_if_absent(
-                    TreeNodeModel(
+            folder = await self.folder_repository.get_by_path(directory_path)
+            if folder is None:
+                if await self.file_repository.get_current_by_path(directory_path) is not None:
+                    raise TreePathConflictError(directory_path)
+                folder = await self.folder_repository.add_if_absent(
+                    FolderModel(
                         parent_id=parent_id,
                         path=directory_path,
                         name=segment,
-                        kind=NODE_KIND_FOLDER,
                         depth=index,
                     )
                 )
-            if node.kind != NODE_KIND_FOLDER:
-                raise TreePathConflictError(directory_path)
-            parent_id = node.id
-            current = node
+            parent_id = folder.id
+            current = folder
         return current
 
     async def _ensure_parent_folder(self, path: str) -> int | None:
-        node = await self._ensure_folder_chain(parent_directory(path))
-        return node.id if node is not None else None
+        folder = await self._ensure_folder_chain(parent_directory(path))
+        return folder.id if folder is not None else None
 
     async def _ingest(
         self,
@@ -595,15 +594,12 @@ class FileService:
             await progress.chunked(len(drafts))
 
         existing = await self.file_repository.get_current_by_path(path)
-        existing_node = await self.tree_repository.get_current_by_path(path)
-        if existing_node is not None and existing_node.kind != NODE_KIND_FILE:
+        if await self.folder_repository.get_by_path(path) is not None:
             raise TreePathConflictError(path)
 
         if publish and existing is not None:
             await self.file_repository.mark_not_current(existing)
             await self.chunk_repository.mark_source_not_current(SOURCE_FILE, existing.id)
-        if publish and existing_node is not None:
-            await self.tree_repository.mark_not_current(existing_node)
 
         timestamp = occurred_at or utcnow()
         file = await self.file_repository.add(
@@ -628,23 +624,7 @@ class FileService:
             )
         )
 
-        parent_id = await self._ensure_parent_folder(path)
-        node = await self.tree_repository.add(
-            TreeNodeModel(
-                parent_id=parent_id,
-                path=path,
-                name=file_name(path),
-                kind=NODE_KIND_FILE,
-                file_id=file.id,
-                depth=len(path_segments(path)),
-                is_current=publish,
-            )
-        )
-        if publish and existing_node is not None:
-            await self.tree_repository.mark_not_current(
-                existing_node,
-                superseded_by_id=node.id,
-            )
+        await self._ensure_parent_folder(path)
 
         if checkpoint is not None:
             await checkpoint()
@@ -693,43 +673,29 @@ class FileService:
         )
 
     async def publish_pending(self, file_id: int) -> FileSchema:
-        """Make a staged file version, its tree node, and chunks current at once."""
+        """Make a staged file version and its chunks current at once."""
         file = await self.file_repository.get_by_id(file_id)
         if file is None:
             raise FileRecordNotFoundError(file_id)
         if file.is_current:
             return self._to_schema(file)
-        node = await self.tree_repository.get_latest_by_file_id(file.id)
-        if node is None:
-            raise FileRecordNotFoundError(file_id)
 
         existing = await self.file_repository.get_current_by_path(file.raw_file_path)
         if existing is not None and existing.id != file.id:
             await self.file_repository.mark_not_current(existing)
             await self.chunk_repository.mark_source_not_current(SOURCE_FILE, existing.id)
-        existing_node = await self.tree_repository.get_current_by_path(file.raw_file_path)
-        if (
-            existing_node is not None
-            and existing_node.id != node.id
-            and existing_node.kind == NODE_KIND_FILE
-        ):
-            await self.tree_repository.mark_not_current(
-                existing_node,
-                superseded_by_id=node.id,
-            )
 
+        await self._ensure_parent_folder(file.raw_file_path)
         now = utcnow()
         file.is_current = True
         file.updated_at = now
-        node.is_current = True
-        node.updated_at = now
         await self.chunk_repository.mark_source_current(SOURCE_FILE, file.id)
         await self.file_repository.flush()
         await self.cache.bump_version()
         return self._to_schema(file)
 
     async def discard_pending(self, file_id: int) -> bool:
-        """Delete an unpublished file, node, and chunks after a failed job.
+        """Delete an unpublished file and its chunks after a failed job.
 
         Returns true only when a staged row was removed. A published file is
         left untouched so a late worker error cannot erase a visible version.
@@ -737,9 +703,6 @@ class FileService:
         file = await self.file_repository.get_by_id(file_id)
         if file is None or file.is_current:
             return False
-        node = await self.tree_repository.get_latest_by_file_id(file.id)
-        if node is not None:
-            await self.tree_repository.delete(node)
         await self.chunk_repository.delete_source(SOURCE_FILE, file.id)
         await self.file_repository.delete(file)
         return True
@@ -842,17 +805,15 @@ class FileService:
         occupied_file = await self.file_repository.get_current_by_path(normalized)
         if occupied_file is not None:
             raise TreePathConflictError(normalized)
-        existing = await self.tree_repository.get_current_by_path(normalized)
+        existing = await self.folder_repository.get_by_path(normalized)
         if existing is not None:
-            if existing.kind != NODE_KIND_FOLDER:
-                raise TreePathConflictError(normalized)
             return self._directory_schema(existing)
 
-        node = await self._ensure_folder_chain(normalized)
-        if node is None:  # pragma: no cover - the root path is rejected above
+        folder = await self._ensure_folder_chain(normalized)
+        if folder is None:  # pragma: no cover - the root path is rejected above
             raise InvalidPathError("A folder path must include a folder name.")
         await self.cache.bump_version()
-        return self._directory_schema(node)
+        return self._directory_schema(folder)
 
     async def _require_current_file(self, file_id: int) -> FileModel:
         file = await self.file_repository.get_by_id(file_id)
@@ -868,8 +829,7 @@ class FileService:
         return target
 
     async def _target_is_occupied(self, path: str) -> bool:
-        node = await self.tree_repository.get_current_by_path(path)
-        if node is not None:
+        if await self.folder_repository.get_by_path(path) is not None:
             return True
         return await self.file_repository.get_current_by_path(path) is not None
 
@@ -906,35 +866,12 @@ class FileService:
         if await self._target_is_occupied(target):
             raise TreePathConflictError(target)
 
-        parent_id = await self._ensure_parent_folder(target)
-        old_node = await self.tree_repository.get_current_by_path(file.raw_file_path)
-        if old_node is not None and (
-            old_node.kind != NODE_KIND_FILE or old_node.file_id != file.id
-        ):
-            old_node = None
-
-        name = file_name(target)
-        depth = len(path_segments(target))
-        await self.file_repository.update_location(file, path=target, file_name=name)
-        if old_node is None:
-            await self.tree_repository.add(
-                TreeNodeModel(
-                    parent_id=parent_id,
-                    path=target,
-                    name=name,
-                    kind=NODE_KIND_FILE,
-                    file_id=file.id,
-                    depth=depth,
-                )
-            )
-        else:
-            await self.tree_repository.update_location(
-                old_node,
-                parent_id=parent_id,
-                path=target,
-                name=name,
-                depth=depth,
-            )
+        await self._ensure_parent_folder(target)
+        await self.file_repository.update_location(
+            file,
+            path=target,
+            file_name=file_name(target),
+        )
         await self.cache.bump_version()
         return self._to_schema(file)
 
@@ -1054,37 +991,24 @@ class FileService:
                 files=[self._path_file_schema(file) for file in files],
             )
 
-        folder = (
-            None
-            if normalized == "/"
-            else await self.tree_repository.get_current_by_path(normalized)
-        )
-        if normalized != "/" and (folder is None or folder.kind != NODE_KIND_FOLDER):
+        folder = None if normalized == "/" else await self.folder_repository.get_by_path(normalized)
+        if normalized != "/" and folder is None:
             raise PathNotFoundError(normalized)
 
-        if path_depth == 1 and folder is None:
-            nodes = await self.tree_repository.get_current_children(None)
-        elif path_depth == 1:
-            if folder is None:
-                raise PathNotFoundError(normalized)
-            nodes = await self.tree_repository.get_current_children(folder.id)
+        if path_depth == 1:
+            children = await self.folder_repository.get_children(
+                None if folder is None else folder.id
+            )
         else:
-            nodes = await self.tree_repository.list_nodes(
+            children = await self.folder_repository.list_descendants(
                 root_path=normalized,
                 root_depth=folder.depth if folder is not None else 0,
                 max_depth=path_depth,
-                include_history=False,
                 limit=1000,
             )
 
         directories = [
-            DirectorySchema(
-                path=node.path,
-                name=node.name,
-                depth=node.depth,
-            )
-            for node in nodes
-            if node.kind == NODE_KIND_FOLDER and node.path != normalized
+            self._directory_schema(child) for child in children if child.path != normalized
         ]
         files = await self.file_repository.list_files_in_directory(normalized)
         return PathListingSchema(
@@ -1102,9 +1026,6 @@ class FileService:
         file.is_current = False
         file.deleted_at = now
         file.updated_at = now
-        node = await self.tree_repository.get_current_by_path(file.raw_file_path)
-        if node is not None and node.file_id == file.id:
-            await self.tree_repository.mark_deleted(node)
         await self.chunk_repository.mark_source_not_current(SOURCE_FILE, file.id)
         await self.cache.bump_version()
 

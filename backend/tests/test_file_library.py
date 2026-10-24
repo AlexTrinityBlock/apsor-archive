@@ -140,6 +140,31 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert repeated_folder.status_code == 201
     assert repeated_folder.json() == folder.json()
 
+    # Empty folders are explicit records, so a folder with no files still lists.
+    workshop_listing = client.get(
+        "/api/v1/paths",
+        params={"path": "/history/workshop", "path_depth": 1},
+    )
+    assert workshop_listing.status_code == 200
+    assert workshop_listing.json()["directories"] == [
+        {
+            "path": "/history/workshop/engines",
+            "name": "engines",
+            "depth": 3,
+        }
+    ]
+    assert workshop_listing.json()["files"] == []
+
+    deeper_listing = client.get(
+        "/api/v1/paths",
+        params={"path": "/history", "path_depth": 2},
+    )
+    deeper_paths = {item["path"] for item in deeper_listing.json()["directories"]}
+    assert {
+        "/history/workshop",
+        "/history/workshop/engines",
+    } <= deeper_paths
+
     invalid_folder = client.post("/api/v1/folders", json={"path": "/"})
     assert invalid_folder.status_code == 422
     assert invalid_folder.json()["error"] == "invalid_path"
