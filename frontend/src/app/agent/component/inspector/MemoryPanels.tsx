@@ -52,7 +52,7 @@ function LeafRef({
         <span className="pi-leaf-chain__role">{role}</span>
         <p>{truncate(memory.content, 260)}</p>
         <div className="pi-leaf-chain__meta">
-          <Link to={`/viewer/memory/${memory.memory_id}`}>
+          <Link to={`/memory/${memory.memory_id}`}>
             memory:{memory.memory_id}
           </Link>
           <span>{memory.status}</span>
@@ -78,7 +78,7 @@ function LineageSection({
       <ul>
         {memories.map((memory) => (
           <li key={memory.memory_id}>
-            <Link to={`/viewer/memory/${memory.memory_id}`}>memory:{memory.memory_id}</Link>
+            <Link to={`/memory/${memory.memory_id}`}>memory:{memory.memory_id}</Link>
             <span>{truncate(memory.content, 140)}</span>
           </li>
         ))}
@@ -139,7 +139,7 @@ export function ReadMemoryPanel({ item }: PanelProps) {
           <strong>memory:{target.memory_id}</strong>
           <span>{target.status} · updated {formatDateTime(target.update_time)}</span>
         </div>
-        <PanelLink to={`/viewer/memory/${target.memory_id}`}>Full trace</PanelLink>
+        <PanelLink to={`/memory/${target.memory_id}`}>Full trace</PanelLink>
       </header>
 
       <div className="pi-leaf-chain__target">
@@ -236,7 +236,7 @@ export function SaveMemoryPanel({ item }: PanelProps) {
           </div>
         </dl>
         {memoryId !== null ? (
-          <PanelLink to={`/viewer/memory/${memoryId}`}>Open the pressed leaf</PanelLink>
+          <PanelLink to={`/memory/${memoryId}`}>Open the pressed leaf</PanelLink>
         ) : null}
       </div>
     </div>

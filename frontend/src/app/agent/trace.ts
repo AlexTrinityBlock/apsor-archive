@@ -69,7 +69,7 @@ export interface WorkTraceModel {
 }
 
 export interface ResourceTarget {
-  readonly type: "file" | "media" | "memory";
+  readonly type: "file" | "memory";
   readonly id: number;
   readonly chunk: number | null;
   readonly title: string | null;
@@ -77,11 +77,9 @@ export interface ResourceTarget {
 
 const TOOL_PHASES: Readonly<Record<string, WorkPhase>> = {
   search_knowledge: "searching",
-  search_media: "searching",
   read_file: "reading",
   read_timeline: "reading",
   read_path: "reading",
-  get_media: "reading",
   read_memory: "comparing",
   save_memory: "saving",
   present_resource: "composing",
@@ -519,7 +517,7 @@ export function itemResourceTarget(item: TraceItem): ResourceTarget | null {
   if (item.tool === "present_resource") {
     const resource = asRecord(data.resource);
     const type = recordText(resource, "resource_type");
-    if (type === "file" || type === "media" || type === "memory") {
+    if (type === "file" || type === "memory") {
       const id = idFrom(resource?.resource_id);
       if (id !== null) {
         return {
@@ -534,34 +532,27 @@ export function itemResourceTarget(item: TraceItem): ResourceTarget | null {
   if (item.tool === "read_file" || item.tool === "read_path") {
     return targetFromRecord("file", data, ["file_id"]);
   }
-  if (item.tool === "get_media" || item.tool === "search_media") {
-    return targetFromRecord("media", data, ["media_id"]);
-  }
   if (item.tool === "read_memory" || item.tool === "save_memory") {
     return targetFromRecord("memory", data, ["memory_id"]);
   }
   return null;
 }
 
-/** A safe same-origin viewer path for a known target. */
+/** The library or memory destination for a known target. */
 export function viewerHref(target: ResourceTarget): string {
   if (target.type === "file") {
-    const chunk = target.chunk === null ? "" : `?chunk=${target.chunk}`;
-    return `/viewer/file/${target.id}${chunk}`;
+    const chunk = target.chunk === null ? "" : `&chunk=${target.chunk}`;
+    return `/library?tab=files&file=${target.id}${chunk}`;
   }
-  if (target.type === "media") {
-    return `/viewer/media/${target.id}`;
-  }
-  return `/viewer/memory/${target.id}`;
+  return `/memory/${target.id}`;
 }
 
-/** Only archive-internal viewer URLs are rendered as links. */
+/** Prefer the structured target; only fall back to archive-internal URLs. */
 export function safeResourceUrl(value: unknown, target: ResourceTarget | null): string | null {
-  const safe = safeViewerPath(value);
-  if (safe) {
-    return safe;
+  if (target) {
+    return viewerHref(target);
   }
-  return target ? viewerHref(target) : null;
+  return safeViewerPath(value);
 }
 
 /** Read a numeric id from a record or argument bag. */

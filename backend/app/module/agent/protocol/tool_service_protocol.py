@@ -1,4 +1,4 @@
-"""Consumer-owned protocols for the knowledge and media services used by tools."""
+"""Consumer-owned protocols for the knowledge services used by tools."""
 
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -9,7 +9,6 @@ from app.module.knowledge.schema.file_schema import FileChunksSchema, FileSchema
 from app.module.knowledge.schema.memory_schema import MemoryReadSchema, MemorySaveSchema
 from app.module.knowledge.schema.search_schema import SearchResponseSchema
 from app.module.knowledge.schema.timeline_schema import TimelineResponseSchema
-from app.module.media.schema.media_schema import MediaSchema, MediaSearchResponseSchema
 
 
 class SearchToolServiceProtocol(Protocol):
@@ -74,17 +73,6 @@ class TimelineToolServiceProtocol(Protocol):
     ) -> TimelineResponseSchema: ...
 
 
-class MediaToolServiceProtocol(Protocol):
-    async def get(self, media_id: int) -> MediaSchema: ...
-
-    async def search_text(
-        self,
-        *,
-        query: str,
-        limit: int,
-    ) -> MediaSearchResponseSchema: ...
-
-
 @dataclass(frozen=True)
 class AgentToolServices:
     """The live services one tool execution may use."""
@@ -93,7 +81,6 @@ class AgentToolServices:
     file_service: FileToolServiceProtocol
     memory_service: MemoryToolServiceProtocol
     timeline_service: TimelineToolServiceProtocol
-    media_service: MediaToolServiceProtocol
 
 
 class ToolServiceScopeProtocol(Protocol):

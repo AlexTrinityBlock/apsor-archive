@@ -7,10 +7,9 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError } from "../../apis/fetch-client";
-import { Badge } from "../component/Badge";
 import { Button, ButtonLink } from "../component/Button";
 import { Icon } from "../component/Icon";
 import { Loader } from "../component/Loader";
@@ -25,27 +24,43 @@ import {
   useListAgentConversations,
   useUpdateAgentConversation,
 } from "../generated-apis-types/agent/agent";
-import type {
-  AgentConversationDetailSchema,
-  AgentEntrySchema,
-} from "../generated-apis-types/schemas";
+import type { AgentEntrySchema } from "../generated-apis-types/schemas";
 import { formatRelative } from "../../lib/format";
+import {
+  buildPersistedWorkTrace,
+  mergeWorkTrace,
+  type ResourceTarget,
+} from "../agent/trace";
+import { useMediaQuery } from "../agent/hook/useMediaQuery";
+import { ApprovalStack } from "./component/ApprovalCard";
 import { ChatComposer } from "./component/ChatComposer";
+import { ChatHeader, type ChatPane } from "./component/ChatHeader";
+import { ChatInspector, type InspectorTab } from "./component/ChatInspector";
 import { ChatIntro } from "./component/ChatIntro";
 import { ChatThread } from "./component/ChatThread";
-import { ApprovalStack } from "./component/ApprovalCard";
 import { ContextActions } from "./component/ContextActions";
 import { ConversationRail } from "./component/ConversationRail";
+import { MethodDisclosure } from "./component/MethodDisclosure";
 import { RetryBar } from "./component/RetryBar";
 import { StreamingTurn } from "./component/StreamingTurn";
+import { useChatSplit } from "./hook/useChatSplit";
 import { useChatStream } from "./hook/useChatStream";
 import { invalidateConversation, invalidateConversationList } from "./query";
-import { isRecord, mergeEntries, readRetryState } from "./types";
+import {
+  isRecord,
+  mergeEntries,
+  readRetryState,
+  systemVersions,
+  type CitationToken,
+  type ResourceMeta,
+} from "./types";
 import { titleFromMessage } from "./format";
 import "./chat.css";
+import "../agent/agent.css";
 
 const PAGE_SIZE = 200;
 const NO_ENTRIES: readonly AgentEntrySchema[] = [];
+const NARROW_QUERY = "(max-width: 899px)";
 
 function parseConversationId(value: string | undefined): number | null {
   if (!value || !/^\d+$/.test(value)) {
@@ -75,87 +90,6 @@ function readRouteDraft(state: unknown): string | null {
     : null;
 }
 
-function ConversationHeader({
-  conversation,
-  archived,
-  onOpenRail,
-  onNew,
-  contextActions,
-}: {
-  readonly conversation: AgentConversationDetailSchema | null;
-  readonly archived: boolean;
-  readonly onOpenRail: () => void;
-  readonly onNew: () => void;
-  readonly contextActions: ReactNode;
-}) {
-  const updated =
-    conversation === null
-      ? null
-      : conversation.last_entry_at ?? conversation.created_at;
-
-  return (
-    <header className="chat-masthead">
-      <div className="chat-masthead__copy">
-        <p className="eyebrow">Studio · correspondence desk</p>
-        <h1>{conversation?.title ?? "Correspondence desk"}</h1>
-        <p className="chat-masthead__meta">
-          {conversation ? (
-            <>
-              <span>{conversation.provider}</span>
-              <span aria-hidden="true">·</span>
-              <span>{conversation.model}</span>
-              <span aria-hidden="true">·</span>
-              <span>{conversation.entries_total} entries</span>
-              {updated ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>updated {formatRelative(updated)}</span>
-                </>
-              ) : null}
-              {conversation.parent_conversation_id !== null ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span className="chat-masthead__fork">
-                    Forked from{" "}
-                    <Link
-                      to={`/chat/${conversation.parent_conversation_id}`}
-                    >
-                      #{conversation.parent_conversation_id}
-                    </Link>
-                    {conversation.fork_at_entry_id !== null ? (
-                      <span> at entry {conversation.fork_at_entry_id}</span>
-                    ) : null}
-                  </span>
-                </>
-              ) : null}
-              {archived ? <Badge tone="ochre">Archived</Badge> : null}
-            </>
-          ) : (
-            <span>Persistent transcripts · citations · resource cards</span>
-          )}
-        </p>
-      </div>
-      <div className="chat-masthead__actions">
-        <Button
-          variant="secondary"
-          size="sm"
-          className="chat-rail-toggle"
-          onClick={onOpenRail}
-          aria-controls="chat-thread-rail"
-        >
-          <Icon name="menu" size={15} />
-          Threads
-        </Button>
-        <Button variant="primary" size="sm" onClick={onNew}>
-          <Icon name="plus" size={14} />
-          New
-        </Button>
-        {contextActions}
-      </div>
-    </header>
-  );
-}
-
 function ThreadState({
   eyebrow,
   title,
@@ -168,16 +102,19 @@ function ThreadState({
   readonly action?: ReactNode;
 }) {
   return (
-    <div className="chat-thread-state" role="status">
-      <p className="eyebrow">{eyebrow}</p>
-      <h2>{title}</h2>
-      <p>{detail}</p>
-      {action ? <div className="chat-thread-state__action">{action}</div> : null}
+    <div className="empty-state chat-thread-state" role="status">
+      <p className="mono-label">{eyebrow}</p>
+      <h2 className="empty-state__title">{title}</h2>
+      <p className="empty-state__description">{detail}</p>
+      {action ? <div className="empty-state__action">{action}</div> : null}
     </div>
   );
 }
 
-/** The persistent reading room for the Pi-shaped entry log. */
+/** The persistent archive desk: sessions, stream, and inspector. */
+// The page orchestrates conversation queries, streaming, approvals, and three
+// coordinated panes; the complexity is in the composition, not a deep branch.
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export function ChatPage() {
   const params = useParams<{ conversationId?: string }>();
   const conversationId = parseConversationId(params.conversationId);
@@ -186,8 +123,39 @@ export function ChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const narrow = useMediaQuery(NARROW_QUERY);
+  const {
+    containerRef,
+    inspectorRef,
+    ratio,
+    collapsed,
+    dragging,
+    maxWidth,
+    currentWidth,
+    open: openInspector,
+    setCollapsed,
+    handlePointerDown,
+    handlePointerMove,
+    handlePointerUp,
+    handlePointerCancel,
+    handleKeyDown,
+  } = useChatSplit();
 
-  const [railOpen, setRailOpen] = useState(false);
+  const [drawerPreference, setDrawerPreference] = useState<boolean | null>(null);
+  const drawerOpen = drawerPreference ?? !narrow;
+  const setDrawerOpen = useCallback(
+    (value: boolean | ((current: boolean) => boolean)) => {
+      setDrawerPreference((preference) => {
+        const current = preference ?? !narrow;
+        return typeof value === "function" ? value(current) : value;
+      });
+    },
+    [narrow],
+  );
+  const [pane, setPane] = useState<ChatPane>("thread");
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("telemetry");
+  const [previewTarget, setPreviewTarget] = useState<ResourceTarget | null>(null);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [draftState, setDraftState] = useState<{
     readonly id: number | null;
     readonly value: string;
@@ -210,11 +178,36 @@ export function ChatPage() {
   const [extraLoading, setExtraLoading] = useState(false);
   const [extraError, setExtraError] = useState<string | null>(null);
   const handledRouteDraft = useRef<string | null>(null);
-  const threadEndRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const extraInFlightRef = useRef(false);
   const stickToBottomRef = useRef(true);
 
-  useScrollLock(railOpen);
+  useScrollLock(narrow && drawerOpen);
+
+  useEffect(() => {
+    if (!narrow || !drawerOpen) {
+      return;
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setDrawerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [drawerOpen, narrow, setDrawerOpen]);
+
+  // Pins and previews belong to one conversation, so a route change resets
+  // the inspector instead of carrying a stale selection across threads.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setPinnedId(null);
+    setPreviewTarget(null);
+    setInspectorTab("telemetry");
+    setLastError(null);
+    setPane("thread");
+  }, [conversationId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const conversationsQuery = useListAgentConversations({ limit: 100 });
   const refetchConversations = conversationsQuery.refetch;
@@ -257,31 +250,6 @@ export function ChatPage() {
     return () => stop();
   }, [conversationId, stop]);
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const remaining =
-        document.documentElement.scrollHeight -
-        window.scrollY -
-        window.innerHeight;
-      stickToBottomRef.current = remaining < 160;
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  useEffect(() => {
-    if (!railOpen) {
-      return;
-    }
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setRailOpen(false);
-      }
-    };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [railOpen]);
-
   const sendMessage = useCallback(
     (id: number, content: string) => {
       const trimmed = content.trim();
@@ -290,6 +258,7 @@ export function ChatPage() {
       }
       stickToBottomRef.current = true;
       setLastError(null);
+      setPinnedId(null);
       setDraft("");
       void start(id, trimmed);
     },
@@ -311,6 +280,7 @@ export function ChatPage() {
     handledRouteDraft.current = key;
     navigate(location.pathname, { replace: true, state: null });
     setLastError(null);
+    setPinnedId(null);
     setDraft("");
     void start(conversationId, routeDraft);
   }, [
@@ -343,6 +313,16 @@ export function ChatPage() {
     [approvalsQuery.data, conversationId],
   );
   const waitingForApproval = pendingApprovals.length > 0;
+
+  const persistedTrace = useMemo(
+    () => buildPersistedWorkTrace(entries),
+    [entries],
+  );
+  const trace = useMemo(
+    () => mergeWorkTrace(persistedTrace, stream),
+    [persistedTrace, stream],
+  );
+
   const handleResolveApproval = useCallback(
     (approvalId: number, decision: "approve" | "reject") => {
       if (conversationId === null) {
@@ -350,6 +330,7 @@ export function ChatPage() {
       }
       stickToBottomRef.current = true;
       setLastError(null);
+      setPinnedId(null);
       return resolveApproval(conversationId, approvalId, decision);
     },
     [conversationId, resolveApproval],
@@ -429,12 +410,19 @@ export function ChatPage() {
   const streamToolCount = stream?.toolCalls.length ?? 0;
   const streamTextLength = stream?.assistantText.length ?? 0;
   const streamingActive = stream !== null;
+  const hiddenEntryCount = entries.reduce(
+    (count, entry) => (entry.kind === "pi.system" ? count + 1 : count),
+    0,
+  );
 
   useEffect(() => {
     if (conversationId === null || !stickToBottomRef.current) {
       return;
     }
-    threadEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    const scroll = scrollRef.current;
+    if (scroll) {
+      scroll.scrollTop = scroll.scrollHeight;
+    }
   }, [
     conversationId,
     entries.length,
@@ -451,6 +439,7 @@ export function ChatPage() {
       return;
     }
     setLastError(null);
+    setPinnedId(null);
 
     if (conversationId === null) {
       if (creating) {
@@ -484,6 +473,7 @@ export function ChatPage() {
     }
     stickToBottomRef.current = true;
     setLastError(null);
+    setPinnedId(null);
     void retry(conversationId, retryState.lastUserText);
   }, [conversationId, retry, retryState.lastUserText, retryState.retryable]);
 
@@ -521,15 +511,91 @@ export function ChatPage() {
   const startNewConversation = useCallback(() => {
     setDraft("");
     setLastError(null);
+    setPinnedId(null);
+    setPreviewTarget(null);
+    setInspectorTab("telemetry");
+    setPane("thread");
+    if (narrow) {
+      setDrawerOpen(false);
+    }
     navigate("/chat");
-    setRailOpen(false);
-  }, [navigate, setDraft]);
+  }, [navigate, narrow, setDraft, setDrawerOpen]);
 
-  const openRail = useCallback(() => setRailOpen(true), []);
-  const closeRail = useCallback(() => setRailOpen(false), []);
+  const handleNavigate = useCallback(() => {
+    setPane("thread");
+    if (narrow) {
+      setDrawerOpen(false);
+    }
+  }, [narrow, setDrawerOpen]);
+
+  const toggleDrawer = useCallback(() => {
+    setDrawerOpen((value) => !value);
+  }, [setDrawerOpen]);
+
+  const closeDrawer = useCallback(() => {
+    setDrawerOpen(false);
+  }, [setDrawerOpen]);
+
   const retryConversations = useCallback(() => {
     void refetchConversations();
   }, [refetchConversations]);
+
+  const revealInspector = useCallback(() => {
+    openInspector();
+    if (narrow) {
+      setPane("inspector");
+      setDrawerOpen(false);
+    }
+  }, [narrow, openInspector, setDrawerOpen]);
+
+  const openFilePreview = useCallback(
+    (fileId: number, chunk: number | null) => {
+      setPreviewTarget({ type: "file", id: fileId, chunk, title: null });
+      setInspectorTab("preview");
+      revealInspector();
+    },
+    [revealInspector],
+  );
+
+  const handleOpenCitation = useCallback(
+    (token: CitationToken) => {
+      if (token.kind === "file") {
+        openFilePreview(token.id, token.chunk);
+        return;
+      }
+      if (token.kind === "memory") {
+        navigate(`/memory/${token.id}`);
+      }
+    },
+    [navigate, openFilePreview],
+  );
+
+  const handleOpenResource = useCallback(
+    (resource: ResourceMeta) => {
+      if (resource.resourceId === null) {
+        return;
+      }
+      if (resource.resourceType === "file") {
+        openFilePreview(resource.resourceId, resource.chunk);
+        return;
+      }
+      navigate(`/memory/${resource.resourceId}`);
+    },
+    [navigate, openFilePreview],
+  );
+
+  const handleSelectTrace = useCallback(
+    (traceId: string) => {
+      setPinnedId(traceId);
+      setInspectorTab("telemetry");
+      revealInspector();
+    },
+    [revealInspector],
+  );
+
+  const handleFollow = useCallback(() => {
+    setPinnedId(null);
+  }, []);
 
   const restoreThread = async () => {
     if (conversationId === null || restoring) {
@@ -555,11 +621,11 @@ export function ChatPage() {
       return (
         <ThreadState
           eyebrow="Address not found"
-          title="That thread address is not valid."
-          detail="Thread addresses are positive integers. The desk is still open."
+          title="That conversation address is not valid."
+          detail="Conversation addresses are positive integers. The desk is still open."
           action={
             <ButtonLink to="/chat" variant="ink" size="sm">
-              Back to the desk
+              Back to chat
             </ButtonLink>
           }
         />
@@ -576,9 +642,9 @@ export function ChatPage() {
     if (conversationQuery.isLoading) {
       return (
         <ThreadState
-          eyebrow="Opening the thread"
-          title="Reading the sheets…"
-          detail="The transcript and its method are being fetched from the archive."
+          eyebrow="Opening the conversation"
+          title="Reading the transcript…"
+          detail="The entries and their method are being fetched from the archive."
         />
       );
     }
@@ -586,7 +652,7 @@ export function ChatPage() {
       return (
         <ThreadState
           eyebrow="Read interrupted"
-          title="This thread could not be opened."
+          title="This conversation could not be opened."
           detail={describeError(conversationQuery.error)}
           action={
             <div className="chat-thread-state__actions">
@@ -598,7 +664,7 @@ export function ChatPage() {
                 Try again
               </Button>
               <ButtonLink to="/chat" variant="ink" size="sm">
-                Back to the desk
+                Back to chat
               </ButtonLink>
             </div>
           }
@@ -617,6 +683,10 @@ export function ChatPage() {
           onForkEntry={handleForkEntry}
           forkingEntryId={forkingEntryId}
           forkDisabled={archived || isStreaming || forkingEntryId !== null}
+          selectedTraceId={pinnedId}
+          onSelectTrace={handleSelectTrace}
+          onOpenCitation={handleOpenCitation}
+          onOpenResource={handleOpenResource}
         />
         <ApprovalStack
           approvals={pendingApprovals}
@@ -624,7 +694,21 @@ export function ChatPage() {
           archived={archived}
           onResolve={handleResolveApproval}
         />
-        {stream ? <StreamingTurn stream={stream} /> : null}
+        {stream ? (
+          <StreamingTurn
+            stream={stream}
+            selectedTraceId={pinnedId}
+            onSelectTrace={handleSelectTrace}
+            onOpenCitation={handleOpenCitation}
+            onOpenResource={handleOpenResource}
+          />
+        ) : null}
+        <MethodDisclosure
+          conversation={conversation}
+          hiddenCount={hiddenEntryCount}
+          entryCount={conversation.entries_total}
+          versions={systemVersions(entries)}
+        />
         {hasMore ? (
           <div className="chat-thread__more">
             <Button
@@ -667,10 +751,10 @@ export function ChatPage() {
       return (
         <div className="chat-archived">
           <span className="chat-archived__mark" aria-hidden="true">
-            <Icon name="archive" size={18} />
+            <Icon name="archive" size={16} />
           </span>
           <div className="chat-archived__copy">
-            <strong>This thread is archived.</strong>
+            <strong>This conversation is archived.</strong>
             <p>Restore it to write another note. Every entry stays readable.</p>
           </div>
           <Button
@@ -679,7 +763,7 @@ export function ChatPage() {
             onClick={() => void restoreThread()}
             disabled={restoring}
           >
-            {restoring ? "Restoring…" : "Restore thread"}
+            {restoring ? "Restoring…" : "Restore"}
           </Button>
         </div>
       );
@@ -715,12 +799,94 @@ export function ChatPage() {
     );
   };
 
+  const totalEntries = conversation?.entries_total ?? entries.length;
+  const contextMeta = [
+    `${totalEntries} ${totalEntries === 1 ? "entry" : "entries"}`,
+    waitingForApproval
+      ? `${pendingApprovals.length} awaiting approval`
+      : null,
+    conversation?.last_entry_at
+      ? `updated ${formatRelative(conversation.last_entry_at)}`
+      : null,
+  ].filter((item): item is string => item !== null);
+
+  const streamPanel = (
+    <section className="panel chat-stream-panel" aria-label="Chat stream">
+      <div className="chat-stream__context">
+        <span className="chat-stream__session">
+          {conversationId === null ? "New session" : `Session #${conversationId}`}
+        </span>
+        <span className="chat-stream__context-title">
+          {conversation?.title ?? "Ask the archive"}
+        </span>
+        <span className="chat-stream__context-meta">
+          {contextMeta.join(" · ")}
+        </span>
+      </div>
+
+      <div
+        className="chat-stream__scroll"
+        ref={scrollRef}
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          stickToBottomRef.current =
+            element.scrollHeight - element.scrollTop - element.clientHeight <
+            140;
+        }}
+      >
+        <div className="chat-stream__inner">
+          {threadContent()}
+          {lastError ? (
+            <div className="chat-stream-error" role="alert">
+              <Icon name="info" size={16} />
+              <div>
+                <strong>That note could not be completed.</strong>
+                <p>{lastError}</p>
+              </div>
+              <button
+                type="button"
+                className="chat-stream-error__close"
+                onClick={() => setLastError(null)}
+                aria-label="Dismiss error"
+              >
+                <Icon name="close" size={14} />
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="chat-composer-dock">{composer()}</div>
+    </section>
+  );
+
+  const inspector = (
+    <ChatInspector
+      inspectorRef={inspectorRef}
+      tab={inspectorTab}
+      onTab={setInspectorTab}
+      trace={trace}
+      pinnedId={pinnedId}
+      onFollow={handleFollow}
+      previewTarget={previewTarget}
+      onCollapse={() => setCollapsed(true)}
+      narrow={narrow}
+    />
+  );
+
   return (
-    <div className="page chat-page">
-      <ConversationHeader
+    <div className="chat-page">
+      <ChatHeader
         conversation={conversation}
+        conversationId={conversationId}
         archived={archived}
-        onOpenRail={openRail}
+        drawerOpen={drawerOpen}
+        narrow={narrow}
+        pane={pane}
+        inspectorCollapsed={collapsed}
+        onToggleDrawer={toggleDrawer}
+        onPane={setPane}
+        onOpenInspector={openInspector}
         onNew={startNewConversation}
         contextActions={
           <ContextActions
@@ -739,42 +905,69 @@ export function ChatPage() {
         }
       />
 
-      <div className="chat-room">
+      <div className="chat-workspace">
         <ConversationRail
-          key={conversationId ?? "new"}
           conversations={conversationsQuery.data?.resources ?? []}
           loading={conversationsQuery.isLoading}
           error={conversationsQuery.error}
           activeId={conversationId}
-          open={railOpen}
+          open={drawerOpen}
+          overlay={narrow}
           onRetry={retryConversations}
           onNew={startNewConversation}
-          onClose={closeRail}
+          onClose={closeDrawer}
+          onNavigate={handleNavigate}
         />
 
-        <div className="chat-main">
-          {threadContent()}
+        <div className="chat-split" ref={containerRef} data-pane={pane}>
+          {streamPanel}
 
-          {lastError ? (
-            <div className="chat-stream-error" role="alert">
-              <Icon name="info" size={16} />
-              <div>
-                <strong>That note could not be completed.</strong>
-                <p>{lastError}</p>
-              </div>
-              <button
-                type="button"
-                className="chat-stream-error__close"
-                onClick={() => setLastError(null)}
-                aria-label="Dismiss error"
-              >
-                <Icon name="close" size={14} />
-              </button>
+          {!narrow ? (
+            <div
+              className={[
+                "chat-resizer",
+                dragging ? "is-dragging" : null,
+                collapsed ? "is-collapsed" : null,
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize the inspector"
+              aria-valuemin={0}
+              aria-valuemax={Math.round(maxWidth)}
+              aria-valuenow={Math.round(currentWidth)}
+              aria-valuetext={
+                collapsed
+                  ? "Collapsed"
+                  : `${Math.round(currentWidth)} pixels wide`
+              }
+              aria-controls="chat-inspector"
+              tabIndex={0}
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+              onKeyDown={handleKeyDown}
+              title={
+                collapsed
+                  ? "Click to open the inspector"
+                  : "Drag to resize · Click to collapse"
+              }
+            >
+              <span className="chat-resizer__line" aria-hidden="true" />
             </div>
           ) : null}
 
-          <div className="chat-thread__end" ref={threadEndRef} />
-          {composer()}
+          {narrow || !collapsed ? (
+            <div
+              id="chat-inspector"
+              className="chat-inspector-slot"
+              style={{ flexBasis: `${ratio * 100}%` }}
+            >
+              {inspector}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

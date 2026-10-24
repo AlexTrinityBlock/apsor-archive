@@ -11,34 +11,44 @@ import {
 const CITATION_ICONS: Record<CitationToken["kind"], IconName> = {
   file: "file",
   memory: "memory",
-  media: "ring",
   summary: "layers",
 };
 
 interface CitationChipProps {
   readonly token: CitationToken;
   readonly label?: ReactNode;
+  /** When present, the chip opens an in-app surface instead of navigating. */
+  readonly onOpen?: (token: CitationToken) => void;
 }
 
-/** A citation token rendered as a viewer link when the kind has one. */
-export function CitationChip({ token, label }: CitationChipProps) {
+/** A citation token rendered as a preview trigger or a library/memory link. */
+export function CitationChip({ token, label, onOpen }: CitationChipProps) {
   const text = label ?? citationLabel(token);
-  const className = `chat-citation chat-citation--${token.kind}`;
+  const className = `citation-chip ${token.kind}`;
   const content = (
     <>
-      <Icon name={CITATION_ICONS[token.kind]} size={10} />
+      <Icon name={CITATION_ICONS[token.kind]} size={11} />
       <span>{text}</span>
     </>
   );
-  const href = citationHref(token);
 
-  if (href) {
+  if (onOpen && token.kind !== "summary") {
     return (
-      <Link
+      <button
+        type="button"
         className={className}
-        to={href}
+        onClick={() => onOpen(token)}
         title={`Open ${citationLabel(token)}`}
       >
+        {content}
+      </button>
+    );
+  }
+
+  const href = citationHref(token);
+  if (href) {
+    return (
+      <Link className={className} to={href} title={`Open ${citationLabel(token)}`}>
         {content}
       </Link>
     );

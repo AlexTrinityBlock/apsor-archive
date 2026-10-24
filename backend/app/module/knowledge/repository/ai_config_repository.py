@@ -15,9 +15,7 @@ class AiProviderConfigRepository:
         self.session = session
 
     async def get_by_purpose(self, purpose: str) -> AiProviderConfigModel | None:
-        statement = select(AiProviderConfigModel).where(
-            AiProviderConfigModel.purpose == purpose
-        )
+        statement = select(AiProviderConfigModel).where(AiProviderConfigModel.purpose == purpose)
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def list_all(self) -> Sequence[AiProviderConfigModel]:

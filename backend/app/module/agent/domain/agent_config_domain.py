@@ -89,17 +89,11 @@ class AgentRuntimeConfig:
             if not isinstance(value, int) or isinstance(value, bool):
                 raise ValueError(f"{name} must be an integer.")
             if value < minimum or value > maximum:
-                raise ValueError(
-                    f"{name} must be between {minimum} and {maximum}."
-                )
+                raise ValueError(f"{name} must be between {minimum} and {maximum}.")
         if self.compaction_threshold_tokens >= self.max_total_tokens:
-            raise ValueError(
-                "compaction_threshold_tokens must be less than max_total_tokens."
-            )
+            raise ValueError("compaction_threshold_tokens must be less than max_total_tokens.")
         if self.max_parallel_tools > self.max_tool_calls_per_turn:
-            raise ValueError(
-                "max_parallel_tools must not exceed max_tool_calls_per_turn."
-            )
+            raise ValueError("max_parallel_tools must not exceed max_tool_calls_per_turn.")
 
 
 __all__ = ["AgentRuntimeConfig"]

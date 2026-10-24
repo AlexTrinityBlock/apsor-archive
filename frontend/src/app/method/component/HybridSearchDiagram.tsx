@@ -49,7 +49,7 @@ export function HybridSearchDiagram() {
                 </li>
               ))}
             </ul>
-            <p>hashing embedder · 384 dimensions</p>
+            <p>hashing embedder · dimension from Settings</p>
           </div>
         </div>
 
@@ -84,7 +84,7 @@ export function HybridSearchDiagram() {
         </div>
       </div>
       <figcaption>
-        Figure 03 — Hybrid retrieval. Both lanes contribute, duplicates collapse,
+        Figure 02 — Hybrid retrieval. Both lanes contribute, duplicates collapse,
         and the final set is capped per source kind. The response carries
         <code> matched_by </code> and fusion counts.
       </figcaption>

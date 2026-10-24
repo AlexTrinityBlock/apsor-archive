@@ -78,9 +78,7 @@ class MemoryRepository:
             .order_by(MemoryModel.memory_time, MemoryModel.id)
             .limit(after)
         )
-        previous = list(
-            (await self.session.execute(previous_statement)).scalars().all()
-        )
+        previous = list((await self.session.execute(previous_statement)).scalars().all())
         previous.reverse()
         following = list((await self.session.execute(next_statement)).scalars().all())
         return previous, following
@@ -147,7 +145,5 @@ class MemoryRepository:
         return int((await self.session.execute(statement)).scalar_one())
 
     async def count_all(self) -> int:
-        statement = select(func.count(MemoryModel.id)).where(
-            MemoryModel.deleted_at.is_(None)
-        )
+        statement = select(func.count(MemoryModel.id)).where(MemoryModel.deleted_at.is_(None))
         return int((await self.session.execute(statement)).scalar_one())

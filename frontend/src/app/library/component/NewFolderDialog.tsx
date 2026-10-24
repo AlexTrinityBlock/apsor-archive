@@ -9,6 +9,7 @@ import { useToast } from "../../component/Toast";
 import { LibraryDialog } from "./LibraryDialog";
 import {
   describeError,
+  invalidateLibraryQueries,
   normalizeArchivePath,
   sameArchivePath,
 } from "./library-utils";
@@ -56,7 +57,7 @@ export function NewFolderDialog({ currentPath, onClose, onCreated }: NewFolderDi
     try {
       const directory = await createFolder({ path: normalized });
       toast.success(`Folder “${basename(directory.path)}” is ready.`);
-      void queryClient.invalidateQueries();
+      invalidateLibraryQueries(queryClient, { paths: true });
       onCreated(directory.path);
     } catch (error) {
       setServerError(describeError(error));

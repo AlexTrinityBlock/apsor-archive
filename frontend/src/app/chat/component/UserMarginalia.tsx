@@ -9,7 +9,7 @@ interface UserMarginaliaProps {
   readonly action?: ReactNode;
 }
 
-/** The keeper's side of the desk: a pencil note in the margin. */
+/** The keeper's turn: a compact author line and an ink speech bubble. */
 export function UserMarginalia({
   text,
   createdAt,
@@ -17,24 +17,22 @@ export function UserMarginalia({
   action,
 }: UserMarginaliaProps) {
   return (
-    <article className={pending ? "chat-user is-pending" : "chat-user"}>
-      <header className="chat-user__head">
-        <span className="chat-user__mark" aria-hidden="true">
+    <article
+      className={pending ? "chat-turn chat-turn--user is-pending" : "chat-turn chat-turn--user"}
+    >
+      <header className="chat-turn__author">
+        <span className="chat-turn__mark" aria-hidden="true">
           K
         </span>
-        <span className="chat-user__label">
-          {pending ? "Sending · keeper" : "Marginalia · keeper"}
-        </span>
+        <span>{pending ? "Keeper · sending" : "Keeper"}</span>
         {createdAt ? (
-          <time className="chat-user__time" dateTime={createdAt}>
-            {formatTime(createdAt)}
-          </time>
+          <time dateTime={createdAt}>{formatTime(createdAt)}</time>
         ) : (
-          <span className="chat-user__time">now</span>
+          <span>now</span>
         )}
         {action}
       </header>
-      <p className="chat-user__text">{text}</p>
+      <div className="chat-turn__bubble">{text}</div>
     </article>
   );
 }

@@ -26,12 +26,9 @@ def test_validation_and_error_envelope(client: TestClient) -> None:
     assert invalid_date.status_code == 422
     assert invalid_date.json()["error"] == "invalid_timeline_range"
 
-    missing_ai = client.post(
-        "/api/v1/ask",
-        json={"question": "What is in the library?"},
-    )
-    assert missing_ai.status_code == 503
-    assert missing_ai.json()["error"] == "ai_not_configured"
+    missing_ai = client.get("/api/v1/ai/status")
+    assert missing_ai.status_code == 200
+    assert missing_ai.json()["configured"] is False
 
     conversation = client.post("/api/v1/agent/conversations", json={})
     assert conversation.status_code == 201

@@ -1,0 +1,70 @@
+/* ==========================================================================
+   Small shared component states. Palette and type come from the global tokens;
+   this file only supplies composition that has no page owner.
+   ========================================================================== */
+
+.route-fallback {
+  display: flex;
+  min-height: 42vh;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.page-header .header-top {
+  flex-wrap: wrap;
+}
+
+.route-fallback .eyebrow {
+  justify-content: center;
+}
+
+.query-state__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.query-state__error-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--accent-seal);
+  background: #ffffff;
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 4px;
+}
+
+.query-state__error-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.query-state__error-copy h2 {
+  font-size: 17px;
+}
+
+.query-state__error-copy .query-state__detail {
+  margin-top: 2px;
+}
+
+.empty-state__aside {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .query-state__error {
+    flex-direction: column;
+  }
+}

@@ -1,5 +1,5 @@
 /**
- * Turns `[file:10#2]`, `[memory:7]`, and `[media:4]` text into ordinary
+ * Turns `[file:10#2]`, `[memory:7]`, and `[summary:4]` text into ordinary
  * Markdown link nodes before rendering. Code, existing links, and images are
  * left untouched, so the transform cannot create nested links.
  */
@@ -9,7 +9,7 @@ import { citationHref, citationLabel, parseCitationLabel } from "../types";
 
 // Literal alternatives plus one digit run: linear, but flagged heuristically.
 // eslint-disable-next-line security/detect-unsafe-regex
-const CITATION = /\[(?:file|memory|media|summary):\d+(?:#\d+)?\]/g;
+const CITATION = /\[(?:file|memory|summary):\d+(?:#\d+)?\]/g;
 const SKIP = new Set([
   "link",
   "linkReference",

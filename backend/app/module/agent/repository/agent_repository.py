@@ -55,6 +55,7 @@ from app.module.agent.model.agent_model import (
 
 class AgentRepository:
     """Repository with one transaction per public mutation."""
+
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self.session_factory = session_factory
 
@@ -197,9 +198,7 @@ class AgentRepository:
                 )
                 .order_by(AgentEntryModel.id.asc())
             )
-            source_entries = list(
-                (await session.execute(statement)).scalars().all()
-            )
+            source_entries = list((await session.execute(statement)).scalars().all())
 
             forked = AgentConversationModel(
                 parent_conversation_id=source.id,
@@ -232,10 +231,7 @@ class AgentRepository:
                 copies.append((source_entry, copy))
             await session.flush()
 
-            id_map = {
-                source_entry.id: copy.id
-                for source_entry, copy in copies
-            }
+            id_map = {source_entry.id: copy.id for source_entry, copy in copies}
             for source_entry, copy in copies:
                 copy.head_entry_id = (
                     id_map.get(source_entry.head_entry_id)
@@ -310,8 +306,10 @@ class AgentRepository:
 
     async def count_conversations(self, *, status: str | None) -> int:
         async with self._read() as session:
-            statement = select(func.count()).select_from(AgentConversationModel).where(
-                AgentConversationModel.deleted_at.is_(None)
+            statement = (
+                select(func.count())
+                .select_from(AgentConversationModel)
+                .where(AgentConversationModel.deleted_at.is_(None))
             )
             if status is not None:
                 statement = statement.where(AgentConversationModel.status == status)
@@ -472,17 +470,13 @@ class AgentRepository:
                     AgentEntryModel.kind == KIND_PAGE_CONTEXT,
                 )
                 if boundary_id is not None:
-                    previous_statement = previous_statement.where(
-                        AgentEntryModel.id >= boundary_id
-                    )
+                    previous_statement = previous_statement.where(AgentEntryModel.id >= boundary_id)
                 previous = await session.execute(
                     previous_statement.order_by(AgentEntryModel.id.desc()).limit(1)
                 )
                 previous_data = previous.scalar_one_or_none()
                 previous_key = (
-                    previous_data.get("page_key")
-                    if isinstance(previous_data, dict)
-                    else None
+                    previous_data.get("page_key") if isinstance(previous_data, dict) else None
                 )
                 if previous_key != page_context_key:
                     page_context_entry = AgentEntryModel(
@@ -1107,17 +1101,17 @@ class AgentRepository:
             )
             if after_id is not None:
                 statement = statement.where(AgentEntryModel.id > after_id)
-            statement = (
-                statement.order_by(AgentEntryModel.id.asc()).limit(limit + 1)
-            )
+            statement = statement.order_by(AgentEntryModel.id.asc()).limit(limit + 1)
             rows = list((await session.execute(statement)).scalars().all())
             has_more = len(rows) > limit
             return rows[:limit], has_more
 
     async def count_entries(self, conversation_id: int) -> int:
         async with self._read() as session:
-            statement = select(func.count()).select_from(AgentEntryModel).where(
-                AgentEntryModel.conversation_id == conversation_id
+            statement = (
+                select(func.count())
+                .select_from(AgentEntryModel)
+                .where(AgentEntryModel.conversation_id == conversation_id)
             )
             return int((await session.execute(statement)).scalar_one())
 
@@ -1217,8 +1211,7 @@ class AgentRepository:
                 run.status = RUN_FAILED
                 run.error_code = "approval_orphaned"
                 run.error_detail = (
-                    "The run was waiting for approval, but no valid pending "
-                    "approval was found."
+                    "The run was waiting for approval, but no valid pending approval was found."
                 )
                 run.finished_at = now
                 orphaned += 1

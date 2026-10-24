@@ -1,16 +1,22 @@
 import {
   useEffect,
-  useId,
   useRef,
   useState,
   type FormEvent,
 } from "react";
 
-import { formatDateTime, formatNumber } from "../../../lib/format";
+import { formatNumber } from "../../../lib/format";
 import { Badge } from "../../component/Badge";
-import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Panel } from "../../component/Panel";
+import {
+  RuntimeActions,
+  RuntimeError,
+  RuntimeGroup,
+  RuntimeNumberField,
+  RuntimeStatus,
+  type RuntimeNumberSpec,
+} from "./RuntimeControls";
 
 /** The ingestion worker bounds applied to the next loop or job. */
 export interface IngestRuntimeValues {
@@ -35,28 +41,11 @@ export interface IngestRuntimePanelProps {
   readonly className?: string;
 }
 
-/** Server-side defaults, kept in sync with the backend domain constants. */
-export const INGEST_RUNTIME_DEFAULTS: IngestRuntimeValues = {
-  poll_seconds: 1,
-  extract_workers: 2,
-  max_inflight_jobs: 2,
-  embedding_concurrency: 6,
-  chunk_target_chars: 4000,
-  chunk_overlap_chars: 500,
-};
-
 type NumericField = keyof IngestRuntimeValues;
 type DraftValues = { readonly [Key in NumericField]: string };
 
-interface NumericFieldSpec {
+interface NumericFieldSpec extends RuntimeNumberSpec {
   readonly key: NumericField;
-  readonly label: string;
-  readonly unit: string;
-  readonly min: number;
-  readonly max: number;
-  readonly step: number;
-  readonly integer: boolean;
-  readonly hint: string;
 }
 
 const WORKER_FIELDS: readonly NumericFieldSpec[] = [
@@ -224,90 +213,6 @@ function validateDraft(draft: DraftValues): ValidationResult {
   };
 }
 
-interface IngestNumberFieldProps {
-  readonly spec: NumericFieldSpec;
-  readonly value: string;
-  readonly defaultValue: number;
-  readonly disabled: boolean;
-  readonly error: string | undefined;
-  readonly onValueChange: (value: string) => void;
-}
-
-function IngestNumberField({
-  spec,
-  value,
-  defaultValue,
-  disabled,
-  error,
-  onValueChange,
-}: IngestNumberFieldProps) {
-  const fieldId = useId();
-  const hintId = `${fieldId}-hint`;
-  const errorId = `${fieldId}-error`;
-  const describedBy = error ? `${hintId} ${errorId}` : hintId;
-
-  return (
-    <div className="ingest-runtime-field">
-      <label className="ingest-runtime-field__label" htmlFor={fieldId}>
-        <span>{spec.label}</span>
-        <span className="ingest-runtime-field__unit" aria-hidden="true">
-          {spec.unit}
-        </span>
-      </label>
-      <input
-        id={fieldId}
-        className={
-          error
-            ? "ingest-runtime-input ingest-runtime-input--invalid"
-            : "ingest-runtime-input"
-        }
-        type="number"
-        inputMode={spec.integer ? "numeric" : "decimal"}
-        value={value}
-        min={spec.min}
-        max={spec.max}
-        step={spec.step}
-        placeholder={formatNumber(defaultValue)}
-        disabled={disabled}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        onChange={(event) => onValueChange(event.currentTarget.value)}
-      />
-      <span className="ingest-runtime-field__hint" id={hintId}>
-        {spec.hint} Default {formatNumber(defaultValue)} ·{" "}
-        {formatNumber(spec.min)}–{formatNumber(spec.max)} {spec.unit}.
-      </span>
-      {error ? (
-        <span className="ingest-runtime-field__error" id={errorId}>
-          {error}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function GroupHeading({
-  slot,
-  title,
-  scope,
-  description,
-}: {
-  readonly slot: string;
-  readonly title: string;
-  readonly scope: string;
-  readonly description: string;
-}) {
-  return (
-    <header className="ingest-runtime-group__head">
-      <p className="ingest-runtime-group__slot">{slot}</p>
-      <h3 className="ingest-runtime-group__title" id={scope}>
-        {title}
-      </h3>
-      <p className="ingest-runtime-group__intro">{description}</p>
-    </header>
-  );
-}
-
 /**
  * Presentational editor for the ingestion worker settings.
  *
@@ -327,8 +232,6 @@ export function IngestRuntimePanel({
 }: IngestRuntimePanelProps) {
   const [draft, setDraft] = useState<DraftValues>(() => toDraft(values));
   const [confirmingReset, setConfirmingReset] = useState(false);
-  const workerGroupId = useId();
-  const chunkGroupId = useId();
 
   const currentValuesKey = valuesKey(values);
   const syncedValuesKey = useRef(currentValuesKey);
@@ -364,54 +267,39 @@ export function IngestRuntimePanel({
     onReset();
   };
 
-  const panelClassName = [
-    "settings-panel",
-    "ingest-runtime-panel",
-    className,
-  ]
+  const panelClassName = ["settings-panel", "runtime-panel", className]
     .filter(Boolean)
     .join(" ");
 
   return (
     <Panel
-      eyebrow="Ingestion · database-backed"
-      title="Ingestion runtime"
+      title={
+        <span className="settings-panel__title">
+          <Icon name="layers" size={16} />
+          Ingestion runtime
+        </span>
+      }
+      action={
+        <Badge>
+          {formatNumber(values.chunk_target_chars)} /{" "}
+          {formatNumber(values.chunk_overlap_chars)} chars
+        </Badge>
+      }
       className={panelClassName}
     >
-      <p className="ingest-runtime-intro">
+      <p className="settings-lede">
         The worker reads one snapshot per loop or job. Saving here changes the
         next claim; a job already running keeps the settings it started with.
       </p>
 
-      <section
-        className="ingest-runtime-status"
-        data-source={source}
-        aria-label="Ingestion runtime settings status"
-      >
-        <Badge tone={source === "database" ? "moss" : "neutral"} dot>
-          {source === "database" ? "Database" : "Defaults"}
-        </Badge>
-        <span className="ingest-runtime-status__updated">
-          {updatedAt ? (
-            <>
-              Last updated{" "}
-              <time dateTime={updatedAt}>{formatDateTime(updatedAt)}</time>
-            </>
-          ) : (
-            "No saved update yet"
-          )}
-        </span>
-        <span className="ingest-runtime-status__summary">
-          {formatNumber(values.poll_seconds)}s poll ·{" "}
-          {formatNumber(values.extract_workers)} threads ·{" "}
-          {formatNumber(values.max_inflight_jobs)} in flight
-        </span>
-        {isDirty ? (
-          <span className="ingest-runtime-status__draft">Unsaved draft</span>
-        ) : null}
-      </section>
+      <RuntimeStatus
+        source={source}
+        updatedAt={updatedAt}
+        summary={`${formatNumber(values.poll_seconds)}s poll · ${formatNumber(values.extract_workers)} threads · ${formatNumber(values.max_inflight_jobs)} in flight`}
+        dirty={isDirty}
+      />
 
-      <div className="ingest-runtime-warning" role="note">
+      <div className="runtime-warning" role="note">
         <Icon name="info" size={15} />
         <span>
           Worker settings apply to the next loop or job. Changing chunk sizes
@@ -421,122 +309,61 @@ export function IngestRuntimePanel({
       </div>
 
       <form
-        className="ingest-runtime-form"
+        className="runtime-form"
         onSubmit={handleSubmit}
         aria-busy={saving}
         noValidate
       >
-        <div className="ingest-runtime-groups">
-          <section
-            className="ingest-runtime-group"
-            aria-labelledby={workerGroupId}
+        <div className="runtime-groups">
+          <RuntimeGroup
+            slot="Group 01"
+            title="Worker"
+            description="How often the worker polls, how much CPU work it may fan out, and how many jobs and embedding requests it may hold at once."
           >
-            <GroupHeading
-              slot="Group 01"
-              title="Worker"
-              scope={workerGroupId}
-              description="How often the worker polls, how much CPU work it may fan out, and how many jobs and embedding requests it may hold at once."
-            />
-            <div className="ingest-runtime-grid">
-              {WORKER_FIELDS.map((spec) => (
-                <IngestNumberField
-                  key={spec.key}
-                  spec={spec}
-                  value={draft[spec.key]}
-                  defaultValue={defaults[spec.key]}
-                  disabled={saving}
-                  error={validation.fieldErrors[spec.key]}
-                  onValueChange={(next) => updateNumber(spec.key, next)}
-                />
-              ))}
-            </div>
-          </section>
-
-          <section
-            className="ingest-runtime-group"
-            aria-labelledby={chunkGroupId}
-          >
-            <GroupHeading
-              slot="Group 02"
-              title="Chunking"
-              scope={chunkGroupId}
-              description="Chunk boundaries decide retrieval granularity. The overlap must stay below the target size."
-            />
-            <div className="ingest-runtime-grid">
-              {CHUNK_FIELDS.map((spec) => (
-                <IngestNumberField
-                  key={spec.key}
-                  spec={spec}
-                  value={draft[spec.key]}
-                  defaultValue={defaults[spec.key]}
-                  disabled={saving}
-                  error={validation.fieldErrors[spec.key]}
-                  onValueChange={(next) => updateNumber(spec.key, next)}
-                />
-              ))}
-            </div>
-          </section>
-        </div>
-
-        {error ? (
-          <p className="ingest-runtime-error" role="alert">
-            <Icon name="info" size={14} />
-            <span>{error}</span>
-          </p>
-        ) : null}
-
-        <div className="ingest-runtime-actions">
-          <div className="ingest-runtime-actions__reset">
-            {confirmingReset ? (
-              <>
-                <span className="ingest-runtime-reset__question" role="status">
-                  Reset every ingestion runtime value to the default?
-                </span>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={confirmReset}
-                  disabled={saving}
-                >
-                  Reset values
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setConfirmingReset(false)}
-                  disabled={saving}
-                >
-                  Keep current
-                </Button>
-              </>
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setConfirmingReset(true)}
+            {WORKER_FIELDS.map((spec) => (
+              <RuntimeNumberField
+                key={spec.key}
+                spec={spec}
+                value={draft[spec.key]}
+                defaultValue={defaults[spec.key]}
                 disabled={saving}
-              >
-                <Icon name="history" size={14} />
-                Reset defaults
-              </Button>
-            )}
-          </div>
+                error={validation.fieldErrors[spec.key]}
+                onValueChange={(next) => updateNumber(spec.key, next)}
+              />
+            ))}
+          </RuntimeGroup>
 
-          <div className="ingest-runtime-actions__save">
-            {isDirty && !isInvalid && !saving ? (
-              <span className="ingest-runtime-actions__note">
-                Unsaved changes
-              </span>
-            ) : null}
-            <Button type="submit" variant="primary" size="sm" disabled={!canSave}>
-              <Icon name="check" size={14} />
-              {saving ? "Saving…" : "Save runtime"}
-            </Button>
-          </div>
+          <RuntimeGroup
+            slot="Group 02"
+            title="Chunking"
+            description="Chunk boundaries decide retrieval granularity. The overlap must stay below the target size."
+          >
+            {CHUNK_FIELDS.map((spec) => (
+              <RuntimeNumberField
+                key={spec.key}
+                spec={spec}
+                value={draft[spec.key]}
+                defaultValue={defaults[spec.key]}
+                disabled={saving}
+                error={validation.fieldErrors[spec.key]}
+                onValueChange={(next) => updateNumber(spec.key, next)}
+              />
+            ))}
+          </RuntimeGroup>
         </div>
+
+        {error ? <RuntimeError message={error} /> : null}
+
+        <RuntimeActions
+          saving={saving}
+          canSave={canSave}
+          dirty={isDirty}
+          invalid={isInvalid}
+          confirmingReset={confirmingReset}
+          onRequestReset={() => setConfirmingReset(true)}
+          onCancelReset={() => setConfirmingReset(false)}
+          onConfirmReset={confirmReset}
+        />
       </form>
     </Panel>
   );

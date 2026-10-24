@@ -1,11 +1,11 @@
 import { lazy, Suspense } from "react";
+import { Navigate, useLocation, useParams } from "react-router-dom";
 import { createBrowserRouter } from "react-router-dom";
 
 import { AuthGate } from "./auth/AuthGate";
 import { AppShell } from "./component/AppShell";
 import { RouteFallback } from "./component/RouteFallback";
 import { NotFoundPage } from "./not-found/page";
-import { loadViewerPage } from "./viewer/route";
 
 const HomePage = lazy(() =>
   import("./home/page").then((module) => ({ default: module.HomePage })),
@@ -19,12 +19,6 @@ const TimelinePage = lazy(() =>
 const LibraryPage = lazy(() =>
   import("./library/page").then((module) => ({ default: module.LibraryPage })),
 );
-const TreePage = lazy(() =>
-  import("./tree/page").then((module) => ({ default: module.TreePage })),
-);
-const MediaPage = lazy(() =>
-  import("./media/page").then((module) => ({ default: module.MediaPage })),
-);
 const MemoryPage = lazy(() =>
   import("./memory/page").then((module) => ({ default: module.MemoryPage })),
 );
@@ -34,29 +28,59 @@ const ChatPage = lazy(() =>
 const QuestionsPage = lazy(() =>
   import("./questions/page").then((module) => ({ default: module.QuestionsPage })),
 );
-const AskPage = lazy(() =>
-  import("./ask/page").then((module) => ({ default: module.AskPage })),
-);
 const MethodPage = lazy(() =>
   import("./method/page").then((module) => ({ default: module.MethodPage })),
 );
 const SettingsPage = lazy(() =>
   import("./settings/page").then((module) => ({ default: module.SettingsPage })),
 );
-const ViewerPage = lazy(loadViewerPage);
 
-function ViewerRoute() {
-  return (
-    <Suspense fallback={<RouteFallback />}>
-      <ViewerPage />
-    </Suspense>
-  );
+/** Keeps the old query string when a removed workspace redirects to its home. */
+function RedirectWithQuery({ to }: { readonly to: string }) {
+  const location = useLocation();
+  const [pathname, search = ""] = to.split("?");
+  const params = new URLSearchParams(search);
+  for (const [key, value] of new URLSearchParams(location.search)) {
+    if (!params.has(key)) {
+      params.set(key, value);
+    }
+  }
+  const query = params.toString();
+  return <Navigate to={query ? `${pathname}?${query}` : pathname} replace />;
 }
 
-/**
- * Each workspace loads on demand so the initial archive shell stays light.
- * View state that survives navigation continues to live in the query string.
- */
+/** Ask is no longer a workspace; Chat is the only inquiry surface. */
+function AskRedirect() {
+  return <Navigate to="/chat" replace />;
+}
+
+function ViewerFileRedirect() {
+  const { fileId } = useParams<{ fileId: string }>();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  params.set("tab", "files");
+  if (fileId) {
+    params.set("file", fileId);
+  }
+  return <Navigate to={`/library?${params.toString()}`} replace />;
+}
+
+function ViewerMemoryRedirect() {
+  const { memoryId } = useParams<{ memoryId: string }>();
+  return <Navigate to={`/memory/${memoryId ?? ""}`} replace />;
+}
+
+function ViewerMediaRedirect() {
+  const { mediaId } = useParams<{ mediaId: string }>();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  params.set("tab", "media");
+  if (mediaId) {
+    params.set("media", mediaId);
+  }
+  return <Navigate to={`/library?${params.toString()}`} replace />;
+}
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -66,24 +90,35 @@ export const router = createBrowserRouter([
         element: <AppShell />,
         children: [
           { index: true, element: <HomePage /> },
+          { path: "overview", element: <Navigate to="/" replace /> },
           { path: "search", element: <SearchPage /> },
           { path: "timeline", element: <TimelinePage /> },
           { path: "library", element: <LibraryPage /> },
-          { path: "tree", element: <TreePage /> },
-          { path: "media", element: <MediaPage /> },
+          { path: "tree", element: <Navigate to="/library" replace /> },
+          { path: "media", element: <RedirectWithQuery to="/library?tab=media" /> },
+          { path: "memory", element: <MemoryPage /> },
+          { path: "memory/new", element: <MemoryPage /> },
           { path: "memory/:memoryId", element: <MemoryPage /> },
           { path: "chat", element: <ChatPage /> },
           { path: "chat/:conversationId", element: <ChatPage /> },
           { path: "questions", element: <QuestionsPage /> },
-          { path: "ask", element: <AskPage /> },
+          { path: "ask", element: <AskRedirect /> },
           { path: "method", element: <MethodPage /> },
+          { path: "docs", element: <Navigate to="/method" replace /> },
           { path: "settings", element: <SettingsPage /> },
-          { path: "*", element: <NotFoundPage /> },
+          { path: "viewer/file/:fileId", element: <ViewerFileRedirect /> },
+          { path: "viewer/media/:mediaId", element: <ViewerMediaRedirect /> },
+          { path: "viewer/memory/:memoryId", element: <ViewerMemoryRedirect /> },
+          {
+            path: "*",
+            element: (
+              <Suspense fallback={<RouteFallback />}>
+                <NotFoundPage />
+              </Suspense>
+            ),
+          },
         ],
       },
-      { path: "viewer/file/:fileId", element: <ViewerRoute /> },
-      { path: "viewer/media/:mediaId", element: <ViewerRoute /> },
-      { path: "viewer/memory/:memoryId", element: <ViewerRoute /> },
     ],
   },
 ]);

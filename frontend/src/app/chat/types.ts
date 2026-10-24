@@ -12,13 +12,13 @@ import type {
 export type JsonRecord = Record<string, unknown>;
 
 export interface CitationToken {
-  readonly kind: "file" | "memory" | "media" | "summary";
+  readonly kind: "file" | "memory" | "summary";
   readonly id: number;
   readonly chunk: number | null;
 }
 
 export interface ResourceMeta {
-  readonly resourceType: "file" | "media" | "memory";
+  readonly resourceType: "file" | "memory";
   readonly resourceId: number | null;
   readonly viewerUrl: string | null;
   readonly title: string | null;
@@ -396,11 +396,7 @@ export function readResource(value: unknown): ResourceMeta | null {
     return null;
   }
   const resourceType = stringValue(record.resource_type);
-  if (
-    resourceType !== "file" &&
-    resourceType !== "media" &&
-    resourceType !== "memory"
-  ) {
+  if (resourceType !== "file" && resourceType !== "memory") {
     return null;
   }
   return {
@@ -446,7 +442,7 @@ export function safeViewerPath(value: unknown): string | null {
 // The alternatives are literal and each digit run is anchored, so this is
 // linear in the label length; the security plugin flags it heuristically.
 // eslint-disable-next-line security/detect-unsafe-regex
-const CITATION_LABEL = /^\[(file|memory|media|summary):(\d+)(?:#(\d+))?\]$/;
+const CITATION_LABEL = /^\[(file|memory|summary):(\d+)(?:#(\d+))?\]$/;
 
 export function parseCitationLabel(value: string): CitationToken | null {
   const match = CITATION_LABEL.exec(value.trim());
@@ -457,10 +453,7 @@ export function parseCitationLabel(value: string): CitationToken | null {
   const id = Number(match[2]);
   const chunk = match[3] ? Number(match[3]) : null;
   if (
-    (kind !== "file" &&
-      kind !== "memory" &&
-      kind !== "media" &&
-      kind !== "summary") ||
+    (kind !== "file" && kind !== "memory" && kind !== "summary") ||
     !Number.isSafeInteger(id) ||
     id <= 0 ||
     (chunk !== null && (!Number.isSafeInteger(chunk) || chunk <= 0))
@@ -477,16 +470,25 @@ export function citationLabel(token: CitationToken): string {
 
 export function citationHref(token: CitationToken): string | null {
   if (token.kind === "file") {
-    const query = token.chunk === null ? "" : `?chunk=${token.chunk}`;
-    return `/viewer/file/${token.id}${query}`;
-  }
-  if (token.kind === "media") {
-    return `/viewer/media/${token.id}`;
+    const chunk = token.chunk === null ? "" : `&chunk=${token.chunk}`;
+    return `/library?tab=files&file=${token.id}${chunk}`;
   }
   if (token.kind === "memory") {
-    return `/viewer/memory/${token.id}`;
+    return `/memory/${token.id}`;
   }
   return null;
+}
+
+/** The in-app destination for a presented file or memory resource. */
+export function resourceHref(resource: ResourceMeta): string | null {
+  if (resource.resourceId === null) {
+    return null;
+  }
+  if (resource.resourceType === "file") {
+    const chunk = resource.chunk === null ? "" : `&chunk=${resource.chunk}`;
+    return `/library?tab=files&file=${resource.resourceId}${chunk}`;
+  }
+  return `/memory/${resource.resourceId}`;
 }
 
 export function noticeText(entry: AgentEntrySchema): string {

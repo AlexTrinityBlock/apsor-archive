@@ -9,6 +9,7 @@ import {
   parseCitationLabel,
   readAssistantMeta,
   readToolCalls,
+  type CitationToken,
   type ToolResultInfo,
 } from "../types";
 import { CitationChip } from "./CitationChip";
@@ -20,6 +21,9 @@ interface AssistantEntryProps {
   readonly entry: AgentEntrySchema;
   readonly toolResults: ReadonlyMap<string, ToolResultInfo>;
   readonly action?: ReactNode;
+  readonly selectedTraceId?: string | null;
+  readonly onSelectTrace?: (traceId: string) => void;
+  readonly onOpenCitation?: (token: CitationToken) => void;
 }
 
 function usageRows(
@@ -35,16 +39,19 @@ function usageRows(
   return rows.filter((row) => row.value > 0);
 }
 
-/** An archive sheet: Markdown prose, tool steps, citations, and usage. */
+/** An archival assistant turn: tool step chips, prose, citations, and usage. */
 export function AssistantEntry({
   entry,
   toolResults,
   action,
+  selectedTraceId = null,
+  onSelectTrace,
+  onOpenCitation,
 }: AssistantEntryProps) {
   const meta = readAssistantMeta(entry);
   const text = assistantText(entry);
   const calls = readToolCalls(entry);
-  const citations: Array<NonNullable<ReturnType<typeof parseCitationLabel>>> = [];
+  const citations: CitationToken[] = [];
   const seenCitations = new Set<string>();
   for (const label of meta.citations) {
     const token = parseCitationLabel(label);
@@ -59,61 +66,56 @@ export function AssistantEntry({
     citations.push(token);
   }
   const usage = usageRows(meta.usage);
-  const isStep = calls.length > 0;
 
   let body: ReactNode = null;
   if (text.length > 0) {
-    body = <MarkdownBody markdown={text} />;
-  } else if (isStep) {
     body = (
-      <p className="chat-sheet__silent">
-        Consulted {calls.length} {calls.length === 1 ? "tool" : "tools"} before
-        answering.
-      </p>
+      <div className="chat-turn__bubble">
+        <MarkdownBody markdown={text} onOpenCitation={onOpenCitation} />
+      </div>
     );
-  } else if (!meta.error) {
-    body = <p className="chat-sheet__silent">No prose was recorded for this step.</p>;
+  } else if (calls.length === 0 && !meta.error) {
+    body = <p className="chat-turn__silent">No prose was recorded for this step.</p>;
   }
 
   return (
-    <article className={isStep ? "chat-sheet chat-sheet--step" : "chat-sheet"}>
-      <header className="chat-sheet__head">
-        <div className="chat-sheet__heading">
-          <p className="eyebrow">
-            {isStep ? "Working sheet" : "Archive sheet"} · entry {entry.id}
-          </p>
-          <p className="chat-sheet__model">
-            {[meta.provider, meta.model, meta.step === null ? null : `step ${meta.step}`]
-              .filter((item): item is string => Boolean(item))
-              .join(" · ")}
-          </p>
-        </div>
-        <div className="chat-sheet__head-actions">
-          <Badge tone={finishReasonTone(meta.finishReason)}>
-            {meta.finishReason ?? "recorded"}
-          </Badge>
-          {action}
-        </div>
+    <article className="chat-turn chat-turn--agent">
+      <header className="chat-turn__author">
+        <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
+          <Icon name="spark" size={11} />
+        </span>
+        <span>DendroMatrix Agent</span>
+        <span className="chat-turn__meta">
+          {[meta.provider, meta.model, meta.step === null ? null : `step ${meta.step}`]
+            .filter((item): item is string => Boolean(item))
+            .join(" · ")}
+        </span>
+        <Badge tone={finishReasonTone(meta.finishReason)}>
+          {meta.finishReason ?? "recorded"}
+        </Badge>
+        {action}
       </header>
 
-      {body}
-
       {calls.length > 0 ? (
-        <div className="chat-sheet__calls">
+        <div className="chat-tool-flow">
           {calls.map((call, index) => (
             <ToolCallCard
               key={call.id}
               call={call}
               result={toolResults.get(call.id)?.meta ?? null}
               index={index}
+              selected={selectedTraceId === call.id}
+              onSelect={onSelectTrace}
             />
           ))}
         </div>
       ) : null}
 
+      {body}
+
       {meta.error ? (
-        <div className="chat-sheet__error" role="status">
-          <Icon name="info" size={16} />
+        <div className="chat-turn__error" role="status">
+          <Icon name="info" size={15} />
           <div>
             <strong>{meta.error.code}</strong>
             <p>{meta.error.detail}</p>
@@ -121,30 +123,27 @@ export function AssistantEntry({
         </div>
       ) : null}
 
-      {citations.length > 0 || usage.length > 0 ? (
-        <footer className="chat-sheet__foot">
-          {citations.length > 0 ? (
-            <div className="chat-sheet__citations">
-              <span className="chat-sheet__foot-label">Sources</span>
-              {citations.map((token) => (
-                <CitationChip
-                  key={`${token.kind}:${token.id}:${token.chunk ?? ""}`}
-                  token={token}
-                />
-              ))}
+      {citations.length > 0 ? (
+        <div className="citations-row chat-turn__citations">
+          {citations.map((token) => (
+            <CitationChip
+              key={`${token.kind}:${token.id}:${token.chunk ?? ""}`}
+              token={token}
+              onOpen={onOpenCitation}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {usage.length > 0 ? (
+        <dl className="chat-turn__usage">
+          {usage.map((row) => (
+            <div key={row.label}>
+              <dt>{row.label}</dt>
+              <dd>{formatNumber(row.value)}</dd>
             </div>
-          ) : null}
-          {usage.length > 0 ? (
-            <dl className="chat-sheet__usage">
-              {usage.map((row) => (
-                <div key={row.label}>
-                  <dt>{row.label}</dt>
-                  <dd>{formatNumber(row.value)}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-        </footer>
+          ))}
+        </dl>
       ) : null}
     </article>
   );

@@ -12,21 +12,12 @@ TRUNCATION_MARKER = "\n[truncated]"
 
 def xml_text(value: object) -> str:
     """Escape a value for XML element text."""
-    return (
-        str(value)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def xml_attr(value: object) -> str:
     """Return a quoted XML attribute value."""
-    escaped = (
-        xml_text(value)
-        .replace('"', "&quot;")
-        .replace("'", "&apos;")
-    )
+    escaped = xml_text(value).replace('"', "&quot;").replace("'", "&apos;")
     return f'"{escaped}"'
 
 

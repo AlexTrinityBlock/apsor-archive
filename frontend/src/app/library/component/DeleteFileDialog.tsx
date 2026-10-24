@@ -1,32 +1,45 @@
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { FileSchema } from "../../generated-apis-types/schemas";
 import { useDeleteFile } from "../../generated-apis-types/files/files";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useToast } from "../../component/Toast";
 import { LibraryDialog } from "./LibraryDialog";
-import { describeError } from "./library-utils";
+import { describeError, invalidateLibraryQueries } from "./library-utils";
 
 interface DeleteFileDialogProps {
-  readonly file: FileSchema;
+  readonly fileId: number;
+  readonly fileName: string;
+  readonly rawFilePath: string;
   readonly onClose: () => void;
   readonly onDeleted: () => void;
 }
 
 /**
- * Confirms the soft delete and says exactly what changes: the leaf disappears
+ * Confirms the soft delete and says exactly what changes: the file disappears
  * from the current shelf and search while the version chain stays in history.
  */
-export function DeleteFileDialog({ file, onClose, onDeleted }: DeleteFileDialogProps) {
+export function DeleteFileDialog({
+  fileId,
+  fileName,
+  rawFilePath,
+  onClose,
+  onDeleted,
+}: DeleteFileDialogProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
 
   const deleteMutation = useDeleteFile({
     mutation: {
       onSuccess: () => {
-        toast.success(`“${file.file_name}” was soft-deleted. Its history remains traceable.`);
-        void queryClient.invalidateQueries();
+        toast.success(`“${fileName}” was soft-deleted. Its history remains traceable.`);
+        invalidateLibraryQueries(queryClient, {
+          paths: true,
+          stats: true,
+          timeline: true,
+          search: true,
+          fileIds: [fileId],
+        });
         onDeleted();
       },
     },
@@ -38,15 +51,15 @@ export function DeleteFileDialog({ file, onClose, onDeleted }: DeleteFileDialogP
   return (
     <LibraryDialog
       eyebrow="Soft delete"
-      title={`Delete “${file.file_name}”?`}
-      description="This removes the current leaf from the shelf, search, and path listings. Nothing is erased: the version chain and earlier editions stay addressable through history."
+      title={`Delete “${fileName}”?`}
+      description="This removes the current file from the shelf, search, and path listings. Nothing is erased: the version chain and earlier editions stay addressable through history."
       onClose={onClose}
       dismissible={!pending}
       className="library-confirm"
     >
       <div className="library-confirm__path">
         <span className="eyebrow">Path</span>
-        <code>{file.raw_file_path}</code>
+        <code>{rawFilePath}</code>
       </div>
 
       {error ? (
@@ -64,7 +77,7 @@ export function DeleteFileDialog({ file, onClose, onDeleted }: DeleteFileDialogP
           variant="primary"
           size="sm"
           className="library-delete-confirm"
-          onClick={() => deleteMutation.mutate({ fileId: file.id })}
+          onClick={() => deleteMutation.mutate({ fileId })}
           disabled={pending}
         >
           {pending ? "Soft-deleting…" : "Soft delete file"}

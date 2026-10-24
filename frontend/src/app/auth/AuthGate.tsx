@@ -11,26 +11,33 @@ import "./auth.css";
 
 function AuthLoading() {
   return (
-    <main className="auth-loading">
+    <main className="auth-loading" aria-busy="true">
       <div className="auth-loading__rings" aria-hidden="true">
-        <TreeRings variant="cta" />
+        <TreeRings variant="quiet" />
       </div>
-      <TreeMark size={54} />
+      <span className="auth-loading__mark">
+        <TreeMark size={34} />
+      </span>
       <p className="eyebrow">DendroMatrix · local archive</p>
-      <Loader size={42} label="Checking the keeper session" />
-      <p>Opening the rings…</p>
+      <Loader size={38} label="Checking the keeper session" />
+      <p>Opening the archive…</p>
     </main>
   );
 }
 
 function AuthLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <main className="auth-loading auth-loading--error">
-      <TreeMark size={54} />
+    <main className="auth-loading auth-loading--error" role="alert">
+      <div className="auth-loading__rings" aria-hidden="true">
+        <TreeRings variant="quiet" />
+      </div>
+      <span className="auth-loading__mark">
+        <TreeMark size={32} />
+      </span>
       <p className="eyebrow">The archive did not answer</p>
       <h1>We could not check the session.</h1>
       <p>{message}</p>
-      <Button variant="ink" onClick={onRetry}>
+      <Button variant="primary" onClick={onRetry}>
         Try again
       </Button>
     </main>

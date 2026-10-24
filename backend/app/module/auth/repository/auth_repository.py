@@ -16,9 +16,7 @@ class UserRepository:
         self.session = session
 
     async def count(self) -> int:
-        return int(
-            (await self.session.execute(select(func.count(AppUserModel.id)))).scalar_one()
-        )
+        return int((await self.session.execute(select(func.count(AppUserModel.id)))).scalar_one())
 
     async def get_by_username(self, username: str) -> AppUserModel | None:
         statement = select(AppUserModel).where(AppUserModel.username == username)
@@ -65,9 +63,7 @@ class SessionRepository:
         return session
 
     async def get_by_token_hash(self, token_hash: str) -> UserSessionModel | None:
-        statement = select(UserSessionModel).where(
-            UserSessionModel.token_hash == token_hash
-        )
+        statement = select(UserSessionModel).where(UserSessionModel.token_hash == token_hash)
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def delete_by_token_hash(self, token_hash: str) -> None:

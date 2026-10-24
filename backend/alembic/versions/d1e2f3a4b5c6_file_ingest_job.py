@@ -17,9 +17,7 @@ down_revision: str | None = "e2b7c4d9a6f1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-_ACTIVE_STATUS_SQL = (
-    "status IN ('queued', 'parsing', 'chunking', 'embedding', 'summarizing')"
-)
+_ACTIVE_STATUS_SQL = "status IN ('queued', 'parsing', 'chunking', 'embedding', 'summarizing')"
 
 
 def upgrade() -> None:

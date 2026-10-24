@@ -1,5 +1,4 @@
 import { ToolErrorPanel } from "./ErrorPanel";
-import { GetMediaPanel, SearchMediaPanel } from "./MediaPanels";
 import { ReadMemoryPanel, SaveMemoryPanel } from "./MemoryPanels";
 import { PresentResourcePanel } from "./PresentResourcePanel";
 import { ReadFilePanel } from "./ReadFilePanel";
@@ -45,10 +44,6 @@ export function InspectorPanel({ item }: PanelProps) {
       return <ReadMemoryPanel item={item} />;
     case "save_memory":
       return <SaveMemoryPanel item={item} />;
-    case "search_media":
-      return <SearchMediaPanel item={item} />;
-    case "get_media":
-      return <GetMediaPanel item={item} />;
     case "present_resource":
       return <PresentResourcePanel item={item} />;
     default:

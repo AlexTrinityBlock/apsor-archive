@@ -47,7 +47,6 @@ from app.module.knowledge.service.search_service import SearchService
 from app.module.knowledge.service.stats_service import StatsService
 from app.module.knowledge.service.summary_service import SummaryService
 from app.module.knowledge.service.timeline_service import TimelineService
-from app.module.knowledge.service.tree_service import TreeService
 
 
 def get_cache(request: Request) -> CacheProtocol:
@@ -82,11 +81,7 @@ def _vision_extractor_for_state(state: State) -> VisionExtractorProtocol:
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
     chat_config = runtime.chat_config
-    if (
-        chat_config.enabled
-        and chat_config.provider != "none"
-        and chat_config.api_key
-    ):
+    if chat_config.enabled and chat_config.provider != "none" and chat_config.api_key:
         return DeepSeekVisionExtractor(
             api_key=chat_config.api_key,
             base_url=chat_config.base_url or settings.deepseek_base_url,
@@ -197,9 +192,7 @@ def build_ingest_worker(
         thread_name_prefix="ingest-extract",
     )
     extract_slots = asyncio.Semaphore(max(1, initial_config.extract_workers))
-    embedding_slots = asyncio.Semaphore(
-        max(1, initial_config.embedding_concurrency)
-    )
+    embedding_slots = asyncio.Semaphore(max(1, initial_config.embedding_concurrency))
 
     def file_service_factory(
         session: AsyncSession,
@@ -240,7 +233,6 @@ def _services(
     SearchService,
     AiService,
     TimelineService,
-    TreeService,
     StatsService,
 ]:
     state = request.app.state
@@ -254,7 +246,6 @@ def _services(
     file_repository = FileRepository(session)
     memory_repository = MemoryRepository(session)
     summary_repository = SummaryRepository(session)
-    tree_repository = TreeRepository(session)
     indexer = IndexerService(
         chunk_repository,
         embedder,
@@ -293,7 +284,6 @@ def _services(
         vector_scan_limit=settings.search_vector_scan_limit,
     )
     ai_service = AiService(
-        search_service=search_service,
         text_generator=text_generator,
         embedding_provider=runtime.embedding_config.provider,
         embedding_model=embedder.model_name,
@@ -308,11 +298,6 @@ def _services(
         timezone_name=settings.timezone,
         max_day_range=settings.timeline_max_day_range,
     )
-    tree_service = TreeService(
-        tree_repository=tree_repository,
-        cache=cache,
-        cache_ttl_seconds=settings.cache_ttl_seconds,
-    )
     stats_service = StatsService(
         stats_repository=StatsRepository(session),
         cache=cache,
@@ -325,7 +310,6 @@ def _services(
         search_service,
         ai_service,
         timeline_service,
-        tree_service,
         stats_service,
     )
 
@@ -384,18 +368,11 @@ def get_timeline_service(
     return _services(request, session)[5]
 
 
-def get_tree_service(
-    request: Request,
-    session: AsyncSession = Depends(get_db_session),
-) -> TreeService:
-    return _services(request, session)[6]
-
-
 def get_stats_service(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
 ) -> StatsService:
-    return _services(request, session)[7]
+    return _services(request, session)[6]
 
 
 def get_demo_service(

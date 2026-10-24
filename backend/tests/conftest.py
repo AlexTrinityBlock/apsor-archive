@@ -12,7 +12,6 @@ from app.main import create_app
 from app.module.agent import model as agent_model  # noqa: F401
 from app.module.auth import model as auth_model  # noqa: F401
 from app.module.knowledge.model import Base
-from app.module.media import model as media_model  # noqa: F401
 
 ADMIN_DATABASE_URL = "postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendromatrix"
 TEST_DATABASE_URL = "postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendromatrix_test"
@@ -22,7 +21,7 @@ TRUNCATE_STATEMENT = (
     "TRUNCATE TABLE agent_approval, saved_question, file_ingest_job, ingest_config, "
     "agent_entry, agent_run, agent_conversation, agent_config, chunk_ngram, chunk, "
     "tree_node, file, memory_summary, memory, "
-    "media_ngram, media_asset, ai_provider_config, user_session, app_user "
+    "ai_provider_config, user_session, app_user "
     "RESTART IDENTITY CASCADE"
 )
 

@@ -1,16 +1,13 @@
-import type { ReactNode } from "react";
-
-import { Button, ButtonLink } from "../../component/Button";
+import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
-import { ViewerShell } from "./ViewerShell";
 import { viewerErrorMessage } from "./viewer-utils";
 
 interface LoadingProps {
   readonly label?: string;
 }
 
-/** A quiet archive placeholder while a viewer chunk or document loads. */
-export function ViewerLoading({ label = "Opening the leaf" }: LoadingProps) {
+/** A quiet archive placeholder while a renderer or chunk loads. */
+export function ViewerLoading({ label = "Opening the file" }: LoadingProps) {
   return (
     <div className="viewer-state viewer-state--loading" role="status" aria-live="polite">
       <span className="viewer-loader" aria-hidden="true">
@@ -20,42 +17,6 @@ export function ViewerLoading({ label = "Opening the leaf" }: LoadingProps) {
       </span>
       <p className="viewer-state__label">{label}</p>
     </div>
-  );
-}
-
-/** Route-level fallback used while a lazy viewer module is fetched. */
-export function ViewerRouteFallback() {
-  return (
-    <ViewerShell
-      kind="Viewer"
-      title="Opening the archive leaf"
-      backTo="/"
-      backLabel="Archive"
-    >
-      <ViewerLoading label="Preparing the reading room" />
-    </ViewerShell>
-  );
-}
-
-interface MissingProps {
-  readonly title: string;
-  readonly message: ReactNode;
-  readonly backTo: string;
-  readonly backLabel: string;
-}
-
-/** A resource was deleted, never existed, or the route id was invalid. */
-export function ViewerMissing({ title, message, backTo, backLabel }: MissingProps) {
-  return (
-    <section className="viewer-state viewer-state--missing reveal reveal-2">
-      <p className="eyebrow">Leaf not found</p>
-      <h2>{title}</h2>
-      <p>{message}</p>
-      <ButtonLink to={backTo} variant="secondary" size="sm">
-        <Icon name="arrow-right" size={15} className="viewer-back-icon" />
-        {backLabel}
-      </ButtonLink>
-    </section>
   );
 }
 
@@ -80,7 +41,7 @@ export function ViewerErrorState({
       <span className="viewer-state__mark" aria-hidden="true">
         <Icon name="info" size={22} />
       </span>
-      <p className="eyebrow">Viewer interrupted</p>
+      <p className="eyebrow">Preview interrupted</p>
       <h2>{title}</h2>
       <p>{viewerErrorMessage(error)}</p>
       <div className="viewer-state__actions">

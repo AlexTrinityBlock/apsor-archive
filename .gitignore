@@ -23,6 +23,7 @@ coverage.xml
 # Data
 backend/data/
 data/
+data-cloudflare/
 *.db
 *.sqlite3
 

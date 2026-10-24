@@ -1,24 +1,15 @@
-import {
-  useId,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-} from "react";
-import { Link } from "react-router-dom";
+import { useId, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../apis/fetch-client";
-import { formatDateTime, formatNumber, formatRelative } from "../../lib/format";
-import { Badge } from "../component/Badge";
+import { formatNumber } from "../../lib/format";
 import { Button } from "../component/Button";
+import { EmptyState } from "../component/EmptyState";
 import { Icon } from "../component/Icon";
-import { Loader } from "../component/Loader";
 import { PageHeader } from "../component/PageHeader";
 import { Panel } from "../component/Panel";
 import { useToast } from "../component/Toast";
-import { CitationChip } from "../chat/component/CitationChip";
-import { parseCitationLabel, type CitationToken } from "../chat/types";
 import {
   getGetAgentConversationQueryKey,
   getListAgentConversationsQueryKey,
@@ -34,26 +25,38 @@ import type {
   SavedQuestionListSchema,
   SavedQuestionReadSchema,
 } from "../generated-apis-types/schemas";
-import type { BadgeTone } from "../type/ui";
-import "../chat/chat.css";
+import { QuestionCard, QuestionCardSkeleton } from "./component/QuestionCard";
+import { QuestionDialog } from "./component/QuestionDialog";
 import "./questions.css";
 
 const PAGE_SIZE = 50;
-const QUESTION_MAX_CHARS = 32_000;
 
-interface StatusMeta {
+type StatusFilter = "all" | "answered" | "running" | "failed";
+
+const STATUS_TABS: readonly {
+  readonly value: StatusFilter;
   readonly label: string;
-  readonly tone: BadgeTone;
-  readonly dot: boolean;
+  readonly dot: "answered" | "running" | "failed" | null;
+}[] = [
+  { value: "all", label: "All", dot: null },
+  { value: "answered", label: "Answered", dot: "answered" },
+  { value: "running", label: "Running", dot: "running" },
+  { value: "failed", label: "Failed", dot: "failed" },
+];
+
+type DialogState =
+  | { readonly mode: "create" }
+  | { readonly mode: "edit"; readonly item: SavedQuestionReadSchema };
+
+interface CardActionError {
+  readonly id: number;
+  readonly message: string;
 }
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const detail = error.detail.trim();
-    if (detail.length > 0) {
-      return detail;
-    }
-    return error.message;
+    return detail.length > 0 ? detail : error.message;
   }
   if (error instanceof Error) {
     return error.message;
@@ -61,58 +64,45 @@ function errorMessage(error: unknown): string {
   return "The archive could not complete that request.";
 }
 
-function statusMeta(status: SavedQuestionReadSchema["run_status"]): StatusMeta {
+function isAiUnavailable(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.status === 503 || error.code === "ai_not_configured")
+  );
+}
+
+function isRunActive(status: SavedQuestionReadSchema["run_status"]): boolean {
+  return status === "running" || status === "waiting";
+}
+
+function statusBucket(
+  status: SavedQuestionReadSchema["run_status"],
+): StatusFilter | "other" {
   switch (status) {
-    case "running":
-      return { label: "Running", tone: "ochre", dot: true };
-    case "waiting":
-      return { label: "Waiting", tone: "ochre", dot: true };
     case "completed":
-      return { label: "Answered", tone: "moss", dot: true };
+      return "answered";
+    case "running":
+    case "waiting":
+      return "running";
     case "failed":
-      return { label: "Failed", tone: "vermilion", dot: true };
-    case "cancelled":
-      return { label: "Cancelled", tone: "neutral", dot: true };
+      return "failed";
     default:
-      return { label: "Not asked", tone: "neutral", dot: false };
+      return "other";
   }
 }
 
-function questionNoun(total: number): string {
-  return total === 1 ? "question" : "questions";
-}
-
-function savedCountLabel(total: number, loaded: boolean): string {
-  if (!loaded) {
-    return "Reading the book";
+function matchesText(item: SavedQuestionReadSchema, query: string): boolean {
+  if (query.length === 0) {
+    return true;
   }
-  return `${formatNumber(total)} saved ${questionNoun(total)}`;
-}
-
-function bookBadgeLabel(total: number, loaded: boolean): string {
-  return loaded ? `${formatNumber(total)} in the book` : "Reading";
-}
-
-function savedCitationToken(label: string): CitationToken | null {
-  const trimmed = label.trim();
-  if (trimmed.length === 0) {
-    return null;
-  }
-  const bracketed = trimmed.startsWith("[") ? trimmed : `[${trimmed}]`;
-  return parseCitationLabel(bracketed);
-}
-
-function answerPlaceholder(item: SavedQuestionReadSchema): string {
-  if (item.run_status === "failed") {
-    return "The run failed before an answer was recorded.";
-  }
-  if (item.run_status === "cancelled") {
-    return "The run was cancelled before an answer was recorded.";
-  }
-  if (item.run_status === "running" || item.run_status === "waiting") {
-    return "The agent is still working on this question.";
-  }
-  return "Not asked yet.";
+  return [
+    item.question,
+    item.answer ?? "",
+    item.citations.join(" "),
+  ]
+    .join(" ")
+    .toLowerCase()
+    .includes(query);
 }
 
 function replaceQuestion(
@@ -128,29 +118,6 @@ function replaceQuestion(
       item.id === question.id ? question : item,
     ),
   };
-}
-
-function QuestionSkeleton() {
-  return (
-    <article className="question-card question-card--skeleton" aria-hidden="true">
-      <span className="question-skeleton question-skeleton--folio" />
-      <span className="question-skeleton question-skeleton--title" />
-      <span className="question-skeleton question-skeleton--title is-short" />
-      <span className="question-skeleton question-skeleton--answer" />
-      <span className="question-skeleton question-skeleton--meta" />
-    </article>
-  );
-}
-
-function runErrorTitle(status: SavedQuestionReadSchema["run_status"]): string {
-  return status === "cancelled" ? "Run cancelled" : "Run failed";
-}
-
-function runErrorFallback(item: SavedQuestionReadSchema): string {
-  if (item.run_status === "cancelled") {
-    return "The run was cancelled before the agent returned an answer.";
-  }
-  return "The agent did not return a readable error detail.";
 }
 
 async function invalidateAfterAsk(
@@ -178,352 +145,321 @@ async function invalidateAfterAsk(
   await Promise.all(invalidations);
 }
 
-interface QuestionEditFormProps {
-  readonly fieldId: string;
-  readonly text: string;
-  readonly error: string | null;
-  readonly saving: boolean;
-  readonly onChange: (value: string) => void;
-  readonly onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  readonly onCancel: () => void;
-  readonly onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+function buildToolbarNote(
+  list: SavedQuestionListSchema | undefined,
+  pageNumber: number,
+  totalPages: number,
+  loaded: number,
+  total: number,
+  filteredCount: number,
+  filtersActive: boolean,
+): string {
+  if (!list) {
+    return "Reading the loaded page";
+  }
+  const base = `Page ${formatNumber(pageNumber)} of ${formatNumber(totalPages)} · ${formatNumber(loaded)} loaded of ${formatNumber(total)} saved · status counts and text filter cover only the loaded page`;
+  if (!filtersActive) {
+    return base;
+  }
+  const noun = filteredCount === 1 ? "match" : "matches";
+  return `${base} · ${formatNumber(filteredCount)} ${noun}`;
 }
 
-function QuestionEditForm({
-  fieldId,
-  text,
+interface QuestionShelfBodyProps {
+  readonly list: SavedQuestionListSchema | undefined;
+  readonly isPending: boolean;
+  readonly isError: boolean;
+  readonly isFetching: boolean;
+  readonly error: unknown;
+  readonly total: number;
+  readonly resources: readonly SavedQuestionReadSchema[];
+  readonly filtered: readonly SavedQuestionReadSchema[];
+  readonly offset: number;
+  readonly pageNumber: number;
+  readonly totalPages: number;
+  readonly rangeStart: number;
+  readonly rangeEnd: number;
+  readonly askingId: number | null;
+  readonly deletingId: number | null;
+  readonly actionError: CardActionError | null;
+  readonly onRetry: () => void;
+  readonly onBackToFirstPage: () => void;
+  readonly onClearFilters: () => void;
+  readonly onCreate: () => void;
+  readonly onAsk: (item: SavedQuestionReadSchema) => void;
+  readonly onEdit: (item: SavedQuestionReadSchema) => void;
+  readonly onDelete: (item: SavedQuestionReadSchema) => void;
+  readonly onOffsetChange: (offset: number) => void;
+}
+
+/** Loading, error, empty, filtered, and populated states for the shelf. */
+function QuestionShelfBody({
+  list,
+  isPending,
+  isError,
+  isFetching,
   error,
-  saving,
-  onChange,
-  onSubmit,
-  onCancel,
-  onKeyDown,
-}: QuestionEditFormProps) {
-  return (
-    <form className="question-card__edit" onSubmit={onSubmit}>
-      <label className="eyebrow" htmlFor={fieldId}>
-        Edit question
-      </label>
-      <textarea
-        id={fieldId}
-        value={text}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={onKeyDown}
-        rows={3}
-        maxLength={QUESTION_MAX_CHARS}
-        disabled={saving}
-        autoFocus
-        aria-describedby={`${fieldId}-hint`}
-      />
-      <div className="question-card__edit-foot">
-        <p className="question-card__edit-hint" id={`${fieldId}-hint`}>
-          Saving changed text clears the stored answer and conversation link.
-        </p>
-        <div className="question-card__edit-actions">
-          <Button
-            type="submit"
-            variant="primary"
-            size="sm"
-            disabled={text.trim().length === 0 || saving}
-          >
-            <Icon name="check" size={14} />
-            {saving ? "Saving…" : "Save"}
-          </Button>
+  total,
+  resources,
+  filtered,
+  offset,
+  pageNumber,
+  totalPages,
+  rangeStart,
+  rangeEnd,
+  askingId,
+  deletingId,
+  actionError,
+  onRetry,
+  onBackToFirstPage,
+  onClearFilters,
+  onCreate,
+  onAsk,
+  onEdit,
+  onDelete,
+  onOffsetChange,
+}: QuestionShelfBodyProps) {
+  if (isPending) {
+    return (
+      <div
+        className="question-list"
+        aria-busy="true"
+        aria-label="Reading saved questions"
+        role="status"
+      >
+        <QuestionCardSkeleton />
+        <QuestionCardSkeleton />
+        <QuestionCardSkeleton />
+      </div>
+    );
+  }
+
+  if (isError && !list) {
+    return (
+      <Panel tone="plain" className="question-error">
+        <div className="question-error__body">
+          <p className="eyebrow">Reading interrupted</p>
+          <h2>The shelf did not answer.</h2>
+          <p>{errorMessage(error)}</p>
           <Button
             type="button"
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            onClick={onCancel}
-            disabled={saving}
+            onClick={onRetry}
+            disabled={isFetching}
           >
-            Cancel
+            <Icon name="ring" size={14} />
+            {isFetching ? "Retrying…" : "Retry"}
           </Button>
         </div>
-      </div>
-      {error ? (
-        <p className="question-card__error" role="alert">
-          <Icon name="info" size={14} />
-          <span>{error}</span>
-        </p>
-      ) : null}
-    </form>
-  );
-}
+      </Panel>
+    );
+  }
 
-interface QuestionBodyProps {
-  readonly item: SavedQuestionReadSchema;
-  readonly asking: boolean;
-  readonly askingError: string | null;
-}
+  if (total === 0) {
+    return (
+      <EmptyState
+        icon="quote"
+        eyebrow="Blank pages"
+        title="No saved questions yet."
+        description="Write a question and keep it here until you are ready to ask it. Answers, citations, and their conversation stay beside it."
+        action={
+          <Button type="button" variant="primary" size="md" onClick={onCreate}>
+            <Icon name="plus" size={14} />
+            Save question
+          </Button>
+        }
+      />
+    );
+  }
 
-function QuestionBody({ item, asking, askingError }: QuestionBodyProps) {
-  const citationTokens = item.citations.map((label) => ({
-    label,
-    token: savedCitationToken(label),
-  }));
-  const hasRunError =
-    item.run_status === "failed" ||
-    item.run_status === "cancelled" ||
-    item.error_detail !== null ||
-    item.error_code !== null;
+  if (resources.length === 0) {
+    return (
+      <Panel tone="plain" className="question-error">
+        <div className="question-error__body">
+          <p className="eyebrow">Past the last page</p>
+          <h2>This page of the shelf is empty.</h2>
+          <p>
+            The shelf changed while this page was open. Return to the newest
+            entries to continue reading.
+          </p>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onBackToFirstPage}
+          >
+            <Icon name="arrow-right" size={14} className="is-flipped" />
+            Back to the first page
+          </Button>
+        </div>
+      </Panel>
+    );
+  }
+
+  if (filtered.length === 0) {
+    return (
+      <EmptyState
+        icon="filter"
+        eyebrow="No matches on this page"
+        title="Nothing matches these filters."
+        description="Status tabs and the text filter only cover the questions loaded on this page. Clear the filters to see the rest of the page."
+        action={
+          <Button type="button" variant="secondary" size="sm" onClick={onClearFilters}>
+            Clear filters
+          </Button>
+        }
+      />
+    );
+  }
 
   return (
     <>
-      <h2 className="question-card__question">{item.question}</h2>
-
-      <div className="question-card__answer">
-        <p className="eyebrow">Answer</p>
-        {item.answer !== null && item.answer.trim().length > 0 ? (
-          <p className="question-card__answer-text">{item.answer}</p>
-        ) : (
-          <p className="question-card__quiet">{answerPlaceholder(item)}</p>
-        )}
+      <div className="question-list" aria-busy={isFetching}>
+        {filtered.map((item) => (
+          <QuestionCard
+            key={item.id}
+            item={item}
+            asking={askingId === item.id}
+            deleting={deletingId === item.id}
+            actionError={actionError?.id === item.id ? actionError.message : null}
+            onAsk={onAsk}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ))}
       </div>
 
-      {citationTokens.length > 0 ? (
-        <div className="question-card__citations">
-          <p className="eyebrow">Citations</p>
-          <div className="question-card__chips">
-            {citationTokens.map(({ label, token }, index) =>
-              token ? (
-                <CitationChip
-                  key={`${token.kind}:${token.id}:${token.chunk ?? "none"}:${index}`}
-                  token={token}
-                />
-              ) : (
-                <span
-                  className="question-card__raw-citation"
-                  key={`${label}:${index}`}
-                >
-                  {label}
-                </span>
-              ),
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {hasRunError ? (
-        <div className="question-card__run-error" role="status">
-          <Icon name="info" size={15} />
-          <div>
-            <strong>
-              {runErrorTitle(item.run_status)}
-              {item.error_code ? (
-                <code className="question-card__error-code">
-                  {item.error_code}
-                </code>
-              ) : null}
-            </strong>
-            <p>{item.error_detail ?? runErrorFallback(item)}</p>
-          </div>
-        </div>
-      ) : null}
-
-      {asking ? (
-        <p className="question-card__pending" role="status">
-          <Loader size={16} label="Asking the archive" />
-          Asking the archive. This can take several seconds.
-        </p>
-      ) : null}
-
-      {askingError ? (
-        <p className="question-card__error" role="alert">
-          <Icon name="info" size={14} />
-          <span>{askingError}</span>
-        </p>
+      {total > PAGE_SIZE ? (
+        <nav className="pagination question-pagination" aria-label="Saved question pages">
+          <button
+            type="button"
+            className="pagination__btn"
+            onClick={() => onOffsetChange(Math.max(0, offset - PAGE_SIZE))}
+            disabled={offset === 0 || isFetching}
+          >
+            Previous
+          </button>
+          <span className="question-pagination__label">
+            Page {formatNumber(pageNumber)} of {formatNumber(totalPages)} ·{" "}
+            {formatNumber(rangeStart)}–{formatNumber(rangeEnd)} of{" "}
+            {formatNumber(total)}
+          </span>
+          <button
+            type="button"
+            className="pagination__btn"
+            onClick={() => onOffsetChange(offset + PAGE_SIZE)}
+            disabled={offset + PAGE_SIZE >= total || isFetching}
+          >
+            Next
+          </button>
+        </nav>
       ) : null}
     </>
   );
 }
 
-interface QuestionFooterProps {
-  readonly item: SavedQuestionReadSchema;
-  readonly busy: boolean;
-  readonly asking: boolean;
-  readonly confirmingDelete: boolean;
-  readonly deleting: boolean;
-  readonly onAsk: () => void;
-  readonly onEdit: () => void;
-  readonly onDeleteRequest: () => void;
-  readonly onConfirmDelete: () => void;
-  readonly onKeep: () => void;
-}
-
-function QuestionFooter({
-  item,
-  busy,
-  asking,
-  confirmingDelete,
-  deleting,
-  onAsk,
-  onEdit,
-  onDeleteRequest,
-  onConfirmDelete,
-  onKeep,
-}: QuestionFooterProps) {
-  return (
-    <footer className="question-card__foot">
-      <div className="question-card__meta">
-        <span>
-          <Icon name="clock" size={12} />
-          {item.last_asked_at ? (
-            <>
-              Asked{" "}
-              <time
-                dateTime={item.last_asked_at}
-                title={formatDateTime(item.last_asked_at)}
-              >
-                {formatRelative(item.last_asked_at)}
-              </time>
-            </>
-          ) : (
-            <>
-              Saved{" "}
-              <time
-                dateTime={item.created_at}
-                title={formatDateTime(item.created_at)}
-              >
-                {formatRelative(item.created_at)}
-              </time>
-            </>
-          )}
-        </span>
-        <span>
-          Updated{" "}
-          <time dateTime={item.updated_at} title={formatDateTime(item.updated_at)}>
-            {formatRelative(item.updated_at)}
-          </time>
-        </span>
-        {item.conversation_id !== null ? (
-          <Link
-            className="question-card__conversation"
-            to={`/chat/${item.conversation_id}`}
-          >
-            <Icon name="chat" size={12} />
-            Open conversation
-          </Link>
-        ) : null}
-      </div>
-
-      <div className="question-card__actions">
-        <Button
-          type="button"
-          variant="primary"
-          size="sm"
-          onClick={onAsk}
-          disabled={busy}
-        >
-          <Icon name="spark" size={14} />
-          {asking ? "Asking…" : "Ask agent"}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={onEdit}
-          disabled={busy}
-        >
-          <Icon name="pencil" size={13} />
-          Edit
-        </Button>
-        {confirmingDelete ? (
-          <div
-            className="question-delete-confirm"
-            role="group"
-            aria-label="Confirm deleting this question"
-          >
-            <span className="question-delete-confirm__label">
-              Delete question?
-            </span>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={onConfirmDelete}
-              disabled={deleting}
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={onKeep}
-              disabled={deleting}
-            >
-              Keep
-            </Button>
-          </div>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onDeleteRequest}
-            disabled={busy}
-          >
-            <Icon name="trash" size={13} />
-            Delete
-          </Button>
-        )}
-      </div>
-    </footer>
-  );
-}
-
-interface QuestionCardProps {
-  readonly item: SavedQuestionReadSchema;
-  readonly listOffset: number;
-  readonly onDeleted: (questionId: number) => void;
-}
-
-function QuestionCard({ item, listOffset, onDeleted }: QuestionCardProps) {
+/**
+ * The saved-question shelf.
+ *
+ * The list endpoint has no status or text parameters, so the toolbar filters
+ * the loaded page only and every count is labelled as such. Asking a question
+ * runs one synchronous agent turn and then opens its conversation in Chat.
+ */
+export function QuestionsPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const toast = useToast();
-  const editFieldId = useId();
+  const filterId = useId();
 
-  const [askingError, setAskingError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [editText, setEditText] = useState(item.question);
-  const [editOriginal, setEditOriginal] = useState(item.question);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [textFilter, setTextFilter] = useState("");
+  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<CardActionError | null>(null);
+  const [askingId, setAskingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const listQuery = useListSavedQuestions(
+    { limit: PAGE_SIZE, offset },
+    {
+      query: {
+        staleTime: 15_000,
+        refetchInterval: (query) =>
+          query.state.data?.resources.some((item) =>
+            isRunActive(item.run_status),
+          )
+            ? 10_000
+            : false,
+      },
+    },
+  );
+
+  const list = listQuery.data;
+  const resources = useMemo(() => list?.resources ?? [], [list]);
+  const total = list?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pageNumber = Math.floor(offset / PAGE_SIZE) + 1;
+  const rangeStart = resources.length > 0 ? offset + 1 : 0;
+  const rangeEnd = list ? Math.min(offset + resources.length, total) : 0;
 
   const listQueryKey = getListSavedQuestionsQueryKey({
     limit: PAGE_SIZE,
-    offset: listOffset,
+    offset,
   });
 
-  const cacheQuestion = (updated: SavedQuestionReadSchema) => {
-    queryClient.setQueryData<SavedQuestionListSchema>(listQueryKey, (current) =>
-      replaceQuestion(current, updated),
-    );
-  };
+  const counts = useMemo(() => {
+    const next = { all: resources.length, answered: 0, running: 0, failed: 0 };
+    for (const item of resources) {
+      const bucket = statusBucket(item.run_status);
+      if (bucket === "answered" || bucket === "running" || bucket === "failed") {
+        next[bucket] += 1;
+      }
+    }
+    return next;
+  }, [resources]);
 
-  const askQuestion = useAskSavedQuestion({
+  const query = textFilter.trim().toLowerCase();
+  const filtered = useMemo(
+    () =>
+      resources.filter(
+        (item) =>
+          (statusFilter === "all" || statusBucket(item.run_status) === statusFilter) &&
+          matchesText(item, query),
+      ),
+    [resources, statusFilter, query],
+  );
+
+  const filtersActive = statusFilter !== "all" || query.length > 0;
+
+  const createQuestion = useCreateSavedQuestion({
     mutation: {
-      onMutate: () => {
-        setAskingError(null);
-      },
-      onSuccess: async (updated) => {
-        cacheQuestion(updated);
-        if (updated.run_status === "failed") {
-          toast.error(
-            "The agent run failed. The question and its error detail were kept.",
-          );
-        } else if (updated.run_status === "cancelled") {
-          toast.info("The agent run was cancelled. The card was kept.");
-        } else {
-          toast.success("Answer saved to the question book.");
-        }
-
-        await invalidateAfterAsk(queryClient, updated.conversation_id);
+      onSuccess: async (created) => {
+        setDialog(null);
+        setDialogError(null);
+        setStatusFilter("all");
+        setTextFilter("");
+        setOffset(0);
+        toast.success("Question saved to the shelf.");
+        queryClient.setQueryData<SavedQuestionListSchema>(
+          getListSavedQuestionsQueryKey({ limit: PAGE_SIZE, offset: 0 }),
+          (current) =>
+            current
+              ? {
+                  ...current,
+                  total: current.total + 1,
+                  resources: [created, ...current.resources].slice(0, PAGE_SIZE),
+                }
+              : current,
+        );
+        await queryClient.invalidateQueries({
+          queryKey: getListSavedQuestionsQueryKey(),
+        });
       },
       onError: (error) => {
-        const detail = errorMessage(error);
-        setAskingError(detail);
-        toast.error(detail);
+        setDialogError(errorMessage(error));
       },
     },
   });
@@ -531,445 +467,265 @@ function QuestionCard({ item, listOffset, onDeleted }: QuestionCardProps) {
   const updateQuestion = useUpdateSavedQuestion({
     mutation: {
       onSuccess: async (updated, variables) => {
-        const changed = variables.data.question !== editOriginal;
-        const hadAnswer = item.answer !== null || item.conversation_id !== null;
-        setEditing(false);
-        setEditError(null);
-        setEditText(updated.question);
-        setEditOriginal(updated.question);
-        cacheQuestion(updated);
+        const editing = dialog?.mode === "edit" ? dialog.item : null;
+        const changed = editing !== null && variables.data.question !== editing.question;
+        const hadAnswer =
+          editing !== null &&
+          (editing.answer !== null || editing.conversation_id !== null);
+        setDialog(null);
+        setDialogError(null);
         toast.success(
           changed && hadAnswer
             ? "Question updated. The previous answer was cleared."
             : "Question updated.",
+        );
+        queryClient.setQueryData<SavedQuestionListSchema>(listQueryKey, (current) =>
+          replaceQuestion(current, updated),
         );
         await queryClient.invalidateQueries({
           queryKey: getListSavedQuestionsQueryKey(),
         });
       },
       onError: (error) => {
-        setEditError(errorMessage(error));
+        setDialogError(errorMessage(error));
+      },
+    },
+  });
+
+  const askQuestion = useAskSavedQuestion({
+    mutation: {
+      onMutate: (variables) => {
+        setAskingId(variables.questionId);
+        setActionError(null);
+      },
+      onSuccess: async (updated) => {
+        setAiNotice(null);
+        queryClient.setQueryData<SavedQuestionListSchema>(listQueryKey, (current) =>
+          replaceQuestion(current, updated),
+        );
+        if (updated.run_status === "failed") {
+          toast.error(
+            "The agent run failed. The question and its error detail were kept.",
+          );
+        } else if (updated.run_status === "cancelled") {
+          toast.info("The agent run was cancelled. The card was kept.");
+        } else {
+          toast.success("Answer saved to the question shelf.");
+        }
+        await invalidateAfterAsk(queryClient, updated.conversation_id);
+        if (updated.conversation_id !== null) {
+          navigate(`/chat/${updated.conversation_id}`);
+        }
+      },
+      onError: (error, variables) => {
+        if (isAiUnavailable(error)) {
+          setAiNotice(errorMessage(error));
+          toast.error("AI provider is not configured. Open Settings to add one.");
+        } else {
+          const detail = errorMessage(error);
+          setActionError({ id: variables.questionId, message: detail });
+          toast.error(detail);
+        }
+      },
+      onSettled: () => {
+        setAskingId(null);
       },
     },
   });
 
   const deleteQuestion = useDeleteSavedQuestion({
     mutation: {
-      onSuccess: async () => {
-        setConfirmingDelete(false);
-        toast.success("Question removed from the book.");
+      onMutate: (variables) => {
+        setDeletingId(variables.questionId);
+        setActionError(null);
+      },
+      onSuccess: async (_result, variables) => {
+        toast.success("Question removed from the shelf.");
+        queryClient.setQueryData<SavedQuestionListSchema>(listQueryKey, (current) =>
+          current
+            ? {
+                ...current,
+                total: Math.max(0, current.total - 1),
+                resources: current.resources.filter(
+                  (item) => item.id !== variables.questionId,
+                ),
+              }
+            : current,
+        );
         await queryClient.invalidateQueries({
           queryKey: getListSavedQuestionsQueryKey(),
         });
-        onDeleted(item.id);
+        if (resources.length === 1 && offset > 0) {
+          setOffset(Math.max(0, offset - PAGE_SIZE));
+        }
       },
-      onError: (error) => {
+      onError: (error, variables) => {
         const detail = errorMessage(error);
-        setConfirmingDelete(false);
-        setAskingError(detail);
+        setActionError({ id: variables.questionId, message: detail });
         toast.error(detail);
       },
-    },
-  });
-
-  const asking = askQuestion.isPending;
-  const saving = updateQuestion.isPending;
-  const deleting = deleteQuestion.isPending;
-  const busy = asking || saving || deleting;
-  const status = statusMeta(item.run_status);
-
-  const startEditing = () => {
-    setAskingError(null);
-    setEditText(item.question);
-    setEditOriginal(item.question);
-    setEditError(null);
-    setEditing(true);
-  };
-
-  const cancelEditing = () => {
-    setEditing(false);
-    setEditError(null);
-    setEditText(item.question);
-    setEditOriginal(item.question);
-  };
-
-  const saveEdit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmed = editText.trim();
-    if (trimmed.length === 0 || saving) {
-      return;
-    }
-    setEditError(null);
-    updateQuestion.mutate({
-      questionId: item.id,
-      data: { question: trimmed },
-    });
-  };
-
-  const handleEditKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      event.currentTarget.form?.requestSubmit();
-    }
-    if (event.key === "Escape" && !saving) {
-      event.preventDefault();
-      cancelEditing();
-    }
-  };
-
-  return (
-    <article
-      className={[
-        "question-card",
-        asking ? "is-asking" : null,
-        item.run_status === "failed" ? "is-failed" : null,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      aria-busy={asking}
-    >
-      <header className="question-card__top">
-        <span className="question-card__folio">
-          Q-{String(item.id).padStart(3, "0")}
-        </span>
-        <div className="question-card__status">
-          <Badge tone={status.tone} dot={status.dot}>
-            {status.label}
-          </Badge>
-        </div>
-      </header>
-
-      {editing ? (
-        <QuestionEditForm
-          fieldId={editFieldId}
-          text={editText}
-          error={editError}
-          saving={saving}
-          onChange={(value) => {
-            setEditText(value);
-            setEditError(null);
-          }}
-          onSubmit={saveEdit}
-          onCancel={cancelEditing}
-          onKeyDown={handleEditKeyDown}
-        />
-      ) : (
-        <QuestionBody
-          item={item}
-          asking={asking}
-          askingError={askingError}
-        />
-      )}
-
-      {!editing ? (
-        <QuestionFooter
-          item={item}
-          busy={busy}
-          asking={asking}
-          confirmingDelete={confirmingDelete}
-          deleting={deleting}
-          onAsk={() => askQuestion.mutate({ questionId: item.id })}
-          onEdit={startEditing}
-          onDeleteRequest={() => {
-            setAskingError(null);
-            setConfirmingDelete(true);
-          }}
-          onConfirmDelete={() => deleteQuestion.mutate({ questionId: item.id })}
-          onKeep={() => setConfirmingDelete(false)}
-        />
-      ) : null}
-    </article>
-  );
-}
-
-/** The saved-question book: capture a question, ask it later, and keep the answer. */
-export function QuestionsPage() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
-  const questionFieldId = useId();
-  const questionHintId = `${questionFieldId}-hint`;
-  const questionInputRef = useRef<HTMLTextAreaElement>(null);
-
-  const [offset, setOffset] = useState(0);
-  const [draft, setDraft] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
-
-  const listQuery = useListSavedQuestions(
-    { limit: PAGE_SIZE, offset },
-    { query: { staleTime: 15_000 } },
-  );
-  const list = listQuery.data;
-  const total = list?.total ?? 0;
-  const pageNumber = Math.floor(offset / PAGE_SIZE) + 1;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const rangeStart = list && list.resources.length > 0 ? offset + 1 : 0;
-  const rangeEnd = list ? Math.min(offset + list.resources.length, total) : 0;
-
-  const createQuestion = useCreateSavedQuestion({
-    mutation: {
-      onSuccess: async () => {
-        setDraft("");
-        setFormError(null);
-        setOffset(0);
-        toast.success("Question saved to the book.");
-        await queryClient.invalidateQueries({
-          queryKey: getListSavedQuestionsQueryKey(),
-        });
-        questionInputRef.current?.focus();
-      },
-      onError: (error) => {
-        setFormError(errorMessage(error));
+      onSettled: () => {
+        setDeletingId(null);
       },
     },
   });
 
-  const submitQuestion = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const question = draft.trim();
-    if (question.length === 0 || createQuestion.isPending) {
+  const dialogSaving =
+    dialog?.mode === "edit" ? updateQuestion.isPending : createQuestion.isPending;
+
+  const openCreate = () => {
+    setDialogError(null);
+    setDialog({ mode: "create" });
+  };
+
+  const openEdit = (item: SavedQuestionReadSchema) => {
+    setDialogError(null);
+    setDialog({ mode: "edit", item });
+  };
+
+  const closeDialog = () => {
+    setDialog(null);
+    setDialogError(null);
+  };
+
+  const submitDialog = (question: string) => {
+    setDialogError(null);
+    if (!dialog) {
       return;
     }
-    setFormError(null);
-    createQuestion.mutate({ data: { question } });
-  };
-
-  const handleComposeKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      event.currentTarget.form?.requestSubmit();
+    if (dialog.mode === "create") {
+      createQuestion.mutate({ data: { question } });
+      return;
     }
+    updateQuestion.mutate({ questionId: dialog.item.id, data: { question } });
   };
 
-  const handleDeleted = (questionId: number) => {
-    queryClient.setQueryData<SavedQuestionListSchema>(
-      getListSavedQuestionsQueryKey({ limit: PAGE_SIZE, offset }),
-      (current) => {
-        if (!current) {
-          return current;
-        }
-        return {
-          ...current,
-          total: Math.max(0, current.total - 1),
-          resources: current.resources.filter((item) => item.id !== questionId),
-        };
-      },
-    );
-    if (list && list.resources.length === 1 && offset > 0) {
-      setOffset((current) => Math.max(0, current - PAGE_SIZE));
-    }
+  const clearFilters = () => {
+    setStatusFilter("all");
+    setTextFilter("");
   };
 
-  let listBody;
-  if (listQuery.isPending) {
-    listBody = (
-      <div
-        className="questions-cards"
-        aria-busy="true"
-        aria-label="Reading saved questions"
-        role="status"
-      >
-        <QuestionSkeleton />
-        <QuestionSkeleton />
-        <QuestionSkeleton />
-      </div>
-    );
-  } else if (listQuery.isError && !list) {
-    listBody = (
-      <Panel tone="plain" className="questions-query-error">
-        <p className="eyebrow">Reading interrupted</p>
-        <h2>The question book did not answer.</h2>
-        <p>{errorMessage(listQuery.error)}</p>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => void listQuery.refetch()}
-          disabled={listQuery.isFetching}
-        >
-          <Icon name="ring" size={14} />
-          {listQuery.isFetching ? "Retrying…" : "Retry"}
-        </Button>
-      </Panel>
-    );
-  } else if (!list || total === 0) {
-    listBody = (
-      <Panel tone="moss" className="questions-empty">
-        <div className="questions-empty__mark" aria-hidden="true">
-          <Icon name="quote" size={26} />
-        </div>
-        <p className="eyebrow">Blank pages</p>
-        <h2>No saved questions yet.</h2>
-        <p>
-          Write a question above and keep it here until you are ready to ask the
-          archive. Answers, citations, and their conversation stay beside it.
-        </p>
-      </Panel>
-    );
-  } else if (list.resources.length === 0) {
-    listBody = (
-      <Panel tone="plain" className="questions-query-error">
-        <p className="eyebrow">Past the last page</p>
-        <h2>This page of the book is empty.</h2>
-        <p>
-          The question book changed while this page was open. Return to the
-          newest entries to continue reading.
-        </p>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={() => setOffset(0)}
-        >
-          <Icon name="arrow-right" size={14} className="is-flipped" />
-          Back to the first page
-        </Button>
-      </Panel>
-    );
-  } else {
-    listBody = (
-      <>
-        <div className="questions-cards">
-          {list.resources.map((item) => (
-            <QuestionCard
-              key={item.id}
-              item={item}
-              listOffset={offset}
-              onDeleted={handleDeleted}
-            />
-          ))}
-        </div>
-
-        {total > PAGE_SIZE ? (
-          <nav
-            className="questions-pagination"
-            aria-label="Saved question pages"
-          >
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                setOffset((current) => Math.max(0, current - PAGE_SIZE))
-              }
-              disabled={offset === 0 || listQuery.isFetching}
-            >
-              <Icon name="chevron-right" size={14} className="is-flipped" />
-              Previous
-            </Button>
-            <span className="questions-pagination__label">
-              Page {formatNumber(pageNumber)} of {formatNumber(totalPages)} ·{" "}
-              {formatNumber(rangeStart)}–{formatNumber(rangeEnd)} of{" "}
-              {formatNumber(total)}
-            </span>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setOffset((current) => current + PAGE_SIZE)}
-              disabled={
-                offset + PAGE_SIZE >= total || listQuery.isFetching
-              }
-            >
-              Next
-              <Icon name="chevron-right" size={14} />
-            </Button>
-          </nav>
-        ) : null}
-      </>
-    );
-  }
+  const toolbarNote = buildToolbarNote(
+    list,
+    pageNumber,
+    totalPages,
+    resources.length,
+    total,
+    filtered.length,
+    filtersActive,
+  );
 
   return (
     <div className="page questions-page">
-      <PageHeader
-        eyebrow="Question book"
-        title="Saved questions"
-        description="Keep a question before you have an answer. Ask the archive when you are ready; the answer, its citations, and the conversation return to this page."
-        meta={<span>{savedCountLabel(total, list !== undefined)}</span>}
-        actions={
-          <Badge tone="ochre" dot>
-            {bookBadgeLabel(total, list !== undefined)}
-          </Badge>
-        }
-      />
+      <div className="content-container">
+        <PageHeader
+          eyebrow="Questions · saved shelf"
+          title="The inquiry shelf."
+          description="Keep a question before you have an answer. Run it in Chat when you are ready; the answer, its citations, and the conversation return here."
+          meta={
+            <span>
+              {list
+                ? `${formatNumber(resources.length)} loaded · ${formatNumber(total)} saved`
+                : "Reading shelf"}
+            </span>
+          }
+        />
 
-      <Panel
-        eyebrow="New entry"
-        title="Add a question to the book."
-        className="questions-compose reveal reveal-2"
-      >
-        <form className="questions-form" onSubmit={submitQuestion}>
-          <div className="questions-form__head">
-            <label className="eyebrow" htmlFor={questionFieldId}>
-              Question
-            </label>
-            <span className="questions-form__hint" id={questionHintId}>
-              <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> to save
-            </span>
+        <section className="question-toolbar" aria-label="Shelf controls">
+          <div
+            className="question-toolbar__tabs"
+            role="group"
+            aria-label="Filter by status"
+          >
+            {STATUS_TABS.map((tab) => {
+              const active = statusFilter === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  className={`question-tab${active ? " is-active" : ""}`}
+                  aria-pressed={active}
+                  onClick={() => setStatusFilter(tab.value)}
+                >
+                  {tab.dot ? (
+                    <span
+                      className={`question-tab__dot question-tab__dot--${tab.dot}`}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <span>{tab.label}</span>
+                  <span
+                    className="question-tab__count"
+                    title="Count on the loaded page"
+                  >
+                    {formatNumber(counts[tab.value])}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-          <textarea
-            ref={questionInputRef}
-            id={questionFieldId}
-            name="question"
-            value={draft}
-            onChange={(event) => {
-              setDraft(event.target.value);
-              setFormError(null);
-            }}
-            onKeyDown={handleComposeKeyDown}
-            placeholder="What should the archive answer later?"
-            rows={3}
-            maxLength={QUESTION_MAX_CHARS}
-            autoComplete="off"
-            disabled={createQuestion.isPending}
-            aria-describedby={questionHintId}
-            aria-busy={createQuestion.isPending}
-          />
-          <div className="questions-form__foot">
-            <span className="questions-form__note">
-              Plain text. Saving is separate from asking; no conversation is
-              created until you press Ask agent.
-            </span>
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              disabled={
-                draft.trim().length === 0 || createQuestion.isPending
-              }
-            >
-              <Icon name="plus" size={15} />
-              {createQuestion.isPending ? "Adding…" : "Add question"}
+
+          <div className="question-toolbar__tools">
+            <div className="question-filter" role="search">
+              <Icon name="search" size={15} />
+              <label className="visually-hidden" htmlFor={filterId}>
+                Filter loaded questions by text
+              </label>
+              <input
+                id={filterId}
+                type="search"
+                value={textFilter}
+                onChange={(event) => setTextFilter(event.target.value)}
+                placeholder="Filter this page…"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {textFilter.length > 0 ? (
+                <button
+                  type="button"
+                  className="question-filter__clear"
+                  aria-label="Clear text filter"
+                  onClick={() => setTextFilter("")}
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              ) : null}
+            </div>
+            <Button type="button" variant="ink" size="md" onClick={openCreate}>
+              <Icon name="plus" size={14} />
+              Save question
             </Button>
           </div>
-          {formError ? (
-            <p className="questions-inline-error" role="alert">
-              <Icon name="info" size={15} />
-              <span>{formError}</span>
-            </p>
-          ) : null}
-        </form>
-      </Panel>
 
-      <section className="questions-list reveal reveal-3" aria-labelledby="questions-list-title">
-        <div className="questions-list__head">
-          <div>
-            <p className="eyebrow">The book</p>
-            <h2 id="questions-list-title">Saved questions</h2>
+          <p className="question-toolbar__note">{toolbarNote}</p>
+        </section>
+
+        {aiNotice ? (
+          <div className="question-notice question-notice--seal" role="status">
+            <Icon name="info" size={15} />
+            <p>
+              <strong>AI provider not configured.</strong>{" "}
+              {aiNotice} Answers cannot be generated until a provider is saved.
+            </p>
+            <Link className="question-notice__link" to="/settings">
+              Open Settings
+              <Icon name="arrow-right" size={13} />
+            </Link>
+            <button
+              type="button"
+              className="question-notice__dismiss"
+              aria-label="Dismiss provider notice"
+              onClick={() => setAiNotice(null)}
+            >
+              <Icon name="close" size={14} />
+            </button>
           </div>
-          <span className="questions-list__count">
-            {list
-              ? `${formatNumber(rangeStart)}–${formatNumber(rangeEnd)} of ${formatNumber(total)}`
-              : "Reading"}
-          </span>
-        </div>
+        ) : null}
 
         {listQuery.isError && list ? (
-          <div className="questions-inline-error" role="alert">
+          <div className="question-notice" role="alert">
             <Icon name="info" size={15} />
-            <span>
-              The book could not refresh. {errorMessage(listQuery.error)}
-            </span>
+            <p>The shelf could not refresh. {errorMessage(listQuery.error)}</p>
             <Button
               type="button"
               variant="ghost"
@@ -982,8 +738,45 @@ export function QuestionsPage() {
           </div>
         ) : null}
 
-        {listBody}
-      </section>
+        <QuestionShelfBody
+          list={list}
+          isPending={listQuery.isPending}
+          isError={listQuery.isError}
+          isFetching={listQuery.isFetching}
+          error={listQuery.error}
+          total={total}
+          resources={resources}
+          filtered={filtered}
+          offset={offset}
+          pageNumber={pageNumber}
+          totalPages={totalPages}
+          rangeStart={rangeStart}
+          rangeEnd={rangeEnd}
+          askingId={askingId}
+          deletingId={deletingId}
+          actionError={actionError}
+          onRetry={() => void listQuery.refetch()}
+          onBackToFirstPage={() => setOffset(0)}
+          onClearFilters={clearFilters}
+          onCreate={openCreate}
+          onAsk={(item) => askQuestion.mutate({ questionId: item.id })}
+          onEdit={openEdit}
+          onDelete={(item) => deleteQuestion.mutate({ questionId: item.id })}
+          onOffsetChange={setOffset}
+        />
+      </div>
+
+      {dialog ? (
+        <QuestionDialog
+          key={dialog.mode === "edit" ? `edit-${dialog.item.id}` : "create"}
+          mode={dialog.mode}
+          initialQuestion={dialog.mode === "edit" ? dialog.item.question : ""}
+          saving={dialogSaving}
+          error={dialogError}
+          onClose={closeDialog}
+          onSubmit={submitDialog}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,15 +1,20 @@
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 
-import { parseDateInput, toDateInput } from "./helpers";
-
-const QUICK_RANGES = [7, 14, 30, 90] as const;
+import {
+  MAX_YEAR,
+  MIN_YEAR,
+  RANGE_OPTIONS,
+  parseDateInput,
+  toDateInput,
+} from "./helpers";
 
 interface TimelineControlsProps {
   readonly anchor: Date;
   readonly range: number;
   readonly includeHistory: boolean;
-  readonly caption: string;
+  readonly canGoEarlier: boolean;
+  readonly canGoLater: boolean;
   readonly onAnchorChange: (date: Date) => void;
   readonly onShift: (days: number) => void;
   readonly onRangeChange: (range: number) => void;
@@ -17,12 +22,13 @@ interface TimelineControlsProps {
   readonly onDemoSeason: () => void;
 }
 
-/** Date anchor, period shifting, quick windows, and the history toggle. */
+/** Compact functional controls for the timeline's date window and sampling. */
 export function TimelineControls({
   anchor,
   range,
   includeHistory,
-  caption,
+  canGoEarlier,
+  canGoLater,
   onAnchorChange,
   onShift,
   onRangeChange,
@@ -37,81 +43,84 @@ export function TimelineControls({
   };
 
   return (
-    <section className="timeline-controls reveal reveal-2" aria-label="Timeline range controls">
-      <div className="timeline-controls__main">
-        <div className="timeline-controls__period">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => onShift(-range)}
-            aria-label={`Prev: previous period, ${range} days earlier`}
-          >
-            <Icon name="chevron-right" size={14} className="timeline-controls__chevron is-back" />
-            Prev
-          </Button>
-          <label className="timeline-date-field">
-            <span className="eyebrow">Anchor day</span>
-            <input
-              type="date"
-              value={toDateInput(anchor)}
-              min="1900-01-01"
-              max="2200-12-31"
-              onChange={(event) => handleDateChange(event.target.value)}
-            />
-          </label>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => onShift(range)}
-            aria-label={`Next period, ${range} days later`}
-          >
-            Next
-            <Icon name="chevron-right" size={14} />
-          </Button>
-        </div>
-
-        <div className="timeline-controls__windows" role="group" aria-label="Quick range lengths">
-          <span className="eyebrow">Window</span>
-          {QUICK_RANGES.map((days) => (
-            <Button
-              key={days}
-              variant={range === days ? "ink" : "secondary"}
-              size="sm"
-              onClick={() => onRangeChange(days)}
-              aria-pressed={range === days}
-            >
-              {days} d
-            </Button>
-          ))}
-        </div>
-
-        <div className="timeline-controls__presets">
-          <Button variant="secondary" size="sm" onClick={onDemoSeason}>
-            <Icon name="ring" size={14} />
-            September 2026
-          </Button>
-        </div>
-
-        <label className="timeline-switch">
+    <section className="timeline-controls" aria-label="Timeline window controls">
+      <div className="timeline-controls__nav">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onShift(-range)}
+          disabled={!canGoEarlier}
+          aria-label={`Previous window, ${range} days earlier`}
+        >
+          <Icon name="chevron-right" size={13} className="timeline-chevron-back" />
+          Prev
+        </Button>
+        <label className="timeline-controls__date">
+          <span className="mono-label">Window end</span>
           <input
-            type="checkbox"
-            checked={includeHistory}
-            onChange={(event) => onHistoryChange(event.target.checked)}
+            className="input timeline-controls__date-input"
+            type="date"
+            value={toDateInput(anchor)}
+            min={`${MIN_YEAR}-01-01`}
+            max={`${MAX_YEAR}-12-31`}
+            onChange={(event) => handleDateChange(event.target.value)}
+            aria-label="Window end date"
           />
-          <span className="timeline-switch__track" aria-hidden="true">
-            <span className="timeline-switch__knob" />
-          </span>
-          <span>Include deprecated history</span>
         </label>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => onShift(range)}
+          disabled={!canGoLater}
+          aria-label={`Next window, ${range} days later`}
+        >
+          Next
+          <Icon name="chevron-right" size={13} />
+        </Button>
       </div>
 
-      <div className="timeline-controls__readout" aria-live="polite">
-        <span className="eyebrow">Displayed range</span>
-        <strong>{caption}</strong>
-        <span>
-          {range} {range === 1 ? "day" : "days"} {"\u00b7"} anchor at the right edge
-        </span>
+      <div className="timeline-controls__ranges" role="group" aria-label="Window length">
+        <span className="mono-label">Range</span>
+        {RANGE_OPTIONS.map((days) => (
+          <Button
+            key={days}
+            variant={range === days ? "ink" : "secondary"}
+            size="sm"
+            onClick={() => onRangeChange(days)}
+            aria-pressed={range === days}
+            aria-label={`${days} day window`}
+          >
+            {days}d
+          </Button>
+        ))}
       </div>
+
+      <label className="timeline-switch">
+        <input
+          type="checkbox"
+          checked={includeHistory}
+          onChange={(event) => onHistoryChange(event.target.checked)}
+        />
+        <span className="timeline-switch__track" aria-hidden="true">
+          <span className="timeline-switch__knob" />
+        </span>
+        <span className="timeline-switch__copy">
+          <span className="timeline-switch__label">Include history</span>
+          <span className="timeline-switch__hint">
+            {includeHistory ? "Deprecated memories included" : "Active memories only"}
+          </span>
+        </span>
+      </label>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onDemoSeason}
+        title="Read the seeded demo season"
+      >
+        <Icon name="ring" size={13} />
+        Try demo season
+      </Button>
     </section>
   );
 }

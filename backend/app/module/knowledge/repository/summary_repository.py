@@ -50,14 +50,10 @@ class SummaryRepository:
     async def list_by_ids(self, summary_ids: Sequence[int]) -> list[MemorySummaryModel]:
         if not summary_ids:
             return []
-        statement = select(MemorySummaryModel).where(
-            MemorySummaryModel.id.in_(summary_ids)
-        )
+        statement = select(MemorySummaryModel).where(MemorySummaryModel.id.in_(summary_ids))
         return list((await self.session.execute(statement)).scalars().all())
 
     async def count(self) -> int:
         return int(
-            (
-                await self.session.execute(select(func.count(MemorySummaryModel.id)))
-            ).scalar_one()
+            (await self.session.execute(select(func.count(MemorySummaryModel.id)))).scalar_one()
         )
