@@ -307,6 +307,18 @@ cd frontend && bun run build
 if Docker is available, sources `.secrets/deepseek.env`, syncs the backend, and
 serves the API and committed client at <http://127.0.0.1:8000>.
 
+On Windows, `./start.sh` needs a bash shell. `./run-local.ps1` is the PowerShell
+equivalent: it starts the dev database/cache if Docker is available, syncs the
+backend, and serves the same URL. The app reads `.secrets/` itself, so the script
+does not export those values. It also forces a `SelectorEventLoop`, because
+psycopg's async mode rejects the `ProactorEventLoop` that uvicorn selects by
+default on Windows.
+
+```powershell
+.\run-local.ps1            # http://127.0.0.1:8000
+.\run-local.ps1 -Port 8080
+```
+
 ### Cloudflare Tunnel
 
 This is the **Tunnel** deployment variant. A future pure Cloudflare Serverless
