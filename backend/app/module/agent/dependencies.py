@@ -34,11 +34,6 @@ from app.module.knowledge.dependencies import (
     get_search_service,
     get_timeline_service,
 )
-from app.module.media.dependencies import (
-    get_media_captioner,
-    get_media_service,
-    get_media_settings,
-)
 
 
 def get_agent_chat_generator(request: Request) -> ChatGeneratorProtocol:
@@ -69,8 +64,6 @@ class _ToolServiceScope:
 
     @asynccontextmanager
     async def _scope(self) -> AsyncIterator[AgentToolServices]:
-        runtime = cast(AiRuntime, self.request.app.state.ai_runtime)
-        settings = get_media_settings(self.request)
         async with self.session_factory() as session:
             try:
                 services = AgentToolServices(
@@ -78,12 +71,6 @@ class _ToolServiceScope:
                     file_service=get_file_service(self.request, session),
                     memory_service=get_memory_service(self.request, session),
                     timeline_service=get_timeline_service(self.request, session),
-                    media_service=get_media_service(
-                        self.request,
-                        session,
-                        get_media_captioner(self.request, runtime, settings),
-                        settings,
-                    ),
                 )
                 yield services
                 await session.commit()

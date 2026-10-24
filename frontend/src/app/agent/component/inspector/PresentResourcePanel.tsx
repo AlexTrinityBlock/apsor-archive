@@ -7,7 +7,6 @@ import {
 } from "../../trace";
 import {
   InspectorFileStage,
-  InspectorMediaStage,
   InspectorMemoryStage,
   LivePanel,
   PanelEmpty,
@@ -17,13 +16,11 @@ import {
 
 const RESOURCE_LABELS = {
   file: "File leaf",
-  media: "Media specimen",
   memory: "Memory leaf",
 } as const;
 
 const RESOURCE_ICONS = {
   file: "file",
-  media: "ring",
   memory: "memory",
 } as const;
 
@@ -48,7 +45,7 @@ export function PresentResourcePanel({ item }: PanelProps) {
       <PanelEmpty
         icon="layers"
         title="No resource on the stage"
-        detail="This presentation result did not include a file, media, or memory id."
+        detail="This presentation result did not include a file or memory id."
       />
     );
   }
@@ -76,15 +73,14 @@ export function PresentResourcePanel({ item }: PanelProps) {
             {target.chunk !== null ? ` · chunk ${target.chunk}` : ""}
           </code>
         </div>
-        <PanelLink to={href}>Open in viewer</PanelLink>
+        <PanelLink to={href}>
+          {target.type === "file" ? "Open in library" : "Open memory"}
+        </PanelLink>
       </header>
 
       <div className="pi-presentation__stage">
         {target.type === "file" ? (
           <InspectorFileStage fileId={target.id} chunk={target.chunk} />
-        ) : null}
-        {target.type === "media" ? (
-          <InspectorMediaStage mediaId={target.id} />
         ) : null}
         {target.type === "memory" ? (
           <InspectorMemoryStage memoryId={target.id} />

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { Link } from "react-router-dom";
 import remarkGfm from "remark-gfm";
@@ -8,103 +8,133 @@ import { remarkCitations } from "./remarkCitations";
 import type { CitationToken } from "../types";
 
 const SUMMARY_HREF = /^#citation-summary-(\d+)$/;
-const VIEWER_HREF = /^\/viewer\/(file|media|memory)\/(\d+)$/;
+const MEMORY_HREF = /^\/memory\/(\d+)\/?$/;
+const VIEWER_HREF = /^\/viewer\/(file|memory)\/(\d+)\/?$/;
+
+function positiveId(value: string | null): number | null {
+  if (value === null) {
+    return null;
+  }
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
 
 function citationFromHref(href: string): CitationToken | null {
   const summary = SUMMARY_HREF.exec(href);
   if (summary) {
-    const id = Number(summary[1]);
-    return Number.isSafeInteger(id) && id > 0
-      ? { kind: "summary", id, chunk: null }
-      : null;
+    const id = positiveId(summary[1]);
+    return id === null ? null : { kind: "summary", id, chunk: null };
   }
 
-  if (!href.startsWith("/viewer/")) {
-    return null;
-  }
   try {
     const url = new URL(href, "http://localhost");
-    const match = VIEWER_HREF.exec(url.pathname);
-    if (!match) {
-      return null;
+
+    if (url.pathname === "/library") {
+      const id = positiveId(url.searchParams.get("file"));
+      if (id === null) {
+        return null;
+      }
+      return {
+        kind: "file",
+        id,
+        chunk: positiveId(url.searchParams.get("chunk")),
+      };
     }
-    const kind = match[1];
-    if (kind !== "file" && kind !== "media" && kind !== "memory") {
-      return null;
+
+    const memory = MEMORY_HREF.exec(url.pathname);
+    if (memory) {
+      const id = positiveId(memory[1]);
+      return id === null ? null : { kind: "memory", id, chunk: null };
     }
-    const id = Number(match[2]);
-    if (!Number.isSafeInteger(id) || id <= 0) {
-      return null;
+
+    const viewer = VIEWER_HREF.exec(url.pathname);
+    if (viewer) {
+      const id = positiveId(viewer[2]);
+      if (id === null) {
+        return null;
+      }
+      if (viewer[1] === "memory") {
+        return { kind: "memory", id, chunk: null };
+      }
+      return {
+        kind: "file",
+        id,
+        chunk: positiveId(url.searchParams.get("chunk")),
+      };
     }
-    const rawChunk = kind === "file" ? url.searchParams.get("chunk") : null;
-    const chunk = rawChunk === null ? null : Number(rawChunk);
-    return {
-      kind,
-      id,
-      chunk:
-        chunk !== null && Number.isSafeInteger(chunk) && chunk > 0 ? chunk : null,
-    };
   } catch {
     return null;
   }
+  return null;
 }
 
-const MARKDOWN_COMPONENTS: Components = {
-  a: ({ href, children }) => {
-    if (!href) {
+function buildComponents(
+  onOpenCitation: ((token: CitationToken) => void) | undefined,
+): Components {
+  return {
+    a: ({ href, children }) => {
+      if (!href) {
+        return <span className="chat-markdown__plain-link">{children}</span>;
+      }
+
+      const citation = citationFromHref(href);
+      if (citation) {
+        return (
+          <CitationChip
+            token={citation}
+            label={children}
+            onOpen={onOpenCitation}
+          />
+        );
+      }
+
+      if (href.startsWith("#")) {
+        return (
+          <a className="chat-markdown__link" href={href}>
+            {children}
+          </a>
+        );
+      }
+
+      if (href.startsWith("/") && !href.startsWith("//")) {
+        return (
+          <Link className="chat-markdown__link" to={href}>
+            {children}
+          </Link>
+        );
+      }
+
+      if (/^https?:\/\//i.test(href)) {
+        return (
+          <a
+            className="chat-markdown__link"
+            href={href}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            {children}
+          </a>
+        );
+      }
+
       return <span className="chat-markdown__plain-link">{children}</span>;
-    }
-
-    const citation = citationFromHref(href);
-    if (citation) {
-      return <CitationChip token={citation} label={children} />;
-    }
-
-    if (href.startsWith("#")) {
-      return (
-        <a className="chat-markdown__link" href={href}>
-          {children}
-        </a>
-      );
-    }
-
-    if (href.startsWith("/") && !href.startsWith("//")) {
-      return (
-        <Link className="chat-markdown__link" to={href}>
-          {children}
-        </Link>
-      );
-    }
-
-    if (/^https?:\/\//i.test(href)) {
-      return (
-        <a
-          className="chat-markdown__link"
-          href={href}
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          {children}
-        </a>
-      );
-    }
-
-    return <span className="chat-markdown__plain-link">{children}</span>;
-  },
-  img: ({ alt }) => (
-    <span className="chat-markdown__image-note">
-      Image omitted from the transcript{alt ? `: ${alt}` : ""}
-    </span>
-  ),
-  table: ({ children }) => (
-    <div className="chat-markdown__table">
-      <table>{children}</table>
-    </div>
-  ),
-};
+    },
+    img: ({ alt }) => (
+      <span className="chat-markdown__image-note">
+        Image omitted from the transcript{alt ? `: ${alt}` : ""}
+      </span>
+    ),
+    table: ({ children }) => (
+      <div className="chat-markdown__table">
+        <table>{children}</table>
+      </div>
+    ),
+  };
+}
 
 interface MarkdownBodyProps {
   readonly markdown: string;
+  readonly onOpenCitation?: (token: CitationToken) => void;
 }
 
 /**
@@ -113,12 +143,18 @@ interface MarkdownBodyProps {
  */
 export const MarkdownBody = memo(function MarkdownBody({
   markdown,
+  onOpenCitation,
 }: MarkdownBodyProps) {
+  const components = useMemo(
+    () => buildComponents(onOpenCitation),
+    [onOpenCitation],
+  );
+
   return (
     <div className="chat-markdown">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkCitations]}
-        components={MARKDOWN_COMPONENTS}
+        components={components}
         skipHtml
       >
         {markdown}

@@ -48,13 +48,9 @@ class IngestRuntimeConfig:
             if not isinstance(value, int) or isinstance(value, bool):
                 raise ValueError(f"{name} must be an integer.")
             if value < minimum or value > maximum:
-                raise ValueError(
-                    f"{name} must be between {minimum} and {maximum}."
-                )
+                raise ValueError(f"{name} must be between {minimum} and {maximum}.")
         if self.chunk_overlap_chars >= self.chunk_target_chars:
-            raise ValueError(
-                "chunk_overlap_chars must be less than chunk_target_chars."
-            )
+            raise ValueError("chunk_overlap_chars must be less than chunk_target_chars.")
 
 
 __all__ = [

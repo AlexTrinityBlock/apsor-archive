@@ -33,7 +33,8 @@ RUN uv sync --frozen --no-dev
 
 COPY frontend/dist /app/frontend/dist
 
-RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin app \
+RUN groupadd --gid 10001 app \
+    && useradd --uid 10001 --gid app --create-home --shell /usr/sbin/nologin app \
     && mkdir -p /data \
     && chown -R app:app /app /data
 USER app

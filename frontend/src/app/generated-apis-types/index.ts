@@ -3,7 +3,6 @@ export * from './ai/ai';
 export * from './auth/auth';
 export * from './files/files';
 export * from './folders/folders';
-export * from './media/media';
 export * from './memories/memories';
 export * from './search/search';
 export * from './settings/settings';

@@ -14,7 +14,9 @@ export function SetupScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const usernameId = useId();
+  const usernameHintId = useId();
   const passwordId = useId();
+  const passwordHintId = useId();
   const confirmId = useId();
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -42,7 +44,7 @@ export function SetupScreen() {
     <AuthFrame
       eyebrow="First run · create keeper"
       title="Press the first ring."
-      description="This archive has no account yet. Create the single keeper account that will protect every file, memory, and image on this machine."
+      description="This archive has no keeper yet. Create the single account that will protect every file and memory on this machine."
       footer={
         <p>
           The password is hashed with Argon2. There is no email recovery, no cloud
@@ -51,9 +53,12 @@ export function SetupScreen() {
       }
     >
       <form className="auth-form" onSubmit={handleSubmit}>
-        <label className="auth-field" htmlFor={usernameId}>
-          <span>Username</span>
+        <div className="field">
+          <label className="field-label" htmlFor={usernameId}>
+            Username
+          </label>
           <input
+            className="input"
             id={usernameId}
             name="username"
             value={username}
@@ -63,16 +68,22 @@ export function SetupScreen() {
             spellCheck={false}
             minLength={3}
             maxLength={64}
+            aria-describedby={usernameHintId}
             required
             disabled={isSubmitting}
           />
-          <small>3–64 characters; letters, digits, dot, dash, underscore.</small>
-        </label>
+          <small className="field-help" id={usernameHintId}>
+            3–64 characters; letters, digits, dot, dash, underscore.
+          </small>
+        </div>
 
-        <label className="auth-field" htmlFor={passwordId}>
-          <span>Password</span>
-          <span className="auth-password">
+        <div className="field">
+          <label className="field-label" htmlFor={passwordId}>
+            Password
+          </label>
+          <div className="auth-password">
             <input
+              className="input"
               id={passwordId}
               name="password"
               type={showPassword ? "text" : "password"}
@@ -81,6 +92,7 @@ export function SetupScreen() {
               autoComplete="new-password"
               minLength={10}
               maxLength={256}
+              aria-describedby={passwordHintId}
               required
               disabled={isSubmitting}
             />
@@ -89,17 +101,24 @@ export function SetupScreen() {
               className="auth-password__toggle"
               onClick={() => setShowPassword((current) => !current)}
               aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
+              aria-controls={passwordId}
               disabled={isSubmitting}
             >
               {showPassword ? "Hide" : "Show"}
             </button>
-          </span>
-          <small>At least 10 characters. There is no recovery.</small>
-        </label>
+          </div>
+          <small className="field-help" id={passwordHintId}>
+            At least 10 characters. There is no recovery.
+          </small>
+        </div>
 
-        <label className="auth-field" htmlFor={confirmId}>
-          <span>Confirm password</span>
+        <div className="field">
+          <label className="field-label" htmlFor={confirmId}>
+            Confirm password
+          </label>
           <input
+            className="input"
             id={confirmId}
             name="confirm-password"
             type={showPassword ? "text" : "password"}
@@ -111,7 +130,7 @@ export function SetupScreen() {
             required
             disabled={isSubmitting}
           />
-        </label>
+        </div>
 
         {localError || error ? (
           <p className="auth-error" role="alert">
@@ -120,7 +139,7 @@ export function SetupScreen() {
           </p>
         ) : null}
 
-        <Button type="submit" variant="ink" size="lg" block disabled={isSubmitting}>
+        <Button type="submit" variant="primary" size="lg" block disabled={isSubmitting}>
           {isSubmitting ? "Pressing the first ring…" : "Create the archive keeper"}
           {!isSubmitting ? <Icon name="arrow-right" size={17} /> : null}
         </Button>

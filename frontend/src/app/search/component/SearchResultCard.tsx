@@ -1,19 +1,21 @@
-import type { ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import { formatDate, formatDateTime } from "../../../lib/format";
+import { highlightTerms, snippetAround } from "../../../lib/highlight";
+import { Badge } from "../../component/Badge";
+import { Button, ButtonLink } from "../../component/Button";
+import { Icon } from "../../component/Icon";
 import type {
   FileSearchResultSchema,
   MemorySearchResultSchema,
   SummarySearchResultSchema,
 } from "../../generated-apis-types/schemas";
-import { formatDate, formatDateTime, formatRelative } from "../../../lib/format";
-import { highlightTerms, snippetAround } from "../../../lib/highlight";
-import { Badge } from "../../component/Badge";
-import { Icon } from "../../component/Icon";
 
 const SNIPPET_LIMIT = 380;
 
-type MatchSource = "text" | "vector";
+type MatchSource = FileSearchResultSchema["matched_by"][number];
+type ResultTone = "file" | "memory" | "summary";
 
 interface CardProps<T> {
   readonly result: T;
@@ -27,6 +29,7 @@ function rankLabel(rank: number): string {
 
 function libraryHref(fileId: number, chunk: number): string {
   const params = new URLSearchParams({
+    tab: "files",
     file: String(fileId),
     chunk: String(chunk),
   });
@@ -38,7 +41,7 @@ function MatchedByBadges({ matchedBy }: { readonly matchedBy: readonly MatchSour
     return null;
   }
   return (
-    <span className="search-result__badges">
+    <span className="search-result__badges" aria-label="Matched by">
       {matchedBy.map((source) => (
         <Badge key={source} tone={source === "text" ? "moss" : "ochre"}>
           {source.toUpperCase()}
@@ -48,37 +51,32 @@ function MatchedByBadges({ matchedBy }: { readonly matchedBy: readonly MatchSour
   );
 }
 
-function SourceTime({ value }: { readonly value: string }) {
+function FusedScore({ value }: { readonly value: number }) {
   return (
-    <span className="search-result__time">
-      <span>Updated</span>
-      <time dateTime={value}>{formatDateTime(value)}</time>
-      <span>({formatRelative(value)})</span>
-    </span>
-  );
-}
-
-function Score({ value }: { readonly value: number }) {
-  return (
-    <span className="search-result__score">
-      <span className="eyebrow">Score</span>
+    <span
+      className="search-result__score"
+      title="Reciprocal-rank fusion score returned by the search API"
+      aria-label={`Fused score ${value.toFixed(6)}`}
+    >
+      <span>Fused</span>
       <strong>{value.toFixed(6)}</strong>
     </span>
   );
 }
 
 function CardFrame({
+  tone,
   rank,
-  rankTone,
   children,
 }: {
+  readonly tone: ResultTone;
   readonly rank: number;
-  readonly rankTone: "file" | "memory" | "summary";
   readonly children: ReactNode;
 }) {
   return (
-    <article className={`search-result search-result--${rankTone}`}>
-      <span className="search-result__rank" aria-hidden="true">
+    <article className={`search-result search-result--${tone}`}>
+      <span className="search-result__rank">
+        <span className="visually-hidden">Rank </span>
         {rankLabel(rank)}
       </span>
       <div className="search-result__body">{children}</div>
@@ -86,134 +84,159 @@ function CardFrame({
   );
 }
 
-/** A file chunk result with a pointer back into the library reader. */
+/** A file chunk with a pointer into the Library preview modal. */
 export function FileResultCard({ result, query, rank }: CardProps<FileSearchResultSchema>) {
   const href = libraryHref(result.file_id, result.chunk);
 
   return (
-    <CardFrame rank={rank} rankTone="file">
+    <CardFrame tone="file" rank={rank}>
       <div className="search-result__top">
-        <div className="search-result__source">
-          <span className="search-result__kind" aria-hidden="true">
-            <Icon name="file" size={17} />
-          </span>
-          <div className="search-result__identity">
-            <Link className="search-result__label" to={href}>
+        <div className="search-result__identity">
+          <span className="search-result__label">
+            <Icon name="file" size={15} className="search-result__kind-icon" />
+            <Link className="search-result__path" to={href}>
               {result.raw_file_path}
             </Link>
-            <span className="search-result__meta">
-              <span>Chunk {result.chunk}</span>
-              <span aria-hidden="true">·</span>
-              <SourceTime value={result.update_time} />
-              {!result.is_current ? <Badge tone="ochre">history</Badge> : null}
+            <Badge>Chunk #{result.chunk}</Badge>
+            {!result.is_current ? <Badge tone="ochre">history</Badge> : null}
+          </span>
+          <span className="search-result__meta">
+            <span>
+              Updated{" "}
+              <time dateTime={result.update_time}>{formatDateTime(result.update_time)}</time>
             </span>
-          </div>
+          </span>
         </div>
-        <Score value={result.score} />
+        <div className="search-result__side">
+          <MatchedByBadges matchedBy={result.matched_by} />
+          <FusedScore value={result.score} />
+        </div>
       </div>
 
       <p className="search-result__snippet">
         {highlightTerms(snippetAround(result.content, query, SNIPPET_LIMIT), query)}
       </p>
 
-      <footer className="search-result__foot">
-        <MatchedByBadges matchedBy={result.matched_by} />
-        <Link className="search-result__action" to={href}>
+      <div className="search-result__foot">
+        <ButtonLink to={href} variant="secondary" size="sm">
           Open in library
           <Icon name="arrow-up-right" size={14} />
-        </Link>
-      </footer>
+        </ButtonLink>
+      </div>
     </CardFrame>
   );
 }
 
-/** A memory result that keeps its status visible and traces back to the ledger. */
+/** A memory crystal with its status and a link to the memory reader. */
 export function MemoryResultCard({ result, query, rank }: CardProps<MemorySearchResultSchema>) {
   const href = `/memory/${result.memory_id}`;
 
   return (
-    <CardFrame rank={rank} rankTone="memory">
+    <CardFrame tone="memory" rank={rank}>
       <div className="search-result__top">
-        <div className="search-result__source">
-          <span className="search-result__kind" aria-hidden="true">
-            <Icon name="memory" size={17} />
-          </span>
-          <div className="search-result__identity">
-            <Link className="search-result__label" to={href}>
+        <div className="search-result__identity">
+          <span className="search-result__label">
+            <Icon name="memory" size={15} className="search-result__kind-icon" />
+            <Link className="search-result__path" to={href}>
               Memory #{result.memory_id}
             </Link>
-            <span className="search-result__meta">
-              <Badge tone={result.status === "active" ? "moss" : "ochre"} dot>
-                {result.status}
-              </Badge>
-              <span aria-hidden="true">·</span>
-              <SourceTime value={result.update_time} />
+            <Badge tone={result.status === "active" ? "moss" : "ochre"} dot>
+              {result.status}
+            </Badge>
+          </span>
+          <span className="search-result__meta">
+            <span>
+              Recorded{" "}
+              <time dateTime={result.update_time}>{formatDateTime(result.update_time)}</time>
             </span>
-          </div>
+          </span>
         </div>
-        <Score value={result.score} />
+        <div className="search-result__side">
+          <MatchedByBadges matchedBy={result.matched_by} />
+          <FusedScore value={result.score} />
+        </div>
       </div>
 
       <p className="search-result__snippet">
         {highlightTerms(snippetAround(result.content, query, SNIPPET_LIMIT), query)}
       </p>
 
-      <footer className="search-result__foot">
-        <MatchedByBadges matchedBy={result.matched_by} />
-        <Link className="search-result__action" to={href}>
+      <div className="search-result__foot">
+        <ButtonLink to={href} variant="secondary" size="sm">
           Trace memory
-          <Icon name="arrow-up-right" size={14} />
-        </Link>
-      </footer>
+          <Icon name="arrow-right" size={14} />
+        </ButtonLink>
+      </div>
     </CardFrame>
   );
 }
 
-/** A memory-summary chunk with its period and themes kept in view. */
+/** A summary that expands in place; it has no reader route. */
 export function SummaryResultCard({
   result,
   query,
   rank,
 }: CardProps<SummarySearchResultSchema>) {
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
+  const body = expanded
+    ? result.content
+    : snippetAround(result.content, query, SNIPPET_LIMIT);
+
   return (
-    <CardFrame rank={rank} rankTone="summary">
+    <CardFrame tone="summary" rank={rank}>
       <div className="search-result__top">
-        <div className="search-result__source">
-          <span className="search-result__kind" aria-hidden="true">
-            <Icon name="layers" size={17} />
-          </span>
-          <div className="search-result__identity">
-            <span className="search-result__label">Summary #{result.memory_summary_id}</span>
-            <span className="search-result__meta">
-              <span>
-                Period {formatDate(result.period_start)} – {formatDate(result.period_end)}
-              </span>
-              <span aria-hidden="true">·</span>
-              <SourceTime value={result.update_time} />
+        <div className="search-result__identity">
+          <span className="search-result__label">
+            <Icon name="layers" size={15} className="search-result__kind-icon" />
+            <span className="search-result__path search-result__path--static">
+              Summary #{result.memory_summary_id}
             </span>
-          </div>
+          </span>
+          <span className="search-result__meta">
+            <span>
+              Period {formatDate(result.period_start)} – {formatDate(result.period_end)}
+            </span>
+          </span>
         </div>
-        <Score value={result.score} />
+        <div className="search-result__side">
+          <MatchedByBadges matchedBy={result.matched_by} />
+          <FusedScore value={result.score} />
+        </div>
       </div>
 
-      <p className="search-result__snippet">
-        {highlightTerms(snippetAround(result.content, query, SNIPPET_LIMIT), query)}
+      <p
+        id={contentId}
+        className={
+          expanded
+            ? "search-result__snippet search-result__snippet--full"
+            : "search-result__snippet"
+        }
+      >
+        {highlightTerms(body, query)}
       </p>
 
       {result.themes.length > 0 ? (
         <p className="search-result__themes" aria-label="Summary themes">
-          {result.themes.map((theme) => (
-            <span className="search-result__theme" key={theme}>
-              #{theme}
-            </span>
+          {result.themes.map((theme, index) => (
+            <span key={`${theme}-${index}`}>#{theme}</span>
           ))}
         </p>
       ) : null}
 
-      <footer className="search-result__foot">
-        <MatchedByBadges matchedBy={result.matched_by} />
-        <span className="search-result__source-tag">Memory summary</span>
-      </footer>
+      <div className="search-result__foot">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? "Collapse summary" : "Read full summary"}
+          <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
+        </Button>
+      </div>
     </CardFrame>
   );
 }

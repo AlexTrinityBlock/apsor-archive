@@ -5,29 +5,22 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
-  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
-  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
-  UseMutationOptions,
-  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
-  AiStatusSchema,
-  AskRequestSchema,
-  AskResponseSchema,
-  HTTPValidationError
+  AiStatusSchema
 } from '../schemas';
 
 import { apiFetch } from '../../../apis/fetch-client';
@@ -152,91 +145,3 @@ export function useGetAiStatus<TData = Awaited<ReturnType<typeof getAiStatus>>, 
 
 
 
-export const getAskKnowledgeUrl = () => {
-
-
-
-
-  return `/api/v1/ask`
-}
-
-/**
- * Answer a question from retrieved sources with explicit citations.
- * @summary Ask Knowledge
- */
-export const askKnowledge = async (askRequestSchema: AskRequestSchema, options?: Parameters<typeof apiFetch>[1]): Promise<AskResponseSchema> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return apiFetch<AskResponseSchema>(getAskKnowledgeUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(askRequestSchema)
-  }
-);}
-
-
-
-
-
-export const getAskKnowledgeMutationKey = () => ['askKnowledge'] as const;
-
-export const getAskKnowledgeMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askKnowledge>>, TError,AskKnowledgeMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof askKnowledge>>, TError,AskKnowledgeMutationVariables, TContext> => {
-
-const mutationKey = getAskKnowledgeMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof askKnowledge>>, AskKnowledgeMutationVariables> = (props) => {
-          const {data} = props ?? {};
-
-          return  askKnowledge(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type AskKnowledgeMutationResult = NonNullable<Awaited<ReturnType<typeof askKnowledge>>>
-    export type AskKnowledgeMutationBody = AskRequestSchema
-    export type AskKnowledgeMutationError = HTTPValidationError
-    export type AskKnowledgeMutationVariables = {data: AskRequestSchema}
-
-    /**
- * @summary Ask Knowledge
- */
-export const useAskKnowledge = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof askKnowledge>>, TError,AskKnowledgeMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof askKnowledge>>,
-        TError,
-        AskKnowledgeMutationVariables,
-        TContext
-      > => {
-      return useMutation(getAskKnowledgeMutationOptions(options), queryClient);
-    }

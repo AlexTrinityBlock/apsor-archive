@@ -1,74 +1,88 @@
-import type { ReactNode } from "react";
-
-import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import { truncate } from "../../../lib/format";
 import { formatArgumentValue } from "../format";
-import { toolStatusTone } from "./status";
 import type { ToolCallMeta, ToolResultMeta } from "../types";
 
 interface ToolCallCardProps {
   readonly call: ToolCallMeta;
   readonly result: ToolResultMeta | null;
   readonly index: number;
+  readonly selected?: boolean;
+  readonly onSelect?: (callId: string) => void;
 }
 
-/** A structured tool call, with status and duration from its matching result. */
-export function ToolCallCard({ call, result, index }: ToolCallCardProps) {
-  const status = result?.status ?? null;
-  const argumentsList = call.arguments
-    ? Object.entries(call.arguments)
-    : [];
-  const statusLabel = status ?? (result ? "recorded" : "awaiting result");
-
-  let argumentsBody: ReactNode;
-  if (argumentsList.length > 0) {
-    argumentsBody = (
-      <dl className="chat-tool__args">
-        {argumentsList.map(([key, value]) => (
-          <div key={key}>
-            <dt>{key}</dt>
-            <dd>{formatArgumentValue(value)}</dd>
-          </div>
-        ))}
-      </dl>
-    );
-  } else if (call.rawArguments) {
-    argumentsBody = (
-      <pre className="chat-tool__raw">{truncate(call.rawArguments, 600)}</pre>
-    );
-  } else {
-    argumentsBody = <p className="chat-tool__empty">No arguments were recorded.</p>;
+function argumentSummary(call: ToolCallMeta): string {
+  if (call.arguments) {
+    const first = Object.entries(call.arguments)[0];
+    if (first) {
+      return `${first[0]}: ${formatArgumentValue(first[1])}`;
+    }
   }
+  if (call.rawArguments) {
+    return truncate(call.rawArguments, 90);
+  }
+  return "no arguments";
+}
+
+function formatDuration(value: number | null | undefined): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(2)} s`;
+  }
+  return `${value} ms`;
+}
+
+/** A compact tool step. Selecting it pins the matching inspector trace item. */
+export function ToolCallCard({
+  call,
+  result,
+  index,
+  selected = false,
+  onSelect,
+}: ToolCallCardProps) {
+  const status = result?.status ?? null;
+  const statusLabel = status ?? (result ? "recorded" : "awaiting result");
+  const duration = formatDuration(result?.durationMs);
+  const isError = status?.toLowerCase() === "error";
+
+  const className = [
+    "tool-step-chip",
+    selected ? "is-active" : null,
+    isError ? "is-error" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <article className="chat-tool">
-      <header className="chat-tool__head">
-        <span className="chat-tool__index" aria-hidden="true">
+    <button
+      type="button"
+      className={className}
+      onClick={onSelect ? () => onSelect(call.id) : undefined}
+      aria-pressed={onSelect ? selected : undefined}
+      title={onSelect ? "Inspect this tool step" : undefined}
+    >
+      <span className="tool-step-chip__left">
+        <span className="tool-step-chip__index" aria-hidden="true">
           {String(index + 1).padStart(2, "0")}
         </span>
-        <span className="chat-tool__mark" aria-hidden="true">
-          <Icon name="spark" size={13} />
-        </span>
-        <span className="chat-tool__name">{call.name}</span>
-        <Badge tone={toolStatusTone(status)} className="chat-tool__status">
+        <Icon name="spark" size={12} />
+        <code className="tool-step-chip__name">{call.name}</code>
+        <span className="tool-step-chip__args">{argumentSummary(call)}</span>
+      </span>
+      <span className="tool-step-chip__right">
+        {duration ? <span>{duration}</span> : null}
+        <span
+          className={
+            isError
+              ? "tool-step-chip__status is-error"
+              : "tool-step-chip__status"
+          }
+        >
           {statusLabel}
-        </Badge>
-      </header>
-
-      {argumentsBody}
-
-      <footer className="chat-tool__foot">
-        <span className="chat-tool__call-id" title={call.id}>
-          {call.id}
         </span>
-        {result?.durationMs !== null && result?.durationMs !== undefined ? (
-          <span>{result.durationMs} ms</span>
-        ) : null}
-        {result?.errorCode ? (
-          <span className="chat-tool__error-code">{result.errorCode}</span>
-        ) : null}
-      </footer>
-    </article>
+      </span>
+    </button>
   );
 }

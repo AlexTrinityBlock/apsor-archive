@@ -34,10 +34,7 @@ def upgrade() -> None:
         server_default=sa.text("75000"),
         existing_nullable=False,
     )
-    op.execute(
-        "UPDATE agent_config SET max_total_tokens = 100000 "
-        "WHERE max_total_tokens = 64000"
-    )
+    op.execute("UPDATE agent_config SET max_total_tokens = 100000 WHERE max_total_tokens = 64000")
     op.execute(
         "UPDATE agent_config SET compaction_threshold_tokens = 75000 "
         "WHERE compaction_threshold_tokens = 48000"
@@ -50,10 +47,7 @@ def downgrade() -> None:
         "UPDATE agent_config SET compaction_threshold_tokens = 48000 "
         "WHERE compaction_threshold_tokens = 75000"
     )
-    op.execute(
-        "UPDATE agent_config SET max_total_tokens = 64000 "
-        "WHERE max_total_tokens = 100000"
-    )
+    op.execute("UPDATE agent_config SET max_total_tokens = 64000 WHERE max_total_tokens = 100000")
     op.alter_column(
         "agent_config",
         "max_total_tokens",

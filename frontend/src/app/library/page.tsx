@@ -1,65 +1,87 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
 import "./library.css";
+import "../viewer/viewer.css";
 
-import type { FileSchema, PathFileSchema } from "../generated-apis-types/schemas";
-import { copyFile, moveFile, uploadFileAsync } from "../generated-apis-types/files/files";
+import type {
+  FileSchema,
+  PathFileSchema,
+} from "../generated-apis-types/schemas";
+import {
+  copyFile,
+  moveFile,
+} from "../generated-apis-types/files/files";
 import { useSeedDemo } from "../generated-apis-types/system/system";
 import { useReadPath } from "../generated-apis-types/tree/tree";
 import { parentPath, pathSegments } from "../../lib/format";
-import { Badge } from "../component/Badge";
 import { Button } from "../component/Button";
-import { Icon } from "../component/Icon";
-import { PageHeader } from "../component/PageHeader";
 import { Panel } from "../component/Panel";
 import { QueryState } from "../component/QueryState";
 import { useToast } from "../component/Toast";
 import { useDebouncedValue } from "../hook/useDebouncedValue";
-import { FileReader } from "./component/FileReader";
 import { BatchMoveDialog, type BatchMoveResult } from "./component/BatchMoveDialog";
-import { LibraryBoard } from "./component/LibraryBoard";
-import { LibraryResults } from "./component/LibraryResults";
+import { DeleteFileDialog } from "./component/DeleteFileDialog";
+import { FilePreviewModal } from "./component/FilePreviewModal";
+import { LibraryFilesContent } from "./component/LibraryFilesContent";
+import { LibraryMediaGallery } from "./component/LibraryMediaGallery";
 import { LibrarySelectionBar } from "./component/LibrarySelectionBar";
 import { LibraryToolbar } from "./component/LibraryToolbar";
+import { LibraryUploadTray } from "./component/LibraryUploadTray";
 import { MoveCopyDialog } from "./component/MoveCopyDialog";
 import { NewFolderDialog } from "./component/NewFolderDialog";
 import { UploadDialog } from "./component/UploadDialog";
 import {
-  ACCEPTED_FILE_HINT,
-  MAX_UPLOAD_BYTES,
+  IMAGE_UPLOAD_ACCEPT,
+  clipboardFiles,
   describeError,
-  ingestJobFailureMessage,
-  isAcceptedFileName,
-  isAbortError,
+  filterImageFiles,
+  imageFiles,
+  invalidateLibraryQueries,
+  isEditablePasteTarget,
+  isImageFileName,
   isNotFoundError,
-  isSafeUploadName,
   joinArchivePath,
+  nameClipboardFile,
   normalizeLibraryPath,
   parsePositiveInt,
   pathParamValue,
-  readerBackLabel,
   sameArchivePath,
-  taskProgressFromJob,
-  type LibraryUploadTask,
+  sortListing,
+  type FileOperationMode,
+  type FileOperationTarget,
+  type LibrarySort,
+  type LibraryTab,
   type LibraryView,
-  waitForIngestJob,
 } from "./component/library-utils";
+import { useLibraryUploads } from "./hook/useLibraryUploads";
 import { useMediaQuery } from "./hook/useMediaQuery";
 
 interface ParamUpdates {
   readonly [key: string]: string | number | null;
 }
 
-type FileOperationMode = "move" | "copy";
-
-const EMPTY_SELECTED_FILE_IDS: ReadonlySet<number> = new Set<number>();
-
 interface MoveCopyRequest {
-  readonly file: PathFileSchema;
+  readonly file: FileOperationTarget;
   readonly mode: FileOperationMode;
 }
+
+interface DeleteRequest {
+  readonly file_id: number;
+  readonly file_name: string;
+  readonly raw_file_path: string;
+}
+
+const EMPTY_SELECTED_FILE_IDS: ReadonlySet<number> = new Set<number>();
 
 function resolveView(rawView: string | null, isDesktop: boolean): LibraryView {
   if (rawView === "board" || rawView === "list") {
@@ -69,65 +91,61 @@ function resolveView(rawView: string | null, isDesktop: boolean): LibraryView {
 }
 
 /**
- * The file shelf. Browse state lives entirely in the query string:
- * `path`, `file`, `chunk` (1-based), `q` (fuzzy path search), and `view`
- * (`board` or `list`). Directory and file clicks push history; search typing,
- * chunk turns, and the view toggle replace it.
+ * The unified file workspace. One `readPath` listing feeds both the Files tab
+ * and the image-only Media gallery; the preview modal keeps the shelf behind
+ * it. Browse state lives in the query string: `tab`, `path`, `q`, `view`,
+ * `file`, `chunk`, and `media` (an image file id).
  */
 export function LibraryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
   const isDesktop = useMediaQuery("(min-width: 761px)");
-  const nextUploadId = useRef(1);
-  const uploadControllers = useRef<Map<number, AbortController>>(new Map());
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const {
+    tasks: uploadTasks,
+    enqueueFiles,
+    retryTask: handleRetryTask,
+    dismiss: dismissUploads,
+  } = useLibraryUploads();
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadTarget, setUploadTarget] = useState("/");
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [moveCopyRequest, setMoveCopyRequest] = useState<MoveCopyRequest | null>(null);
-  const [uploadTasks, setUploadTasks] = useState<readonly LibraryUploadTask[]>([]);
+  const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selectedFileIds, setSelectedFileIds] = useState<ReadonlySet<number>>(
     () => new Set<number>(),
   );
   const [selectionPath, setSelectionPath] = useState<string | null>(null);
   const [batchMoveFiles, setBatchMoveFiles] = useState<readonly PathFileSchema[] | null>(null);
+  const [sort, setSort] = useState<LibrarySort>("modified");
+  const [mediaFilter, setMediaFilter] = useState("");
 
+  const rawTab = searchParams.get("tab");
+  const tab: LibraryTab = rawTab === "media" ? "media" : "files";
   const path = normalizeLibraryPath(searchParams.get("path"));
   const fileId = parsePositiveInt(searchParams.get("file"));
+  const mediaId = parsePositiveInt(searchParams.get("media"));
+  const previewFileId = tab === "media" ? mediaId ?? fileId : fileId;
   const requestedChunk = parsePositiveInt(searchParams.get("chunk")) ?? 1;
-  const rawQuery = searchParams.get("q") ?? "";
+  const rawQuery = tab === "files" ? searchParams.get("q") ?? "" : "";
   const query = rawQuery.trim();
   const debouncedQuery = useDebouncedValue(query, 300);
   const activeQuery = query.length > 0 ? debouncedQuery.trim() : "";
   const view = resolveView(searchParams.get("view"), isDesktop);
 
-  const browseQuery = useReadPath(
-    {
-      path,
-      path_depth: 1,
-      fuzzy_search: activeQuery || undefined,
-    },
-    { query: { enabled: fileId === null } },
-  );
+  const browseQuery = useReadPath({
+    path,
+    path_depth: 1,
+    fuzzy_search: tab === "files" && activeQuery ? activeQuery : undefined,
+  });
 
-  // Opening a folder or a reader should start at the masthead, not wherever
-  // the previous shelf happened to be scrolled. Query typing does not move it.
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "auto" });
-  }, [path, fileId]);
-
-  // Closing the library page stops local polling; the durable jobs keep
-  // running on the server and can be picked up again later.
-  useEffect(() => {
-    const controllers = uploadControllers.current;
-    return () => {
-      for (const controller of controllers.values()) {
-        controller.abort();
-      }
-      controllers.clear();
-    };
+  const resetSelection = useCallback(() => {
+    setSelecting(false);
+    setSelectedFileIds(new Set<number>());
+    setSelectionPath(null);
   }, []);
 
   const seedMutation = useSeedDemo({
@@ -135,6 +153,10 @@ export function LibraryPage() {
       onSuccess: () => {
         toast.success("Demo archive seeded. The shelf is ready.");
         void queryClient.invalidateQueries();
+        setSelecting(false);
+        setSelectedFileIds(new Set<number>());
+        setSelectionPath(null);
+        setMediaFilter("");
         setSearchParams(new URLSearchParams(), { replace: true });
       },
       onError: (error) => {
@@ -165,29 +187,48 @@ export function LibraryPage() {
 
   const openFolder = useCallback(
     (folderPath: string) => {
-      setSelecting(false);
-      setSelectedFileIds(new Set<number>());
-      setSelectionPath(null);
+      resetSelection();
+      setMediaFilter("");
       updateParams({
         path: pathParamValue(folderPath || "/"),
         file: null,
+        media: null,
         chunk: null,
         q: null,
       });
     },
-    [updateParams],
+    [resetSelection, updateParams],
   );
 
-  const selectFile = useCallback(
+  const openPreview = useCallback(
     (nextFileId: number) => {
-      // Keep the current browse path and query so closing the reader returns
-      // to the same directory or fuzzy result set.
-      setSelecting(false);
-      setSelectedFileIds(new Set<number>());
-      setSelectionPath(null);
-      updateParams({ file: nextFileId, chunk: 1 });
+      resetSelection();
+      if (tab === "media") {
+        updateParams({ media: nextFileId, file: null, chunk: null });
+      } else {
+        updateParams({ file: nextFileId, media: null, chunk: null });
+      }
     },
-    [updateParams],
+    [resetSelection, tab, updateParams],
+  );
+
+  const closePreview = useCallback(() => {
+    updateParams({ file: null, media: null, chunk: null }, { replace: true });
+  }, [updateParams]);
+
+  const handleChunkChange = useCallback(
+    (nextChunk: number) => {
+      if (previewFileId === null) {
+        return;
+      }
+      const chunk = Math.max(1, nextChunk);
+      if (tab === "media") {
+        updateParams({ media: previewFileId, chunk }, { replace: true });
+      } else {
+        updateParams({ file: previewFileId, chunk }, { replace: true });
+      }
+    },
+    [previewFileId, tab, updateParams],
   );
 
   const openUpload = useCallback(
@@ -201,28 +242,40 @@ export function LibraryPage() {
   const openCreatedFile = useCallback(
     (file: FileSchema) => {
       setUploadOpen(false);
-      setSelecting(false);
-      setSelectedFileIds(new Set<number>());
-      setSelectionPath(null);
+      resetSelection();
+      setMediaFilter("");
       toast.success(`“${file.file_name}” archived as version ${file.version}.`);
-      void queryClient.invalidateQueries();
-      updateParams({
-        path: pathParamValue(parentPath(file.raw_file_path)),
-        file: file.id,
-        chunk: 1,
-        q: null,
+      invalidateLibraryQueries(queryClient, {
+        paths: true,
+        stats: true,
+        timeline: true,
+        search: true,
+        fileIds: [file.id],
       });
+      const image = isImageFileName(file.file_name) || file.mime_type.startsWith("image/");
+      const nextPath = pathParamValue(parentPath(file.raw_file_path));
+      if (tab === "media" && image) {
+        updateParams({
+          tab: "media",
+          path: nextPath,
+          media: file.id,
+          file: null,
+          chunk: null,
+          q: null,
+        });
+      } else {
+        updateParams({
+          tab: null,
+          path: nextPath,
+          file: file.id,
+          media: null,
+          chunk: null,
+          q: null,
+        });
+      }
     },
-    [queryClient, toast, updateParams],
+    [queryClient, resetSelection, tab, toast, updateParams],
   );
-
-  const closeReader = useCallback(() => {
-    updateParams({ file: null, chunk: null });
-  }, [updateParams]);
-
-  const clearQuery = useCallback(() => {
-    updateParams({ q: null }, { replace: true });
-  }, [updateParams]);
 
   const handleQueryChange = useCallback(
     (value: string) => {
@@ -238,16 +291,27 @@ export function LibraryPage() {
     [updateParams],
   );
 
-  const handleChunkChange = (nextChunk: number) => {
-    if (fileId === null) {
-      return;
-    }
-    updateParams({ file: fileId, chunk: Math.max(1, nextChunk) }, { replace: true });
-  };
-
-  const handleDeleted = useCallback(() => {
-    updateParams({ file: null, chunk: null }, { replace: true });
+  const clearQuery = useCallback(() => {
+    updateParams({ q: null }, { replace: true });
   }, [updateParams]);
+
+  const handleTabChange = useCallback(
+    (nextTab: LibraryTab) => {
+      if (nextTab === tab) {
+        return;
+      }
+      resetSelection();
+      setMediaFilter("");
+      updateParams({
+        tab: nextTab === "media" ? "media" : null,
+        file: null,
+        media: null,
+        chunk: null,
+        q: null,
+      });
+    },
+    [resetSelection, tab, updateParams],
+  );
 
   const handleViewChange = useCallback(
     (nextView: LibraryView) => {
@@ -256,175 +320,78 @@ export function LibraryPage() {
     [updateParams],
   );
 
-  const updateUploadTask = useCallback(
-    (id: number, updates: Partial<LibraryUploadTask>) => {
-      setUploadTasks((current) =>
-        current.map((task) => (task.id === id ? { ...task, ...updates } : task)),
-      );
-    },
-    [],
-  );
 
-  const runUploadTask = useCallback(
-    async (
-      id: number,
-      file: File,
-      targetFolder: string,
-      targetPath: string,
-    ): Promise<boolean> => {
-      const controller = new AbortController();
-      uploadControllers.current.set(id, controller);
-      updateUploadTask(id, { status: "uploading", message: undefined });
-      try {
-        const job = await uploadFileAsync({ path: targetPath, file });
-        if (controller.signal.aborted) {
-          return false;
-        }
-        updateUploadTask(id, {
-          ...taskProgressFromJob(job),
-          status: "processing",
-          message: undefined,
-        });
-
-        const finalJob = await waitForIngestJob(job.id, {
-          signal: controller.signal,
-          onUpdate: (snapshot) => {
-            updateUploadTask(id, {
-              ...taskProgressFromJob(snapshot),
-              status: snapshot.status === "failed" ? "error" : "processing",
-              message:
-                snapshot.status === "failed"
-                  ? ingestJobFailureMessage(snapshot)
-                  : undefined,
-            });
-          },
-        });
-        if (controller.signal.aborted) {
-          return false;
-        }
-        updateUploadTask(id, {
-          ...taskProgressFromJob(finalJob),
-          status: "done",
-          message: `Archived in ${targetFolder}`,
-        });
-        void queryClient.invalidateQueries();
-        return true;
-      } catch (error) {
-        if (controller.signal.aborted || isAbortError(error)) {
-          return false;
-        }
-        updateUploadTask(id, {
-          status: "error",
-          message: describeError(error),
-        });
-        return false;
-      } finally {
-        uploadControllers.current.delete(id);
-      }
-    },
-    [queryClient, updateUploadTask],
-  );
-
-  const handleFilesDropped = useCallback(
-    async (files: readonly File[], targetFolder: string) => {
-      const accepted: Array<{
-        readonly id: number;
-        readonly file: File;
-        readonly targetPath: string;
-      }> = [];
-      const rejected: LibraryUploadTask[] = [];
-
-      for (const file of files) {
-        const id = nextUploadId.current;
-        nextUploadId.current += 1;
-        const targetPath = joinArchivePath(targetFolder, file.name);
-        if (!isSafeUploadName(file.name) || !isAcceptedFileName(file.name)) {
-          rejected.push({
-            id,
-            name: file.name || "Unnamed file",
-            targetPath,
-            status: "error",
-            rejected: true,
-            message: `Allowed types: ${ACCEPTED_FILE_HINT}.`,
-          });
-          continue;
-        }
-        if (file.size > MAX_UPLOAD_BYTES) {
-          rejected.push({
-            id,
-            name: file.name,
-            targetPath,
-            status: "error",
-            rejected: true,
-            message: "Larger than the 10 MB upload limit.",
-          });
-          continue;
-        }
-        accepted.push({ id, file, targetPath });
-      }
-
-      const queued: LibraryUploadTask[] = accepted.map(({ id, file, targetPath }) => ({
-        id,
-        name: file.name,
-        targetPath,
-        status: "queued",
-        stage: "queued",
-      }));
-
-      if (queued.length > 0 || rejected.length > 0) {
-        setUploadTasks((current) => [...current, ...queued, ...rejected]);
-      }
-      if (rejected.length > 0) {
-        toast.error(
-          `${rejected.length} ${rejected.length === 1 ? "file was" : "files were"} rejected. See the intake queue.`,
-        );
-      }
-      if (accepted.length === 0) {
+  // Clipboard files use the same ingest queue as drag/drop. Text paste in
+  // inputs, textareas, and contenteditable regions is left to the browser.
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      if (isEditablePasteTarget(event.target)) {
         return;
       }
-
-      const results = await Promise.all(
-        accepted.map(({ id, file, targetPath }) =>
-          runUploadTask(id, file, targetFolder, targetPath),
-        ),
-      );
-      await queryClient.invalidateQueries();
-      const archived = results.filter(Boolean).length;
-      if (archived > 0) {
-        toast.success(
-          `${archived} ${archived === 1 ? "file" : "files"} archived in ${targetFolder}.`,
-        );
+      const files = clipboardFiles(event.clipboardData);
+      if (files.length === 0) {
+        return;
       }
-    },
-    [queryClient, runUploadTask, toast],
-  );
+      event.preventDefault();
+      const named = files.map((file, index) => nameClipboardFile(file, index));
+      void enqueueFiles(named, path);
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [enqueueFiles, path]);
+
+  const handleMediaInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    const images = files.filter((file) => isImageFileName(file.name));
+    if (images.length === 0) {
+      if (files.length > 0) {
+        toast.error("Choose a JPEG, PNG, or WebP image.");
+      }
+      return;
+    }
+    void enqueueFiles(images, path);
+  };
+
+  const openMediaPicker = () => {
+    mediaInputRef.current?.click();
+  };
 
   const handleOperationDone = useCallback(
     (result: FileSchema, targetFolder: string, mode: FileOperationMode) => {
-      void queryClient.invalidateQueries();
+      invalidateLibraryQueries(queryClient, {
+        paths: true,
+        stats: true,
+        timeline: true,
+        fileIds: [result.id],
+      });
       if (mode === "move") {
         toast.success(`“${result.file_name}” moved to ${targetFolder}.`);
-        if (fileId === result.id) {
-          updateParams(
-            {
-              path: pathParamValue(parentPath(result.raw_file_path)),
-              file: result.id,
-              chunk: requestedChunk,
-              q: null,
-            },
-            { replace: true },
-          );
+        if (previewFileId === result.id) {
+          const nextPath = pathParamValue(parentPath(result.raw_file_path));
+          const chunk = requestedChunk > 1 ? requestedChunk : null;
+          if (tab === "media") {
+            updateParams(
+              { path: nextPath, media: result.id, file: null, chunk },
+              { replace: true },
+            );
+          } else {
+            updateParams(
+              { path: nextPath, file: result.id, media: null, chunk },
+              { replace: true },
+            );
+          }
         }
       } else {
         toast.success(`“${result.file_name}” copied to ${targetFolder} as #${result.id}.`);
       }
       setMoveCopyRequest(null);
     },
-    [fileId, queryClient, requestedChunk, toast, updateParams],
+    [previewFileId, queryClient, requestedChunk, tab, toast, updateParams],
   );
 
   const handleDropMoveCopy = useCallback(
-    async (file: PathFileSchema, targetFolder: string, mode: FileOperationMode) => {
+    async (file: FileOperationTarget, targetFolder: string, mode: FileOperationMode) => {
       if (mode === "move" && sameArchivePath(parentPath(file.raw_file_path), targetFolder)) {
         toast.info(`“${file.file_name}” already lives in ${targetFolder}.`);
         return;
@@ -443,15 +410,56 @@ export function LibraryPage() {
     [handleOperationDone, toast],
   );
 
-  const handleRequestMoveCopy = useCallback((file: PathFileSchema, mode: FileOperationMode) => {
-    setMoveCopyRequest({ file, mode });
+  const handleRequestMoveCopy = useCallback(
+    (file: FileOperationTarget, mode: FileOperationMode) => {
+      setMoveCopyRequest({ file, mode });
+    },
+    [],
+  );
+
+  const handleRequestDelete = useCallback((target: FileOperationTarget) => {
+    setDeleteRequest({
+      file_id: target.file_id,
+      file_name: target.file_name,
+      raw_file_path: target.raw_file_path,
+    });
   }, []);
 
+  const handleDeleted = useCallback(
+    (deletedFileId: number) => {
+      setDeleteRequest(null);
+      setSelectedFileIds((current) => {
+        if (!current.has(deletedFileId)) {
+          return current;
+        }
+        const next = new Set(current);
+        next.delete(deletedFileId);
+        return next;
+      });
+      if (previewFileId === deletedFileId) {
+        updateParams({ file: null, media: null, chunk: null }, { replace: true });
+      }
+    },
+    [previewFileId, updateParams],
+  );
+
   const listing = browseQuery.data;
-  const folderCount = activeQuery ? 0 : (listing?.directories.length ?? 0);
-  const fileCount = listing?.files.length ?? 0;
-  const settling = query !== activeQuery;
-  const visibleFiles = useMemo(() => browseQuery.data?.files ?? [], [browseQuery.data?.files]);
+  const sortedListing = useMemo(
+    () => (listing ? sortListing(listing, sort) : undefined),
+    [listing, sort],
+  );
+  const visibleFiles = useMemo(() => sortedListing?.files ?? [], [sortedListing]);
+  const visibleFolders = useMemo(
+    () => (activeQuery ? [] : sortedListing?.directories ?? []),
+    [activeQuery, sortedListing],
+  );
+  const imageListing = useMemo(() => imageFiles(visibleFiles), [visibleFiles]);
+  const visibleImages = useMemo(
+    () => filterImageFiles(imageListing, mediaFilter),
+    [imageListing, mediaFilter],
+  );
+  const settling = tab === "files" && query !== activeQuery;
+
   const activeSelectedFileIds =
     selectionPath === path ? selectedFileIds : EMPTY_SELECTED_FILE_IDS;
   const selectedFiles = useMemo(
@@ -466,13 +474,13 @@ export function LibraryPage() {
   }, [path]);
 
   const toggleSelected = useCallback(
-    (fileId: number) => {
+    (selectedFileId: number) => {
       setSelectedFileIds((current) => {
         const next = new Set(selectionPath === path ? current : []);
-        if (next.has(fileId)) {
-          next.delete(fileId);
+        if (next.has(selectedFileId)) {
+          next.delete(selectedFileId);
         } else {
-          next.add(fileId);
+          next.add(selectedFileId);
         }
         return next;
       });
@@ -504,12 +512,32 @@ export function LibraryPage() {
 
   const handleBatchMoveFinished = useCallback(
     (result: BatchMoveResult) => {
-      void queryClient.invalidateQueries();
+      invalidateLibraryQueries(queryClient, {
+        paths: true,
+        stats: true,
+        timeline: true,
+        fileIds: result.movedIds,
+      });
       const moved = new Set(result.movedIds);
       setSelectedFileIds((current) => {
         const next = new Set([...current].filter((id) => !moved.has(id)));
         return next.size === current.size ? current : next;
       });
+      if (previewFileId !== null && result.movedIds.includes(previewFileId)) {
+        const nextPath = pathParamValue(result.targetFolder);
+        const chunk = requestedChunk > 1 ? requestedChunk : null;
+        if (tab === "media") {
+          updateParams(
+            { path: nextPath, media: previewFileId, file: null, chunk },
+            { replace: true },
+          );
+        } else {
+          updateParams(
+            { path: nextPath, file: previewFileId, media: null, chunk },
+            { replace: true },
+          );
+        }
+      }
       if (result.movedIds.length > 0) {
         toast.success(
           `Moved ${result.movedIds.length} ${
@@ -534,7 +562,7 @@ export function LibraryPage() {
         setBatchMoveFiles(null);
       }
     },
-    [queryClient, toast],
+    [previewFileId, queryClient, requestedChunk, tab, toast, updateParams],
   );
 
   const folderSuggestions = useMemo(() => {
@@ -561,136 +589,139 @@ export function LibraryPage() {
     return suggestions;
   }, [listing?.directories, path]);
 
+  let panelContent: ReactNode = null;
+  if (tab === "files" && sortedListing) {
+    panelContent = (
+      <LibraryFilesContent
+        listing={{ ...sortedListing, directories: visibleFolders }}
+        path={path}
+        query={activeQuery}
+        view={view}
+        seeding={seedMutation.isPending}
+        selecting={selecting}
+        selectedFileIds={activeSelectedFileIds}
+        onToggleSelected={toggleSelected}
+        onOpenFolder={openFolder}
+        onOpenFile={openPreview}
+        onUpload={() => openUpload()}
+        onUploadHere={(folderPath) => openUpload(folderPath)}
+        onNewFolder={() => setNewFolderOpen(true)}
+        onClearSearch={clearQuery}
+        onOpenRoot={() => openFolder("/")}
+        onSeed={() => seedMutation.mutate()}
+        onRequestMove={handleRequestMoveCopy}
+        onRequestDelete={handleRequestDelete}
+        onMoveFile={(file, targetFolder, mode) => {
+          void handleDropMoveCopy(file, targetFolder, mode);
+        }}
+        onFilesDropped={(files, targetFolder) => {
+          void enqueueFiles(files, targetFolder);
+        }}
+      />
+    );
+  } else if (tab === "media") {
+    panelContent = (
+      <LibraryMediaGallery
+        path={path}
+        images={visibleImages}
+        totalImages={imageListing.length}
+        filter={mediaFilter}
+        onFilterChange={setMediaFilter}
+        onClearFilter={() => setMediaFilter("")}
+        onOpen={openPreview}
+        onUploadImage={openMediaPicker}
+        onOpenRoot={() => openFolder("/")}
+      />
+    );
+  }
+
   return (
-    <div className="page library-page">
-      <PageHeader
-        eyebrow="Library · file shelf"
-        title="Every file has a branch."
-        description="Browse current leaves by path, drop files onto a branch, move or copy a leaf without rewriting its history, and read every edition chunk by chunk."
-        meta={<span>read_path · 1-based chunks · soft delete keeps history</span>}
-        actions={
-          <div className="library-actions">
-            <Badge tone="moss" dot>
-              Current leaves
-            </Badge>
-            <Badge tone="ochre">Versions branch</Badge>
-            <Button variant="primary" size="sm" onClick={() => openUpload()}>
-              <Icon name="plus" size={15} />
-              Add file
-            </Button>
-          </div>
-        }
+    <div className="library-page">
+      <h1 className="visually-hidden">File library</h1>
+
+      <LibraryToolbar
+        path={path}
+        tab={tab}
+        rawQuery={rawQuery}
+        activeQuery={activeQuery}
+        sort={sort}
+        view={view}
+        selecting={selecting}
+        folderCount={visibleFolders.length}
+        fileCount={visibleFiles.length}
+        mediaCount={imageListing.length}
+        loading={browseQuery.isLoading}
+        settling={settling}
+        onNavigate={openFolder}
+        onQueryChange={handleQueryChange}
+        onQuerySubmit={handleQuerySubmit}
+        onClearQuery={clearQuery}
+        onSortChange={setSort}
+        onTabChange={handleTabChange}
+        onViewChange={handleViewChange}
+        onToggleSelecting={toggleSelecting}
+        onUpload={() => openUpload()}
+        onNewFolder={() => setNewFolderOpen(true)}
       />
 
-      {fileId !== null ? (
-        <FileReader
-          fileId={fileId}
-          requestedChunk={requestedChunk}
-          query={query}
-          backLabel={readerBackLabel(path, query.length > 0)}
-          onClose={closeReader}
-          onChunkChange={handleChunkChange}
-          onOpenFolder={openFolder}
-          onDeleted={handleDeleted}
-          onClearQuery={clearQuery}
+      <div
+        className="library-canvas"
+        id="library-panel"
+        role="tabpanel"
+        aria-labelledby={tab === "files" ? "library-tab-files" : "library-tab-media"}
+      >
+        <LibraryUploadTray
+          tasks={uploadTasks}
+          onRetry={handleRetryTask}
+          onDismiss={dismissUploads}
         />
-      ) : (
-        <>
-          <LibraryToolbar
-            path={path}
-            rawQuery={rawQuery}
-            activeQuery={activeQuery}
-            folderCount={folderCount}
-            fileCount={fileCount}
-            loading={browseQuery.isLoading}
-            settling={settling}
-            view={view}
-            onNavigate={openFolder}
-            onQueryChange={handleQueryChange}
-            onQuerySubmit={handleQuerySubmit}
-            onClearQuery={clearQuery}
-            onViewChange={handleViewChange}
-            selecting={selecting}
-            onToggleSelecting={toggleSelecting}
+
+        {tab === "files" && selecting ? (
+          <LibrarySelectionBar
+            selectedCount={selectedFiles.length}
+            visibleCount={visibleFiles.length}
+            onSelectAll={selectAllVisible}
+            onClear={clearSelection}
+            onMoveSelected={requestBatchMove}
+            onExit={exitSelection}
           />
+        ) : null}
 
-          {selecting ? (
-            <LibrarySelectionBar
-              selectedCount={selectedFiles.length}
-              visibleCount={visibleFiles.length}
-              onSelectAll={selectAllVisible}
-              onClear={clearSelection}
-              onMoveSelected={requestBatchMove}
-              onExit={exitSelection}
-            />
-          ) : null}
+        {browseQuery.error && isNotFoundError(browseQuery.error) ? (
+          <Panel tone="plain" className="library-not-found">
+            <p className="eyebrow">Path not found</p>
+            <h2>This folder is not on the shelf.</h2>
+            <p>
+              The archive has no current folder at <code>{path}</code>. It may have been removed
+              with its last file, or the link may be out of date.
+            </p>
+            <div className="library-not-found__actions">
+              <Button variant="secondary" size="sm" onClick={() => openFolder("/")}>
+                Back to archive root
+              </Button>
+            </div>
+          </Panel>
+        ) : (
+          <QueryState
+            loading={browseQuery.isLoading}
+            error={browseQuery.error}
+            loadingLabel="Reading the shelf"
+          >
+            {panelContent}
+          </QueryState>
+        )}
+      </div>
 
-          {browseQuery.error && isNotFoundError(browseQuery.error) ? (
-            <Panel tone="plain" className="library-not-found reveal reveal-3">
-              <p className="eyebrow">Path not found</p>
-              <h2>This folder is not on the shelf.</h2>
-              <p>
-                The archive has no current folder at <code>{path}</code>. It may have been removed
-                with its last leaf, or the link may be out of date.
-              </p>
-              <div className="library-not-found__actions">
-                <Button variant="secondary" size="sm" onClick={() => openFolder("/")}>
-                  Back to archive root
-                </Button>
-              </div>
-            </Panel>
-          ) : (
-            <QueryState
-              loading={browseQuery.isLoading}
-              error={browseQuery.error}
-              loadingLabel="Reading the shelf"
-            >
-              {listing && view === "board" ? (
-                <LibraryBoard
-                  listing={listing}
-                  path={path}
-                  query={activeQuery}
-                  seeding={seedMutation.isPending}
-                  uploads={uploadTasks}
-                  selecting={selecting}
-                  selectedFileIds={activeSelectedFileIds}
-                  onToggleSelected={toggleSelected}
-                  onOpenFolder={openFolder}
-                  onOpenFile={selectFile}
-                  onUpload={() => openUpload()}
-                  onUploadHere={(folderPath) => openUpload(folderPath)}
-                  onNewFolder={() => setNewFolderOpen(true)}
-                  onClearSearch={clearQuery}
-                  onSeed={() => seedMutation.mutate()}
-                  onDismissUploads={() => setUploadTasks([])}
-                  onMoveFile={(file, targetFolder, mode) => {
-                    void handleDropMoveCopy(file, targetFolder, mode);
-                  }}
-                  onRequestMove={handleRequestMoveCopy}
-                  onFilesDropped={(files, targetFolder) => {
-                    void handleFilesDropped(files, targetFolder);
-                  }}
-                />
-              ) : null}
-              {listing && view === "list" ? (
-                <LibraryResults
-                  listing={listing}
-                  query={activeQuery}
-                  seeding={seedMutation.isPending}
-                  selecting={selecting}
-                  selectedFileIds={activeSelectedFileIds}
-                  onToggleSelected={toggleSelected}
-                  onOpenFolder={openFolder}
-                  onOpenFile={selectFile}
-                  onUpload={() => openUpload()}
-                  onClearSearch={clearQuery}
-                  onSeed={() => seedMutation.mutate()}
-                />
-              ) : null}
-            </QueryState>
-          )}
-        </>
-      )}
+      <input
+        ref={mediaInputRef}
+        type="file"
+        accept={IMAGE_UPLOAD_ACCEPT}
+        multiple
+        className="visually-hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={handleMediaInputChange}
+      />
 
       {uploadOpen ? (
         <UploadDialog
@@ -704,7 +735,10 @@ export function LibraryPage() {
         <NewFolderDialog
           currentPath={path}
           onClose={() => setNewFolderOpen(false)}
-          onCreated={() => setNewFolderOpen(false)}
+          onCreated={(createdPath) => {
+            setNewFolderOpen(false);
+            openFolder(createdPath);
+          }}
         />
       ) : null}
 
@@ -726,6 +760,28 @@ export function LibraryPage() {
           suggestions={folderSuggestions}
           onClose={() => setBatchMoveFiles(null)}
           onFinished={handleBatchMoveFinished}
+        />
+      ) : null}
+
+      {deleteRequest ? (
+        <DeleteFileDialog
+          fileId={deleteRequest.file_id}
+          fileName={deleteRequest.file_name}
+          rawFilePath={deleteRequest.raw_file_path}
+          onClose={() => setDeleteRequest(null)}
+          onDeleted={() => handleDeleted(deleteRequest.file_id)}
+        />
+      ) : null}
+
+      {previewFileId !== null ? (
+        <FilePreviewModal
+          fileId={previewFileId}
+          requestedChunk={requestedChunk}
+          onClose={closePreview}
+          onChunkChange={handleChunkChange}
+          onMove={(target) => handleRequestMoveCopy(target, "move")}
+          onCopy={(target) => handleRequestMoveCopy(target, "copy")}
+          onDelete={handleRequestDelete}
         />
       ) : null}
     </div>

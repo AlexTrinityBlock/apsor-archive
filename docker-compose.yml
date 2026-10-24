@@ -56,7 +56,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      - dendro-data:/data
+      - ./data:/data
       # Read-only local secrets. The app reads .secrets/deepseek.env itself, so
       # the key never becomes a container environment variable.
       - ./.secrets:/app/backend/.secrets:ro
@@ -87,7 +87,7 @@ services:
       DENDRO_DATA_DIR: /data
       DENDRO_TIMEZONE: Asia/Taipei
     volumes:
-      - dendro-data:/data
+      - ./data:/data
       - ./.secrets:/app/backend/.secrets:ro
     depends_on:
       db:
@@ -98,4 +98,3 @@ services:
 
 volumes:
   dendro-postgres:
-  dendro-data:

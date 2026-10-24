@@ -53,7 +53,7 @@ services:
       # fallback off so only one process drains the queue.
       DENDRO_INGEST_WORKER_ENABLED: "false"
     volumes:
-      - dendro-cloudflare-data:/data
+      - ./data-cloudflare:/data
       - ./.secrets:/app/backend/.secrets:ro
     expose:
       - "8000"
@@ -75,7 +75,7 @@ services:
       DENDRO_TIMEZONE: Asia/Taipei
       DENDRO_COOKIE_SECURE: "true"
     volumes:
-      - dendro-cloudflare-data:/data
+      - ./data-cloudflare:/data
       - ./.secrets:/app/backend/.secrets:ro
     depends_on:
       db:
@@ -112,5 +112,4 @@ secrets:
 
 volumes:
   dendro-cloudflare-postgres:
-  dendro-cloudflare-data:
   caddy-logs:

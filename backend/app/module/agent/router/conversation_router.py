@@ -36,9 +36,7 @@ SSE_HEADERS = {
 
 _TURN_RESPONSES: dict[int | str, dict[str, Any]] = {
     200: {
-        "description": (
-            "A server-sent event stream. Send Accept: application/json for JSON."
-        ),
+        "description": ("A server-sent event stream. Send Accept: application/json for JSON."),
         "content": {
             "text/event-stream": {"schema": {"type": "string"}},
         },

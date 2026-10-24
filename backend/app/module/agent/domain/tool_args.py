@@ -69,22 +69,9 @@ class SaveMemoryArgs(_ToolArgs):
     )
 
 
-class SearchMediaArgs(_ToolArgs):
-    """Arguments for image caption/tag search."""
-
-    query: str = Field(min_length=1, max_length=200)
-    limit: int = Field(default=12, ge=1, le=24)
-
-
-class GetMediaArgs(_ToolArgs):
-    """Arguments for one media asset."""
-
-    media_id: int = Field(gt=0)
-
-
 class PresentResourceArgs(_ToolArgs):
     """Arguments for a viewer card."""
 
-    resource_type: Literal["file", "media", "memory"]
+    resource_type: Literal["file", "memory"]
     resource_id: int = Field(gt=0)
     chunk: int | None = Field(default=None, ge=1)

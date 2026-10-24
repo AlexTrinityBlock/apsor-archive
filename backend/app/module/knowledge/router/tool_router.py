@@ -64,7 +64,7 @@ async def search_knowledge_tool(
     ]
     for file_result in result.file_results:
         lines.append(
-            f"<file_result file_id=\"{file_result.file_id}\" "
+            f'<file_result file_id="{file_result.file_id}" '
             f"raw_file_path={_quoteattr(file_result.raw_file_path)} "
             f'update_time="{file_result.update_time.isoformat()}" '
             f'chunk="{file_result.chunk}" score="{file_result.score}" '
@@ -108,7 +108,7 @@ async def read_file_tool(
     )
     lines = [
         (
-            f"<result file_id=\"{result.file_id}\" "
+            f'<result file_id="{result.file_id}" '
             f"raw_file_path={_quoteattr(result.raw_file_path)} "
             f'update_time="{result.update_time.isoformat()}" '
             f'total_chunks="{result.total_chunks}" '
@@ -165,7 +165,7 @@ async def read_timeline_tool(
         elif item.kind == "file_update" and item.file_id is not None:
             lines.append(
                 f'<file_update file_id="{item.file_id}" '
-                f'raw_file_path={_quoteattr(item.raw_file_path or "")} '
+                f"raw_file_path={_quoteattr(item.raw_file_path or '')} "
                 f'time="{item.time.isoformat()}" anchor="{item.anchor}" '
                 f'action="{item.action or "updated"}" />'
             )
@@ -196,13 +196,13 @@ async def read_path_tool(
     lines = [f"<path_result path={_quoteattr(result.path)}>"]
     for directory in result.directories:
         lines.append(
-            f'<dir path={_quoteattr(directory.path)} name={_quoteattr(directory.name)} '
+            f"<dir path={_quoteattr(directory.path)} name={_quoteattr(directory.name)} "
             f'depth="{directory.depth}" />'
         )
     for file in result.files:
         lines.append(
             f'<file file_id="{file.file_id}" '
-            f'raw_file_path={_quoteattr(file.raw_file_path)} '
+            f"raw_file_path={_quoteattr(file.raw_file_path)} "
             f'total_chunks="{file.total_chunks}" size_bytes="{file.size_bytes}" '
             f'update_time="{file.update_time.isoformat()}" />'
         )
@@ -279,9 +279,7 @@ async def read_memory_tool(
         if memory.memory_id == result.target.memory_id:
             continue
         relation = (
-            "superseded_by"
-            if memory.memory_id == result.target.superseded_by_id
-            else "supersedes"
+            "superseded_by" if memory.memory_id == result.target.superseded_by_id else "supersedes"
         )
         lines.append(
             f'<memory id="{memory.memory_id}" status="{memory.status}" '

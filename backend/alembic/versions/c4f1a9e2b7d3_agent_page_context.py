@@ -29,8 +29,7 @@ _OLD_KIND_VALID = (
     "'pi.reset', 'pi.compaction', 'ui.notice')"
 )
 _OLD_MODEL_REQUIRED = (
-    "kind NOT IN ('pi.user', 'pi.assistant', 'pi.tool-result', 'pi.system') "
-    "OR model IS NOT NULL"
+    "kind NOT IN ('pi.user', 'pi.assistant', 'pi.tool-result', 'pi.system') OR model IS NOT NULL"
 )
 
 

@@ -93,10 +93,10 @@ function EventCard({ event }: { readonly event: TimelineEvent }) {
         )}
         <div className="pi-ribbon__event-links">
           {event.memoryId !== null ? (
-            <Link to={`/viewer/memory/${event.memoryId}`}>memory:{event.memoryId}</Link>
+            <Link to={`/memory/${event.memoryId}`}>memory:{event.memoryId}</Link>
           ) : null}
           {event.fileId !== null ? (
-            <Link to={`/viewer/file/${event.fileId}`}>file:{event.fileId}</Link>
+            <Link to={`/library?tab=files&file=${event.fileId}`}>file:{event.fileId}</Link>
           ) : null}
         </div>
       </div>

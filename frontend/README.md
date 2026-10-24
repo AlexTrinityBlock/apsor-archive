@@ -30,18 +30,17 @@ src/
   app/
     component/                  shared shell, panels, badges, toast
     generated-apis-types/       committed Orval client (incl. agent)
-    hook/                       theme, command palette, debounce
+    hook/                       scroll lock, debounce, media queries
     type/                       UI types and local demo shapes
-    agent/                      global dock, page context, inspector panels
-    home/ search/ timeline/     route pages
-    library/                    folder workspace board + list, intake progress
-    tree/ memory/
-    chat/                       persistent agent reading room
+    agent/                      page context, trace, inspector panels
+    home/ search/ timeline/     workspace routes
+    library/                    files, media gallery, preview modal, intake
+    memory/                     vault, pressing room, reader
+    chat/                       persistent agent workspace
     questions/                  saved-question Q&A library
-    viewer/                     file/media/memory viewers
-    ask/ method/ settings/
+    method/ settings/
   lib/                          formatting, safe text highlighting
-  styles/                       paper / night archive design tokens
+  styles/                       mono archive design tokens
 scripts/copy-pdfjs-assets.mjs   pinned PDF.js runtime assets
 ```
 
@@ -79,9 +78,9 @@ helpers. Both fetch paths preserve `ApiError` and dispatch the shared
 `dendromatrix:unauthorized` event on `401`. Do not add other hand-written API
 clients.
 
-After a mutation, invalidate the related React Query keys (the pages use
-`queryClient.invalidateQueries()`), so the overview, search, timeline, tree,
-library, questions, chat, and viewer stay consistent.
+After a mutation, invalidate the related React Query keys (the pages use scoped
+keys), so the overview, search, timeline, library, questions, chat, and memory
+stay consistent.
 
 ## Chat
 
@@ -90,7 +89,8 @@ thread rail supports new, rename, archive/restore, and delete. The composer
 streams over SSE with Cmd/Ctrl+Enter, a stop action, and a live turn view;
 completed entries replace the optimistic view after the scoped query
 invalidation. Markdown uses `react-markdown` + `remark-gfm` with `skipHtml`, and
-citations become viewer links only for `/viewer/file|media|memory/...`.
+citations open file previews in the File Library (`/library?tab=files&file=…`)
+or memories in `/memory/…`; legacy `/viewer/*` links redirect there.
 
 ### Retry
 
@@ -110,7 +110,7 @@ or tool-call budget again.
 ### Approval cards
 
 `save_memory` is gated by a durable human approval. `ApprovalStack` in
-`chat/component/ApprovalCard.tsx` is shared by `/chat` and the Agent dock. It
+`chat/component/ApprovalCard.tsx` is used by the chat workspace. It
 loads `GET /api/v1/agent/conversations/{id}/approvals?status=pending`, so the
 card reappears after a reload while the run is waiting. Each card shows the
 proposed memory, supersedes/occurred-at context, write risk, and accessible
@@ -153,14 +153,13 @@ the masthead with a link to the source, and the rail labels them
 `fork of #<id>`. Forking copies transcript entries only; runs, retry state, and
 approval state are not copied.
 
-Chat is in the **Studio** sidebar and the command palette. Mobile bottom tabs
-stay Overview, Search, Timeline, Library, and More; Chat is reached through the
-navigation drawer.
+Chat is the first item in the seven-item archive rail. The rail becomes a
+navigation drawer below 980 px; the mobile bar opens it.
 
 ## Saved questions
 
-`/questions` is the question book under **Studio**, also reachable from the
-command palette. It uses the generated `useListSavedQuestions`,
+`/questions` is the question book and a secondary page, linked from Search and
+the method colophon. It uses the generated `useListSavedQuestions`,
 `useCreateSavedQuestion`, `useUpdateSavedQuestion`, `useDeleteSavedQuestion`,
 and `useAskSavedQuestion` hooks. No separate fetch client is added.
 
@@ -196,87 +195,40 @@ last page" recovery action, and per-card pending/error states. Ask, edit, and
 delete are disabled while a card operation is in flight.
 
 Mobile keeps the same card layout without horizontal overflow; the page is
-reached through the navigation drawer rather than the bottom tabs.
+reached through the navigation drawer.
 
-## Agent dock
+## Chat workspace
 
-`AgentDock` is mounted inside `AppShell` but outside `<main>`, so it persists
-across archive routes and is explicitly excluded from page-context capture. It
-is intentionally hidden on `/chat`, which keeps the full-page desk as the
-single composer for that route. The dock has three states:
+`/chat` is a fixed-height three-column workspace: a collapsible conversations
+drawer, the stream column, and a tool inspector. The 12 px separator supports
+pointer drag, click-to-collapse, and keyboard arrows/Home/End; the ratio and
+collapsed state persist in localStorage. Below 900 px the inspector becomes a
+tab instead of a split. The composer sends on Enter, inserts a newline on
+Shift+Enter, and exposes Stop while streaming.
 
-- `collapsed` — a floating seal/button in the lower-right corner;
-- `panel` — a compact chat panel with recent conversations, the live stream, and
-  the composer;
-- `expanded` — a full-screen split workspace with the conversation on the left
-  and the tool inspector on the right.
-
-The state is kept in localStorage under the dock's own key, and the selected
-conversation id is remembered separately. Expanding from the panel opens the
-current conversation in the split view; `/chat` remains the full-page desk and
-uses the same conversation id. On mobile, `collapsed` opens a full-height sheet;
-the expanded surface switches to Correspondence / Workbench pane tabs, and the
-layout must not produce horizontal overflow.
-
-### Panel height
-
-Panel mode has a resize handle on its top edge. Drag the grip, or focus the
-handle and use Arrow Up / Arrow Down (Shift for larger steps, Home / End for the
-limits), to change the panel height. The chosen height is stored in localStorage
-(`dendromatrix.agentDock.panelHeight`) and restored on reload; if storage is
-unavailable the panel keeps the CSS default and the resize still works for the
-session.
-
-The handle clamps to 320 px minimum and to the viewport above the panel's bottom
-anchor, so it never covers the mobile tabs or safe-area inset. It is hidden at
-640 px and below, where panel mode is a full-height sheet, and the stored height
-is ignored on that sheet. The handle exposes separator, value, minimum, maximum,
-and a screen-reader description, and text selection is suppressed only while
-dragging.
-
-The dock reuses `RetryBar` and the same `readRetryState()` decision as `/chat`.
-Retry is available in both the panel and expanded desk, disabled while streaming,
-and never appends a duplicate user entry. Compact and clear live on the full
-`/chat` desk rather than in the dock.
+There is no second composer. The former floating dock and command palette were
+removed; saved questions run through `/chat` like any other conversation.
 
 ### Page context
 
-`app/agent/page-context.ts` captures a plain-text snapshot of `#main-content`:
-
-- only the main column is read; `nav`, form controls, hidden nodes,
-  `aria-hidden` nodes, `[data-agent-surface]` (the dock), and
-  `[data-page-context='exclude']` are skipped;
-- block elements contribute paragraph breaks, and repeated whitespace is
-  compacted;
-- `/chat` and `/chat/:conversationId` are skipped because the desk is the
-  conversation itself; viewer routes are outside `AppShell` and have no
-  `#main-content`, so they produce no snapshot;
-- the key is `v1:<pathname>` plus canonical, meaningful query parameters
-  (`path`, `file`, `chunk`, `q`, timeline filters, and similar), so irrelevant
-  parameters do not manufacture a new page identity;
-- the title is capped at 300 characters and the plain text at 6,000 characters.
-
-`usePageContext` captures once on route change and debounces MutationObserver
-updates by 220 ms so async page loads settle into one snapshot. The composer
-receives the current snapshot through `useChatStream.start(conversationId,
-content, pageContext)` and shows an expandable **Current page context** preview.
-The transcript reads persisted `pi.page-context` entries through
-`readPageContextEntry()` and renders a compact context card; it must not count
-as a user question. `lastPageContextKey()` reads the detail field for reload
-continuity while the backend remains the source of truth for deduplication.
+The backend still accepts an optional `page_context` object with a turn, and the
+transcript renders any persisted `pi.page-context` entry as a compact context
+card through `readPageContextEntry()`. The current SPA does not attach a
+snapshot: with the floating dock removed, Chat is the only composer and it skips
+its own route. The API enforces the key/path/title/text limits and server-side
+clipping.
 
 ### Expanded inspector
 
 The inspector follows the newest tool call until the user pins a panel. It
 offers **Follow current**, keeps the last valid resource visible when a later
-tool has no resource, and reuses the existing file renderer plus the media and
-memory viewer queries rather than a second rendering stack.
+tool has no resource, and reuses the existing file renderer and memory reader
+rather than a second rendering stack.
 
-The nine tools map to distinct panels: result constellation, manuscript chunks,
-timeline band, folder branch map, memory chain, save receipt, media contact
-sheet, specimen sheet, and display stand. Every panel implements loading, empty,
-error, and success states, and errors show the stable tool error code and the
-validated arguments.
+The seven tools map to distinct panels: result constellation, manuscript chunks,
+timeline band, folder branch map, memory chain, save receipt, specimen sheet, and
+display stand. Every panel implements loading, empty, error, and success states,
+and errors show the stable tool error code and the validated arguments.
 
 Live `tool_end` events carry `entry_id`, `tool_call_id`, `name`, `status`,
 `resource`, `data`, `duration_ms`, and `error_code`. `data` is the same UI-only
@@ -298,10 +250,10 @@ only; when it is off, no approval card appears and the backend authorizes the
 write directly. Pending cards created while the setting was on keep rendering
 and still require an explicit decision.
 
-`AgentDock` and the inspector panels are mounted by `AppShell` on archive pages.
-The production build is committed under `dist/`; rebuild and commit `dist/` (and
-`dist/pdfjs/` when it changes) after frontend changes, because the Docker image
-does not run a frontend build.
+The inspector panels are mounted by the chat workspace. The production build is
+committed under `dist/`; rebuild and commit `dist/` (and `dist/pdfjs/` when it
+changes) after frontend changes, because the Docker image does not run a
+frontend build.
 
 ## Settings
 
@@ -438,18 +390,21 @@ The board, dialogs, and generated folder/move/copy hooks are in the source tree
 and the production `dist/` is rebuilt. The Docker image copies the committed
 client and does not run a frontend build.
 
-## Viewer
+## Preview
 
-The viewer routes live under `AuthGate` as siblings of `AppShell`, so they keep
-deep links, new tabs, their own top bar, and safe-area layout:
+Files open in an in-situ preview modal inside the File Library, with tabs for
+page preview, chunk inspection, and metadata. Legacy `/viewer/*` URLs redirect
+into the Library or the Memory reader, so deep links keep working:
 
-- `/viewer/file/:fileId` — `react-pdf` 11 + `pdfjs-dist` 6.3.289 for PDF,
-  `docx-preview` 0.4.1 in a script-disabled sandbox for DOCX, native image with
-  `react-zoom-pan-pinch` 4.2.0, and an archive sheet for text/JSON/Markdown/CSV
-  (`react-markdown` 10.1.0 + `remark-gfm` 4.0.1, `skipHtml`).
-- `/viewer/media/:mediaId` — native image + zoom/pan, notes, and a
-  `yet-another-react-lightbox` 3.32.2 gallery.
-- `/viewer/memory/:memoryId` — the memory leaf with lineage and trace links.
+- `/viewer/file/:fileId` → `/library?tab=files&file=…` — `react-pdf` 11 +
+  `pdfjs-dist` 6.3.289 for PDF, `docx-preview` 0.4.1 in a script-disabled
+  sandbox for DOCX, native image with `react-zoom-pan-pinch` 4.2.0, and an
+  archive sheet for text/JSON/Markdown/CSV (`react-markdown` 10.1.0 +
+  `remark-gfm` 4.0.1, `skipHtml`).
+- `/viewer/media/:mediaId` → `/library?tab=media&media=…` — the same file
+  preview for image files.
+- `/viewer/memory/:memoryId` → `/memory/:memoryId` — the memory leaf with
+  lineage and trace links.
 
 Text-only files use `has_original=false`, skip the 404 **Open original** and
 **Download** actions, skip the `/content` probe entirely, and rebuild the sheet

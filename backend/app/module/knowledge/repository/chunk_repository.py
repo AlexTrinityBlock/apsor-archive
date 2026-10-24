@@ -192,9 +192,7 @@ class ChunkRepository:
             )
             .group_by(ChunkNgramModel.gram)
         )
-        document_frequency = {
-            str(gram): int(count) for gram, count in frequency_rows.all()
-        }
+        document_frequency = {str(gram): int(count) for gram, count in frequency_rows.all()}
 
         candidate_rows = await self.session.execute(
             select(ChunkNgramModel.chunk_id, ChunkModel.source_kind)
@@ -229,9 +227,7 @@ class ChunkRepository:
             terms_by_chunk.setdefault(int(chunk_id), {})[str(gram)] = int(frequency)
 
         length_rows = await self.session.execute(
-            select(ChunkModel.id, ChunkModel.token_count).where(
-                ChunkModel.id.in_(candidate_ids)
-            )
+            select(ChunkModel.id, ChunkModel.token_count).where(ChunkModel.id.in_(candidate_ids))
         )
         lengths = {int(chunk_id): int(length) for chunk_id, length in length_rows.all()}
 
@@ -245,12 +241,8 @@ class ChunkRepository:
                 doc_frequency = document_frequency.get(gram, 0)
                 if doc_frequency == 0:
                     continue
-                idf = math.log(
-                    1.0 + (total_chunks - doc_frequency + 0.5) / (doc_frequency + 0.5)
-                )
-                denominator = term_frequency + k1 * (
-                    1.0 - b + b * document_length / average_length
-                )
+                idf = math.log(1.0 + (total_chunks - doc_frequency + 0.5) / (doc_frequency + 0.5))
+                denominator = term_frequency + k1 * (1.0 - b + b * document_length / average_length)
                 score += idf * (term_frequency * (k1 + 1.0) / denominator)
             if score > 0:
                 scored.append(

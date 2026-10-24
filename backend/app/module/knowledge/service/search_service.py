@@ -162,8 +162,7 @@ class SearchService:
         )
 
         text_ranking = {
-            chunk_id: rank
-            for rank, (chunk_id, _kind, _score) in enumerate(text_selected, start=1)
+            chunk_id: rank for rank, (chunk_id, _kind, _score) in enumerate(text_selected, start=1)
         }
         vector_ranking = {
             chunk_id: rank
@@ -192,15 +191,15 @@ class SearchService:
             if chunk is not None:
                 grouped[chunk.source_kind].append((chunk, score, matched))
 
-        file_chunks = sorted(
-            grouped[SOURCE_FILE], key=lambda item: item[1], reverse=True
-        )[:result_number]
-        memory_chunks = sorted(
-            grouped[SOURCE_MEMORY], key=lambda item: item[1], reverse=True
-        )[:result_number]
-        summary_chunks = sorted(
-            grouped[SOURCE_SUMMARY], key=lambda item: item[1], reverse=True
-        )[:result_number]
+        file_chunks = sorted(grouped[SOURCE_FILE], key=lambda item: item[1], reverse=True)[
+            :result_number
+        ]
+        memory_chunks = sorted(grouped[SOURCE_MEMORY], key=lambda item: item[1], reverse=True)[
+            :result_number
+        ]
+        summary_chunks = sorted(grouped[SOURCE_SUMMARY], key=lambda item: item[1], reverse=True)[
+            :result_number
+        ]
 
         files = {
             file.id: file

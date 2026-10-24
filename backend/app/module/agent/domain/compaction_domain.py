@@ -35,7 +35,7 @@ MAX_SUMMARY_ITEM_CHARS = 280
 MAX_COMPACTION_CARRY_CHARS = 1_200
 MAX_SUMMARY_ITEMS = 40
 CHARS_PER_ESTIMATED_TOKEN = 3
-_CITATION_PATTERN = re.compile(r"\[(?:file|memory|media|summary):\d+(?:#\d+)?\]")
+_CITATION_PATTERN = re.compile(r"\[(?:file|memory|summary):\d+(?:#\d+)?\]")
 
 
 def active_context_entries(
@@ -53,11 +53,7 @@ def compactable_context_entries(
     entries: Sequence[TranscriptEntry],
 ) -> list[TranscriptEntry]:
     """Return active entries that carry conversation state, excluding system."""
-    return [
-        entry
-        for entry in active_context_entries(entries)
-        if entry.kind != KIND_SYSTEM
-    ]
+    return [entry for entry in active_context_entries(entries) if entry.kind != KIND_SYSTEM]
 
 
 def estimate_context_tokens(entries: Sequence[TranscriptEntry]) -> int:
@@ -83,9 +79,7 @@ def estimate_context_tokens(entries: Sequence[TranscriptEntry]) -> int:
         separators=(",", ":"),
         default=str,
     )
-    char_estimate = (
-        len(serialized) + CHARS_PER_ESTIMATED_TOKEN - 1
-    ) // CHARS_PER_ESTIMATED_TOKEN
+    char_estimate = (len(serialized) + CHARS_PER_ESTIMATED_TOKEN - 1) // CHARS_PER_ESTIMATED_TOKEN
 
     start = active_start_entry_id(ordered)
     usage_estimate = 0
@@ -98,10 +92,7 @@ def estimate_context_tokens(entries: Sequence[TranscriptEntry]) -> int:
         if data.get("error"):
             continue
         finish_reason = data.get("finish_reason")
-        if (
-            isinstance(finish_reason, str)
-            and finish_reason.lower() in ERROR_FINISH_REASONS
-        ):
+        if isinstance(finish_reason, str) and finish_reason.lower() in ERROR_FINISH_REASONS:
             continue
         usage = data.get("usage")
         if not isinstance(usage, dict):
@@ -139,11 +130,7 @@ def build_compaction_draft(
     summary = clip(summary, max_summary_chars)
 
     last_user_entry = next(
-        (
-            entry
-            for entry in reversed(compactable)
-            if entry.kind == KIND_USER and _user_text(entry)
-        ),
+        (entry for entry in reversed(compactable) if entry.kind == KIND_USER and _user_text(entry)),
         None,
     )
     last_user_text = (
@@ -154,9 +141,7 @@ def build_compaction_draft(
 
     values: list[str] = ["<compaction>"]
     if last_user_text:
-        values.append(
-            f"<last_user_input>{xml_text(last_user_text)}</last_user_input>"
-        )
+        values.append(f"<last_user_input>{xml_text(last_user_text)}</last_user_input>")
     values.append(f"<summary>{xml_text(summary)}</summary>")
     values.append("</compaction>")
 
@@ -166,9 +151,7 @@ def build_compaction_draft(
         data={
             "reason": reason,
             "summary_chars": len(summary),
-            "last_user_entry_id": (
-                last_user_entry.id if last_user_entry is not None else None
-            ),
+            "last_user_entry_id": (last_user_entry.id if last_user_entry is not None else None),
             "source_entry_ids": [entry.id for entry in selected],
             "auto": auto,
         },
@@ -185,9 +168,7 @@ def _summary_line(entry: TranscriptEntry) -> str:
             _one_line(assistant_text),
             MAX_SUMMARY_ITEM_CHARS,
         )
-        citations = ",".join(
-            sorted(set(_CITATION_PATTERN.findall(assistant_text)))
-        )
+        citations = ",".join(sorted(set(_CITATION_PATTERN.findall(assistant_text))))
         suffix = f" citations={citations}" if citations else ""
         return f"Assistant: {text}{suffix}" if text else "Assistant: (empty)"
     if entry.kind == KIND_TOOL_RESULT:

@@ -4,10 +4,6 @@ import { Link } from "react-router-dom";
 import { Icon, type IconName } from "../../../component/Icon";
 import { Loader } from "../../../component/Loader";
 import { useGetFile } from "../../../generated-apis-types/files/files";
-import {
-  getGetMediaContentUrl,
-  useGetMedia,
-} from "../../../generated-apis-types/media/media";
 import { useReadMemory } from "../../../generated-apis-types/memories/memories";
 import { formatDateTime } from "../../../../lib/format";
 import { FileRenderer } from "../../../viewer/component/FileViewer";
@@ -124,70 +120,23 @@ export function InspectorFileStage({
   }
 
   const viewerPath = chunk
-    ? "/viewer/file/" + fileId + "?chunk=" + chunk
-    : "/viewer/file/" + fileId;
+    ? `/library?tab=files&file=${fileId}&chunk=${chunk}`
+    : `/library?tab=files&file=${fileId}`;
 
   return (
     <div className="pi-file-stage">
       <div className="pi-file-stage__head">
         <div>
-          <p className="eyebrow">File leaf · embedded at chunk</p>
+          <p className="eyebrow">
+            {chunk ? "File leaf · embedded at chunk" : "File leaf · embedded"}
+          </p>
           <strong>{query.data.file_name}</strong>
           <code>{query.data.raw_file_path}</code>
         </div>
-        <PanelLink to={viewerPath}>Full viewer</PanelLink>
+        <PanelLink to={viewerPath}>Open in library</PanelLink>
       </div>
       <div className="pi-file-stage__body">
         <FileRenderer file={query.data} chunk={chunk ?? null} />
-      </div>
-    </div>
-  );
-}
-
-/** A compact specimen image used by get_media and present_resource. */
-export function InspectorMediaStage({
-  mediaId,
-  compact = false,
-}: {
-  readonly mediaId: number;
-  readonly compact?: boolean;
-}) {
-  const query = useGetMedia(mediaId, { query: { retry: false } });
-
-  if (query.isLoading) {
-    return <PanelLoading label="Reading the specimen" />;
-  }
-  if (query.error || !query.data) {
-    return (
-      <PanelEmpty
-        icon="ring"
-        title="The specimen could not be opened"
-        detail={viewerErrorMessage(query.error)}
-      />
-    );
-  }
-
-  const media = query.data;
-  return (
-    <div className={compact ? "pi-media-stage is-compact" : "pi-media-stage"}>
-      <div className="pi-media-stage__frame">
-        <img
-          src={getGetMediaContentUrl(media.media_id)}
-          alt={media.title || media.file_name}
-          loading="lazy"
-          decoding="async"
-        />
-      </div>
-      <div className="pi-media-stage__meta">
-        <p className="eyebrow">Specimen #{media.media_id}</p>
-        <strong>{media.title || media.file_name}</strong>
-        <p>
-          {media.width > 0 && media.height > 0
-            ? `${media.width} × ${media.height}`
-            : "Dimensions unrecorded"}
-          {media.mime_type ? ` · ${media.mime_type}` : ""}
-        </p>
-        <time dateTime={media.update_time}>{formatDateTime(media.update_time)}</time>
       </div>
     </div>
   );
@@ -224,7 +173,7 @@ export function InspectorMemoryStage({ memoryId }: { readonly memoryId: number }
       <blockquote>{memory.content}</blockquote>
       <div className="pi-memory-stage__foot">
         <span>updated {formatDateTime(memory.update_time)}</span>
-        <PanelLink to={`/viewer/memory/${memory.memory_id}`}>Full trace</PanelLink>
+        <PanelLink to={`/memory/${memory.memory_id}`}>Full trace</PanelLink>
       </div>
     </div>
   );
