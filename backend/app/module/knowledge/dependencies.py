@@ -27,6 +27,7 @@ from app.module.knowledge.protocol.vision_extractor_protocol import VisionExtrac
 from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
 from app.module.knowledge.repository.chunk_repository import ChunkRepository
 from app.module.knowledge.repository.file_repository import FileRepository
+from app.module.knowledge.repository.folder_repository import FolderRepository
 from app.module.knowledge.repository.ingest_config_repository import (
     IngestConfigRepository,
 )
@@ -34,7 +35,6 @@ from app.module.knowledge.repository.ingest_job_repository import IngestJobRepos
 from app.module.knowledge.repository.memory_repository import MemoryRepository
 from app.module.knowledge.repository.stats_repository import StatsRepository
 from app.module.knowledge.repository.summary_repository import SummaryRepository
-from app.module.knowledge.repository.tree_repository import TreeRepository
 from app.module.knowledge.service.ai_config_service import AiConfigService
 from app.module.knowledge.service.ai_service import AiService
 from app.module.knowledge.service.demo_service import DemoService
@@ -144,7 +144,7 @@ def build_file_service_for_state(
     )
     return FileService(
         file_repository=FileRepository(session),
-        tree_repository=TreeRepository(session),
+        folder_repository=FolderRepository(session),
         chunk_repository=chunk_repository,
         indexer=indexer,
         storage=cast(FileStorageProtocol, state.storage),
