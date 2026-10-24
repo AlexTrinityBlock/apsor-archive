@@ -123,7 +123,10 @@ export function classifyFile(
   if (mime.includes("wordprocessingml.document") || extension === ".docx") {
     return "docx";
   }
-  if (mime.startsWith("image/") || [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(extension)) {
+  if (
+    mime.startsWith("image/") ||
+    [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"].includes(extension)
+  ) {
     return "image";
   }
   if (extension === ".json" || mime === "application/json" || mime.endsWith("+json")) {

@@ -1,12 +1,17 @@
+import type { QueryClient } from "@tanstack/react-query";
+
 import { ApiError } from "../../../apis/fetch-client";
-import { basename, humanFileKind } from "../../../lib/format";
+import { basename } from "../../../lib/format";
 import {
   getFile,
   getIngestJob,
 } from "../../generated-apis-types/files/files";
 import type {
+  DirectorySchema,
   FileSchema,
   IngestJobSchema,
+  PathFileSchema,
+  PathListingSchema,
 } from "../../generated-apis-types/schemas";
 
 /** Upload ceiling enforced by the API, mirrored here for a faster hint. */
@@ -15,8 +20,49 @@ export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** Text creation ceiling enforced by the API, mirrored here for a faster hint. */
 export const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 
-/** The two presentations of the same shelf. */
+/** The two workspaces that share one path listing. */
+export type LibraryTab = "files" | "media";
+
+/** The two file operation modes used by move/copy dialogs and drag drops. */
+export type FileOperationMode = "move" | "copy";
+
+/** The two presentations of the same file shelf. */
 export type LibraryView = "board" | "list";
+
+/** Client-side ordering for the path listing (the API exposes no sort param). */
+export type LibrarySort = "modified" | "name" | "size" | "type";
+
+export interface LibrarySortOption {
+  readonly value: LibrarySort;
+  readonly label: string;
+}
+
+export const LIBRARY_SORT_OPTIONS: readonly LibrarySortOption[] = [
+  { value: "modified", label: "Date modified" },
+  { value: "name", label: "Name A–Z" },
+  { value: "size", label: "Size" },
+  { value: "type", label: "Type" },
+];
+
+/** The image extensions the merged media gallery recognises. */
+export const IMAGE_EXTENSIONS = [
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  ".avif",
+] as const;
+
+/** The image types the file ingest endpoint currently accepts. */
+export const IMAGE_UPLOAD_ACCEPT = ".jpg,.jpeg,.png,.webp";
+
+/** One file operation target; both `FileSchema` and `PathFileSchema` map to it. */
+export interface FileOperationTarget {
+  readonly file_id: number;
+  readonly file_name: string;
+  readonly raw_file_path: string;
+}
 
 /** The durable ingestion stages reported by `IngestJobSchema.status`. */
 export type IngestStage =
@@ -64,6 +110,8 @@ export interface LibraryUploadTask {
   readonly chunksTotal?: number | null;
   readonly chunksEmbedded?: number | null;
   readonly fileId?: number | null;
+  /** Kept only while the tray is open so a failed upload can be retried. */
+  readonly sourceFile?: File;
 }
 
 /** Copies the durable job's progress fields onto a tray task. */
@@ -289,6 +337,12 @@ export function isAcceptedFileName(name: string): boolean {
   return ALLOWED_EXTENSIONS.some((extension) => lower.endsWith(extension));
 }
 
+/** Returns true when a stored file name is one of the gallery image types. */
+export function isImageFileName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return IMAGE_EXTENSIONS.some((extension) => lower.endsWith(extension));
+}
+
 /** Rejects a browser file name that could escape the chosen folder. */
 export function isSafeUploadName(name: string): boolean {
   const trimmed = name.trim();
@@ -317,25 +371,183 @@ export function sameArchivePath(left: string, right: string): boolean {
   return normalizeArchivePath(left) === normalizeArchivePath(right);
 }
 
-/** The allowed-type hint shared by the intake dialog and drag-and-drop tray. */
+/** The allowed-type hint shared by the intake dialog and the drag-and-drop tray. */
 export const ACCEPTED_FILE_HINT =
   ".md, .markdown, .txt, .csv, .json, .log, .pdf, .docx, .jpg, .jpeg, .png, .webp";
 
-/** The compact kind label shown in the file table. */
+/** The compact type pill shown on file cards. */
 export function fileKindLabel(rawPath: string): string {
-  const kind = humanFileKind(rawPath);
-  return kind.length > 0 ? kind.toUpperCase() : "FILE";
+  const name = basename(rawPath);
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot + 1).toUpperCase() : "FILE";
 }
 
-/** Names the place the reader's back button returns to. */
-export function readerBackLabel(path: string, hasQuery: boolean): string {
-  if (hasQuery) {
-    return "Back to path matches";
+/** Maps a stored file to the minimal target used by move/copy dialogs. */
+export function operationTargetFromSchema(file: FileSchema): FileOperationTarget {
+  return {
+    file_id: file.id,
+    file_name: file.file_name,
+    raw_file_path: file.raw_file_path,
+  };
+}
+
+/** Maps a path listing file to the minimal target used by move/copy dialogs. */
+export function operationTargetFromPathFile(file: PathFileSchema): FileOperationTarget {
+  return {
+    file_id: file.file_id,
+    file_name: file.file_name,
+    raw_file_path: file.raw_file_path,
+  };
+}
+
+const COLLATOR = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
+
+function sortFolders(folders: readonly DirectorySchema[]): DirectorySchema[] {
+  // Path listings do not expose folder size or timestamps; name stays honest.
+  return [...folders].sort((left, right) => COLLATOR.compare(left.name, right.name));
+}
+
+function sortFiles(
+  files: readonly PathFileSchema[],
+  sort: LibrarySort,
+): PathFileSchema[] {
+  const result = [...files];
+  if (sort === "name") {
+    return result.sort((left, right) => COLLATOR.compare(left.file_name, right.file_name));
   }
-  if (path === "/") {
-    return "Back to archive root";
+  if (sort === "size") {
+    return result.sort((left, right) => right.size_bytes - left.size_bytes);
   }
-  return `Back to ${basename(path)}`;
+  if (sort === "type") {
+    return result.sort((left, right) => {
+      const typeOrder = COLLATOR.compare(
+        fileKindLabel(left.raw_file_path),
+        fileKindLabel(right.raw_file_path),
+      );
+      return typeOrder !== 0
+        ? typeOrder
+        : COLLATOR.compare(left.file_name, right.file_name);
+    });
+  }
+  return result.sort((left, right) => {
+    const leftTime = new Date(left.update_time).getTime();
+    const rightTime = new Date(right.update_time).getTime();
+    const leftValue = Number.isNaN(leftTime) ? 0 : leftTime;
+    const rightValue = Number.isNaN(rightTime) ? 0 : rightTime;
+    return rightValue - leftValue;
+  });
+}
+
+/** Orders one listing in the browser; the API has no sort parameter. */
+export function sortListing(
+  listing: PathListingSchema,
+  sort: LibrarySort,
+): PathListingSchema {
+  return {
+    ...listing,
+    directories: sortFolders(listing.directories),
+    files: sortFiles(listing.files, sort),
+  };
+}
+
+/** Keeps only files whose stored name is an image extension. */
+export function imageFiles(files: readonly PathFileSchema[]): PathFileSchema[] {
+  return files.filter((file) => isImageFileName(file.file_name));
+}
+
+/** Applies the Media tab's local text filter to image files. */
+export function filterImageFiles(
+  files: readonly PathFileSchema[],
+  query: string,
+): PathFileSchema[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return [...files];
+  }
+  return files.filter(
+    (file) =>
+      file.file_name.toLowerCase().includes(needle) ||
+      file.raw_file_path.toLowerCase().includes(needle),
+  );
+}
+
+/** True when a paste event landed in a field that owns the clipboard. */
+export function isEditablePasteTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+const CLIPBOARD_EXTENSIONS: Record<string, string> = {
+  "image/avif": ".avif",
+  "image/gif": ".gif",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+  "application/json": ".json",
+  "application/pdf": ".pdf",
+  "text/csv": ".csv",
+  "text/markdown": ".md",
+  "text/plain": ".txt",
+};
+
+function clipboardStamp(): string {
+  const now = new Date();
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return [
+    now.getFullYear(),
+    pad(now.getMonth() + 1),
+    pad(now.getDate()),
+    "-",
+    pad(now.getHours()),
+    pad(now.getMinutes()),
+    pad(now.getSeconds()),
+  ].join("");
+}
+
+/** Collects file items from a clipboard payload, including unnamed images. */
+export function clipboardFiles(data: DataTransfer | null): File[] {
+  if (!data) {
+    return [];
+  }
+  const fromFiles = Array.from(data.files ?? []);
+  if (fromFiles.length > 0) {
+    return fromFiles;
+  }
+  const files: File[] = [];
+  for (const item of Array.from(data.items ?? [])) {
+    if (item.kind !== "file") {
+      continue;
+    }
+    const file = item.getAsFile();
+    if (file) {
+      files.push(file);
+    }
+  }
+  return files;
+}
+
+/**
+ * Gives a nameless clipboard file a safe archive name. Named files are left
+ * untouched so the uploaded path stays predictable.
+ */
+export function nameClipboardFile(file: File, index: number): File {
+  const trimmed = file.name.trim();
+  if (trimmed.length > 0) {
+    return file;
+  }
+  const mime = file.type.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+  const extension = CLIPBOARD_EXTENSIONS[mime] ?? ".bin";
+  const name = `pasted-${clipboardStamp()}-${index + 1}${extension}`;
+  return new File([file], name, {
+    type: file.type,
+    lastModified: file.lastModified,
+  });
 }
 
 /** Clamps a requested chunk to the file's 1-based range. */
@@ -347,6 +559,49 @@ export function clampChunk(chunk: number, totalChunks: number): number {
 /** Measures UTF-8 bytes for the 2 MB text ceiling. */
 export function textByteLength(value: string): number {
   return new TextEncoder().encode(value).length;
+}
+
+export interface LibraryInvalidateOptions {
+  readonly paths?: boolean;
+  readonly stats?: boolean;
+  readonly timeline?: boolean;
+  readonly search?: boolean;
+  readonly fileIds?: readonly number[];
+}
+
+/**
+ * Invalidates only the keys a file mutation can change. Path listings, stats,
+ * and timeline use path-prefix keys; generated file keys are flat strings, so
+ * the affected file and its chunk windows are matched by a scoped predicate.
+ */
+export function invalidateLibraryQueries(
+  queryClient: QueryClient,
+  options: LibraryInvalidateOptions,
+): void {
+  if (options.paths) {
+    void queryClient.invalidateQueries({ queryKey: ["/api/v1/paths"] });
+  }
+  if (options.stats) {
+    void queryClient.invalidateQueries({ queryKey: ["/api/v1/stats"] });
+  }
+  if (options.timeline) {
+    void queryClient.invalidateQueries({ queryKey: ["/api/v1/timeline"] });
+  }
+  if (options.search) {
+    void queryClient.invalidateQueries({ queryKey: ["/api/v1/search"] });
+  }
+  for (const fileId of options.fileIds ?? []) {
+    const fileKey = `/api/v1/files/${fileId}`;
+    void queryClient.invalidateQueries({
+      predicate: (query) => {
+        const key = query.queryKey[0];
+        return (
+          typeof key === "string" &&
+          (key === fileKey || key.startsWith(`${fileKey}/chunks/`))
+        );
+      },
+    });
+  }
 }
 
 /** Extracts a calm, human message from an API or network failure. */

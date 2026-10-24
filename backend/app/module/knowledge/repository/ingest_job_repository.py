@@ -111,9 +111,7 @@ class IngestJobRepository:
         afterwards, so use an explicit Core update here.
         """
         await self.session.execute(
-            update(FileIngestJobModel)
-            .where(FileIngestJobModel.id == job_id)
-            .values(file_id=None)
+            update(FileIngestJobModel).where(FileIngestJobModel.id == job_id).values(file_id=None)
         )
 
     async def requeue_stale(

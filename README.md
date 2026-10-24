@@ -5,7 +5,7 @@
 <h1 align="center">DendroMatrix</h1>
 
 <p align="center">
-  A local-first knowledge and memory archive for files, memories, and the media between them.
+  A local-first knowledge and memory archive for files, memories, and the links between them.
 </p>
 
 <p align="center">
@@ -32,11 +32,11 @@ number of deliberate tool calls: search a passage, read its neighbours, walk the
 path, sample a season, press a new memory, or trace a superseded one. Every
 result carries its source, chunk number, and time.
 
-> Status: v0.1.0 — file/memory/media archive, owner login, persistent
+> Status: v0.1.0 — file/memory archive, owner login, persistent
 > Pi-shaped agent with database-backed runtime limits, compaction, parallel
 > tools, SSE chat, a saved-question Q&A library, durable async ingestion,
-> dedicated PDF/DOCX/image/text viewers, a folder workspace, and a three-state
-> agent dock.
+> dedicated PDF/DOCX/image/text preview engines, a folder workspace, and a
+> three-panel chat workspace.
 
 ## Highlights
 
@@ -50,12 +50,9 @@ result carries its source, chunk number, and time.
   place, drop files onto a folder card to upload, drag a file card onto another
   folder to move it, and use an explicit Copy action when you want an
   independent second record.
-- **The agent stays within reach.** A global dock collapses to a seal, opens as
-  a compact chat panel, or expands into a split desk where the current tool call
-  is inspected beside the conversation.
-- **Page context respects the cache.** A plain-text snapshot of the current page
-  is appended only when the page key changes, in the same commit as the user
-  message, so earlier entries and the KV-cache prefix stay untouched.
+- **The agent has one workspace.** Chat is a three-panel desk: a collapsible
+  conversation drawer, the streaming transcript, and a tool inspector with a
+  draggable, persisted split. There is no second composer or command palette.
 - **Agent limits are database-backed.** The model context window, turn budget,
   compaction threshold, step and tool caps, parallel width, and result budgets
   live in one validated `agent_config` row and apply to new runs without a
@@ -70,19 +67,19 @@ result carries its source, chunk number, and time.
 - **Time is sampled honestly.** A timeline returns up to five anchors per event
   kind and reports exactly how many events were skipped.
 - **AI answers are grounded.** DeepSeek receives retrieved passages, not the
-  whole library, and every claim must carry a citation. Without a key, the
-  answer endpoint fails closed.
+  whole library, and every claim must carry a citation. Without a key, agent
+  turns fail closed.
 - **Questions outlive the conversation.** Save a question before you have an
   answer, ask it later, and keep the answer, its citations, the run status, and
   a link to the conversation on the same row. Editing the question clears the
   stale answer instead of leaving a mismatched pair on screen.
-- **Images have their own archive.** A standalone media index turns images into
-  captions, OCR text, and visual fingerprints. Text search reaches the captions;
-  image search compares visual descriptors. It never mixes with the text chunk
-  tree.
+- **Images live in the File Library.** An image is a normal file record with its
+  original bytes, path, and chunks. A vision-capable chat provider adds OCR and
+  caption metadata; without one, a filename-derived caption keeps local uploads
+  searchable. There is no separate image index.
 - **Documents choose their extractor.** PDFs try text first and fall back to
   vision for scanned pages. DOCX, TXT, JSON, CSV, and logs use text, with AI
-  structured metadata; images use vision.
+  structured metadata; images use vision or the filename fallback.
 - **The archive is local and single-owner.** It binds to `127.0.0.1` by default
   and is protected by one owner account with an Argon2 password hash and an
   HttpOnly session cookie. Run it on your own machine; put it behind Cloudflare
@@ -105,12 +102,19 @@ result carries its source, chunk number, and time.
 ### Docker Compose (normal)
 
 ```bash
+mkdir -p data
+sudo chown -R 10001:10001 data
 docker compose up --build
 ```
 
+> 注意：`./data` 會以 bind mount 掛進容器，容器程序以 uid `10001` 執行。
+> 首次啟動前必須先建立目錄並調整擁有者，否則上傳與原始檔寫入會失敗。
+> 若主機使用者已是 uid `10001`，可省略 `sudo chown`。
+
 Open <http://127.0.0.1:8000>. The first visit asks you to create the single
-owner account. Once signed in, an empty archive offers a demo seed. The database
-and file data live on named volumes.
+owner account. Once signed in, an empty archive offers a demo seed. PostgreSQL
+uses a named volume; uploaded originals and the generated secret key live under
+the host's `./data` directory.
 
 The API image copies the committed `frontend/dist`; it does not run a frontend
 build. After changing frontend code, run `cd frontend && bun run build` before
@@ -130,8 +134,8 @@ The Compose file mounts `.secrets/` read-only. The app reads the env file itself
 so the key never becomes a container environment variable and never appears in
 `docker compose config`. The `644` mode is required because the API container
 runs as a non-root user. The key is gitignored and is never returned by the API.
-Without it, summaries fall back to a deterministic extractive form,
-`POST /api/v1/ask` returns `503 ai_not_configured`, and agent messages return
+Without it, summaries fall back to a deterministic extractive form, image
+uploads use the filename caption, and agent messages return
 `503 agent_not_configured`.
 
 ### Configure AI in the app
@@ -355,8 +359,8 @@ for an LLM to use in sequence.
 | `save_memory` | `POST /api/v1/memories` | A new memory, the deprecated memories it replaced, and any new summary |
 | `read_memory` | `GET /api/v1/memories/{memory_id}?memory_range=1&trace_history=true` | Target, neighbours, supersedes, successor, and chain |
 
-The persistent archive agent exposes nine model tools: the six above plus
-`search_media`, `get_media`, and `present_resource`. The HTTP examples use
+The persistent archive agent exposes seven model tools: the six above plus
+`present_resource`. The HTTP examples use
 explicit parameters; the HTTP server defaults are `result_number=2`,
 `chunk_range=1`, `day_range=1`, `path_depth=1`, and `memory_range=0`. Text is chunked at about 4,000 characters with a 500-character overlap; existing files keep their original chunk boundaries until re-ingested. The agent's
 tool schemas choose their own defaults, such as `result_number=8` and
@@ -364,8 +368,10 @@ tool schemas choose their own defaults, such as `result_number=8` and
 renders the same services as compact XML; the persistent agent calls the
 services directly through its own registry.
 
-`present_resource` returns a viewer URL such as `/viewer/file/{id}?chunk={n}`,
-`/viewer/media/{id}`, or `/viewer/memory/{id}` and never fetches the resource.
+`present_resource` returns a resource URL such as `/viewer/file/{id}?chunk={n}`
+or `/viewer/memory/{id}` and never fetches the resource. The client redirects
+file links into the File Library preview modal and memory links into the memory
+reader.
 
 Persisted `pi.tool-result` entries also carry UI-only `data`: bounded excerpts,
 dimensions, tags, and viewer URLs for the expanded inspector. This payload never
@@ -395,9 +401,9 @@ resulting receipt after a write.
 
 Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 /api/v1/files/text`, `DELETE /api/v1/files/{file_id}`, `GET /api/v1/paths`,
-`GET /api/v1/tree`, `GET /api/v1/memories`, `POST /api/v1/memories`,
+`GET /api/v1/memories`, `POST /api/v1/memories`,
 `POST /api/v1/summaries`, `GET /api/v1/stats`, `POST /api/v1/demo/seed`,
-`GET /api/v1/health`, `GET /api/v1/ai/status`, and `POST /api/v1/ask`.
+`GET /api/v1/health`, and `GET /api/v1/ai/status`.
 
 ### Folder workspace
 
@@ -650,12 +656,10 @@ Page context is append-only and cache-preserving:
   previous conversation prefix remain a valid KV-cache lineage. A compaction or
   reset boundary deliberately starts a new lineage.
 
-The composer shows an expandable **Current page context** preview, and the
-transcript renders the snapshot as a compact context card rather than as a user
-question. Capture runs only on AppShell pages from `#main-content`; navigation,
-controls, hidden nodes, and the agent's own surfaces are excluded. `/chat` is
-skipped because the desk is the conversation itself. Viewer routes live outside
-`AppShell` and do not produce a snapshot.
+The current SPA does not attach a page snapshot, because the floating dock and
+cross-page composer were removed. The API field remains available to external
+clients; when a snapshot is present, the transcript renders it as a compact
+context card rather than as a user question.
 
 Tests inject a deterministic `FakeChatGenerator` from
 `app/module/agent/test/fake_chat_generator.py` by setting
@@ -715,11 +719,12 @@ question survives. A missing AI configuration keeps the existing
 `503 agent_not_configured` response. Asking the same question again creates
 another conversation and replaces the answer on the same saved row.
 
-The `/questions` page under **Studio** uses the generated hooks and provides
-create, list, pagination, edit, delete, and ask actions. Each card shows its
-status, answer, citation chips, run error, last-asked time, and an **Open
-conversation** link when a conversation exists. Ask is a synchronous JSON
-request, so the card shows a pending state for the seconds the turn takes.
+The `/questions` page is a secondary workspace, linked from Search and the
+method colophon. It uses the generated hooks and provides create, list,
+pagination, edit, delete, and ask actions. Each card shows its status, answer,
+citation chips, run error, last-asked time, and an **Open conversation** link
+when a conversation exists. Ask is a synchronous JSON request, so the card shows
+a pending state for the seconds the turn takes.
 
 ### Chat reading room
 
@@ -758,47 +763,35 @@ model's active context.
 The UI uses the generated Orval hooks for conversation metadata and lifecycle,
 and a small `agent-stream.ts` client for `text/event-stream` because generated
 hooks resolve normal JSON responses. Markdown is rendered with `skipHtml`;
-citations link only to known viewer paths. `/ask` remains available as Quick ask.
+citations resolve to File Library previews or memory readers. Saved questions
+remain available at `/questions` for later agent turns.
 
-Chat appears in the **Studio** navigation and the command palette. On mobile the
-bottom tabs remain Overview, Search, Timeline, Library, and More; Chat and the
-thread rail are reached from the navigation drawer.
+Chat is the first item in the seven-item archive rail (Chat, File library,
+Timeline, Memory, Search, Overview, Settings). Below 980 px the rail becomes a
+navigation drawer opened from the mobile bar.
 
-### Agent dock
+### Chat workspace
 
-The global agent dock lives inside `AppShell` but outside `<main>`, so it is
-available on every archive page except `/chat` without becoming part of the
-captured page text. `/chat` keeps the full-page desk as the single composer for
-that route. The dock has three states:
+`/chat` is a fixed-height three-column workspace: a collapsible conversations
+drawer, the stream column, and a tool inspector. A 12 px separator supports
+pointer drag, click-to-collapse, and keyboard arrows/Home/End; the ratio and
+collapsed state persist locally. Below 900 px the inspector becomes a tab. The
+composer sends on Enter, inserts a newline on Shift+Enter, and exposes Stop while
+streaming.
 
-- **Collapsed** — a floating seal in the lower-right corner.
-- **Panel** — a compact chat panel with recent conversations, the live stream,
-  and the composer.
-- **Expanded** — a full-screen split desk. The left column holds the
-  conversation, status bubbles, and composer; the right column is an inspector
-  that follows the current tool call.
-
-The selected state is stored locally and survives a reload. **Expand** from the
-panel opens the same conversation in the split desk instead of starting a new
-thread; `/chat` remains the full-page reading room. On mobile the collapsed
-state opens a full-height sheet, and the layout must not introduce horizontal
-overflow.
-
-The dock uses the same retry decision and `RetryBar` as `/chat`, so a failed or
-hard-limited latest turn can be retried from either surface without appending a
-second user entry. Compact and clear controls live on the full `/chat` desk.
+There is no second composer. The former floating dock and command palette were
+removed; a saved question runs through `/chat` like any other turn.
 
 Status bubbles describe observable work, not hidden chain-of-thought:
 orienting, searching, reading, comparing, composing, saving, sealed, and error.
 Each row can show the step, tool name, elapsed time, status, and a short result
 summary.
 
-The expanded inspector keeps the resource the user is reading on screen. It
-follows the newest tool call until the user pins a panel, offers **Follow
-current** to resume following, and retains the last valid resource when a later
-tool has no resource. Inspector panels reuse the same safe renderers and viewer
-queries as the standalone `/viewer/...` routes rather than adding a second
-rendering path.
+The inspector keeps the resource the user is reading on screen. It follows the
+newest tool call until the user pins a panel, offers **Follow current** to resume
+following, and retains the last valid resource when a later tool has no resource.
+Inspector panels reuse the same safe renderers and file/memory queries as the
+File Library and Memory reader rather than adding a second rendering path.
 
 | Tool | Inspector idea |
 |---|---|
@@ -808,31 +801,29 @@ rendering path.
 | `read_path` | Folder branch map that opens a folder or file directly |
 | `read_memory` | Pressed-leaf memory chain with supersession neighbours |
 | `save_memory` | Wax-seal receipt with status, memory id, and superseded ids |
-| `search_media` | Contact sheet of thumbnails with an in-panel lightbox |
-| `get_media` | Specimen sheet with image, caption, OCR text, and tags |
-| `present_resource` | Display stand that embeds the file, media, or memory viewer |
+| `present_resource` | Display stand that embeds the file or memory viewer |
 
 Every panel provides loading, empty, error, and success states. Tool result
 `data` carries the bounded, UI-only excerpts and viewer URLs that make these
 panels possible; provider-facing tool content is unchanged.
 
-The dock, panel/expanded surfaces, inspector panels, and folder board are
-implemented in the current release, and the committed `frontend/dist` is the
-rebuilt production client. Rebuild and commit `frontend/dist` after further
-frontend changes, because the Docker image serves the committed client and does
-not run a frontend build.
+The chat inspector, File Library workspace, and folder board are implemented in
+the current release, and the committed `frontend/dist` is the rebuilt production
+client. Rebuild and commit `frontend/dist` after further frontend changes,
+because the Docker image serves the committed client and does not run a frontend
+build.
 
-### Resource viewer
+### Resource preview
 
-`/viewer/file/:fileId`, `/viewer/media/:mediaId`, and
-`/viewer/memory/:memoryId` are standalone routes outside `AppShell`; they own
-their top bar and safe-area layout so a resource can open in a new tab.
+Files open in an in-situ preview modal inside the File Library; the Memory
+reader is a normal route at `/memory/:id`. Legacy `/viewer/*` URLs redirect into
+those surfaces, so old citations and bookmarks keep working.
 
 | Resource | Renderer |
 |---|---|
 | PDF | `react-pdf` 11 + bundled `pdfjs-dist` 6, page navigation, zoom, fit width, text layer |
 | DOCX | `docx-preview` inside a script-disabled sandbox |
-| Image | native image with zoom/pan, plus a `yet-another-react-lightbox` gallery |
+| Image | native image with the standard file content endpoint |
 | Text / JSON / Markdown / CSV | archive sheet with wrap/copy/download, pretty JSON, GFM Markdown |
 | Memory | pressed-record memory leaf with lineage and trace link |
 
@@ -865,26 +856,16 @@ token. The cookie is HttpOnly, SameSite=Lax, and Secure when
 | `POST` | `/api/v1/auth/logout` | Delete the session and clear the cookie |
 | `GET` | `/api/v1/auth/me` | Current owner (requires a session) |
 
-Every knowledge, media, settings, and agent endpoint requires the session; only
-`/api/v1/health`, `/health`, `/api/v1/auth/*`, `/docs`, `/redoc`,
+Every knowledge, settings, and agent endpoint requires the session; only
+`/api/v1/health`, `/health`, `/api/v1/auth/*`, `/api/docs`, `/api/redoc`,
 `/openapi.json`, and the SPA shell are public. Tool endpoints need the session
 cookie too.
 
-Standalone media API:
-
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/api/v1/media` | Upload an image; vision caption/OCR when configured |
-| `GET` | `/api/v1/media` | List current media |
-| `GET` | `/api/v1/media/search?query=` | Text → image over caption/OCR/tags |
-| `POST` | `/api/v1/media/search/image` | Image → image visual similarity |
-| `GET` | `/api/v1/media/{media_id}/content` | Original image bytes |
-| `POST` | `/api/v1/media/{media_id}/describe` | Re-run AI caption/OCR |
-| `DELETE` | `/api/v1/media/{media_id}` | Soft-delete the media asset |
-
 Document intake (`POST /api/v1/files`) supports:
 
-- **Images** (`jpg`, `jpeg`, `png`, `webp`) — DeepSeek vision caption + OCR.
+- **Images** (`jpg`, `jpeg`, `png`, `webp`) — DeepSeek vision caption + OCR when
+  configured; otherwise a filename-derived caption with
+  `extraction_method=filename`. Images remain normal File Library files.
 - **PDF** — pypdf text first; when the text is empty, garbled, or the AI
   structured analysis says `use_vision`, render up to 10 pages with pypdfium2
   and run vision OCR.
@@ -898,7 +879,7 @@ The same intake is available asynchronously through
 `GET /api/v1/files/ingest-jobs/{id}` for stage and chunk progress. See
 **Ingestion runtime** above.
 
-Interactive docs: <http://127.0.0.1:8000/docs>. The OpenAPI schema is the source
+Interactive docs: <http://127.0.0.1:8000/api/docs>. The OpenAPI schema is the source
 for the committed Orval client.
 
 ### Generated API client and drift
@@ -937,13 +918,8 @@ uv run python -m script.ingest_wikipedia \
   --prefix /wikipedia/en
 ```
 
-Ask a question across the imported corpus:
-
-```bash
-curl -sS -X POST http://127.0.0.1:8000/api/v1/ask \
-  -H 'Content-Type: application/json' \
-  -d '{"question":"Who built the first practical automobile?","result_number":5}' | jq
-```
+Ask a question across the imported corpus from the agent desk at `/chat`, or
+save it to the question library at `/questions` and run it later.
 
 ### Long-document validation
 
@@ -981,10 +957,6 @@ corpus.
 5. **Fuse** with reciprocal rank fusion. Each source kind keeps its own top
    `result_number`, so a summary cannot be crowded out by file chunks.
 6. **Deduplicate** by chunk id, then hydrate the file, memory, or summary row.
-7. **Expand on ask.** `/ask` first asks DeepSeek for 2–4 short retrieval queries,
-   runs hybrid search for each, and fuses the runs with another RRF pass. This
-   finds the passage that answers a full question instead of only the passages
-   that repeat its nouns.
 
 If vector recall is unavailable, search still returns BM25 results. Synchronous
 ingestion keeps a chunk text-only when its embedding call fails within the
@@ -1034,8 +1006,7 @@ Consequences:
 - **No model download, no GPU, no key.** It runs on the CPU in microseconds per
   chunk and needs only a few kilobytes of RAM per vector.
 - **Lexical, not semantic.** `car` and `automobile` are different tokens. BM25
-  handles exact terms; DeepSeek query expansion supplies related retrieval
-  terms for `/ask`.
+  handles exact terms, but query phrasing matters.
 - **Deterministic.** The same text always produces the same vector, which makes
   ingestion and tests reproducible.
 - **Exact scan at personal scale.** The current implementation scans up to
@@ -1067,8 +1038,6 @@ memory_summary ───┘
 - `memory_summary`: period, source memory ids, themes, generator, and model.
 - `ai_provider_config`: one row per purpose (`chat` / `embedding`), with an
   encrypted API key, a safe hint, and the active model/base URL/dimension.
-- `media_asset` / `media_ngram`: the standalone visual archive, its OCR/caption
-  text, and the n-gram index used for text → image search.
 - `agent_conversation` / `agent_entry` / `agent_run`: the persistent agent's
   transcript scope, immutable entry log, and per-submission run state.
   `agent_commit_seq` groups entries written in one transaction. Page snapshots
@@ -1115,7 +1084,7 @@ bun audit
 
 The integration suite uses one real PostgreSQL test database
 (`dendromatrix_test`) on the same instance, runs sequentially, and resets every
-table between tests. There are exactly ten tests; each one exercises the real
+table between tests. There are exactly eleven tests; each one exercises the real
 HTTP surface and database. The agent test covers runtime settings defaults,
 full PUT/reset, validation, the runtime snapshot used by later runs, auto and
 manual compaction, clear, page-context reattachment at a boundary, retry,
@@ -1128,9 +1097,11 @@ saved-question coverage includes create/list/pagination, ask success, a failed
 ask that keeps the row, edit clearing the answer, delete, not-found errors, and
 the `conversation_id` `ON DELETE SET NULL` behavior. Page-context
 deduplication and ordering, and folder creation plus move/copy coverage, extend
-existing tests rather than adding new functions.
+the existing agent and file-library tests. A separate file-library test uploads
+an image without a vision provider and verifies the filename caption, stored
+original, path listing, and search result.
 
-The latest migration is `f2b3c4d5e6a7`, after `c8f2a4b6d9e1`. The migrations
+The latest migration is `8f4b2c6d9e01`, after `f2b3c4d5e6a7`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1148,9 +1119,11 @@ after `agent_config` on this branch are:
   1,000,000 server default and an 8,000–2,000,000 check constraint;
 - `c8f2a4b6d9e1` adds the non-null `save_memory_requires_approval` boolean to
   `agent_config` with a `true` server default; existing rows receive `true`;
-- `f2b3c4d5e6a7` (current head) creates `agent_approval` with its status check,
+- `f2b3c4d5e6a7` creates `agent_approval` with its status check,
   conversation/run/entry foreign keys, status indexes, and the partial unique
-  pending `(run_id, tool_call_id)` index.
+  pending `(run_id, tool_call_id)` index;
+- `8f4b2c6d9e01` (current head) drops the retired `media_ngram` and
+  `media_asset` tables. Its downgrade recreates the original media schema.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so
@@ -1174,22 +1147,20 @@ backend/
       router/                   HTTP adapters incl. file intake and settings
       schema/                   Pydantic contracts
       exception/                stable error codes
-    module/media/               standalone image archive and visual retrieval
     module/agent/               transcript, runtime settings, compaction, tools,
                                 saved questions, SSE
   alembic/                      migrations
-  tests/                        ten integration tests
+  tests/                        eleven integration tests
 frontend/
   src/app/
     component/                  shared archive UI
     generated-apis-types/       committed Orval client
-    agent/                      global dock, page capture, inspector panels
+    agent/                      page capture, trace, and inspector panels
     chat/                       reading room, retry, context actions
     questions/                  saved-question Q&A library
     settings/                   provider, agent, and ingestion runtime panels
-    viewer/                     file, media, and memory viewers
-    library/                    folder workspace board, list, intake progress
-    home/ search/ timeline/ tree/ media/ memory/ ask/ ...
+    library/                    files, media gallery, preview modal, intake
+    home/ search/ timeline/ memory/ method/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting
@@ -1220,8 +1191,8 @@ docker/caddy/                   non-root reverse proxy for the tunnel
 - The DeepSeek key lives in `.secrets/deepseek.env` or the environment. It is
   never logged, returned, or committed. Keys saved from the Settings page are
   encrypted in PostgreSQL and returned only as a four-character hint.
-- AI calls happen for summaries, `POST /ask`, and agent turns. If the provider
-  fails, the API returns a stable error instead of inventing an answer.
+- AI calls happen for summaries and agent turns. If the provider fails, the API
+  returns a stable error instead of inventing an answer.
 
 ## License
 

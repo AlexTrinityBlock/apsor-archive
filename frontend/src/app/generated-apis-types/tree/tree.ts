@@ -20,11 +20,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  GetTreeParams,
   HTTPValidationError,
   PathListingSchema,
-  ReadPathParams,
-  TreeSchema
+  ReadPathParams
 } from '../schemas';
 
 import { apiFetch } from '../../../apis/fetch-client';
@@ -146,114 +144,6 @@ export function useReadPath<TData = Awaited<ReturnType<typeof readPath>>, TError
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getReadPathQueryOptions(params,options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const getGetTreeUrl = (params?: GetTreeParams,) => {
-  const normalizedParams = new URLSearchParams();
-
-  Object.entries(params || {}).forEach(([key, value]) => {
-
-    if (value !== undefined) {
-      normalizedParams.append(key, value === null ? 'null' : String(value))
-    }
-  });
-
-  const stringifiedParams = normalizedParams.toString();
-
-  return stringifiedParams.length > 0 ? `/api/v1/tree?${stringifiedParams}` : `/api/v1/tree`
-}
-
-/**
- * Return a flat tree; the frontend performs the SVG layout.
- * @summary Get Tree
- */
-export const getTree = async (params?: GetTreeParams, options?: Parameters<typeof apiFetch>[1]): Promise<TreeSchema> => {
-
-  return apiFetch<TreeSchema>(getGetTreeUrl(params),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetTreeQueryKey = (params?: GetTreeParams,) => {
-    return [
-    `/api/v1/tree`, ...(params ? [params] : [])
-    ] as const;
-    }
-
-
-export const getGetTreeQueryOptions = <TData = Awaited<ReturnType<typeof getTree>>, TError = HTTPValidationError>(params?: GetTreeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTree>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetTreeQueryKey(params);
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTree>>> = ({ signal }) => getTree(params, { signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTree>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetTreeQueryResult = NonNullable<Awaited<ReturnType<typeof getTree>>>
-export type GetTreeQueryError = HTTPValidationError
-
-
-export function useGetTree<TData = Awaited<ReturnType<typeof getTree>>, TError = HTTPValidationError>(
- params: undefined |  GetTreeParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTree>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getTree>>,
-          TError,
-          Awaited<ReturnType<typeof getTree>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetTree<TData = Awaited<ReturnType<typeof getTree>>, TError = HTTPValidationError>(
- params?: GetTreeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTree>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getTree>>,
-          TError,
-          Awaited<ReturnType<typeof getTree>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetTree<TData = Awaited<ReturnType<typeof getTree>>, TError = HTTPValidationError>(
- params?: GetTreeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTree>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary Get Tree
- */
-
-export function useGetTree<TData = Awaited<ReturnType<typeof getTree>>, TError = HTTPValidationError>(
- params?: GetTreeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getTree>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetTreeQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

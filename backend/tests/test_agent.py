@@ -48,8 +48,8 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v3"
-TOOLS_VERSION = "archive-tools-v1"
+PROMPT_VERSION = "archive-agent-v4"
+TOOLS_VERSION = "archive-tools-v2"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -63,8 +63,6 @@ TOOL_NAMES = [
     "read_path",
     "read_memory",
     "save_memory",
-    "search_media",
-    "get_media",
     "present_resource",
 ]
 
@@ -208,9 +206,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
 
     detail = client.get(f"/api/v1/agent/conversations/{conversation_id}")
     assert detail.status_code == 200
-    system_entries = [
-        entry for entry in detail.json()["entries"] if entry["kind"] == "pi.system"
-    ]
+    system_entries = [entry for entry in detail.json()["entries"] if entry["kind"] == "pi.system"]
     assert len(system_entries) == 1
     system_entry = system_entries[0]
     assert system_entry["model"][0]["role"] == "system"
@@ -318,21 +314,15 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert read_calls[0]["function"]["name"] == "read_file"
     read_result_entry = entries[5]
     assert read_result_entry["data"]["tool"] == "read_file"
-    assert read_result_entry["data"]["viewer_url"] == (
-        f"/viewer/file/{file_id}?chunk=1"
-    )
-    assert read_result_entry["data"]["chunks"][0]["excerpt"].startswith(
-        "The wrench is a hand tool"
-    )
+    assert read_result_entry["data"]["viewer_url"] == (f"/viewer/file/{file_id}?chunk=1")
+    assert read_result_entry["data"]["chunks"][0]["excerpt"].startswith("The wrench is a hand tool")
     assert turn["tool_results"] == [tool_result_entry, read_result_entry]
 
     final_entry = entries[6]
     assert final_entry["model"][0]["content"] == final_answer
     assert turn["assistant_entry"] == final_entry
 
-    assistant_entries = [
-        entry for entry in entries if entry["kind"] == "pi.assistant"
-    ]
+    assistant_entries = [entry for entry in entries if entry["kind"] == "pi.assistant"]
     assert [entry["data"]["step"] for entry in assistant_entries] == [1, 2, 3]
     assert assistant_entries[0]["data"]["usage"] == TOOL_USAGE
     assert assistant_entries[1]["data"]["usage"] == READ_USAGE
@@ -350,8 +340,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         == assistant_entries[2]["data"]["cache_prefix_hash"]
     )
     assert turn["usage"] == {
-        key: TOOL_USAGE[key] + READ_USAGE[key] + ANSWER_USAGE[key]
-        for key in TOOL_USAGE
+        key: TOOL_USAGE[key] + READ_USAGE[key] + ANSWER_USAGE[key] for key in TOOL_USAGE
     }
 
     first_request = fake.requests[0]
@@ -360,15 +349,11 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "user",
         "user",
     ]
-    assert first_request.messages[1]["content"].startswith(
-        f'<page_context key="{PAGE_KEY}"'
-    )
+    assert first_request.messages[1]["content"].startswith(f'<page_context key="{PAGE_KEY}"')
     assert PAGE_TEXT in first_request.messages[1]["content"]
     assert first_request.messages[2]["content"] == first_question
 
-    first_detail = client.get(
-        f"/api/v1/agent/conversations/{conversation_id}"
-    ).json()
+    first_detail = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     assert first_detail["last_page_context_key"] == PAGE_KEY
 
     first_page = client.get(
@@ -492,10 +477,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "pi.user",
         "pi.assistant",
     ]
-    assert all(
-        entry["kind"] != "pi.page-context"
-        for entry in second_body["entries"]
-    )
+    assert all(entry["kind"] != "pi.page-context" for entry in second_body["entries"])
     assert len(fake.requests) == 4
     same_page_request = fake.requests[3]
     same_page_context_messages = [
@@ -505,14 +487,10 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         and str(message.get("content", "")).startswith("<page_context")
     ]
     assert len(same_page_context_messages) == 1
-    assert same_page_context_messages[0]["content"].startswith(
-        f'<page_context key="{PAGE_KEY}"'
-    )
+    assert same_page_context_messages[0]["content"].startswith(f'<page_context key="{PAGE_KEY}"')
     assert PAGE_TEXT in same_page_context_messages[0]["content"]
 
-    after_same_page = client.get(
-        f"/api/v1/agent/conversations/{conversation_id}"
-    ).json()
+    after_same_page = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     assert after_same_page["last_page_context_key"] == PAGE_KEY
     assert after_same_page["entries_total"] == 10
 
@@ -539,15 +517,10 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "pi.assistant",
     ]
     assert third_body["entries"][0]["data"]["page_key"] == SECOND_PAGE_KEY
-    assert (
-        third_body["entries"][0]["commit_seq"]
-        == third_body["entries"][1]["commit_seq"]
-    )
+    assert third_body["entries"][0]["commit_seq"] == third_body["entries"][1]["commit_seq"]
     assert third_body["entries"][0]["id"] < third_body["entries"][1]["id"]
 
-    after_second_page = client.get(
-        f"/api/v1/agent/conversations/{conversation_id}"
-    ).json()
+    after_second_page = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     assert after_second_page["last_page_context_key"] == SECOND_PAGE_KEY
     assert after_second_page["entries_total"] == 13
 
@@ -578,9 +551,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         and str(message.get("content", "")).startswith("<page_context")
     ]
     assert len(final_page_context_messages) == 2
-    assert final_page_context_messages[0]["content"].startswith(
-        f'<page_context key="{PAGE_KEY}"'
-    )
+    assert final_page_context_messages[0]["content"].startswith(f'<page_context key="{PAGE_KEY}"')
     assert final_page_context_messages[1]["content"].startswith(
         f'<page_context key="{SECOND_PAGE_KEY}"'
     )
@@ -600,22 +571,16 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert final_request.messages[11]["content"] == third_question
     assert final_request.model == conversation["model"]
 
-    cleared = client.post(
-        f"/api/v1/agent/conversations/{conversation_id}/clear"
-    )
+    cleared = client.post(f"/api/v1/agent/conversations/{conversation_id}/clear")
     assert cleared.status_code == 200, cleared.text
     clear_entry = cleared.json()
     assert clear_entry["kind"] == "pi.reset"
     assert clear_entry["head_entry_id"] == clear_entry["id"]
 
-    source_detail = client.get(
-        f"/api/v1/agent/conversations/{conversation_id}"
-    ).json()
+    source_detail = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     source_entries = source_detail["entries"]
     assert source_entries[-1]["id"] == clear_entry["id"]
-    first_user_entry = next(
-        entry for entry in source_entries if entry["kind"] == "pi.user"
-    )
+    first_user_entry = next(entry for entry in source_entries if entry["kind"] == "pi.user")
     first_page_context = next(
         entry for entry in source_entries if entry["kind"] == "pi.page-context"
     )
@@ -624,10 +589,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     engine = create_engine(TEST_DATABASE_URL)
     with engine.begin() as connection:
         connection.execute(
-            text(
-                "UPDATE agent_entry SET edits = CAST(:edits AS jsonb) "
-                "WHERE id = :entry_id"
-            ),
+            text("UPDATE agent_entry SET edits = CAST(:edits AS jsonb) WHERE id = :entry_id"),
             {
                 "edits": json.dumps(
                     [
@@ -643,15 +605,11 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         )
     engine.dispose()
 
-    source_detail = client.get(
-        f"/api/v1/agent/conversations/{conversation_id}"
-    ).json()
+    source_detail = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     source_entries = source_detail["entries"]
     source_entry_ids = {entry["id"] for entry in source_entries}
     first_user_index = next(
-        index
-        for index, entry in enumerate(source_entries)
-        if entry["kind"] == "pi.user"
+        index for index, entry in enumerate(source_entries) if entry["kind"] == "pi.user"
     )
     source_updated_at = source_detail["updated_at"]
     source_last_entry_at = source_detail["last_entry_at"]
@@ -669,10 +627,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert forked_latest["status"] == "active"
     assert forked_latest["provider"] == source_detail["provider"]
     assert forked_latest["model"] == source_detail["model"]
-    assert (
-        forked_latest["provider_session_id"]
-        != source_detail["provider_session_id"]
-    )
+    assert forked_latest["provider_session_id"] != source_detail["provider_session_id"]
     assert forked_latest["archived_at"] is None
     assert forked_latest["deleted_at"] is None
 
@@ -686,41 +641,27 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert forked_at["parent_conversation_id"] == conversation_id
     assert forked_at["fork_at_entry_id"] == first_user_entry["id"]
     assert forked_at["title"] == "Fork of Wrench research"
-    assert (
-        forked_at["provider_session_id"]
-        != source_detail["provider_session_id"]
-    )
+    assert forked_at["provider_session_id"] != source_detail["provider_session_id"]
 
-    forked_latest_detail = client.get(
-        f"/api/v1/agent/conversations/{forked_latest['id']}"
-    ).json()
+    forked_latest_detail = client.get(f"/api/v1/agent/conversations/{forked_latest['id']}").json()
     forked_latest_entries = forked_latest_detail["entries"]
     assert len(forked_latest_entries) == len(source_entries)
     assert [entry["kind"] for entry in forked_latest_entries] == [
         entry["kind"] for entry in source_entries
     ]
-    assert all(
-        entry["id"] not in source_entry_ids
-        for entry in forked_latest_entries
-    )
-    assert len({entry["id"] for entry in forked_latest_entries}) == len(
-        forked_latest_entries
-    )
+    assert all(entry["id"] not in source_entry_ids for entry in forked_latest_entries)
+    assert len({entry["id"] for entry in forked_latest_entries}) == len(forked_latest_entries)
     assert all(entry["by_run_id"] is None for entry in forked_latest_entries)
     assert [entry["commit_seq"] for entry in forked_latest_entries] == sorted(
         entry["commit_seq"] for entry in forked_latest_entries
     )
-    for source_entry, copied_entry in zip(
-        source_entries, forked_latest_entries, strict=True
-    ):
+    for source_entry, copied_entry in zip(source_entries, forked_latest_entries, strict=True):
         assert copied_entry["kind"] == source_entry["kind"]
         assert copied_entry["model"] == source_entry["model"]
         assert copied_entry["data"] == source_entry["data"]
 
     copied_page_context = next(
-        entry
-        for entry in forked_latest_entries
-        if entry["kind"] == "pi.page-context"
+        entry for entry in forked_latest_entries if entry["kind"] == "pi.page-context"
     )
     assert forked_latest_entries[0]["edits"] == [
         {"target_entry_id": copied_page_context["id"], "action": "omit"}
@@ -730,9 +671,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert copied_clear["head_entry_id"] == copied_clear["id"]
     assert source_entries[-1]["head_entry_id"] == source_entries[-1]["id"]
 
-    forked_at_detail = client.get(
-        f"/api/v1/agent/conversations/{forked_at['id']}"
-    ).json()
+    forked_at_detail = client.get(f"/api/v1/agent/conversations/{forked_at['id']}").json()
     forked_at_entries = forked_at_detail["entries"]
     assert len(forked_at_entries) == first_user_index + 1
     assert [entry["kind"] for entry in forked_at_entries] == [
@@ -740,9 +679,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     ]
     assert forked_at_entries[-1]["kind"] == "pi.user"
     assert forked_at_entries[-1]["model"] == first_user_entry["model"]
-    assert all(
-        entry["id"] not in source_entry_ids for entry in forked_at_entries
-    )
+    assert all(entry["id"] not in source_entry_ids for entry in forked_at_entries)
 
     fork_fake = FakeChatGenerator.from_texts("The fork continues.")
     client.app.state.agent_chat_generator = fork_fake
@@ -761,15 +698,12 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert fork_request.messages[0]["role"] == "system"
     assert "You are DendroMatrix" in fork_request.messages[0]["content"]
     assert any(
-        message.get("role") == "user"
-        and message.get("content") == first_question
+        message.get("role") == "user" and message.get("content") == first_question
         for message in fork_request.messages
     )
     assert fork_request.messages[-1]["content"] == "Continue in the fork."
 
-    source_after = client.get(
-        f"/api/v1/agent/conversations/{conversation_id}"
-    ).json()
+    source_after = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     assert source_after["entries"] == source_entries
     assert source_after["updated_at"] == source_updated_at
     assert source_after["last_entry_at"] == source_last_entry_at
@@ -781,9 +715,9 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     )
     assert cutoff_helper.status_code == 201, cutoff_helper.text
     cutoff_helper_id = cutoff_helper.json()["id"]
-    cutoff_helper_entry_id = client.get(
-        f"/api/v1/agent/conversations/{cutoff_helper_id}"
-    ).json()["entries"][0]["id"]
+    cutoff_helper_entry_id = client.get(f"/api/v1/agent/conversations/{cutoff_helper_id}").json()[
+        "entries"
+    ][0]["id"]
     foreign_cutoff = client.post(
         f"/api/v1/agent/conversations/{conversation_id}/fork",
         json={"at_entry_id": cutoff_helper_entry_id},
@@ -796,9 +730,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     )
     assert missing_cutoff.status_code == 400
     assert missing_cutoff.json()["error"] == "agent_fork_entry_invalid"
-    assert client.delete(
-        f"/api/v1/agent/conversations/{cutoff_helper_id}"
-    ).status_code == 204
+    assert client.delete(f"/api/v1/agent/conversations/{cutoff_helper_id}").status_code == 204
 
     engine = create_engine(TEST_DATABASE_URL)
     with engine.begin() as connection:
@@ -881,12 +813,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     deleted = client.delete(f"/api/v1/agent/conversations/{conversation_id}")
     assert deleted.status_code == 204
     assert client.get(f"/api/v1/agent/conversations/{conversation_id}").status_code == 404
-    assert (
-        client.get(
-            f"/api/v1/agent/conversations/{conversation_id}/entries"
-        ).status_code
-        == 404
-    )
+    assert client.get(f"/api/v1/agent/conversations/{conversation_id}/entries").status_code == 404
     missing_source_fork = client.post(
         f"/api/v1/agent/conversations/{conversation_id}/fork",
         json={},
@@ -895,9 +822,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert missing_source_fork.json()["error"] == "agent_conversation_not_found"
     listed = client.get("/api/v1/agent/conversations")
     assert listed.status_code == 200
-    assert all(
-        item["id"] != conversation_id for item in listed.json()["resources"]
-    )
+    assert all(item["id"] != conversation_id for item in listed.json()["resources"])
 
     failing = FakeChatGenerator([])
     client.app.state.agent_chat_generator = failing
@@ -997,13 +922,14 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "call_parallel_search",
         "call_parallel_read",
     ]
-    assert [
-        entry["model"][0]["tool_call_id"]
-        for entry in parallel_body["tool_results"]
-    ] == ["call_parallel_search", "call_parallel_read"]
-    assert [
-        entry["data"]["tool"] for entry in parallel_body["tool_results"]
-    ] == ["search_knowledge", "read_file"]
+    assert [entry["model"][0]["tool_call_id"] for entry in parallel_body["tool_results"]] == [
+        "call_parallel_search",
+        "call_parallel_read",
+    ]
+    assert [entry["data"]["tool"] for entry in parallel_body["tool_results"]] == [
+        "search_knowledge",
+        "read_file",
+    ]
 
     sequential_settings = {**defaults, "parallel_tools_enabled": False}
     sequential_update = client.put(
@@ -1045,13 +971,14 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "pi.tool-result",
         "pi.assistant",
     ]
-    assert [
-        entry["model"][0]["tool_call_id"]
-        for entry in sequential_body["tool_results"]
-    ] == ["call_sequential_search", "call_sequential_read"]
-    assert [
-        entry["data"]["tool"] for entry in sequential_body["tool_results"]
-    ] == ["search_knowledge", "read_file"]
+    assert [entry["model"][0]["tool_call_id"] for entry in sequential_body["tool_results"]] == [
+        "call_sequential_search",
+        "call_sequential_read",
+    ]
+    assert [entry["data"]["tool"] for entry in sequential_body["tool_results"]] == [
+        "search_knowledge",
+        "read_file",
+    ]
     assert sequential_body["answer"] == "Sequential tool batch complete."
 
     restore_settings = client.post("/api/v1/agent/settings/reset")
@@ -1174,15 +1101,10 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert manual_compaction_entry["head_entry_id"] == manual_compaction_entry["id"]
     assert manual_compaction_entry["data"]["auto"] is False
     assert manual_compaction_entry["data"]["reason"] == "manual"
-    assert (
-        manual_compaction_entry["data"]["last_user_entry_id"]
-        == second_compact_user["id"]
-    )
+    assert manual_compaction_entry["data"]["last_user_entry_id"] == second_compact_user["id"]
     assert second_compact_question in manual_compaction_entry["model"][0]["content"]
 
-    compacted_detail = client.get(
-        f"/api/v1/agent/conversations/{compact_conversation_id}"
-    ).json()
+    compacted_detail = client.get(f"/api/v1/agent/conversations/{compact_conversation_id}").json()
     assert compacted_detail["last_page_context_key"] is None
 
     restored_compact_settings = client.post("/api/v1/agent/settings/reset")
@@ -1214,9 +1136,9 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert fresh_page_context["id"] > manual_compaction_entry["id"]
     assert fresh_page_context["commit_seq"] == third_compact_body["entries"][1]["commit_seq"]
     assert (
-        client.get(
-            f"/api/v1/agent/conversations/{compact_conversation_id}"
-        ).json()["last_page_context_key"]
+        client.get(f"/api/v1/agent/conversations/{compact_conversation_id}").json()[
+            "last_page_context_key"
+        ]
         == PAGE_KEY
     )
     post_compaction_request = compact_fake.requests[2]
@@ -1225,18 +1147,14 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert post_compaction_request.messages[2]["content"].startswith("<page_context")
     assert post_compaction_request.messages[3]["content"] == third_compact_question
 
-    cleared = client.post(
-        f"/api/v1/agent/conversations/{compact_conversation_id}/clear"
-    )
+    cleared = client.post(f"/api/v1/agent/conversations/{compact_conversation_id}/clear")
     assert cleared.status_code == 200, cleared.text
     clear_entry = cleared.json()
     assert clear_entry["kind"] == "pi.reset"
     assert clear_entry["head_entry_id"] == clear_entry["id"]
     assert clear_entry["data"] == {"reason": "manual_clear"}
     assert clear_entry["model"] == []
-    cleared_detail = client.get(
-        f"/api/v1/agent/conversations/{compact_conversation_id}"
-    ).json()
+    cleared_detail = client.get(f"/api/v1/agent/conversations/{compact_conversation_id}").json()
     assert cleared_detail["last_page_context_key"] is None
 
     fourth_compact_turn = client.post(
@@ -1260,9 +1178,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "pi.assistant",
     ]
     assert fourth_compact_body["entries"][0]["id"] > clear_entry["id"]
-    assert (
-        fourth_compact_body["entries"][0]["data"]["page_key"] == PAGE_KEY
-    )
+    assert fourth_compact_body["entries"][0]["data"]["page_key"] == PAGE_KEY
     after_clear_request = compact_fake.requests[3]
     assert [message["role"] for message in after_clear_request.messages] == [
         "system",
@@ -1323,7 +1239,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "that were captured in the archive for later review?"
     )
     saved_second_question = "How should I recall a stored memory?"
-    saved_third_question = "Which media assets mention the wrench?"
+    saved_third_question = "Which image files mention the wrench?"
     saved_answer = f"The saved archive answer cites the wrench [file:{file_id}#1]."
     saved_fake = FakeChatGenerator.from_texts(saved_answer)
     client.app.state.agent_chat_generator = saved_fake
@@ -1409,9 +1325,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "/api/v1/agent/conversations",
         params={"limit": 100},
     ).json()
-    asked_saved_first = client.post(
-        f"/api/v1/agent/questions/{saved_first_id}/ask"
-    )
+    asked_saved_first = client.post(f"/api/v1/agent/questions/{saved_first_id}/ask")
     assert asked_saved_first.status_code == 200, asked_saved_first.text
     asked_first = asked_saved_first.json()
     assert asked_first["id"] == saved_first_id
@@ -1429,14 +1343,9 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "/api/v1/agent/conversations",
         params={"limit": 100},
     ).json()
-    assert (
-        conversations_after_ask["total_results"]
-        == conversations_before_ask["total_results"] + 1
-    )
+    assert conversations_after_ask["total_results"] == conversations_before_ask["total_results"] + 1
     asked_conversation_id = asked_first["conversation_id"]
-    asked_conversation = client.get(
-        f"/api/v1/agent/conversations/{asked_conversation_id}"
-    )
+    asked_conversation = client.get(f"/api/v1/agent/conversations/{asked_conversation_id}")
     assert asked_conversation.status_code == 200
     assert asked_conversation.json()["title"] == saved_first_question[:80].strip()
     asked_conversation_entries = client.get(
@@ -1446,9 +1355,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     asked_user_entries = [
         entry for entry in asked_conversation_entries if entry["kind"] == "pi.user"
     ]
-    assert [entry["model"][0]["content"] for entry in asked_user_entries] == [
-        saved_first_question
-    ]
+    assert [entry["model"][0]["content"] for entry in asked_user_entries] == [saved_first_question]
     assert saved_fake.requests[0].messages[-1]["content"] == saved_first_question
 
     after_ask_library = client.get(
@@ -1456,10 +1363,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         params={"limit": 100},
     ).json()
     assert after_ask_library["total"] == 3
-    assert (
-        sum(1 for item in after_ask_library["resources"] if item["id"] == saved_first_id)
-        == 1
-    )
+    assert sum(1 for item in after_ask_library["resources"] if item["id"] == saved_first_id) == 1
     stored_first = next(
         item for item in after_ask_library["resources"] if item["id"] == saved_first_id
     )
@@ -1482,9 +1386,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert edited_first["last_asked_at"] is None
 
     client.app.state.agent_chat_generator = FakeChatGenerator([])
-    failed_saved_ask = client.post(
-        f"/api/v1/agent/questions/{saved_second_id}/ask"
-    )
+    failed_saved_ask = client.post(f"/api/v1/agent/questions/{saved_second_id}/ask")
     assert failed_saved_ask.status_code == 200, failed_saved_ask.text
     failed_saved = failed_saved_ask.json()
     assert failed_saved["id"] == saved_second_id
@@ -1509,17 +1411,13 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert retained_failure["run_status"] == "failed"
     assert retained_failure["error_detail"]
 
-    saved_third_answer = "The wrench appears in a media asset [media:7]."
-    client.app.state.agent_chat_generator = FakeChatGenerator.from_texts(
-        saved_third_answer
-    )
-    asked_saved_third = client.post(
-        f"/api/v1/agent/questions/{saved_third_id}/ask"
-    )
+    saved_third_answer = "The wrench appears in an image file [file:9#2]."
+    client.app.state.agent_chat_generator = FakeChatGenerator.from_texts(saved_third_answer)
+    asked_saved_third = client.post(f"/api/v1/agent/questions/{saved_third_id}/ask")
     assert asked_saved_third.status_code == 200, asked_saved_third.text
     asked_third = asked_saved_third.json()
     assert asked_third["answer"] == saved_third_answer
-    assert asked_third["citations"] == ["[media:7]"]
+    assert asked_third["citations"] == ["[file:9#2]"]
     assert asked_third["conversation_id"] is not None
     doomed_conversation_id = asked_third["conversation_id"]
 
@@ -1549,7 +1447,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert preserved_third["conversation_id"] is None
     assert preserved_third["question"] == saved_third_question
     assert preserved_third["answer"] == saved_third_answer
-    assert preserved_third["citations"] == ["[media:7]"]
+    assert preserved_third["citations"] == ["[file:9#2]"]
     assert preserved_library["total"] == 3
 
     missing_question_id = 999_999
@@ -1559,35 +1457,23 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     )
     assert missing_update.status_code == 404
     assert missing_update.json()["error"] == "saved_question_not_found"
-    missing_ask = client.post(
-        f"/api/v1/agent/questions/{missing_question_id}/ask"
-    )
+    missing_ask = client.post(f"/api/v1/agent/questions/{missing_question_id}/ask")
     assert missing_ask.status_code == 404
     assert missing_ask.json()["error"] == "saved_question_not_found"
-    missing_delete = client.delete(
-        f"/api/v1/agent/questions/{missing_question_id}"
-    )
+    missing_delete = client.delete(f"/api/v1/agent/questions/{missing_question_id}")
     assert missing_delete.status_code == 404
     assert missing_delete.json()["error"] == "saved_question_not_found"
 
-    deleted_saved_second = client.delete(
-        f"/api/v1/agent/questions/{saved_second_id}"
-    )
+    deleted_saved_second = client.delete(f"/api/v1/agent/questions/{saved_second_id}")
     assert deleted_saved_second.status_code == 204
-    deleted_saved_second_again = client.delete(
-        f"/api/v1/agent/questions/{saved_second_id}"
-    )
+    deleted_saved_second_again = client.delete(f"/api/v1/agent/questions/{saved_second_id}")
     assert deleted_saved_second_again.status_code == 404
     after_delete_library = client.get(
         "/api/v1/agent/questions",
         params={"limit": 100},
     ).json()
     assert after_delete_library["total"] == 2
-    assert all(
-        item["id"] != saved_second_id
-        for item in after_delete_library["resources"]
-    )
-
+    assert all(item["id"] != saved_second_id for item in after_delete_library["resources"])
 
     # ------------------------------------------------------------------
     # save_memory requires a durable human approval. The model-supplied
@@ -1596,9 +1482,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     def memory_count() -> int:
         engine = create_engine(TEST_DATABASE_URL)
         with engine.connect() as connection:
-            total = connection.execute(
-                text("SELECT count(*) FROM memory")
-            ).scalar_one()
+            total = connection.execute(text("SELECT count(*) FROM memory")).scalar_one()
         engine.dispose()
         return int(total)
 
@@ -1661,9 +1545,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert memory_count() == before_approval_memories
 
     # The transcript stays readable: the assistant tool call is not dropped.
-    reloaded_detail = client.get(
-        f"/api/v1/agent/conversations/{approval_conversation_id}"
-    )
+    reloaded_detail = client.get(f"/api/v1/agent/conversations/{approval_conversation_id}")
     assert reloaded_detail.status_code == 200
     reloaded_entries = reloaded_detail.json()["entries"]
     assert [entry["kind"] for entry in reloaded_entries] == [
@@ -1672,16 +1554,12 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "pi.assistant",
         "pi.tool-result",
     ]
-    assert reloaded_entries[-2]["model"][0]["tool_calls"][0]["id"] == (
-        "call_approval_search"
-    )
+    assert reloaded_entries[-2]["model"][0]["tool_calls"][0]["id"] == ("call_approval_search")
     assert [call["id"] for call in reloaded_entries[-2]["model"][0]["tool_calls"]] == [
         "call_approval_search",
         "call_approval_memory",
     ]
-    pending_list = client.get(
-        f"/api/v1/agent/conversations/{approval_conversation_id}/approvals"
-    )
+    pending_list = client.get(f"/api/v1/agent/conversations/{approval_conversation_id}/approvals")
     assert pending_list.status_code == 200, pending_list.text
     assert [item["id"] for item in pending_list.json()["resources"]] == [approval_id]
 
@@ -1697,15 +1575,11 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
             f"/api/v1/agent/conversations/{approval_conversation_id}/approvals"
         )
         assert restarted_approvals.status_code == 200, restarted_approvals.text
-        assert [
-            item["id"] for item in restarted_approvals.json()["resources"]
-        ] == [approval_id]
+        assert [item["id"] for item in restarted_approvals.json()["resources"]] == [approval_id]
         engine = create_engine(TEST_DATABASE_URL)
         with engine.connect() as connection:
             restarted_run = connection.execute(
-                text(
-                    "SELECT status FROM agent_run WHERE id = :run_id"
-                ),
+                text("SELECT status FROM agent_run WHERE id = :run_id"),
                 {"run_id": waiting_body["run"]["id"]},
             ).scalar_one()
         engine.dispose()
@@ -1720,9 +1594,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert approved_body["run"]["status"] == "completed"
     assert approved_body["answer"] == "The approved memory is now archived."
     approved_results = [
-        entry
-        for entry in approved_body["tool_results"]
-        if entry["data"]["tool"] == "save_memory"
+        entry for entry in approved_body["tool_results"] if entry["data"]["tool"] == "save_memory"
     ]
     assert len(approved_results) == 1
     assert approved_results[0]["data"]["status"] == "ok"
@@ -1777,9 +1649,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert rejected_body["run"]["status"] == "completed"
     assert rejected_body["answer"] == "Understood. The memory was not saved."
     rejected_results = [
-        entry
-        for entry in rejected_body["tool_results"]
-        if entry["data"]["tool"] == "save_memory"
+        entry for entry in rejected_body["tool_results"] if entry["data"]["tool"] == "save_memory"
     ]
     assert len(rejected_results) == 1
     assert rejected_results[0]["data"]["status"] == "error"
@@ -1833,9 +1703,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     engine = create_engine(TEST_DATABASE_URL)
     with engine.connect() as connection:
         orphan_status, orphan_error = connection.execute(
-            text(
-                "SELECT status, error_code FROM agent_run WHERE id = :run_id"
-            ),
+            text("SELECT status, error_code FROM agent_run WHERE id = :run_id"),
             {"run_id": orphan_run_id},
         ).one()
     engine.dispose()
@@ -1899,9 +1767,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         json=disabled_settings,
     )
     assert disabled_response.status_code == 200, disabled_response.text
-    assert (
-        disabled_response.json()["config"]["save_memory_requires_approval"] is False
-    )
+    assert disabled_response.json()["config"]["save_memory_requires_approval"] is False
 
     direct_content = "Direct memory with the approval gate disabled."
     direct_fake = FakeChatGenerator(
@@ -1937,9 +1803,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "pi.assistant",
     ]
     direct_results = [
-        entry
-        for entry in direct_body["tool_results"]
-        if entry["data"]["tool"] == "save_memory"
+        entry for entry in direct_body["tool_results"] if entry["data"]["tool"] == "save_memory"
     ]
     assert len(direct_results) == 1
     assert direct_results[0]["data"]["status"] == "ok"
@@ -1960,9 +1824,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         json=current_settings,
     )
     assert restored_settings.status_code == 200, restored_settings.text
-    assert (
-        restored_settings.json()["config"]["save_memory_requires_approval"] is True
-    )
+    assert restored_settings.json()["config"]["save_memory_requires_approval"] is True
 
     pending_fake = FakeChatGenerator(
         [
@@ -2003,9 +1865,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     )
     assert still_pending.status_code == 200, still_pending.text
     still_pending_body = still_pending.json()
-    assert [item["id"] for item in still_pending_body["resources"]] == [
-        pending_approval_id
-    ]
+    assert [item["id"] for item in still_pending_body["resources"]] == [pending_approval_id]
     assert still_pending_body["resources"][0]["status"] == "pending"
     assert memory_count() == before_pending_memories
 

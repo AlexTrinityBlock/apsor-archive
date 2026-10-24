@@ -308,9 +308,7 @@ class FileService:
             else []
         )
         return DocumentAnalysis(
-            has_meaningful_text=bool(
-                body.get("has_meaningful_text", len(text.strip()) >= 40)
-            ),
+            has_meaningful_text=bool(body.get("has_meaningful_text", len(text.strip()) >= 40)),
             use_vision=bool(body.get("use_vision", False)),
             document_type=str(body.get("document_type") or document_type),
             title=str(body.get("title") or file_name_value),
@@ -473,17 +471,12 @@ class FileService:
                 document_type="docx",
             )
             if (
-                (not analysis.has_meaningful_text or analysis.use_vision)
-                and self.vision_extractor.configured
-            ):
+                not analysis.has_meaningful_text or analysis.use_vision
+            ) and self.vision_extractor.configured:
                 images = await self._run_cpu(self._docx_images, data)
                 if images:
-                    vision_text, summary, tags, document_type = await self._vision_images(
-                        images
-                    )
-                    combined = "\n\n".join(
-                        part for part in (text.strip(), vision_text) if part
-                    )
+                    vision_text, summary, tags, document_type = await self._vision_images(images)
+                    combined = "\n\n".join(part for part in (text.strip(), vision_text) if part)
                     if combined:
                         return ExtractedDocument(
                             text=combined,
@@ -503,8 +496,16 @@ class FileService:
             )
         if suffix in IMAGE_EXTENSIONS:
             if not self.vision_extractor.configured:
-                raise VisionExtractionError(
-                    "Image ingestion requires a vision-capable chat provider."
+                # Local-first uploads must not depend on a vision provider. The
+                # filename still gives the image a useful searchable caption.
+                stem = file_name_value.rsplit(".", 1)[0]
+                label = " ".join(stem.replace("_", " ").replace("-", " ").split())
+                return ExtractedDocument(
+                    text=f"{label or 'Untitled'} image",
+                    document_type="image",
+                    extraction_method="filename",
+                    ai_summary=None,
+                    ai_tags=[],
                 )
             vision = await self.vision_extractor.extract(
                 data,
@@ -814,9 +815,7 @@ class FileService:
 
         extracted = await self._extract_document(normalized, data)
         mime_type = (
-            content_type
-            or mimetypes.guess_type(normalized)[0]
-            or "application/octet-stream"
+            content_type or mimetypes.guess_type(normalized)[0] or "application/octet-stream"
         )
         storage_key = self._new_storage_key(suffix)
         await self.storage.save(storage_key, data)
@@ -865,9 +864,7 @@ class FileService:
     def _target_file_path(file: FileModel, raw: str) -> str:
         target = FileService._normalized_path(raw)
         if extension(target) != file.extension:
-            raise InvalidPathError(
-                "A moved or copied file must keep its original extension."
-            )
+            raise InvalidPathError("A moved or copied file must keep its original extension.")
         return target
 
     async def _target_is_occupied(self, path: str) -> bool:
@@ -895,9 +892,7 @@ class FileService:
                 merged += content[overlap:]
                 continue
             separator = (
-                ""
-                if merged.endswith(("\n", " ")) or content.startswith(("\n", " "))
-                else "\n"
+                "" if merged.endswith(("\n", " ")) or content.startswith(("\n", " ")) else "\n"
             )
             merged = f"{merged}{separator}{content}"
         return merged
@@ -1059,8 +1054,10 @@ class FileService:
                 files=[self._path_file_schema(file) for file in files],
             )
 
-        folder = None if normalized == "/" else await self.tree_repository.get_current_by_path(
-            normalized
+        folder = (
+            None
+            if normalized == "/"
+            else await self.tree_repository.get_current_by_path(normalized)
         )
         if normalized != "/" and (folder is None or folder.kind != NODE_KIND_FOLDER):
             raise PathNotFoundError(normalized)

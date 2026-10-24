@@ -46,9 +46,7 @@ class IndexerService:
         self.embedder = embedder
         self.embedding_batch_size = max(1, embedding_batch_size)
         self.embedding_concurrency = max(1, embedding_concurrency)
-        self._embedding_slots = embedding_semaphore or asyncio.Semaphore(
-            self.embedding_concurrency
-        )
+        self._embedding_slots = embedding_semaphore or asyncio.Semaphore(self.embedding_concurrency)
         self.embedding_max_attempts = max(1, embedding_max_attempts)
         self.embedding_retry_seconds = max(0.0, embedding_retry_seconds)
         self.fail_on_embedding_error = fail_on_embedding_error
@@ -69,8 +67,7 @@ class IndexerService:
                     vectors = await self.embedder.embed(texts)
                 if len(vectors) != len(texts):
                     raise EmbeddingProviderError(
-                        f"Embedding provider returned {len(vectors)} vectors for "
-                        f"{len(texts)} texts"
+                        f"Embedding provider returned {len(vectors)} vectors for {len(texts)} texts"
                     )
             except EmbeddingProviderError as exc:
                 if attempt >= self.embedding_max_attempts:
@@ -118,9 +115,7 @@ class IndexerService:
             for start in range(0, total, self.embedding_batch_size)
         ]
         tasks = {
-            asyncio.create_task(
-                self._embeddings([draft.content for draft in batch])
-            ): batch
+            asyncio.create_task(self._embeddings([draft.content for draft in batch])): batch
             for batch in batches
         }
         pending = set(tasks)
@@ -144,9 +139,7 @@ class IndexerService:
                             token_count=draft.token_count,
                             embedding=embedding,
                             embedding_model=(
-                                self.embedder.model_name
-                                if embedding is not None
-                                else None
+                                self.embedder.model_name if embedding is not None else None
                             ),
                             is_current=is_current,
                         )

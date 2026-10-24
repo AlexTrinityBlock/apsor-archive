@@ -104,9 +104,7 @@ def sample_timeline(
             fraction = 0.0 if anchors == 1 else index / (anchors - 1)
             target = _anchor_time(start, end, fraction)
             remaining = [
-                event
-                for event in kind_events
-                if (event.kind, event.source_id) not in selected
+                event for event in kind_events if (event.kind, event.source_id) not in selected
             ]
             if not remaining:
                 break
@@ -127,9 +125,7 @@ def sample_timeline(
             selection.event.source_id,
         ),
     )
-    selected_keys = {
-        (selection.event.kind, selection.event.source_id) for selection in selections
-    }
+    selected_keys = {(selection.event.kind, selection.event.source_id) for selection in selections}
 
     skips: list[TimelineSkip] = []
     for previous, current in pairwise(selections):

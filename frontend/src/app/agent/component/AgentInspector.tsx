@@ -20,7 +20,6 @@ import {
 import { InspectorPanel } from "./inspector/InspectorPanels";
 import {
   InspectorFileStage,
-  InspectorMediaStage,
   InspectorMemoryStage,
   PanelEmpty,
   PanelLink,
@@ -67,12 +66,13 @@ function PreservedResource({ target }: { readonly target: ResourceTarget }) {
             {target.chunk !== null ? ` · chunk ${target.chunk}` : ""}
           </code>
         </div>
-        <PanelLink to={viewerHref(target)}>Open viewer</PanelLink>
+        <PanelLink to={viewerHref(target)}>
+          {target.type === "file" ? "Open file" : "Open memory"}
+        </PanelLink>
       </header>
       {target.type === "file" ? (
         <InspectorFileStage fileId={target.id} chunk={target.chunk} />
       ) : null}
-      {target.type === "media" ? <InspectorMediaStage mediaId={target.id} compact /> : null}
       {target.type === "memory" ? <InspectorMemoryStage memoryId={target.id} /> : null}
     </section>
   );
@@ -209,9 +209,9 @@ export function AgentInspector({
             </span>
             <h3>A clean bench</h3>
             <p>
-              Send a note from any page. Every recorded search, read, comparison,
-              save, and presentation will appear here with its real previews and
-              resource.
+              Send a note in this thread. Every recorded search, read,
+              comparison, save, and presentation appears here with its real
+              preview and resource.
             </p>
           </div>
         )}

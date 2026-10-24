@@ -1,72 +1,28 @@
-import { Link } from "react-router-dom";
-
 import { ApiError } from "../../../apis/fetch-client";
-import { Button } from "../../component/Button";
 import { Badge } from "../../component/Badge";
+import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
-import { buildSearchUrl } from "./url";
 
-const SUGGESTED_QUERIES = [
-  "automobile history",
-  "Ford Model T",
-  "automatic transmission",
-  "brake line",
-] as const;
-
-/** The pre-query room: what the archive can do and where to begin. */
+/** The pre-query room: what the archive can retrieve and how to begin. */
 export function SearchWelcome() {
   return (
-    <section className="empty-state search-welcome reveal reveal-3">
-      <div className="empty-state__rings" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
+    <section className="empty-state search-welcome">
       <div className="empty-state__icon">
-        <Icon name="search" size={28} />
+        <Icon name="search" size={26} />
       </div>
       <p className="eyebrow">The archive is ready</p>
       <h2>Nothing is retrieved until you ask.</h2>
       <p className="empty-state__description">
-        A query runs through two lanes: BM25 for literal grain and vector
-        similarity for near meaning. Reciprocal-rank fusion keeps the passages
-        both lanes agree on, then each source kind gets its own shelf.
+        One query runs through a text lane and a vector lane. The fused candidates
+        return as file chunks, memory crystals, and summaries, each with a real score
+        and the lanes that matched it.
       </p>
-
-      <div className="search-welcome__suggestions">
-        <span className="search-welcome__label">Follow a vein</span>
-        {SUGGESTED_QUERIES.map((suggestion) => (
-          <Link key={suggestion} className="suggestion" to={buildSearchUrl(suggestion)}>
-            {suggestion}
-          </Link>
-        ))}
+      <div className="search-welcome__kinds" aria-label="Searchable source kinds">
+        <span className="badge badge--moss">File chunks</span>
+        <span className="badge badge--vermilion">Memory crystals</span>
+        <span className="badge badge--ochre">Summaries</span>
       </div>
-
-      <ol className="search-welcome__steps" aria-label="How hybrid search runs">
-        <li>
-          <span>01</span>
-          <div>
-            <strong>Text lane</strong>
-            <p>BM25 scores CJK bigrams, words, and partial spellings.</p>
-          </div>
-        </li>
-        <li>
-          <span>02</span>
-          <div>
-            <strong>Vector lane</strong>
-            <p>Cosine similarity finds passages close in meaning.</p>
-          </div>
-        </li>
-        <li>
-          <span>03</span>
-          <div>
-            <strong>Fuse once</strong>
-            <p>Duplicates collapse and RRF orders the surviving grain.</p>
-          </div>
-        </li>
-      </ol>
     </section>
   );
 }
@@ -74,11 +30,13 @@ export function SearchWelcome() {
 /** A quiet in-progress state while both retrieval lanes report back. */
 export function SearchLoading() {
   return (
-    <section className="search-loading reveal reveal-3" role="status" aria-live="polite">
-      <Loader size={38} label="Searching the archive" />
+    <section className="search-loading" role="status" aria-live="polite">
+      <Loader size={34} label="Searching the archive" />
       <div>
         <p className="eyebrow">Both lanes are running</p>
-        <p>BM25 and vector candidates are being fused before the shelves open.</p>
+        <p className="search-loading__copy">
+          BM25 and vector candidates are being merged, deduplicated, and fused.
+        </p>
       </div>
     </section>
   );
@@ -87,6 +45,7 @@ export function SearchLoading() {
 interface SearchNoResultsProps {
   readonly query: string;
   readonly includeHistory: boolean;
+  readonly isFetching: boolean;
   readonly onIncludeHistory: () => void;
   readonly onClear: () => void;
 }
@@ -95,21 +54,29 @@ interface SearchNoResultsProps {
 export function SearchNoResults({
   query,
   includeHistory,
+  isFetching,
   onIncludeHistory,
   onClear,
 }: SearchNoResultsProps) {
   return (
-    <section className="empty-state search-noresults reveal reveal-3">
+    <section className="empty-state search-noresults">
       <div className="empty-state__icon">
-        <Icon name="search" size={28} />
+        <Icon name="search" size={26} />
       </div>
       <p className="eyebrow">No matching grain</p>
       <h2>Nothing matched “{query}”.</h2>
       <p className="empty-state__description">
-        Try a shorter phrase, split the query into two concrete words, or open
-        the history branch. Deprecated memories and superseded file versions do
-        not enter the default search surface.
+        Try a shorter phrase or split the query into two concrete words.{" "}
+        {includeHistory
+          ? "History is already included, so superseded files and deprecated memories were searched too."
+          : "Include history to search superseded files and deprecated memories."}
       </p>
+      {isFetching ? (
+        <p className="search-results__busy">
+          <Loader size={12} label="Updating results" />
+          Updating…
+        </p>
+      ) : null}
       <div className="empty-state__actions">
         {!includeHistory ? (
           <Button variant="secondary" size="sm" onClick={onIncludeHistory}>
@@ -131,29 +98,39 @@ interface SearchErrorProps {
   readonly onRetry: () => void;
 }
 
-function errorDetail(error: unknown): string {
+function errorParts(error: unknown): {
+  readonly detail: string;
+  readonly code: string;
+  readonly status: number | null;
+} {
   if (error instanceof ApiError) {
-    return error.detail;
+    return {
+      detail: error.detail || "The archive did not answer.",
+      code: error.code,
+      status: error.status > 0 ? error.status : null,
+    };
   }
   if (error instanceof Error) {
-    return error.message;
+    return {
+      detail: error.message || "The archive did not answer.",
+      code: "unknown_error",
+      status: null,
+    };
   }
-  return "The archive did not answer.";
+  return { detail: "The archive did not answer.", code: "unknown_error", status: null };
 }
 
 /** The failure state names the API error instead of hiding it behind a spinner. */
 export function SearchError({ error, endpoint, onRetry }: SearchErrorProps) {
-  const detail = errorDetail(error);
-  const code = error instanceof ApiError ? error.code : "unknown_error";
-  const status = error instanceof ApiError && error.status > 0 ? error.status : null;
+  const { detail, code, status } = errorParts(error);
 
   return (
-    <section className="empty-state search-error reveal reveal-3" role="alert">
+    <section className="empty-state search-error" role="alert">
       <div className="empty-state__icon">
-        <Icon name="info" size={28} />
+        <Icon name="info" size={26} />
       </div>
       <p className="eyebrow">Search interrupted</p>
-      <h2>The two lanes did not report back.</h2>
+      <h2>The archive did not answer.</h2>
       <p className="empty-state__description">{detail}</p>
 
       <div className="search-error__meta">

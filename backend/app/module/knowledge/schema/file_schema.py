@@ -177,37 +177,6 @@ class PathListingSchema(BaseModel):
     files: list[PathFileSchema]
 
 
-class TreeNodeSchema(BaseModel):
-    """One node in the unified tree."""
-
-    model_config = ConfigDict(frozen=True)
-
-    id: int
-    parent_id: int | None
-    path: str
-    name: str
-    kind: Literal["folder", "file"]
-    file_id: int | None
-    depth: int
-    is_current: bool
-    superseded_by_id: int | None
-    deleted_at: datetime | None
-    update_time: datetime
-
-
-class TreeSchema(BaseModel):
-    """Flat nodes for the frontend tree layout engine."""
-
-    model_config = ConfigDict(frozen=True)
-
-    root: str
-    depth: int
-    include_history: bool
-    total: int
-    truncated: bool
-    nodes: list[TreeNodeSchema]
-
-
 class FileListSchema(BaseModel):
     """A small collection envelope for browse screens."""
 

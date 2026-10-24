@@ -36,8 +36,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Restore the previous default and the matching value."""
     op.execute(
-        "UPDATE agent_config SET max_tool_result_chars = 12000 "
-        "WHERE max_tool_result_chars = 100000"
+        "UPDATE agent_config SET max_tool_result_chars = 12000 WHERE max_tool_result_chars = 100000"
     )
     op.alter_column(
         "agent_config",

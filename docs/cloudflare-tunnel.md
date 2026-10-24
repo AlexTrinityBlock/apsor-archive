@@ -22,7 +22,7 @@ cloudflared ──► Caddy :80 ──► API :8000
                                │
                                ├── PostgreSQL 17
                                ├── Valkey
-                               └── shared /data volume
+                               └── host ./data-cloudflare (bound to /data)
                                       ▲
                                worker process
 ```
@@ -31,10 +31,10 @@ Compose services:
 
 | Service | Role |
 |---|---|
-| `db` | PostgreSQL 17 with a persistent volume |
+| `db` | PostgreSQL 17 with a persistent named volume |
 | `cache` | Valkey, used for the optional cache |
-| `api` | FastAPI, serves the API and committed SPA build |
-| `worker` | Dedicated durable-ingestion worker |
+| `api` | FastAPI, serves the API and committed SPA build; originals live in `./data-cloudflare` |
+| `worker` | Dedicated durable-ingestion worker sharing the same host directory |
 | `caddy` | Non-root reverse proxy, port 80 inside the Compose network only |
 | `cloudflare-tunnel` | `cloudflared` connector with the tunnel token |
 
@@ -48,6 +48,8 @@ service owns the ingestion queue, so exactly one process drains jobs.
 - Outbound HTTPS/QUIC access from the host. No router port forwarding or
   public IP is required.
 - A Cloudflare tunnel token.
+- A host data directory owned by the container uid:
+  `mkdir -p data-cloudflare && sudo chown -R 10001:10001 data-cloudflare`.
 - At least 2 GB of RAM for the database, API, worker, Caddy, and connector.
   The stack is designed for a single owner and a single host.
 
@@ -198,7 +200,8 @@ files keep their current boundaries until re-ingested.
 
 ## 7. Backups
 
-The PostgreSQL volume and the `/data` volume are the state that matters.
+The PostgreSQL named volume and the host `./data-cloudflare` directory are the
+state that matters.
 
 Database dump:
 
@@ -207,18 +210,16 @@ docker compose -f docker-compose.cloudflare-tunnel.yml exec -T db \
   pg_dump -U dendro -d dendromatrix | gzip > dendromatrix-$(date +%F).sql.gz
 ```
 
-Data volume snapshot (stored originals and the Fernet key):
+Data directory snapshot (stored originals and the Fernet key):
 
 ```bash
-docker run --rm \
-  -v dendromatrix-cloudflare_dendro-cloudflare-data:/data:ro \
-  -v "$PWD":/backup \
-  alpine tar czf /backup/dendromatrix-data-$(date +%F).tar.gz -C /data .
+sudo tar czf dendromatrix-data-$(date +%F).tar.gz -C data-cloudflare .
 ```
 
-Stop the stack before restoring both volumes, then restore the database dump
-with `pg_restore`/`psql`. Keep at least one backup of `/data/.secret_key`
-separate from the database.
+Stop the stack before restoring both stores, then restore the database dump
+with `pg_restore`/`psql` and extract the data archive back into
+`./data-cloudflare`. Keep at least one backup of `/data/.secret_key` separate
+from the database.
 
 ## 8. Security checklist
 

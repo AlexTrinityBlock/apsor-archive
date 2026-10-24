@@ -26,7 +26,7 @@ export default defineConfig({
       client: "react-query",
       httpClient: "fetch",
       mock: false,
-      clean: false,
+      clean: true,
       override: {
         mutator: {
           path: "./src/apis/fetch-client.ts",

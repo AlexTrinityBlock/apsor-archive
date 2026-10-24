@@ -161,9 +161,7 @@ class AuthService:
 
     async def logout(self, token: str | None) -> None:
         if token:
-            await self.session_repository.delete_by_token_hash(
-                self.token_generator.hash(token)
-            )
+            await self.session_repository.delete_by_token_hash(self.token_generator.hash(token))
 
     async def status(self, token: str | None) -> AuthStatusSchema:
         requires_setup = await self.user_repository.count() == 0

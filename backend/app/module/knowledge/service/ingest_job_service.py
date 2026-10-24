@@ -179,9 +179,7 @@ class IngestJobService:
         if len(data) > self.file_service.max_upload_bytes:
             raise FileTooLargeError(len(data), self.file_service.max_upload_bytes)
         mime_type = (
-            content_type
-            or mimetypes.guess_type(normalized)[0]
-            or "application/octet-stream"
+            content_type or mimetypes.guess_type(normalized)[0] or "application/octet-stream"
         )
         storage_key = self.file_service.new_storage_key(suffix)
         await self.file_service.storage.save(storage_key, data)
@@ -367,9 +365,7 @@ class IngestWorker:
         self.extract_workers = runtime_config.extract_workers
         self.max_in_flight_jobs = runtime_config.max_inflight_jobs
         self.embedding_concurrency = runtime_config.embedding_concurrency
-        self.extract_semaphore = extract_semaphore or asyncio.Semaphore(
-            self.extract_workers
-        )
+        self.extract_semaphore = extract_semaphore or asyncio.Semaphore(self.extract_workers)
         self.embedding_semaphore = embedding_semaphore or asyncio.Semaphore(
             self.embedding_concurrency
         )
@@ -446,9 +442,7 @@ class IngestWorker:
             await session.commit()
 
         async with self.session_factory() as session:
-            recovered, terminal_payloads = await IngestJobRepository(
-                session
-            ).requeue_stale(
+            recovered, terminal_payloads = await IngestJobRepository(session).requeue_stale(
                 stale_before=stale_before,
                 max_attempts=self.max_attempts,
             )
@@ -618,9 +612,7 @@ class IngestWorker:
                     extracted=extracted,
                     mime_type=job.mime_type,
                     storage_key=(
-                        job.storage_key
-                        if job.source_kind == INGEST_SOURCE_UPLOAD
-                        else None
+                        job.storage_key if job.source_kind == INGEST_SOURCE_UPLOAD else None
                     ),
                     occurred_at=job.occurred_at,
                     publish=False,
@@ -696,11 +688,7 @@ class IngestWorker:
                 discarded = await file_service.discard_pending(file_id)
                 await session.commit()
         can_delete_payload = file_id is None or discarded
-        if (
-            job.attempts >= self.max_attempts
-            and can_delete_payload
-            and job.storage_key is not None
-        ):
+        if job.attempts >= self.max_attempts and can_delete_payload and job.storage_key is not None:
             await self._delete_payload(job.storage_key)
         detail = str(exc) or exc.__class__.__name__
         await self.update_job(

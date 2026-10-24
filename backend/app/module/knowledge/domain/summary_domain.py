@@ -45,10 +45,7 @@ def _evenly_spaced(items: list[SummaryMemoryInput], count: int) -> list[SummaryM
         return items
     if count == 1:
         return [items[0]]
-    indexes = {
-        round(index * (len(items) - 1) / (count - 1))
-        for index in range(count)
-    }
+    indexes = {round(index * (len(items) - 1) / (count - 1)) for index in range(count)}
     return [items[index] for index in sorted(indexes)]
 
 

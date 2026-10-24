@@ -8,7 +8,7 @@ help:
 	  'make api          Run the FastAPI server with reload' \
 	  'make web          Run the Vite dev server' \
 	  'make build        Build the frontend into frontend/dist' \
-	  'make test         Run the ten backend integration tests' \
+	  'make test         Run the eleven backend integration tests' \
 	  'make lint         Run backend and frontend checks' \
 	  'make up           Build and start the normal Compose stack' \
 	  'make down         Stop the normal Compose stack' \

@@ -4,6 +4,8 @@
 .secrets
 .agents
 docs/plan
+data
+data-cloudflare
 private
 private-docs
 backend/.venv

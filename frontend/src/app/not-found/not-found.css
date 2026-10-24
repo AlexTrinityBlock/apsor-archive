@@ -1,0 +1,91 @@
+/* ==========================================================================
+   NotFound — a 404 inside the AppShell, with concentric rings behind it.
+   ========================================================================== */
+
+.not-found-page {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: min(78vh, 760px);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.not-found__rings {
+  position: absolute;
+  z-index: -1;
+  top: 50%;
+  right: -18%;
+  width: min(760px, 85vw);
+  color: var(--mono-ink);
+  opacity: 0.08;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.not-found__content {
+  position: relative;
+  max-width: 620px;
+  padding: 12px 0 40px;
+}
+
+.not-found__title {
+  max-width: 16ch;
+  margin-top: 14px;
+  font-size: clamp(30px, 4vw, 40px);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.not-found__description {
+  max-width: 52ch;
+  margin-top: 16px;
+  color: var(--mono-l2);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.not-found__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 26px;
+}
+
+.not-found__code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 32px;
+  padding-top: 14px;
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  border-top: 0.7px solid var(--mono-grid);
+}
+
+.not-found__code code {
+  color: var(--mono-l2);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .not-found-page {
+    min-height: 60vh;
+    align-items: flex-start;
+  }
+
+  .not-found__rings {
+    right: -45%;
+    width: 120%;
+    opacity: 0.06;
+  }
+
+  .not-found__title {
+    font-size: 30px;
+  }
+}

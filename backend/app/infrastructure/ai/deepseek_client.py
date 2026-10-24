@@ -178,10 +178,7 @@ class DeepSeekClient:
         tool_calls = _parse_tool_calls(message.get("tool_calls"))
         if not text.strip() and not tool_calls:
             raise AiProviderError("empty completion")
-        finish_reason = str(
-            choice.get("finish_reason")
-            or ("tool_calls" if tool_calls else "stop")
-        )
+        finish_reason = str(choice.get("finish_reason") or ("tool_calls" if tool_calls else "stop"))
         usage = _normalize_usage(body.get("usage"))
         model = body.get("model") or payload.get("model") or self.model_name
         return ChatResult(
@@ -215,9 +212,7 @@ class DeepSeekClient:
                     if response.status_code >= 400:
                         body = await response.aread()
                         detail = body.decode("utf-8", errors="replace")[:300].replace("\n", " ")
-                        raise AiProviderError(
-                            f"HTTP {response.status_code}: {detail}"
-                        )
+                        raise AiProviderError(f"HTTP {response.status_code}: {detail}")
                     async for raw_line in response.aiter_lines():
                         line = raw_line.strip()
                         if not line or line.startswith(":"):

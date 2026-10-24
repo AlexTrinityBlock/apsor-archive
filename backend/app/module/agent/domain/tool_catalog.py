@@ -11,7 +11,6 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.module.agent.domain.tool_args import (
-    GetMediaArgs,
     PresentResourceArgs,
     ReadFileArgs,
     ReadMemoryArgs,
@@ -19,11 +18,10 @@ from app.module.agent.domain.tool_args import (
     ReadTimelineArgs,
     SaveMemoryArgs,
     SearchKnowledgeArgs,
-    SearchMediaArgs,
 )
 
-PROMPT_VERSION = "archive-agent-v3"
-TOOLS_VERSION = "archive-tools-v1"
+PROMPT_VERSION = "archive-agent-v4"
+TOOLS_VERSION = "archive-tools-v2"
 
 
 @dataclass(frozen=True)
@@ -105,27 +103,12 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         requires_confirmation=True,
     ),
     ToolSpec(
-        name="search_media",
-        description=(
-            "Search image captions, OCR text, and tags in the media library. Use "
-            "it to find images, then call get_media or present_resource."
-        ),
-        args_model=SearchMediaArgs,
-    ),
-    ToolSpec(
-        name="get_media",
-        description=(
-            "Read metadata and the caption for one media asset by id. Cite it as "
-            "[media:id]."
-        ),
-        args_model=GetMediaArgs,
-    ),
-    ToolSpec(
         name="present_resource",
         description=(
-            "Show a file, memory, or image to the user as a viewer card. Use this "
-            "when the user should open the resource. It only returns the viewer "
-            "URL and metadata; it does not fetch content."
+            "Show a file or memory to the user as a viewer card. Use this when "
+            "the user should open the resource. Images are presented as files. "
+            "It only returns the viewer URL and metadata; it does not fetch "
+            "content."
         ),
         args_model=PresentResourceArgs,
     ),
@@ -153,11 +136,7 @@ def tool_catalog() -> list[dict[str, Any]]:
 def _clean_schema(value: object) -> Any:
     """Drop Pydantic title noise while preserving property order."""
     if isinstance(value, dict):
-        return {
-            key: _clean_schema(item)
-            for key, item in value.items()
-            if key != "title"
-        }
+        return {key: _clean_schema(item) for key, item in value.items() if key != "title"}
     if isinstance(value, list):
         return [_clean_schema(item) for item in value]
     return value

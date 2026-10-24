@@ -1,4 +1,4 @@
-"""Validated tool execution against the knowledge and media services.
+"""Validated tool execution against the knowledge services.
 
 Tool failures are values, not HTTP errors: validation problems, missing records,
 and service failures become structured ``pi.tool-result`` content so the model can
@@ -15,7 +15,6 @@ from pydantic import BaseModel, ValidationError
 
 from app.module.agent.domain.agent_domain import ToolOutcome
 from app.module.agent.domain.tool_args import (
-    GetMediaArgs,
     PresentResourceArgs,
     ReadFileArgs,
     ReadMemoryArgs,
@@ -23,7 +22,6 @@ from app.module.agent.domain.tool_args import (
     ReadTimelineArgs,
     SaveMemoryArgs,
     SearchKnowledgeArgs,
-    SearchMediaArgs,
 )
 from app.module.agent.domain.tool_catalog import TOOL_SPECS, ToolSpec, tool_catalog
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
@@ -39,7 +37,6 @@ from app.module.knowledge.exception.domain_error import (
 )
 from app.module.knowledge.schema.memory_schema import MemorySchema
 from app.module.knowledge.schema.timeline_schema import TimelineEventSchema
-from app.module.media.exception.domain_error import MediaError
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +44,6 @@ ERROR_DETAIL_LIMIT = 500
 SOURCE_EXCERPT_LIMIT = 1_200
 FILE_CHUNK_LIMIT = 4_000
 MEMORY_CONTENT_LIMIT = 4_000
-MEDIA_TEXT_LIMIT = 2_000
 MAX_LISTED_ENTRIES = 100
 MAX_TIMELINE_EVENTS = 50
 PREVIEW_EXCERPT_LIMIT = 600
@@ -162,7 +158,7 @@ class AgentToolRegistry:
         try:
             async with self.service_scope() as services:
                 content, data, resource = await _dispatch(name, parsed, services)
-        except (KnowledgeError, MediaError, AgentError) as exc:
+        except (KnowledgeError, AgentError) as exc:
             return _error(
                 name,
                 _exception_code(exc),
@@ -208,10 +204,6 @@ async def _dispatch(
         return await _read_memory(args, services)
     if name == "save_memory" and isinstance(args, SaveMemoryArgs):
         return await _save_memory(args, services)
-    if name == "search_media" and isinstance(args, SearchMediaArgs):
-        return await _search_media(args, services)
-    if name == "get_media" and isinstance(args, GetMediaArgs):
-        return await _get_media(args, services)
     if name == "present_resource" and isinstance(args, PresentResourceArgs):
         return await _present_resource(args, services)
     raise ValueError(f"No handler is registered for tool {name!r}.")
@@ -393,9 +385,7 @@ async def _read_timeline(
         if event.raw_file_path is not None:
             event_attributes["path"] = event.raw_file_path
         rendered.append(
-            _open("event", event_attributes)
-            + xml_text(clip(event.content, 600))
-            + _close("event")
+            _open("event", event_attributes) + xml_text(clip(event.content, 600)) + _close("event")
         )
     content = (
         _open(
@@ -408,11 +398,7 @@ async def _read_timeline(
                 "truncated": result.truncated,
             },
         )
-        + (
-            "".join(rendered)
-            if rendered
-            else "<summary>No events in this range.</summary>"
-        )
+        + ("".join(rendered) if rendered else "<summary>No events in this range.</summary>")
         + _close("timeline")
     )
     data = {
@@ -480,8 +466,7 @@ async def _read_path(
     data = {
         "path": result.path,
         "directories": [
-            {"path": item.path, "name": item.name, "depth": item.depth}
-            for item in directories
+            {"path": item.path, "name": item.name, "depth": item.depth} for item in directories
         ],
         "files": [
             {
@@ -520,8 +505,7 @@ async def _read_memory(
         "status": result.target.status,
         "target": _memory_preview(result.target),
         "neighbors": [
-            _memory_preview(item)
-            for item in [*result.neighbors_before, *result.neighbors_after]
+            _memory_preview(item) for item in [*result.neighbors_before, *result.neighbors_after]
         ],
         "neighbors_before": [item.memory_id for item in result.neighbors_before],
         "neighbors_after": [item.memory_id for item in result.neighbors_after],
@@ -560,90 +544,6 @@ async def _save_memory(
     return content, data, None
 
 
-async def _search_media(
-    args: SearchMediaArgs,
-    services: AgentToolServices,
-) -> tuple[str, dict[str, Any], None]:
-    result = await services.media_service.search_text(query=args.query, limit=args.limit)
-    content: list[str] = [f"<summary>images={len(result.results)}</summary>"]
-    for item in result.results:
-        excerpt = item.caption or item.summary or item.ocr_text or item.title
-        content.append(
-            _open(
-                "source",
-                {
-                    "kind": "media",
-                    "id": item.media_id,
-                    "path": item.raw_file_path,
-                    "title": item.title,
-                    "mime_type": item.mime_type,
-                },
-            )
-            + xml_text(clip(excerpt, 800))
-            + _close("source")
-        )
-    data = {
-        "query": result.query,
-        "results": [
-            {
-                "media_id": item.media_id,
-                "raw_file_path": item.raw_file_path,
-                "title": item.title,
-                "mime_type": item.mime_type,
-                "score": item.score,
-                "excerpt": _excerpt(
-                    item.caption or item.summary or item.ocr_text or item.title
-                ),
-                "width": item.width,
-                "height": item.height,
-                "tags": list(item.tags),
-                "viewer_url": _media_viewer_url(item.media_id),
-            }
-            for item in result.results
-        ],
-    }
-    return "".join(content), data, None
-
-
-async def _get_media(
-    args: GetMediaArgs,
-    services: AgentToolServices,
-) -> tuple[str, dict[str, Any], None]:
-    media = await services.media_service.get(args.media_id)
-    content = (
-        _open(
-            "media",
-            {
-                "id": media.media_id,
-                "path": media.raw_file_path,
-                "title": media.title,
-                "mime_type": media.mime_type,
-                "width": media.width,
-                "height": media.height,
-            },
-        )
-        + f"<caption>{xml_text(clip(media.caption, MEDIA_TEXT_LIMIT))}</caption>"
-        + f"<ocr>{xml_text(clip(media.ocr_text, MEDIA_TEXT_LIMIT))}</ocr>"
-        + f"<tags>{xml_text(', '.join(media.tags))}</tags>"
-        + _close("media")
-    )
-    data = {
-        "media_id": media.media_id,
-        "raw_file_path": media.raw_file_path,
-        "file_name": media.file_name,
-        "mime_type": media.mime_type,
-        "title": media.title,
-        "width": media.width,
-        "height": media.height,
-        "tags": list(media.tags),
-        "caption": _excerpt(media.caption),
-        "summary": _excerpt(media.summary),
-        "ocr_text": _excerpt(media.ocr_text),
-        "viewer_url": _media_viewer_url(media.media_id),
-    }
-    return content, data, None
-
-
 async def _present_resource(
     args: PresentResourceArgs,
     services: AgentToolServices,
@@ -652,9 +552,7 @@ async def _present_resource(
         file = await services.file_service.get_file(args.resource_id)
         if file.deleted_at is not None:
             raise FileRecordNotFoundError(file.id)
-        if args.chunk is not None and (
-            args.chunk < 1 or args.chunk > file.total_chunks
-        ):
+        if args.chunk is not None and (args.chunk < 1 or args.chunk > file.total_chunks):
             raise InvalidChunkWindowError(
                 f"chunk {args.chunk} exceeds the file's {file.total_chunks} chunks."
             )
@@ -670,17 +568,7 @@ async def _present_resource(
             "raw_file_path": file.raw_file_path,
             "chunk": args.chunk,
         }
-    elif args.resource_type == "media":
-        media = await services.media_service.get(args.resource_id)
-        resource = {
-            "resource_type": "media",
-            "resource_id": media.media_id,
-            "viewer_url": f"/viewer/media/{media.media_id}",
-            "title": media.title or media.file_name,
-            "mime_type": media.mime_type,
-            "raw_file_path": media.raw_file_path,
-        }
-    else:
+    elif args.resource_type == "memory":
         result = await services.memory_service.read_memory(
             args.resource_id,
             memory_range=0,
@@ -721,10 +609,6 @@ def _file_viewer_url(file_id: int, chunk: int | None = None) -> str:
     if chunk is not None:
         url += f"?chunk={chunk}"
     return url
-
-
-def _media_viewer_url(media_id: int) -> str:
-    return f"/viewer/media/{media_id}"
 
 
 def _memory_viewer_url(memory_id: int) -> str:
@@ -811,8 +695,4 @@ def _close(name: str) -> str:
 
 
 def _defined(values: Mapping[str, object] | None) -> dict[str, object]:
-    return {
-        key: value
-        for key, value in (values or {}).items()
-        if value is not None
-    }
+    return {key: value for key, value in (values or {}).items() if value is not None}

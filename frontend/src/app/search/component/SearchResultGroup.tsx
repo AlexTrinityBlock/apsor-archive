@@ -1,10 +1,11 @@
 import { useId, type ReactNode } from "react";
 
+type ResultGroupTone = "files" | "memories" | "summaries";
+
 interface SearchResultGroupProps {
   readonly index: string;
-  readonly eyebrow: string;
   readonly title: string;
-  readonly accent: "moss" | "vermilion" | "ochre";
+  readonly tone: ResultGroupTone;
   readonly count: number;
   readonly emptyLabel: string;
   readonly children: ReactNode;
@@ -13,34 +14,31 @@ interface SearchResultGroupProps {
 /** One source-kind shelf within the fused result set. */
 export function SearchResultGroup({
   index,
-  eyebrow,
   title,
-  accent,
+  tone,
   count,
   emptyLabel,
   children,
 }: SearchResultGroupProps) {
   const headingId = useId();
-  const countLabel = String(count).padStart(2, "0");
 
   return (
-    <section
-      className={`search-group search-group--${accent}`}
-      aria-labelledby={headingId}
-    >
+    <section className={`search-group search-group--${tone}`} aria-labelledby={headingId}>
       <header className="search-group__head">
-        <div>
-          <p className="eyebrow">
-            {index} · {eyebrow}
-          </p>
-          <h2 id={headingId}>{title}</h2>
-        </div>
-        <span className="search-group__count">
-          {countLabel} {count === 1 ? "result" : "results"}
+        <span className="search-group__index" aria-hidden="true">
+          {index}
         </span>
+        <h3 className="search-group__title" id={headingId}>
+          {title}
+          <span className="search-group__count">{count}</span>
+        </h3>
       </header>
 
-      {count > 0 ? <div className="search-group__list">{children}</div> : <p className="search-group__empty">{emptyLabel}</p>}
+      {count > 0 ? (
+        <div className="search-group__list">{children}</div>
+      ) : (
+        <p className="search-group__empty">{emptyLabel}</p>
+      )}
     </section>
   );
 }

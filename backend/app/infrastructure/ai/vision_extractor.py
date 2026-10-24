@@ -67,9 +67,7 @@ class DeepSeekVisionExtractor:
             caption=caption.strip() if isinstance(caption, str) else "",
             ocr_text=text.strip(),
             title=(
-                title.strip()
-                if isinstance(title, str) and title.strip()
-                else "Untitled document"
+                title.strip() if isinstance(title, str) and title.strip() else "Untitled document"
             ),
             summary=summary.strip() if isinstance(summary, str) else "",
             document_type=(
@@ -89,6 +87,4 @@ class NullVisionExtractor:
     model_name = "unconfigured"
 
     async def extract(self, data: bytes, mime_type: str) -> VisionDocument:
-        raise VisionExtractionError(
-            "A vision-capable chat provider is required for this document."
-        )
+        raise VisionExtractionError("A vision-capable chat provider is required for this document.")

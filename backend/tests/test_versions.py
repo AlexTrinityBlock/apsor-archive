@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from tests.helpers import create_text
 
 
-def test_tree_history_and_versioning(client: TestClient) -> None:
+def test_file_history_and_versioning(client: TestClient) -> None:
     first = create_text(
         client,
         "/versions/document.md",
@@ -26,25 +26,16 @@ def test_tree_history_and_versioning(client: TestClient) -> None:
     assert second["supersedes_file_id"] == first_id
 
     current = client.get(
-        "/api/v1/tree",
-        params={"root": "/versions", "depth": 3},
+        "/api/v1/paths",
+        params={"path": "/versions", "path_depth": 1},
     )
-    current_nodes = current.json()["nodes"]
-    file_nodes = [node for node in current_nodes if node["kind"] == "file"]
-    assert len(file_nodes) == 1
-    assert file_nodes[0]["file_id"] == second_id
+    current_ids = [item["file_id"] for item in current.json()["files"]]
+    assert current_ids == [second_id]
 
-    history = client.get(
-        "/api/v1/tree",
-        params={"root": "/versions", "depth": 3, "include_history": True},
-    )
-    history_file_nodes = [
-        node for node in history.json()["nodes"] if node["kind"] == "file"
-    ]
-    assert len(history_file_nodes) == 2
-    old_node = next(node for node in history_file_nodes if node["file_id"] == first_id)
-    assert old_node["is_current"] is False
-    assert old_node["superseded_by_id"] is not None
+    old_version = client.get(f"/api/v1/files/{first_id}")
+    assert old_version.status_code == 200
+    assert old_version.json()["is_current"] is False
+    assert old_version.json()["deleted_at"] is None
 
     old_search = client.get(
         "/api/v1/search",

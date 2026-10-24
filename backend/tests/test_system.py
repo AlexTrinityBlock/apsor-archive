@@ -1,15 +1,8 @@
-"""Health, gzip, cache invalidation, settings, and standalone media."""
-
-import base64
+"""Health, gzip, cache invalidation, and settings."""
 
 from fastapi.testclient import TestClient
 
 from tests.helpers import create_text
-
-# A 1x1 blue PNG; enough to exercise decoding, visual features, and storage.
-BLUE_PNG = base64.b64decode(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-)
 
 
 def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> None:
@@ -115,43 +108,7 @@ def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> Non
     assert cleared.json()["chat"]["key_hint"] is None
     assert cleared.json()["chat"]["key_source"] == "none"
 
-    media = client.post(
-        "/api/v1/media",
-        data={
-            "path": "/media/blue-square.png",
-            "caption": "A blue square used for the media smoke test.",
-            "tags": "blue,square",
-        },
-        files={"file": ("blue-square.png", BLUE_PNG, "image/png")},
-    )
-    assert media.status_code == 201, media.text
-    media_body = media.json()
-    media_id = media_body["media_id"]
-    assert media_body["caption"].startswith("A blue square")
-    assert media_body["width"] == 1
-    assert media_body["height"] == 1
-
-    listed = client.get("/api/v1/media")
-    assert listed.status_code == 200
-    assert listed.json()["total_results"] == 1
-
-    found = client.get("/api/v1/media/search", params={"query": "blue"})
-    assert found.status_code == 200
-    assert found.json()["results"][0]["media_id"] == media_id
-
-    content = client.get(f"/api/v1/media/{media_id}/content")
-    assert content.status_code == 200
-    assert content.headers["content-type"].startswith("image/png")
-    assert content.content == BLUE_PNG
-
-    similar = client.post(
-        "/api/v1/media/search/image",
-        files={"file": ("query.png", BLUE_PNG, "image/png")},
-    )
-    assert similar.status_code == 200
-    assert similar.json()["results"][0]["media_id"] == media_id
-
-    deleted = client.delete(f"/api/v1/media/{media_id}")
-    assert deleted.status_code == 204
-    assert client.get("/api/v1/media").json()["total_results"] == 0
-
+    status = client.get("/api/v1/ai/status")
+    assert status.status_code == 200
+    assert status.json()["configured"] is False
+    assert status.json()["provider"] == "none"

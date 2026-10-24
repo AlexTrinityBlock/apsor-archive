@@ -1,129 +1,257 @@
 import type { TimelineResponseSchema } from "../../generated-apis-types/schemas";
 
-import { Badge } from "../../component/Badge";
-import { Icon } from "../../component/Icon";
-import { Panel } from "../../component/Panel";
 import { formatNumber } from "../../../lib/format";
 
-import { formatDay } from "./helpers";
+import {
+  addDays,
+  differenceInCalendarDays,
+  formatCalendarDay,
+  formatShortDay,
+  isWithinApiRange,
+  parseIsoDay,
+  toDateInput,
+} from "./helpers";
 
 interface TimelineDensityProps {
   readonly data: TimelineResponseSchema;
-  readonly caption: string;
+  readonly anchor: Date;
+  readonly onAnchorChange: (date: Date) => void;
 }
 
-/** Per-day stacked bars for memories, summaries, and file updates. */
-export function TimelineDensity({ data, caption }: TimelineDensityProps) {
+interface DensityBar {
+  readonly date: string;
+  readonly day: Date;
+  readonly memoryCount: number;
+  readonly summaryCount: number;
+  readonly fileCount: number;
+  readonly xPercent: number;
+  readonly height: number;
+  readonly tier: "quiet" | "mid" | "peak";
+  readonly canAnchor: boolean;
+}
+
+function densityTier(ratio: number): "quiet" | "mid" | "peak" {
+  if (ratio === 1) {
+    return "peak";
+  }
+  if (ratio >= 0.5) {
+    return "mid";
+  }
+  return "quiet";
+}
+
+function densityBarLabel(bar: DensityBar): string {
+  return [
+    `${bar.memoryCount} ${bar.memoryCount === 1 ? "memory" : "memories"}`,
+    `${bar.summaryCount} ${bar.summaryCount === 1 ? "summary" : "summaries"}`,
+    `${bar.fileCount} ${bar.fileCount === 1 ? "file update" : "file updates"}`,
+  ].join(", ");
+}
+
+/** The 68px hairline density strip; each stem is one active day in the API window. */
+export function TimelineDensity({ data, anchor, onAnchorChange }: TimelineDensityProps) {
+  const startDay = parseIsoDay(data.range_start);
+  const dayRange = Math.max(1, data.day_range);
+  const maxTotal = Math.max(
+    1,
+    ...data.density.map((day) => day.memory_count + day.summary_count + day.file_count),
+  );
+  const anchorKey = toDateInput(anchor);
+
+  const bars: DensityBar[] = [];
+  for (const day of data.density) {
+    const date = parseIsoDay(day.date);
+    if (!date) {
+      continue;
+    }
+    const offset = startDay ? differenceInCalendarDays(date, startDay) : 0;
+    const clampedOffset = Math.min(dayRange - 1, Math.max(0, offset));
+    const total = day.memory_count + day.summary_count + day.file_count;
+    const ratio = total / maxTotal;
+    bars.push({
+      date: day.date,
+      day: date,
+      memoryCount: day.memory_count,
+      summaryCount: day.summary_count,
+      fileCount: day.file_count,
+      xPercent: ((clampedOffset + 0.5) / dayRange) * 100,
+      height: Math.max(3, ratio * 42),
+      tier: densityTier(ratio),
+      canAnchor: isWithinApiRange(date),
+    });
+  }
+
   const totals = data.density.reduce(
     (sum, day) => ({
-      files: sum.files + day.file_count,
       memories: sum.memories + day.memory_count,
       summaries: sum.summaries + day.summary_count,
+      files: sum.files + day.file_count,
     }),
-    { files: 0, memories: 0, summaries: 0 },
+    { memories: 0, summaries: 0, files: 0 },
   );
-  const maxDay = data.density.reduce(
-    (max, day) => Math.max(max, day.file_count + day.memory_count + day.summary_count),
-    1,
-  );
+
+  const tickCount = Math.min(5, dayRange);
+  const axisTicks =
+    startDay !== null
+      ? Array.from({ length: tickCount }, (_, index) => {
+          const offset =
+            tickCount === 1 ? 0 : Math.round((index * (dayRange - 1)) / (tickCount - 1));
+          return addDays(startDay, offset);
+        })
+      : [];
+
+  const hitWidthPercent = Math.min(1.6, Math.max(0.2, 80 / dayRange));
+  const hasUnanchorableBars = bars.some((bar) => !bar.canAnchor);
 
   return (
-    <Panel
-      eyebrow="Sparse sample"
-      title="Density along the range"
-      className="timeline-density reveal reveal-3"
-      action={
-        <Badge tone={data.truncated ? "vermilion" : "neutral"}>
-          {data.truncated ? "Truncated at 2000 / kind" : `${data.day_range} days`}
-        </Badge>
-      }
-    >
-      <dl className="timeline-density__stats">
-        <div>
-          <dt>Total events</dt>
-          <dd>{formatNumber(data.total)}</dd>
+    <section className="timeline-density" aria-label="Timeline density strip">
+      <div className="timeline-density__head">
+        <div className="timeline-density__title-group">
+          <h2 className="timeline-density__title">Growth-ring density across the window</h2>
+          <span className="timeline-density__protocol">0.7px hairline protocol</span>
         </div>
-        <div>
-          <dt>Sampled</dt>
-          <dd>{formatNumber(data.sampled)}</dd>
-        </div>
-        <div>
-          <dt>Skipped</dt>
-          <dd>{formatNumber(data.skipped)}</dd>
-        </div>
-        <div className="timeline-density__caption">
-          <dt>Window</dt>
-          <dd>{caption}</dd>
-        </div>
-      </dl>
-
-      <div className="timeline-density__plot-wrap">
-        {data.density.length === 0 ? (
-          <div className="timeline-density__empty">
-            <Icon name="info" size={18} />
-            <p>
-              {data.total === 0
-                ? "No density to plot: this range contains no memories, summaries, or file updates."
-                : "No per-day density was returned for this range, even though the endpoint counted events."}
-            </p>
-          </div>
-        ) : (
-          <ol className="timeline-density__plot" aria-label={`Daily event density for ${caption}`}>
-            {data.density.map((day) => {
-              const total = day.file_count + day.memory_count + day.summary_count;
-              const height = Math.max(3, (total / maxDay) * 100);
-              const label = `${formatDay(day.date)}: ${day.memory_count} memories, ${day.summary_count} summaries, ${day.file_count} file updates`;
-              return (
-                <li key={day.date} className="timeline-density__day" title={label}>
-                  <span className="visually-hidden">{label}</span>
-                  <span
-                    className="timeline-density__bar"
-                    style={{ height: `${height}%` }}
-                    aria-hidden="true"
-                  >
-                    {day.file_count > 0 ? (
-                      <span
-                        className="timeline-density__segment is-file"
-                        style={{ flexGrow: day.file_count }}
-                      />
-                    ) : null}
-                    {day.memory_count > 0 ? (
-                      <span
-                        className="timeline-density__segment is-memory"
-                        style={{ flexGrow: day.memory_count }}
-                      />
-                    ) : null}
-                    {day.summary_count > 0 ? (
-                      <span
-                        className="timeline-density__segment is-summary"
-                        style={{ flexGrow: day.summary_count }}
-                      />
-                    ) : null}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        <span className="timeline-density__telemetry">
+          {formatNumber(dayRange)}-day window {"\u00b7"} {formatNumber(data.density.length)} active{" "}
+          {data.density.length === 1 ? "day" : "days"} {"\u00b7"}{" "}
+          {formatNumber(data.sampled)} sampled of {formatNumber(data.total)}
+        </span>
       </div>
 
-      <div className="timeline-density__legend" aria-label="Density legend">
-        <span>
-          <i className="timeline-swatch is-file" aria-hidden="true" />
-          {formatNumber(totals.files)} {totals.files === 1 ? "file update" : "file updates"}
-        </span>
-        <span>
-          <i className="timeline-swatch is-memory" aria-hidden="true" />
+      <div className="timeline-density__canvas">
+        <svg
+          className="timeline-density__svg"
+          viewBox="0 0 1000 68"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <line
+            className="timeline-density__guideline"
+            x1="0"
+            y1="14"
+            x2="1000"
+            y2="14"
+            vectorEffect="non-scaling-stroke"
+          />
+          <line
+            className="timeline-density__guideline"
+            x1="0"
+            y1="32"
+            x2="1000"
+            y2="32"
+            vectorEffect="non-scaling-stroke"
+          />
+          <line
+            className="timeline-density__baseline"
+            x1="0"
+            y1="52"
+            x2="1000"
+            y2="52"
+            vectorEffect="non-scaling-stroke"
+          />
+          {bars.map((bar) => (
+            <line
+              key={bar.date}
+              className={`timeline-density__stem timeline-density__stem--${bar.tier}`}
+              x1={bar.xPercent * 10}
+              y1={52 - bar.height}
+              x2={bar.xPercent * 10}
+              y2="52"
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+          {bars
+            .filter((bar) => bar.date === anchorKey)
+            .map((bar) => (
+              <line
+                key={`cursor-${bar.date}`}
+                className="timeline-density__cursor"
+                x1={bar.xPercent * 10}
+                y1="2"
+                x2={bar.xPercent * 10}
+                y2="56"
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+        </svg>
+
+        {bars.map((bar) => (
+          <button
+            key={bar.date}
+            type="button"
+            className={
+              bar.date === anchorKey
+                ? "timeline-density__bar is-anchor"
+                : "timeline-density__bar"
+            }
+            style={{ left: `${bar.xPercent}%`, width: `${hitWidthPercent}%` }}
+            title={
+              bar.canAnchor
+                ? `${formatCalendarDay(bar.day)} \u00b7 ${densityBarLabel(bar)}`
+                : `${formatCalendarDay(bar.day)} is outside the supported 1900–2200 window ends`
+            }
+            aria-label={
+              bar.canAnchor
+                ? `Set window end to ${formatCalendarDay(bar.day)}. ${densityBarLabel(bar)}.`
+                : `${formatCalendarDay(bar.day)} is outside the supported 1900–2200 window ends. ${densityBarLabel(bar)}.`
+            }
+            aria-current={bar.date === anchorKey ? "date" : undefined}
+            disabled={!bar.canAnchor}
+            onClick={() => onAnchorChange(bar.day)}
+          />
+        ))}
+
+        {bars.length === 0 ? (
+          <p className="timeline-density__empty-note">
+            No dated events in this window. The strip stays flat until the archive has something to
+            plot.
+          </p>
+        ) : null}
+      </div>
+
+      {axisTicks.length > 0 ? (
+        <div className="timeline-density__axis" aria-hidden="true">
+          {axisTicks.map((tick, index) => (
+            <span key={`axis-${index}-${toDateInput(tick)}`} className="timeline-density__axis-tick">
+              {formatShortDay(tick)}
+              {index === axisTicks.length - 1 ? " \u00b7 end" : ""}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="timeline-density__legend">
+        <span className="timeline-density__legend-label">Window composition</span>
+        <span className="timeline-density__legend-item">
+          <i
+            className="timeline-density__swatch timeline-density__swatch--memory"
+            aria-hidden="true"
+          />
           {formatNumber(totals.memories)} {totals.memories === 1 ? "memory" : "memories"}
         </span>
-        <span>
-          <i className="timeline-swatch is-summary" aria-hidden="true" />
+        <span className="timeline-density__legend-item">
+          <i
+            className="timeline-density__swatch timeline-density__swatch--summary"
+            aria-hidden="true"
+          />
           {formatNumber(totals.summaries)} {totals.summaries === 1 ? "summary" : "summaries"}
         </span>
-        <span className="timeline-density__legend-note">
-          Each bar is one day with events; plain days are not drawn.
+        <span className="timeline-density__legend-item">
+          <i className="timeline-density__swatch timeline-density__swatch--file" aria-hidden="true" />
+          {formatNumber(totals.files)} {totals.files === 1 ? "file update" : "file updates"}
+        </span>
+        {hasUnanchorableBars ? (
+          <span className="timeline-density__anchor-note">
+            Window end must be within 1900–2200
+          </span>
+        ) : null}
+        {data.truncated ? (
+          <span className="timeline-density__truncated">Truncated at the per-kind event cap</span>
+        ) : null}
+        <span className="timeline-density__legend-hint">
+          Click a stem to move the window end to that day.
         </span>
       </div>
-    </Panel>
+    </section>
   );
 }

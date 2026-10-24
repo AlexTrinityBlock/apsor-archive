@@ -23,8 +23,7 @@ class AgentConversationBusyError(AgentError):
 class AgentForkEntryInvalidError(AgentError):
     def __init__(self, conversation_id: int, entry_id: int) -> None:
         super().__init__(
-            f"Entry {entry_id} does not belong to agent conversation "
-            f"{conversation_id}."
+            f"Entry {entry_id} does not belong to agent conversation {conversation_id}."
         )
 
 
@@ -36,9 +35,7 @@ class AgentRequestDuplicateError(AgentError):
 class AgentRunNotFoundError(AgentError):
     def __init__(self, run_id: int | None = None) -> None:
         detail = (
-            "No agent run was found."
-            if run_id is None
-            else f"Agent run {run_id} was not found."
+            "No agent run was found." if run_id is None else f"Agent run {run_id} was not found."
         )
         super().__init__(detail)
 
@@ -80,9 +77,7 @@ class AgentApprovalNotPendingError(AgentError):
 
 class AgentApprovalOutOfOrderError(AgentError):
     def __init__(self) -> None:
-        super().__init__(
-            "An earlier approval for this run is still pending; resolve it first."
-        )
+        super().__init__("An earlier approval for this run is still pending; resolve it first.")
 
 
 class SavedQuestionNotFoundError(AgentError):

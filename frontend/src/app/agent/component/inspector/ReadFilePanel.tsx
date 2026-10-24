@@ -73,9 +73,9 @@ function viewerPathFor(fileId: number | null, chunk: number | null): string | nu
     return null;
   }
   if (chunk === null) {
-    return "/viewer/file/" + fileId;
+    return "/library?tab=files&file=" + fileId;
   }
-  return "/viewer/file/" + fileId + "?chunk=" + chunk;
+  return "/library?tab=files&file=" + fileId + "&chunk=" + chunk;
 }
 
 /** `read_file`: a manuscript window with the real file renderer underneath. */

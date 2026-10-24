@@ -35,13 +35,9 @@ class AgentSettingsValuesSchema(BaseModel):
     def _cross_field_ranges(self) -> Self:
         """Enforce the invariants a single-field range cannot express."""
         if self.compaction_threshold_tokens >= self.max_total_tokens:
-            raise ValueError(
-                "compaction_threshold_tokens must be less than max_total_tokens."
-            )
+            raise ValueError("compaction_threshold_tokens must be less than max_total_tokens.")
         if self.max_parallel_tools > self.max_tool_calls_per_turn:
-            raise ValueError(
-                "max_parallel_tools must not exceed max_tool_calls_per_turn."
-            )
+            raise ValueError("max_parallel_tools must not exceed max_tool_calls_per_turn.")
         return self
 
 
