@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DendroMatrix — Overview Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --mono-ink: #1C1C1A;
+      --mono-paper: #F0EFEB;
+      --mono-card-bg: #FAF9F6;
+      --mono-subtle: #E8E7E2;
+      --mono-muted: #8F8E88;
+      --mono-faint: #C6C5BF;
+      --mono-grid: #DEDDD6;
+      --accent-seal: #C84B31;
+      --accent-moss: #2E4B3E;
+      --accent-ochre: #B45309;
+      --mono-dark-bg: #1C1C1A;
+      --mono-dark-ink: #F0EFEB;
+      --mono-dark-grid: #2E2D29;
+      --mono-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono-font-mono: 'JetBrains Mono', monospace;
+      --rail-width-expanded: 230px;
+      --rail-width-collapsed: 68px;
+      --transition-smooth: 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--mono-font);
+      background-color: var(--mono-paper);
+      color: var(--mono-ink);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COLLAPSIBLE NAVIGATION RAIL
+       ═══════════════════════════════════════════════════════════════ */
+    .nav-rail {
+      width: var(--rail-width-expanded);
+      height: 100vh;
+      background: var(--mono-paper);
+      border-right: 0.7px solid var(--mono-grid);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width var(--transition-smooth);
+      position: relative;
+      z-index: 50;
+      user-select: none;
+    }
+
+    .nav-rail.collapsed {
+      width: var(--rail-width-collapsed);
+    }
+
+    .rail-header {
+      height: 60px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 0.7px solid var(--mono-grid);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .nav-rail.collapsed .rail-header {
+      padding: 0;
+      justify-content: center;
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--mono-ink);
+      overflow: hidden;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .nav-rail.collapsed .brand-cluster {
+      gap: 0;
+      justify-content: center;
+    }
+
+    .brand-seal {
+      width: 36px;
+      height: 36px;
+      background: var(--mono-ink);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--mono-paper);
+    }
+
+    .brand-meta {
+      display: flex;
+      flex-direction: column;
+      transition: opacity var(--transition-smooth);
+    }
+
+    .nav-rail.collapsed .brand-meta {
+      display: none !important;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .brand-sub {
+      font-size: 9.5px;
+      font-weight: 500;
+      color: var(--mono-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .rail-toggle-btn {
+      width: 24px;
+      height: 24px;
+      background: var(--mono-subtle);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--mono-ink);
+      transition: all var(--transition-smooth);
+      flex-shrink: 0;
+    }
+
+    .rail-toggle-btn:hover {
+      background: #FFFFFF;
+      border-color: var(--mono-ink);
+    }
+
+    .nav-rail.collapsed .rail-toggle-btn {
+      display: none;
+    }
+
+    .rail-menu {
+      flex: 1;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .nav-rail.collapsed .rail-menu {
+      padding: 14px 0;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rail-section-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+      padding: 8px 10px 4px;
+      white-space: nowrap;
+    }
+
+    .nav-rail.collapsed .rail-section-label {
+      display: none !important;
+    }
+
+    .rail-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 12px;
+      border-radius: 5px;
+      background: transparent;
+      border: 0.7px solid transparent;
+      color: #4A4944;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      position: relative;
+    }
+
+    .rail-item:hover {
+      background: var(--mono-subtle);
+      color: var(--mono-ink);
+    }
+
+    .rail-item.active {
+      background: #FFFFFF;
+      border-color: var(--mono-grid);
+      color: var(--mono-ink);
+      font-weight: 700;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+
+    .nav-rail.collapsed .rail-item {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      justify-content: center;
+      gap: 0;
+      margin: 0 auto;
+    }
+
+    .rail-item-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .rail-item-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-rail.collapsed .rail-item-text,
+    .nav-rail.collapsed .rail-item-badge {
+      display: none !important;
+    }
+
+    .rail-item-badge {
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--mono-subtle);
+      border: 0.7px solid var(--mono-grid);
+      padding: 1px 6px;
+      border-radius: 2px;
+      color: var(--mono-muted);
+    }
+
+    .nav-rail.collapsed .rail-item::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: calc(100% + 12px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .nav-rail.collapsed .rail-item:hover::after {
+      opacity: 1;
+    }
+
+    .rail-footer {
+      padding: 12px 14px;
+      border-top: 0.7px solid var(--mono-grid);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .nav-rail.collapsed .rail-footer {
+      padding: 12px 0;
+      justify-content: center;
+    }
+
+    .rail-footer-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      cursor: pointer;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .rail-footer-btn:hover {
+      background: #FFFFFF;
+    }
+
+    .nav-rail.collapsed .rail-footer-btn {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+    }
+
+    .nav-rail.collapsed .rail-footer-btn span {
+      display: none;
+    }
+
+    /* ═════════════════════════════════════════════════════════════
+       OVERVIEW DASHBOARD WORKSPACE
+       ═════════════════════════════════════════════════════════════ */
+    .app-main {
+      flex: 1;
+      height: 100vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      background: var(--mono-paper);
+    }
+
+    /* Top Masthead */
+    .overview-masthead {
+      padding: 32px 40px 24px;
+      background: var(--mono-paper);
+      border-bottom: 0.7px solid var(--mono-grid);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      flex-shrink: 0;
+    }
+
+    .masthead-row-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .overview-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .overview-eyebrow {
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+    }
+
+    .overview-title {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--mono-ink);
+    }
+
+    .archive-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-ink);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+
+    .status-dot-green {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #2E7D32;
+    }
+
+    /* Quick Search Bar & Suggestions */
+    .search-hero-box {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 860px;
+    }
+
+    .search-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      padding: 10px 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+      transition: border-color 0.15s ease;
+    }
+
+    .search-input-wrap:focus-within {
+      border-color: var(--mono-ink);
+    }
+
+    .search-hero-input {
+      border: none;
+      background: transparent;
+      font-family: var(--mono-font);
+      font-size: 14.5px;
+      color: var(--mono-ink);
+      outline: none;
+      width: 100%;
+    }
+
+    .search-suggestions-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .suggestion-label {
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-muted);
+    }
+
+    .suggestion-chip {
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-ink);
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .suggestion-chip:hover {
+      border-color: var(--mono-ink);
+      background: var(--mono-card-bg);
+    }
+
+    /* Overview Scrollable Stage */
+    .overview-scroll-body {
+      padding: 32px 40px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
+      max-width: 1380px;
+    }
+
+    /* STATS STRIP */
+    .stats-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .stat-metric-card {
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      padding: 20px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-metric-card.moss {
+      border-left: 3px solid var(--accent-moss);
+    }
+
+    .stat-metric-card.ink {
+      border-left: 3px solid var(--mono-ink);
+    }
+
+    .stat-metric-card.ochre {
+      border-left: 3px solid var(--accent-ochre);
+    }
+
+    .stat-metric-card.vermilion {
+      border-left: 3px solid var(--accent-seal);
+    }
+
+    .stat-label {
+      font-family: var(--mono-font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--mono-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--mono-ink);
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    .stat-note {
+      font-size: 11.5px;
+      color: var(--mono-muted);
+      margin-top: 2px;
+    }
+
+    /* TWO-COLUMN SPLIT: RECENT FILES SHELF & TIMELINE STREAM */
+    .dashboard-split-layout {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 24px;
+    }
+
+    .content-box {
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+    }
+
+    .box-header {
+      padding: 14px 20px;
+      border-bottom: 0.7px solid var(--mono-grid);
+      background: var(--mono-paper);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .box-title-cluster {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .box-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--mono-ink);
+    }
+
+    .box-view-all {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .box-view-all:hover {
+      color: var(--accent-seal);
+    }
+
+    /* RECENT FILES SHELF */
+    .recent-files-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .recent-file-entry {
+      padding: 14px 20px;
+      border-bottom: 0.7px solid var(--mono-grid);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      text-decoration: none;
+      color: var(--mono-ink);
+      transition: background 0.12s ease;
+    }
+
+    .recent-file-entry:last-child {
+      border-bottom: none;
+    }
+
+    .recent-file-entry:hover {
+      background: var(--mono-card-bg);
+    }
+
+    .file-entry-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .file-type-chip {
+      font-family: var(--mono-font-mono);
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+    }
+
+    .file-text-col {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .file-primary-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-meta-sub {
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-muted);
+    }
+
+    .file-entry-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-muted);
+      flex-shrink: 0;
+    }
+
+    /* TIMELINE EVENTS STREAM (Canonical Alex Trinity Block Style) */
+    .timeline-card-box {
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+    }
+
+    .timeline-stream-wrap {
+      padding: 16px 20px 20px 38px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: relative;
+    }
+
+    .timeline-spine-line {
+      position: absolute;
+      left: 17.5px;
+      top: 22px;
+      bottom: 24px;
+      width: 0.7px;
+      background: var(--mono-grid);
+    }
+
+    .timeline-event-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      position: relative;
+      padding-bottom: 2px;
+    }
+
+    /* Major Phase Dot: 10px Ink + 3px Paper Gap + 0.7px Hairline Ring */
+    .timeline-event-item::before {
+      content: '';
+      position: absolute;
+      left: -25.5px;
+      top: 4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--mono-ink);
+      box-shadow: 0 0 0 3px var(--mono-paper), 0 0 0 3.7px var(--mono-grid);
+      z-index: 2;
+      box-sizing: border-box;
+    }
+
+    /* Minor Phase Dot: 5px Muted Dot + 2.5px Paper Gap */
+    .timeline-event-item.minor::before {
+      left: -23px;
+      top: 6px;
+      width: 5px;
+      height: 5px;
+      background: var(--mono-muted);
+      box-shadow: 0 0 0 2.5px var(--mono-paper);
+    }
+
+    .timeline-src-footer {
+      font-family: var(--mono-font-mono);
+      font-size: 9.5px;
+      font-weight: 500;
+      color: var(--mono-faint);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 0.7px solid var(--mono-grid);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .event-content-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .event-head-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .event-badge-label {
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 1px 6px;
+      border-radius: 2px;
+      border: 0.7px solid var(--mono-grid);
+      background: var(--mono-paper);
+    }
+
+    .event-timestamp {
+      font-family: var(--mono-font-mono);
+      font-size: 10.5px;
+      color: var(--mono-muted);
+    }
+
+    .event-text {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--mono-ink);
+    }
+
+    .event-link {
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--accent-seal);
+      text-decoration: none;
+      align-self: flex-start;
+      margin-top: 2px;
+    }
+
+    .event-link:hover {
+      text-decoration: underline;
+    }
+
+    /* TREE RING RADIAL THUMBNAIL CARD */
+    .tree-rings-card {
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+    }
+
+    .rings-left-info {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .rings-heading {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--mono-ink);
+    }
+
+    .rings-desc {
+      font-size: 13px;
+      color: var(--mono-muted);
+      max-width: 540px;
+      line-height: 1.6;
+    }
+
+    .rings-btn-link {
+      margin-top: 8px;
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.15s ease;
+    }
+
+    .rings-btn-link:hover {
+      background: #333330;
+    }
+
+    .rings-svg-slot {
+      width: 140px;
+      height: 140px;
+      flex-shrink: 0;
+    }
+  </style>
+
+<!-- EMBED_SINGLE_SIDEBAR_PATCH_START -->
+  <style>
+    /* Strict single sidebar enforcement: suppress redundant inner rail when embedded */
+    html.is-embedded .nav-rail,
+    body.is-embedded .nav-rail,
+    .is-embedded #main-nav-rail {
+      display: none !important;
+      width: 0 !important;
+      visibility: hidden !important;
+      overflow: hidden !important;
+    }
+    html.is-embedded,
+    body.is-embedded {
+      overflow: auto !important;
+    }
+    html.is-embedded .app-main,
+    html.is-embedded .viewer-app-main,
+    html.is-embedded .workspace-stage,
+    html.is-embedded .chat-studio-grid,
+    html.is-embedded .archive-canvas-scroll {
+      width: 100% !important;
+      max-width: 100% !important;
+      flex: 1 1 100% !important;
+    }
+  </style>
+  <script>
+    (function() {
+      if (window.self !== window.top || window.location.search.indexOf('embed=true') !== -1) {
+        document.documentElement.classList.add('is-embedded');
+        if (document.body) document.body.classList.add('is-embedded');
+        window.addEventListener('DOMContentLoaded', function() {
+          if (document.body) document.body.classList.add('is-embedded');
+          var r = document.getElementById('main-nav-rail');
+          if (r) r.style.setProperty('display', 'none', 'important');
+        });
+      }
+    })();
+  </script>
+<!-- EMBED_SINGLE_SIDEBAR_PATCH_END -->
+</head>
+<body>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       COLLAPSIBLE NAVIGATION RAIL (68px / 230px)
+       ═════════════════════════════════════════════════════════════ -->
+  <aside id="main-nav-rail" class="nav-rail">
+    <!-- Header with TreeMark centered -->
+    <div class="rail-header">
+      <a href="chat.html" class="brand-cluster" title="DendroMatrix">
+        <div class="brand-seal" title="TreeMark Logo">
+          <svg viewBox="0 0 48 48" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="21" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.3" />
+            <circle cx="24" cy="24" r="15" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.5" stroke-dasharray="2 3" />
+            <circle cx="24" cy="24" r="9" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.8" />
+            <circle cx="24" cy="24" r="2.2" fill="var(--mono-paper)" />
+            <path d="M24 41V27m0-6V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            <path d="M24 3v3M24 42v3M3 24h3M42 24h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-opacity="0.5" />
+          </svg>
+        </div>
+        <div class="brand-meta">
+          <span class="brand-title">DendroMatrix</span>
+          <span class="brand-sub">Archive Studio</span>
+        </div>
+      </a>
+
+      <button class="rail-toggle-btn" onclick="toggleNavRail()" title="Toggle Navigation Rail">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+    </div>
+
+    <!-- Nav Items Menu -->
+        <div class="rail-menu">
+      <a href="chat.html" class="rail-item" data-page="chat" data-tooltip="Chat (01)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h10v11H8.2L4 19z"/><path d="M8 8.5h4M8 11.5h2.6"/><path d="M16.5 7.5H20v8.5h-1.8L17 18.5V16"/></svg>
+        </span>
+        <span class="rail-item-text">Chat</span>
+        <span class="rail-item-badge">01</span>
+      </a>
+
+      <a href="library.html" class="rail-item" data-page="library" data-tooltip="File library (02)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <span class="rail-item-text">File library</span>
+        <span class="rail-item-badge">02</span>
+      </a>
+
+      <a href="timeline.html" class="rail-item" data-page="timeline" data-tooltip="Timeline (03)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </span>
+        <span class="rail-item-text">Timeline</span>
+        <span class="rail-item-badge">03</span>
+      </a>
+
+      <a href="memory.html" class="rail-item" data-page="memory" data-tooltip="Memory (04)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="9" r="1"/><path d="M9 15h6"/></svg>
+        </span>
+        <span class="rail-item-text">Memory</span>
+        <span class="rail-item-badge">04</span>
+      </a>
+
+      <a href="search.html" class="rail-item" data-page="search" data-tooltip="Search (05)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <span class="rail-item-text">Search</span>
+        <span class="rail-item-badge">05</span>
+      </a>
+
+      <a href="overview.html" class="rail-item active" data-page="overview" data-tooltip="Overview (06)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        </span>
+        <span class="rail-item-text">Overview</span>
+        <span class="rail-item-badge">06</span>
+      </a>
+
+      <a href="settings.html" class="rail-item" data-page="settings" data-tooltip="Settings (07)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h7M15 7h5M4 17h5M13 17h7"/><circle cx="13" cy="7" r="2.1"/><circle cx="11" cy="17" r="2.1"/></svg>
+        </span>
+        <span class="rail-item-text">Settings</span>
+        <span class="rail-item-badge">07</span>
+      </a>
+    </div>
+
+    <!-- Rail Footer Toggle -->
+    <div class="rail-footer">
+      <button class="rail-footer-btn" onclick="toggleNavRail()" title="Expand or collapse sidebar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 19 4 12 11 5"/><polyline points="18 19 11 12 18 5"/></svg>
+        <span>Collapse sidebar</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       MAIN APPLICATION AREA: OVERVIEW DASHBOARD
+       ═════════════════════════════════════════════════════════════ -->
+  <main class="app-main">
+    
+    <!-- Masthead Section -->
+    <header class="overview-masthead">
+      <div class="masthead-row-top">
+        <div class="overview-title-group">
+          <span class="overview-eyebrow">Dendrochronological Intelligence Hub</span>
+          <h1 class="overview-title">Archive Overview</h1>
+        </div>
+        <div class="archive-status-badge">
+          <span class="status-dot-green"></span>
+          <span>Live Archive · 0.7s latency</span>
+        </div>
+      </div>
+
+      <!-- Quick Search Bar & Suggestions -->
+      <div class="search-hero-box">
+        <div class="search-input-wrap">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="overview-search-bar" class="search-hero-input" placeholder="Search knowledge base, tree nodes, or ask research questions...">
+        </div>
+        <div class="search-suggestions-row">
+          <span class="suggestion-label">Suggested searches:</span>
+          <button class="suggestion-chip" onclick="applySearch('hybrid retrieval')">hybrid retrieval</button>
+          <button class="suggestion-chip" onclick="applySearch('superseded memories')">superseded memories</button>
+          <button class="suggestion-chip" onclick="applySearch('/history/industry')">/history/industry</button>
+          <button class="suggestion-chip" onclick="applySearch('Ford in the 1970s')">Ford in the 1970s</button>
+          <button class="suggestion-chip" onclick="applySearch('frost ring anomalies')">frost ring anomalies</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Scrollable Overview Stage -->
+    <div class="overview-scroll-body">
+      
+      <!-- STATS CARDS STRIP -->
+      <section class="stats-cards-grid" aria-label="Archive Statistics">
+        <!-- Stat Card 1: Files Archived -->
+        <article class="stat-metric-card moss">
+          <span class="stat-label">Files Archived</span>
+          <span class="stat-value">1,428</span>
+          <span class="stat-note">1.8 GB stored locally · 14 new this week</span>
+        </article>
+
+        <!-- Stat Card 2: Active Leaves -->
+        <article class="stat-metric-card ink">
+          <span class="stat-label">Active Leaves</span>
+          <span class="stat-value">4,892</span>
+          <span class="stat-note">Current indexed knowledge units</span>
+        </article>
+
+        <!-- Stat Card 3: Memory Crystals -->
+        <article class="stat-metric-card ochre">
+          <span class="stat-label">Memory Crystals</span>
+          <span class="stat-value">834</span>
+          <span class="stat-note">782 active · 52 superseded</span>
+        </article>
+
+        <!-- Stat Card 4: Tree Nodes -->
+        <article class="stat-metric-card vermilion">
+          <span class="stat-label">Tree Nodes</span>
+          <span class="stat-value">312</span>
+          <span class="stat-note">Concentric depth 1–18</span>
+        </article>
+      </section>
+
+      <!-- TWO-COLUMN DASHBOARD SPLIT -->
+      <div class="dashboard-split-layout">
+        
+        <!-- LEFT: RECENT FILES SHELF -->
+        <section class="content-box">
+          <div class="box-header">
+            <div class="box-title-cluster">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <h2 class="box-title">Recent Files Shelf</h2>
+            </div>
+            <a href="library.html" class="box-view-all">
+              <span>View all files</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+            </a>
+          </div>
+
+          <div class="recent-files-list">
+            <!-- File Item 1 -->
+            <a href="viewer.html" class="recent-file-entry">
+              <div class="file-entry-left">
+                <span class="file-type-chip">PDF</span>
+                <div class="file-text-col">
+                  <span class="file-primary-name">1974_yushan_tsuga_radial_increment_survey.pdf</span>
+                  <span class="file-meta-sub">/subalpine_cores · 18 chunks · v2.1</span>
+                </div>
+              </div>
+              <div class="file-entry-right">
+                <span>14.2 MB</span>
+                <span>·</span>
+                <span>Yesterday</span>
+              </div>
+            </a>
+
+            <!-- File Item 2 -->
+            <a href="viewer.html" class="recent-file-entry">
+              <div class="file-entry-left">
+                <span class="file-type-chip">CSV</span>
+                <div class="file-text-col">
+                  <span class="file-primary-name">conifer_cambial_dormancy_profiles_1965_1990.csv</span>
+                  <span class="file-meta-sub">/cambial_phenology · 6 chunks · v1.0</span>
+                </div>
+              </div>
+              <div class="file-entry-right">
+                <span>3.8 MB</span>
+                <span>·</span>
+                <span>3 days ago</span>
+              </div>
+            </a>
+
+            <!-- File Item 3 -->
+            <a href="viewer.html" class="recent-file-entry">
+              <div class="file-entry-left">
+                <span class="file-type-chip">JPG</span>
+                <div class="file-text-col">
+                  <span class="file-primary-name">tracheid_wall_lumen_ratio_micrograph_800x.jpg</span>
+                  <span class="file-meta-sub">/tracheid_morphometry · Micrograph · 4096x3072</span>
+                </div>
+              </div>
+              <div class="file-entry-right">
+                <span>8.4 MB</span>
+                <span>·</span>
+                <span>Sep 20</span>
+              </div>
+            </a>
+
+            <!-- File Item 4 -->
+            <a href="viewer.html" class="recent-file-entry">
+              <div class="file-entry-left">
+                <span class="file-type-chip">DOCX</span>
+                <div class="file-text-col">
+                  <span class="file-primary-name">sheipa_paleo_drought_chronology_report.docx</span>
+                  <span class="file-meta-sub">/paleo_drought · 8 chunks · v1.2</span>
+                </div>
+              </div>
+              <div class="file-entry-right">
+                <span>2.1 MB</span>
+                <span>·</span>
+                <span>Oct 12</span>
+              </div>
+            </a>
+          </div>
+        </section>
+
+        <!-- RIGHT: RECENT TIMELINE EVENTS STREAM (Canonical Alex Trinity Block Style) -->
+        <section class="content-box timeline-card-box">
+          <div class="box-header">
+            <div class="box-title-cluster">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <h2 class="box-title">Recent Timeline Events</h2>
+            </div>
+            <span style="font-family: var(--mono-font-mono); font-size: 11px; color: var(--mono-muted);">0.7px HAIRLINE PROTOCOL</span>
+          </div>
+
+          <div class="timeline-stream-wrap">
+            <div class="timeline-spine-line"></div>
+
+            <!-- Event 1: Memory Crystallized (Major Anchor) -->
+            <div class="timeline-event-item">
+              <div class="event-content-body">
+                <div class="event-head-row">
+                  <span class="event-badge-label" style="color: var(--accent-moss);">Memory Crystallized</span>
+                  <span class="event-timestamp">2 hours ago</span>
+                </div>
+                <p class="event-text">
+                  Memory #1043 approved: 1976 Chamaecyparis formosensis specimen #14 recorded 42.8% reduction in latewood tracheids.
+                </p>
+                <a href="chat.html" class="event-link">View in Chat →</a>
+              </div>
+            </div>
+
+            <!-- Event 2: File Ingested (Major Anchor) -->
+            <div class="timeline-event-item">
+              <div class="event-content-body">
+                <div class="event-head-row">
+                  <span class="event-badge-label">File Ingested</span>
+                  <span class="event-timestamp">Yesterday</span>
+                </div>
+                <p class="event-text">
+                  <code>1974_yushan_tsuga_radial_increment_survey.pdf</code> ingested and embedded with 18 chunks into text-embedding-004.
+                </p>
+                <a href="library.html" class="event-link">Open in File Library →</a>
+              </div>
+            </div>
+
+            <!-- Event 3: Summary Synthesized (Minor Checkpoint) -->
+            <div class="timeline-event-item minor">
+              <div class="event-content-body">
+                <div class="event-head-row">
+                  <span class="event-badge-label" style="color: var(--accent-ochre);">Summary Synthesized</span>
+                  <span class="event-timestamp">Oct 18, 2026</span>
+                </div>
+                <p class="event-text">
+                  Comparative cross-dating summary published for 1970–1980 high-elevation false frost ring anomalies.
+                </p>
+              </div>
+            </div>
+
+            <!-- Event 4: Memory Superseded (Minor Checkpoint) -->
+            <div class="timeline-event-item minor">
+              <div class="event-content-body">
+                <div class="event-head-row">
+                  <span class="event-badge-label" style="color: var(--accent-seal);">Memory Superseded</span>
+                  <span class="event-timestamp">Oct 12, 2026</span>
+                </div>
+                <p class="event-text">
+                  Memory #812 deprecated in favor of Memory #1043 following calibrated microdensitometry review.
+                </p>
+              </div>
+            </div>
+
+            <!-- Footer Attribution Line -->
+            <div class="timeline-src-footer">
+              <span>TIMELINE · DUAL-CHAMFER · MONO EDITORIAL PROTOCOL</span>
+              <span>0.7px CONTINUOUS SPINE</span>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+
+      <!-- BOTTOM: TREE RING RADIAL THUMBNAIL CARD -->
+      <section class="tree-rings-card">
+        <div class="rings-left-info">
+          <span class="overview-eyebrow">Dendro Topological Model</span>
+          <h2 class="rings-heading">Concentric Knowledge Tree</h2>
+          <p class="rings-desc">
+            The archive organizes biological specimens, radiocarbon logs, and archival reports into radial concentric growth rings. Each depth ring models physical growth intervals from pith to bark.
+          </p>
+          <a href="library.html" class="rings-btn-link">
+            <span>Explore Tree Archive</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </a>
+        </div>
+
+        <!-- SVG Concentric Growth Rings -->
+        <div class="rings-svg-slot">
+          <svg viewBox="0 0 140 140" width="140" height="140" fill="none">
+            <circle cx="70" cy="70" r="62" stroke="#DEDDD6" stroke-width="1.2" stroke-dasharray="3 3"/>
+            <circle cx="70" cy="70" r="48" stroke="#1C1C1A" stroke-width="1.4" opacity="0.3"/>
+            <circle cx="70" cy="70" r="34" stroke="#1C1C1A" stroke-width="1.4" opacity="0.6"/>
+            <circle cx="70" cy="70" r="20" stroke="#C84B31" stroke-width="1.6"/>
+            <circle cx="70" cy="70" r="5" fill="#C84B31"/>
+            <!-- Radial Axis Lines -->
+            <path d="M70 8V132M8 70H132" stroke="#DEDDD6" stroke-width="0.7"/>
+          </svg>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       INTERACTIVE JAVASCRIPT
+       ═════════════════════════════════════════════════════════════ -->
+  <script>
+    function toggleNavRail() {
+      const rail = document.getElementById('main-nav-rail');
+      rail.classList.toggle('collapsed');
+    }
+
+    function applySearch(query) {
+      const input = document.getElementById('overview-search-bar');
+      input.value = query;
+      input.focus();
+    }
+  </script>
+</body>
+</html>

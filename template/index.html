@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DendroMatrix — English Prototype Showcase & Source Audit Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --mono-ink: #1C1C1A;
+      --mono-paper: #F0EFEB;
+      --mono-card-bg: #FAF9F6;
+      --mono-subtle: #E8E7E2;
+      --mono-muted: #8F8E88;
+      --mono-faint: #C6C5BF;
+      --mono-grid: #DEDDD6;
+      --accent-seal: #A83824;
+      --accent-moss: #2E4B3E;
+      --accent-amber: #B45309;
+      --mono-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono-font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--mono-font);
+      background-color: var(--mono-paper);
+      color: var(--mono-ink);
+      min-height: 100vh;
+      padding: 40px 24px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .hub-container {
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+
+    /* Header & Brand Seal */
+    .hub-header {
+      border-bottom: 0.7px solid var(--mono-grid);
+      padding-bottom: 28px;
+      margin-bottom: 36px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .brand-seal {
+      width: 44px;
+      height: 44px;
+      background: var(--mono-ink);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--mono-paper);
+      flex-shrink: 0;
+    }
+
+    .brand-title {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--mono-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    .hub-meta-badges {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .badge-chip {
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      padding: 4px 10px;
+      background: var(--mono-card-bg);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 2px;
+      color: var(--mono-ink);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-chip.accent {
+      background: #FDF4E7;
+      border-color: #E2CEB1;
+      color: var(--accent-amber);
+      font-weight: 600;
+    }
+
+    /* Master Callout Banner */
+    .master-callout {
+      background: var(--mono-card-bg);
+      border: 0.7px solid var(--mono-grid);
+      border-left: 4px solid var(--mono-ink);
+      padding: 24px 28px;
+      border-radius: 4px;
+      margin-bottom: 36px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    }
+
+    .master-callout-info h3 {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      letter-spacing: -0.01em;
+    }
+
+    .master-callout-info p {
+      font-size: 13px;
+      color: var(--mono-muted);
+      line-height: 1.5;
+      max-width: 780px;
+    }
+
+    .btn-master {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 4px;
+      transition: opacity 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .btn-master:hover {
+      opacity: 0.9;
+    }
+
+    /* Section Headings */
+    .section-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::after {
+      content: '';
+      flex: 1;
+      height: 0.7px;
+      background: var(--mono-grid);
+    }
+
+    /* Grid of Pages */
+    .page-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    .page-card {
+      background: var(--mono-card-bg);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+      text-decoration: none;
+      color: inherit;
+    }
+
+    .page-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--mono-ink);
+    }
+
+    .card-top {
+      margin-bottom: 14px;
+    }
+
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .card-index {
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-seal);
+      letter-spacing: 0.04em;
+    }
+
+    .card-route {
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-muted);
+      background: var(--mono-subtle);
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+
+    .card-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+
+    .card-desc {
+      font-size: 12.5px;
+      color: var(--mono-muted);
+      line-height: 1.45;
+    }
+
+    .card-footer {
+      border-top: 0.7px solid var(--mono-grid);
+      padding-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11.5px;
+      font-family: var(--mono-font-mono);
+    }
+
+    .source-tag {
+      color: var(--mono-muted);
+    }
+
+    .open-action {
+      font-weight: 600;
+      color: var(--mono-ink);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Architecture Audit Table */
+    .audit-section {
+      background: var(--mono-card-bg);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 24px;
+      margin-bottom: 40px;
+    }
+
+    .audit-section h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .audit-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .audit-table th {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1.4px solid var(--mono-grid);
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .audit-table td {
+      padding: 10px 12px;
+      border-bottom: 0.7px solid var(--mono-grid);
+      vertical-align: top;
+      line-height: 1.4;
+    }
+
+    .audit-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .pill {
+      display: inline-block;
+      font-family: var(--mono-font-mono);
+      font-size: 10.5px;
+      padding: 2px 6px;
+      border-radius: 2px;
+    }
+
+    .pill-green {
+      background: #E8F5E9;
+      color: #2E7D32;
+    }
+
+    .pill-gray {
+      background: var(--mono-subtle);
+      color: var(--mono-ink);
+    }
+
+    /* Footer */
+    .hub-footer {
+      border-top: 0.7px solid var(--mono-grid);
+      padding-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--mono-muted);
+      font-family: var(--mono-font-mono);
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hub-container">
+    
+    <!-- Header -->
+    <header class="hub-header">
+      <div class="brand-group">
+        <div class="brand-seal" title="DendroMatrix Seal">
+          <svg viewBox="0 0 48 48" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="21" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.3" />
+            <circle cx="24" cy="24" r="15" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.5" stroke-dasharray="2 3" />
+            <circle cx="24" cy="24" r="9" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.8" />
+            <circle cx="24" cy="24" r="2.2" fill="var(--mono-paper)" />
+            <path d="M24 41V27m0-6V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            <path d="M24 3v3M24 42v3M3 24h3M42 24h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-opacity="0.5" />
+          </svg>
+        </div>
+        <div>
+          <h1 class="brand-title">DendroMatrix Prototype Hub</h1>
+          <div class="brand-sub">Alex Trinity Block Style · 100% English · Pure Static Deliverables</div>
+        </div>
+      </div>
+
+      <div class="hub-meta-badges">
+        <span class="badge-chip">ARCH: ALEX TRINITY BLOCK</span>
+        <span class="badge-chip">NAV: COLLAPSIBLE 68/230PX</span>
+        <span class="badge-chip accent">WORKSPACES: 10/10 CONSOLIDATED</span>
+      </div>
+    </header>
+
+    <!-- Master SPA Showcase Banner -->
+    <section class="master-callout">
+      <div class="master-callout-info">
+        <h3>Master Unified SPA Prototype (dendromatrix-english.html)</h3>
+        <p>
+          The complete, all-in-one interactive system prototype. Features the collapsible 68px/230px navigation rail, live tab switching among the 7 core workspaces, Tool Call inspector with live parameters and result inspection, interactive specimen page preview panel, and dynamic timeline density lazy-loading.
+        </p>
+      </div>
+      <a href="dendromatrix-english.html" class="btn-master" target="_blank">
+        <span>Launch Master SPA Prototype</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </section>
+
+    <!-- Standalone Pages Section -->
+    <div class="section-title">Standalone Page Prototypes (Direct Source Audit)</div>
+    <div class="page-grid">
+
+      <!-- 01. Overview -->
+      <a href="pages/overview.html" class="page-card" target="_blank">
+        <div class="card-top">
+          <div class="card-header-row">
+            <span class="card-index">WORKSPACE // 01</span>
+            <span class="card-route">/ (frontend/src/app/home/page.tsx)</span>
+          </div>
+          <h4 class="card-name">System Overview</h4>
+          <p class="card-desc">Telemetry metrics shelf, active tree ring preview card, recent timeline chronologies, quick search suggestions, and active leaf counters.</p>
+        </div>
+        <div class="card-footer">
+          <span class="source-tag">home/page.tsx</span>
+          <span class="open-action">Open Standalone →</span>
+        </div>
+      </a>
+
+      <!-- 02. Search -->
+      <a href="pages/search.html" class="page-card" target="_blank">
+        <div class="card-top">
+          <div class="card-header-row">
+            <span class="card-index">WORKSPACE // 02</span>
+            <span class="card-route">/search (frontend/src/app/search/page.tsx)</span>
+          </div>
+          <h4 class="card-name">Hybrid Search</h4>
+          <p class="card-desc">Dual retrieval engine with BM25 keyword vs vector dense semantic slider, latency telemetries, and grouped chunk & memory hit cards.</p>
+        </div>
+        <div class="card-footer">
+          <span class="source-tag">search/page.tsx</span>
+          <span class="open-action">Open Standalone →</span>
+        </div>
+      </a>
+
+      <!-- 03. Timeline -->
+      <a href="pages/timeline.html" class="page-card" target="_blank">
+        <div class="card-top">
+          <div class="card-header-row">
+            <span class="card-index">WORKSPACE // 03</span>
+            <span class="card-route">/timeline (frontend/src/app/timeline/page.tsx)</span>
+          </div>
+          <h4 class="card-name">Sparse Timeline</h4>
+          <p class="card-desc">Slender 0.7px hairline density barchart (no red lines), collinear continuous spine, major epoch anchors, and scroll-down lazy loading.</p>
+        </div>
+        <div class="card-footer">
+          <span class="source-tag">timeline/page.tsx</span>
+          <span class="open-action">Open Standalone →</span>
+        </div>
+      </a>
+
+      <!-- 04. File Library (CONSOLIDATED: Media Gallery + Ctrl+V Upload + Full Page Preview) -->
+      <a href="pages/library.html" class="page-card" target="_blank" style="border-color: var(--accent-seal); box-shadow: 0 2px 8px rgba(168,56,36,0.06);">
+        <div class="card-top">
+          <div class="card-header-row">
+            <span class="card-index" style="color: var(--accent-seal);">WORKSPACE // 04 · CONSOLIDATED</span>
+            <span class="card-route">/library (frontend/src/app/library/page.tsx)</span>
+          </div>
+          <h4 class="card-name">File Library</h4>
+          <p class="card-desc">Consolidated archival workspace: folder cards, specimen file lists, integrated <strong>Media Gallery</strong> tab, <strong>Ctrl + V</strong> direct clipboard image paste & dropzone, and in-situ <strong>Document Page Preview</strong> modal.</p>
+        </div>
+        <div class="card-footer">
+          <span class="source-tag">library/page.tsx (Merged Viewer & Media)</span>
+          <span class="open-action">Open Standalone →</span>
+        </div>
+      </a>
+
+      <!-- 05. Memory Vault -->
+      <a href="pages/memory.html" class="page-card" target="_blank">
+        <div class="card-top">
+          <div class="card-header-row">
+            <span class="card-index">WORKSPACE // 05</span>
+            <span class="card-route">/memory (frontend/src/app/memory/page.tsx)</span>
+          </div>
+          <h4 class="card-name">Dendro Memory Vault</h4>
+          <p class="card-desc">Living memory reader view with version supersede lineage chain (v1 → v2 → v3 active) and pressing room markdown editor.</p>
+        </div>
+        <div class="card-footer">
+          <span class="source-tag">memory/page.tsx</span>
+          <span class="open-action">Open Standalone →</span>
+        </div>
+      </a>
+
+      <!-- 06. Chat (CONSOLIDATED: Absorbed Quick Ask) -->
+      <a href="pages/chat.html" class="page-card" target="_blank" style="border-color: var(--accent-moss);">
+        <div class="card-top">
+          <div class="card-header-row">
+            <span class="card-index" style="color: var(--accent-moss);">WORKSPACE // 06 · CONSOLIDATED</span>
+            <span class="card-route">/chat (frontend/src/app/chat/page.tsx)</span>
+          </div>
+          <h4 class="card-name">Chat</h4>
+          <p class="card-desc">Left conversational stream + <strong>Draggable Resizer Divider</strong> + Right Tool Call Inspector (Eye icon removed, slim top space). Unified inquiry engine fully absorbing single-turn Quick Ask.</p>
+        </div>
+        <div class="card-footer">
+          <span class="source-tag">chat/page.tsx (Merged Quick Ask)</span>
+          <span class="open-action">Open Standalone →</span>
+        </div>
+      </a>
+
+      <!-- 07. Questions Shelf -->
+      <a href="pages/questions.html" class="page-card" target="_blank">
+        <div class="card-top">
+          <div class="card-header-row">
+            <span class="card-index">WORKSPACE // 07</span>
+            <span class="card-route">/questions (frontend/src/app/questions/page.tsx)</span>
+          </div>
+          <h4 class="card-name">Curated Questions Shelf</h4>
+          <p class="card-desc">Curated research query cards, execution status badges, verifiable citation tokens, and re-run in chat triggers.</p>
+        </div>
+        <div class="card-footer">
+          <span class="source-tag">questions/page.tsx</span>
+          <span class="open-action">Open Standalone →</span>
+        </div>
+      </a>
+
+      <!-- 08. Method -->
+      <a href="pages/method.html" class="page-card" target="_blank">
+        <div class="card-top">
+          <div class="card-header-row">
+            <span class="card-index">WORKSPACE // 08</span>
+            <span class="card-route">/method (frontend/src/app/method/page.tsx)</span>
+          </div>
+          <h4 class="card-name">Methodology Whitepaper</h4>
+          <p class="card-desc">Editorial monograph: "Two libraries. One tree.", 4 chamfered structural principle cards, and architectural geometry diagrams.</p>
+        </div>
+        <div class="card-footer">
+          <span class="source-tag">method/page.tsx</span>
+          <span class="open-action">Open Standalone →</span>
+        </div>
+      </a>
+
+      <!-- 09. Settings -->
+      <a href="pages/settings.html" class="page-card" target="_blank">
+        <div class="card-top">
+          <div class="card-header-row">
+            <span class="card-index">WORKSPACE // 09</span>
+            <span class="card-route">/settings (frontend/src/app/settings/page.tsx)</span>
+          </div>
+          <h4 class="card-name">System Settings & Key Vault</h4>
+          <p class="card-desc">Database API key management for Gemini, Claude, and embedding models, latency health checks, and system diagnostics.</p>
+        </div>
+        <div class="card-footer">
+          <span class="source-tag">settings/page.tsx</span>
+          <span class="open-action">Open Standalone →</span>
+        </div>
+      </a>
+
+    </div>
+
+    <!-- Architectural Alignment Matrix -->
+    <div class="audit-section">
+      <h3>Design Decisions & Codebase Refactoring Matrix</h3>
+      <table class="audit-table">
+        <thead>
+          <tr>
+            <th>Module / Feature</th>
+            <th>Original Codebase State</th>
+            <th>Prototype Architecture Alignment</th>
+            <th>Decision Rationale</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Media Gallery (/media)</strong></td>
+            <td>Separate top-level route in original app</td>
+            <td><span class="pill pill-green">Merged into File Library</span></td>
+            <td>Consolidated as a specialized view mode tab inside File Library with Ctrl+V direct clipboard paste & drag-drop zone.</td>
+          </tr>
+          <tr>
+            <td><strong>Document Viewer (/viewer)</strong></td>
+            <td>Detached full-page route</td>
+            <td><span class="pill pill-green">Merged into File Library</span></td>
+            <td>Integrated directly as an in-situ modal/drawer page preview with Chunk inspection tabs. Sidebar called strictly "File Library".</td>
+          </tr>
+          <tr>
+            <td><strong>Quick Ask (/ask)</strong></td>
+            <td>Separate single-turn RAG reader route</td>
+            <td><span class="pill pill-green">Merged into Chat</span></td>
+            <td>Eliminated redundant single-turn view; all knowledge inquiry and grounded citations unified into Chat (/chat).</td>
+          </tr>
+          <tr>
+            <td><strong>Chat Inspector</strong></td>
+            <td>Eye icon header & fixed layout</td>
+            <td><span class="pill pill-gray">Draggable Resizer & Slim Header</span></td>
+            <td>Removed eye icon, compressed masthead to 42px, and added interactive horizontal split drag resizer bar.</td>
+          </tr>
+          <tr>
+            <td><strong>Global AgentDock & Cmd+K</strong></td>
+            <td>Floating widget & modal dialog</td>
+            <td><span class="pill pill-green">Permanently Removed</span></td>
+            <td>Removed to avoid screen congestion and modal overlay conflicts.</td>
+          </tr>
+          <tr>
+            <td><strong>Navigation Rail</strong></td>
+            <td>Fixed vertical bar with sections</td>
+            <td><span class="pill pill-gray">Collapsible Flat Single-Layer (68/230px)</span></td>
+            <td>Strictly single layer (7 core workspaces, 01-07) with centered TreeMark logo (24, 24).</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Footer -->
+    <footer class="hub-footer">
+      <div>DendroMatrix Research Architecture · Alex Trinity Block Design Language</div>
+      <div>Versioned Deliverables · Template Snapshot · All Rights Reserved 2026</div>
+    </footer>
+
+  </div>
+
+</body>
+</html>
