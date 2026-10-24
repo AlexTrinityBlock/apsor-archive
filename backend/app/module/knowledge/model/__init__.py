@@ -15,6 +15,7 @@ from app.module.knowledge.model.chunk_model import (
     ChunkModel,
 )
 from app.module.knowledge.model.file_model import FileModel
+from app.module.knowledge.model.folder_model import FolderModel
 from app.module.knowledge.model.ingest_config_model import IngestConfigModel
 from app.module.knowledge.model.ingest_job_model import (
     INGEST_ACTIVE_STATUSES,
@@ -44,7 +45,6 @@ from app.module.knowledge.model.memory_model import (
 )
 from app.module.knowledge.model.ngram_model import ChunkNgramModel
 from app.module.knowledge.model.summary_model import MemorySummaryModel
-from app.module.knowledge.model.tree_model import NODE_KIND_FILE, NODE_KIND_FOLDER, TreeNodeModel
 
 __all__ = [
     "INGEST_ACTIVE_STATUSES",
@@ -67,8 +67,6 @@ __all__ = [
     "MEMORY_SOURCE_IMPORT",
     "MEMORY_SOURCE_MANUAL",
     "MEMORY_STATUSES",
-    "NODE_KIND_FILE",
-    "NODE_KIND_FOLDER",
     "PURPOSES",
     "PURPOSE_CHAT",
     "PURPOSE_EMBEDDING",
@@ -82,8 +80,8 @@ __all__ = [
     "ChunkNgramModel",
     "FileIngestJobModel",
     "FileModel",
+    "FolderModel",
     "IngestConfigModel",
     "MemoryModel",
     "MemorySummaryModel",
-    "TreeNodeModel",
 ]
