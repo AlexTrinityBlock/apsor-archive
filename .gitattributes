@@ -1,0 +1,4 @@
+# Generated client. Normalize text to LF so a Windows checkout and build do not
+# rewrite the bundle, and leave binary assets (cmaps, fonts, images) byte-exact.
+frontend/index.html text eol=lf
+frontend/dist/**    text=auto eol=lf
