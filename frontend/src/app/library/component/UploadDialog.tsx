@@ -44,6 +44,38 @@ function pathPrefix(path: string): string {
   return normalized === "" || normalized === "/" ? "/" : `${normalized}/`;
 }
 
+/**
+ * Grows a folder-shaped path with the picked file's name.
+ *
+ * The dialog starts with the current folder (for example `/檔案A/`), and the
+ * server reads the final path segment as the file name, so leaving it as a
+ * folder fails with a missing-extension error. A path that already names a
+ * supported file wins, so renaming on upload still works, while a name this
+ * handler filled in earlier is replaced when another file is picked.
+ */
+function pathWithFileName(
+  path: string,
+  fileName: string,
+  previousFileName: string | null,
+): string {
+  const trimmed = path.trim();
+  const folder = normalizeArchivePath(trimmed);
+  const segments = folder.split("/").filter(Boolean);
+  const lastSegment = segments[segments.length - 1] ?? "";
+
+  if (previousFileName !== null && lastSegment === previousFileName) {
+    segments[segments.length - 1] = fileName;
+    return `/${segments.join("/")}`;
+  }
+
+  const isFolderShaped =
+    trimmed === "" || trimmed.endsWith("/") || !isAcceptedFileName(lastSegment);
+  if (!isFolderShaped) {
+    return path;
+  }
+  return folder === "" || folder === "/" ? `/${fileName}` : `${folder}/${fileName}`;
+}
+
 function intakeSubmitLabel(tab: IntakeTab, phase: IngestRunPhase): string {
   if (phase === "enqueueing") {
     return tab === "upload" ? "Uploading…" : "Creating…";
@@ -427,6 +459,7 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     setLocalError(null);
+    const previousFileName = selectedFile?.name ?? null;
     const file = event.target.files?.[0] ?? null;
     if (!file) {
       setSelectedFile(null);
@@ -445,6 +478,7 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
       return;
     }
     setSelectedFile(file);
+    setUploadPath((current) => pathWithFileName(current, file.name, previousFileName));
   };
 
   const handleUpload = (event: FormEvent<HTMLFormElement>) => {
