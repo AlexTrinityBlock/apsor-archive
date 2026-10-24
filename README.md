@@ -424,15 +424,15 @@ browsing, and it is the fallback layout on narrow screens.
   holding Alt/Option while dropping copies it. Touch and keyboard users get
   separate **Move** and **Copy** actions instead of drag.
 - A **move** keeps the same file id, version, chunks, embeddings, and original
-  bytes. Only `raw_file_path`, the file name, and the tree node location change,
-  so existing search, timeline, citation, and viewer links remain valid.
+  bytes. Only `raw_file_path` and the file name change, so existing search,
+  timeline, citation, and viewer links remain valid.
 - A **copy** creates a new current file id at version 1, clones the stored
   original when one exists, rebuilds chunks and embeddings, and copies the AI
   summary, tags, document type, and extraction method. Both files remain
   current and searchable.
 - Moves and copies must keep the original extension. A target occupied by
-  another current node returns `409 tree_path_conflict`; an invalid path or a
-  changed extension returns `422 invalid_path`.
+  another folder or current file returns `409 tree_path_conflict`; an invalid
+  path or a changed extension returns `422 invalid_path`.
 
 | Method | Path | Body | Purpose |
 |---|---|---|---|
@@ -441,7 +441,7 @@ browsing, and it is the fallback layout on narrow screens.
 | `POST` | `/api/v1/files/{file_id}/copy` | `{path}` | Copy one current file to a new record; `201` |
 
 All three endpoints require the owner session and bump the archive cache version
-when they change the tree or file index.
+when they change the folder or file index.
 
 ### Agent conversations
 
@@ -1022,15 +1022,16 @@ unified chunk table stores only the source key.
 
 ```text
 file ─────────────┐
-tree_node ────────┤
+folder ───────────┤
 memory ───────────┼──> chunk ──> chunk_ngram
 memory_summary ───┘
 ```
 
 - `file`: one row per version. `is_current` and `deleted_at` are soft state;
-  ids are never reused.
-- `tree_node`: folders and file leaves in one tree; `superseded_by_id` links a
-  hidden branch to its replacement.
+  ids are never reused. File leaves are not duplicated in the folder table:
+  their placement is `raw_file_path`.
+- `folder`: explicit folder records (`parent_id`, `path`, `name`, `depth`).
+  Empty folders and folder identity survive independently of files.
 - `chunk`: `(source_kind, source_id, chunk_index)` with an optional JSONB vector.
 - `chunk_ngram`: the inverted index used by BM25.
 - `memory`: linear timeline with `supersedes_ids`, `superseded_by_id`, and
@@ -1101,7 +1102,7 @@ the existing agent and file-library tests. A separate file-library test uploads
 an image without a vision provider and verifies the filename caption, stored
 original, path listing, and search result.
 
-The latest migration is `8f4b2c6d9e01`, after `f2b3c4d5e6a7`. The migrations
+The latest migration is `c4d8e2f6a1b9`, after `8f4b2c6d9e01`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1122,8 +1123,12 @@ after `agent_config` on this branch are:
 - `f2b3c4d5e6a7` creates `agent_approval` with its status check,
   conversation/run/entry foreign keys, status indexes, and the partial unique
   pending `(run_id, tool_call_id)` index;
-- `8f4b2c6d9e01` (current head) drops the retired `media_ngram` and
-  `media_asset` tables. Its downgrade recreates the original media schema.
+- `8f4b2c6d9e01` drops the retired `media_ngram` and `media_asset` tables. Its
+  downgrade recreates the original media schema;
+- `c4d8e2f6a1b9` (current head) creates the explicit `folder` table, copies
+  current folder rows from `tree_node` with their ids, and drops `tree_node`.
+  File leaves are now derived from `file.raw_file_path`. The downgrade recreates
+  current folder rows and current file leaves.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so
