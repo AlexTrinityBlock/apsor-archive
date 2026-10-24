@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DendroMatrix — Visual Archive & Micrographs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       ALEX TRINITY BLOCK STYLE TOKENS (SSOT)
+       ═══════════════════════════════════════════════════════════════ */
+    :root {
+      --mono-ink: #1C1C1A;
+      --mono-paper: #F0EFEB;
+      --mono-card-bg: #FFFFFF;
+      --mono-subtle: #E8E7E2;
+      --mono-muted: #8F8E88;
+      --mono-faint: #C6C5BF;
+      --mono-grid: #DEDDD6;
+      
+      --accent-seal: #C84B31;
+      --accent-moss: #2E4B3E;
+      --accent-amber: #B45309;
+      --accent-blue: #2563EB;
+
+      --mono-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono-font-mono: 'JetBrains Mono', monospace;
+
+      --rail-width-expanded: 230px;
+      --rail-width-collapsed: 68px;
+      --transition-smooth: 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--mono-font);
+      background-color: var(--mono-paper);
+      color: var(--mono-ink);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COLLAPSIBLE NAVIGATION RAIL (68px / 230px)
+       ═══════════════════════════════════════════════════════════════ */
+    .nav-rail {
+      width: var(--rail-width-expanded);
+      height: 100vh;
+      background: var(--mono-paper);
+      border-right: 0.7px solid var(--mono-grid);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width var(--transition-smooth);
+      position: relative;
+      z-index: 50;
+      user-select: none;
+    }
+
+    .nav-rail.collapsed {
+      width: var(--rail-width-collapsed);
+    }
+
+    .rail-header {
+      height: 60px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 0.7px solid var(--mono-grid);
+      overflow: hidden;
+      transition: padding var(--transition-smooth);
+    }
+
+    .nav-rail.collapsed .rail-header {
+      padding: 0;
+      justify-content: center;
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--mono-ink);
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .nav-rail.collapsed .brand-cluster {
+      gap: 0;
+      justify-content: center;
+    }
+
+    .brand-seal {
+      width: 36px;
+      height: 36px;
+      background: var(--mono-ink);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--mono-paper);
+    }
+
+    .brand-meta {
+      display: flex;
+      flex-direction: column;
+      transition: opacity var(--transition-smooth);
+    }
+
+    .nav-rail.collapsed .brand-meta {
+      display: none !important;
+    }
+
+    .brand-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .brand-sub {
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--mono-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .rail-toggle-btn {
+      width: 24px;
+      height: 24px;
+      background: var(--mono-subtle);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--mono-ink);
+      transition: all var(--transition-smooth);
+      flex-shrink: 0;
+    }
+
+    .rail-toggle-btn:hover {
+      background: var(--mono-card-bg);
+    }
+
+    .nav-rail.collapsed .rail-toggle-btn {
+      display: none;
+    }
+
+    .rail-menu {
+      flex: 1;
+      padding: 16px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .nav-rail.collapsed .rail-menu {
+      padding: 16px 0;
+      align-items: center;
+    }
+
+    .rail-section-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+      padding: 8px 10px 4px;
+      white-space: nowrap;
+    }
+
+    .nav-rail.collapsed .rail-section-label {
+      display: none !important;
+    }
+
+    .rail-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 12px;
+      border-radius: 5px;
+      background: transparent;
+      border: 0.7px solid transparent;
+      color: var(--mono-ink);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      position: relative;
+    }
+
+    .rail-item:hover {
+      background: var(--mono-subtle);
+    }
+
+    .rail-item.active {
+      background: var(--mono-card-bg);
+      border-color: var(--mono-grid);
+      font-weight: 700;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+
+    .nav-rail.collapsed .rail-item {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      justify-content: center;
+      gap: 0;
+      margin: 0 auto;
+    }
+
+    .rail-item-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .rail-item-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-rail.collapsed .rail-item-text,
+    .nav-rail.collapsed .rail-item-badge {
+      display: none !important;
+    }
+
+    .rail-item-badge {
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--mono-subtle);
+      border: 0.7px solid var(--mono-grid);
+      padding: 1px 6px;
+      border-radius: 3px;
+      color: var(--mono-muted);
+    }
+
+    .nav-rail.collapsed .rail-item::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: calc(100% + 12px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 4px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s ease;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+      z-index: 999;
+    }
+
+    .nav-rail.collapsed .rail-item:hover::after {
+      opacity: 1;
+    }
+
+    .rail-footer {
+      padding: 12px 10px;
+      border-top: 0.7px solid var(--mono-grid);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .nav-rail.collapsed .rail-footer {
+      padding: 12px 0;
+      align-items: center;
+    }
+
+    .db-badge-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--mono-card-bg);
+      border: 0.7px solid var(--mono-grid);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-family: var(--mono-font-mono);
+      font-size: 10.5px;
+      color: var(--mono-ink);
+      white-space: nowrap;
+    }
+
+    .nav-rail.collapsed .db-badge-pill {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      justify-content: center;
+    }
+
+    .nav-rail.collapsed .db-badge-pill span:not(.pulse-dot) {
+      display: none !important;
+    }
+
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10B981;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+      flex-shrink: 0;
+    }
+
+    .rail-collapse-footer-btn {
+      width: 100%;
+      padding: 8px 10px;
+      background: transparent;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .rail-collapse-footer-btn:hover {
+      background: var(--mono-card-bg);
+    }
+
+    .nav-rail.collapsed .rail-collapse-footer-btn {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      margin: 0 auto;
+    }
+
+    .nav-rail.collapsed .rail-collapse-footer-btn span {
+      display: none !important;
+    }
+
+    .nav-rail.collapsed .rail-collapse-footer-btn svg {
+      transform: rotate(180deg);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       WORKSPACE STAGE & SCROLL CONTAINER
+       ═══════════════════════════════════════════════════════════════ */
+    .workspace-stage {
+      flex: 1;
+      height: 100vh;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .content-container {
+      max-width: 1240px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 40px 32px 80px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       EDITORIAL PAGE HEADER
+       ═══════════════════════════════════════════════════════════════ */
+    .page-header {
+      border-bottom: 0.7px solid var(--mono-grid);
+      padding-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .eyebrow {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      background: var(--accent-seal);
+      border-radius: 1px;
+      display: inline-block;
+    }
+
+    .page-title {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--mono-ink);
+      line-height: 1.15;
+    }
+
+    .page-desc {
+      font-size: 14.5px;
+      line-height: 1.6;
+      color: #4A4944;
+      max-width: 820px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 3px;
+      border: 0.7px solid var(--mono-grid);
+      background: var(--mono-card-bg);
+      color: var(--mono-ink);
+      white-space: nowrap;
+    }
+
+    .badge-moss {
+      background: #E8EFEA;
+      color: var(--accent-moss);
+      border-color: #BBD2C1;
+    }
+
+    .badge-ochre {
+      background: #FEF3C7;
+      color: var(--accent-amber);
+      border-color: #FDE68A;
+    }
+
+    .badge-vermilion {
+      background: #FEE2E2;
+      color: var(--accent-seal);
+      border-color: #FECACA;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MEDIA TOOLBAR (TEXT-TO-IMAGE & IMAGE-TO-IMAGE SEARCH)
+       ═══════════════════════════════════════════════════════════════ */
+    .media-toolbar-card {
+      background: var(--mono-card-bg);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      padding: 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.02);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .toolbar-inputs-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 960px) {
+      .toolbar-inputs-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Text search lane */
+    .search-lane {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .search-lane-label {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--mono-ink);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .search-input-wrap {
+      display: flex;
+      align-items: center;
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 4px 14px;
+      transition: all 0.15s ease;
+    }
+
+    .search-input-wrap:focus-within {
+      border-color: var(--mono-ink);
+      background: #FFF;
+      box-shadow: 0 0 0 1px var(--mono-ink);
+    }
+
+    .search-input {
+      flex: 1;
+      height: 42px;
+      border: none;
+      background: transparent;
+      font-family: var(--mono-font);
+      font-size: 14px;
+      color: var(--mono-ink);
+      outline: none;
+    }
+
+    /* Image-to-image similarity dropzone */
+    .dropzone-lane {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .dropzone-box {
+      border: 1.2px dashed #B0AFA9;
+      background: var(--mono-paper);
+      border-radius: 4px;
+      height: 52px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .dropzone-box:hover, .dropzone-box.active {
+      border-color: var(--mono-ink);
+      background: #EAE9E4;
+    }
+
+    .dropzone-content {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .dropzone-icon {
+      color: var(--mono-muted);
+      flex-shrink: 0;
+    }
+
+    .dropzone-text {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .dropzone-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+
+    .dropzone-hint {
+      font-size: 10px;
+      color: var(--mono-muted);
+    }
+
+    /* Active image query pill */
+    .image-query-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      padding: 3px 8px;
+      border-radius: 3px;
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .image-query-chip button {
+      background: transparent;
+      border: none;
+      color: var(--mono-paper);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+    }
+
+    /* Filter pills strip */
+    .toolbar-bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding-top: 8px;
+      border-top: 0.7px solid var(--mono-grid);
+    }
+
+    .filter-pills {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .filter-pill {
+      font-family: var(--mono-font);
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      padding: 5px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: #4A4944;
+      transition: all 0.15s ease;
+    }
+
+    .filter-pill:hover {
+      background: var(--mono-subtle);
+      color: var(--mono-ink);
+    }
+
+    .filter-pill.active {
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      border-color: var(--mono-ink);
+    }
+
+    .ingest-btn {
+      font-size: 12px;
+      font-weight: 700;
+      background: var(--accent-seal);
+      color: #FFF;
+      border: none;
+      padding: 7px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: opacity 0.15s ease;
+    }
+
+    .ingest-btn:hover {
+      opacity: 0.9;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       SPECIMEN GALLERY GRID
+       ═══════════════════════════════════════════════════════════════ */
+    .gallery-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 0.7px solid var(--mono-grid);
+      padding-bottom: 12px;
+    }
+
+    .gallery-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--mono-ink);
+    }
+
+    .specimen-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 24px;
+    }
+
+    /* Specimen Card Anatomy with Chamfer & Hairline */
+    .specimen-card {
+      background: var(--mono-card-bg);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .specimen-card:hover {
+      border-color: var(--mono-ink);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+      transform: translateY(-2px);
+    }
+
+    /* Figure Preview Box */
+    .specimen-figure {
+      position: relative;
+      height: 220px;
+      background: #141413;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .specimen-img-sim {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform 0.3s ease;
+    }
+
+    .specimen-card:hover .specimen-img-sim {
+      transform: scale(1.03);
+    }
+
+    /* 4 Corner Markers (Hairline tick marks) */
+    .card-corner {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      border-color: rgba(255,255,255,0.7);
+      pointer-events: none;
+    }
+
+    .card-corner-tl { top: 8px; left: 8px; border-top: 1.5px solid; border-left: 1.5px solid; }
+    .card-corner-tr { top: 8px; right: 8px; border-top: 1.5px solid; border-right: 1.5px solid; }
+    .card-corner-bl { bottom: 8px; left: 8px; border-bottom: 1.5px solid; border-left: 1.5px solid; }
+    .card-corner-br { bottom: 8px; right: 8px; border-bottom: 1.5px solid; border-right: 1.5px solid; }
+
+    /* Mag overlay tag */
+    .mag-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(28, 28, 26, 0.88);
+      backdrop-filter: blur(4px);
+      border: 0.7px solid rgba(255, 255, 255, 0.2);
+      color: #F0EFEB;
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+
+    .sim-score-badge {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(200, 75, 49, 0.92);
+      color: #FFF;
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 3px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    /* Card Details */
+    .specimen-info {
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: var(--mono-card-bg);
+      flex: 1;
+    }
+
+    .specimen-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .specimen-id {
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--mono-muted);
+      letter-spacing: 0.05em;
+    }
+
+    .specimen-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--mono-ink);
+      line-height: 1.25;
+      margin-top: 2px;
+    }
+
+    .specimen-caption {
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #55554F;
+    }
+
+    /* Metadata Specification Table */
+    .meta-spec-table {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 12px;
+      background: var(--mono-paper);
+      padding: 10px 12px;
+      border-radius: 4px;
+      border: 0.7px solid var(--mono-grid);
+    }
+
+    .meta-spec-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .spec-key {
+      font-size: 9.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--mono-muted);
+    }
+
+    .spec-val {
+      font-family: var(--mono-font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .specimen-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 0.7px solid var(--mono-grid);
+      padding-top: 10px;
+      font-size: 11px;
+      color: var(--mono-muted);
+    }
+
+    .action-inspect {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-seal);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       INTERACTIVE SPECIMEN DETAIL MODAL
+       ═══════════════════════════════════════════════════════════════ */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(28, 28, 26, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-dialog {
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 8px;
+      max-width: 1080px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 12px 36px rgba(0,0,0,0.25);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      background: #FFF;
+      border-bottom: 0.7px solid var(--mono-grid);
+    }
+
+    .modal-close-btn {
+      background: transparent;
+      border: 0.7px solid var(--mono-grid);
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--mono-ink);
+    }
+
+    .modal-body {
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 860px) {
+      .modal-body {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .modal-viewport {
+      background: #141413;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      height: 440px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .modal-telemetry-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .telemetry-block {
+      background: #FFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+  </style>
+
+<!-- EMBED_SINGLE_SIDEBAR_PATCH_START -->
+  <style>
+    /* Strict single sidebar enforcement: suppress redundant inner rail when embedded */
+    html.is-embedded .nav-rail,
+    body.is-embedded .nav-rail,
+    .is-embedded #main-nav-rail {
+      display: none !important;
+      width: 0 !important;
+      visibility: hidden !important;
+      overflow: hidden !important;
+    }
+    html.is-embedded,
+    body.is-embedded {
+      overflow: auto !important;
+    }
+    html.is-embedded .app-main,
+    html.is-embedded .viewer-app-main,
+    html.is-embedded .workspace-stage,
+    html.is-embedded .chat-studio-grid,
+    html.is-embedded .archive-canvas-scroll {
+      width: 100% !important;
+      max-width: 100% !important;
+      flex: 1 1 100% !important;
+    }
+  </style>
+  <script>
+    (function() {
+      if (window.self !== window.top || window.location.search.indexOf('embed=true') !== -1) {
+        document.documentElement.classList.add('is-embedded');
+        if (document.body) document.body.classList.add('is-embedded');
+        window.addEventListener('DOMContentLoaded', function() {
+          if (document.body) document.body.classList.add('is-embedded');
+          var r = document.getElementById('main-nav-rail');
+          if (r) r.style.setProperty('display', 'none', 'important');
+        });
+      }
+    })();
+  </script>
+<!-- EMBED_SINGLE_SIDEBAR_PATCH_END -->
+</head>
+<body>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       1. COLLAPSIBLE NAVIGATION RAIL (68px / 230px)
+       ═════════════════════════════════════════════════════════════ -->
+  <aside id="main-nav-rail" class="nav-rail">
+    <!-- Header -->
+    <div class="rail-header">
+      <a href="search.html" class="brand-cluster">
+        <div class="brand-seal" title="DendroMatrix Seal">
+          <svg viewBox="0 0 48 48" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="21" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.3" />
+            <circle cx="24" cy="24" r="15" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.5" stroke-dasharray="2 3" />
+            <circle cx="24" cy="24" r="9" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.8" />
+            <circle cx="24" cy="24" r="2.2" fill="var(--mono-paper)" />
+            <path d="M24 41V27m0-6V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            <path d="M24 3v3M24 42v3M3 24h3M42 24h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-opacity="0.5" />
+          </svg>
+        </div>
+        <div class="brand-meta">
+          <span class="brand-title">DendroMatrix</span>
+          <span class="brand-sub">Knowledge Archive</span>
+        </div>
+      </a>
+
+      <button class="rail-toggle-btn" onclick="toggleNavRail()" title="Toggle Navigation Rail">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+    </div>
+
+    <!-- Navigation Items -->
+    <div class="rail-menu">
+      <div class="rail-section-label">Retrieval & Inquiry</div>
+      
+      <a href="search.html" class="rail-item" data-tooltip="Hybrid Search (02)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <span class="rail-item-text">Hybrid Search</span>
+        <span class="rail-item-badge">02</span>
+      </a>
+
+      <a href="ask.html" class="rail-item" data-tooltip="Quick Ask RAG (10)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <span class="rail-item-text">Quick Ask</span>
+        <span class="rail-item-badge">10</span>
+      </a>
+
+      <a href="questions.html" class="rail-item" data-tooltip="Questions Shelf (09)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </span>
+        <span class="rail-item-text">Questions Shelf</span>
+        <span class="rail-item-badge">09</span>
+      </a>
+
+      <div class="rail-section-label" style="margin-top: 10px;">Archive & Specimens</div>
+
+      <a href="media.html" class="rail-item active" data-tooltip="Visual Archive (06)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+        </span>
+        <span class="rail-item-text">Visual Media</span>
+        <span class="rail-item-badge">06</span>
+      </a>
+
+      <a href="memory.html" class="rail-item" data-tooltip="Memory Vault (07)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        </span>
+        <span class="rail-item-text">Memory Vault</span>
+        <span class="rail-item-badge">07</span>
+      </a>
+
+      <div class="rail-section-label" style="margin-top: 10px;">System & Foundations</div>
+
+      <a href="../style-alex-trinity-drive.html" class="rail-item" data-tooltip="Reference Console">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </span>
+        <span class="rail-item-text">System Core</span>
+        <span class="rail-item-badge">Ref</span>
+      </a>
+    </div>
+
+    <!-- Rail Footer -->
+    <div class="rail-footer">
+      <div class="db-badge-pill" title="Media Indexing Engine">
+        <span class="pulse-dot"></span>
+        <span>MEDIA: CLIP-ViT OK</span>
+      </div>
+      <button class="rail-collapse-footer-btn" onclick="toggleNavRail()" title="Toggle Rail Width">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>Collapse Rail</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       2. WORKSPACE STAGE
+       ═════════════════════════════════════════════════════════════ -->
+  <main class="workspace-stage">
+    <div class="content-container">
+
+      <!-- Editorial Page Header -->
+      <header class="page-header">
+        <div class="header-top">
+          <p class="eyebrow">Visual Archive · Standalone Index</p>
+          <div class="badge badge-moss">High-Res Micrography · 1200X</div>
+        </div>
+        <h1 class="page-title">Wood cellular anatomy & micrographs.</h1>
+        <p class="page-desc">
+          Transverse tracheid lumens, annual ring boundary transitions, and microdensitometry specimen sheets. Visual assets exist in a dedicated visual embedding index and are never fragmented into text chunks.
+        </p>
+      </header>
+
+      <!-- Media Toolbar: Text-to-Image & Image-to-Image Search -->
+      <section class="media-toolbar-card" aria-label="Media search controls">
+        <div class="toolbar-inputs-grid">
+          <!-- Text to Image Search -->
+          <div class="search-lane">
+            <label class="search-lane-label" for="mediaTextSearch">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <span>Text-to-Image Search (Captions, OCR, Species)</span>
+            </label>
+            <div class="search-input-wrap">
+              <input 
+                type="text" 
+                id="mediaTextSearch" 
+                class="search-input" 
+                placeholder="Search 'tracheid lumen', 'resin canals', 'polarized light 1200X'..."
+                oninput="handleTextFilter(this.value)"
+              />
+            </div>
+          </div>
+
+          <!-- Image to Image Similarity Dropzone -->
+          <div class="dropzone-lane">
+            <span class="search-lane-label">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+              <span>Image-to-Image Similarity (Visual Embeddings)</span>
+            </span>
+            <div class="dropzone-box" id="dropzoneBox" onclick="simulateDropImage()">
+              <div class="dropzone-content">
+                <span class="dropzone-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </span>
+                <div class="dropzone-text" id="dropzoneText">
+                  <span class="dropzone-title">Drop reference micrograph here</span>
+                  <span class="dropzone-hint">Click to simulate querying by Pinus Aristata sample</span>
+                </div>
+              </div>
+              <span class="badge" id="dropStatus">CLIP ViT-L/14</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter Pills & Ingest Action -->
+        <div class="toolbar-bottom-bar">
+          <div class="filter-pills">
+            <button class="filter-pill active" onclick="setFilter('all', this)">All Specimens (6)</button>
+            <button class="filter-pill" onclick="setFilter('1200x', this)">1200X Micrographs (4)</button>
+            <button class="filter-pill" onclick="setFilter('polar', this)">Polarized Light (2)</button>
+            <button class="filter-pill" onclick="setFilter('resin', this)">Resin Ducts (1)</button>
+          </div>
+
+          <button class="ingest-btn" onclick="alert('Specimen Ingest Pipeline ready: Drag & drop 16-bit TIFF or DICOM imagery.')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>+ Ingest Specimen</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Specimen Gallery Grid -->
+      <section aria-label="Specimens list">
+        <header class="gallery-head">
+          <div>
+            <p class="eyebrow">Archival Plates</p>
+            <h2 class="gallery-title"><span id="galleryCount">6</span> High-Resolution Anatomical Specimens</h2>
+          </div>
+          <span class="badge badge-moss">Sensor: CMOS 4096×3072 · Calibrated</span>
+        </header>
+
+        <div class="specimen-grid" style="margin-top: 18px;" id="specimenGrid">
+
+          <!-- Card 1: Pinus Aristata Tracheids -->
+          <article class="specimen-card" data-tags="1200x polar" onclick="openSpecimenModal('SPEC-1974-TR08', 'Pinus aristata · Latewood Tracheid Boundary', '1200X Optical', '4096 × 3072', '12.4 mm', 'Polarized Light (Crossed Nicols)', 'Pinus aristata Engelm. (Bristlecone pine)', 'Transverse microtome slice (15µm thickness) displaying abrupt latewood to earlywood boundary with double cell-wall thickness measuring 4.8µm.', '0.941')">
+            <div class="specimen-figure">
+              <!-- SVG Visual Representation of Tracheid Cell Rings -->
+              <svg viewBox="0 0 400 240" class="specimen-img-sim" xmlns="http://www.w3.org/2000/svg">
+                <rect width="400" height="240" fill="#141816"/>
+                <!-- Cellular Grid Pattern -->
+                <defs>
+                  <pattern id="tracheids1" width="28" height="24" patternUnits="userSpaceOnUse">
+                    <rect x="2" y="2" width="24" height="20" rx="4" fill="#202A24" stroke="#3D5244" stroke-width="1.8"/>
+                    <circle cx="14" cy="12" r="5" fill="#141A16"/>
+                  </pattern>
+                  <pattern id="latewood1" width="18" height="24" patternUnits="userSpaceOnUse">
+                    <rect x="2" y="2" width="14" height="20" rx="2" fill="#1B221E" stroke="#5C7A65" stroke-width="3"/>
+                    <ellipse cx="9" cy="12" rx="2" ry="4" fill="#0E1210"/>
+                  </pattern>
+                </defs>
+                <rect x="0" y="0" width="260" height="240" fill="url(#tracheids1)"/>
+                <rect x="260" y="0" width="140" height="240" fill="url(#latewood1)"/>
+                <!-- Boundary Guide Hairline -->
+                <line x1="260" y1="0" x2="260" y2="240" stroke="#C84B31" stroke-width="1.2" stroke-dasharray="3 3"/>
+                <!-- Scale Bar in Microns -->
+                <rect x="20" y="210" width="60" height="3" fill="#F0EFEB"/>
+                <text x="20" y="202" fill="#F0EFEB" font-family="'JetBrains Mono'" font-size="9" font-weight="600">50 µm</text>
+              </svg>
+              <span class="card-corner card-corner-tl"></span>
+              <span class="card-corner card-corner-tr"></span>
+              <span class="card-corner card-corner-bl"></span>
+              <span class="card-corner card-corner-br"></span>
+              <span class="mag-badge">1200X OPTICAL</span>
+              <span class="sim-score-badge" id="badgeSim1">SIMILARITY: 0.941</span>
+            </div>
+            <div class="specimen-info">
+              <div class="specimen-header">
+                <div>
+                  <span class="specimen-id">SPEC-1974-TR08</span>
+                  <h3 class="specimen-title">Pinus aristata · Latewood Boundary</h3>
+                </div>
+                <span class="badge badge-moss">Verified</span>
+              </div>
+              <p class="specimen-caption">
+                Transverse 15µm section showing transition zone. Radial lumen diameter decreases from 32µm in earlywood to 6.2µm in terminal latewood.
+              </p>
+              <div class="meta-spec-table">
+                <div class="meta-spec-item">
+                  <span class="spec-key">Resolution</span>
+                  <span class="spec-val">4096 × 3072 px</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Focal Dist</span>
+                  <span class="spec-val">12.4 mm (Nikon Plan)</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Illumination</span>
+                  <span class="spec-val">Polarized (Nicols)</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Taxon</span>
+                  <span class="spec-val">Pinus aristata</span>
+                </div>
+              </div>
+              <div class="specimen-foot">
+                <span>Elevation: 3,420m · White Mtns</span>
+                <span class="action-inspect">Inspect Plate &rarr;</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card 2: Larix Gmelinii Frost Ring -->
+          <article class="specimen-card" data-tags="1200x" onclick="openSpecimenModal('SPEC-1982-FR02', 'Larix gmelinii · 1982 Severe Frost Ring Collapse', '1200X Optical', '4096 × 3072', '14.1 mm', 'Brightfield Differential Interference', 'Larix gmelinii (Dahurian larch)', 'Pathological anatomical anomaly: crushed cambial zone formed during severe unseasonal freezing event following El Chichón eruption.', '0.918')">
+            <div class="specimen-figure">
+              <svg viewBox="0 0 400 240" class="specimen-img-sim" xmlns="http://www.w3.org/2000/svg">
+                <rect width="400" height="240" fill="#181512"/>
+                <defs>
+                  <pattern id="frostRing" width="30" height="24" patternUnits="userSpaceOnUse">
+                    <rect x="2" y="2" width="26" height="20" rx="3" fill="#2A241E" stroke="#524436" stroke-width="1.5"/>
+                    <circle cx="15" cy="12" r="4.5" fill="#181410"/>
+                  </pattern>
+                </defs>
+                <rect x="0" y="0" width="400" height="240" fill="url(#frostRing)"/>
+                <!-- Crushed Cambium Deformation Band -->
+                <path d="M0 110 Q 120 135 240 105 T 400 120 L 400 148 Q 280 160 160 140 T 0 135 Z" fill="#4A3420" opacity="0.85" stroke="#C84B31" stroke-width="1"/>
+                <rect x="20" y="210" width="60" height="3" fill="#F0EFEB"/>
+                <text x="20" y="202" fill="#F0EFEB" font-family="'JetBrains Mono'" font-size="9" font-weight="600">50 µm</text>
+              </svg>
+              <span class="card-corner card-corner-tl"></span>
+              <span class="card-corner card-corner-tr"></span>
+              <span class="card-corner card-corner-bl"></span>
+              <span class="card-corner card-corner-br"></span>
+              <span class="mag-badge">1200X OPTICAL</span>
+              <span class="sim-score-badge">SIMILARITY: 0.918</span>
+            </div>
+            <div class="specimen-info">
+              <div class="specimen-header">
+                <div>
+                  <span class="specimen-id">SPEC-1982-FR02</span>
+                  <h3 class="specimen-title">Larix gmelinii · 1982 Frost Ring</h3>
+                </div>
+                <span class="badge badge-vermilion">Anomaly</span>
+              </div>
+              <p class="specimen-caption">
+                Severe cambial frost collapse showing crushed, under-lignified xylem cells resulting from sub-zero June temperatures in Eastern Siberia.
+              </p>
+              <div class="meta-spec-table">
+                <div class="meta-spec-item">
+                  <span class="spec-key">Resolution</span>
+                  <span class="spec-val">4096 × 3072 px</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Focal Dist</span>
+                  <span class="spec-val">14.1 mm (DIC Prism)</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Illumination</span>
+                  <span class="spec-val">Brightfield Nomarski</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Taxon</span>
+                  <span class="spec-val">Larix gmelinii</span>
+                </div>
+              </div>
+              <div class="specimen-foot">
+                <span>Yakutia Transect · Lat 64°N</span>
+                <span class="action-inspect">Inspect Plate &rarr;</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card 3: Cryptomeria Japonica Resin Duct -->
+          <article class="specimen-card" data-tags="resin 1200x" onclick="openSpecimenModal('SPEC-2004-RD11', 'Cryptomeria japonica · Axial Resin Canal', '800X Optical', '3840 × 2880', '16.0 mm', 'Fluorescence 365nm UV', 'Cryptomeria japonica D. Don', 'Axial traumatic resin duct lined with secretory epithelial cells, indicating mechanical disturbance or entomological attack.', '0.865')">
+            <div class="specimen-figure">
+              <svg viewBox="0 0 400 240" class="specimen-img-sim" xmlns="http://www.w3.org/2000/svg">
+                <rect width="400" height="240" fill="#0C1412"/>
+                <defs>
+                  <pattern id="cryptoCells" width="24" height="20" patternUnits="userSpaceOnUse">
+                    <rect x="2" y="2" width="20" height="16" rx="3" fill="#142822" stroke="#224238" stroke-width="1.2"/>
+                    <circle cx="12" cy="10" r="3.5" fill="#0C1412"/>
+                  </pattern>
+                </defs>
+                <rect x="0" y="0" width="400" height="240" fill="url(#cryptoCells)"/>
+                <!-- Large Central Resin Duct -->
+                <circle cx="200" cy="120" r="48" fill="#060A09" stroke="#48BB78" stroke-width="2.5"/>
+                <!-- Epithelial Cells Ring -->
+                <circle cx="200" cy="120" r="48" fill="none" stroke="#68D391" stroke-width="6" stroke-dasharray="8 6"/>
+                <rect x="20" y="210" width="60" height="3" fill="#F0EFEB"/>
+                <text x="20" y="202" fill="#F0EFEB" font-family="'JetBrains Mono'" font-size="9" font-weight="600">50 µm</text>
+              </svg>
+              <span class="card-corner card-corner-tl"></span>
+              <span class="card-corner card-corner-tr"></span>
+              <span class="card-corner card-corner-bl"></span>
+              <span class="card-corner card-corner-br"></span>
+              <span class="mag-badge">800X OPTICAL</span>
+              <span class="sim-score-badge">SIMILARITY: 0.865</span>
+            </div>
+            <div class="specimen-info">
+              <div class="specimen-header">
+                <div>
+                  <span class="specimen-id">SPEC-2004-RD11</span>
+                  <h3 class="specimen-title">Cryptomeria · Traumatic Resin Canal</h3>
+                </div>
+                <span class="badge badge-moss">Verified</span>
+              </div>
+              <p class="specimen-caption">
+                UV epifluorescence of traumatic resin canal. Lignified secondary wall structures fluoresce emerald under 365nm excitation.
+              </p>
+              <div class="meta-spec-table">
+                <div class="meta-spec-item">
+                  <span class="spec-key">Resolution</span>
+                  <span class="spec-val">3840 × 2880 px</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Focal Dist</span>
+                  <span class="spec-val">16.0 mm (Apo Fluor)</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Illumination</span>
+                  <span class="spec-val">UV-Fluorescence 365nm</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Taxon</span>
+                  <span class="spec-val">Cryptomeria japonica</span>
+                </div>
+              </div>
+              <div class="specimen-foot">
+                <span>Yakushima Forest · Stand 03</span>
+                <span class="action-inspect">Inspect Plate &rarr;</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card 4: Quercus Robur Vessel -->
+          <article class="specimen-card" data-tags="polar" onclick="openSpecimenModal('SPEC-1845-VR01', 'Quercus robur · Ring-Porous Earlywood Vessels', '600X Optical', '4096 × 3072', '18.5 mm', 'Polarized Light', 'Quercus robur L. (English oak)', 'Massive earlywood tracheary vessel elements exceeding 280µm lumen diameter with tyloses formations.', '0.822')">
+            <div class="specimen-figure">
+              <svg viewBox="0 0 400 240" class="specimen-img-sim" xmlns="http://www.w3.org/2000/svg">
+                <rect width="400" height="240" fill="#1A1816"/>
+                <defs>
+                  <pattern id="oakFiber" width="16" height="16" patternUnits="userSpaceOnUse">
+                    <rect x="1" y="1" width="14" height="14" rx="2" fill="#2E2822" stroke="#483F34" stroke-width="1"/>
+                  </pattern>
+                </defs>
+                <rect x="0" y="0" width="400" height="240" fill="url(#oakFiber)"/>
+                <!-- Huge Earlywood Vessels -->
+                <circle cx="120" cy="110" r="65" fill="#14110E" stroke="#B45309" stroke-width="3"/>
+                <circle cx="280" cy="130" r="55" fill="#14110E" stroke="#B45309" stroke-width="2.5"/>
+                <rect x="20" y="210" width="60" height="3" fill="#F0EFEB"/>
+                <text x="20" y="202" fill="#F0EFEB" font-family="'JetBrains Mono'" font-size="9" font-weight="600">100 µm</text>
+              </svg>
+              <span class="card-corner card-corner-tl"></span>
+              <span class="card-corner card-corner-tr"></span>
+              <span class="card-corner card-corner-bl"></span>
+              <span class="card-corner card-corner-br"></span>
+              <span class="mag-badge">600X OPTICAL</span>
+              <span class="sim-score-badge">SIMILARITY: 0.822</span>
+            </div>
+            <div class="specimen-info">
+              <div class="specimen-header">
+                <div>
+                  <span class="specimen-id">SPEC-1845-VR01</span>
+                  <h3 class="specimen-title">Quercus robur · Earlywood Vessels</h3>
+                </div>
+                <span class="badge badge-ochre">Porous</span>
+              </div>
+              <p class="specimen-caption">
+                Ring-porous transverse section. Giant earlywood vessel lumens demonstrate complete hydraulic conductive architecture prior to tylosis occlusion.
+              </p>
+              <div class="meta-spec-table">
+                <div class="meta-spec-item">
+                  <span class="spec-key">Resolution</span>
+                  <span class="spec-val">4096 × 3072 px</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Focal Dist</span>
+                  <span class="spec-val">18.5 mm (Plan Fluor)</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Illumination</span>
+                  <span class="spec-val">Cross-Polarized</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Taxon</span>
+                  <span class="spec-val">Quercus robur</span>
+                </div>
+              </div>
+              <div class="specimen-foot">
+                <span>Fontainebleau Plot · Core A</span>
+                <span class="action-inspect">Inspect Plate &rarr;</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card 5: Picea Abies Reaction Wood -->
+          <article class="specimen-card" data-tags="1200x" onclick="openSpecimenModal('SPEC-1960-RW04', 'Picea abies · Compression Reaction Wood', '1200X Optical', '4096 × 3072', '11.8 mm', 'Confocal Laser Scanning (488nm)', 'Picea abies (L.) Karst.', 'Round compression tracheids with intercellular spaces and distinct S2 helical cavity checks caused by gravitational mechanical strain.', '0.795')">
+            <div class="specimen-figure">
+              <svg viewBox="0 0 400 240" class="specimen-img-sim" xmlns="http://www.w3.org/2000/svg">
+                <rect width="400" height="240" fill="#101820"/>
+                <defs>
+                  <pattern id="reactionCells" width="26" height="26" patternUnits="userSpaceOnUse">
+                    <circle cx="13" cy="13" r="10" fill="#182A3A" stroke="#2B4C68" stroke-width="2.5"/>
+                    <circle cx="13" cy="13" r="4" fill="#0C141A"/>
+                  </pattern>
+                </defs>
+                <rect x="0" y="0" width="400" height="240" fill="url(#reactionCells)"/>
+                <rect x="20" y="210" width="60" height="3" fill="#F0EFEB"/>
+                <text x="20" y="202" fill="#F0EFEB" font-family="'JetBrains Mono'" font-size="9" font-weight="600">50 µm</text>
+              </svg>
+              <span class="card-corner card-corner-tl"></span>
+              <span class="card-corner card-corner-tr"></span>
+              <span class="card-corner card-corner-bl"></span>
+              <span class="card-corner card-corner-br"></span>
+              <span class="mag-badge">1200X CONFOCAL</span>
+              <span class="sim-score-badge">SIMILARITY: 0.795</span>
+            </div>
+            <div class="specimen-info">
+              <div class="specimen-header">
+                <div>
+                  <span class="specimen-id">SPEC-1960-RW04</span>
+                  <h3 class="specimen-title">Picea abies · Compression Wood</h3>
+                </div>
+                <span class="badge badge-moss">Reaction</span>
+              </div>
+              <p class="specimen-caption">
+                Confocal laser micrograph of severe reaction wood. Heavily lignified outer S2 layers showing rounded tracheid profiles and prominent intercellular triangular voids.
+              </p>
+              <div class="meta-spec-table">
+                <div class="meta-spec-item">
+                  <span class="spec-key">Resolution</span>
+                  <span class="spec-val">4096 × 3072 px</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Focal Dist</span>
+                  <span class="spec-val">11.8 mm (Oil Immersion)</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Illumination</span>
+                  <span class="spec-val">Confocal Argon 488nm</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Taxon</span>
+                  <span class="spec-val">Picea abies</span>
+                </div>
+              </div>
+              <div class="specimen-foot">
+                <span>Swiss Alps Slope · Core 14</span>
+                <span class="action-inspect">Inspect Plate &rarr;</span>
+              </div>
+            </div>
+          </article>
+
+          <!-- Card 6: Pinus Taeda Bordered Pits -->
+          <article class="specimen-card" data-tags="1200x" onclick="openSpecimenModal('SPEC-2015-BP09', 'Pinus taeda · Tracheid Bordered Pits Membrane', '1200X Optical', '4096 × 3072', '10.5 mm', 'Phase Contrast 100X Oil', 'Pinus taeda L. (Loblolly pine)', 'Radial longitudinal slice displaying aspirated torus-margo pit membranes between adjoining earlywood conducting cells.', '0.781')">
+            <div class="specimen-figure">
+              <svg viewBox="0 0 400 240" class="specimen-img-sim" xmlns="http://www.w3.org/2000/svg">
+                <rect width="400" height="240" fill="#171A1C"/>
+                <line x1="100" y1="0" x2="100" y2="240" stroke="#2D3748" stroke-width="8"/>
+                <line x1="200" y1="0" x2="200" y2="240" stroke="#2D3748" stroke-width="8"/>
+                <line x1="300" y1="0" x2="300" y2="240" stroke="#2D3748" stroke-width="8"/>
+                <!-- Pit Pairs -->
+                <circle cx="200" cy="70" r="18" fill="#1A202C" stroke="#A0AEC0" stroke-width="2"/>
+                <circle cx="200" cy="70" r="7" fill="#4A5568"/>
+                <circle cx="200" cy="160" r="18" fill="#1A202C" stroke="#A0AEC0" stroke-width="2"/>
+                <circle cx="200" cy="160" r="7" fill="#4A5568"/>
+                <rect x="20" y="210" width="60" height="3" fill="#F0EFEB"/>
+                <text x="20" y="202" fill="#F0EFEB" font-family="'JetBrains Mono'" font-size="9" font-weight="600">20 µm</text>
+              </svg>
+              <span class="card-corner card-corner-tl"></span>
+              <span class="card-corner card-corner-tr"></span>
+              <span class="card-corner card-corner-bl"></span>
+              <span class="card-corner card-corner-br"></span>
+              <span class="mag-badge">1200X PHASE</span>
+              <span class="sim-score-badge">SIMILARITY: 0.781</span>
+            </div>
+            <div class="specimen-info">
+              <div class="specimen-header">
+                <div>
+                  <span class="specimen-id">SPEC-2015-BP09</span>
+                  <h3 class="specimen-title">Pinus taeda · Bordered Pits</h3>
+                </div>
+                <span class="badge badge-moss">Membrane</span>
+              </div>
+              <p class="specimen-caption">
+                Radial longitudinal section showcasing inter-tracheid bordered pit pairs. Torus valve mechanism visible in partially aspirated state.
+              </p>
+              <div class="meta-spec-table">
+                <div class="meta-spec-item">
+                  <span class="spec-key">Resolution</span>
+                  <span class="spec-val">4096 × 3072 px</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Focal Dist</span>
+                  <span class="spec-val">10.5 mm (Phase Ring 3)</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Illumination</span>
+                  <span class="spec-val">Phase Contrast Halogen</span>
+                </div>
+                <div class="meta-spec-item">
+                  <span class="spec-key">Taxon</span>
+                  <span class="spec-val">Pinus taeda</span>
+                </div>
+              </div>
+              <div class="specimen-foot">
+                <span>Duke Forest · Plot 08</span>
+                <span class="action-inspect">Inspect Plate &rarr;</span>
+              </div>
+            </div>
+          </article>
+
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       3. INTERACTIVE SPECIMEN DETAIL MODAL
+       ═════════════════════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="specimenModal" onclick="closeModalOnOverlay(event)">
+    <div class="modal-dialog" role="dialog" aria-labelledby="modalTitle">
+      <div class="modal-head">
+        <div>
+          <span class="specimen-id" id="modalSpecId">SPEC-1974-TR08</span>
+          <h2 class="page-title" style="font-size: 20px;" id="modalTitle">Pinus aristata · Latewood Boundary</h2>
+        </div>
+        <button class="modal-close-btn" onclick="closeSpecimenModal()" title="Close inspector">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-viewport">
+          <svg viewBox="0 0 500 440" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+            <rect width="500" height="440" fill="#141816"/>
+            <!-- Zoomed 1200X Micrograph Detail -->
+            <defs>
+              <pattern id="zoomTracheid" width="48" height="42" patternUnits="userSpaceOnUse">
+                <rect x="4" y="4" width="40" height="34" rx="8" fill="#202A24" stroke="#486352" stroke-width="3"/>
+                <circle cx="24" cy="21" r="8" fill="#0E1210"/>
+              </pattern>
+            </defs>
+            <rect width="500" height="440" fill="url(#zoomTracheid)"/>
+            <!-- Telemetry Caliper Measurement Annotation -->
+            <line x1="120" y1="180" x2="260" y2="180" stroke="#C84B31" stroke-width="2"/>
+            <line x1="120" y1="172" x2="120" y2="188" stroke="#C84B31" stroke-width="2"/>
+            <line x1="260" y1="172" x2="260" y2="188" stroke="#C84B31" stroke-width="2"/>
+            <rect x="150" y="156" width="80" height="20" rx="3" fill="#1C1C1A" stroke="#C84B31" stroke-width="0.7"/>
+            <text x="160" y="170" fill="#F0EFEB" font-family="'JetBrains Mono'" font-size="11" font-weight="700">32.4 µm</text>
+            <!-- 1200X Optical Reticle HUD -->
+            <circle cx="250" cy="220" r="140" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="4 6"/>
+            <line x1="250" y1="60" x2="250" y2="380" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+            <line x1="90" y1="220" x2="410" y2="220" stroke="rgba(255,255,255,0.2)" stroke-width="0.8"/>
+          </svg>
+        </div>
+
+        <div class="modal-telemetry-panel">
+          <div class="telemetry-block">
+            <span class="eyebrow">Optical Telemetry & EXIF</span>
+            <div class="meta-spec-table" style="grid-template-columns: 1fr;">
+              <div class="meta-spec-item">
+                <span class="spec-key">Magnification & Optics</span>
+                <span class="spec-val" id="modalMag">1200X Optical (Apo Oil 100X/1.40 NA)</span>
+              </div>
+              <div class="meta-spec-item">
+                <span class="spec-key">Native Sensor Dimensions</span>
+                <span class="spec-val" id="modalRes">4096 × 3072 px (12-bit monochrome TIFF)</span>
+              </div>
+              <div class="meta-spec-item">
+                <span class="spec-key">Focal Working Distance</span>
+                <span class="spec-val" id="modalFocal">12.4 mm</span>
+              </div>
+              <div class="meta-spec-item">
+                <span class="spec-key">Illumination Mode</span>
+                <span class="spec-val" id="modalIllum">Polarized Light</span>
+              </div>
+              <div class="meta-spec-item">
+                <span class="spec-key">Taxon Classification</span>
+                <span class="spec-val" id="modalTaxon">Pinus aristata</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="telemetry-block">
+            <span class="eyebrow">Anatomical Observations</span>
+            <p id="modalDesc" style="font-size: 13px; line-height: 1.6; color: #383734;">
+              Transverse microtome slice displaying abrupt latewood to earlywood boundary with double cell-wall thickness measuring 4.8µm.
+            </p>
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+              <span class="badge badge-moss">Lumen: 32.4µm</span>
+              <span class="badge badge-ochre">Wall: 4.8µm</span>
+              <span class="badge">Density: 0.62 g/cm³</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Navigation Rail Collapsing
+    function toggleNavRail() {
+      const rail = document.getElementById('main-nav-rail');
+      rail.classList.toggle('collapsed');
+      localStorage.setItem('dendro_rail_collapsed', rail.classList.contains('collapsed'));
+    }
+
+    if (localStorage.getItem('dendro_rail_collapsed') === 'true') {
+      document.getElementById('main-nav-rail').classList.add('collapsed');
+    }
+
+    // Specimen Filtering
+    function setFilter(tag, btn) {
+      document.querySelectorAll('.filter-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const cards = document.querySelectorAll('.specimen-card');
+      let visible = 0;
+      cards.forEach(card => {
+        const cardTags = card.getAttribute('data-tags') || '';
+        if (tag === 'all' || cardTags.includes(tag)) {
+          card.style.display = 'flex';
+          visible++;
+        } else {
+          card.style.display = 'none';
+        }
+      });
+      document.getElementById('galleryCount').textContent = visible;
+    }
+
+    // Text search filtering
+    function handleTextFilter(query) {
+      const q = query.toLowerCase().trim();
+      const cards = document.querySelectorAll('.specimen-card');
+      let visible = 0;
+      cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        if (!q || text.includes(q)) {
+          card.style.display = 'flex';
+          visible++;
+        } else {
+          card.style.display = 'none';
+        }
+      });
+      document.getElementById('galleryCount').textContent = visible;
+    }
+
+    // Image Dropzone Simulation
+    let imageQueryActive = false;
+    function simulateDropImage() {
+      imageQueryActive = !imageQueryActive;
+      const box = document.getElementById('dropzoneBox');
+      const text = document.getElementById('dropzoneText');
+      const status = document.getElementById('dropStatus');
+
+      if (imageQueryActive) {
+        box.classList.add('active');
+        text.innerHTML = `
+          <div class="image-query-chip">
+            <span>Query: tracheid_wall_lumen_ratio_micrograph_800x.jpg</span>
+            <button onclick="event.stopPropagation(); simulateDropImage();" title="Remove">&times;</button>
+          </div>
+        `;
+        status.innerHTML = `<span class="pulse-dot"></span> 0.941 COSINE`;
+        document.getElementById('badgeSim1').style.background = '#C84B31';
+      } else {
+        box.classList.remove('active');
+        text.innerHTML = `
+          <span class="dropzone-title">Drop reference micrograph here</span>
+          <span class="dropzone-hint">Click to simulate querying by Pinus Aristata sample</span>
+        `;
+        status.textContent = 'CLIP ViT-L/14';
+      }
+    }
+
+    // Modal Details Inspector
+    function openSpecimenModal(id, title, mag, res, focal, illum, taxon, desc, sim) {
+      document.getElementById('modalSpecId').textContent = id;
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('modalMag').textContent = mag;
+      document.getElementById('modalRes').textContent = res;
+      document.getElementById('modalFocal').textContent = focal;
+      document.getElementById('modalIllum').textContent = illum;
+      document.getElementById('modalTaxon').textContent = taxon;
+      document.getElementById('modalDesc').textContent = desc;
+
+      document.getElementById('specimenModal').classList.add('open');
+    }
+
+    function closeSpecimenModal() {
+      document.getElementById('specimenModal').classList.remove('open');
+    }
+
+    function closeModalOnOverlay(e) {
+      if (e.target.id === 'specimenModal') {
+        closeSpecimenModal();
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeSpecimenModal();
+      }
+    });
+  </script>
+</body>
+</html>

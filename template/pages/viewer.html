@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DendroMatrix — Document Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --mono-ink: #1C1C1A;
+      --mono-paper: #F0EFEB;
+      --mono-card-bg: #FAF9F6;
+      --mono-subtle: #E8E7E2;
+      --mono-muted: #8F8E88;
+      --mono-faint: #C6C5BF;
+      --mono-grid: #DEDDD6;
+      --accent-seal: #C84B31;
+      --accent-moss: #2E4B3E;
+      --accent-ochre: #B45309;
+      --mono-dark-bg: #1C1C1A;
+      --mono-dark-ink: #F0EFEB;
+      --mono-dark-grid: #2E2D29;
+      --mono-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono-font-mono: 'JetBrains Mono', monospace;
+      --rail-width-expanded: 230px;
+      --rail-width-collapsed: 68px;
+      --transition-smooth: 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--mono-font);
+      background-color: var(--mono-paper);
+      color: var(--mono-ink);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COLLAPSIBLE NAVIGATION RAIL
+       ═══════════════════════════════════════════════════════════════ */
+    .nav-rail {
+      width: var(--rail-width-expanded);
+      height: 100vh;
+      background: var(--mono-paper);
+      border-right: 0.7px solid var(--mono-grid);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width var(--transition-smooth);
+      position: relative;
+      z-index: 50;
+      user-select: none;
+    }
+
+    .nav-rail.collapsed {
+      width: var(--rail-width-collapsed);
+    }
+
+    .rail-header {
+      height: 60px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 0.7px solid var(--mono-grid);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .nav-rail.collapsed .rail-header {
+      padding: 0;
+      justify-content: center;
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--mono-ink);
+      overflow: hidden;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .nav-rail.collapsed .brand-cluster {
+      gap: 0;
+      justify-content: center;
+    }
+
+    .brand-seal {
+      width: 36px;
+      height: 36px;
+      background: var(--mono-ink);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--mono-paper);
+    }
+
+    .brand-meta {
+      display: flex;
+      flex-direction: column;
+      transition: opacity var(--transition-smooth);
+    }
+
+    .nav-rail.collapsed .brand-meta {
+      display: none !important;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .brand-sub {
+      font-size: 9.5px;
+      font-weight: 500;
+      color: var(--mono-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .rail-toggle-btn {
+      width: 24px;
+      height: 24px;
+      background: var(--mono-subtle);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--mono-ink);
+      transition: all var(--transition-smooth);
+      flex-shrink: 0;
+    }
+
+    .rail-toggle-btn:hover {
+      background: #FFFFFF;
+      border-color: var(--mono-ink);
+    }
+
+    .nav-rail.collapsed .rail-toggle-btn {
+      display: none;
+    }
+
+    .rail-menu {
+      flex: 1;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .nav-rail.collapsed .rail-menu {
+      padding: 14px 0;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rail-section-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+      padding: 8px 10px 4px;
+      white-space: nowrap;
+    }
+
+    .nav-rail.collapsed .rail-section-label {
+      display: none !important;
+    }
+
+    .rail-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 12px;
+      border-radius: 5px;
+      background: transparent;
+      border: 0.7px solid transparent;
+      color: #4A4944;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      position: relative;
+    }
+
+    .rail-item:hover {
+      background: var(--mono-subtle);
+      color: var(--mono-ink);
+    }
+
+    .rail-item.active {
+      background: #FFFFFF;
+      border-color: var(--mono-grid);
+      color: var(--mono-ink);
+      font-weight: 700;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+
+    .nav-rail.collapsed .rail-item {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      justify-content: center;
+      gap: 0;
+      margin: 0 auto;
+    }
+
+    .rail-item-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .rail-item-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-rail.collapsed .rail-item-text,
+    .nav-rail.collapsed .rail-item-badge {
+      display: none !important;
+    }
+
+    .rail-item-badge {
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--mono-subtle);
+      border: 0.7px solid var(--mono-grid);
+      padding: 1px 6px;
+      border-radius: 2px;
+      color: var(--mono-muted);
+    }
+
+    .nav-rail.collapsed .rail-item::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: calc(100% + 12px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .nav-rail.collapsed .rail-item:hover::after {
+      opacity: 1;
+    }
+
+    .rail-footer {
+      padding: 12px 14px;
+      border-top: 0.7px solid var(--mono-grid);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .nav-rail.collapsed .rail-footer {
+      padding: 12px 0;
+      justify-content: center;
+    }
+
+    .rail-footer-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      cursor: pointer;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .rail-footer-btn:hover {
+      background: #FFFFFF;
+    }
+
+    .nav-rail.collapsed .rail-footer-btn {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+    }
+
+    .nav-rail.collapsed .rail-footer-btn span {
+      display: none;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       DOCUMENT VIEWER CANVAS & FULL-WIDTH CONTROLS
+       ═══════════════════════════════════════════════════════════════ */
+    .viewer-app-main {
+      flex: 1;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: #E5E4DF;
+    }
+
+    /* Viewer Top Chrome */
+    .viewer-chrome-top {
+      padding: 10px 24px;
+      background: #FFFFFF;
+      border-bottom: 0.7px solid var(--mono-grid);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      gap: 16px;
+    }
+
+    .viewer-title-cluster {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .back-nav-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      text-decoration: none;
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .back-nav-link:hover {
+      background: #FFFFFF;
+      border-color: var(--mono-ink);
+    }
+
+    .doc-headline-wrap {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .doc-main-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--mono-ink);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .doc-sub-path {
+      font-family: var(--mono-font-mono);
+      font-size: 10.5px;
+      color: var(--mono-muted);
+    }
+
+    /* Viewer Center Toggles (Page Preview, Chunk Inspection, Metadata) */
+    .viewer-mode-toggles {
+      display: flex;
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 5px;
+      padding: 3px;
+      gap: 3px;
+    }
+
+    .viewer-tab-btn {
+      border: none;
+      background: transparent;
+      padding: 6px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--mono-muted);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .viewer-tab-btn:hover {
+      color: var(--mono-ink);
+    }
+
+    .viewer-tab-btn.active {
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+    }
+
+    .viewer-actions-cluster {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-viewer-tool {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-viewer-tool:hover {
+      border-color: var(--mono-ink);
+    }
+
+    /* Secondary Telemetry Strip */
+    .viewer-telemetry-bar {
+      height: 36px;
+      padding: 0 24px;
+      background: var(--mono-paper);
+      border-bottom: 0.7px solid var(--mono-grid);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-muted);
+      flex-shrink: 0;
+    }
+
+    .telemetry-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .telemetry-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .telemetry-tag.active {
+      color: var(--accent-moss);
+      font-weight: 600;
+    }
+
+    .telemetry-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .page-nav-controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .page-ctrl-btn {
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 3px;
+      cursor: pointer;
+      color: var(--mono-ink);
+    }
+
+    .page-ctrl-btn:hover {
+      border-color: var(--mono-ink);
+    }
+
+    /* Scrollable Canvas Viewport */
+    .viewer-viewport-stage {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px 24px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    /* Tab 1: Canonical Page Preview Sheet */
+    .viewer-canonical-sheet {
+      width: 760px;
+      min-height: 1040px;
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.09);
+      padding: 56px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      font-size: 13.5px;
+      line-height: 1.75;
+      color: var(--mono-ink);
+      position: relative;
+    }
+
+    .sheet-seal-badge {
+      position: absolute;
+      top: 48px;
+      right: 60px;
+      width: 52px;
+      height: 52px;
+      border: 1.5px solid var(--accent-seal);
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-seal);
+      font-family: var(--mono-font-mono);
+      font-size: 8px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transform: rotate(-10deg);
+      user-select: none;
+    }
+
+    .sheet-head-block {
+      border-bottom: 2px solid var(--mono-grid);
+      padding-bottom: 18px;
+    }
+
+    .sheet-report-number {
+      font-family: var(--mono-font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+      letter-spacing: 0.09em;
+    }
+
+    .sheet-doc-title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-top: 6px;
+      line-height: 1.3;
+    }
+
+    .sheet-authors {
+      font-size: 12.5px;
+      color: var(--mono-muted);
+      margin-top: 6px;
+    }
+
+    .sheet-section-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      margin-top: 8px;
+      color: var(--mono-ink);
+    }
+
+    .sheet-table-box {
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 16px 18px;
+      font-family: var(--mono-font-mono);
+      font-size: 11.5px;
+      line-height: 1.7;
+    }
+
+    .sheet-table-header {
+      font-weight: 700;
+      border-bottom: 0.7px solid var(--mono-grid);
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .sheet-table-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 0;
+    }
+
+    .sheet-table-row.highlight {
+      background: #FFFFFF;
+      font-weight: 700;
+      color: var(--accent-seal);
+      padding: 3px 6px;
+      border-radius: 2px;
+      border-left: 2px solid var(--accent-seal);
+    }
+
+    /* SVG Density Graph in Sheet */
+    .graph-card-slot {
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 16px;
+      margin-top: 6px;
+    }
+
+    .graph-title {
+      font-family: var(--mono-font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Tab 2: Chunk Inspection Container */
+    .chunks-container {
+      width: 860px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .chunk-card {
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    }
+
+    .chunk-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 0.7px solid var(--mono-grid);
+      padding-bottom: 10px;
+    }
+
+    .chunk-id-tag {
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--mono-ink);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chunk-metrics {
+      font-family: var(--mono-font-mono);
+      font-size: 10.5px;
+      color: var(--mono-muted);
+      display: flex;
+      gap: 10px;
+    }
+
+    .chunk-body-text {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--mono-ink);
+    }
+
+    .chunk-body-text em {
+      background: #E8E7E2;
+      font-style: normal;
+      font-weight: 600;
+      padding: 1px 4px;
+      border-radius: 2px;
+    }
+
+    /* Tab 3: Metadata Container */
+    .metadata-container {
+      width: 860px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .metadata-block {
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .meta-heading {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--mono-ink);
+      border-bottom: 0.7px solid var(--mono-grid);
+      padding-bottom: 10px;
+    }
+
+    .meta-key-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      font-family: var(--mono-font-mono);
+      font-size: 11.5px;
+    }
+
+    .meta-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .meta-cell-key {
+      font-size: 10px;
+      color: var(--mono-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .meta-cell-val {
+      font-weight: 600;
+      color: var(--mono-ink);
+      word-break: break-all;
+    }
+  </style>
+
+<!-- EMBED_SINGLE_SIDEBAR_PATCH_START -->
+  <style>
+    /* Strict single sidebar enforcement: suppress redundant inner rail when embedded */
+    html.is-embedded .nav-rail,
+    body.is-embedded .nav-rail,
+    .is-embedded #main-nav-rail {
+      display: none !important;
+      width: 0 !important;
+      visibility: hidden !important;
+      overflow: hidden !important;
+    }
+    html.is-embedded,
+    body.is-embedded {
+      overflow: auto !important;
+    }
+    html.is-embedded .app-main,
+    html.is-embedded .viewer-app-main,
+    html.is-embedded .workspace-stage,
+    html.is-embedded .chat-studio-grid,
+    html.is-embedded .archive-canvas-scroll {
+      width: 100% !important;
+      max-width: 100% !important;
+      flex: 1 1 100% !important;
+    }
+  </style>
+  <script>
+    (function() {
+      if (window.self !== window.top || window.location.search.indexOf('embed=true') !== -1) {
+        document.documentElement.classList.add('is-embedded');
+        if (document.body) document.body.classList.add('is-embedded');
+        window.addEventListener('DOMContentLoaded', function() {
+          if (document.body) document.body.classList.add('is-embedded');
+          var r = document.getElementById('main-nav-rail');
+          if (r) r.style.setProperty('display', 'none', 'important');
+        });
+      }
+    })();
+  </script>
+<!-- EMBED_SINGLE_SIDEBAR_PATCH_END -->
+</head>
+<body>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       COLLAPSIBLE NAVIGATION RAIL (68px / 230px)
+       ═════════════════════════════════════════════════════════════ -->
+  <aside id="main-nav-rail" class="nav-rail">
+    <!-- Header with TreeMark centered -->
+    <div class="rail-header">
+      <a href="overview.html" class="brand-cluster" title="DendroMatrix">
+        <div class="brand-seal" title="TreeMark Logo">
+          <svg viewBox="0 0 48 48" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="21" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.3" />
+            <circle cx="24" cy="24" r="15" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.5" stroke-dasharray="2 3" />
+            <circle cx="24" cy="24" r="9" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.8" />
+            <circle cx="24" cy="24" r="2.2" fill="var(--mono-paper)" />
+            <path d="M24 41V27m0-6V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            <path d="M24 3v3M24 42v3M3 24h3M42 24h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-opacity="0.5" />
+          </svg>
+        </div>
+        <div class="brand-meta">
+          <span class="brand-title">DendroMatrix</span>
+          <span class="brand-sub">Archive Studio</span>
+        </div>
+      </a>
+
+      <button class="rail-toggle-btn" onclick="toggleNavRail()" title="Toggle Navigation Rail">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+    </div>
+
+    <!-- Nav Items Menu -->
+    <div class="rail-menu">
+      <div class="rail-section-label">Overview</div>
+      <a href="overview.html" class="rail-item" data-tooltip="Overview (01)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        </span>
+        <span class="rail-item-text">Overview</span>
+        <span class="rail-item-badge">01</span>
+      </a>
+
+      <div class="rail-section-label" style="margin-top: 10px;">Archive Workspaces</div>
+      <a href="library.html" class="rail-item" data-tooltip="File library (04)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h3.8V20H4z"/><path d="M8.8 4.5H13V20H8.8z"/><path d="m15 5.8 3.7-.9 3 14.2-3.7.9z"/></svg>
+        </span>
+        <span class="rail-item-text">File library</span>
+        <span class="rail-item-badge">04</span>
+      </a>
+
+      <a href="chat.html" class="rail-item" data-tooltip="Chat (08)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h10v11H8.2L4 19z"/><path d="M8 8.5h4M8 11.5h2.6"/><path d="M16.5 7.5H20v8.5h-1.8L17 18.5V16"/></svg>
+        </span>
+        <span class="rail-item-text">Chat</span>
+        <span class="rail-item-badge">08</span>
+      </a>
+
+      <a href="viewer.html" class="rail-item active" data-tooltip="Document Viewer (13)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        </span>
+        <span class="rail-item-text">Document Viewer</span>
+        <span class="rail-item-badge">13</span>
+      </a>
+    </div>
+
+    <!-- Rail Footer Toggle -->
+    <div class="rail-footer">
+      <button class="rail-footer-btn" onclick="toggleNavRail()" title="Expand or collapse sidebar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 19 4 12 11 5"/><polyline points="18 19 11 12 18 5"/></svg>
+        <span>Collapse sidebar</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       MAIN APPLICATION AREA: DOCUMENT VIEWER
+       ═════════════════════════════════════════════════════════════ -->
+  <main class="viewer-app-main">
+    
+    <!-- Top Chrome Bar -->
+    <header class="viewer-chrome-top">
+      <div class="viewer-title-cluster">
+        <a href="library.html" class="back-nav-link" title="Return to File library">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          <span>File library</span>
+        </a>
+        <div class="doc-headline-wrap">
+          <h1 class="doc-main-title">1974_yushan_tsuga_radial_increment_survey.pdf</h1>
+          <span class="doc-sub-path">/surveys/1974_yushan_tsuga_radial_increment_survey.pdf · Leaf #1042</span>
+        </div>
+      </div>
+
+      <!-- Mode Toggles: Page Preview (Default), Chunk Inspection, Metadata -->
+      <nav class="viewer-mode-toggles" aria-label="Viewer modes">
+        <button class="viewer-tab-btn active" id="btn-tab-preview" onclick="setViewerTab('preview')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span>Page Preview</span>
+        </button>
+        <button class="viewer-tab-btn" id="btn-tab-chunks" onclick="setViewerTab('chunks')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="8" height="8" x="3" y="3" rx="1"/><rect width="8" height="8" x="13" y="3" rx="1"/><rect width="8" height="8" x="3" y="13" rx="1"/><rect width="8" height="8" x="13" y="13" rx="1"/></svg>
+          <span>Chunk Inspection</span>
+        </button>
+        <button class="viewer-tab-btn" id="btn-tab-metadata" onclick="setViewerTab('metadata')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Metadata</span>
+        </button>
+      </nav>
+
+      <!-- Action buttons -->
+      <div class="viewer-actions-cluster">
+        <button class="btn-viewer-tool" onclick="alert('Downloading original untouched PDF binary...')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Download</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Secondary Telemetry / Navigation Strip -->
+    <div class="viewer-telemetry-bar">
+      <div class="telemetry-left">
+        <span class="telemetry-tag active">● Current Edition (v2.1)</span>
+        <span>14.2 MB</span>
+        <span>18 Chunks</span>
+        <span>text-embedding-004</span>
+      </div>
+      <div class="telemetry-right">
+        <div class="page-nav-controls">
+          <button class="page-ctrl-btn" onclick="prevPage()" title="Previous Page">‹</button>
+          <span style="padding: 0 6px; font-weight: 600; color: var(--mono-ink);" id="page-indicator">Page 14 of 18</span>
+          <button class="page-ctrl-btn" onclick="nextPage()" title="Next Page">›</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Viewport Stage -->
+    <div class="viewer-viewport-stage">
+      
+      <!-- TAB 1: CANONICAL PAGE PREVIEW (DEFAULT) -->
+      <article class="viewer-canonical-sheet" id="view-preview">
+        <!-- Archival Seal Stamp -->
+        <div class="sheet-seal-badge">
+          <span>TFRI</span>
+          <span>DENDRO</span>
+          <span>1974</span>
+        </div>
+
+        <div class="sheet-head-block">
+          <span class="sheet-report-number">Taiwan Forestry Research Bulletin · Report Series No. 58</span>
+          <h2 class="sheet-doc-title">Yushan Tsuga formosana Subalpine Radial Increment Survey</h2>
+          <p class="sheet-authors">Dr. H. C. Lin & K. T. Wang · Forest Ecology & Tree-Ring Laboratory</p>
+        </div>
+
+        <p>
+          <strong>Section 3: Microdensitometric Radial Profile & Latewood Transition:</strong><br>
+          Using dual-energy X-ray microdensitometry, increment core sample <strong>#14</strong> collected from the northern ridge of Yushan (elevation 2,850 m) was analyzed under 0.05 mm radial scan increments.
+        </p>
+
+        <!-- Precision Data Matrix Table -->
+        <div class="sheet-table-box">
+          <div class="sheet-table-header">
+            <span>GROWTH YEAR</span>
+            <span>EARLYWOOD DENSITY</span>
+            <span>LATEWOOD DENSITY</span>
+            <span>TRANSITION RATIO</span>
+          </div>
+          <div class="sheet-table-row">
+            <span>1974</span>
+            <span>0.312 g/cm³</span>
+            <span>0.738 g/cm³</span>
+            <span>0.422</span>
+          </div>
+          <div class="sheet-table-row">
+            <span>1975</span>
+            <span>0.305 g/cm³</span>
+            <span>0.742 g/cm³</span>
+            <span>0.411</span>
+          </div>
+          <div class="sheet-table-row highlight">
+            <span>1976 (ANOMALY)</span>
+            <span>0.334 g/cm³</span>
+            <span>0.781 g/cm³</span>
+            <span>0.423 [FROST RING]</span>
+          </div>
+          <div class="sheet-table-row">
+            <span>1977</span>
+            <span>0.298 g/cm³</span>
+            <span>0.710 g/cm³</span>
+            <span>0.419</span>
+          </div>
+          <div class="sheet-table-row">
+            <span>1978</span>
+            <span>0.315 g/cm³</span>
+            <span>0.745 g/cm³</span>
+            <span>0.423</span>
+          </div>
+        </div>
+
+        <!-- Density Hairline Graph -->
+        <div class="graph-card-slot">
+          <div class="graph-title">
+            <span>FIGURE 3-B: RADIAL DENSITY CURVE (1970 - 1980)</span>
+            <span>RESOLUTION: 0.05 MM</span>
+          </div>
+          <svg viewBox="0 0 640 140" style="width: 100%; height: 120px; overflow: visible;">
+            <!-- Grid Hairlines (0.7px) -->
+            <line x1="40" y1="20" x2="620" y2="20" stroke="#DEDDD6" stroke-width="0.7" stroke-dasharray="2 3"/>
+            <line x1="40" y1="60" x2="620" y2="60" stroke="#DEDDD6" stroke-width="0.7" stroke-dasharray="2 3"/>
+            <line x1="40" y1="100" x2="620" y2="100" stroke="#DEDDD6" stroke-width="0.7"/>
+            
+            <!-- Axis Labels -->
+            <text x="32" y="24" font-family="'JetBrains Mono', monospace" font-size="9" fill="#8F8E88" text-anchor="end">0.80</text>
+            <text x="32" y="64" font-family="'JetBrains Mono', monospace" font-size="9" fill="#8F8E88" text-anchor="end">0.50</text>
+            <text x="32" y="104" font-family="'JetBrains Mono', monospace" font-size="9" fill="#8F8E88" text-anchor="end">0.20</text>
+
+            <!-- Line Data Path -->
+            <path d="M 60 72 L 120 70 L 180 75 L 240 68 L 300 70 L 360 28 L 420 74 L 480 71 L 540 69 L 600 72" 
+                  fill="none" stroke="#1C1C1A" stroke-width="1.8" stroke-linecap="round"/>
+
+            <!-- Anomaly Marker at 1976 (x=360, y=28) -->
+            <circle cx="360" cy="28" r="4" fill="#C84B31"/>
+            <circle cx="360" cy="28" r="8" fill="none" stroke="#C84B31" stroke-width="1.2" stroke-dasharray="2 2"/>
+            <text x="360" y="16" font-family="'JetBrains Mono', monospace" font-size="9.5" font-weight="700" fill="#C84B31" text-anchor="middle">1976 FROST DROP</text>
+
+            <!-- Year labels on bottom -->
+            <text x="60" y="118" font-family="'JetBrains Mono', monospace" font-size="9" fill="#8F8E88" text-anchor="middle">1971</text>
+            <text x="180" y="118" font-family="'JetBrains Mono', monospace" font-size="9" fill="#8F8E88" text-anchor="middle">1973</text>
+            <text x="300" y="118" font-family="'JetBrains Mono', monospace" font-size="9" fill="#8F8E88" text-anchor="middle">1975</text>
+            <text x="360" y="118" font-family="'JetBrains Mono', monospace" font-size="9.5" font-weight="700" fill="#1C1C1A" text-anchor="middle">1976</text>
+            <text x="480" y="118" font-family="'JetBrains Mono', monospace" font-size="9" fill="#8F8E88" text-anchor="middle">1978</text>
+            <text x="600" y="118" font-family="'JetBrains Mono', monospace" font-size="9" fill="#8F8E88" text-anchor="middle">1980</text>
+          </svg>
+        </div>
+
+        <p>
+          The micro-photometric profile indicates pronounced radial cell-wall collapse in earlywood tracheids formed during the initial vegetative flush of April 1976, verifying a cold-shock frost injury signature characteristic of sub-zero spring incursions.
+        </p>
+      </article>
+
+      <!-- TAB 2: CHUNK INSPECTION (HIDDEN BY DEFAULT) -->
+      <section class="chunks-container" id="view-chunks" style="display: none;">
+        <!-- Chunk Card 1 -->
+        <article class="chunk-card">
+          <div class="chunk-card-head">
+            <span class="chunk-id-tag">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>Chunk #1042-P14-C1</span>
+            </span>
+            <div class="chunk-metrics">
+              <span>Tokens: 482</span>
+              <span>·</span>
+              <span>Vector: text-embedding-004 (768d)</span>
+              <span>·</span>
+              <span style="color: var(--accent-moss); font-weight: 700;">Score: 0.912</span>
+            </div>
+          </div>
+          <div class="chunk-body-text">
+            Taiwan Forestry Research Bulletin Report No. 43. <em>Section 3: Microdensitometric Radial Profile & Latewood Transition:</em> Using dual-energy X-ray microdensitometry, increment core sample #14 collected from northern ridge of Yushan (elevation 2,850 m) was analyzed under 0.05 mm radial scan increments.
+          </div>
+        </article>
+
+        <!-- Chunk Card 2 -->
+        <article class="chunk-card">
+          <div class="chunk-card-head">
+            <span class="chunk-id-tag">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>Chunk #1042-P14-C2</span>
+            </span>
+            <div class="chunk-metrics">
+              <span>Tokens: 504</span>
+              <span>·</span>
+              <span>Vector: text-embedding-004 (768d)</span>
+              <span>·</span>
+              <span style="color: var(--accent-moss); font-weight: 700;">Score: 0.892</span>
+            </div>
+          </div>
+          <div class="chunk-body-text">
+            Table 3-2: Annual Earlywood vs. Latewood Density Calibration 1970–1981. <em>1976 Growth Anomaly: Earlywood 0.334 g/cm³, Latewood 0.781 g/cm³, Transition Ratio: 0.423</em> (Frost Ring Anomaly). The micro-photometric profile indicates pronounced radial cell-wall collapse in earlywood tracheids formed during the initial flush of April 1976.
+          </div>
+        </article>
+
+        <!-- Chunk Card 3 -->
+        <article class="chunk-card">
+          <div class="chunk-card-head">
+            <span class="chunk-id-tag">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <span>Chunk #1042-P14-C3</span>
+            </span>
+            <div class="chunk-metrics">
+              <span>Tokens: 416</span>
+              <span>·</span>
+              <span>Vector: text-embedding-004 (768d)</span>
+              <span>·</span>
+              <span style="color: var(--mono-muted);">Score: 0.784</span>
+            </div>
+          </div>
+          <div class="chunk-body-text">
+            Discussion of False Annual Ring formation: Comparison between high-elevation <em>Chamaecyparis formosensis</em> and low-altitude specimens confirms that false frost rings occur exclusively in plots exceeding 1,800 m elevation subject to sub-zero spring fronts.
+          </div>
+        </article>
+      </section>
+
+      <!-- TAB 3: METADATA & TELEMETRY (HIDDEN BY DEFAULT) -->
+      <section class="metadata-container" id="view-metadata" style="display: none;">
+        <article class="metadata-block">
+          <h3 class="meta-heading">Document Provenance & Storage Properties</h3>
+          <div class="meta-key-grid">
+            <div class="meta-cell">
+              <span class="meta-cell-key">Archive Resource ID</span>
+              <span class="meta-cell-val">leaf_1042_f88e2</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-cell-key">Canonical Path</span>
+              <span class="meta-cell-val">/surveys/1974_yushan_tsuga_radial_increment_survey.pdf</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-cell-key">Content-Type</span>
+              <span class="meta-cell-val">application/pdf (PDF 1.7)</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-cell-key">SHA-256 Digest</span>
+              <span class="meta-cell-val">e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-cell-key">Storage Bytes</span>
+              <span class="meta-cell-val">14,892,104 bytes (14.2 MB)</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-cell-key">Edition / Version</span>
+              <span class="meta-cell-val">v2.1 (Current Leaf)</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="metadata-block">
+          <h3 class="meta-heading">Ingestion Engine & Vector Pipeline</h3>
+          <div class="meta-key-grid">
+            <div class="meta-cell">
+              <span class="meta-cell-key">Vector Model</span>
+              <span class="meta-cell-val">Google text-embedding-004 (768 Dimensions)</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-cell-key">Chunk Partition Strategy</span>
+              <span class="meta-cell-val">512 Tokens · 64 Stride Overlap</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-cell-key">Total Chunks Index</span>
+              <span class="meta-cell-val">18 Semantic Chunks (All embedded)</span>
+            </div>
+            <div class="meta-cell">
+              <span class="meta-cell-key">Ingestion Incurred Latency</span>
+              <span class="meta-cell-val">412 ms (OCR + Embedding Pipeline)</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       INTERACTIVE JAVASCRIPT
+       ═════════════════════════════════════════════════════════════ -->
+  <script>
+    function toggleNavRail() {
+      const rail = document.getElementById('main-nav-rail');
+      rail.classList.toggle('collapsed');
+    }
+
+    let currentPage = 14;
+    const totalPages = 18;
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        document.getElementById('page-indicator').textContent = `Page ${currentPage} of ${totalPages}`;
+      }
+    }
+
+    function nextPage() {
+      if (currentPage < totalPages) {
+        currentPage++;
+        document.getElementById('page-indicator').textContent = `Page ${currentPage} of ${totalPages}`;
+      }
+    }
+
+    function setViewerTab(tabKey) {
+      document.querySelectorAll('.viewer-tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('view-preview').style.display = 'none';
+      document.getElementById('view-chunks').style.display = 'none';
+      document.getElementById('view-metadata').style.display = 'none';
+
+      if (tabKey === 'preview') {
+        document.getElementById('btn-tab-preview').classList.add('active');
+        document.getElementById('view-preview').style.display = 'flex';
+      } else if (tabKey === 'chunks') {
+        document.getElementById('btn-tab-chunks').classList.add('active');
+        document.getElementById('view-chunks').style.display = 'flex';
+      } else if (tabKey === 'metadata') {
+        document.getElementById('btn-tab-metadata').classList.add('active');
+        document.getElementById('view-metadata').style.display = 'flex';
+      }
+    }
+  </script>
+</body>
+</html>

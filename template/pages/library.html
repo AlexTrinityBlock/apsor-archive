@@ -1,0 +1,1881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DendroMatrix — File Library</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --mono-ink: #1C1C1A;
+      --mono-paper: #F0EFEB;
+      --mono-card-bg: #FAF9F6;
+      --mono-subtle: #E8E7E2;
+      --mono-muted: #8F8E88;
+      --mono-faint: #C6C5BF;
+      --mono-grid: #DEDDD6;
+      --accent-seal: #C84B31;
+      --accent-moss: #2E4B3E;
+      --accent-ochre: #B45309;
+      --mono-dark-bg: #1C1C1A;
+      --mono-dark-ink: #F0EFEB;
+      --mono-dark-grid: #2E2D29;
+      --mono-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono-font-mono: 'JetBrains Mono', monospace;
+      --rail-width-expanded: 230px;
+      --rail-width-collapsed: 68px;
+      --transition-smooth: 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--mono-font);
+      background-color: var(--mono-paper);
+      color: var(--mono-ink);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       COLLAPSIBLE NAVIGATION RAIL
+       ═══════════════════════════════════════════════════════════════ */
+    .nav-rail {
+      width: var(--rail-width-expanded);
+      height: 100vh;
+      background: var(--mono-paper);
+      border-right: 0.7px solid var(--mono-grid);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width var(--transition-smooth);
+      position: relative;
+      z-index: 50;
+      user-select: none;
+    }
+
+    .nav-rail.collapsed {
+      width: var(--rail-width-collapsed);
+    }
+
+    .rail-header {
+      height: 60px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 0.7px solid var(--mono-grid);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .nav-rail.collapsed .rail-header {
+      padding: 0;
+      justify-content: center;
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--mono-ink);
+      overflow: hidden;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .nav-rail.collapsed .brand-cluster {
+      gap: 0;
+      justify-content: center;
+    }
+
+    .brand-seal {
+      width: 36px;
+      height: 36px;
+      background: var(--mono-ink);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--mono-paper);
+    }
+
+    .brand-meta {
+      display: flex;
+      flex-direction: column;
+      transition: opacity var(--transition-smooth);
+    }
+
+    .nav-rail.collapsed .brand-meta {
+      display: none !important;
+    }
+
+    .brand-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .brand-sub {
+      font-size: 9.5px;
+      font-weight: 500;
+      color: var(--mono-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .rail-toggle-btn {
+      width: 24px;
+      height: 24px;
+      background: var(--mono-subtle);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--mono-ink);
+      transition: all var(--transition-smooth);
+      flex-shrink: 0;
+    }
+
+    .rail-toggle-btn:hover {
+      background: #FFFFFF;
+      border-color: var(--mono-ink);
+    }
+
+    .nav-rail.collapsed .rail-toggle-btn {
+      display: none;
+    }
+
+    .rail-menu {
+      flex: 1;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .nav-rail.collapsed .rail-menu {
+      padding: 14px 0;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rail-section-label {
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+      padding: 8px 10px 4px;
+      white-space: nowrap;
+    }
+
+    .nav-rail.collapsed .rail-section-label {
+      display: none !important;
+    }
+
+    .rail-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 12px;
+      border-radius: 5px;
+      background: transparent;
+      border: 0.7px solid transparent;
+      color: #4A4944;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      position: relative;
+    }
+
+    .rail-item:hover {
+      background: var(--mono-subtle);
+      color: var(--mono-ink);
+    }
+
+    .rail-item.active {
+      background: #FFFFFF;
+      border-color: var(--mono-grid);
+      color: var(--mono-ink);
+      font-weight: 700;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+
+    .nav-rail.collapsed .rail-item {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      justify-content: center;
+      gap: 0;
+      margin: 0 auto;
+    }
+
+    .rail-item-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .rail-item-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .nav-rail.collapsed .rail-item-text,
+    .nav-rail.collapsed .rail-item-badge {
+      display: none !important;
+    }
+
+    .rail-item-badge {
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      background: var(--mono-subtle);
+      border: 0.7px solid var(--mono-grid);
+      padding: 1px 6px;
+      border-radius: 2px;
+      color: var(--mono-muted);
+    }
+
+    .nav-rail.collapsed .rail-item::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: calc(100% + 12px);
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .nav-rail.collapsed .rail-item:hover::after {
+      opacity: 1;
+    }
+
+    .rail-footer {
+      padding: 12px 14px;
+      border-top: 0.7px solid var(--mono-grid);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .nav-rail.collapsed .rail-footer {
+      padding: 12px 0;
+      justify-content: center;
+    }
+
+    .rail-footer-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      cursor: pointer;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .rail-footer-btn:hover {
+      background: #FFFFFF;
+    }
+
+    .nav-rail.collapsed .rail-footer-btn {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+    }
+
+    .nav-rail.collapsed .rail-footer-btn span {
+      display: none;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       FILE LIBRARY WORKSPACE (NO SECONDARY SIDEBAR, NO TABLE LIST)
+       ═══════════════════════════════════════════════════════════════ */
+    .app-main {
+      flex: 1;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background: #FFFFFF;
+    }
+
+    .archive-topbar {
+      padding: 20px 32px 16px;
+      border-bottom: 0.7px solid var(--mono-grid);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: var(--mono-paper);
+      flex-shrink: 0;
+    }
+
+    .archive-breadcrumb-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--mono-ink);
+    }
+
+    .crumb-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      color: var(--mono-ink);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .crumb-link:hover {
+      color: var(--accent-seal);
+    }
+
+    .crumb-sep {
+      color: var(--mono-muted);
+      font-weight: 400;
+      margin: 0 2px;
+    }
+
+    .crumb-current {
+      color: var(--mono-muted);
+      font-weight: 600;
+    }
+
+    .archive-action-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-left-cluster {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .archive-search-mini {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 7px 12px;
+      width: 280px;
+      transition: border-color 0.15s ease;
+    }
+
+    .archive-search-mini:focus-within {
+      border-color: var(--mono-ink);
+    }
+
+    .archive-search-mini input {
+      border: none;
+      background: transparent;
+      font-family: var(--mono-font);
+      font-size: 12.5px;
+      color: var(--mono-ink);
+      outline: none;
+      width: 100%;
+    }
+
+    .toolbar-right-cluster {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .tool-btn-dropdown {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--mono-ink);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .tool-btn-dropdown:hover {
+      background: var(--mono-card-bg);
+      border-color: var(--mono-ink);
+    }
+
+    .btn-action-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      border: none;
+      border-radius: 4px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-action-primary:hover {
+      background: #333330;
+    }
+
+    .btn-action-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      background: #FFFFFF;
+      color: var(--mono-ink);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .btn-action-secondary:hover {
+      border-color: var(--mono-ink);
+    }
+
+    /* Scrollable Canvas */
+    .archive-canvas-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
+      background: #FFFFFF;
+    }
+
+    .section-headline-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .section-headline-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-headline-left h3 {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--mono-ink);
+    }
+
+    .counter-badge {
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-muted);
+      font-weight: 600;
+    }
+
+    /* FOLDERS GRID */
+    .folders-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 16px;
+    }
+
+    .folder-block-card {
+      background: var(--mono-card-bg);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      padding: 18px 20px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 110px;
+      position: relative;
+    }
+
+    .folder-block-card:hover {
+      border-color: var(--mono-ink);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+      transform: translateY(-2px);
+    }
+
+    .folder-top-icons {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--mono-ink);
+    }
+
+    .folder-card-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--mono-ink);
+      margin: 14px 0 4px 0;
+      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .folder-items-meta {
+      font-size: 11.5px;
+      color: var(--mono-muted);
+      font-family: var(--mono-font-mono);
+    }
+
+    /* FILES GRID */
+    .files-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 16px;
+    }
+
+    .file-block-card {
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      padding: 18px 20px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 120px;
+      position: relative;
+    }
+
+    .file-block-card:hover {
+      border-color: var(--mono-ink);
+      box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+      transform: translateY(-2px);
+    }
+
+    .file-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .file-type-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      padding: 2px 7px;
+      border-radius: 3px;
+      color: var(--mono-ink);
+    }
+
+    .file-card-heading {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--mono-ink);
+      margin: 12px 0 4px 0;
+      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-card-foot-meta {
+      font-size: 11.5px;
+      color: var(--mono-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--mono-font-mono);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       DOCUMENT PAGE PREVIEW MODAL
+       ═══════════════════════════════════════════════════════════════ */
+    .doc-preview-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(28, 28, 26, 0.45);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .doc-preview-modal.active {
+      display: flex;
+    }
+
+    .preview-modal-dialog {
+      width: 90vw;
+      max-width: 1060px;
+      height: 88vh;
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.22);
+    }
+
+    .modal-head {
+      padding: 12px 20px;
+      background: #FFFFFF;
+      border-bottom: 0.7px solid var(--mono-grid);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .modal-head-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .modal-toggles {
+      display: flex;
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      padding: 2px;
+      gap: 2px;
+    }
+
+    .modal-toggle-tab {
+      border: none;
+      background: transparent;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--mono-muted);
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .modal-toggle-tab.active {
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      font-weight: 600;
+    }
+
+    .modal-btn-close {
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      color: var(--mono-muted);
+      padding: 4px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-btn-close:hover {
+      color: var(--mono-ink);
+      background: var(--mono-paper);
+    }
+
+    .modal-content-viewport {
+      flex: 1;
+      overflow-y: auto;
+      background: #E5E4DF;
+      display: flex;
+      justify-content: center;
+      padding: 28px;
+    }
+
+    .page-sheet-canonical {
+      width: 680px;
+      min-height: 880px;
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      padding: 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      font-size: 13.5px;
+      line-height: 1.7;
+    }
+
+    .sheet-title-bar {
+      border-bottom: 2px solid var(--mono-grid);
+      padding-bottom: 14px;
+    }
+
+    .sheet-eyebrow {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--mono-muted);
+      letter-spacing: 0.08em;
+      font-family: var(--mono-font-mono);
+    }
+
+    .sheet-heading {
+      font-size: 20px;
+      font-weight: 700;
+      margin-top: 4px;
+      color: var(--mono-ink);
+    }
+
+    .sheet-data-table {
+      margin: 10px 0;
+      padding: 14px;
+      background: var(--mono-paper);
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 4px;
+      font-family: var(--mono-font-mono);
+      font-size: 11.5px;
+      line-height: 1.6;
+    }
+  
+    /* View Switcher Tabs (All Files vs Media Gallery) */
+    .library-view-switcher {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 24px;
+      height: 44px;
+      border-bottom: 0.7px solid var(--mono-grid);
+      background: var(--mono-paper);
+      flex-shrink: 0;
+    }
+
+    .view-mode-pill {
+      font-family: var(--mono-font);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--mono-muted);
+      background: transparent;
+      border: 0.7px solid transparent;
+      border-radius: 4px;
+      padding: 5px 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .view-mode-pill:hover {
+      background: var(--mono-subtle);
+      color: var(--mono-ink);
+    }
+
+    .view-mode-pill.active {
+      background: #FFFFFF;
+      color: var(--mono-ink);
+      border-color: var(--mono-grid);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+
+    /* Paste / Dropzone Toast Banner */
+    .paste-banner-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 28px;
+      background: var(--mono-ink);
+      color: var(--mono-paper);
+      padding: 12px 18px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-family: var(--mono-font-mono);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      z-index: 1000;
+      opacity: 0;
+      transform: translateY(12px);
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+    }
+
+    .paste-banner-toast.show {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    /* Drag over highlight */
+    .drag-drop-overlay {
+      position: absolute;
+      inset: 12px;
+      border: 2px dashed var(--accent-seal);
+      border-radius: 8px;
+      background: rgba(240, 239, 235, 0.94);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 80;
+      backdrop-filter: blur(2px);
+    }
+
+    .drag-drop-overlay.active {
+      display: flex;
+    }
+
+    /* SPECIMEN MEDIA GALLERY VIEW */
+    .media-gallery-section {
+      display: none;
+      padding: 24px;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .media-gallery-section.active {
+      display: flex;
+    }
+
+    .media-sub-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 18px;
+    }
+
+    .micrograph-card {
+      background: #FFFFFF;
+      border: 0.7px solid var(--mono-grid);
+      border-radius: 6px;
+      overflow: hidden;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .micrograph-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--mono-ink);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    }
+
+    .micrograph-canvas-box {
+      width: 100%;
+      height: 180px;
+      background: #111110;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .micrograph-canvas-box svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .micrograph-meta-strip {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      display: flex;
+      gap: 6px;
+    }
+
+    .tag-optic {
+      font-family: var(--mono-font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      background: rgba(28, 28, 26, 0.82);
+      color: #F0EFEB;
+      padding: 2px 6px;
+      border-radius: 2px;
+      border: 0.7px solid rgba(255,255,255,0.2);
+    }
+
+    .micrograph-card-body {
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .micrograph-card-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--mono-ink);
+    }
+
+    .micrograph-card-desc {
+      font-size: 11.5px;
+      color: var(--mono-muted);
+      line-height: 1.45;
+    }
+
+    .micrograph-card-footer {
+      border-top: 0.7px solid var(--mono-grid);
+      padding: 10px 16px;
+      background: var(--mono-card-bg);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--mono-font-mono);
+      font-size: 11px;
+      color: var(--mono-muted);
+    }
+
+  </style>
+
+<!-- EMBED_SINGLE_SIDEBAR_PATCH_START -->
+  <style>
+    /* Strict single sidebar enforcement: suppress redundant inner rail when embedded */
+    html.is-embedded .nav-rail,
+    body.is-embedded .nav-rail,
+    .is-embedded #main-nav-rail {
+      display: none !important;
+      width: 0 !important;
+      visibility: hidden !important;
+      overflow: hidden !important;
+    }
+    html.is-embedded,
+    body.is-embedded {
+      overflow: auto !important;
+    }
+    html.is-embedded .app-main,
+    html.is-embedded .viewer-app-main,
+    html.is-embedded .workspace-stage,
+    html.is-embedded .chat-studio-grid,
+    html.is-embedded .archive-canvas-scroll {
+      width: 100% !important;
+      max-width: 100% !important;
+      flex: 1 1 100% !important;
+    }
+  </style>
+  <script>
+    (function() {
+      if (window.self !== window.top || window.location.search.indexOf('embed=true') !== -1) {
+        document.documentElement.classList.add('is-embedded');
+        if (document.body) document.body.classList.add('is-embedded');
+        window.addEventListener('DOMContentLoaded', function() {
+          if (document.body) document.body.classList.add('is-embedded');
+          var r = document.getElementById('main-nav-rail');
+          if (r) r.style.setProperty('display', 'none', 'important');
+        });
+      }
+    })();
+  
+    // --- Library View Mode Switcher ---
+    function setLibraryViewMode(mode) {
+      const filesBtn = document.getElementById('btn-mode-files');
+      const mediaBtn = document.getElementById('btn-mode-media');
+      const foldersSec = document.getElementById('folders-section');
+      const filesSec = document.getElementById('files-section');
+      const mediaSec = document.getElementById('media-gallery-section');
+
+      if (mode === 'media') {
+        filesBtn.classList.remove('active');
+        mediaBtn.classList.add('active');
+        foldersSec.style.display = 'none';
+        filesSec.style.display = 'none';
+        mediaSec.classList.add('active');
+      } else {
+        mediaBtn.classList.remove('active');
+        filesBtn.classList.add('active');
+        foldersSec.style.display = 'block';
+        filesSec.style.display = 'block';
+        mediaSec.classList.remove('active');
+      }
+    }
+
+    // --- Ctrl + V Direct Clipboard Image Paste & Drop Handler ---
+    window.addEventListener('paste', function(e) {
+      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+      let hasImage = false;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          hasImage = true;
+          break;
+        }
+      }
+
+      // Simulate instantaneous ingest on Ctrl+V
+      const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+      const newFileName = `clipboard_specimen_scan_${timestamp}.png`;
+
+      // Create new file card in the grid
+      const container = document.getElementById('files-container');
+      const newCard = document.createElement('div');
+      newCard.className = 'file-block-card';
+      newCard.style.borderColor = 'var(--accent-moss)';
+      newCard.onclick = () => openDocPreview(newFileName, 'IMAGE', '8.4 MB · 4096x3072 · Pasted Micrograph');
+      newCard.innerHTML = `
+        <div class="file-card-top">
+          <span class="file-type-pill" style="background: #E8F5E9; color: #2E7D32; font-weight: 700;">PNG (NEW)</span>
+          <span style="color: var(--mono-muted); font-size: 14px;">···</span>
+        </div>
+        <div>
+          <div class="file-card-heading">${newFileName}</div>
+          <div class="file-card-foot-meta">
+            <span>8.4 MB · Ingested from Clipboard</span>
+            <span style="color: #2E7D32; font-weight: 600;">Just now</span>
+          </div>
+        </div>
+      `;
+      container.prepend(newCard);
+
+      // Trigger Toast Banner
+      const toast = document.getElementById('paste-toast');
+      const toastText = document.getElementById('paste-toast-text');
+      toastText.textContent = `Pasted image "${newFileName}" from clipboard · Vectorized & archived!`;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3800);
+    });
+
+    // Drag and Drop Overlay Logic
+    const overlay = document.getElementById('drag-drop-overlay');
+    window.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      overlay.classList.add('active');
+    });
+
+    window.addEventListener('dragleave', function(e) {
+      if (e.clientX <= 0 || e.clientY <= 0) {
+        overlay.classList.remove('active');
+      }
+    });
+
+    window.addEventListener('drop', function(e) {
+      e.preventDefault();
+      overlay.classList.remove('active');
+      const toast = document.getElementById('paste-toast');
+      const toastText = document.getElementById('paste-toast-text');
+      toastText.textContent = 'Files dropped · Automatically extracted chunks & vectorized via text-embedding-004!';
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3800);
+    });
+
+  </script>
+<!-- EMBED_SINGLE_SIDEBAR_PATCH_END -->
+</head>
+<body>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       COLLAPSIBLE NAVIGATION RAIL (68px / 230px)
+       ═════════════════════════════════════════════════════════════ -->
+  <aside id="main-nav-rail" class="nav-rail">
+    <!-- Header with TreeMark centered -->
+    <div class="rail-header">
+      <a href="chat.html" class="brand-cluster" title="DendroMatrix">
+        <div class="brand-seal" title="TreeMark Logo">
+          <svg viewBox="0 0 48 48" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="21" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.3" />
+            <circle cx="24" cy="24" r="15" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.5" stroke-dasharray="2 3" />
+            <circle cx="24" cy="24" r="9" stroke="currentColor" stroke-width="1.4" stroke-opacity="0.8" />
+            <circle cx="24" cy="24" r="2.2" fill="var(--mono-paper)" />
+            <path d="M24 41V27m0-6V7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+            <path d="M24 3v3M24 42v3M3 24h3M42 24h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-opacity="0.5" />
+          </svg>
+        </div>
+        <div class="brand-meta">
+          <span class="brand-title">DendroMatrix</span>
+          <span class="brand-sub">Archive Studio</span>
+        </div>
+      </a>
+
+      <button class="rail-toggle-btn" onclick="toggleNavRail()" title="Toggle Navigation Rail">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+    </div>
+
+    <!-- Nav Items Menu -->
+        <div class="rail-menu">
+      <a href="chat.html" class="rail-item" data-page="chat" data-tooltip="Chat (01)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h10v11H8.2L4 19z"/><path d="M8 8.5h4M8 11.5h2.6"/><path d="M16.5 7.5H20v8.5h-1.8L17 18.5V16"/></svg>
+        </span>
+        <span class="rail-item-text">Chat</span>
+        <span class="rail-item-badge">01</span>
+      </a>
+
+      <a href="library.html" class="rail-item active" data-page="library" data-tooltip="File library (02)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <span class="rail-item-text">File library</span>
+        <span class="rail-item-badge">02</span>
+      </a>
+
+      <a href="timeline.html" class="rail-item" data-page="timeline" data-tooltip="Timeline (03)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </span>
+        <span class="rail-item-text">Timeline</span>
+        <span class="rail-item-badge">03</span>
+      </a>
+
+      <a href="memory.html" class="rail-item" data-page="memory" data-tooltip="Memory (04)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="9" r="1"/><path d="M9 15h6"/></svg>
+        </span>
+        <span class="rail-item-text">Memory</span>
+        <span class="rail-item-badge">04</span>
+      </a>
+
+      <a href="search.html" class="rail-item" data-page="search" data-tooltip="Search (05)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <span class="rail-item-text">Search</span>
+        <span class="rail-item-badge">05</span>
+      </a>
+
+      <a href="overview.html" class="rail-item" data-page="overview" data-tooltip="Overview (06)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>
+        </span>
+        <span class="rail-item-text">Overview</span>
+        <span class="rail-item-badge">06</span>
+      </a>
+
+      <a href="settings.html" class="rail-item" data-page="settings" data-tooltip="Settings (07)">
+        <span class="rail-item-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h7M15 7h5M4 17h5M13 17h7"/><circle cx="13" cy="7" r="2.1"/><circle cx="11" cy="17" r="2.1"/></svg>
+        </span>
+        <span class="rail-item-text">Settings</span>
+        <span class="rail-item-badge">07</span>
+      </a>
+    </div>
+
+    <!-- Rail Footer Toggle -->
+    <div class="rail-footer">
+      <button class="rail-footer-btn" onclick="toggleNavRail()" title="Expand or collapse sidebar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 19 4 12 11 5"/><polyline points="18 19 11 12 18 5"/></svg>
+        <span>Collapse sidebar</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       MAIN APPLICATION AREA: FILE LIBRARY
+       ═════════════════════════════════════════════════════════════ -->
+  <main class="app-main">
+    
+    <!-- Topbar: Breadcrumbs + Control Toolbar -->
+    <header class="archive-topbar">
+      <!-- Breadcrumb Navigation -->
+      <div class="archive-breadcrumb-row" id="archive-breadcrumb">
+        <span class="crumb-link" onclick="navigateToFolder('root')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h3.8V20H4z"/><path d="M8.8 4.5H13V20H8.8z"/><path d="m15 5.8 3.7-.9 3 14.2-3.7.9z"/></svg>
+          <span>File library</span>
+        </span>
+        <span id="breadcrumb-subfolder" style="display: none; align-items: center; gap: 6px;">
+          <span class="crumb-sep">/</span>
+          <span class="crumb-current" id="breadcrumb-subfolder-label">Subalpine Radial Core Series (1950–2020)</span>
+        </span>
+      </div>
+
+      <!-- Action Toolbar (Search, Sort, Upload, New Folder) -->
+      <div class="archive-action-toolbar">
+        <div class="toolbar-left-cluster">
+          <div class="archive-search-mini">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="library-filter-input" oninput="filterGrid(this.value)" placeholder="Search files and folders...">
+          </div>
+        </div>
+
+        <div class="toolbar-right-cluster">
+          <button class="tool-btn-dropdown" onclick="cycleSort()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+            <span id="sort-label">Sort: Date modified</span>
+          </button>
+          <button class="btn-action-secondary" onclick="triggerUploadPrompt()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Upload file</span>
+          </button>
+          <button class="btn-action-primary" onclick="promptNewFolder()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            <span>New folder</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Scrollable Canvas Grid (Intuitive folders & files) -->
+    <div class="archive-canvas-scroll">
+      
+      <!-- FOLDERS SECTION -->
+      <section id="folders-section">
+        <div class="section-headline-bar">
+          <div class="section-headline-left">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <h3>Folders</h3>
+          </div>
+          <span class="counter-badge" id="folder-counter">6 folders</span>
+        </div>
+
+        <div class="folders-grid" id="folders-container">
+          <!-- Folder Card 1 -->
+          <div class="folder-block-card" onclick="navigateToFolder('Subalpine Radial Core Series (1950–2020)')">
+            <div class="folder-top-icons">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="#8F8E88"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div>
+              <div class="folder-card-name">Subalpine Radial Core Series (1950–2020)</div>
+              <div class="folder-items-meta">12 items · Modified yesterday</div>
+            </div>
+          </div>
+
+          <!-- Folder Card 2 -->
+          <div class="folder-block-card" onclick="navigateToFolder('Microdensitometry Records')">
+            <div class="folder-top-icons">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="#8F8E88"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div>
+              <div class="folder-card-name">Microdensitometry Records</div>
+              <div class="folder-items-meta">8 items · Oct 18, 2026</div>
+            </div>
+          </div>
+
+          <!-- Folder Card 3 -->
+          <div class="folder-block-card" onclick="navigateToFolder('Alishan High-Altitude Plots')">
+            <div class="folder-top-icons">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="#8F8E88"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div>
+              <div class="folder-card-name">Alishan High-Altitude Plots</div>
+              <div class="folder-items-meta">15 items · Sep 29, 2026</div>
+            </div>
+          </div>
+
+          <!-- Folder Card 4 -->
+          <div class="folder-block-card" onclick="navigateToFolder('Radiocarbon Chronology')">
+            <div class="folder-top-icons">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="#8F8E88"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div>
+              <div class="folder-card-name">Radiocarbon Chronology</div>
+              <div class="folder-items-meta">4 items · Aug 14, 2026</div>
+            </div>
+          </div>
+
+          <!-- Folder Card 5 -->
+          <div class="folder-block-card" onclick="navigateToFolder('Climate Calibration Models')">
+            <div class="folder-top-icons">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="#8F8E88"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div>
+              <div class="folder-card-name">Climate Calibration Models</div>
+              <div class="folder-items-meta">7 items · Jul 02, 2026</div>
+            </div>
+          </div>
+
+          <!-- Folder Card 6 -->
+          <div class="folder-block-card" onclick="navigateToFolder('Forestry Bureau Archive')">
+            <div class="folder-top-icons">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="#8F8E88"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div>
+              <div class="folder-card-name">Forestry Bureau Archive</div>
+              <div class="folder-items-meta">19 items · May 11, 2026</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FILES SECTION -->
+      <section id="files-section">
+        <div class="section-headline-bar">
+          <div class="section-headline-left">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <h3>Files</h3>
+          </div>
+          <span class="counter-badge" id="file-counter">6 files</span>
+        </div>
+
+        <div class="files-grid" id="files-container">
+          <!-- File Card 1: PDF -->
+          <div class="file-block-card" onclick="openDocPreview('1982_taipingshan_density_survey.pdf', 'PDF', '14.2 MB · 18 pages')">
+            <div class="file-card-top">
+              <span class="file-type-pill">PDF</span>
+              <span style="color: var(--mono-muted); font-size: 14px;">···</span>
+            </div>
+            <div>
+              <div class="file-card-heading">1982_taipingshan_density_survey.pdf</div>
+              <div class="file-card-foot-meta">
+                <span>14.2 MB · 18 chunks</span>
+                <span>Yesterday</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Card 2: CSV -->
+          <div class="file-block-card" onclick="openDocPreview('tree_ring_density_matrix_1970_1985.csv', 'CSV', '3.8 MB · 1,520 rows')">
+            <div class="file-card-top">
+              <span class="file-type-pill">CSV</span>
+              <span style="color: var(--mono-muted); font-size: 14px;">···</span>
+            </div>
+            <div>
+              <div class="file-card-heading">tree_ring_density_matrix_1970_1985.csv</div>
+              <div class="file-card-foot-meta">
+                <span>3.8 MB · 6 chunks</span>
+                <span>3 days ago</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Card 3: DOCX -->
+          <div class="file-block-card" onclick="openDocPreview('alishan_chronology_methodology.docx', 'DOCX', '2.1 MB · 12 pages')">
+            <div class="file-card-top">
+              <span class="file-type-pill">DOCX</span>
+              <span style="color: var(--mono-muted); font-size: 14px;">···</span>
+            </div>
+            <div>
+              <div class="file-card-heading">alishan_chronology_methodology.docx</div>
+              <div class="file-card-foot-meta">
+                <span>2.1 MB · 8 chunks</span>
+                <span>Oct 12, 2026</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Card 4: JPG Micrograph -->
+          <div class="file-block-card" onclick="openDocPreview('frost_ring_xylem_cross_section_1200x.jpg', 'IMAGE', '8.4 MB · 4096x3072')">
+            <div class="file-card-top">
+              <span class="file-type-pill">JPG</span>
+              <span style="color: var(--mono-muted); font-size: 14px;">···</span>
+            </div>
+            <div>
+              <div class="file-card-heading">frost_ring_xylem_cross_section_1200x.jpg</div>
+              <div class="file-card-foot-meta">
+                <span>8.4 MB · Micrograph</span>
+                <span>Sep 20, 2026</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Card 5: PDF -->
+          <div class="file-block-card" onclick="openDocPreview('chamaecyparis_calibration_protocol_v2.pdf', 'PDF', '5.6 MB · 24 pages')">
+            <div class="file-card-top">
+              <span class="file-type-pill">PDF</span>
+              <span style="color: var(--mono-muted); font-size: 14px;">···</span>
+            </div>
+            <div>
+              <div class="file-card-heading">chamaecyparis_calibration_protocol_v2.pdf</div>
+              <div class="file-card-foot-meta">
+                <span>5.6 MB · 14 chunks</span>
+                <span>Aug 28, 2026</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- File Card 6: JSON Spec -->
+          <div class="file-block-card" onclick="openDocPreview('radiocarbon_calibration_curve_intcal20.json', 'JSON', '1.2 MB · 4,800 points')">
+            <div class="file-card-top">
+              <span class="file-type-pill">JSON</span>
+              <span style="color: var(--mono-muted); font-size: 14px;">···</span>
+            </div>
+            <div>
+              <div class="file-card-heading">radiocarbon_calibration_curve_intcal20.json</div>
+              <div class="file-card-foot-meta">
+                <span>1.2 MB · 4 chunks</span>
+                <span>Jul 19, 2026</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  
+      <!-- SPECIMEN MEDIA GALLERY VIEW (Merged into File Library) -->
+      <section class="media-gallery-section" id="media-gallery-section">
+        <div class="section-headline-bar">
+          <div class="section-headline-left">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+            <h3>Specimen Micrographs & Anatomical Scans</h3>
+          </div>
+          <span class="counter-badge" id="media-counter">6 specimens · 1200X Optical</span>
+        </div>
+
+        <div class="media-sub-grid">
+          
+          <!-- Plate 1 -->
+          <div class="micrograph-card" onclick="openDocPreview('tracheid_wall_lumen_ratio_micrograph_800x.jpg', 'IMAGE', '9.1 MB · 4096x3072 · 800X')">
+            <div class="micrograph-canvas-box">
+              <span class="micrograph-meta-strip">
+                <span class="tag-optic">800X OPTICAL</span>
+                <span class="tag-optic" style="background: rgba(46, 75, 62, 0.9);">POLARIZED</span>
+              </span>
+              <!-- Procedural Anatomical SVG -->
+              <svg viewBox="0 0 320 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="320" height="180" fill="#141412"/>
+                <circle cx="80" cy="90" r="34" stroke="#8F8E88" stroke-width="4" stroke-dasharray="2 3"/>
+                <circle cx="160" cy="90" r="38" stroke="#DEDDD6" stroke-width="5"/>
+                <circle cx="240" cy="90" r="32" stroke="#8F8E88" stroke-width="3.5"/>
+                <circle cx="160" cy="90" r="16" fill="#2E2D29" stroke="#A83824" stroke-width="1.5"/>
+                <!-- Reticle Measurement HUD -->
+                <line x1="160" y1="20" x2="160" y2="160" stroke="#FAF9F6" stroke-width="0.7" stroke-opacity="0.3"/>
+                <line x1="20" y1="90" x2="300" y2="90" stroke="#FAF9F6" stroke-width="0.7" stroke-opacity="0.3"/>
+                <text x="170" y="40" fill="#FAF9F6" font-family="monospace" font-size="9" opacity="0.6">32.4 µm LUMEN</text>
+              </svg>
+            </div>
+            <div class="micrograph-card-body">
+              <h4 class="micrograph-card-title">tracheid_wall_lumen_ratio_micrograph_800x.jpg</h4>
+              <p class="micrograph-card-desc">Transverse section showing latewood tracheid cell-wall thickening and lumen contraction. Specimen TS-1974-C28.</p>
+            </div>
+            <div class="micrograph-card-footer">
+              <span>9.1 MB · TIFF / JPG</span>
+              <span style="font-weight: 600; color: var(--mono-ink);">Inspect Plate →</span>
+            </div>
+          </div>
+
+          <!-- Plate 2 -->
+          <div class="micrograph-card" onclick="openDocPreview('frost_ring_xylem_collapse_horizon_1200x.png', 'IMAGE', '11.4 MB · 5120x3840 · 1200X')">
+            <div class="micrograph-canvas-box">
+              <span class="micrograph-meta-strip">
+                <span class="tag-optic">1200X OPTICAL</span>
+                <span class="tag-optic" style="background: rgba(168, 56, 36, 0.9);">ANOMALY</span>
+              </span>
+              <svg viewBox="0 0 320 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="320" height="180" fill="#121210"/>
+                <path d="M20 90 Q 90 70, 160 110 T 300 85" stroke="#C84B31" stroke-width="3" fill="none"/>
+                <circle cx="160" cy="110" r="28" stroke="#FAF9F6" stroke-width="2" stroke-dasharray="3 3"/>
+                <line x1="20" y1="90" x2="300" y2="90" stroke="#8F8E88" stroke-width="0.7" stroke-opacity="0.4"/>
+                <text x="175" y="115" fill="#C84B31" font-family="monospace" font-size="9">FROST COLLAPSE</text>
+              </svg>
+            </div>
+            <div class="micrograph-card-body">
+              <h4 class="micrograph-card-title">frost_ring_xylem_collapse_horizon_1200x.png</h4>
+              <p class="micrograph-card-desc">Abrupt radial tracheid collapse horizon resulting from unseasonable April 1976 severe freeze.</p>
+            </div>
+            <div class="micrograph-card-footer">
+              <span>11.4 MB · 1200X</span>
+              <span style="font-weight: 600; color: var(--mono-ink);">Inspect Plate →</span>
+            </div>
+          </div>
+
+          <!-- Plate 3 -->
+          <div class="micrograph-card" onclick="openDocPreview('bordered_pit_torus_electron_micrograph.jpg', 'IMAGE', '10.4 MB · 4096x4096 · SEM')">
+            <div class="micrograph-canvas-box">
+              <span class="micrograph-meta-strip">
+                <span class="tag-optic">SEM 2400X</span>
+                <span class="tag-optic" style="background: rgba(46, 75, 62, 0.9);">ELECTRON</span>
+              </span>
+              <svg viewBox="0 0 320 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="320" height="180" fill="#0E0E0D"/>
+                <circle cx="160" cy="90" r="50" stroke="#DEDDD6" stroke-width="3"/>
+                <circle cx="160" cy="90" r="22" fill="#2E2D29" stroke="#FAF9F6" stroke-width="2"/>
+                <circle cx="160" cy="90" r="10" fill="#FAF9F6"/>
+                <text x="30" y="40" fill="#FAF9F6" font-family="monospace" font-size="9" opacity="0.6">TORUS-MARGO ARCHITECTURE</text>
+              </svg>
+            </div>
+            <div class="micrograph-card-body">
+              <h4 class="micrograph-card-title">bordered_pit_torus_electron_micrograph.jpg</h4>
+              <p class="micrograph-card-desc">Scanning electron micrograph of aspirating bordered pit membrane and margo fibrils in Taiwan White Pine.</p>
+            </div>
+            <div class="micrograph-card-footer">
+              <span>10.4 MB · SEM</span>
+              <span style="font-weight: 600; color: var(--mono-ink);">Inspect Plate →</span>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+  </main>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       PAGE PREVIEW MODAL (Default is Page Preview, Tab Toggles)
+       ═════════════════════════════════════════════════════════════ -->
+  <div id="doc-preview-modal" class="doc-preview-modal" onclick="closeDocPreviewOnBackdrop(event)">
+    <div class="preview-modal-dialog" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="modal-head-left">
+          <h3 id="modal-doc-title" style="font-size: 14.5px; font-weight: 700;">1982_taipingshan_density_survey.pdf</h3>
+          <span id="modal-page-counter" style="font-size: 11px; background: var(--mono-paper); border: 0.7px solid var(--mono-grid); padding: 3px 8px; border-radius: 3px; font-family: var(--mono-font-mono);">Page 14 of 18</span>
+        </div>
+
+        <div class="modal-toggles">
+          <button class="modal-toggle-tab active" id="tab-page" onclick="switchModalTab('page')">Page Preview</button>
+          <button class="modal-toggle-tab" id="tab-chunk" onclick="switchModalTab('chunk')">Chunk Inspection</button>
+          <button class="modal-toggle-tab" id="tab-meta" onclick="switchModalTab('meta')">Metadata</button>
+        </div>
+
+        <button class="modal-btn-close" onclick="closeDocPreview()" title="Close Preview">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-content-viewport">
+        <!-- Canonical Page Sheet Content -->
+        <div class="page-sheet-canonical" id="modal-viewport-sheet">
+          <div class="sheet-title-bar">
+            <span class="sheet-eyebrow">Taiwan Forestry Research Bulletin · Report No. 58</span>
+            <h2 class="sheet-heading">Yushan Tsuga formosana Subalpine Radial Increment Survey</h2>
+          </div>
+          <p>
+            <strong>Section 3: Microdensitometric Radial Profile & Latewood Transition:</strong><br>
+            Using dual-energy X-ray microdensitometry, increment core sample <strong>#14</strong> collected from the northern ridge of Yushan (elevation 2,850 m) was analyzed under 0.05 mm radial scan increments.
+          </p>
+          <div class="sheet-data-table">
+            [Table 3-2: Annual Earlywood vs. Latewood Density Calibration 1970–1981]<br>
+            1974: Earlywood 0.312 g/cm³ · Latewood 0.738 g/cm³ · Transition Ratio: 0.422<br>
+            1975: Earlywood 0.305 g/cm³ · Latewood 0.742 g/cm³ · Transition Ratio: 0.411<br>
+            <strong>1976: Earlywood 0.334 g/cm³ · Latewood 0.781 g/cm³ · Transition Ratio: 0.423 (Frost Ring Anomaly)</strong><br>
+            1977: Earlywood 0.298 g/cm³ · Latewood 0.710 g/cm³ · Transition Ratio: 0.419
+          </div>
+          <p>
+            The micro-photometric profile indicates pronounced radial cell-wall collapse in earlywood tracheids formed during the initial flush of April 1976, verifying a cold-shock frost injury signature characteristic of sub-zero spring incursions.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════════════════════════════════════
+       INTERACTIVE JAVASCRIPT
+       ═════════════════════════════════════════════════════════════ -->
+  <script>
+    function toggleNavRail() {
+      const rail = document.getElementById('main-nav-rail');
+      rail.classList.toggle('collapsed');
+    }
+
+    function navigateToFolder(folderName) {
+      const subfolderElement = document.getElementById('breadcrumb-subfolder');
+      const labelElement = document.getElementById('breadcrumb-subfolder-label');
+      
+      if (folderName === 'root') {
+        subfolderElement.style.display = 'none';
+        document.getElementById('folders-section').style.display = 'block';
+      } else {
+        subfolderElement.style.display = 'inline-flex';
+        labelElement.textContent = folderName;
+        // In subfolder, focus on files inside
+        document.getElementById('folders-section').style.display = 'none';
+      }
+    }
+
+    function filterGrid(query) {
+      const term = query.toLowerCase().trim();
+      const folderCards = document.querySelectorAll('.folder-block-card');
+      const fileCards = document.querySelectorAll('.file-block-card');
+
+      folderCards.forEach(card => {
+        const title = card.querySelector('.folder-card-name')?.textContent.toLowerCase() || '';
+        card.style.display = title.includes(term) ? 'flex' : 'none';
+      });
+
+      fileCards.forEach(card => {
+        const title = card.querySelector('.file-card-heading')?.textContent.toLowerCase() || '';
+        card.style.display = title.includes(term) ? 'flex' : 'none';
+      });
+    }
+
+    let sortMode = 0;
+    const sortModes = ['Date modified', 'Name (A-Z)', 'Size'];
+    function cycleSort() {
+      sortMode = (sortMode + 1) % sortModes.length;
+      document.getElementById('sort-label').textContent = 'Sort: ' + sortModes[sortMode];
+    }
+
+    function promptNewFolder() {
+      const name = prompt("Enter new folder name:", "New Research Folder");
+      if (!name) return;
+      const container = document.getElementById('folders-container');
+      const newCard = document.createElement('div');
+      newCard.className = 'folder-block-card';
+      newCard.onclick = () => navigateToFolder(name);
+      newCard.innerHTML = `
+        <div class="folder-top-icons">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="#8F8E88"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div>
+          <div class="folder-card-name">${name}</div>
+          <div class="folder-items-meta">0 items · Created just now</div>
+        </div>
+      `;
+      container.prepend(newCard);
+    }
+
+    function triggerUploadPrompt() {
+      alert("Opening secure file ingest pipeline: PDF, CSV, DOCX, and TIFF/JPG micrographs are automatically vectorized using text-embedding-004 upon drop.");
+    }
+
+    
+    // --- DIVERSE RESEARCH DATASETS (For realistic name randomization) ---
+    const PRESET_DATASETS = [
+      {
+        name: "Subalpine Conifer & Dendroclimatology",
+        folders: [
+          { name: "Subalpine Radial Core Series (1950–2020)", meta: "24 items · Modified yesterday" },
+          { name: "X-Ray Densitometry & Micro-CT Scans", meta: "14 items · Oct 21, 2026" },
+          { name: "Cambial Phenology & Frost Benchmarks", meta: "18 items · Oct 04, 2026" },
+          { name: "Stable Isotope Vault (δ13C & δ18O)", meta: "9 items · Sep 18, 2026" },
+          { name: "Shei-Pa High Elevation Plots", meta: "11 items · Aug 12, 2026" },
+          { name: "Historical Meteorological Logs", meta: "32 items · May 29, 2026" }
+        ],
+        files: [
+          { name: "1974_yushan_tsuga_radial_increment_survey.pdf", type: "PDF", meta: "16.4 MB · 22 chunks", time: "Yesterday", details: "16.4 MB · 22 pages" },
+          { name: "conifer_cambial_dormancy_profiles_1965_1990.csv", type: "CSV", meta: "4.2 MB · 9 chunks", time: "2 days ago", details: "4.2 MB · 2,840 rows" },
+          { name: "sheipa_paleo_drought_chronology_report.docx", type: "DOCX", meta: "2.9 MB · 12 chunks", time: "Oct 14, 2026", details: "2.9 MB · 16 pages" },
+          { name: "tracheid_wall_lumen_ratio_micrograph_800x.jpg", type: "JPG", meta: "9.1 MB · Micrograph", time: "Sep 22, 2026", details: "9.1 MB · 4096x3072" },
+          { name: "pinus_morrisonicola_crossdating_protocol_v4.pdf", type: "PDF", meta: "6.8 MB · 16 chunks", time: "Aug 30, 2026", details: "6.8 MB · 31 pages" },
+          { name: "stable_carbon_isotope_series_d13c_cores.csv", type: "CSV", meta: "5.1 MB · 8 chunks", time: "Jul 19, 2026", details: "5.1 MB · 1,980 rows" }
+        ]
+      },
+      {
+        name: "Paleo-Ecology & Historic Forest Monograph",
+        folders: [
+          { name: "Ancient Timber & Archaeological Wood", meta: "16 items · Modified today" },
+          { name: "Little Ice Age Radial Narrowing Records", meta: "21 items · Oct 19, 2026" },
+          { name: "Volcanic Tephra & Frost Ring Horizons", meta: "10 items · Oct 08, 2026" },
+          { name: "Pacific Decadal Oscillation Tree Indexes", meta: "15 items · Sep 25, 2026" },
+          { name: "Monsoon Moisture Variability Surveys", meta: "8 items · Aug 17, 2026" },
+          { name: "Central Mountain Primeval Stand Archives", meta: "27 items · Jun 04, 2026" }
+        ],
+        files: [
+          { name: "1815_tambora_volcanic_freeze_ring_inventory.pdf", type: "PDF", meta: "19.8 MB · 34 chunks", time: "3 hours ago", details: "19.8 MB · 34 pages" },
+          { name: "east_asia_summer_monsoon_pdsi_1600_1990.csv", type: "CSV", meta: "6.4 MB · 14 chunks", time: "Yesterday", details: "6.4 MB · 4,200 rows" },
+          { name: "taiwan_fir_krummholz_elevation_transects.docx", type: "DOCX", meta: "3.5 MB · 9 chunks", time: "Oct 11, 2026", details: "3.5 MB · 20 pages" },
+          { name: "subfossil_cedar_microphotometry_plate_1200x.jpg", type: "JPG", meta: "11.2 MB · Micrograph", time: "Sep 28, 2026", details: "11.2 MB · 5120x3840" },
+          { name: "chilan_sunken_wood_radiocarbon_calibration.pdf", type: "PDF", meta: "8.2 MB · 19 chunks", time: "Sep 05, 2026", details: "8.2 MB · 26 pages" },
+          { name: "sapwood_heartwood_permeability_matrix.csv", type: "CSV", meta: "3.9 MB · 7 chunks", time: "Jul 22, 2026", details: "3.9 MB · 1,450 rows" }
+        ]
+      },
+      {
+        name: "Micro-Anatomy & Wood Quality Telemetry",
+        folders: [
+          { name: "Tracheid Morphometry & Luminal Dimensions", meta: "19 items · Modified 1 hr ago" },
+          { name: "Bordered Pit Aspiration & Cavitation Tests", meta: "12 items · Oct 22, 2026" },
+          { name: "Lignification Gradient Microdensitometry", meta: "28 items · Oct 15, 2026" },
+          { name: "Microfibril Angle Synchrotron Scans", meta: "7 items · Sep 30, 2026" },
+          { name: "High-Frequency Cambium Bio-Sensors", meta: "14 items · Aug 24, 2026" },
+          { name: "Tree-Ring Width Index Standardizations", meta: "35 items · Jun 18, 2026" }
+        ],
+        files: [
+          { name: "1988_hemlock_tracheid_lumen_deformation_study.pdf", type: "PDF", meta: "15.1 MB · 20 chunks", time: "Just now", details: "15.1 MB · 20 pages" },
+          { name: "xylem_hydraulic_conductivity_raw_series.csv", type: "CSV", meta: "7.8 MB · 16 chunks", time: "Yesterday", details: "7.8 MB · 5,120 rows" },
+          { name: "compression_wood_gravimetric_profile.docx", type: "DOCX", meta: "4.1 MB · 11 chunks", time: "Oct 16, 2026", details: "4.1 MB · 18 pages" },
+          { name: "bordered_pit_torus_electron_micrograph.jpg", type: "JPG", meta: "10.4 MB · SEM 2400X", time: "Sep 24, 2026", details: "10.4 MB · 4096x4096" },
+          { name: "crossdating_coo_recorder_standard_indices.pdf", type: "PDF", meta: "9.6 MB · 22 chunks", time: "Sep 02, 2026", details: "9.6 MB · 28 pages" },
+          { name: "temperature_sensitivity_divergence_matrix.csv", type: "CSV", meta: "4.7 MB · 10 chunks", time: "Jul 11, 2026", details: "4.7 MB · 2,100 rows" }
+        ]
+      }
+    ];
+
+    let currentDatasetIdx = 0;
+
+    function renderDataset(idx) {
+      const ds = PRESET_DATASETS[idx];
+      currentDatasetIdx = idx;
+
+      // Render Folders
+      const fContainer = document.getElementById('folders-container');
+      fContainer.innerHTML = ds.folders.map(f => `
+        <div class="folder-block-card" onclick="navigateToFolder('${f.name}')">
+          <div class="folder-top-icons">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" color="#8F8E88"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div>
+            <div class="folder-card-name">${f.name}</div>
+            <div class="folder-items-meta">${f.meta}</div>
+          </div>
+        </div>
+      `).join('');
+
+      // Render Files
+      const filesContainer = document.getElementById('files-container');
+      filesContainer.innerHTML = ds.files.map(f => `
+        <div class="file-block-card" onclick="openDocPreview('${f.name}', '${f.type}', '${f.details}')">
+          <div class="file-card-top">
+            <span class="file-type-pill">${f.type}</span>
+            <span style="color: var(--mono-muted); font-size: 14px;">···</span>
+          </div>
+          <div>
+            <div class="file-card-heading">${f.name}</div>
+            <div class="file-card-foot-meta">
+              <span>${f.meta}</span>
+              <span>${f.time}</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      // Update counters
+      document.getElementById('folder-counter').textContent = ds.folders.length + ' folders';
+      document.getElementById('file-counter').textContent = ds.files.length + ' files';
+    }
+
+
+    // Modal Document Preview Logic
+    let currentFileName = "1982_taipingshan_density_survey.pdf";
+    function openDocPreview(filename, type, details) {
+      currentFileName = filename;
+      document.getElementById('modal-doc-title').textContent = filename;
+      document.getElementById('modal-page-counter').textContent = details || "Page 1 of 1";
+      document.getElementById('doc-preview-modal').classList.add('active');
+      switchModalTab('page');
+    }
+
+    function closeDocPreview() {
+      document.getElementById('doc-preview-modal').classList.remove('active');
+    }
+
+    function closeDocPreviewOnBackdrop(e) {
+      if (e.target.id === 'doc-preview-modal') {
+        closeDocPreview();
+      }
+    }
+
+    function switchModalTab(tabKey) {
+      document.querySelectorAll('.modal-toggle-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('tab-' + tabKey)?.classList.add('active');
+
+      const sheet = document.getElementById('modal-viewport-sheet');
+      if (tabKey === 'page') {
+        sheet.innerHTML = `
+          <div class="sheet-title-bar">
+            <span class="sheet-eyebrow">Taiwan Forestry Research Bulletin · Report No. 58</span>
+            <h2 class="sheet-heading">Yushan Tsuga formosana Subalpine Radial Increment Survey</h2>
+          </div>
+          <p>
+            <strong>Section 3: Microdensitometric Radial Profile & Latewood Transition:</strong><br>
+            Using dual-energy X-ray microdensitometry, increment core sample <strong>#14</strong> collected from the northern ridge of Yushan (elevation 2,850 m) was analyzed under 0.05 mm radial scan increments.
+          </p>
+          <div class="sheet-data-table">
+            [Table 3-2: Annual Earlywood vs. Latewood Density Calibration 1970–1981]<br>
+            1974: Earlywood 0.312 g/cm³ · Latewood 0.738 g/cm³ · Transition Ratio: 0.422<br>
+            1975: Earlywood 0.305 g/cm³ · Latewood 0.742 g/cm³ · Transition Ratio: 0.411<br>
+            <strong>1976: Earlywood 0.334 g/cm³ · Latewood 0.781 g/cm³ · Transition Ratio: 0.423 (Frost Ring Anomaly)</strong><br>
+            1977: Earlywood 0.298 g/cm³ · Latewood 0.710 g/cm³ · Transition Ratio: 0.419
+          </div>
+          <p>
+            The micro-photometric profile indicates pronounced radial cell-wall collapse in earlywood tracheids formed during the initial flush of April 1976, verifying a cold-shock frost injury signature characteristic of sub-zero spring incursions.
+          </p>
+        `;
+      } else if (tabKey === 'chunk') {
+        sheet.innerHTML = `
+          <div class="sheet-title-bar">
+            <span class="sheet-eyebrow">Chunk Vector Inspection // text-embedding-004</span>
+            <h2 class="sheet-heading">Semantic Chunks (Size: 512 Tokens · Stride: 64)</h2>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 14px;">
+            <div style="padding: 14px; background: var(--mono-paper); border: 0.7px solid var(--mono-grid); border-radius: 4px;">
+              <div style="font-family: var(--mono-font-mono); font-size: 11px; color: var(--mono-muted);">CHUNK_ID: #1042-P14-C1 · OFFSET: 0..498 · 768-DIM VECTOR</div>
+              <p style="margin-top: 6px; font-size: 13px;">Taipingshan Chamaecyparis formosensis increment core specimen #14. X-ray microdensitometry radial profile calibration across annual growth layers...</p>
+            </div>
+            <div style="padding: 14px; background: var(--mono-paper); border: 0.7px solid var(--mono-grid); border-radius: 4px;">
+              <div style="font-family: var(--mono-font-mono); font-size: 11px; color: var(--mono-muted);">CHUNK_ID: #1042-P14-C2 · OFFSET: 499..984 · 768-DIM VECTOR</div>
+              <p style="margin-top: 6px; font-size: 13px;">Table 3-2 measurements confirm 1976 latewood transition ratio fell to 0.423 due to premature frost injury and collapsed tracheid lumens along ring perimeter...</p>
+            </div>
+          </div>
+        `;
+      } else if (tabKey === 'meta') {
+        sheet.innerHTML = `
+          <div class="sheet-title-bar">
+            <span class="sheet-eyebrow">Technical Leaf Metadata</span>
+            <h2 class="sheet-heading">System Provenance & Ingestion Telemetry</h2>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; font-family: var(--mono-font-mono); font-size: 12px;">
+            <div style="padding: 12px; background: var(--mono-paper); border: 0.7px solid var(--mono-grid); border-radius: 4px;">
+              <div style="color: var(--mono-muted); font-size: 10px; text-transform: uppercase;">File Path</div>
+              <div style="font-weight: 600; margin-top: 4px;">/surveys/1982_taipingshan_density_survey.pdf</div>
+            </div>
+            <div style="padding: 12px; background: var(--mono-paper); border: 0.7px solid var(--mono-grid); border-radius: 4px;">
+              <div style="color: var(--mono-muted); font-size: 10px; text-transform: uppercase;">SHA-256 Digest</div>
+              <div style="font-weight: 600; margin-top: 4px; word-break: break-all;">e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855</div>
+            </div>
+            <div style="padding: 12px; background: var(--mono-paper); border: 0.7px solid var(--mono-grid); border-radius: 4px;">
+              <div style="color: var(--mono-muted); font-size: 10px; text-transform: uppercase;">Ingest Job UUID</div>
+              <div style="font-weight: 600; margin-top: 4px;">job-ingest-8839-prod</div>
+            </div>
+            <div style="padding: 12px; background: var(--mono-paper); border: 0.7px solid var(--mono-grid); border-radius: 4px;">
+              <div style="color: var(--mono-muted); font-size: 10px; text-transform: uppercase;">MIME Classification</div>
+              <div style="font-weight: 600; margin-top: 4px;">application/pdf (Parsed & Vectorized)</div>
+            </div>
+          </div>
+        `;
+      }
+    }
+  </script>
+
+  <!-- Drag-and-drop overlay indicator -->
+  <div class="drag-drop-overlay" id="drag-drop-overlay">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--mono-ink)" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div style="font-size: 17px; font-weight: 700;">Drop Image or Document to Archive</div>
+    <div style="font-size: 12px; color: var(--mono-muted); font-family: var(--mono-font-mono);">Automatic thumbnail generation & vectorization via text-embedding-004</div>
+  </div>
+
+  <!-- Clipboard Paste Confirmation Toast -->
+  <div class="paste-banner-toast" id="paste-toast">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4ADE80" stroke-width="2.2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+    <span id="paste-toast-text">Pasted image from clipboard · Ingested & vectorized into File Library!</span>
+  </div>
+
+</body>
+</html>
