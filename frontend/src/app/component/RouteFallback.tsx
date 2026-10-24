@@ -1,4 +1,5 @@
 import { Loader } from "./Loader";
+import "./shared.css";
 
 /** Quiet fallback shown while a lazy route module is fetched. */
 export function RouteFallback() {

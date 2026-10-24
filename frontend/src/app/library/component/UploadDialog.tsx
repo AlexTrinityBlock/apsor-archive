@@ -468,7 +468,7 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
     if (!isAcceptedFileName(file.name)) {
       setSelectedFile(null);
       event.target.value = "";
-      setLocalError("Choose a Markdown, text, CSV, JSON, log, or PDF file.");
+      setLocalError("Choose a Markdown, text, CSV, JSON, log, PDF, DOCX, or image file.");
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {

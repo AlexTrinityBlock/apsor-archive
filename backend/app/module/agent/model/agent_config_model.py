@@ -158,9 +158,7 @@ class AgentConfigModel(Base):
         Boolean,
         nullable=False,
         default=SAVE_MEMORY_REQUIRES_APPROVAL,
-        server_default=text(
-            "true" if SAVE_MEMORY_REQUIRES_APPROVAL else "false"
-        ),
+        server_default=text("true" if SAVE_MEMORY_REQUIRES_APPROVAL else "false"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

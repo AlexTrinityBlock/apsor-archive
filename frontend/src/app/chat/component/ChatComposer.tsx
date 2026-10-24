@@ -1,4 +1,10 @@
-import { useEffect, useId, useRef, type FormEvent, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
@@ -16,7 +22,7 @@ interface ChatComposerProps {
 
 const MAX_HEIGHT = 220;
 
-/** A sticky correspondence desk: multiline, Cmd/Ctrl+Enter, and a stop note. */
+/** A sticky composer: Enter sends, Shift+Enter inserts a newline. */
 export function ChatComposer({
   value,
   onChange,
@@ -30,13 +36,6 @@ export function ChatComposer({
   const hintId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const canSubmit = value.trim().length > 0 && !pending && !disabled;
-
-  let note = "The transcript is persistent; citations open the viewer.";
-  if (streaming) {
-    note = "A run is open. Stop it to keep the completed entries.";
-  } else if (disabled) {
-    note = "This thread cannot accept new notes right now.";
-  }
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -59,34 +58,40 @@ export function ChatComposer({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || (!event.metaKey && !event.ctrlKey)) {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
       return;
     }
     event.preventDefault();
     submit();
   };
 
+  let note = "The transcript is persistent; citations open in the inspector.";
+  if (streaming) {
+    note = "A run is open. Stop it to keep the completed entries.";
+  } else if (disabled) {
+    note = "This thread cannot accept new notes right now.";
+  }
+
   return (
     <form className="chat-composer" onSubmit={handleSubmit} aria-label="Write to the archive">
-      <div className="chat-composer__sheet">
-        <div className="chat-composer__head">
-          <label className="eyebrow" htmlFor={inputId}>
-            Correspondence
-          </label>
-          <span className="chat-composer__hint" id={hintId}>
-            <kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> to send
-          </span>
-        </div>
-
+      <div className="chat-composer__box">
+        <label className="visually-hidden" htmlFor={inputId}>
+          Message
+        </label>
         <textarea
           ref={textareaRef}
           id={inputId}
           name="message"
+          className="chat-composer__input"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask the archive, or ask it to open a resource..."
-          rows={3}
+          placeholder="Ask about the archive, or ask it to open a resource…"
+          rows={2}
           maxLength={32000}
           autoComplete="off"
           disabled={disabled}
@@ -95,37 +100,40 @@ export function ChatComposer({
         />
 
         <div className="chat-composer__foot">
-          <span className="chat-composer__note">{note}</span>
+          <span className="chat-composer__note" id={hintId}>
+            <span>Enter to send · Shift+Enter for newline</span>
+            <span className="chat-composer__state">{note}</span>
+          </span>
 
-          <div className="chat-composer__submit">
+          <div className="chat-composer__actions">
             {streaming ? (
               <Button
                 type="button"
                 variant="secondary"
-                size="md"
+                size="sm"
                 className="chat-composer__stop"
                 onClick={onStop}
               >
-                <Icon name="stop" size={14} />
+                <Icon name="stop" size={13} />
                 Stop
               </Button>
             ) : null}
             <Button
               type="submit"
               variant="ink"
-              size="md"
+              size="sm"
               disabled={!canSubmit}
               aria-busy={pending}
             >
               {pending && !streaming ? (
                 <>
-                  <Loader size={16} label="Opening a thread" />
+                  <Loader size={14} label="Opening a thread" />
                   Opening…
                 </>
               ) : (
                 <>
                   <span>Send</span>
-                  <Icon name="send" size={16} />
+                  <Icon name="send" size={14} />
                 </>
               )}
             </Button>

@@ -32,12 +32,11 @@ Every setting is prefixed with `DENDRO_`. The app also reads `.env`,
 ## AI
 
 Set `DENDRO_DEEPSEEK_API_KEY`, or configure a chat provider in Settings, to
-enable `POST /api/v1/ask`, AI-generated memory summaries, and the persistent
-archive agent. The default model is `deepseek-flash`. Without a configured
-provider:
+enable AI-generated memory summaries and the persistent archive agent. The
+default model is `deepseek-flash`. Without a configured provider:
 
 - summaries use the deterministic extractive fallback (`generator=extractive`);
-- `/api/v1/ask` returns `503 ai_not_configured`;
+- image uploads use a filename-derived caption and metadata;
 - agent messages return `503 agent_not_configured`.
 
 ## File ingestion
@@ -472,8 +471,6 @@ entries, 50 timeline events).
 | `read_path` | `directories[]`, `files[].viewer_url` |
 | `read_memory` | `target` preview, `neighbors[]` previews, plus the id lists |
 | `save_memory` | `memory` preview, `supersedes[]` |
-| `search_media` | `excerpt`, `width`, `height`, `tags[]`, `viewer_url` |
-| `get_media` | `caption`, `summary`, `ocr_text`, `viewer_url` |
 | `present_resource` | `resource` descriptor |
 
 The live `tool_end` SSE event carries `entry_id`, `tool_call_id`, `name`,
@@ -486,7 +483,7 @@ transcript refetch. Provider-facing tool content remains the separate XML
 payload in `model`.
 
 Tool names: `search_knowledge`, `read_file`, `read_timeline`, `read_path`,
-`read_memory`, `save_memory`, `search_media`, `get_media`, `present_resource`.
+`read_memory`, `save_memory`, `present_resource`.
 `save_memory` is a write action and never executes from a model-supplied
 confirmation. Its authorization depends on the run's
 `save_memory_requires_approval` snapshot:
@@ -503,8 +500,8 @@ confirmation. Its authorization depends on the run's
 Direct registry calls without that backend flag still return
 `memory_confirmation_required`. Disabling the setting does not resolve existing
 pending approvals; they remain explicit and their cards keep rendering.
-`present_resource` returns `/viewer/file/{id}?chunk={n}`, `/viewer/media/{id}`,
-or `/viewer/memory/{id}` and does not fetch or open the resource.
+`present_resource` returns `/viewer/file/{id}?chunk={n}` or
+`/viewer/memory/{id}` and does not fetch or open the resource.
 
 For tests, inject `FakeChatGenerator` from
 `app/module/agent/test/fake_chat_generator.py` through
@@ -593,10 +590,11 @@ indexed chunks; if they have no chunks either, the viewer shows a readable error
 If a record claims an original but `/content` returns
 `file_content_unavailable`, the sheet still falls back to chunks.
 
-The frontend uses `/viewer/file/:fileId`, `/viewer/media/:mediaId`, and
-`/viewer/memory/:memoryId`; PDF/DOCX/image engines are lazy-loaded and never execute
-uploaded scripts. `/api/v1/media/{media_id}/content` remains inline for media
-images.
+The frontend opens files in the File Library preview modal and memories in the
+memory reader; legacy `/viewer/file/:fileId` and `/viewer/memory/:memoryId`
+links redirect there. PDF, DOCX, image, and text engines are lazy-loaded and
+never execute uploaded scripts. Images are served through the normal file
+content endpoint.
 PDF.js CMaps and standard fonts are copied into `frontend/public/pdfjs` by
 `frontend/scripts/copy-pdfjs-assets.mjs`, then emitted into
 `frontend/dist/pdfjs` by Vite. The Docker image copies the committed `dist`, so
@@ -608,8 +606,8 @@ The first visit creates the single owner account through
 `POST /api/v1/auth/setup`. Passwords are hashed with Argon2; sessions are opaque
 cookies whose SHA-256 hash is stored in `user_session`. The cookie is HttpOnly and
 SameSite=Lax; set `DENDRO_COOKIE_SECURE=true` behind HTTPS. Every knowledge,
-media, settings, and agent endpoint requires the session; `/api/v1/health`,
-`/health`, `/api/v1/auth/*`, `/docs`, `/redoc`, `/openapi.json`, and the SPA
+settings, and agent endpoint requires the session; `/api/v1/health`,
+`/health`, `/api/v1/auth/*`, `/api/docs`, `/api/redoc`, `/openapi.json`, and the SPA
 shell are public. There is no password recovery, by design.
 
 ## Database
@@ -617,8 +615,8 @@ shell are public. There is no password recovery, by design.
 Alembic owns the schema. The initial migration creates `pg_trgm` and six archive
 tables: `file`, `tree_node`, `chunk`, `chunk_ngram`, `memory`, and
 `memory_summary` (plus Alembic's own `alembic_version`). Later migrations add
-provider settings, standalone media, document analysis fields, account/session
-auth (`app_user`,
+provider settings, the retired standalone media tables, document analysis
+fields, account/session auth (`app_user`,
 `user_session`), the agent tables (`agent_conversation`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
@@ -651,10 +649,12 @@ and seeds row `id=1` with the defaults. Later migrations in order:
 - `c8f2a4b6d9e1` (after `b3e5c7d9f1a2`) adds the non-null
   `save_memory_requires_approval` boolean with a `true` server default;
   existing rows receive `true`;
-- `f2b3c4d5e6a7` (after `c8f2a4b6d9e1`, the current head) creates
-  `agent_approval` with its status check, conversation/run/entry foreign keys,
-  status indexes, and the partial unique pending `(run_id, tool_call_id)`
-  index.
+- `f2b3c4d5e6a7` (after `c8f2a4b6d9e1`) creates `agent_approval` with its
+  status check, conversation/run/entry foreign keys, status indexes, and the
+  partial unique pending `(run_id, tool_call_id)` index;
+- `8f4b2c6d9e01` (after `f2b3c4d5e6a7`, the current head) drops the retired
+  `media_ngram` and `media_asset` tables. The downgrade recreates their original
+  schema and indexes.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
@@ -693,7 +693,6 @@ app/
     schema/                Pydantic request/response contracts
     exception/             stable domain errors
     dependencies.py        composition root
-  module/media/            standalone image library and visual search
   module/agent/
     domain/                replay builder, compaction, runtime config, envelopes
     model/                 conversation, entry, run, agent_config, saved_question
@@ -726,18 +725,19 @@ PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/dendromatrix-pytest.log
 
 The tests use a real PostgreSQL database named `dendromatrix_test` on the same
 instance. They run sequentially, reset tables between tests, and treat warnings
-as errors. There are exactly ten collected tests:
+as errors. There are exactly eleven collected tests:
 
 1. `tests/test_agent.py::test_agent_entry_log_tool_loop_and_cache_usage`
 2. `tests/test_errors.py::test_validation_and_error_envelope`
 3. `tests/test_file_library.py::test_file_ingest_path_read_and_soft_delete`
-4. `tests/test_memories.py::test_save_memory_supersede_and_trace`
-5. `tests/test_memories.py::test_read_memory_neighbors`
-6. `tests/test_search.py::test_hybrid_search_and_union_query`
-7. `tests/test_summaries.py::test_summary_fallback_and_search`
-8. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
-9. `tests/test_timeline.py::test_timeline_sparse_sampling`
-10. `tests/test_versions.py::test_tree_history_and_versioning`
+4. `tests/test_file_library.py::test_image_upload_without_vision_uses_filename_caption`
+5. `tests/test_memories.py::test_save_memory_supersede_and_trace`
+6. `tests/test_memories.py::test_read_memory_neighbors`
+7. `tests/test_search.py::test_hybrid_search_and_union_query`
+8. `tests/test_summaries.py::test_summary_fallback_and_search`
+9. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
+10. `tests/test_timeline.py::test_timeline_sparse_sampling`
+11. `tests/test_versions.py::test_file_history_and_versioning`
 
 The agent test injects a deterministic `FakeChatGenerator` by assigning
 `client.app.state.agent_chat_generator`; no DeepSeek or OpenAI request is made.
@@ -769,8 +769,10 @@ fields through `ready`/`failed`, the rule that a failed job publishes no
 current file or chunks, the synchronous fallback, and the ingestion settings
 read/PUT/reset contract. The retry endpoint was also exercised manually against
 a failed job. The former two search tests are
-merged into `test_hybrid_search_and_union_query`, which is what keeps the suite
-at ten collected functions.
+merged into `test_hybrid_search_and_union_query`. A separate file-library test
+uploads an image without a vision provider and checks the filename caption,
+stored original, path listing, and search result, which is what keeps the suite
+at eleven collected functions.
 
 A separate manual validation used the public-domain 《紅樓夢》 from Project
 Gutenberg (about 2.66 MB, 268 chunks at 4,000 characters / 500 overlap) against

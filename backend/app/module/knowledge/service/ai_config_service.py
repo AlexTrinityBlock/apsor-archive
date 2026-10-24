@@ -138,9 +138,7 @@ class AiConfigService:
             )
         base_url = payload.base_url.strip() if payload.base_url else None
         if provider in {"openai-compatible"} and not base_url:
-            raise InvalidProviderConfigError(
-                "openai-compatible providers require a base URL."
-            )
+            raise InvalidProviderConfigError("openai-compatible providers require a base URL.")
         if purpose == PURPOSE_CHAT:
             return provider, base_url, None
         if provider == "hashing":
@@ -255,9 +253,7 @@ class AiConfigService:
     async def test(self, purpose_value: str) -> AiTestResultSchema:
         purpose = self._purpose(purpose_value)
         config = (
-            self.runtime.chat_config
-            if purpose == PURPOSE_CHAT
-            else self.runtime.embedding_config
+            self.runtime.chat_config if purpose == PURPOSE_CHAT else self.runtime.embedding_config
         )
         started = time.perf_counter()
         try:

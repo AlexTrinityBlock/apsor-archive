@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 
-import type { FileSchema, PathFileSchema } from "../../generated-apis-types/schemas";
+import type { FileSchema } from "../../generated-apis-types/schemas";
 import { copyFile, moveFile } from "../../generated-apis-types/files/files";
 import { basename, parentPath } from "../../../lib/format";
 import { Button } from "../../component/Button";
@@ -12,12 +12,13 @@ import {
   joinArchivePath,
   normalizeArchivePath,
   sameArchivePath,
+  type FileOperationTarget,
 } from "./library-utils";
 
 type FileOperationMode = "move" | "copy";
 
 interface MoveCopyDialogProps {
-  readonly file: PathFileSchema;
+  readonly file: FileOperationTarget;
   readonly mode: FileOperationMode;
   readonly currentPath: string;
   readonly suggestions: readonly string[];

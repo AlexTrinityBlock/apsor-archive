@@ -84,7 +84,7 @@ from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-CITATION_PATTERN = re.compile(r"\[(?:file|memory|media|summary):\d+(?:#\d+)?\]")
+CITATION_PATTERN = re.compile(r"\[(?:file|memory|summary):\d+(?:#\d+)?\]")
 _PAGE_CONTEXT_LINE_WS = re.compile(r"[ \t\f\v]+")
 _PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")
 LIMIT_CODES = frozenset(
@@ -230,9 +230,7 @@ class AgentService:
         total = await self.repository.count_entries(conversation_id)
         page = _entry_page(conversation_id, entries, total, has_more)
         base = _conversation_schema(conversation)
-        last_page_context_key = await self.repository.last_page_context_key(
-            conversation_id
-        )
+        last_page_context_key = await self.repository.last_page_context_key(conversation_id)
         return AgentConversationDetailSchema(
             **base.model_dump(),
             entries=page.entries,
@@ -453,10 +451,7 @@ class AgentService:
             return None
         if not any(entry.kind == KIND_USER for entry in compactable):
             return None
-        if (
-            estimate_context_tokens(transcript)
-            <= self.config.compaction_threshold_tokens
-        ):
+        if estimate_context_tokens(transcript) <= self.config.compaction_threshold_tokens:
             return None
         return build_compaction_draft(
             transcript,
@@ -703,9 +698,7 @@ class AgentService:
                             {"run_id": run_id, "status": RUN_CANCELLED},
                         )
                         return
-                    last_entry_id = (
-                        limit_entries[-1].id if limit_entries else last_entry_id
-                    )
+                    last_entry_id = limit_entries[-1].id if limit_entries else last_entry_id
                     await self._fail_run(
                         turn,
                         last_entry_id,
@@ -740,9 +733,7 @@ class AgentService:
                             {"run_id": run_id, "status": RUN_CANCELLED},
                         )
                         return
-                    last_entry_id = (
-                        limit_entries[-1].id if limit_entries else last_entry_id
-                    )
+                    last_entry_id = limit_entries[-1].id if limit_entries else last_entry_id
                     await self._fail_run(
                         turn,
                         last_entry_id,
@@ -765,9 +756,7 @@ class AgentService:
 
                 batch_size = len(calls)
                 parallel = self.config.parallel_tools_enabled and batch_size > 1
-                planned: list[tuple[ChatToolCall, ToolOutcome] | None] = [
-                    None
-                ] * batch_size
+                planned: list[tuple[ChatToolCall, ToolOutcome] | None] = [None] * batch_size
                 eligible_indices: list[int] = []
                 approval_specs: list[tuple[int, ChatToolCall, dict[str, Any]]] = []
                 backend_approved_indices: set[int] = set()
@@ -797,19 +786,15 @@ class AgentService:
                     tool_calls_used += 1
                     if self.tool_registry.requires_confirmation(call.name):
                         if self.config.save_memory_requires_approval:
-                            validated, validation_error = (
-                                self.tool_registry.validate_arguments(
-                                    call.name,
-                                    call.arguments,
-                                    parse_error=call.parse_error,
-                                )
+                            validated, validation_error = self.tool_registry.validate_arguments(
+                                call.name,
+                                call.arguments,
+                                parse_error=call.parse_error,
                             )
                             if validation_error is not None:
                                 planned[index] = (call, validation_error)
                             else:
-                                approval_specs.append(
-                                    (index, call, validated or {})
-                                )
+                                approval_specs.append((index, call, validated or {}))
                             continue
                         # The human gate is disabled for this run snapshot. The
                         # backend authorizes the write itself; a model-supplied
@@ -845,8 +830,7 @@ class AgentService:
                 limit_codes = {
                     outcome[1].error_code
                     for outcome in planned
-                    if outcome is not None
-                    and outcome[1].error_code in LIMIT_CODES
+                    if outcome is not None and outcome[1].error_code in LIMIT_CODES
                 }
                 if limit_codes:
                     code = sorted(limit_codes)[0]
@@ -863,8 +847,7 @@ class AgentService:
                             conversation_id=conversation_id,
                             run_id=run_id,
                             drafts=[
-                                _tool_result_draft(call, outcome)
-                                for call, outcome in outcomes
+                                _tool_result_draft(call, outcome) for call, outcome in outcomes
                             ],
                             now=utcnow(),
                         )
@@ -876,9 +859,7 @@ class AgentService:
                             {"run_id": run_id, "status": RUN_CANCELLED},
                         )
                         return
-                    last_entry_id = (
-                        result_entries[-1].id if result_entries else last_entry_id
-                    )
+                    last_entry_id = result_entries[-1].id if result_entries else last_entry_id
                     for index, ((call, outcome), entry) in enumerate(
                         zip(outcomes, result_entries, strict=True)
                     ):
@@ -934,15 +915,13 @@ class AgentService:
                         for index, call, arguments in approval_specs
                     ]
                     try:
-                        result_entries, approvals = (
-                            await self.repository.pause_run_with_approvals(
-                                conversation_id=conversation_id,
-                                run_id=run_id,
-                                result_drafts=result_drafts,
-                                approval_drafts=approval_drafts,
-                                last_entry_id=last_entry_id,
-                                now=utcnow(),
-                            )
+                        result_entries, approvals = await self.repository.pause_run_with_approvals(
+                            conversation_id=conversation_id,
+                            run_id=run_id,
+                            result_drafts=result_drafts,
+                            approval_drafts=approval_drafts,
+                            last_entry_id=last_entry_id,
+                            now=utcnow(),
                         )
                     except AgentRunNotActiveError:
                         await self._best_effort_cancel(turn, last_entry_id)
@@ -987,10 +966,7 @@ class AgentService:
                     result_entries = await self.repository.append_tool_results(
                         conversation_id=conversation_id,
                         run_id=run_id,
-                        drafts=[
-                            _tool_result_draft(call, outcome)
-                            for call, outcome in outcomes
-                        ],
+                        drafts=[_tool_result_draft(call, outcome) for call, outcome in outcomes],
                         now=utcnow(),
                     )
                 except AgentRunNotActiveError:
@@ -1001,9 +977,7 @@ class AgentService:
                         {"run_id": run_id, "status": RUN_CANCELLED},
                     )
                     return
-                last_entry_id = (
-                    result_entries[-1].id if result_entries else last_entry_id
-                )
+                last_entry_id = result_entries[-1].id if result_entries else last_entry_id
                 for index, ((call, outcome), entry) in enumerate(
                     zip(outcomes, result_entries, strict=True)
                 ):
@@ -1076,12 +1050,8 @@ class AgentService:
         entries = [_entry_schema(row) for row in rows]
         if not any(entry.id == turn.user_entry.id for entry in entries):
             entries.insert(0, turn.user_entry)
-        assistant_entries = [
-            entry for entry in entries if entry.kind == KIND_ASSISTANT
-        ]
-        tool_results = [
-            entry for entry in entries if entry.kind == KIND_TOOL_RESULT
-        ]
+        assistant_entries = [entry for entry in entries if entry.kind == KIND_ASSISTANT]
+        tool_results = [entry for entry in entries if entry.kind == KIND_TOOL_RESULT]
         pending = await self.repository.list_pending_approvals(run.id)
         return AgentTurnResultSchema(
             run=_run_schema(run),
@@ -1127,9 +1097,7 @@ class AgentService:
         approval = await self.repository.get_approval(approval_id)
         if approval is None:
             raise AgentApprovalNotFoundError(approval_id)
-        conversation_row = await self.repository.get_conversation(
-            approval.conversation_id
-        )
+        conversation_row = await self.repository.get_conversation(approval.conversation_id)
         if conversation_row is None:
             raise AgentConversationNotFoundError(approval.conversation_id)
         if conversation_row.status != "active":
@@ -1162,12 +1130,10 @@ class AgentService:
         else:
             outcome = _rejection_outcome(call.name, approval_id)
 
-        tool_entry, run, conversation, remaining = (
-            await self.repository.record_approval_result(
-                approval_id=approval_id,
-                draft=_tool_result_draft(call, outcome),
-                now=utcnow(),
-            )
+        tool_entry, run, conversation, remaining = await self.repository.record_approval_result(
+            approval_id=approval_id,
+            draft=_tool_result_draft(call, outcome),
+            now=utcnow(),
         )
         user_entry = await self.repository.get_entry(run.user_entry_id)
         if user_entry is None:
@@ -1334,9 +1300,7 @@ class AgentService:
                     )
                     continue
                 if kind == "result":
-                    outcome.result = (
-                        payload if isinstance(payload, ChatResult) else None
-                    )
+                    outcome.result = payload if isinstance(payload, ChatResult) else None
                     if outcome.result is None:
                         outcome.error = RuntimeError("provider returned an invalid result")
                     return
@@ -1555,9 +1519,7 @@ def _page_context_draft(
         return None, None
     key = context.key.strip()
     path = context.path.strip()
-    title: str | None = (
-        " ".join(context.title.split()) if context.title else ""
-    ) or None
+    title: str | None = (" ".join(context.title.split()) if context.title else "") or None
     text = _normalize_page_text(context.text)
     if not key or not path or not text:
         return None, None
@@ -1569,9 +1531,7 @@ def _page_context_draft(
     if title:
         values["title"] = title
     provider_content = (
-        f"<page_context{attributes(values)}>"
-        f"<text>{xml_text(text)}</text>"
-        "</page_context>"
+        f"<page_context{attributes(values)}><text>{xml_text(text)}</text></page_context>"
     )
     data = {
         "page_key": key,
@@ -1592,15 +1552,8 @@ def _page_context_draft(
 
 def _normalize_page_text(value: str) -> str:
     """Normalize line endings and whitespace without losing paragraph breaks."""
-    normalized = (
-        value.replace("\r\n", "\n")
-        .replace("\r", "\n")
-        .replace("\u00a0", " ")
-    )
-    lines = [
-        _PAGE_CONTEXT_LINE_WS.sub(" ", line).strip()
-        for line in normalized.split("\n")
-    ]
+    normalized = value.replace("\r\n", "\n").replace("\r", "\n").replace("\u00a0", " ")
+    lines = [_PAGE_CONTEXT_LINE_WS.sub(" ", line).strip() for line in normalized.split("\n")]
     normalized = "\n".join(lines).strip()
     return _PAGE_CONTEXT_BLANK_LINES.sub("\n\n", normalized)
 
@@ -1727,9 +1680,7 @@ def _approval_preview(
         "content": content,
         "content_chars": len(content),
         "supersedes": supersedes,
-        "occurred_at": (
-            raw_occurred_at if isinstance(raw_occurred_at, str) else None
-        ),
+        "occurred_at": (raw_occurred_at if isinstance(raw_occurred_at, str) else None),
         "risk": (
             "Approving appends a durable memory to the archive. Rejecting "
             "writes nothing and tells the agent the write was declined."
@@ -1760,8 +1711,7 @@ def _approval_required_event(approval: AgentApprovalSchema) -> AgentStreamEvent:
 def _rejection_outcome(tool_name: str, approval_id: int) -> ToolOutcome:
     detail = "The user rejected the proposed memory write. No memory was saved."
     return ToolOutcome(
-        content=f"<error{attributes({'code': 'memory_rejected'})}>"
-        f"{xml_text(detail)}</error>",
+        content=f"<error{attributes({'code': 'memory_rejected'})}>{xml_text(detail)}</error>",
         data={
             "tool": tool_name,
             "status": "error",
@@ -1862,11 +1812,7 @@ def _usage_from_entries(entries: list[AgentEntrySchema]) -> dict[str, int]:
         if isinstance(usage, dict):
             _merge_usage(
                 total,
-                {
-                    str(key): int(value)
-                    for key, value in usage.items()
-                    if isinstance(value, int)
-                },
+                {str(key): int(value) for key, value in usage.items() if isinstance(value, int)},
             )
     return total
 

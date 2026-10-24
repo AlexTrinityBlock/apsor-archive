@@ -72,9 +72,7 @@ def test_read_memory_neighbors(client: TestClient) -> None:
     assert [item["memory_id"] for item in body["neighbors_before"]] == [
         first["memory"]["memory_id"]
     ]
-    assert [item["memory_id"] for item in body["neighbors_after"]] == [
-        last["memory"]["memory_id"]
-    ]
+    assert [item["memory_id"] for item in body["neighbors_after"]] == [last["memory"]["memory_id"]]
 
     exact = client.get(
         f"/api/v1/memories/{middle['memory']['memory_id']}",

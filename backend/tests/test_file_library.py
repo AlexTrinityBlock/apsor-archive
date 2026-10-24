@@ -1,8 +1,15 @@
 """File ingestion, path listing, chunk windows, and soft deletion."""
 
+import base64
+
 from fastapi.testclient import TestClient
 
 from tests.helpers import create_text
+
+# A 1x1 blue PNG; enough to exercise the image extension and original storage.
+BLUE_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
 
 
 def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
@@ -44,17 +51,15 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     deleted = client.delete(f"/api/v1/files/{file_id}")
     assert deleted.status_code == 204
 
-    current_tree = client.get("/api/v1/tree", params={"root": "/history", "depth": 5})
-    current_nodes = current_tree.json()["nodes"]
-    assert all(node["file_id"] != file_id for node in current_nodes)
-
-    history_tree = client.get(
-        "/api/v1/tree",
-        params={"root": "/history", "depth": 5, "include_history": True},
+    deleted_file = client.get(f"/api/v1/files/{file_id}")
+    assert deleted_file.status_code == 200
+    assert deleted_file.json()["deleted_at"] is not None
+    assert deleted_file.json()["is_current"] is False
+    after_delete_listing = client.get(
+        "/api/v1/paths",
+        params={"path": "/history", "path_depth": 5},
     )
-    history_nodes = history_tree.json()["nodes"]
-    deleted_nodes = [node for node in history_nodes if node["file_id"] == file_id]
-    assert deleted_nodes and deleted_nodes[0]["deleted_at"] is not None
+    assert all(item["file_id"] != file_id for item in after_delete_listing.json()["files"])
 
     recreated = create_text(
         client,
@@ -305,8 +310,7 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     )
     assert not_ready.status_code == 200
     assert all(
-        item["raw_file_path"] != async_text_path
-        for item in not_ready.json()["file_results"]
+        item["raw_file_path"] != async_text_path for item in not_ready.json()["file_results"]
     )
 
     assert client.portal is not None
@@ -332,9 +336,7 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
         params={"query": "quasar bearing", "result_number": 5},
     )
     assert ready_search.status_code == 200
-    assert any(
-        item["file_id"] == text_file_id for item in ready_search.json()["file_results"]
-    )
+    assert any(item["file_id"] == text_file_id for item in ready_search.json()["file_results"])
 
     # The same queue drives uploaded originals; the original bytes keep the
     # inline viewer working after the job publishes.
@@ -349,9 +351,7 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert upload_job["source_kind"] == "upload"
     assert upload_job["file_id"] is None
     assert client.portal.call(worker.run_once) is True
-    upload_state = client.get(
-        f"/api/v1/files/ingest-jobs/{upload_job['id']}"
-    ).json()
+    upload_state = client.get(f"/api/v1/files/ingest-jobs/{upload_job['id']}").json()
     assert upload_state["status"] == "ready"
     assert upload_state["chunks_embedded"] == upload_state["chunks_total"]
     upload_content = client.get(f"/api/v1/files/{int(upload_state['file_id'])}/content")
@@ -368,9 +368,7 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert broken.status_code == 202, broken.text
     broken_job = broken.json()
     assert client.portal.call(worker.process_job, broken_job["id"]) is not None
-    broken_state = client.get(
-        f"/api/v1/files/ingest-jobs/{broken_job['id']}"
-    ).json()
+    broken_state = client.get(f"/api/v1/files/ingest-jobs/{broken_job['id']}").json()
     assert broken_state["status"] == "failed"
     assert broken_state["error_code"] == "empty_content"
     assert broken_state["error_detail"]
@@ -449,3 +447,44 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     reset_ingest_body = reset_ingest.json()
     assert reset_ingest_body["source"] == "database"
     assert reset_ingest_body["config"] == ingest_defaults
+
+
+def test_image_upload_without_vision_uses_filename_caption(
+    client: TestClient,
+) -> None:
+    """Images are normal files even when no vision provider is configured."""
+    uploaded = client.post(
+        "/api/v1/files",
+        data={"path": "/images/blue-square.png"},
+        files={"file": ("blue-square.png", BLUE_PNG, "image/png")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    image = uploaded.json()
+    image_id = int(image["id"])
+    assert image["document_type"] == "image"
+    assert image["extraction_method"] == "filename"
+    assert image["has_original"] is True
+    assert int(image["total_chunks"]) >= 1
+
+    content = client.get(f"/api/v1/files/{image_id}/content")
+    assert content.status_code == 200
+    assert content.content == BLUE_PNG
+    assert content.headers["content-type"].startswith("image/png")
+
+    chunks = client.get(f"/api/v1/files/{image_id}/chunks/1")
+    assert chunks.status_code == 200
+    assert "blue square image" in chunks.json()["chunks"][0]["content"]
+
+    listing = client.get(
+        "/api/v1/paths",
+        params={"path": "/images", "path_depth": 1},
+    )
+    assert listing.status_code == 200
+    assert [item["file_id"] for item in listing.json()["files"]] == [image_id]
+
+    found = client.get(
+        "/api/v1/search",
+        params={"query": "blue square", "result_number": 5},
+    )
+    assert found.status_code == 200
+    assert any(item["file_id"] == image_id for item in found.json()["file_results"])

@@ -13,7 +13,6 @@ const SUGGESTIONS: Readonly<Record<string, string>> = {
   tool_execution_failed:
     "The underlying archive service failed. Retry once the local API and its providers are healthy.",
   file_not_found: "Check the file id and whether the leaf was removed or superseded.",
-  media_not_found: "Check the media id; deleted specimens leave no viewer link.",
   memory_not_found: "Check the memory id; deprecated leaves remain readable, removed ones do not.",
   invalid_chunk_window:
     "Choose a chunk inside the file's recorded range, then retry the read.",

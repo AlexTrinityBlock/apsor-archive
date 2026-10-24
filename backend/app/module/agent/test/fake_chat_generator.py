@@ -88,12 +88,7 @@ class FakeChatGenerator:
         usage: dict[str, int] | None = None,
     ) -> "FakeChatGenerator":
         """Build a generator from plain final answers."""
-        return cls(
-            [
-                text_result(text, usage=usage)
-                for text in texts
-            ]
-        )
+        return cls([text_result(text, usage=usage) for text in texts])
 
 
 def text_result(

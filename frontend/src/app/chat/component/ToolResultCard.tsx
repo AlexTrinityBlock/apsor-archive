@@ -2,12 +2,22 @@ import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
 import { formatArgumentValue } from "../format";
-import { readToolResultCallId, readToolResultMeta } from "../types";
+import {
+  readToolResultCallId,
+  readToolResultMeta,
+  type ResourceMeta,
+} from "../types";
 import { ResourceCard } from "./ResourceCard";
 import { toolStatusTone } from "./status";
 
 /** A result card built from structured data, never the model-facing XML. */
-export function ToolResultCard({ entry }: { readonly entry: AgentEntrySchema }) {
+export function ToolResultCard({
+  entry,
+  onOpenResource,
+}: {
+  readonly entry: AgentEntrySchema;
+  readonly onOpenResource?: (resource: ResourceMeta) => void;
+}) {
   const meta = readToolResultMeta(entry);
   const callId = readToolResultCallId(entry);
   const argumentsList = meta.arguments ? Object.entries(meta.arguments) : [];
@@ -37,7 +47,7 @@ export function ToolResultCard({ entry }: { readonly entry: AgentEntrySchema }) 
       </p>
 
       {meta.resource ? (
-        <ResourceCard resource={meta.resource} />
+        <ResourceCard resource={meta.resource} onOpen={onOpenResource} />
       ) : (
         <p className="chat-result__note">
           The full tool result remains recorded in the transcript.

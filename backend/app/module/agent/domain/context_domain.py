@@ -34,11 +34,7 @@ def build_context(
 ) -> ProviderContext:
     """Derive the exact provider payload from an ordered entry log."""
     ordered = sorted(
-        (
-            entry
-            for entry in entries
-            if cutoff_entry_id is None or entry.id <= cutoff_entry_id
-        ),
+        (entry for entry in entries if cutoff_entry_id is None or entry.id <= cutoff_entry_id),
         key=lambda entry: entry.id,
     )
     if not ordered:
@@ -58,17 +54,13 @@ def build_context(
     system_entries = [entry for entry in active if entry.kind == KIND_SYSTEM]
     if not system_entries:
         earlier = [
-            entry
-            for entry in ordered
-            if entry.kind == KIND_SYSTEM and entry.id < active_start
+            entry for entry in ordered if entry.kind == KIND_SYSTEM and entry.id < active_start
         ]
         if earlier:
             system_entries = [earlier[-1]]
 
     sections, tools, system_override = _system_snapshot(system_entries, edits)
-    system_content = (
-        system_override if system_override is not None else _render_sections(sections)
-    )
+    system_content = system_override if system_override is not None else _render_sections(sections)
     system_message = {"role": "system", "content": system_content}
     tools_list = list(tools.values())
 
@@ -151,9 +143,7 @@ def _system_snapshot(
                 sections[name] = (section_title, content)
 
         raw_tools = data.get("tools")
-        has_tool_delta = isinstance(raw_tools, list) or isinstance(
-            data.get("tools_added"), list
-        )
+        has_tool_delta = isinstance(raw_tools, list) or isinstance(data.get("tools_added"), list)
         if isinstance(raw_tools, list):
             tools = {}
             for raw_tool in raw_tools:

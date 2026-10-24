@@ -156,9 +156,7 @@ class MemoryService:
                 if memory.deleted_at is None
             ]
             if target.superseded_by_id is not None:
-                superseded_by = await self.memory_repository.get_by_id(
-                    target.superseded_by_id
-                )
+                superseded_by = await self.memory_repository.get_by_id(target.superseded_by_id)
             chain = await self._trace_chain(target)
 
         return MemoryReadSchema(
@@ -166,9 +164,7 @@ class MemoryService:
             neighbors_before=[self._to_schema(memory) for memory in previous],
             neighbors_after=[self._to_schema(memory) for memory in following],
             supersedes=[self._to_schema(memory) for memory in supersedes],
-            superseded_by=(
-                self._to_schema(superseded_by) if superseded_by is not None else None
-            ),
+            superseded_by=(self._to_schema(superseded_by) if superseded_by is not None else None),
             chain=[self._to_schema(memory) for memory in chain],
         )
 

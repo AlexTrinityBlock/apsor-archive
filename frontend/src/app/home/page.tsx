@@ -1,49 +1,38 @@
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
-  useGetAiStatus,
+  useGetHealth,
   useGetStats,
-  useGetTree,
-  useListMemories,
+  useReadPath,
   useReadTimeline,
   useSeedDemo,
 } from "../generated-apis-types";
 import type {
-  MemorySchema,
+  HealthSchema,
+  PathFileSchema,
   ReadTimelineParams,
   StatsSchema,
   TimelineEventSchema,
-  TreeNodeSchema,
-  TreeSchema,
 } from "../generated-apis-types/schemas";
 import { Badge } from "../component/Badge";
 import { Button, ButtonLink } from "../component/Button";
 import { Icon } from "../component/Icon";
 import { Panel } from "../component/Panel";
 import { SearchField } from "../component/SearchField";
-import { SectionHeading } from "../component/SectionHeading";
 import { StatCard } from "../component/StatCard";
 import { useToast } from "../component/Toast";
-import { ToolCard } from "../component/ToolCard";
-import { TreeMark } from "../component/TreeMark";
-import { TreeRings } from "../component/TreeRings";
+import type { BadgeTone } from "../type/ui";
 import {
   basename,
   formatBytes,
   formatDate,
+  formatDateTime,
   formatNumber,
-  formatTime,
-  parentPath,
+  formatRelative,
   truncate,
 } from "../../lib/format";
-import {
-  demoAskCitations,
-  demoTools,
-  type StatAccent,
-} from "../type/demo";
-import type { BadgeTone } from "../type/ui";
 import "./home.css";
 
 const SEARCH_SUGGESTIONS = [
@@ -51,21 +40,23 @@ const SEARCH_SUGGESTIONS = [
   "superseded memories",
   "/history/industry",
   "Ford in the 1970s",
+  "frost ring anomalies",
 ] as const;
 
-const MEMORY_PREVIEW_LIMIT = 4;
-const TIMELINE_WINDOW_DAYS = 14;
-const LATEST_EVENT_LIMIT = 3;
-const FILE_PREVIEW_LIMIT = 4;
-const EMPTY_MEMORIES: readonly MemorySchema[] = [];
-const EMPTY_TREE_NODES: readonly TreeNodeSchema[] = [];
-const EMPTY_EVENTS: readonly TimelineEventSchema[] = [];
+const TIMELINE_WINDOW_DAYS = 30;
+const RECENT_FILE_LIMIT = 4;
+const RECENT_EVENT_LIMIT = 4;
 
-const TIMELINE_KIND_LABELS: Record<TimelineEventSchema["kind"], string> = {
-  memory: "Memory",
-  summary: "Summary",
-  file_update: "File",
-};
+/** Seed changes every read surface that can expose the new records. */
+const SEED_INVALIDATION_KEYS = [
+  "/api/v1/stats",
+  "/api/v1/health",
+  "/api/v1/timeline",
+  "/api/v1/paths",
+  "/api/v1/memories",
+  "/api/v1/files",
+  "/api/v1/search",
+] as const;
 
 const TIMELINE_KIND_TONES: Record<TimelineEventSchema["kind"], BadgeTone> = {
   memory: "moss",
@@ -77,155 +68,51 @@ interface StatCardData {
   readonly label: string;
   readonly value: string;
   readonly note: string;
-  readonly accent: StatAccent;
+  readonly accent: "moss" | "ink" | "ochre" | "vermilion";
 }
 
-interface ChainNode {
-  readonly id: number;
-  readonly status: MemorySchema["status"];
-}
-
-interface SupersedeChain {
-  readonly nodes: readonly ChainNode[];
-  readonly anchorId: number | null;
-}
-
-interface TimelineSummary {
-  readonly sampled: number;
-  readonly total: number;
-  readonly skipped: number;
+interface RecentFile {
+  readonly key: string;
+  readonly fileId: number;
+  readonly name: string;
+  readonly path: string | null;
+  readonly sizeBytes: number | null;
+  readonly totalChunks: number | null;
+  readonly action: string | null;
+  readonly time: string;
 }
 
 function searchHref(query: string): string {
   return `/search?query=${encodeURIComponent(query)}`;
 }
 
-function statNote(stats: StatsSchema | undefined, error: boolean, loaded: string): string {
-  if (stats) {
-    return loaded;
+function fileHref(fileId: number): string {
+  return `/library?tab=files&file=${fileId}&chunk=1`;
+}
+
+function errorText(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.length > 0
+    ? error.message
+    : fallback;
+}
+
+function fileTypeLabel(name: string): string {
+  const base = basename(name);
+  const dot = base.lastIndexOf(".");
+  if (dot < 0 || dot === base.length - 1) {
+    return "FILE";
   }
-  return error ? "Counts unavailable" : "Reading live counts";
-}
-
-function statsCredit(stats: StatsSchema | undefined, error: boolean): string {
-  if (stats) {
-    return "Live counts · /api/v1/stats";
+  const extension = base.slice(dot + 1).toLowerCase();
+  if (extension === "markdown") {
+    return "MD";
   }
-  return error ? "Counts unavailable" : "Reading live counts";
-}
-
-function archiveCondition(stats: StatsSchema | undefined, error: boolean): string {
-  if (stats) {
-    return "Live archive";
+  if (extension === "jpeg") {
+    return "JPG";
   }
-  return error ? "API unreachable" : "Reading the archive";
+  return extension.slice(0, 4).toUpperCase();
 }
 
-function footerCount(stats: StatsSchema | undefined): string {
-  if (!stats) {
-    return "Local-first archive";
-  }
-  return `${formatNumber(stats.memory_count)} memories · ${formatNumber(stats.file_count)} files`;
-}
-
-function fileStatNote(stats: StatsSchema | undefined): string {
-  return stats ? `${formatBytes(stats.storage_bytes)} stored locally` : "";
-}
-
-function memoryStatNote(stats: StatsSchema | undefined): string {
-  if (!stats) {
-    return "";
-  }
-  return `${formatNumber(stats.active_memory_count)} active · ${formatNumber(stats.memory_count)} pressed`;
-}
-
-function buildStatCards(
-  stats: StatsSchema | undefined,
-  error: boolean,
-): readonly StatCardData[] {
-  return [
-    {
-      label: "Files archived",
-      value: stats ? formatNumber(stats.file_count) : "—",
-      note: statNote(stats, error, fileStatNote(stats)),
-      accent: "moss",
-    },
-    {
-      label: "Memories pressed",
-      value: stats ? formatNumber(stats.active_memory_count) : "—",
-      note: statNote(stats, error, memoryStatNote(stats)),
-      accent: "ochre",
-    },
-    {
-      label: "AI summaries",
-      value: stats ? formatNumber(stats.summary_count) : "—",
-      note: statNote(stats, error, "generator recorded on every one"),
-      accent: "vermilion",
-    },
-    {
-      label: "Indexed chunks",
-      value: stats ? formatNumber(stats.chunk_count) : "—",
-      note: statNote(stats, error, "current chunks · 1-based"),
-      accent: "ink",
-    },
-  ];
-}
-
-function memoryTitle(memory: MemorySchema): string {
-  const compact = memory.content.replace(/\s+/g, " ").trim();
-  if (compact.length === 0) {
-    return `Memory #${memory.memory_id}`;
-  }
-  const sentenceEnd = compact.search(/[.!?\u3002\uFF01\uFF1F]/);
-  const sentence = sentenceEnd >= 0 ? compact.slice(0, sentenceEnd + 1) : compact;
-  return truncate(sentence, 118) || `Memory #${memory.memory_id}`;
-}
-
-function memoryExcerpt(memory: MemorySchema): string {
-  const compact = memory.content.replace(/\s+/g, " ").trim();
-  return compact.length > 0 ? truncate(compact, 280) : "No content recorded.";
-}
-
-function memoryStatusTone(status: MemorySchema["status"]): BadgeTone {
-  return status === "active" ? "moss" : "ochre";
-}
-
-function buildSupersedeChain(memories: readonly MemorySchema[]): SupersedeChain {
-  for (const memory of memories) {
-    if (memory.supersedes_ids.length > 0) {
-      const nodes = memory.supersedes_ids.map<ChainNode>((id) => ({
-        id,
-        status: "deprecated",
-      }));
-      nodes.push({ id: memory.memory_id, status: memory.status });
-      return { nodes, anchorId: memory.memory_id };
-    }
-    if (memory.superseded_by_id !== null) {
-      return {
-        nodes: [
-          { id: memory.memory_id, status: memory.status },
-          { id: memory.superseded_by_id, status: "active" },
-        ],
-        anchorId: memory.superseded_by_id,
-      };
-    }
-  }
-  return { nodes: [], anchorId: null };
-}
-
-function chainNodeClass(status: MemorySchema["status"]): string {
-  return status === "active"
-    ? "supersede-chain__node is-active"
-    : "supersede-chain__node is-deprecated";
-}
-
-function currentFiles(nodes: readonly TreeNodeSchema[]): TreeNodeSchema[] {
-  return nodes
-    .filter((node) => node.kind === "file" && node.is_current)
-    .sort((left, right) => Date.parse(right.update_time) - Date.parse(left.update_time));
-}
-
-function timelineParamsFor(value: string | undefined): ReadTimelineParams | null {
+function timelineParamsFor(value: string | null | undefined): ReadTimelineParams | null {
   if (!value) {
     return null;
   }
@@ -255,392 +142,476 @@ function fallbackTimelineParams(): ReadTimelineParams {
   };
 }
 
-function latestEvents(events: readonly TimelineEventSchema[]): TimelineEventSchema[] {
-  return [...events]
-    .sort((left, right) => Date.parse(right.time) - Date.parse(left.time))
-    .slice(0, LATEST_EVENT_LIMIT);
+function buildStatCards(stats: StatsSchema | undefined): readonly StatCardData[] {
+  const deprecated = stats
+    ? Math.max(0, stats.memory_count - stats.active_memory_count)
+    : 0;
+  return [
+    {
+      label: "Files archived",
+      value: stats ? formatNumber(stats.file_count) : "—",
+      note: stats ? `${formatBytes(stats.storage_bytes)} stored locally` : "Counts unavailable",
+      accent: "moss",
+    },
+    {
+      label: "Indexed chunks",
+      value: stats ? formatNumber(stats.chunk_count) : "—",
+      note: stats ? "Current indexed knowledge units" : "Counts unavailable",
+      accent: "ink",
+    },
+    {
+      label: "Memory crystals",
+      value: stats ? formatNumber(stats.memory_count) : "—",
+      note: stats
+        ? `${formatNumber(stats.active_memory_count)} active · ${formatNumber(deprecated)} superseded`
+        : "Counts unavailable",
+      accent: "ochre",
+    },
+    {
+      label: "AI summaries",
+      value: stats ? formatNumber(stats.summary_count) : "—",
+      note: stats ? "Recorded document summaries" : "Counts unavailable",
+      accent: "vermilion",
+    },
+  ];
 }
 
-function timelineCountLabel(summary: TimelineSummary | undefined): string {
-  if (!summary) {
-    return "—";
+function dedupeTimelineFiles(
+  events: readonly TimelineEventSchema[],
+): RecentFile[] {
+  const byId = new Map<number, RecentFile>();
+  for (const event of events) {
+    if (event.kind !== "file_update" || event.file_id == null) {
+      continue;
+    }
+    const path = event.raw_file_path?.trim() || null;
+    const name = event.content.trim() || (path ? basename(path) : `File #${event.file_id}`);
+    const next: RecentFile = {
+      key: `timeline-file-${event.file_id}`,
+      fileId: event.file_id,
+      name,
+      path,
+      sizeBytes: null,
+      totalChunks: null,
+      action: event.action ?? null,
+      time: event.time,
+    };
+    const existing = byId.get(event.file_id);
+    if (!existing || Date.parse(next.time) > Date.parse(existing.time)) {
+      byId.set(event.file_id, next);
+    }
   }
-  const base = `${formatNumber(summary.sampled)} sampled / ${formatNumber(summary.total)} events`;
-  return summary.skipped > 0 ? `${base} · ${formatNumber(summary.skipped)} skipped` : base;
+  return [...byId.values()]
+    .sort((left, right) => Date.parse(right.time) - Date.parse(left.time))
+    .slice(0, RECENT_FILE_LIMIT);
 }
 
-function eventKey(event: TimelineEventSchema): string {
+function recentPathFiles(files: readonly PathFileSchema[]): RecentFile[] {
+  return [...files]
+    .sort((left, right) => Date.parse(right.update_time) - Date.parse(left.update_time))
+    .slice(0, RECENT_FILE_LIMIT)
+    .map((file) => ({
+      key: `path-file-${file.file_id}`,
+      fileId: file.file_id,
+      name: file.file_name,
+      path: file.raw_file_path,
+      sizeBytes: file.size_bytes,
+      totalChunks: file.total_chunks,
+      action: null,
+      time: file.update_time,
+    }));
+}
+
+function eventKey(event: TimelineEventSchema, index: number): string {
   const source =
     event.memory_id ?? event.memory_summary_id ?? event.file_id ?? event.raw_file_path ?? "event";
-  return `${event.kind}-${String(source)}-${event.time}`;
+  return `${event.kind}-${String(source)}-${event.time}-${index}`;
 }
 
-function aiHeading(
-  pending: boolean,
-  error: boolean,
-  configured: boolean,
-  provider: string | undefined,
-  model: string | undefined,
-): string {
-  if (pending) {
-    return "Grounded answers · reading AI status";
+function eventLabel(event: TimelineEventSchema): string {
+  if (event.kind === "memory") {
+    return event.status === "deprecated" ? "Memory superseded" : "Memory crystallized";
   }
-  if (error) {
-    return "Grounded answers · status unavailable";
+  if (event.kind === "summary") {
+    return "Summary synthesized";
   }
-  if (configured && provider && model) {
-    return `Grounded answers · ${provider} ${model}`;
+  return event.action === "created" ? "File created" : "File updated";
+}
+
+function eventTone(event: TimelineEventSchema): BadgeTone {
+  if (event.kind === "memory" && event.status === "deprecated") {
+    return "vermilion";
   }
-  return "Grounded answers · AI unconfigured";
+  return TIMELINE_KIND_TONES[event.kind];
 }
 
-function aiDotClassName(pending: boolean, configured: boolean): string {
-  if (pending) {
-    return "status-dot status-dot--pending";
+function eventFallbackContent(event: TimelineEventSchema): string {
+  if (event.kind === "memory" && event.memory_id != null) {
+    return `Memory #${event.memory_id}`;
   }
-  return configured ? "status-dot" : "status-dot status-dot--missing";
-}
-
-function aiFallbackCopy(configured: boolean, pending: boolean): string {
-  if (pending) {
-    return "Reading the AI connection. Answers cite retrieval or fail honestly.";
+  if (event.kind === "summary" && event.memory_summary_id != null) {
+    return `Summary #${event.memory_summary_id}`;
   }
-  if (configured) {
-    return "Cited answers via DeepSeek. Only retrieved passages leave this machine; the key never reaches the browser.";
+  if (event.kind === "file_update") {
+    return event.raw_file_path?.trim() || `File #${event.file_id ?? "—"}`;
   }
-  return "No API key? Ask returns 503 ai_not_configured, never a fabricated answer. Set DENDRO_DEEPSEEK_API_KEY in .secrets/deepseek.env.";
+  return "No excerpt recorded.";
 }
 
-function aiHintCopy(configured: boolean, pending: boolean): string {
-  if (pending) {
-    return "Checking the AI connection";
+function eventLink(event: TimelineEventSchema): { to: string; label: string } | null {
+  if (event.kind === "memory" && event.memory_id != null) {
+    return { to: `/memory/${event.memory_id}`, label: "Read memory" };
   }
-  return configured ? "RAG · 2–4 retrieval steps" : "AI unconfigured · summaries stay extractive";
+  if (event.kind === "file_update" && event.file_id != null) {
+    return { to: fileHref(event.file_id), label: "Open in File Library" };
+  }
+  return null;
 }
 
-function MemoryLedgerSkeleton() {
-  return (
-    <div className="memory-ledger" aria-busy="true" aria-label="Reading recent memories">
-      {[0, 1, 2].map((index) => (
-        <div className="memory-entry home-skeleton-entry" key={index} aria-hidden="true">
-          <div className="memory-entry__rail">
-            <span className="home-skeleton home-skeleton--tiny" />
-            <span className="home-skeleton home-skeleton--tiny is-short" />
-          </div>
-          <div className="memory-entry__body">
-            <span className="home-skeleton home-skeleton--badge" />
-            <span className="home-skeleton home-skeleton--title" />
-            <span className="home-skeleton home-skeleton--line" />
-            <span className="home-skeleton home-skeleton--line is-short" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function LineageSkeleton() {
-  return (
-    <div className="lineage-card__files" aria-busy="true" aria-label="Reading current file leaves">
-      {[0, 1, 2].map((index) => (
-        <div className="lineage-file home-skeleton-entry" key={index} aria-hidden="true">
-          <span className="lineage-file__graft" />
-          <span className="lineage-file__icon">
-            <span className="home-skeleton home-skeleton--icon" />
-          </span>
-          <span className="lineage-file__copy">
-            <span className="home-skeleton home-skeleton--name" />
-            <span className="home-skeleton home-skeleton--meta" />
-          </span>
-          <span className="home-skeleton home-skeleton--badge" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SeasonSkeleton() {
-  return (
-    <div className="season-strip__events" aria-busy="true" aria-label="Reading the latest season">
-      {[0, 1, 2].map((index) => (
-        <div className="season-event" key={index} aria-hidden="true">
-          <span className="home-skeleton home-skeleton--badge" />
-          <span className="home-skeleton home-skeleton--line" />
-          <span className="home-skeleton home-skeleton--line is-short" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SeedPanel({
-  isPending,
-  onSeed,
-}: {
-  readonly isPending: boolean;
-  readonly onSeed: () => void;
-}) {
-  return (
-    <Panel
-      eyebrow="First pressing"
-      title="Seed the demo archive."
-      action={<Badge tone="ochre" dot>Archive empty</Badge>}
-      tone="moss"
-      className="seed-panel reveal reveal-5"
-    >
-      <div className="seed-panel__layout">
-        <div>
-          <p className="seed-panel__lede">
-            The shelves are ready but empty. Seed a small, coherent archive of text
-            files, memories, and one summary, then watch the tree and the timeline
-            fill in. The seed only writes to an empty archive.
-          </p>
-          <ul className="seed-panel__facts">
-            <li>Text files with paths</li>
-            <li>Memory supersession</li>
-            <li>One generated summary</li>
-            <li>Nothing overwritten</li>
-          </ul>
-        </div>
-        <div className="seed-panel__actions">
-          <Button
-            type="button"
-            variant="primary"
-            size="md"
-            onClick={onSeed}
-            disabled={isPending}
-          >
-            <Icon name="leaf" size={16} />
-            {isPending ? "Seeding the archive…" : "Seed the demo archive"}
-          </Button>
-          <ButtonLink to="/library" variant="ghost" size="sm">
-            Upload files instead
-            <Icon name="arrow-right" size={15} />
-          </ButtonLink>
-          <p className="seed-panel__hint">
-            Seeding uses POST /api/v1/demo/seed. Counts and recent records refresh
-            when it finishes.
-          </p>
-        </div>
-      </div>
-    </Panel>
-  );
-}
-
-function StatsStrip({
-  stats,
-  error,
+function StatusChip({
+  health,
   pending,
+  error,
 }: {
-  readonly stats: StatsSchema | undefined;
-  readonly error: boolean;
+  readonly health: HealthSchema | undefined;
   readonly pending: boolean;
+  readonly error: boolean;
+}) {
+  let tone = "loading";
+  let label = "Checking archive";
+  let detail = "Reading local service health";
+
+  if (error) {
+    tone = "error";
+    label = "Archive offline";
+    detail = "The health endpoint did not answer.";
+  } else if (health) {
+    detail = `DB ${health.database} · cache ${health.cache} · AI ${health.ai}`;
+    if (health.database !== "ok") {
+      tone = "error";
+      label = `Degraded · database ${health.database}`;
+    } else if (health.status !== "ok") {
+      tone = "degraded";
+      label = `Degraded · ${health.status}`;
+    } else if (health.cache !== "ok") {
+      tone = "degraded";
+      label = `Degraded · cache ${health.cache}`;
+    } else {
+      tone = "ok";
+      label = `Live Archive · v${health.version}`;
+    }
+  }
+
+  return (
+    <span
+      className={`overview-status overview-status--${tone}`}
+      role="status"
+      title={detail}
+    >
+      <span
+        className={pending ? "status-dot status-dot--pending" : "status-dot"}
+        aria-hidden="true"
+      />
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function InlineError({
+  title,
+  detail,
+  onRetry,
+  retrying,
+}: {
+  readonly title: string;
+  readonly detail: string;
+  readonly onRetry: () => void;
+  readonly retrying: boolean;
 }) {
   return (
-    <section
-      className="stats-strip reveal reveal-5"
-      aria-label="Archive statistics"
-      aria-busy={pending}
-    >
-      <div className="stats-strip__head">
-        <p className="eyebrow">The archive in numbers</p>
-        <p className="stats-strip__credit">{statsCredit(stats, error)}</p>
+    <div className="overview-inline-state overview-inline-state--error" role="alert">
+      <span className="overview-inline-state__icon" aria-hidden="true">
+        <Icon name="info" size={18} />
+      </span>
+      <div className="overview-inline-state__copy">
+        <p className="overview-inline-state__title">{title}</p>
+        <p className="overview-inline-state__detail">{detail}</p>
       </div>
-      <div className="stats-strip__grid">
-        {buildStatCards(stats, error).map((stat, index) => (
-          <StatCard
-            key={stat.label}
-            label={stat.label}
-            value={stat.value}
-            note={stat.note}
-            accent={stat.accent}
-            index={String(index + 1).padStart(2, "0")}
-            className="reveal"
-          />
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={onRetry}
+        disabled={retrying}
+      >
+        {retrying ? "Retrying…" : "Retry"}
+      </Button>
+    </div>
+  );
+}
+
+function InlineEmpty({
+  icon = "file",
+  title,
+  description,
+  action,
+}: {
+  readonly icon?: "file" | "timeline" | "search";
+  readonly title: string;
+  readonly description: string;
+  readonly action?: ReactNode;
+}) {
+  return (
+    <div className="overview-inline-state overview-inline-state--empty">
+      <span className="overview-inline-state__icon" aria-hidden="true">
+        <Icon name={icon} size={20} />
+      </span>
+      <div className="overview-inline-state__copy">
+        <p className="overview-inline-state__title">{title}</p>
+        <p className="overview-inline-state__detail">{description}</p>
+      </div>
+      {action ? <div className="overview-inline-state__action">{action}</div> : null}
+    </div>
+  );
+}
+
+function StatSkeleton() {
+  return (
+    <section aria-label="Archive statistics" aria-busy="true">
+      <div className="stats-cards-grid">
+        {[0, 1, 2, 3].map((index) => (
+          <div className="stat-card overview-stat-skeleton" key={index} aria-hidden="true">
+            <span className="overview-skeleton overview-skeleton--label" />
+            <span className="overview-skeleton overview-skeleton--value" />
+            <span className="overview-skeleton overview-skeleton--note" />
+          </div>
         ))}
       </div>
     </section>
   );
 }
 
-function MemoryGrain({
-  pending,
-  error,
-  memories,
-}: {
-  readonly pending: boolean;
-  readonly error: boolean;
-  readonly memories: readonly MemorySchema[];
-}) {
-  if (pending) {
-    return <MemoryLedgerSkeleton />;
-  }
-  if (error) {
-    return (
-      <p className="home-inline-note">
-        The recent grain did not answer. <Link to="/settings">Check the archive connection.</Link>
-      </p>
-    );
-  }
-  if (memories.length === 0) {
-    return (
-      <div className="home-empty-note">
-        <p className="eyebrow">No memories pressed yet</p>
-        <p>
-          The grain begins with a single moment. Press a memory, or seed the demo archive
-          above to see how memories gather over time.
-        </p>
-        <ButtonLink to="/memory/new" variant="ink" size="sm">
-          Press a memory
-          <Icon name="arrow-right" size={15} />
-        </ButtonLink>
-      </div>
-    );
-  }
+function FileRowsSkeleton() {
   return (
-    <div className="memory-ledger">
-      {memories.map((memory) => (
-        <article className="memory-entry" key={memory.memory_id}>
-          <div className="memory-entry__rail">
-            <time dateTime={memory.update_time}>{formatDate(memory.update_time)}</time>
-            <span>{formatTime(memory.update_time)}</span>
-            <span className="memory-entry__pin" aria-hidden="true" />
-          </div>
-          <div className="memory-entry__body">
-            <div className="memory-entry__meta">
-              <Badge tone={memoryStatusTone(memory.status)} dot>
-                {memory.status}
-              </Badge>
-              <span className="memory-entry__id">MEMORY #{memory.memory_id}</span>
-            </div>
-            <h3>{memoryTitle(memory)}</h3>
-            <p>{memoryExcerpt(memory)}</p>
-            <div className="memory-entry__foot">
-              <span className="theme-list">
-                <span>source: {memory.source}</span>
-                {memory.supersedes_ids.length > 0 ? (
-                  <span>supersedes {memory.supersedes_ids.length}</span>
-                ) : null}
-                {memory.superseded_by_id !== null ? (
-                  <span>superseded by #{memory.superseded_by_id}</span>
-                ) : null}
-              </span>
-              <Link
-                className="memory-entry__link"
-                to={`/memory/${memory.memory_id}`}
-              >
-                Read memory
-                <Icon name="arrow-right" size={13} />
-              </Link>
-            </div>
-          </div>
-        </article>
+    <div className="overview-file-list" aria-busy="true" aria-label="Reading recent files">
+      {[0, 1, 2, 3].map((index) => (
+        <div className="overview-file overview-file--skeleton" key={index} aria-hidden="true">
+          <span className="overview-skeleton overview-skeleton--type" />
+          <span className="overview-file__copy">
+            <span className="overview-skeleton overview-skeleton--name" />
+            <span className="overview-skeleton overview-skeleton--meta" />
+          </span>
+          <span className="overview-skeleton overview-skeleton--time" />
+        </div>
       ))}
     </div>
   );
 }
 
-function GrainNote({ chain }: { readonly chain: SupersedeChain }) {
-  const nodes = chain.nodes.slice(-4);
+function TimelineSkeleton() {
   return (
-    <aside className="grain-note">
-      <span className="grain-note__quote-icon" aria-hidden="true">
-        <Icon name="quote" size={22} />
-      </span>
-      <p className="eyebrow">Retrieval note</p>
-      <p className="grain-note__quote">
-        A superseded memory leaves search. It never leaves the record.
-      </p>
-      {nodes.length > 0 ? (
-        <div className="supersede-chain" aria-label="Supersede chain from recent memories">
-          {nodes.map((node, index) => (
-            <Fragment key={`${node.id}-${index}`}>
-              {index > 0 ? <span className="supersede-chain__line" aria-hidden="true" /> : null}
-              <span className={chainNodeClass(node.status)}>memory:{node.id}</span>
-            </Fragment>
-          ))}
+    <div className="overview-timeline" aria-busy="true" aria-label="Reading recent timeline events">
+      {[0, 1, 2, 3].map((index) => (
+        <div className="overview-event" key={index} aria-hidden="true">
+          <div className="overview-event__head">
+            <span className="overview-skeleton overview-skeleton--badge" />
+            <span className="overview-skeleton overview-skeleton--time" />
+          </div>
+          <span className="overview-skeleton overview-skeleton--line" />
+          <span className="overview-skeleton overview-skeleton--line is-short" />
         </div>
-      ) : (
-        <p className="grain-note__empty">
-          No supersession appears in the latest grain. Every memory keeps its own leaf.
-        </p>
-      )}
-      {chain.anchorId !== null ? (
-        <p className="grain-note__code">
-          GET /api/v1/memories/{chain.anchorId}?trace_history=true
-        </p>
-      ) : null}
-    </aside>
+      ))}
+    </div>
   );
 }
 
-function SeasonStrip({
-  latestPending,
-  latestError,
-  latestMemory,
-  timelinePending,
+function RecentFilesPanel({
+  files,
+  loading,
+  error,
+  usingFallback,
   timelineError,
-  events,
-  summary,
+  onRetry,
+  retrying,
 }: {
-  readonly latestPending: boolean;
-  readonly latestError: boolean;
-  readonly latestMemory: MemorySchema | undefined;
-  readonly timelinePending: boolean;
-  readonly timelineError: boolean;
-  readonly events: readonly TimelineEventSchema[];
-  readonly summary: TimelineSummary | undefined;
+  readonly files: readonly RecentFile[];
+  readonly loading: boolean;
+  readonly error: unknown;
+  readonly usingFallback: boolean;
+  readonly timelineError: unknown;
+  readonly onRetry: () => void;
+  readonly retrying: boolean;
 }) {
   let body: ReactNode;
-  if (latestPending) {
-    body = <SeasonSkeleton />;
-  } else if (latestError) {
+  if (loading) {
+    body = <FileRowsSkeleton />;
+  } else if (error) {
     body = (
-      <p className="season-strip__empty">
-        The season anchor could not be read. Check the archive connection.
-      </p>
+      <InlineError
+        title="Recent files could not be read."
+        detail={errorText(error, "Neither the timeline nor the root shelf answered.")}
+        onRetry={onRetry}
+        retrying={retrying}
+      />
     );
-  } else if (!latestMemory) {
+  } else if (files.length === 0) {
     body = (
-      <p className="season-strip__empty">
-        No memories are pressed yet, so there is no season to sample. The window
-        begins with the first memory.
-      </p>
-    );
-  } else if (timelinePending) {
-    body = <SeasonSkeleton />;
-  } else if (timelineError) {
-    body = (
-      <p className="season-strip__empty">
-        The timeline did not answer for this window. Try again from the timeline view.
-      </p>
-    );
-  } else if (events.length === 0) {
-    body = (
-      <p className="season-strip__empty">
-        No events were sampled in the fourteen days ending {formatDate(latestMemory.update_time)}.
-      </p>
+      <InlineEmpty
+        title="No files on the shelf yet."
+        description="Upload a text file, PDF, or image to begin the archive."
+        action={
+          <ButtonLink to="/library" variant="ink" size="sm">
+            Upload a file
+            <Icon name="arrow-right" size={14} />
+          </ButtonLink>
+        }
+      />
     );
   } else {
     body = (
-      <div className="season-strip__events">
+      <>
+        {usingFallback && timelineError ? (
+          <div className="overview-fallback-note" role="status">
+            <span>
+              The timeline did not answer, so this shelf lists the newest files at the
+              archive root.
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onRetry}
+              disabled={retrying}
+            >
+              {retrying ? "Retrying…" : "Retry timeline"}
+            </Button>
+          </div>
+        ) : null}
+        <div className="overview-file-list">
+          {files.map((file) => (
+            <Link className="overview-file" to={fileHref(file.fileId)} key={file.key}>
+              <span className="file-type-pill">{fileTypeLabel(file.name)}</span>
+              <span className="overview-file__copy">
+                <span className="overview-file__name" title={file.name}>
+                  {file.name}
+                </span>
+                <span className="overview-file__meta">
+                  <span title={file.path ?? undefined}>
+                    {file.path ?? "Path unavailable"}
+                  </span>
+                  {file.totalChunks !== null ? (
+                    <span>· {formatNumber(file.totalChunks)} chunks</span>
+                  ) : null}
+                  {file.action ? <span>· {file.action}</span> : null}
+                </span>
+              </span>
+              <span className="overview-file__right">
+                {file.sizeBytes !== null ? <span>{formatBytes(file.sizeBytes)}</span> : null}
+                <time dateTime={file.time} title={formatDateTime(file.time)}>
+                  {formatRelative(file.time)}
+                </time>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <Panel
+      className="overview-panel"
+      title={
+        <span className="overview-panel__title">
+          <Icon name="file" size={15} />
+          Recent Files
+        </span>
+      }
+      action={
+        <Link className="box-view-all" to="/library">
+          <span>View all files</span>
+          <Icon name="chevron-right" size={12} />
+        </Link>
+      }
+    >
+      {body}
+    </Panel>
+  );
+}
+
+function RecentTimelinePanel({
+  events,
+  total,
+  rangeStart,
+  rangeEnd,
+  loading,
+  error,
+  onRetry,
+  retrying,
+}: {
+  readonly events: readonly TimelineEventSchema[];
+  readonly total: number | undefined;
+  readonly rangeStart: string | undefined;
+  readonly rangeEnd: string | undefined;
+  readonly loading: boolean;
+  readonly error: unknown;
+  readonly onRetry: () => void;
+  readonly retrying: boolean;
+}) {
+  let body: ReactNode;
+  if (loading) {
+    body = <TimelineSkeleton />;
+  } else if (error) {
+    body = (
+      <InlineError
+        title="The timeline did not answer."
+        detail={errorText(error, "The 30-day window could not be read.")}
+        onRetry={onRetry}
+        retrying={retrying}
+      />
+    );
+  } else if (events.length === 0) {
+    body = (
+      <InlineEmpty
+        icon="timeline"
+        title="No events in this window."
+        description="Files, memories, and summaries appear here as the archive grows."
+        action={
+          <ButtonLink to="/timeline" variant="secondary" size="sm">
+            Open timeline
+            <Icon name="arrow-right" size={14} />
+          </ButtonLink>
+        }
+      />
+    );
+  } else {
+    body = (
+      <div className="overview-timeline">
         {events.map((event, index) => {
-          const content =
-            event.content.trim().length > 0
-              ? truncate(event.content, 160)
-              : "No excerpt recorded.";
+          const link = eventLink(event);
           return (
-            <article className="season-event" key={`${eventKey(event)}-${index}`}>
-              <div className="season-event__top">
-                <Badge tone={TIMELINE_KIND_TONES[event.kind]} dot>
-                  {TIMELINE_KIND_LABELS[event.kind]}
+            <article className="overview-event" key={eventKey(event, index)}>
+              <div className="overview-event__head">
+                <Badge tone={eventTone(event)} dot>
+                  {eventLabel(event)}
                 </Badge>
-                <time className="season-event__time" dateTime={event.time}>
-                  {formatDate(event.time)} · {formatTime(event.time)}
+                <time
+                  className="overview-event__time"
+                  dateTime={event.time}
+                  title={formatDateTime(event.time)}
+                >
+                  {formatRelative(event.time)}
                 </time>
               </div>
-              <p className="season-event__content">{content}</p>
-              <span className="season-event__anchor">anchor {event.anchor.toFixed(2)}</span>
+              <p className="overview-event__text">
+                {truncate(event.content.trim() || eventFallbackContent(event), 190)}
+              </p>
+              {link ? (
+                <Link className="overview-event__link" to={link.to}>
+                  {link.label}
+                  <Icon name="arrow-right" size={12} />
+                </Link>
+              ) : null}
             </article>
           );
         })}
@@ -648,225 +619,168 @@ function SeasonStrip({
     );
   }
 
+  const rangeLabel =
+    rangeStart && rangeEnd
+      ? `${formatDate(rangeStart)} – ${formatDate(rangeEnd)}`
+      : `Last ${TIMELINE_WINDOW_DAYS} days`;
+  const countLabel =
+    total === undefined
+      ? "30-day window"
+      : `${formatNumber(events.length)} of ${formatNumber(total)} events`;
+
   return (
-    <div className="season-strip reveal reveal-4">
-      <div className="season-strip__head">
-        <div>
-          <p className="eyebrow">Latest season · {TIMELINE_WINDOW_DAYS} days</p>
-          <p className="season-strip__range">
-            {latestMemory
-              ? `Sampled around ${formatDate(latestMemory.update_time)}`
-              : "Waiting for the first memory to anchor the window"}
-          </p>
+    <Panel
+      className="overview-panel"
+      title={
+        <span className="overview-panel__title">
+          <Icon name="timeline" size={15} />
+          Recent Timeline Events
+        </span>
+      }
+      action={
+        <div className="overview-panel__action">
+          <span className="overview-panel__meta" title={rangeLabel}>
+            {countLabel}
+          </span>
+          <Link className="box-view-all" to="/timeline">
+            <span>View timeline</span>
+            <Icon name="chevron-right" size={12} />
+          </Link>
         </div>
-        <span className="season-strip__count">{timelineCountLabel(summary)}</span>
-      </div>
+      }
+    >
       {body}
-    </div>
+    </Panel>
   );
 }
 
-function LineageFiles({
-  pending,
-  error,
-  files,
-}: {
-  readonly pending: boolean;
-  readonly error: boolean;
-  readonly files: readonly TreeNodeSchema[];
-}) {
-  if (pending) {
-    return <LineageSkeleton />;
-  }
-  if (error) {
-    return (
-      <div className="lineage-card__files">
-        <p className="home-inline-note">
-          The tree did not answer. <Link to="/settings">Check the archive connection.</Link>
-        </p>
-      </div>
-    );
-  }
-  if (files.length === 0) {
-    return (
-      <div className="lineage-card__files">
-        <div className="home-empty-note">
-          <p className="eyebrow">No file leaves in this branch</p>
-          <p>
-            Upload a file to grow the first branch. Re-uploading the same path will
-            grow a new leaf while the old edition stays traceable.
-          </p>
-          <ButtonLink to="/library" variant="ink" size="sm">
-            Upload a file
-            <Icon name="arrow-right" size={15} />
-          </ButtonLink>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="lineage-card__files">
-      {files.map((file) => (
-        <div className="lineage-file" key={file.id}>
-          <span className="lineage-file__graft" aria-hidden="true" />
-          <span className="lineage-file__icon" aria-hidden="true">
-            <Icon name="file" size={18} />
-          </span>
-          <span className="lineage-file__copy">
-            <span className="lineage-file__name" title={file.path}>
-              {file.name || basename(file.path)}
-            </span>
-            <span className="lineage-file__path" title={file.path}>
-              {file.path}
-            </span>
-            <span className="lineage-file__meta">
-              <span>file:{file.file_id ?? "—"}</span>
-              <span>Updated {formatDate(file.update_time)}</span>
-            </span>
-          </span>
-          <Badge tone="moss" dot>
-            current leaf
-          </Badge>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function LineageSection({
-  pending,
-  error,
-  tree,
-  files,
+function CompositionCard({
   stats,
+  pending,
+  error,
+  onRetry,
+  retrying,
 }: {
+  readonly stats: StatsSchema | undefined;
   readonly pending: boolean;
   readonly error: boolean;
-  readonly tree: TreeSchema | undefined;
-  readonly files: readonly TreeNodeSchema[];
-  readonly stats: StatsSchema | undefined;
+  readonly onRetry: () => void;
+  readonly retrying: boolean;
 }) {
-  const leadFile = files.at(0);
-  const root = tree?.root ?? "/";
-  const branch = leadFile ? parentPath(leadFile.path) : "/";
+  let counts: ReactNode;
+  if (pending) {
+    counts = (
+      <p className="overview-composition__note" aria-busy="true">
+        Reading live counts…
+      </p>
+    );
+  } else if (error || !stats) {
+    counts = (
+      <div className="overview-composition__error">
+        <span>Live counts are unavailable.</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onRetry}
+          disabled={retrying}
+        >
+          {retrying ? "Retrying…" : "Retry"}
+        </Button>
+      </div>
+    );
+  } else {
+    counts = (
+      <div className="overview-composition__legend" aria-label="Live archive counts">
+        <span>
+          <strong>{formatNumber(stats.file_count)}</strong> files
+        </span>
+        <span>
+          <strong>{formatNumber(stats.chunk_count)}</strong> chunks
+        </span>
+        <span>
+          <strong>{formatNumber(stats.memory_count)}</strong> memories
+        </span>
+        <span>
+          <strong>{formatNumber(stats.summary_count)}</strong> summaries
+        </span>
+      </div>
+    );
+  }
+
   return (
-    <section className="home-section" aria-labelledby="lineage-title">
-      <SectionHeading
-        index="02"
-        eyebrow="The branching shelf"
-        title="Every path remembers its previous editions."
-        id="lineage-title"
-        action={
-          <ButtonLink to="/tree" variant="ghost" size="sm">
-            Walk the tree
-            <Icon name="arrow-right" size={15} />
-          </ButtonLink>
-        }
-      />
-      <div className="lineage-card">
-        <div className="lineage-card__path">
-          <p className="eyebrow">Current branch</p>
-          <div className="path-breadcrumb">
-            <Icon name="folder" size={17} />
-            <span>{root}</span>
-            {branch !== "/" ? (
-              <>
-                <span className="path-breadcrumb__slash" aria-hidden="true">/</span>
-                <span>{branch.replace(/^\//, "")}</span>
-              </>
-            ) : null}
-          </div>
-          <p className="lineage-card__path-note">
-            A re-upload grows a new leaf. The old branch stays indexed as history and
-            returns only when you ask for it.
-            {tree?.truncated
-              ? " This preview stops at depth four; open the tree for the rest."
-              : ""}
-          </p>
-          <div className="lineage-card__legend">
-            <span><i className="legend-dot legend-dot--current" aria-hidden="true" />Current</span>
-            <span><i className="legend-dot legend-dot--history" aria-hidden="true" />History on request</span>
-          </div>
-          <div className="lineage-card__meta">
-            <span>{tree ? `${formatNumber(files.length)} leaves in view` : "— leaves in view"}</span>
-            <span aria-hidden="true">/</span>
-            <span>
-              {stats ? `${formatNumber(stats.chunk_count)} chunks indexed` : "— chunks indexed"}
-            </span>
-            <span aria-hidden="true">/</span>
-            <span>include_history=false</span>
-          </div>
-        </div>
-        <LineageFiles pending={pending} error={error} files={files} />
+    <section className="overview-composition" aria-labelledby="overview-composition-title">
+      <div className="overview-composition__copy">
+        <p className="eyebrow">Archive composition</p>
+        <h2 id="overview-composition-title">Ring by ring, the archive holds together.</h2>
+        <p className="overview-composition__text">
+          Files branch by path, memories gather by time, and summaries record what the
+          archive has read. The rings are a decorative cross-section of those layers —
+          not a second navigation surface.
+        </p>
+        {counts}
+        <ButtonLink to="/library" variant="ink" size="sm" className="overview-composition__link">
+          Open File Library
+          <Icon name="arrow-up-right" size={14} />
+        </ButtonLink>
+      </div>
+      <div className="overview-composition__rings" aria-hidden="true">
+        <svg viewBox="0 0 160 160" fill="none">
+          <circle cx="80" cy="80" r="76" stroke="var(--mono-grid)" strokeWidth="1.2" strokeDasharray="3 3" />
+          <circle cx="80" cy="80" r="58" stroke="var(--mono-ink)" strokeWidth="1.4" opacity="0.3" />
+          <circle cx="80" cy="80" r="40" stroke="var(--mono-ink)" strokeWidth="1.4" opacity="0.55" />
+          <circle cx="80" cy="80" r="22" stroke="var(--accent-seal)" strokeWidth="1.6" />
+          <circle cx="80" cy="80" r="4.5" fill="var(--accent-seal)" />
+          <path d="M80 4V156M4 80H156" stroke="var(--mono-grid)" strokeWidth="0.7" />
+        </svg>
       </div>
     </section>
   );
 }
 
-function AskSection({
-  configured,
-  pending,
+function SeedBanner({
+  isPending,
   error,
-  provider,
-  model,
+  onSeed,
 }: {
-  readonly configured: boolean;
-  readonly pending: boolean;
-  readonly error: boolean;
-  readonly provider: string | undefined;
-  readonly model: string | undefined;
+  readonly isPending: boolean;
+  readonly error: unknown;
+  readonly onSeed: () => void;
 }) {
-  const heading = aiHeading(pending, error, configured, provider, model);
-  const dotClass = aiDotClassName(pending, configured);
   return (
-    <section className="home-section" aria-labelledby="ask-title">
-      <div className="ask-banner">
-        <div className="ask-banner__rings" aria-hidden="true">
-          <TreeRings variant="cta" />
-        </div>
-        <div className="ask-banner__copy">
-          <p className="eyebrow">
-            <span className={dotClass} aria-hidden="true" />
-            {heading}
-          </p>
-          <h2 id="ask-title">Let the rings answer.</h2>
-          <p>
-            Ask across every file, memory, and summary. Each claim returns with a
-            citation, or it does not return at all.
-          </p>
-          <div className="ask-banner__actions">
-            <ButtonLink to="/ask" variant="paper" size="md">
-              Open the reading room
-              <Icon name="arrow-up-right" size={16} />
-            </ButtonLink>
-            <span className="ask-banner__hint">
-              {aiHintCopy(configured, pending)}
-            </span>
-          </div>
-        </div>
-        <div className="ask-banner__citations" aria-label="Example citation formats">
-          <p className="eyebrow">Every answer carries its grain</p>
-          <div className="citation-stack">
-            {demoAskCitations.map((citation) => (
-              <span
-                className={`citation citation--${citation.tone}`}
-                key={citation.label}
-              >
-                <Icon name={citation.tone === "file" ? "file" : "memory"} size={13} />
-                [{citation.label}]
-              </span>
-            ))}
-          </div>
-          <p className="ask-banner__fallback">{aiFallbackCopy(configured, pending)}</p>
-        </div>
+    <section className="overview-seed" aria-labelledby="overview-seed-title">
+      <div className="overview-seed__copy">
+        <p className="eyebrow">Empty archive</p>
+        <h2 id="overview-seed-title">Seed the demo archive.</h2>
+        <p>
+          The shelves are ready but empty. Seed a small, coherent archive of text files,
+          memories, and one summary, then watch the counts and timeline fill in. The seed
+          only writes to an empty archive.
+        </p>
       </div>
+      <div className="overview-seed__actions">
+        <Button type="button" variant="primary" size="md" onClick={onSeed} disabled={isPending}>
+          <Icon name="leaf" size={16} />
+          {isPending ? "Seeding the archive…" : "Seed demo archive"}
+        </Button>
+        <ButtonLink to="/library" variant="secondary" size="md">
+          Upload first file
+          <Icon name="arrow-right" size={15} />
+        </ButtonLink>
+      </div>
+      {error ? (
+        <p className="overview-seed__error" role="alert">
+          {errorText(error, "The demo archive could not be seeded.")}
+        </p>
+      ) : null}
     </section>
   );
 }
 
 /**
- * The archive's front porch: live counts, recent memory grain, current file
- * leaves, the latest fourteen-day season, the RAG invitation, and the tool shelf.
+ * The archive dashboard: health, live counts, recent files, the latest timeline
+ * events, and a decorative composition card. All data comes from the existing
+ * stats, health, timeline, and path-listing endpoints.
  */
 export function HomePage() {
   const [query, setQuery] = useState("");
@@ -875,43 +789,56 @@ export function HomePage() {
   const toast = useToast();
 
   const statsQuery = useGetStats({ query: { staleTime: 30_000 } });
-  const recentQuery = useListMemories(
-    { limit: MEMORY_PREVIEW_LIMIT },
-    { query: { staleTime: 30_000 } },
-  );
-  const latestQuery = useListMemories(
-    { limit: 1 },
-    { query: { staleTime: 60_000 } },
-  );
-  const treeQuery = useGetTree(
-    { root: "/", depth: 4 },
-    { query: { staleTime: 60_000 } },
-  );
-  const aiQuery = useGetAiStatus({ query: { staleTime: 60_000 } });
-
-  const latestMemory = latestQuery.data?.resources.at(0);
-  const timelineParams = useMemo(
-    () => timelineParamsFor(latestMemory?.update_time),
-    [latestMemory],
-  );
-  const timelineFallback = useMemo(() => fallbackTimelineParams(), []);
-  const timelineQuery = useReadTimeline(timelineParams ?? timelineFallback, {
-    query: { enabled: timelineParams !== null, staleTime: 60_000 },
+  const healthQuery = useGetHealth({
+    query: { staleTime: 60_000, refetchInterval: 60_000 },
   });
+
+  const timelineAnchor = statsQuery.data?.newest_memory_time ?? null;
+  const timelineParams = useMemo(
+    () => timelineParamsFor(timelineAnchor) ?? fallbackTimelineParams(),
+    [timelineAnchor],
+  );
+  const timelineQuery = useReadTimeline(timelineParams, {
+    query: { enabled: !statsQuery.isPending, staleTime: 60_000 },
+  });
+
+  const timelineFiles = useMemo(
+    () => dedupeTimelineFiles(timelineQuery.data?.events ?? []),
+    [timelineQuery.data],
+  );
+  const needsPathFallback = !timelineQuery.isPending && timelineFiles.length === 0;
+  const pathQuery = useReadPath(
+    { path: "/", path_depth: 1 },
+    { query: { enabled: needsPathFallback, staleTime: 60_000 } },
+  );
+  const fallbackFiles = useMemo(
+    () => recentPathFiles(pathQuery.data?.files ?? []),
+    [pathQuery.data],
+  );
+  const recentFiles = timelineFiles.length > 0 ? timelineFiles : fallbackFiles;
+  const usingFallback = timelineFiles.length === 0;
+
+  const timelineEvents = useMemo(
+    () =>
+      [...(timelineQuery.data?.events ?? [])]
+        .sort((left, right) => Date.parse(right.time) - Date.parse(left.time))
+        .slice(0, RECENT_EVENT_LIMIT),
+    [timelineQuery.data],
+  );
 
   const seedDemo = useSeedDemo({
     mutation: {
       onSuccess: (result) => {
-        void queryClient.invalidateQueries();
+        for (const key of SEED_INVALIDATION_KEYS) {
+          void queryClient.invalidateQueries({ queryKey: [key] });
+        }
         const summaryWord = result.summaries_created === 1 ? "summary" : "summaries";
         toast.success(
           `Seeded ${formatNumber(result.files_created)} files, ${formatNumber(result.memories_created)} memories, and ${formatNumber(result.summaries_created)} ${summaryWord}.`,
         );
       },
       onError: (error) => {
-        toast.error(
-          error instanceof Error ? error.message : "The demo archive could not be seeded.",
-        );
+        toast.error(errorText(error, "The demo archive could not be seeded."));
       },
     },
   });
@@ -921,198 +848,149 @@ export function HomePage() {
   };
 
   const stats = statsQuery.data;
-  const statsError = statsQuery.isError;
-  const memories = recentQuery.data?.resources ?? EMPTY_MEMORIES;
-  const treeNodes = treeQuery.data?.nodes ?? EMPTY_TREE_NODES;
-  const files = useMemo(() => currentFiles(treeNodes), [treeNodes]);
-  const previewFiles = files.slice(0, FILE_PREVIEW_LIMIT);
-  const chain = useMemo(() => buildSupersedeChain(memories), [memories]);
-  const seasonEvents = useMemo(
-    () => latestEvents(timelineQuery.data?.events ?? EMPTY_EVENTS),
-    [timelineQuery.data],
-  );
-  const aiConfigured = aiQuery.data?.configured === true;
-  const emptyArchive =
-    stats !== undefined && stats.file_count + stats.memory_count === 0;
+  const allCountsZero =
+    stats !== undefined &&
+    stats.file_count === 0 &&
+    stats.chunk_count === 0 &&
+    stats.memory_count === 0 &&
+    stats.summary_count === 0;
+  // Hide the banner as soon as the seed succeeds; the invalidated stats query
+  // catches up on the next render. Cached zero counts are not enough after a
+  // stats failure.
+  const showSeedBanner =
+    allCountsZero && !statsQuery.isError && !seedDemo.isSuccess;
+
+  const retryStats = () => void statsQuery.refetch();
+  const retryTimeline = () => void timelineQuery.refetch();
+  const retryFiles = () => {
+    void timelineQuery.refetch();
+    if (needsPathFallback) {
+      void pathQuery.refetch();
+    }
+  };
+
+  const filesLoading =
+    timelineQuery.isPending || (needsPathFallback && pathQuery.isPending);
+  const retryingFiles = timelineQuery.isFetching || pathQuery.isFetching;
+
+  let fileError: unknown = null;
+  if (!filesLoading && recentFiles.length === 0) {
+    if (needsPathFallback && pathQuery.isError) {
+      fileError = pathQuery.error;
+    } else if (timelineQuery.isError) {
+      fileError = timelineQuery.error;
+    }
+  }
 
   return (
-    <div className="page home-page">
-      <section className="home-hero">
-        <div className="home-hero__rings" aria-hidden="true">
-          <TreeRings variant="hero" />
+    <div className="content-container overview-page">
+      <header className="overview-masthead">
+        <div className="overview-masthead__top">
+          <div className="overview-title-group">
+            <p className="eyebrow eyebrow--plain">Dendrochronological Intelligence Hub</p>
+            <h1 className="overview-title">Archive Overview</h1>
+          </div>
+          <StatusChip
+            health={healthQuery.data}
+            pending={healthQuery.isPending}
+            error={healthQuery.isError}
+          />
         </div>
 
-        <div className="home-hero__main">
-          <p className="home-hero__kicker reveal reveal-1">
-            <span className="kicker-mark" aria-hidden="true" />
-            A local-first memory archive
-            <span className="home-hero__kicker-rule" aria-hidden="true" />
-            <span>FIELD STATION 001</span>
-          </p>
-
-          <h1 className="home-hero__title reveal reveal-2">
-            Memory is not data.
-            <span className="home-hero__title-span">It is <em>growth.</em></span>
-          </h1>
-
-          <p className="home-hero__lede reveal reveal-3">
-            A second brain with provenance. Files branch by path, memories gather by
-            time, and every answer returns with the grain it came from.
-          </p>
-
-          <div className="home-hero__search reveal reveal-4">
-            <SearchField
-              value={query}
-              onChange={setQuery}
-              onSubmit={handleSearch}
-              size="lg"
-              label="Search the DendroMatrix archive"
-              placeholder="Search files, memories, paths, or a feeling..."
-              submitLabel="Search the rings"
-            />
-            <div className="search-suggestions">
-              <span className="search-suggestions__label">Follow a vein</span>
-              {SEARCH_SUGGESTIONS.map((suggestion) => (
-                <Link key={suggestion} to={searchHref(suggestion)} className="suggestion">
-                  {suggestion}
-                </Link>
-              ))}
-            </div>
+        <div className="search-hero-box">
+          <SearchField
+            value={query}
+            onChange={setQuery}
+            onSubmit={handleSearch}
+            size="lg"
+            label="Search the DendroMatrix archive"
+            placeholder="Search files, memories, summaries, or a path…"
+            submitLabel="Search"
+          />
+          <div className="search-suggestions-row">
+            <span className="suggestion-label">Suggested searches:</span>
+            {SEARCH_SUGGESTIONS.map((suggestion) => (
+              <Link
+                className="suggestion-chip"
+                key={suggestion}
+                to={searchHref(suggestion)}
+              >
+                {suggestion}
+              </Link>
+            ))}
           </div>
         </div>
+      </header>
 
-        <aside className="specimen-card reveal reveal-3" aria-label="Archive specimen label">
-          <div className="specimen-card__head">
-            <span>Herbarium label</span>
-            <span>No. 001</span>
-          </div>
-          <div className="specimen-card__seal">
-            <TreeMark size={40} />
-            <span className="specimen-card__seal-text">Pressed locally</span>
-          </div>
-          <p className="specimen-card__species">Dendromatrix memoriae</p>
-          <p className="specimen-card__family">Family: Knowledge systems</p>
-          <dl className="specimen-card__facts">
-            <div>
-              <dt>Collected</dt>
-              <dd>On this machine</dd>
-            </div>
-            <div>
-              <dt>Habitat</dt>
-              <dd>Paths and time</dd>
-            </div>
-            <div>
-              <dt>Instruments</dt>
-              <dd>Six tools</dd>
-            </div>
-            <div>
-              <dt>Condition</dt>
-              <dd>{archiveCondition(stats, statsError)}</dd>
-            </div>
-          </dl>
-          <p className="specimen-card__note">
-            Old branches remain visible. Nothing is overwritten.
-          </p>
-          <div className="specimen-card__foot">
-            <span>DM–001</span>
-            <span aria-hidden="true">✦</span>
-            <span>2026</span>
-          </div>
-        </aside>
-      </section>
-
-      {emptyArchive ? (
-        <SeedPanel
+      {showSeedBanner ? (
+        <SeedBanner
           isPending={seedDemo.isPending}
+          error={seedDemo.error}
           onSeed={() => seedDemo.mutate()}
         />
       ) : null}
 
-      <StatsStrip
+      {statsQuery.isPending ? (
+        <StatSkeleton />
+      ) : (
+        <section aria-labelledby="overview-stats-title">
+          <h2 className="visually-hidden" id="overview-stats-title">
+            Archive statistics
+          </h2>
+          {statsQuery.isError ? (
+            <div className="overview-stats-error">
+              <InlineError
+                title="Live counts are unavailable."
+                detail={errorText(statsQuery.error, "The stats endpoint did not answer.")}
+                onRetry={retryStats}
+                retrying={statsQuery.isFetching}
+              />
+            </div>
+          ) : null}
+          <div className="stats-cards-grid">
+            {buildStatCards(stats).map((stat, index) => (
+              <StatCard
+                key={stat.label}
+                label={stat.label}
+                value={stat.value}
+                note={stat.note}
+                accent={stat.accent}
+                index={String(index + 1).padStart(2, "0")}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="overview-split">
+        <RecentFilesPanel
+          files={recentFiles}
+          loading={filesLoading}
+          error={fileError}
+          usingFallback={usingFallback}
+          timelineError={timelineQuery.error}
+          onRetry={retryFiles}
+          retrying={retryingFiles}
+        />
+        <RecentTimelinePanel
+          events={timelineEvents}
+          total={timelineQuery.data?.total}
+          rangeStart={timelineQuery.data?.range_start}
+          rangeEnd={timelineQuery.data?.range_end}
+          loading={timelineQuery.isPending}
+          error={timelineQuery.error}
+          onRetry={retryTimeline}
+          retrying={timelineQuery.isFetching}
+        />
+      </div>
+
+      <CompositionCard
         stats={stats}
-        error={statsError}
         pending={statsQuery.isPending}
+        error={statsQuery.isError}
+        onRetry={retryStats}
+        retrying={statsQuery.isFetching}
       />
-
-      <section className="home-section" aria-labelledby="recent-memory-title">
-        <SectionHeading
-          index="01"
-          eyebrow="The recent grain"
-          title="What the archive remembered lately."
-          id="recent-memory-title"
-          action={
-            <ButtonLink to="/timeline" variant="ghost" size="sm">
-              Open timeline
-              <Icon name="arrow-right" size={15} />
-            </ButtonLink>
-          }
-        />
-        <div className="memory-layout">
-          <MemoryGrain
-            pending={recentQuery.isPending}
-            error={recentQuery.isError}
-            memories={memories}
-          />
-          <GrainNote chain={chain} />
-        </div>
-        <SeasonStrip
-          latestPending={latestQuery.isPending}
-          latestError={latestQuery.isError}
-          latestMemory={latestMemory}
-          timelinePending={timelineQuery.isPending}
-          timelineError={timelineQuery.isError}
-          events={seasonEvents}
-          summary={timelineQuery.data}
-        />
-      </section>
-
-      <LineageSection
-        pending={treeQuery.isPending}
-        error={treeQuery.isError}
-        tree={treeQuery.data}
-        files={previewFiles}
-        stats={stats}
-      />
-
-      <AskSection
-        configured={aiConfigured}
-        pending={aiQuery.isPending}
-        error={aiQuery.isError}
-        provider={aiQuery.data?.provider}
-        model={aiQuery.data?.model}
-      />
-
-      <section className="home-section" aria-labelledby="tool-shelf-title">
-        <SectionHeading
-          index="03"
-          eyebrow="The tool shelf"
-          title="Six moves, two to four steps."
-          id="tool-shelf-title"
-          action={
-            <ButtonLink to="/method" variant="ghost" size="sm">
-              Read the method
-              <Icon name="arrow-right" size={15} />
-            </ButtonLink>
-          }
-        />
-        <p className="tool-shelf__intro">
-          An LLM should not read the whole library. These are the six focused moves
-          that take it from a question to a quoted, traceable passage.
-        </p>
-        <div className="tool-grid">
-          {demoTools.map((tool) => (
-            <ToolCard key={tool.name} tool={tool} />
-          ))}
-        </div>
-      </section>
-
-      <footer className="home-colophon">
-        <span>DendroMatrix</span>
-        <span aria-hidden="true">✦</span>
-        <span>{footerCount(stats)}</span>
-        <span aria-hidden="true">✦</span>
-        <span>Local-first, single reader</span>
-      </footer>
     </div>
   );
 }

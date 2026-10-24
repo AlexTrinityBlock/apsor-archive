@@ -28,9 +28,7 @@ class IngestSettingsValuesSchema(BaseModel):
     def _overlap_below_target(self) -> Self:
         """Enforce the invariant a single-field range cannot express."""
         if self.chunk_overlap_chars >= self.chunk_target_chars:
-            raise ValueError(
-                "chunk_overlap_chars must be less than chunk_target_chars."
-            )
+            raise ValueError("chunk_overlap_chars must be less than chunk_target_chars.")
         return self
 
 

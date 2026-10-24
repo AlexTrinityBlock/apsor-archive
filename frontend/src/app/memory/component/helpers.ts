@@ -1,3 +1,5 @@
+import type { QueryClient } from "@tanstack/react-query";
+
 import type { MemorySchema, SummarySchema } from "../../generated-apis-types/schemas";
 
 export interface MemorySaveReceipt {
@@ -113,4 +115,64 @@ export function savedMemoryMessage(memoryId: number, deprecatedCount: number): s
   }
   const noun = deprecatedCount === 1 ? "earlier memory is" : "earlier memories are";
   return `Memory ${memoryId} saved; ${deprecatedCount} ${noun} now deprecated.`;
+}
+
+export interface MemoryPreview {
+  readonly thesis: string;
+  readonly body: string;
+}
+
+function clipAtWord(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  const cut = value.slice(0, Math.max(1, maxLength - 1));
+  const lastSpace = cut.lastIndexOf(" ");
+  const boundary = lastSpace > maxLength * 0.6 ? cut.slice(0, lastSpace) : cut;
+  return `${boundary.trimEnd()}\u2026`;
+}
+
+/**
+ * Builds a card thesis from the first sentence, falling back to a word-safe
+ * character cut. Memory content has no separate title field, so this is a
+ * presentation-only split of real text rather than invented metadata.
+ */
+export function splitMemoryPreview(content: string): MemoryPreview {
+  const compact = content.replace(/\s+/g, " ").trim();
+  if (compact.length === 0) {
+    return { thesis: "Untitled memory", body: "" };
+  }
+  const firstSentence = compact
+    .match(/^.{16,320}?[.!?](?=(?:\s+[A-Z0-9"“(]|$))/)?.[0]
+    ?.trim();
+  if (firstSentence) {
+    const remainder = compact.slice(firstSentence.length).trim();
+    return {
+      thesis: firstSentence,
+      body: remainder.length > 0 ? clipAtWord(remainder, 420) : "",
+    };
+  }
+  return { thesis: clipAtWord(compact, 150), body: "" };
+}
+
+/**
+ * Invalidates every memory query variant plus the derived archive surfaces
+ * after a save. The generated keys use the full path as their first element,
+ * so memory details need a predicate rather than a single literal prefix.
+ */
+export function invalidateMemoryQueries(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({
+    predicate: (query) => {
+      const [root] = query.queryKey;
+      return typeof root === "string" && root.startsWith("/api/v1/memories");
+    },
+  });
+  for (const key of [
+    "/api/v1/stats",
+    "/api/v1/timeline",
+    "/api/v1/summaries",
+    "/api/v1/search",
+  ]) {
+    void queryClient.invalidateQueries({ queryKey: [key] });
+  }
 }

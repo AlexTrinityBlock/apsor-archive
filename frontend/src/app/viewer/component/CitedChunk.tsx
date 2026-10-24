@@ -19,8 +19,8 @@ export function CitedChunk({ fileId, chunk }: CitedChunkProps) {
         <span className="eyebrow">
           <Icon name="quote" size={13} /> Cited passage · chunk {chunk}
         </span>
-        <Link to={`/viewer/file/${fileId}`} className="viewer-citation__clear">
-          Dismiss
+        <Link to={`/library?tab=files&file=${fileId}`} className="viewer-citation__clear">
+          Open in library
         </Link>
       </div>
       {query.isLoading ? (

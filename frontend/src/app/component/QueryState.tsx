@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 
+import { Icon } from "./Icon";
 import { Loader } from "./Loader";
 import { Panel } from "./Panel";
+import "./shared.css";
 
 interface QueryStateProps {
   readonly loading: boolean;
@@ -42,10 +44,17 @@ export function QueryState({
   }
   if (error) {
     return (
-      <Panel tone="plain" className="query-state query-state--error">
-        <p className="eyebrow">Read interrupted</p>
-        <h2>The archive did not answer.</h2>
-        <p className="query-state__detail">{errorMessage(error)}</p>
+      <Panel tone="plain" className="query-state query-state--error" role="alert">
+        <div className="query-state__error">
+          <span className="query-state__error-icon" aria-hidden="true">
+            <Icon name="info" size={18} />
+          </span>
+          <div className="query-state__error-copy">
+            <p className="eyebrow">Read interrupted</p>
+            <h2>The archive did not answer.</h2>
+            <p className="query-state__detail">{errorMessage(error)}</p>
+          </div>
+        </div>
       </Panel>
     );
   }

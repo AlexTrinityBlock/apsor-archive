@@ -1,0 +1,116 @@
+"""drop standalone media tables
+
+Revision ID: 8f4b2c6d9e01
+Revises: f2b3c4d5e6a7
+Create Date: 2026-10-24 18:00:00.000000
+
+Images are normal File Library files now. The standalone media subsystem was
+removed, so its tables are dropped intentionally. The downgrade recreates the
+exact schema from revision 219e00eb04cc.
+"""
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+from alembic import op
+
+revision: str = "8f4b2c6d9e01"
+down_revision: str | None = "f2b3c4d5e6a7"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def upgrade() -> None:
+    op.drop_index("ix_media_ngram_gram", table_name="media_ngram")
+    op.drop_table("media_ngram")
+    op.drop_index(
+        "uq_media_asset_current_path",
+        table_name="media_asset",
+        postgresql_where=sa.text("is_current AND deleted_at IS NULL"),
+    )
+    op.drop_index("ix_media_asset_created_at", table_name="media_asset")
+    op.drop_index("ix_media_asset_content_hash", table_name="media_asset")
+    op.drop_table("media_asset")
+
+
+def downgrade() -> None:
+    op.create_table(
+        "media_asset",
+        sa.Column("id", sa.BigInteger(), sa.Identity(always=False), nullable=False),
+        sa.Column("raw_file_path", sa.Text(), nullable=False),
+        sa.Column("file_name", sa.Text(), nullable=False),
+        sa.Column("mime_type", sa.String(length=64), nullable=False),
+        sa.Column("size_bytes", sa.BigInteger(), nullable=False),
+        sa.Column("width", sa.Integer(), nullable=False),
+        sa.Column("height", sa.Integer(), nullable=False),
+        sa.Column("content_hash", sa.String(length=64), nullable=False),
+        sa.Column("storage_key", sa.Text(), nullable=False),
+        sa.Column("caption", sa.Text(), nullable=False),
+        sa.Column("ocr_text", sa.Text(), nullable=False),
+        sa.Column("title", sa.Text(), nullable=False),
+        sa.Column("summary", sa.Text(), nullable=False),
+        sa.Column("document_type", sa.String(length=32), nullable=False),
+        sa.Column(
+            "tags",
+            postgresql.ARRAY(sa.Text()),
+            server_default=sa.text("'{}'::text[]"),
+            nullable=False,
+        ),
+        sa.Column("token_count", sa.Integer(), nullable=False),
+        sa.Column(
+            "visual_embedding",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+        ),
+        sa.Column("embedding_model", sa.String(length=64), nullable=True),
+        sa.Column("perceptual_hash", sa.String(length=32), nullable=True),
+        sa.Column(
+            "is_current",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.CheckConstraint(
+            "size_bytes >= 0",
+            name=op.f("ck_media_asset_size_non_negative"),
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_media_asset")),
+    )
+    op.create_index(
+        "ix_media_asset_content_hash",
+        "media_asset",
+        ["content_hash"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_media_asset_created_at",
+        "media_asset",
+        ["created_at"],
+        unique=False,
+    )
+    op.create_index(
+        "uq_media_asset_current_path",
+        "media_asset",
+        ["raw_file_path"],
+        unique=True,
+        postgresql_where=sa.text("is_current AND deleted_at IS NULL"),
+    )
+    op.create_table(
+        "media_ngram",
+        sa.Column("media_id", sa.BigInteger(), nullable=False),
+        sa.Column("gram", sa.Text(), nullable=False),
+        sa.Column("term_frequency", sa.Integer(), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["media_id"],
+            ["media_asset.id"],
+            name=op.f("fk_media_ngram_media_id_media_asset"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("media_id", "gram", name=op.f("pk_media_ngram")),
+    )
+    op.create_index("ix_media_ngram_gram", "media_ngram", ["gram"], unique=False)

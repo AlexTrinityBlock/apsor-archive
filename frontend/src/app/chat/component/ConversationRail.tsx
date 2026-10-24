@@ -1,10 +1,4 @@
-import {
-  memo,
-  useMemo,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { memo, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -14,14 +8,13 @@ import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
 import { useToast } from "../../component/Toast";
 import {
-  useDeleteAgentConversation,
   useForkAgentConversation,
   useUpdateAgentConversation,
 } from "../../generated-apis-types/agent/agent";
 import type { AgentConversationSchema } from "../../generated-apis-types/schemas";
 import { formatRelative } from "../../../lib/format";
 import {
-  invalidateConversationDetail,
+  invalidateConversation,
   invalidateConversationList,
 } from "../query";
 
@@ -31,10 +24,20 @@ interface ConversationRailProps {
   readonly error: unknown;
   readonly activeId: number | null;
   readonly open: boolean;
+  readonly overlay: boolean;
   readonly onRetry: () => void;
   readonly onNew: () => void;
   readonly onClose: () => void;
+  readonly onNavigate: () => void;
 }
+
+type SessionGroup = "today" | "week" | "earlier";
+
+const GROUP_ORDER: ReadonlyArray<{ key: SessionGroup; label: string }> = [
+  { key: "today", label: "Today" },
+  { key: "week", label: "Previous 7 days" },
+  { key: "earlier", label: "Earlier" },
+];
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
@@ -43,280 +46,116 @@ function describeError(error: unknown): string {
   if (error instanceof Error && error.message.length > 0) {
     return error.message;
   }
-  return "The thread list could not be read.";
+  return "The conversation list could not be read.";
 }
 
-interface RailItemProps {
-  readonly conversation: AgentConversationSchema;
-  readonly active: boolean;
-  readonly editing: boolean;
-  readonly title: string;
-  readonly busy: boolean;
-  readonly forking: boolean;
-  readonly confirmingDelete: boolean;
-  readonly onFork: () => void;
-  readonly onTitleChange: (value: string) => void;
-  readonly onEdit: () => void;
-  readonly onCancelEdit: () => void;
-  readonly onSaveTitle: () => void;
-  readonly onToggleStatus: () => void;
-  readonly onRequestDelete: () => void;
-  readonly onCancelDelete: () => void;
-  readonly onDelete: () => void;
-  readonly onClose: () => void;
+function timestampOf(conversation: AgentConversationSchema): number {
+  const raw = conversation.last_entry_at ?? conversation.created_at;
+  const time = Date.parse(raw);
+  return Number.isNaN(time) ? 0 : time;
 }
 
-function ForkActionButton({
-  conversation,
-  busy,
-  forking,
-  onFork,
-}: {
-  readonly conversation: AgentConversationSchema;
-  readonly busy: boolean;
-  readonly forking: boolean;
-  readonly onFork: () => void;
-}) {
-  const archived = conversation.status === "archived";
-  return (
-    <button
-      type="button"
-      className="chat-thread-link__action"
-      onClick={onFork}
-      aria-label={
-        archived
-          ? `${conversation.title} is archived and cannot be forked`
-          : `Fork ${conversation.title}`
-      }
-      title={
-        archived
-          ? "Archived threads cannot be forked. Restore the thread first."
-          : "Fork thread"
-      }
-      disabled={busy || forking || archived}
-      aria-busy={forking || undefined}
-    >
-      {forking ? (
-        <Loader size={12} label="Forking thread" />
-      ) : (
-        <Icon name="branch" size={13} />
-      )}
-    </button>
-  );
+function groupOf(conversation: AgentConversationSchema): SessionGroup {
+  const time = timestampOf(conversation);
+  if (time === 0) {
+    return "earlier";
+  }
+  const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  if (time >= startOfToday) {
+    return "today";
+  }
+  if (time >= startOfToday - 7 * 24 * 60 * 60 * 1000) {
+    return "week";
+  }
+  return "earlier";
 }
 
-function RailItem({
-  conversation,
-  active,
-  editing,
-  title,
-  busy,
-  forking,
-  confirmingDelete,
-  onFork,
-  onTitleChange,
-  onEdit,
-  onCancelEdit,
-  onSaveTitle,
-  onToggleStatus,
-  onRequestDelete,
-  onCancelDelete,
-  onDelete,
-  onClose,
-}: RailItemProps) {
-  const archived = conversation.status === "archived";
-  const inputId = `chat-rail-title-${conversation.id}`;
-
-  const handleTitleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    onSaveTitle();
-  };
-
-  return (
-    <li
-      className={[
-        "chat-thread-link",
-        active ? "is-active" : null,
-        archived ? "is-archived" : null,
-        busy ? "is-busy" : null,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {editing ? (
-        <form className="chat-thread-link__edit" onSubmit={handleTitleSubmit}>
-          <label className="visually-hidden" htmlFor={inputId}>
-            Thread title
-          </label>
-          <input
-            id={inputId}
-            value={title}
-            onChange={(event) => onTitleChange(event.target.value)}
-            maxLength={200}
-            autoFocus
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                event.stopPropagation();
-                onCancelEdit();
-              }
-            }}
-          />
-          <div className="chat-thread-link__edit-actions">
-            <Button type="submit" size="sm" variant="ink" disabled={busy}>
-              Save
-            </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={onCancelEdit}>
-              Cancel
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <Link
-          className="chat-thread-link__anchor"
-          to={`/chat/${conversation.id}`}
-          onClick={onClose}
-          aria-current={active ? "page" : undefined}
-        >
-          <span className="chat-thread-link__title">{conversation.title}</span>
-          <span className="chat-thread-link__meta">
-            <span>{formatRelative(conversation.last_entry_at ?? conversation.created_at)}</span>
-            <span aria-hidden="true">·</span>
-            <span>{conversation.model}</span>
-            {archived ? (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="chat-thread-link__archived">archived</span>
-              </>
-            ) : null}
-            {conversation.parent_conversation_id !== null ? (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="chat-thread-link__fork">
-                  fork of #{conversation.parent_conversation_id}
-                </span>
-              </>
-            ) : null}
-          </span>
-        </Link>
-      )}
-
-      {!editing && !confirmingDelete ? (
-        <div className="chat-thread-link__actions">
-          <ForkActionButton
-            conversation={conversation}
-            busy={busy}
-            forking={forking}
-            onFork={onFork}
-          />
-          <button
-            type="button"
-            className="chat-thread-link__action"
-            onClick={onEdit}
-            aria-label={`Rename ${conversation.title}`}
-            title="Rename"
-            disabled={busy}
-          >
-            <Icon name="pencil" size={13} />
-          </button>
-          <button
-            type="button"
-            className="chat-thread-link__action"
-            onClick={onToggleStatus}
-            aria-label={
-              archived
-                ? `Restore ${conversation.title}`
-                : `Archive ${conversation.title}`
-            }
-            title={archived ? "Restore" : "Archive"}
-            disabled={busy}
-          >
-            <Icon name={archived ? "history" : "archive"} size={13} />
-          </button>
-          <button
-            type="button"
-            className="chat-thread-link__action chat-thread-link__action--danger"
-            onClick={onRequestDelete}
-            aria-label={`Delete ${conversation.title}`}
-            title="Delete"
-            disabled={busy}
-          >
-            <Icon name="trash" size={13} />
-          </button>
-        </div>
-      ) : null}
-
-      {confirmingDelete ? (
-        <div className="chat-thread-link__confirm" role="alert">
-          <p>Remove this thread from the desk?</p>
-          <div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              className="chat-thread-link__delete"
-              onClick={onDelete}
-              disabled={busy}
-            >
-              Remove
-            </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={onCancelDelete}>
-              Keep
-            </Button>
-          </div>
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
-/** Thread rail: list, create, rename, archive/restore, and remove. */
+/** Session drawer: grouped conversations with rename, archive, and fork. */
 export const ConversationRail = memo(function ConversationRail({
   conversations,
   loading,
   error,
   activeId,
   open,
+  overlay,
   onRetry,
   onNew,
   onClose,
+  onNavigate,
 }: ConversationRailProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
   const updateConversation = useUpdateAgentConversation();
-  const deleteConversation = useDeleteAgentConversation();
   const forkConversation = useForkAgentConversation();
 
+  const [menuId, setMenuId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
-  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [forkingId, setForkingId] = useState<number | null>(null);
 
-  const active = useMemo(
-    () => conversations.filter((conversation) => conversation.status === "active"),
-    [conversations],
-  );
-  const archived = useMemo(
-    () =>
-      conversations.filter((conversation) => conversation.status === "archived"),
-    [conversations],
-  );
+  useEffect(() => {
+    if (menuId === null) {
+      return;
+    }
+    const handlePointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        target.closest(`[data-session-menu="${menuId}"]`) !== null
+      ) {
+        return;
+      }
+      setMenuId(null);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuId(null);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [menuId]);
+
+  const grouped = useMemo(() => {
+    const buckets = new Map<SessionGroup, AgentConversationSchema[]>();
+    for (const { key } of GROUP_ORDER) {
+      buckets.set(key, []);
+    }
+    for (const conversation of conversations) {
+      buckets.get(groupOf(conversation))?.push(conversation);
+    }
+    for (const bucket of buckets.values()) {
+      bucket.sort((left, right) => timestampOf(right) - timestampOf(left));
+    }
+    return GROUP_ORDER.map((group) => ({
+      ...group,
+      items: buckets.get(group.key) ?? [],
+    }));
+  }, [conversations]);
+
+  const activeCount = conversations.filter(
+    (conversation) => conversation.status === "active",
+  ).length;
+  const archivedCount = conversations.length - activeCount;
 
   const refresh = async (conversationId?: number) => {
     await Promise.all([
       invalidateConversationList(queryClient),
       conversationId === undefined
         ? Promise.resolve()
-        : invalidateConversationDetail(queryClient, conversationId),
+        : invalidateConversation(queryClient, conversationId),
     ]);
-  };
-
-  const startRename = (conversation: AgentConversationSchema) => {
-    setPendingDeleteId(null);
-    setEditingId(conversation.id);
-    setEditTitle(conversation.title);
   };
 
   const saveTitle = async (conversation: AgentConversationSchema) => {
@@ -336,7 +175,7 @@ export const ConversationRail = memo(function ConversationRail({
       });
       await refresh(conversation.id);
       setEditingId(null);
-      toast.success("Thread renamed.");
+      toast.success("Conversation renamed.");
     } catch (caught) {
       toast.error(describeError(caught));
     } finally {
@@ -358,34 +197,11 @@ export const ConversationRail = memo(function ConversationRail({
       });
       await refresh(conversation.id);
       toast.success(
-        nextStatus === "archived" ? "Thread archived." : "Thread restored.",
+        nextStatus === "archived" ? "Conversation archived." : "Conversation restored.",
       );
       if (nextStatus === "archived" && activeId === conversation.id) {
         navigate("/chat");
-        onClose();
-      }
-    } catch (caught) {
-      toast.error(describeError(caught));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const removeConversation = async (conversation: AgentConversationSchema) => {
-    if (busyId !== null || forkingId !== null) {
-      return;
-    }
-    setBusyId(conversation.id);
-    try {
-      await deleteConversation.mutateAsync({
-        conversationId: conversation.id,
-      });
-      await refresh();
-      setPendingDeleteId(null);
-      toast.success("Thread removed from the desk.");
-      if (activeId === conversation.id) {
-        navigate("/chat");
-        onClose();
+        onNavigate();
       }
     } catch (caught) {
       toast.error(describeError(caught));
@@ -411,7 +227,7 @@ export const ConversationRail = memo(function ConversationRail({
       await invalidateConversationList(queryClient);
       toast.success(`Forked “${conversation.title}”.`);
       navigate(`/chat/${forked.id}`);
-      onClose();
+      onNavigate();
     } catch (caught) {
       toast.error(describeError(caught));
     } finally {
@@ -419,51 +235,25 @@ export const ConversationRail = memo(function ConversationRail({
     }
   };
 
-  const renderItem = (conversation: AgentConversationSchema) => (
-    <RailItem
-      key={conversation.id}
-      conversation={conversation}
-      active={conversation.id === activeId}
-      editing={editingId === conversation.id}
-      title={editTitle}
-      busy={busyId === conversation.id || forkingId === conversation.id}
-      forking={forkingId === conversation.id}
-      confirmingDelete={pendingDeleteId === conversation.id}
-      onFork={() => {
-        void forkThread(conversation);
-      }}
-      onTitleChange={setEditTitle}
-      onEdit={() => startRename(conversation)}
-      onCancelEdit={() => setEditingId(null)}
-      onSaveTitle={() => {
-        void saveTitle(conversation);
-      }}
-      onToggleStatus={() => {
-        void toggleStatus(conversation);
-      }}
-      onRequestDelete={() => {
-        setEditingId(null);
-        setPendingDeleteId(conversation.id);
-      }}
-      onCancelDelete={() => setPendingDeleteId(null)}
-      onDelete={() => {
-        void removeConversation(conversation);
-      }}
-      onClose={onClose}
-    />
-  );
+  const handleTitleSubmit = (
+    event: FormEvent<HTMLFormElement>,
+    conversation: AgentConversationSchema,
+  ) => {
+    event.preventDefault();
+    void saveTitle(conversation);
+  };
 
-  let railBody: ReactNode;
+  let body;
   if (loading) {
-    railBody = (
-      <div className="chat-rail__loading">
-        <Loader size={28} label="Reading the thread list" />
+    body = (
+      <div className="chat-sessions__state" role="status" aria-live="polite">
+        <Loader size={22} label="Reading the conversation list" />
         <span>Reading the desk…</span>
       </div>
     );
   } else if (error) {
-    railBody = (
-      <div className="chat-rail__error" role="alert">
+    body = (
+      <div className="chat-sessions__state chat-sessions__state--error" role="alert">
         <p>{describeError(error)}</p>
         <Button variant="secondary" size="sm" onClick={onRetry}>
           Try again
@@ -471,100 +261,273 @@ export const ConversationRail = memo(function ConversationRail({
       </div>
     );
   } else if (conversations.length === 0) {
-    railBody = (
-      <div className="chat-rail__empty">
-        <p className="eyebrow">No sheets yet</p>
+    body = (
+      <div className="chat-sessions__state">
+        <p className="mono-label">No conversations</p>
         <p>The first question opens a thread and keeps its sources.</p>
       </div>
     );
   } else {
-    railBody = (
-      <>
-        <section className="chat-rail__section">
-          <p className="chat-rail__section-label">Active</p>
-          {active.length === 0 ? (
-            <p className="chat-rail__section-empty">
-              Every thread is archived.
-            </p>
-          ) : (
-            <ul className="chat-rail__list">{active.map(renderItem)}</ul>
-          )}
-        </section>
+    body = (
+      <div className="chat-sessions__scroll">
+        {grouped.map((group) =>
+          group.items.length === 0 ? null : (
+            <section className="chat-sessions__group" key={group.key}>
+              <p className="chat-sessions__group-label">{group.label}</p>
+              <ul className="chat-sessions__list">
+                {group.items.map((conversation) => {
+                  const active = conversation.id === activeId;
+                  const archived = conversation.status === "archived";
+                  const busy = busyId === conversation.id;
+                  const forking = forkingId === conversation.id;
+                  const editing = editingId === conversation.id;
+                  const menuOpen = menuId === conversation.id;
+                  const timestamp =
+                    conversation.last_entry_at ?? conversation.created_at;
+                  return (
+                    <li
+                      className={[
+                        "chat-session",
+                        active ? "is-active" : null,
+                        archived ? "is-archived" : null,
+                        busy ? "is-busy" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      key={conversation.id}
+                    >
+                      {editing ? (
+                        <form
+                          className="chat-session__edit"
+                          onSubmit={(event) =>
+                            handleTitleSubmit(event, conversation)
+                          }
+                        >
+                          <label
+                            className="visually-hidden"
+                            htmlFor={`chat-session-title-${conversation.id}`}
+                          >
+                            Conversation title
+                          </label>
+                          <input
+                            id={`chat-session-title-${conversation.id}`}
+                            className="input"
+                            value={editTitle}
+                            onChange={(event) => setEditTitle(event.target.value)}
+                            maxLength={200}
+                            autoFocus
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                setEditingId(null);
+                              }
+                            }}
+                          />
+                          <div className="chat-session__edit-actions">
+                            <Button
+                              type="submit"
+                              size="sm"
+                              variant="ink"
+                              disabled={busy}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditingId(null)}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <>
+                          <Link
+                            className="chat-session__anchor"
+                            to={`/chat/${conversation.id}`}
+                            onClick={() => {
+                              setMenuId(null);
+                              onNavigate();
+                            }}
+                            aria-current={active ? "page" : undefined}
+                          >
+                            <span className="chat-session__icon" aria-hidden="true">
+                              <Icon name="chat" size={13} />
+                            </span>
+                            <span className="chat-session__copy">
+                              <span className="chat-session__title">
+                                {conversation.title}
+                              </span>
+                              <span className="chat-session__meta">
+                                <span>{conversation.model}</span>
+                                <span aria-hidden="true">·</span>
+                                <time dateTime={timestamp}>
+                                  {formatRelative(timestamp)}
+                                </time>
+                                {archived ? (
+                                  <>
+                                    <span aria-hidden="true">·</span>
+                                    <span className="chat-session__flag">
+                                      archived
+                                    </span>
+                                  </>
+                                ) : null}
+                              </span>
+                            </span>
+                          </Link>
 
-        {archived.length > 0 ? (
-          <details className="chat-rail__archived">
-            <summary>
-              <span>Archived</span>
-              <span className="chat-rail__archived-count">{archived.length}</span>
-              <Icon name="chevron-down" size={13} />
-            </summary>
-            <p className="chat-rail__archived-note">
-              Restore a thread to fork it or write another note.
-            </p>
-            <ul className="chat-rail__list">{archived.map(renderItem)}</ul>
-          </details>
-        ) : null}
-      </>
+                          {active ? (
+                            <span
+                              className="chat-session__dot"
+                              aria-label="Current conversation"
+                            />
+                          ) : null}
+
+                          <div
+                            className="chat-session__menu"
+                            data-session-menu={conversation.id}
+                          >
+                            <button
+                              type="button"
+                              className="chat-session__menu-btn"
+                              onClick={() =>
+                                setMenuId(menuOpen ? null : conversation.id)
+                              }
+                              aria-label={`Actions for ${conversation.title}`}
+                              aria-expanded={menuOpen}
+                              disabled={busy || forking}
+                            >
+                              <span aria-hidden="true">⋯</span>
+                            </button>
+                            {menuOpen ? (
+                              <div
+                                className="chat-session__menu-panel"
+                                role="group"
+                                aria-label={`Actions for ${conversation.title}`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuId(null);
+                                    setEditingId(conversation.id);
+                                    setEditTitle(conversation.title);
+                                  }}
+                                >
+                                  <Icon name="pencil" size={13} />
+                                  Rename
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuId(null);
+                                    void toggleStatus(conversation);
+                                  }}
+                                >
+                                  <Icon
+                                    name={archived ? "history" : "archive"}
+                                    size={13}
+                                  />
+                                  {archived ? "Restore" : "Archive"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMenuId(null);
+                                    void forkThread(conversation);
+                                  }}
+                                  disabled={archived}
+                                  title={
+                                    archived
+                                      ? "Restore the conversation before forking."
+                                      : "Fork this conversation"
+                                  }
+                                >
+                                  {forking ? (
+                                    <Loader size={12} label="Forking" />
+                                  ) : (
+                                    <Icon name="branch" size={13} />
+                                  )}
+                                  Fork
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ),
+        )}
+      </div>
+    );
+  }
+
+  if (!open) {
+    return (
+      <aside
+        id="chat-sessions"
+        className="chat-sessions is-collapsed"
+        aria-hidden="true"
+      />
     );
   }
 
   return (
     <>
-      {open ? (
+      {overlay ? (
         <button
           type="button"
-          className="chat-rail__scrim"
+          className="chat-scrim"
           onClick={onClose}
-          aria-label="Close threads"
+          aria-label="Close conversations"
         />
       ) : null}
       <aside
-        id="chat-thread-rail"
-        className={open ? "chat-rail is-open" : "chat-rail"}
-        aria-label="Conversation threads"
+        id="chat-sessions"
+        className={
+          overlay
+            ? "chat-sessions chat-sessions--overlay is-open"
+            : "chat-sessions is-open"
+        }
+        aria-label="Conversations"
       >
-        <div className="chat-rail__inner">
-          <header className="chat-rail__head">
-            <div>
-              <p className="eyebrow">Reading room</p>
-              <h2>Threads</h2>
-              <p className="chat-rail__count">
-                {loading
-                  ? "reading the desk…"
-                  : `${active.length} active · ${archived.length} archived`}
-              </p>
-            </div>
+        <div className="chat-sessions__head">
+          <div className="chat-sessions__head-row">
+            <span className="mono-label">Conversations</span>
             <button
               type="button"
-              className="chat-rail__close"
+              className="chat-sessions__collapse"
               onClick={onClose}
-              aria-label="Close threads"
+              aria-label="Collapse conversations"
+              title="Collapse conversations"
             >
-              <Icon name="close" size={16} />
+              <Icon name="chevron-right" size={13} />
             </button>
-          </header>
-
+          </div>
           <Button
-            variant="primary"
+            variant="ink"
             size="sm"
             block
-            className="chat-rail__new"
-            onClick={() => {
-              setEditingId(null);
-              setPendingDeleteId(null);
-              onNew();
-            }}
+            className="chat-sessions__new"
+            onClick={onNew}
           >
-            <Icon name="plus" size={14} />
-            New conversation
+            <Icon name="plus" size={13} />
+            New chat
           </Button>
+        </div>
 
-          <div className="chat-rail__scroll">{railBody}</div>
+        {body}
 
-          <footer className="chat-rail__foot">
-            <Icon name="history" size={13} />
-            <span>Entries are append-only. A thread keeps its frozen method.</span>
-          </footer>
+        <div className="chat-sessions__foot">
+          <span>
+            {activeCount} active · {archivedCount} archived
+          </span>
         </div>
       </aside>
     </>

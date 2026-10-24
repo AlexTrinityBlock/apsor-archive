@@ -3,7 +3,6 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Button, ButtonLink } from "../../component/Button";
-import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import { PageHeader } from "../../component/PageHeader";
 import { Panel } from "../../component/Panel";
@@ -13,6 +12,7 @@ import { formatNumber } from "../../../lib/format";
 
 import {
   errorText,
+  invalidateMemoryQueries,
   nowLocalInput,
   parseSupersedes,
   savedMemoryMessage,
@@ -32,31 +32,59 @@ export function MemoryNewView() {
 
   const [content, setContent] = useState("");
   const [occurredAt, setOccurredAt] = useState(nowLocalInput);
-  const [supersedes, setSupersedes] = useState(() => searchParams.get("supersedes") ?? "");
+  const [supersedes, setSupersedes] = useState(() => {
+    const repeated = searchParams.getAll("supersedes");
+    return repeated.length > 0
+      ? repeated.join(", ")
+      : (searchParams.get("supersedes") ?? "");
+  });
+  const [contentError, setContentError] = useState<string | null>(null);
+  const [occurredError, setOccurredError] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
   const parsedSupersedes = parseSupersedes(supersedes);
   const supersedesIssue =
     supersedes.trim().length > 0 ? parsedSupersedes.error : null;
+  const supersedeCount = parsedSupersedes.ids.length;
+  const supersedeNoun = supersedeCount === 1 ? "record" : "records";
+  const supersedeMeta =
+    supersedeCount > 0 ? `supersedes ${supersedeCount} ${supersedeNoun}` : "new record";
+  const nearContentLimit = content.length >= 7600;
+  const contentDescribedBy = [
+    `${contentId}-help`,
+    `${contentId}-count`,
+    contentError ? `${contentId}-error` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleaned = content.trim();
+    let valid = true;
+
     if (cleaned.length === 0) {
-      setFailure("Write the memory before pressing it into the archive.");
-      return;
+      setContentError("Write the memory before pressing it into the archive.");
+      valid = false;
+    } else if (cleaned.length > 8000) {
+      setContentError("A memory is limited to 8,000 characters.");
+      valid = false;
+    } else {
+      setContentError(null);
     }
-    if (cleaned.length > 8000) {
-      setFailure("A memory is limited to 8,000 characters.");
+
+    const occurred = occurredAt.length > 0 ? new Date(occurredAt) : null;
+    if (occurred && Number.isNaN(occurred.getTime())) {
+      setOccurredError("The occurred-at time is not a valid date.");
+      valid = false;
+    } else {
+      setOccurredError(null);
+    }
+
+    if (!valid) {
       return;
     }
     if (parsedSupersedes.error) {
-      setFailure(parsedSupersedes.error);
-      return;
-    }
-    const occurred = occurredAt.length > 0 ? new Date(occurredAt) : null;
-    if (occurred && Number.isNaN(occurred.getTime())) {
-      setFailure("The occurred-at time is not a valid date.");
       return;
     }
 
@@ -67,12 +95,13 @@ export function MemoryNewView() {
           content: cleaned,
           supersedes: parsedSupersedes.ids,
           occurred_at: occurred ? occurred.toISOString() : null,
+          source: "manual",
         },
       },
       {
         onSuccess: (result) => {
           toast.success(savedMemoryMessage(result.memory.memory_id, result.deprecated.length));
-          void queryClient.invalidateQueries();
+          invalidateMemoryQueries(queryClient);
           const receipt: MemorySaveReceipt = {
             deprecated: result.deprecated,
             summary: result.summary,
@@ -89,16 +118,28 @@ export function MemoryNewView() {
   };
 
   return (
-    <div className="page memory-page memory-new-page">
+    <div className="content-container memory-page memory-new-page">
+      <nav className="memory-breadcrumb" aria-label="Breadcrumb">
+        <Link to="/memory">Memory Vault</Link>
+        <span aria-hidden="true">/</span>
+        <span className="memory-breadcrumb__current" aria-current="page">
+          Pressing room
+        </span>
+      </nav>
+
       <PageHeader
         eyebrow="Memory · pressing room"
         title="Press a new memory."
-        description="A new memory records a moment and may supersede earlier beliefs. The older entries become deprecated, not deleted: they leave search and the default timeline, yet the lineage remains readable."
-        meta={<span>supersede in both directions</span>}
+        description="A new memory records an occurrence and may supersede earlier beliefs. The older entries become deprecated, not deleted: they leave default search and the timeline, yet the lineage remains readable."
+        meta={
+          <span className="memory-page-header__meta">
+            {supersedeMeta}
+          </span>
+        }
         actions={
-          <ButtonLink to="/timeline" variant="ghost" size="sm">
+          <ButtonLink to="/memory" variant="ghost" size="sm">
             <Icon name="arrow-right" size={15} className="memory-back-icon" />
-            Back to timeline
+            Back to vault
           </ButtonLink>
         }
       />
@@ -107,60 +148,110 @@ export function MemoryNewView() {
         <Panel
           eyebrow="New record"
           title="What should be remembered?"
-          className="memory-new__form reveal reveal-2"
+          className="memory-new__form"
         >
           <form className="memory-form" onSubmit={handleSubmit}>
-            <label className="memory-field" htmlFor={contentId}>
-              <span className="memory-field__label">
+            <div className="memory-field">
+              <label className="memory-field__label" htmlFor={contentId}>
                 Content <small>required · 8,000 characters max</small>
-              </span>
+              </label>
               <textarea
                 id={contentId}
+                className="textarea"
                 value={content}
-                onChange={(event) => setContent(event.target.value)}
-                rows={10}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setContent(next);
+                  if (contentError && next.trim().length > 0) {
+                    setContentError(null);
+                  }
+                }}
+                rows={12}
                 maxLength={8000}
-                required
+                aria-required="true"
                 autoFocus
                 placeholder="A decision, a change of mind, an observation, a moment that should survive."
+                aria-invalid={contentError !== null}
+                aria-describedby={contentDescribedBy}
               />
-              <span className="memory-field__count">{formatNumber(content.length)} / 8,000</span>
-            </label>
+              <div className="memory-field__footer">
+                <span className="field-help" id={`${contentId}-help`}>
+                  Plain text; stored and indexed exactly as written.
+                </span>
+                <span
+                  className={[
+                    "memory-field__count",
+                    nearContentLimit ? "is-near-limit" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  id={`${contentId}-count`}
+                >
+                  {formatNumber(content.length)} / 8,000
+                </span>
+              </div>
+              {contentError ? (
+                <p className="field-error" id={`${contentId}-error`} role="alert">
+                  {contentError}
+                </p>
+              ) : null}
+            </div>
 
             <div className="memory-form__grid">
-              <label className="memory-field" htmlFor={occurredId}>
-                <span className="memory-field__label">
+              <div className="memory-field">
+                <label className="memory-field__label" htmlFor={occurredId}>
                   Occurred at <small>optional · defaults to now</small>
-                </span>
+                </label>
                 <input
                   id={occurredId}
+                  className="input"
                   type="datetime-local"
                   value={occurredAt}
-                  onChange={(event) => setOccurredAt(event.target.value)}
+                  onChange={(event) => {
+                    setOccurredAt(event.target.value);
+                    if (occurredError) {
+                      setOccurredError(null);
+                    }
+                  }}
+                  aria-invalid={occurredError !== null}
+                  aria-describedby={occurredError ? `${occurredId}-error` : undefined}
                 />
-              </label>
-              <label className="memory-field" htmlFor={supersedesId}>
-                <span className="memory-field__label">
+                {occurredError ? (
+                  <p className="field-error" id={`${occurredId}-error`} role="alert">
+                    {occurredError}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="memory-field">
+                <label className="memory-field__label" htmlFor={supersedesId}>
                   Supersedes <small>optional · comma-separated ids</small>
-                </span>
+                </label>
                 <input
                   id={supersedesId}
+                  className="input"
                   type="text"
                   inputMode="numeric"
                   value={supersedes}
                   onChange={(event) => setSupersedes(event.target.value)}
                   placeholder="12, 14"
                   aria-invalid={supersedesIssue !== null}
-                  aria-describedby={supersedesIssue ? `${supersedesId}-error` : undefined}
+                  aria-describedby={
+                    supersedesIssue
+                      ? `${supersedesId}-help ${supersedesId}-error`
+                      : `${supersedesId}-help`
+                  }
                 />
-              </label>
+                <span className="field-help" id={`${supersedesId}-help`}>
+                  Numeric memory ids only. Up to 50 records can be replaced.
+                </span>
+                {supersedesIssue ? (
+                  <p className="field-error" id={`${supersedesId}-error`} role="alert">
+                    {supersedesIssue}
+                  </p>
+                ) : null}
+              </div>
             </div>
-
-            {supersedesIssue ? (
-              <p className="memory-form__issue" id={`${supersedesId}-error`} role="alert">
-                {supersedesIssue}
-              </p>
-            ) : null}
 
             {failure ? (
               <p className="memory-form__failure" role="alert">
@@ -173,25 +264,24 @@ export function MemoryNewView() {
                 type="submit"
                 variant="primary"
                 size="lg"
-                disabled={saveMemory.isPending || content.trim().length === 0}
+                disabled={saveMemory.isPending}
               >
                 <Icon name="leaf" size={17} />
-                {saveMemory.isPending ? "Pressing the memory" : "Save memory"}
+                {saveMemory.isPending ? "Pressing the memory…" : "Save memory"}
               </Button>
               <p>
-                The endpoint may also return an auto-created summary. It will be shown on the saved
-                record together with the deprecated list.
+                The record is saved with source <span className="code-inline">manual</span>. If the
+                API returns an auto-created summary, it appears in the receipt on the saved
+                record.
               </p>
             </div>
           </form>
         </Panel>
 
-        <aside className="memory-new__side">
+        <aside className="memory-new__aside">
           <Panel
             eyebrow="Consequences"
             title="What saving does"
-            className="reveal reveal-3"
-            action={<Badge tone="neutral">source: manual</Badge>}
           >
             <ol className="memory-steps">
               <li>
@@ -211,8 +301,8 @@ export function MemoryNewView() {
               <li>
                 <span>03</span>
                 <p>
-                  Deprecated memories leave search and the default timeline. Their chunks stop
-                  being retrieved; their text remains readable.
+                  Deprecated memories leave default search and the default timeline. Their chunks
+                  stop being retrieved; their text remains readable with the full chain.
                 </p>
               </li>
               <li>
@@ -228,7 +318,7 @@ export function MemoryNewView() {
           <Panel
             eyebrow="Will be deprecated"
             title="Listed earlier memories"
-            className="memory-new__deprecations reveal reveal-4"
+            className="memory-new__deprecations"
           >
             {parsedSupersedes.ids.length > 0 ? (
               <>
@@ -239,7 +329,7 @@ export function MemoryNewView() {
                 <ul className="memory-deprecation-list">
                   {parsedSupersedes.ids.map((id) => (
                     <li key={id}>
-                      <Link to={`/memory/${id}`}>memory:{id}</Link>
+                      <Link to={`/memory/${id}`}>CRYSTAL #{id}</Link>
                     </li>
                   ))}
                 </ul>
@@ -249,22 +339,6 @@ export function MemoryNewView() {
                 No earlier memories are listed. This save will not deprecate anything.
               </p>
             )}
-          </Panel>
-
-          <Panel
-            tone="plain"
-            eyebrow="Endpoint"
-            title="save_memory"
-            className="memory-new__endpoint reveal reveal-4"
-          >
-            <div className="endpoint-label">
-              <span>POST</span>
-              <code>/api/v1/memories</code>
-            </div>
-            <p className="memory-note">
-              Uses the generated <code>useSaveMemory</code> hook. All timeline, memory, and
-              summary queries are invalidated after a successful save.
-            </p>
           </Panel>
         </aside>
       </div>

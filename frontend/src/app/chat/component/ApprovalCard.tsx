@@ -159,7 +159,7 @@ function ApprovalCard({
 }
 
 /**
- * Persisted approval cards shared by `/chat` and the Agent dock.
+ * Persisted approval cards for the chat stream.
  *
  * The cards come from the durable approvals endpoint, so they reappear after a
  * reload while the run is waiting. Resolution streams the resumed turn through

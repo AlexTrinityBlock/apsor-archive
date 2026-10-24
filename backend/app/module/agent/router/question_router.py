@@ -80,9 +80,7 @@ async def delete_saved_question(
 )
 async def ask_saved_question(
     question_id: int,
-    saved_question_service: SavedQuestionService = Depends(
-        get_saved_question_ask_service
-    ),
+    saved_question_service: SavedQuestionService = Depends(get_saved_question_ask_service),
 ) -> SavedQuestionReadSchema:
     """Run one JSON agent turn and persist its answer, citations, and status.
 

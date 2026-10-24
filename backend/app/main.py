@@ -37,8 +37,6 @@ from app.module.knowledge.exception.handler import register_exceptions
 from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
 from app.module.knowledge.router import router as knowledge_router
 from app.module.knowledge.router.health_router import router as health_router
-from app.module.media.exception.handler import register_exceptions as register_media_exceptions
-from app.module.media.router.media_router import router as media_router
 from app.shared.exception.registry import ExceptionRegistry
 from app.shared.time import utcnow
 
@@ -72,9 +70,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resolved_settings.database_url,
             echo=resolved_settings.debug,
         )
-        await AgentRepository(app.state.db.session_factory).recover_stale_runs(
-            now=utcnow()
-        )
+        await AgentRepository(app.state.db.session_factory).recover_stale_runs(now=utcnow())
         app.state.cache = build_cache(resolved_settings.cache_url)
         app.state.storage = LocalFileStorage(resolved_settings.data_dir)
         cipher = SecretCipher.from_settings(resolved_settings)
@@ -133,11 +129,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=resolved_settings.version,
         debug=resolved_settings.debug,
         lifespan=lifespan,
+        docs_url="/api/docs",
+        redoc_url="/api/redoc",
     )
     app.state.settings = resolved_settings
 
     register_exceptions()
-    register_media_exceptions()
     register_auth_exceptions()
     register_agent_exceptions()
     ExceptionRegistry.setup_app(app)
@@ -162,11 +159,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dependencies=[Depends(require_authenticated)],
     )
     app.include_router(
-        media_router,
-        prefix="/api/v1",
-        dependencies=[Depends(require_authenticated)],
-    )
-    app.include_router(
         agent_router,
         prefix="/api/v1",
         dependencies=[Depends(require_authenticated)],
@@ -187,7 +179,7 @@ def _mount_spa(app: FastAPI, directory: Path) -> None:
 
     @app.get("/{path:path}", include_in_schema=False, response_model=None)
     def spa(path: str) -> FileResponse | HTMLResponse:
-        if path.startswith(("api/", "docs", "openapi.json", "redoc")):
+        if path.startswith(("api/", "openapi.json")):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
         candidate = (resolved / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(resolved):

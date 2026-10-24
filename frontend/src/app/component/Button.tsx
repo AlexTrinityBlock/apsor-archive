@@ -1,7 +1,13 @@
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "ink" | "paper";
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "ink"
+  | "paper"
+  | "danger";
 export type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonStyleOptions {

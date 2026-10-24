@@ -27,16 +27,12 @@ def upgrade() -> None:
         server_default=sa.text("24"),
         existing_nullable=False,
     )
-    op.execute(
-        "UPDATE agent_config SET max_steps = 24 WHERE max_steps = 8"
-    )
+    op.execute("UPDATE agent_config SET max_steps = 24 WHERE max_steps = 8")
 
 
 def downgrade() -> None:
     """Restore the previous step guard."""
-    op.execute(
-        "UPDATE agent_config SET max_steps = 8 WHERE max_steps = 24"
-    )
+    op.execute("UPDATE agent_config SET max_steps = 8 WHERE max_steps = 24")
     op.alter_column(
         "agent_config",
         "max_steps",

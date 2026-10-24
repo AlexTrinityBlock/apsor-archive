@@ -1,16 +1,17 @@
-import { Suspense, useCallback, useEffect, useState, type CSSProperties } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  type CSSProperties,
+} from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 
-import { useGetHealth, useListMemories } from "../generated-apis-types";
-import { AgentDock } from "../agent/AgentDock";
-import { isChatPath } from "../agent/page-context";
+import { useGetHealth } from "../generated-apis-types";
 import { useAuth } from "../auth/AuthProvider";
-import { useCommandK } from "../hook/useCommandK";
 import { useScrollLock } from "../hook/useScrollLock";
-import { CommandPalette } from "./CommandPalette";
 import { Icon, type IconName } from "./Icon";
 import { RouteFallback } from "./RouteFallback";
-import { ThemeToggle } from "./ThemeToggle";
 import { TreeMark } from "./TreeMark";
 
 interface NavItem {
@@ -21,46 +22,18 @@ interface NavItem {
   readonly end?: boolean;
 }
 
-interface NavSection {
-  readonly label: string;
-  readonly items: readonly NavItem[];
-}
-
-const NAV_SECTIONS: readonly NavSection[] = [
-  {
-    label: "Index",
-    items: [
-      { to: "/", label: "Overview", index: "01", icon: "overview", end: true },
-      { to: "/search", label: "Search", index: "02", icon: "search" },
-      { to: "/timeline", label: "Timeline", index: "03", icon: "timeline" },
-    ],
-  },
-  {
-    label: "Collections",
-    items: [
-      { to: "/library", label: "File library", index: "04", icon: "library" },
-      { to: "/tree", label: "Knowledge tree", index: "05", icon: "tree" },
-      { to: "/media", label: "Media", index: "06", icon: "ring" },
-      { to: "/memory/1015", label: "Memory", index: "07", icon: "memory" },
-    ],
-  },
-  {
-    label: "Studio",
-    items: [
-      { to: "/chat", label: "Chat", index: "08", icon: "chat" },
-      { to: "/questions", label: "Questions", index: "09", icon: "quote" },
-      { to: "/ask", label: "Quick ask", index: "10", icon: "ask" },
-      { to: "/method", label: "Method", index: "11", icon: "method" },
-      { to: "/settings", label: "Settings", index: "12", icon: "settings" },
-    ],
-  },
-];
-
-const MOBILE_NAV: readonly NavItem[] = [
-  { to: "/", label: "Overview", index: "01", icon: "overview", end: true },
-  { to: "/search", label: "Search", index: "02", icon: "search" },
+/**
+ * The flat seven-workspace rail defined by the template audit matrix.
+ * Order is part of the interface: Chat is the entry point, Settings the exit.
+ */
+const NAV_ITEMS: readonly NavItem[] = [
+  { to: "/chat", label: "Chat", index: "01", icon: "chat" },
+  { to: "/library", label: "File library", index: "02", icon: "library" },
   { to: "/timeline", label: "Timeline", index: "03", icon: "timeline" },
-  { to: "/library", label: "Library", index: "04", icon: "library" },
+  { to: "/memory", label: "Memory", index: "04", icon: "memory" },
+  { to: "/search", label: "Search", index: "05", icon: "search" },
+  { to: "/", label: "Overview", index: "06", icon: "overview", end: true },
+  { to: "/settings", label: "Settings", index: "07", icon: "settings" },
 ];
 
 type StatusTone = "ok" | "degraded" | "error" | "loading";
@@ -69,23 +42,38 @@ const STATUS_DOT_STYLES: Record<StatusTone, CSSProperties | undefined> = {
   ok: undefined,
   loading: undefined,
   degraded: {
-    backgroundColor: "var(--ochre)",
-    boxShadow: "0 0 0 3px var(--ochre-wash)",
+    backgroundColor: "var(--accent-ochre)",
+    boxShadow: "0 0 0 3px rgba(180, 83, 9, 0.12)",
   },
   error: {
-    backgroundColor: "var(--vermilion)",
-    boxShadow: "0 0 0 3px var(--vermilion-wash)",
+    backgroundColor: "var(--accent-seal)",
+    boxShadow: "0 0 0 3px rgba(200, 75, 49, 0.12)",
   },
 };
 
+const RAIL_STORAGE_KEY = "dendromatrix.rail.collapsed";
+
+function readRailPreference(): boolean {
+  try {
+    return window.localStorage.getItem(RAIL_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 /**
- * The fixed archive shell: a deep-green index rail on desktop, a compact top
- * bar and bottom shelf on mobile, and one command palette for both.
+ * The fixed archive shell: a collapsible mono rail on desktop, a drawer on
+ * mobile, and a single main canvas. The global command palette and floating
+ * agent dock were deliberately removed by the template audit matrix.
  */
 export function AppShell() {
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [railCollapsed, setRailCollapsed] = useState(readRailPreference);
   const location = useLocation();
+  const [drawer, setDrawer] = useState({
+    open: false,
+    path: location.pathname,
+  });
+  const drawerOpen = drawer.open && drawer.path === location.pathname;
   const healthQuery = useGetHealth({
     query: {
       enabled: true,
@@ -93,15 +81,8 @@ export function AppShell() {
       refetchInterval: 60_000,
     },
   });
-  const latestMemories = useListMemories({ limit: 1 });
-  const latestMemoryId = latestMemories.data?.resources[0]?.memory_id;
-  const memoryHref = latestMemoryId ? `/memory/${latestMemoryId}` : "/memory/new";
   const { user, logout, isSubmitting } = useAuth();
 
-  const openPalette = useCallback(() => setPaletteOpen(true), []);
-  const closePalette = useCallback(() => setPaletteOpen(false), []);
-
-  useCommandK(openPalette);
   useScrollLock(drawerOpen);
 
   useEffect(() => {
@@ -109,23 +90,42 @@ export function AppShell() {
   }, [location.pathname]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(RAIL_STORAGE_KEY, String(railCollapsed));
+    } catch {
+      // A private browser may reject storage; the rail still works for the tab.
+    }
+  }, [railCollapsed]);
+
+  useEffect(() => {
     if (!drawerOpen) {
       return;
     }
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setDrawerOpen(false);
+        setDrawer((current) => ({ ...current, open: false }));
       }
     };
     window.addEventListener("keydown", handleEscape);
     return () => window.removeEventListener("keydown", handleEscape);
   }, [drawerOpen]);
 
-  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  const openDrawer = useCallback(
+    () => setDrawer({ open: true, path: location.pathname }),
+    [location.pathname],
+  );
+  const closeDrawer = useCallback(
+    () => setDrawer((current) => ({ ...current, open: false })),
+    [],
+  );
+  const toggleRail = useCallback(
+    () => setRailCollapsed((previous) => !previous),
+    [],
+  );
 
   const health = healthQuery.data;
   let statusTone: StatusTone = "loading";
-  let statusDetail = "checking local services";
+  let statusDetail = "Checking local services";
   if (healthQuery.isError) {
     statusTone = "error";
     statusDetail = "API offline";
@@ -138,14 +138,16 @@ export function AppShell() {
       statusTone = "ok";
     }
     const aiState = health.ai === "configured" ? "configured" : "missing";
-    statusDetail = `db ${health.database} · cache ${health.cache} · AI ${aiState}`;
+    statusDetail = `DB ${health.database} · cache ${health.cache} · AI ${aiState}`;
   }
   const statusDotClassName =
-    statusTone === "loading" ? "status-dot status-dot--pending" : "status-dot";
+    statusTone === "loading"
+      ? "status-dot status-dot--pending"
+      : "status-dot";
   const statusDotStyle = STATUS_DOT_STYLES[statusTone];
 
   return (
-    <div className="app-shell">
+    <div className={railCollapsed ? "app-shell rail-collapsed" : "app-shell"}>
       <a className="skip-link" href="#main-content">
         Skip to the archive
       </a>
@@ -154,31 +156,29 @@ export function AppShell() {
         <button
           type="button"
           className="mobile-bar__button"
-          onClick={() => setDrawerOpen(true)}
+          onClick={openDrawer}
           aria-expanded={drawerOpen}
           aria-controls="archive-navigation"
           aria-label="Open navigation"
         >
           <Icon name="menu" size={20} />
         </button>
-        <Link to="/" className="mobile-bar__brand">
+        <NavLink to="/" className="mobile-bar__brand" end>
           <TreeMark size={26} />
           <span>DendroMatrix</span>
-        </Link>
-        <button
-          type="button"
-          className="mobile-bar__button"
-          onClick={openPalette}
-          aria-label="Open command palette"
-        >
-          <Icon name="command" size={19} />
-        </button>
+        </NavLink>
+        <span
+          className={statusDotClassName}
+          style={statusDotStyle}
+          aria-label={statusDetail}
+          title={statusDetail}
+        />
       </header>
 
       {drawerOpen ? (
         <button
           type="button"
-          className="sidebar-scrim"
+          className="rail-scrim"
           onClick={closeDrawer}
           aria-label="Close navigation"
         />
@@ -186,121 +186,109 @@ export function AppShell() {
 
       <aside
         id="archive-navigation"
-        className={drawerOpen ? "sidebar is-open" : "sidebar"}
+        className={drawerOpen ? "nav-rail is-open" : "nav-rail"}
         aria-label="Archive navigation"
       >
-        <div className="sidebar__top">
-          <Link to="/" className="brand" onClick={closeDrawer}>
-            <span className="brand__mark">
-              <TreeMark size={42} />
+        <div className="rail-header">
+          <NavLink to="/" className="brand-cluster" onClick={closeDrawer} title="DendroMatrix">
+            <span className="brand-seal" aria-hidden="true">
+              <TreeMark size={24} />
             </span>
-            <span className="brand__copy">
-              <span className="brand__name">DendroMatrix</span>
-              <span className="brand__subtitle">Annual ring archive</span>
+            <span className="brand-meta">
+              <span className="brand-title">DendroMatrix</span>
+              <span className="brand-sub">Archive Studio</span>
             </span>
-          </Link>
+          </NavLink>
           <button
             type="button"
-            className="sidebar__close"
+            className="rail-toggle-btn"
+            onClick={toggleRail}
+            aria-label={railCollapsed ? "Expand navigation rail" : "Collapse navigation rail"}
+            title={railCollapsed ? "Expand navigation rail" : "Collapse navigation rail"}
+          >
+            <Icon name={railCollapsed ? "chevron-right" : "chevron-down"} size={12} />
+          </button>
+          <button
+            type="button"
+            className="rail-close-btn"
             onClick={closeDrawer}
             aria-label="Close navigation"
           >
             <Icon name="close" size={18} />
           </button>
-          <div className="sidebar__edition">
-            <span>Vol. 01</span>
-            <span aria-hidden="true">/</span>
-            <span>Local archive</span>
-            <span aria-hidden="true">/</span>
-            <span>2026</span>
-          </div>
         </div>
 
-        <div className="sidebar__nav">
-          <nav aria-label="Primary">
-            {NAV_SECTIONS.map((section) => (
-              <div className="nav-section" key={section.label}>
-                <p className="nav-section__label">{section.label}</p>
-                <ul className="nav-list">
-                  {section.items.map((item) => {
-                    const isMemoryRoute = item.to.startsWith("/memory/");
-                    const destination = isMemoryRoute ? memoryHref : item.to;
-                    return (
-                      <li key={item.to}>
-                        <NavLink
-                          to={destination}
-                          end={item.end}
-                          onClick={closeDrawer}
-                          className={({ isActive }) =>
-                            isActive || (isMemoryRoute && location.pathname.startsWith("/memory"))
-                              ? "nav-link is-active"
-                              : "nav-link"
-                          }
-                        >
-                          <span className="nav-link__icon" aria-hidden="true">
-                            <Icon name={item.icon} size={17} />
-                          </span>
-                          <span className="nav-link__label">{item.label}</span>
-                          <span className="nav-link__index" aria-hidden="true">
-                            {item.index}
-                          </span>
-                        </NavLink>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </nav>
-        </div>
+        <nav className="rail-menu" aria-label="Primary">
+          {NAV_ITEMS.map((item) => {
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={closeDrawer}
+                data-tooltip={`${item.label} (${item.index})`}
+                className={({ isActive }) =>
+                  isActive ? "rail-item active" : "rail-item"
+                }
+              >
+                <span className="rail-item-icon" aria-hidden="true">
+                  <Icon name={item.icon} size={18} />
+                </span>
+                <span className="rail-item-text">{item.label}</span>
+                <span className="rail-item-badge" aria-hidden="true">
+                  {item.index}
+                </span>
+              </NavLink>
+            );
+          })}
+        </nav>
 
-        <div className="sidebar__foot">
-          <button type="button" className="command-trigger" onClick={openPalette}>
-            <Icon name="command" size={16} />
-            <span>Command menu</span>
-            <span className="command-trigger__keys" aria-hidden="true">
-              <kbd>⌘</kbd>
-              <kbd>K</kbd>
-            </span>
-          </button>
-
-          <ThemeToggle />
-
+        <div className="rail-footer">
           {user ? (
-            <div className="account-chip">
-              <span className="account-chip__mark" aria-hidden="true">
+            <div className="rail-account">
+              <span className="rail-account__mark" aria-hidden="true">
                 {user.username.slice(0, 2).toUpperCase()}
               </span>
-              <span className="account-chip__copy">
+              <span className="rail-account__copy">
                 <span>Signed in</span>
                 <strong>{user.username}</strong>
               </span>
               <button
                 type="button"
-                className="account-chip__action"
+                className="rail-account__action"
                 onClick={() => void logout()}
                 disabled={isSubmitting}
                 aria-label="Sign out"
                 title="Sign out"
               >
-                <Icon name="logout" size={16} />
+                <Icon name="logout" size={15} />
               </button>
             </div>
           ) : null}
 
-          <div className="system-status" aria-label="System status">
+          <div className="rail-status" aria-label="System status">
             <span
               className={statusDotClassName}
               style={statusDotStyle}
               aria-hidden="true"
             />
-            <span className="system-status__copy">
-              <span className="system-status__label">Local archive</span>
-              <span className="system-status__detail">{statusDetail}</span>
+            <span className="rail-status__copy">
+              <span className="rail-status__label">Local archive</span>
+              <span className="rail-status__detail">{statusDetail}</span>
             </span>
           </div>
 
-          <div className="sidebar__colophon">
+          <button
+            type="button"
+            className="rail-footer-btn"
+            onClick={toggleRail}
+            title="Expand or collapse sidebar"
+          >
+            <Icon name="chevron-right" size={14} />
+            <span>{railCollapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
+          </button>
+
+          <div className="rail-colophon">
             <span>v{health?.version ?? "—"}</span>
             <span aria-hidden="true">·</span>
             <span>Local-first</span>
@@ -309,42 +297,19 @@ export function AppShell() {
       </aside>
 
       <main id="main-content" className="app-main" tabIndex={-1}>
-        <div className="app-page">
+        <div
+          className={
+            location.pathname.startsWith("/chat") ||
+            location.pathname.startsWith("/library")
+              ? "app-page app-page--fixed"
+              : "app-page"
+          }
+        >
           <Suspense fallback={<RouteFallback />}>
             <Outlet />
           </Suspense>
         </div>
       </main>
-
-      {!isChatPath(location.pathname) ? <AgentDock /> : null}
-
-      <nav className="mobile-tabs" aria-label="Primary mobile">
-        {MOBILE_NAV.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) => (isActive ? "mobile-tab is-active" : "mobile-tab")}
-          >
-            <Icon name={item.icon} size={20} />
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
-        <button
-          type="button"
-          className="mobile-tab mobile-tab--more"
-          onClick={() => setDrawerOpen(true)}
-          aria-expanded={drawerOpen}
-          aria-controls="archive-navigation"
-        >
-          <Icon name="menu" size={20} />
-          <span>More</span>
-        </button>
-      </nav>
-
-      {paletteOpen ? (
-        <CommandPalette onClose={closePalette} memoryHref={memoryHref} />
-      ) : null}
     </div>
   );
 }
