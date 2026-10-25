@@ -1,8 +1,12 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import { createBrowserRouter } from "react-router-dom";
 
 import { AuthGate } from "./auth/AuthGate";
+import {
+  clearLastChatConversation,
+  readLastChatConversation,
+} from "./chat/session-storage";
 import { AppShell } from "./component/AppShell";
 import { RouteError } from "./component/RouteError";
 import { RouteFallback } from "./component/RouteFallback";
@@ -55,6 +59,39 @@ function AskRedirect() {
   return <Navigate to="/chat" replace />;
 }
 
+/** A draft arriving at `/chat` always starts a new conversation. */
+function hasRouteDraft(state: unknown): boolean {
+  if (typeof state !== "object" || state === null) {
+    return false;
+  }
+  const draft = (state as { draft?: unknown }).draft;
+  return typeof draft === "string" && draft.trim().length > 0;
+}
+
+/**
+ * Resumes the last conversation, except when a route draft is pending.
+ * The clear happens in an effect so render stays free of storage writes.
+ */
+function ChatEntry() {
+  const location = useLocation();
+  const draftPending = hasRouteDraft(location.state);
+
+  useEffect(() => {
+    if (draftPending) {
+      clearLastChatConversation();
+    }
+  }, [draftPending]);
+
+  if (!draftPending) {
+    const saved = readLastChatConversation();
+    if (saved !== null) {
+      return <Navigate to={`/chat/${saved}`} replace />;
+    }
+  }
+
+  return <ChatPage />;
+}
+
 function ViewerFileRedirect() {
   const { fileId } = useParams<{ fileId: string }>();
   const location = useLocation();
@@ -101,7 +138,7 @@ export const router = createBrowserRouter([
           { path: "memory", element: <MemoryPage /> },
           { path: "memory/new", element: <MemoryPage /> },
           { path: "memory/:memoryId", element: <MemoryPage /> },
-          { path: "chat", element: <ChatPage /> },
+          { path: "chat", element: <ChatEntry /> },
           { path: "chat/:conversationId", element: <ChatPage /> },
           { path: "questions", element: <QuestionsPage /> },
           { path: "ask", element: <AskRedirect /> },

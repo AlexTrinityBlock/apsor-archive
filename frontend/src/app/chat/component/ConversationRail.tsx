@@ -17,6 +17,7 @@ import {
   invalidateConversation,
   invalidateConversationList,
 } from "../query";
+import { clearLastChatConversation } from "../session-storage";
 
 interface ConversationRailProps {
   readonly conversations: readonly AgentConversationSchema[];
@@ -200,6 +201,7 @@ export const ConversationRail = memo(function ConversationRail({
         nextStatus === "archived" ? "Conversation archived." : "Conversation restored.",
       );
       if (nextStatus === "archived" && activeId === conversation.id) {
+        clearLastChatConversation();
         navigate("/chat");
         onNavigate();
       }
@@ -515,7 +517,10 @@ export const ConversationRail = memo(function ConversationRail({
             size="sm"
             block
             className="chat-sessions__new"
-            onClick={onNew}
+            onClick={() => {
+              clearLastChatConversation();
+              onNew();
+            }}
           >
             <Icon name="plus" size={13} />
             New chat
