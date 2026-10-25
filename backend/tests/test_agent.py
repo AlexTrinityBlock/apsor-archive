@@ -55,7 +55,7 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v7"
+PROMPT_VERSION = "archive-agent-v8"
 TOOLS_VERSION = "archive-tools-v3"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"

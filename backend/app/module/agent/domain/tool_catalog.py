@@ -22,10 +22,11 @@ from app.module.agent.domain.tool_args import (
     WebSearchArgs,
 )
 
-# v6 新增外部研究工具（web_search / web_fetch）與 summary 壓縮視圖協定；v3 對應
-# 工具目錄新增兩個唯讀 spec。兩個版本字串都會寫進 pi.system，舊對話因此仍持有
-# 舊前綴，provider 的 KV cache 不會被這次變更破壞。
-PROMPT_VERSION = "archive-agent-v7"
+# v8 將單一 custom system prompt 改為多條 owner-authored sections：每條以
+# ``system_prompt:<id>`` 插在 built-in identity 之前。composition 改變會影響
+# 新對話的 provider 前綴，因此必須 bump PROMPT_VERSION；舊對話仍保存自己的
+# pi.system 與舊版本字串，KV cache 不會被這次變更破壞。
+PROMPT_VERSION = "archive-agent-v8"
 TOOLS_VERSION = "archive-tools-v3"
 
 

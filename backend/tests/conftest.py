@@ -21,7 +21,7 @@ TEST_DATABASE_NAME = "apsor_archive_test"
 TRUNCATE_STATEMENT = (
     "TRUNCATE TABLE agent_approval, saved_question, file_ingest_job, ingest_config, "
     "agent_entry, agent_run, agent_conversation, agent_config, chunk_ngram, chunk, "
-    "folder, file, memory_summary, memory, system_prompt, frequently_used_prompt, "
+    "folder, file, memory_summary, memory, system_prompt_section, frequently_used_prompt, "
     "chat_provider_config, embedding_provider_config, web_search_provider_config, "
     "web_fetch_provider_config, user_session, app_user "
     "RESTART IDENTITY CASCADE"

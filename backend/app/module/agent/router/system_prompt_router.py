@@ -1,41 +1,102 @@
-"""HTTP adapter for the custom system prompt."""
+"""HTTP adapters for ordered system prompt sections."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
 
 from app.module.agent.dependencies import get_system_prompt_service
 from app.module.agent.schema.system_prompt_schema import (
-    SystemPromptReadSchema,
-    SystemPromptUpdateSchema,
+    SystemPromptReorderSchema,
+    SystemPromptSectionCreateSchema,
+    SystemPromptSectionReadSchema,
+    SystemPromptSectionUpdateSchema,
 )
 from app.module.agent.service.system_prompt_service import SystemPromptService
+from app.shared.types.list_response import ListResponseSchema
 
 router = APIRouter(prefix="/settings/system-prompt", tags=["agent"])
 
 
-@router.get("", response_model=SystemPromptReadSchema, operation_id="getSystemPrompt")
-async def get_system_prompt(
-    service: SystemPromptService = Depends(get_system_prompt_service),
-) -> SystemPromptReadSchema:
-    """Return the owner-authored prompt and whether it is active."""
-    return await service.get_prompt()
+# 路由順序很重要：``/order`` 與 ``/reset`` 必須宣告在 ``/{section_id}``
+# 之前，否則 Starlette 會先用 path param 匹配，讓固定字串被當成 int 解析而
+# 回傳 422。
 
 
-@router.put("", response_model=SystemPromptReadSchema, operation_id="updateSystemPrompt")
-async def update_system_prompt(
-    payload: SystemPromptUpdateSchema,
+@router.get(
+    "",
+    response_model=ListResponseSchema[SystemPromptSectionReadSchema],
+    operation_id="listSystemPromptSections",
+)
+async def list_system_prompt_sections(
     service: SystemPromptService = Depends(get_system_prompt_service),
-) -> SystemPromptReadSchema:
-    """Replace the prompt used by future conversations."""
-    return await service.update_prompt(payload)
+) -> ListResponseSchema[SystemPromptSectionReadSchema]:
+    """List every custom section in display order."""
+    return await service.list_sections()
+
+
+@router.post(
+    "",
+    response_model=ListResponseSchema[SystemPromptSectionReadSchema],
+    status_code=status.HTTP_201_CREATED,
+    operation_id="createSystemPromptSection",
+)
+async def create_system_prompt_section(
+    payload: SystemPromptSectionCreateSchema,
+    service: SystemPromptService = Depends(get_system_prompt_service),
+) -> ListResponseSchema[SystemPromptSectionReadSchema]:
+    """Create one section and return the updated list."""
+    return await service.create_section(payload)
+
+
+@router.put(
+    "/order",
+    response_model=ListResponseSchema[SystemPromptSectionReadSchema],
+    operation_id="reorderSystemPromptSections",
+)
+async def reorder_system_prompt_sections(
+    payload: SystemPromptReorderSchema,
+    service: SystemPromptService = Depends(get_system_prompt_service),
+) -> ListResponseSchema[SystemPromptSectionReadSchema]:
+    """Replace the complete section order."""
+    return await service.reorder_sections(payload.section_ids)
 
 
 @router.post(
     "/reset",
-    response_model=SystemPromptReadSchema,
-    operation_id="resetSystemPrompt",
+    response_model=ListResponseSchema[SystemPromptSectionReadSchema],
+    operation_id="resetSystemPromptSections",
 )
-async def reset_system_prompt(
+async def reset_system_prompt_sections(
     service: SystemPromptService = Depends(get_system_prompt_service),
-) -> SystemPromptReadSchema:
-    """Remove the custom section and return to the built-in prompt."""
-    return await service.reset_prompt()
+) -> ListResponseSchema[SystemPromptSectionReadSchema]:
+    """Delete every custom section; the built-in prompt remains."""
+    return await service.reset_sections()
+
+
+@router.put(
+    "/{section_id}",
+    response_model=ListResponseSchema[SystemPromptSectionReadSchema],
+    operation_id="updateSystemPromptSection",
+)
+async def update_system_prompt_section(
+    section_id: int,
+    payload: SystemPromptSectionUpdateSchema,
+    service: SystemPromptService = Depends(get_system_prompt_service),
+) -> ListResponseSchema[SystemPromptSectionReadSchema]:
+    """Replace one section and return the updated list."""
+    return await service.update_section(section_id, payload)
+
+
+@router.delete(
+    "/{section_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="deleteSystemPromptSection",
+)
+async def delete_system_prompt_section(
+    section_id: int,
+    service: SystemPromptService = Depends(get_system_prompt_service),
+) -> Response:
+    """Hard-delete one section."""
+    await service.delete_section(section_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+__all__ = ["router"]

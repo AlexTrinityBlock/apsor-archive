@@ -1,4 +1,6 @@
-"""Custom system prompt plus the DB-backed frequently used prompt list."""
+"""Ordered system prompt sections plus the DB-backed frequently used prompts."""
+
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -6,93 +8,341 @@ from sqlalchemy import create_engine, text
 from app.module.agent.test.fake_chat_generator import FakeChatGenerator
 from tests.conftest import TEST_DATABASE_URL
 
+SYSTEM_PROMPT_URL = "/api/v1/agent/settings/system-prompt"
+FREQUENT_PROMPTS_URL = "/api/v1/settings/frequent-prompts"
+BUILTIN_SECTION_NAMES = ["identity", "instructions", "examples", "context_protocol"]
+
+
+def _list_sections(client: TestClient) -> dict[str, Any]:
+    """Return the section collection envelope from the API."""
+    response = client.get(SYSTEM_PROMPT_URL)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _create_section(
+    client: TestClient,
+    *,
+    title: str,
+    body: str,
+    sort_order: int | None = None,
+) -> dict[str, Any]:
+    """Create one section and return the resulting collection envelope."""
+    payload: dict[str, Any] = {"title": title, "body": body}
+    if sort_order is not None:
+        payload["sort_order"] = sort_order
+    response = client.post(SYSTEM_PROMPT_URL, json=payload)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _find_section(list_body: dict[str, Any], title: str) -> dict[str, Any]:
+    """Find one section by its unique title in a collection envelope."""
+    return next(item for item in list_body["resources"] if item["title"] == title)
+
+
+def _create_conversation(client: TestClient, title: str) -> int:
+    """Create a conversation and return its id."""
+    response = client.post("/api/v1/agent/conversations", json={"title": title})
+    assert response.status_code == 201, response.text
+    return int(response.json()["id"])
+
+
+def _system_entry(client: TestClient, conversation_id: int) -> dict[str, Any]:
+    """Return the immutable ``pi.system`` entry of one conversation."""
+    response = client.get(f"/api/v1/agent/conversations/{conversation_id}")
+    assert response.status_code == 200, response.text
+    entries = [entry for entry in response.json()["entries"] if entry["kind"] == "pi.system"]
+    assert len(entries) == 1
+    return entries[0]
+
+
+def _section_names(system_entry: dict[str, Any]) -> list[str]:
+    """Return the provider-visible section names in order."""
+    return [section["name"] for section in system_entry["data"]["sections"]]
+
+
+def _prompt(system_entry: dict[str, Any]) -> str:
+    """Return the rendered provider system message."""
+    return system_entry["model"][0]["content"]
+
 
 def test_system_prompt_module_and_section_order(client: TestClient) -> None:
-    """Prompt edits affect new conversations only and stay ahead of built-ins."""
+    """Sections are CRUD-managed, ordered, frozen, and cache-invalidated."""
     client.app.state.agent_chat_generator = FakeChatGenerator([])
 
-    url = "/api/v1/agent/settings/system-prompt"
-    initial = client.get(url)
-    assert initial.status_code == 200, initial.text
-    assert initial.json()["is_custom"] is False
-    assert initial.json()["title"] == ""
-    assert initial.json()["body"] == ""
+    # ------------------------------------------------------------------
+    # 1. The collection starts empty.
+    # ------------------------------------------------------------------
+    initial = _list_sections(client)
+    assert initial["total_results"] == 0
+    assert initial["resources"] == []
+    assert initial["start_index"] == 1
+    assert initial["items_per_page"] == 0
 
-    blank = client.put(url, json={"title": "   ", "body": "Prefer short answers."})
-    assert blank.status_code == 422, blank.text
-    assert blank.json()["error"] == "agent_invalid_system_prompt"
+    # ------------------------------------------------------------------
+    # 2. Create two sections; the list follows sort_order and id. The first
+    # created row has a higher sort_order, so it must not lead the list.
+    # ------------------------------------------------------------------
+    first_created = _create_section(client, title="Title 1", body="Body one.", sort_order=20)
+    first_section = _find_section(first_created, "Title 1")
+    first_id = first_section["id"]
+    assert first_section["sort_order"] == 20
 
-    updated = client.put(
-        url,
-        json={
-            "title": "Archive voice",
-            "body": "Prefer short answers and name the cited file.",
-        },
+    second_created = _create_section(client, title="Title 2", body="Body two.", sort_order=10)
+    second_section = _find_section(second_created, "Title 2")
+    second_id = second_section["id"]
+    assert second_section["sort_order"] == 10
+    assert second_id > first_id
+
+    listed = _list_sections(client)
+    assert listed["total_results"] == 2
+    assert [item["title"] for item in listed["resources"]] == ["Title 2", "Title 1"]
+    assert [item["sort_order"] for item in listed["resources"]] == [10, 20]
+
+    # ------------------------------------------------------------------
+    # 3. Reorder the complete collection. A missing or unknown id must be
+    # rejected without changing the stored order.
+    # ------------------------------------------------------------------
+    reordered = client.put(
+        f"{SYSTEM_PROMPT_URL}/order",
+        json={"section_ids": [first_id, second_id]},
     )
-    assert updated.status_code == 200, updated.text
-    assert updated.json()["is_custom"] is True
-    assert updated.json()["title"] == "Archive voice"
+    assert reordered.status_code == 200, reordered.text
+    assert [item["id"] for item in reordered.json()["resources"]] == [first_id, second_id]
+    assert [item["sort_order"] for item in reordered.json()["resources"]] == [10, 20]
+    assert [item["id"] for item in _list_sections(client)["resources"]] == [first_id, second_id]
 
-    created = client.post("/api/v1/agent/conversations", json={"title": "Prompt order"})
-    assert created.status_code == 201, created.text
-    conversation_id = created.json()["id"]
-    detail = client.get(f"/api/v1/agent/conversations/{conversation_id}")
-    assert detail.status_code == 200, detail.text
-    system = next(entry for entry in detail.json()["entries"] if entry["kind"] == "pi.system")
-    sections = system["data"]["sections"]
-    assert [section["name"] for section in sections] == [
-        "system_prompt",
+    missing_id = client.put(
+        f"{SYSTEM_PROMPT_URL}/order",
+        json={"section_ids": [first_id]},
+    )
+    assert missing_id.status_code == 422, missing_id.text
+    assert missing_id.json()["error"] == "agent_invalid_system_prompt"
+
+    unknown_id = client.put(
+        f"{SYSTEM_PROMPT_URL}/order",
+        json={"section_ids": [first_id, second_id, 999_999]},
+    )
+    assert unknown_id.status_code == 422, unknown_id.text
+    assert unknown_id.json()["error"] == "agent_invalid_system_prompt"
+
+    duplicate_id = client.put(
+        f"{SYSTEM_PROMPT_URL}/order",
+        json={"section_ids": [first_id, first_id]},
+    )
+    assert duplicate_id.status_code == 422, duplicate_id.text
+    assert duplicate_id.json()["error"] == "agent_invalid_system_prompt"
+
+    assert [item["id"] for item in _list_sections(client)["resources"]] == [first_id, second_id]
+
+    # ------------------------------------------------------------------
+    # 4. A new conversation freezes both custom sections before the four
+    # built-in sections and renders them in order.
+    # ------------------------------------------------------------------
+    conversation_id = _create_conversation(client, "Ordered sections")
+    system_entry = _system_entry(client, conversation_id)
+    assert _section_names(system_entry) == [
+        f"system_prompt:{first_id}",
+        f"system_prompt:{second_id}",
         "identity",
         "instructions",
         "examples",
         "context_protocol",
     ]
+    assert system_entry["data"]["prompt_version"] == "archive-agent-v8"
+    sections = system_entry["data"]["sections"]
     assert sections[0] == {
-        "name": "system_prompt",
-        "title": "Archive voice",
-        "content": "Prefer short answers and name the cited file.",
+        "name": f"system_prompt:{first_id}",
+        "title": "Title 1",
+        "content": "Body one.",
     }
-    prompt = system["model"][0]["content"]
-    assert prompt.index("# Archive voice") < prompt.index("# Identity")
+    assert sections[1] == {
+        "name": f"system_prompt:{second_id}",
+        "title": "Title 2",
+        "content": "Body two.",
+    }
+    prompt = _prompt(system_entry)
+    assert "# Title 1" in prompt
+    assert "# Title 2" in prompt
+    assert prompt.index("# Title 1") < prompt.index("# Title 2") < prompt.index("# Identity")
 
-    changed = client.put(
-        url,
-        json={
-            "title": "Second voice",
-            "body": "Answer in the keeper's language.",
-        },
+    # ------------------------------------------------------------------
+    # 5. Editing a section only affects conversations created afterwards.
+    # ------------------------------------------------------------------
+    edited = client.put(
+        f"{SYSTEM_PROMPT_URL}/{first_id}",
+        json={"title": "Title 1 edited", "body": "Body one edited."},
     )
-    assert changed.status_code == 200, changed.text
+    assert edited.status_code == 200, edited.text
+    edited_section = _find_section(edited.json(), "Title 1 edited")
+    assert edited_section["id"] == first_id
+    assert edited_section["sort_order"] == 10
 
-    old_detail = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
-    old_system = next(entry for entry in old_detail["entries"] if entry["kind"] == "pi.system")
-    assert old_system["data"]["sections"][0]["title"] == "Archive voice"
+    frozen = _system_entry(client, conversation_id)
+    assert frozen["model"] == system_entry["model"]
+    assert frozen["data"] == system_entry["data"]
+    assert "# Title 1 edited" not in _prompt(frozen)
 
-    second = client.post("/api/v1/agent/conversations", json={"title": "New prompt"})
-    assert second.status_code == 201, second.text
-    second_detail = client.get(f"/api/v1/agent/conversations/{second.json()['id']}").json()
-    second_system = next(
-        entry for entry in second_detail["entries"] if entry["kind"] == "pi.system"
-    )
-    assert second_system["data"]["sections"][0]["title"] == "Second voice"
+    edited_conversation_id = _create_conversation(client, "Edited sections")
+    edited_entry = _system_entry(client, edited_conversation_id)
+    assert _section_names(edited_entry)[:2] == [
+        f"system_prompt:{first_id}",
+        f"system_prompt:{second_id}",
+    ]
+    assert edited_entry["data"]["sections"][0]["title"] == "Title 1 edited"
+    assert edited_entry["data"]["sections"][0]["content"] == "Body one edited."
+    edited_prompt = _prompt(edited_entry)
+    assert "# Title 1 edited" in edited_prompt
+    assert edited_prompt.index("# Title 1 edited") < edited_prompt.index("# Title 2")
 
-    reset = client.post(f"{url}/reset")
+    # ------------------------------------------------------------------
+    # 6. Deleting one section leaves the other custom section and the
+    # built-ins in new conversations; older conversations stay frozen.
+    # ------------------------------------------------------------------
+    deleted = client.delete(f"{SYSTEM_PROMPT_URL}/{first_id}")
+    assert deleted.status_code == 204, deleted.text
+    remaining = _list_sections(client)
+    assert remaining["total_results"] == 1
+    assert [item["id"] for item in remaining["resources"]] == [second_id]
+
+    after_delete_id = _create_conversation(client, "After delete")
+    after_delete_entry = _system_entry(client, after_delete_id)
+    assert _section_names(after_delete_entry) == [
+        f"system_prompt:{second_id}",
+        "identity",
+        "instructions",
+        "examples",
+        "context_protocol",
+    ]
+    after_delete_prompt = _prompt(after_delete_entry)
+    assert "# Title 1 edited" not in after_delete_prompt
+    assert "# Title 2" in after_delete_prompt
+    assert _section_names(_system_entry(client, edited_conversation_id))[:2] == [
+        f"system_prompt:{first_id}",
+        f"system_prompt:{second_id}",
+    ]
+
+    # ------------------------------------------------------------------
+    # 7. Reset clears the collection; new conversations use built-ins only.
+    # ------------------------------------------------------------------
+    reset = client.post(f"{SYSTEM_PROMPT_URL}/reset")
     assert reset.status_code == 200, reset.text
-    assert reset.json()["is_custom"] is False
+    assert reset.json()["total_results"] == 0
+    assert reset.json()["resources"] == []
+    assert _list_sections(client)["total_results"] == 0
 
-    third = client.post("/api/v1/agent/conversations", json={"title": "Built-in only"})
-    assert third.status_code == 201, third.text
-    third_detail = client.get(f"/api/v1/agent/conversations/{third.json()['id']}").json()
-    third_system = next(entry for entry in third_detail["entries"] if entry["kind"] == "pi.system")
-    third_names = [section["name"] for section in third_system["data"]["sections"]]
-    assert "system_prompt" not in third_names
-    assert third_names[0] == "identity"
+    reset_conversation_id = _create_conversation(client, "After reset")
+    reset_entry = _system_entry(client, reset_conversation_id)
+    assert _section_names(reset_entry) == BUILTIN_SECTION_NAMES
+    reset_prompt = _prompt(reset_entry)
+    assert "# Title 1 edited" not in reset_prompt
+    assert "# Title 2" not in reset_prompt
+
+    # ------------------------------------------------------------------
+    # 8. Whitespace-only titles and bodies are rejected on create and update
+    # with the stable agent_invalid_system_prompt error.
+    # ------------------------------------------------------------------
+    blank_title = client.post(SYSTEM_PROMPT_URL, json={"title": "   ", "body": "A body."})
+    assert blank_title.status_code == 422, blank_title.text
+    assert blank_title.json()["error"] == "agent_invalid_system_prompt"
+
+    blank_body = client.post(SYSTEM_PROMPT_URL, json={"title": "A title", "body": "\n\t "})
+    assert blank_body.status_code == 422, blank_body.text
+    assert blank_body.json()["error"] == "agent_invalid_system_prompt"
+    assert _list_sections(client)["total_results"] == 0
+
+    editable_created = _create_section(client, title="Editable", body="Original body.")
+    editable_id = _find_section(editable_created, "Editable")["id"]
+
+    blank_update_title = client.put(
+        f"{SYSTEM_PROMPT_URL}/{editable_id}",
+        json={"title": "   ", "body": "Original body."},
+    )
+    assert blank_update_title.status_code == 422, blank_update_title.text
+    assert blank_update_title.json()["error"] == "agent_invalid_system_prompt"
+
+    blank_update_body = client.put(
+        f"{SYSTEM_PROMPT_URL}/{editable_id}",
+        json={"title": "Editable", "body": "   "},
+    )
+    assert blank_update_body.status_code == 422, blank_update_body.text
+    assert blank_update_body.json()["error"] == "agent_invalid_system_prompt"
+
+    unchanged = _list_sections(client)["resources"][0]
+    assert unchanged["id"] == editable_id
+    assert unchanged["title"] == "Editable"
+    assert unchanged["body"] == "Original body."
+
+    # ------------------------------------------------------------------
+    # 9. Deleting a section does not rewind the identity sequence.
+    # ------------------------------------------------------------------
+    assert client.delete(f"{SYSTEM_PROMPT_URL}/{editable_id}").status_code == 204
+    fresh_created = _create_section(client, title="Fresh", body="Fresh body.")
+    fresh_id = _find_section(fresh_created, "Fresh")["id"]
+    assert fresh_id > editable_id
+    assert [item["id"] for item in fresh_created["resources"]] == [fresh_id]
+
+    # ------------------------------------------------------------------
+    # 10. The list is cached under the system_prompts scope. A direct database
+    # edit stays hidden until a real write bumps that scope, which leaves the
+    # archive index scope untouched.
+    # ------------------------------------------------------------------
+    assert client.post(f"{SYSTEM_PROMPT_URL}/reset").status_code == 200
+    cached_created = _create_section(client, title="Cached title", body="Cached body.")
+    cached_id = _find_section(cached_created, "Cached title")["id"]
+
+    cache = client.app.state.cache
+    assert client.portal is not None
+    version_before = client.portal.call(cache.get_version, "system_prompts")
+    index_before = client.portal.call(cache.get_version, "index")
+
+    primed = _list_sections(client)
+    assert [item["title"] for item in primed["resources"]] == ["Cached title"]
+
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE system_prompt_section SET title = :title, body = :body "
+                "WHERE id = :section_id"
+            ),
+            {
+                "title": "Direct database title",
+                "body": "Direct database body.",
+                "section_id": cached_id,
+            },
+        )
+        direct_title = connection.execute(
+            text("SELECT title FROM system_prompt_section WHERE id = :section_id"),
+            {"section_id": cached_id},
+        ).scalar_one()
+    engine.dispose()
+    assert direct_title == "Direct database title"
+
+    stale = _list_sections(client)
+    assert [item["title"] for item in stale["resources"]] == ["Cached title"]
+
+    second_created = _create_section(client, title="Cache buster", body="Second body.")
+    second_id = _find_section(second_created, "Cache buster")["id"]
+    assert second_id > cached_id
+
+    version_after = client.portal.call(cache.get_version, "system_prompts")
+    index_after = client.portal.call(cache.get_version, "index")
+    assert version_after == version_before + 1
+    assert index_after == index_before
+
+    refreshed = _list_sections(client)
+    assert refreshed["total_results"] == 2
+    assert [item["id"] for item in refreshed["resources"]] == [cached_id, second_id]
+    assert refreshed["resources"][0]["title"] == "Direct database title"
+    assert refreshed["resources"][0]["body"] == "Direct database body."
 
     # ------------------------------------------------------------------
     # Frequently used prompts: CRUD, whitespace validation, ordering, the
     # 20-row cap, identity monotonicity, and scoped cache invalidation.
     # ------------------------------------------------------------------
-    prompts_url = "/api/v1/settings/frequent-prompts"
+    prompts_url = FREQUENT_PROMPTS_URL
     empty_list = client.get(prompts_url)
     assert empty_list.status_code == 200, empty_list.text
     assert empty_list.json()["resources"] == []
@@ -111,7 +361,7 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     assert whitespace_text.status_code == 422, whitespace_text.text
     assert whitespace_text.json()["error"] == "invalid_frequent_prompt"
 
-    first_created = client.post(
+    first_prompt_created = client.post(
         prompts_url,
         json={
             "title": "  Alpha prompt  ",
@@ -119,18 +369,18 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
             "sort_order": 30,
         },
     )
-    assert first_created.status_code == 201, first_created.text
-    first_prompt = first_created.json()
+    assert first_prompt_created.status_code == 201, first_prompt_created.text
+    first_prompt = first_prompt_created.json()
     first_prompt_id = first_prompt["id"]
     assert first_prompt["title"] == "Alpha prompt"
     assert first_prompt["prompt_text"] == "Summarise the archive."
     assert first_prompt["sort_order"] == 30
 
-    listed = client.get(prompts_url)
-    assert listed.status_code == 200
-    assert [item["id"] for item in listed.json()["resources"]] == [first_prompt_id]
+    prompts_listed = client.get(prompts_url)
+    assert prompts_listed.status_code == 200
+    assert [item["id"] for item in prompts_listed.json()["resources"]] == [first_prompt_id]
 
-    edited = client.put(
+    prompt_edited = client.put(
         f"{prompts_url}/{first_prompt_id}",
         json={
             "title": "Alpha edited",
@@ -138,22 +388,22 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
             "sort_order": 10,
         },
     )
-    assert edited.status_code == 200, edited.text
-    edited_prompt = edited.json()
+    assert prompt_edited.status_code == 200, prompt_edited.text
+    edited_prompt = prompt_edited.json()
     assert edited_prompt["id"] == first_prompt_id
     assert edited_prompt["title"] == "Alpha edited"
     assert edited_prompt["prompt_text"] == "Trace the newest memory."
     assert edited_prompt["sort_order"] == 10
     assert edited_prompt["updated_at"] >= edited_prompt["created_at"]
 
-    after_edit = client.get(prompts_url).json()["resources"]
-    assert [item["title"] for item in after_edit] == ["Alpha edited"]
+    after_prompt_edit = client.get(prompts_url).json()["resources"]
+    assert [item["title"] for item in after_prompt_edit] == ["Alpha edited"]
 
-    removed = client.delete(f"{prompts_url}/{first_prompt_id}")
-    assert removed.status_code == 204
+    prompt_removed = client.delete(f"{prompts_url}/{first_prompt_id}")
+    assert prompt_removed.status_code == 204
     assert client.get(prompts_url).json()["resources"] == []
 
-    second_created = client.post(
+    second_prompt_created = client.post(
         prompts_url,
         json={
             "title": "Beta prompt",
@@ -161,32 +411,30 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
             "sort_order": 20,
         },
     )
-    assert second_created.status_code == 201, second_created.text
-    second_prompt_id = second_created.json()["id"]
+    assert second_prompt_created.status_code == 201, second_prompt_created.text
+    second_prompt_id = second_prompt_created.json()["id"]
     assert second_prompt_id > first_prompt_id
 
     # Prime the list cache, then edit the row directly in PostgreSQL. The next
     # GET must still return the cached snapshot; a real write bumps the
     # "prompts" scope and the following GET sees the database edit.
-    cached = client.get(prompts_url)
-    assert cached.status_code == 200
-    cache = client.app.state.cache
-    assert client.portal is not None
+    prompts_cached = client.get(prompts_url)
+    assert prompts_cached.status_code == 200
     prompts_version_before = client.portal.call(cache.get_version, "prompts")
 
-    engine = create_engine(TEST_DATABASE_URL)
-    with engine.begin() as connection:
+    prompts_engine = create_engine(TEST_DATABASE_URL)
+    with prompts_engine.begin() as connection:
         connection.execute(
             text("UPDATE frequently_used_prompt SET title = :title WHERE id = :prompt_id"),
             {"title": "Direct database title", "prompt_id": second_prompt_id},
         )
-    engine.dispose()
+    prompts_engine.dispose()
 
-    stale = client.get(prompts_url)
-    assert stale.status_code == 200
-    assert [item["title"] for item in stale.json()["resources"]] == ["Beta prompt"]
+    prompts_stale = client.get(prompts_url)
+    assert prompts_stale.status_code == 200
+    assert [item["title"] for item in prompts_stale.json()["resources"]] == ["Beta prompt"]
 
-    third_created = client.post(
+    third_prompt_created = client.post(
         prompts_url,
         json={
             "title": "Ordering prompt",
@@ -194,19 +442,19 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
             "sort_order": 5,
         },
     )
-    assert third_created.status_code == 201, third_created.text
-    third_prompt_id = third_created.json()["id"]
+    assert third_prompt_created.status_code == 201, third_prompt_created.text
+    third_prompt_id = third_prompt_created.json()["id"]
     prompts_version_after = client.portal.call(cache.get_version, "prompts")
     assert prompts_version_after == prompts_version_before + 1
 
-    refreshed = client.get(prompts_url)
-    assert refreshed.status_code == 200
-    refreshed_resources = refreshed.json()["resources"]
+    prompts_refreshed = client.get(prompts_url)
+    assert prompts_refreshed.status_code == 200
+    refreshed_resources = prompts_refreshed.json()["resources"]
     assert [item["title"] for item in refreshed_resources] == [
         "Ordering prompt",
         "Direct database title",
     ]
-    assert refreshed.json()["total_results"] == 2
+    assert prompts_refreshed.json()["total_results"] == 2
 
     assert client.delete(f"{prompts_url}/{third_prompt_id}").status_code == 204
     ordering_after_delete = client.get(prompts_url).json()["resources"]

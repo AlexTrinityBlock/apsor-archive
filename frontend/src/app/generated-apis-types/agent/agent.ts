@@ -44,13 +44,15 @@ import type {
   ListAgentEntriesParams,
   ListResponseSchemaAgentApprovalSchema,
   ListResponseSchemaAgentConversationSchema,
+  ListResponseSchemaSystemPromptSectionReadSchema,
   ListSavedQuestionsParams,
   SavedQuestionCreateSchema,
   SavedQuestionListSchema,
   SavedQuestionReadSchema,
   SavedQuestionUpdateSchema,
-  SystemPromptReadSchema,
-  SystemPromptUpdateSchema
+  SystemPromptReorderSchema,
+  SystemPromptSectionCreateSchema,
+  SystemPromptSectionUpdateSchema
 } from '../schemas';
 
 import { apiFetch } from '../../../apis/fetch-client';
@@ -2048,7 +2050,7 @@ export const useResetAgentSettings = <TError = unknown,
       > => {
       return useMutation(getResetAgentSettingsMutationOptions(options), queryClient);
     }
-    export const getGetSystemPromptUrl = () => {
+    export const getListSystemPromptSectionsUrl = () => {
 
 
 
@@ -2057,12 +2059,12 @@ export const useResetAgentSettings = <TError = unknown,
 }
 
 /**
- * Return the owner-authored prompt and whether it is active.
- * @summary Get System Prompt
+ * List every custom section in display order.
+ * @summary List System Prompt Sections
  */
-export const getSystemPrompt = async ( options?: Parameters<typeof apiFetch>[1]): Promise<SystemPromptReadSchema> => {
+export const listSystemPromptSections = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ListResponseSchemaSystemPromptSectionReadSchema> => {
 
-  return apiFetch<SystemPromptReadSchema>(getGetSystemPromptUrl(),
+  return apiFetch<ListResponseSchemaSystemPromptSectionReadSchema>(getListSystemPromptSectionsUrl(),
   {
     ...options,
     method: 'GET'
@@ -2075,69 +2077,69 @@ export const getSystemPrompt = async ( options?: Parameters<typeof apiFetch>[1])
 
 
 
-export const getGetSystemPromptQueryKey = () => {
+export const getListSystemPromptSectionsQueryKey = () => {
     return [
     `/api/v1/agent/settings/system-prompt`
     ] as const;
     }
 
 
-export const getGetSystemPromptQueryOptions = <TData = Awaited<ReturnType<typeof getSystemPrompt>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemPrompt>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getListSystemPromptSectionsQueryOptions = <TData = Awaited<ReturnType<typeof listSystemPromptSections>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSystemPromptSections>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetSystemPromptQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListSystemPromptSectionsQueryKey();
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemPrompt>>> = ({ signal }) => getSystemPrompt({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSystemPromptSections>>> = ({ signal }) => listSystemPromptSections({ signal, ...requestOptions });
 
 
 
 
 
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSystemPrompt>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSystemPromptSections>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
 }
 
-export type GetSystemPromptQueryResult = NonNullable<Awaited<ReturnType<typeof getSystemPrompt>>>
-export type GetSystemPromptQueryError = unknown
+export type ListSystemPromptSectionsQueryResult = NonNullable<Awaited<ReturnType<typeof listSystemPromptSections>>>
+export type ListSystemPromptSectionsQueryError = unknown
 
 
-export function useGetSystemPrompt<TData = Awaited<ReturnType<typeof getSystemPrompt>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemPrompt>>, TError, TData>> & Pick<
+export function useListSystemPromptSections<TData = Awaited<ReturnType<typeof listSystemPromptSections>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSystemPromptSections>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getSystemPrompt>>,
+          Awaited<ReturnType<typeof listSystemPromptSections>>,
           TError,
-          Awaited<ReturnType<typeof getSystemPrompt>>
+          Awaited<ReturnType<typeof listSystemPromptSections>>
         > , 'initialData'
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetSystemPrompt<TData = Awaited<ReturnType<typeof getSystemPrompt>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemPrompt>>, TError, TData>> & Pick<
+export function useListSystemPromptSections<TData = Awaited<ReturnType<typeof listSystemPromptSections>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSystemPromptSections>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getSystemPrompt>>,
+          Awaited<ReturnType<typeof listSystemPromptSections>>,
           TError,
-          Awaited<ReturnType<typeof getSystemPrompt>>
+          Awaited<ReturnType<typeof listSystemPromptSections>>
         > , 'initialData'
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetSystemPrompt<TData = Awaited<ReturnType<typeof getSystemPrompt>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemPrompt>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export function useListSystemPromptSections<TData = Awaited<ReturnType<typeof listSystemPromptSections>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSystemPromptSections>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Get System Prompt
+ * @summary List System Prompt Sections
  */
 
-export function useGetSystemPrompt<TData = Awaited<ReturnType<typeof getSystemPrompt>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSystemPrompt>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export function useListSystemPromptSections<TData = Awaited<ReturnType<typeof listSystemPromptSections>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSystemPromptSections>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetSystemPromptQueryOptions(options)
+  const queryOptions = getListSystemPromptSectionsQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -2149,7 +2151,7 @@ export function useGetSystemPrompt<TData = Awaited<ReturnType<typeof getSystemPr
 
 
 
-export const getUpdateSystemPromptUrl = () => {
+export const getCreateSystemPromptSectionUrl = () => {
 
 
 
@@ -2158,10 +2160,10 @@ export const getUpdateSystemPromptUrl = () => {
 }
 
 /**
- * Replace the prompt used by future conversations.
- * @summary Update System Prompt
+ * Create one section and return the updated list.
+ * @summary Create System Prompt Section
  */
-export const updateSystemPrompt = async (systemPromptUpdateSchema: SystemPromptUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<SystemPromptReadSchema> => {
+export const createSystemPromptSection = async (systemPromptSectionCreateSchema: SystemPromptSectionCreateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<ListResponseSchemaSystemPromptSectionReadSchema> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -2177,12 +2179,12 @@ export const updateSystemPrompt = async (systemPromptUpdateSchema: SystemPromptU
     }
     return headers;
   };
-return apiFetch<SystemPromptReadSchema>(getUpdateSystemPromptUrl(),
+return apiFetch<ListResponseSchemaSystemPromptSectionReadSchema>(getCreateSystemPromptSectionUrl(),
   {
     ...options,
-    method: 'PUT',
+    method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(systemPromptUpdateSchema)
+    body: JSON.stringify(systemPromptSectionCreateSchema)
   }
 );}
 
@@ -2190,13 +2192,13 @@ return apiFetch<SystemPromptReadSchema>(getUpdateSystemPromptUrl(),
 
 
 
-export const getUpdateSystemPromptMutationKey = () => ['updateSystemPrompt'] as const;
+export const getCreateSystemPromptSectionMutationKey = () => ['createSystemPromptSection'] as const;
 
-export const getUpdateSystemPromptMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSystemPrompt>>, TError,UpdateSystemPromptMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateSystemPrompt>>, TError,UpdateSystemPromptMutationVariables, TContext> => {
+export const getCreateSystemPromptSectionMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSystemPromptSection>>, TError,CreateSystemPromptSectionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSystemPromptSection>>, TError,CreateSystemPromptSectionMutationVariables, TContext> => {
 
-const mutationKey = getUpdateSystemPromptMutationKey();
+const mutationKey = getCreateSystemPromptSectionMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2206,10 +2208,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSystemPrompt>>, UpdateSystemPromptMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSystemPromptSection>>, CreateSystemPromptSectionMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  updateSystemPrompt(data,requestOptions)
+          return  createSystemPromptSection(data,requestOptions)
         }
 
 
@@ -2219,25 +2221,113 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type UpdateSystemPromptMutationResult = NonNullable<Awaited<ReturnType<typeof updateSystemPrompt>>>
-    export type UpdateSystemPromptMutationBody = SystemPromptUpdateSchema
-    export type UpdateSystemPromptMutationError = HTTPValidationError
-    export type UpdateSystemPromptMutationVariables = {data: SystemPromptUpdateSchema}
+    export type CreateSystemPromptSectionMutationResult = NonNullable<Awaited<ReturnType<typeof createSystemPromptSection>>>
+    export type CreateSystemPromptSectionMutationBody = SystemPromptSectionCreateSchema
+    export type CreateSystemPromptSectionMutationError = HTTPValidationError
+    export type CreateSystemPromptSectionMutationVariables = {data: SystemPromptSectionCreateSchema}
 
     /**
- * @summary Update System Prompt
+ * @summary Create System Prompt Section
  */
-export const useUpdateSystemPrompt = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSystemPrompt>>, TError,UpdateSystemPromptMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+export const useCreateSystemPromptSection = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSystemPromptSection>>, TError,CreateSystemPromptSectionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof updateSystemPrompt>>,
+        Awaited<ReturnType<typeof createSystemPromptSection>>,
         TError,
-        UpdateSystemPromptMutationVariables,
+        CreateSystemPromptSectionMutationVariables,
         TContext
       > => {
-      return useMutation(getUpdateSystemPromptMutationOptions(options), queryClient);
+      return useMutation(getCreateSystemPromptSectionMutationOptions(options), queryClient);
     }
-    export const getResetSystemPromptUrl = () => {
+    export const getReorderSystemPromptSectionsUrl = () => {
+
+
+
+
+  return `/api/v1/agent/settings/system-prompt/order`
+}
+
+/**
+ * Replace the complete section order.
+ * @summary Reorder System Prompt Sections
+ */
+export const reorderSystemPromptSections = async (systemPromptReorderSchema: SystemPromptReorderSchema, options?: Parameters<typeof apiFetch>[1]): Promise<ListResponseSchemaSystemPromptSectionReadSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<ListResponseSchemaSystemPromptSectionReadSchema>(getReorderSystemPromptSectionsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(systemPromptReorderSchema)
+  }
+);}
+
+
+
+
+
+export const getReorderSystemPromptSectionsMutationKey = () => ['reorderSystemPromptSections'] as const;
+
+export const getReorderSystemPromptSectionsMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reorderSystemPromptSections>>, TError,ReorderSystemPromptSectionsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reorderSystemPromptSections>>, TError,ReorderSystemPromptSectionsMutationVariables, TContext> => {
+
+const mutationKey = getReorderSystemPromptSectionsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reorderSystemPromptSections>>, ReorderSystemPromptSectionsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  reorderSystemPromptSections(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReorderSystemPromptSectionsMutationResult = NonNullable<Awaited<ReturnType<typeof reorderSystemPromptSections>>>
+    export type ReorderSystemPromptSectionsMutationBody = SystemPromptReorderSchema
+    export type ReorderSystemPromptSectionsMutationError = HTTPValidationError
+    export type ReorderSystemPromptSectionsMutationVariables = {data: SystemPromptReorderSchema}
+
+    /**
+ * @summary Reorder System Prompt Sections
+ */
+export const useReorderSystemPromptSections = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reorderSystemPromptSections>>, TError,ReorderSystemPromptSectionsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof reorderSystemPromptSections>>,
+        TError,
+        ReorderSystemPromptSectionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReorderSystemPromptSectionsMutationOptions(options), queryClient);
+    }
+    export const getResetSystemPromptSectionsUrl = () => {
 
 
 
@@ -2246,12 +2336,12 @@ export const useUpdateSystemPrompt = <TError = HTTPValidationError,
 }
 
 /**
- * Remove the custom section and return to the built-in prompt.
- * @summary Reset System Prompt
+ * Delete every custom section; the built-in prompt remains.
+ * @summary Reset System Prompt Sections
  */
-export const resetSystemPrompt = async ( options?: Parameters<typeof apiFetch>[1]): Promise<SystemPromptReadSchema> => {
+export const resetSystemPromptSections = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ListResponseSchemaSystemPromptSectionReadSchema> => {
 
-  return apiFetch<SystemPromptReadSchema>(getResetSystemPromptUrl(),
+  return apiFetch<ListResponseSchemaSystemPromptSectionReadSchema>(getResetSystemPromptSectionsUrl(),
   {
     ...options,
     method: 'POST'
@@ -2264,13 +2354,13 @@ export const resetSystemPrompt = async ( options?: Parameters<typeof apiFetch>[1
 
 
 
-export const getResetSystemPromptMutationKey = () => ['resetSystemPrompt'] as const;
+export const getResetSystemPromptSectionsMutationKey = () => ['resetSystemPromptSections'] as const;
 
-export const getResetSystemPromptMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetSystemPrompt>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof resetSystemPrompt>>, TError,void, TContext> => {
+export const getResetSystemPromptSectionsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetSystemPromptSections>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetSystemPromptSections>>, TError,void, TContext> => {
 
-const mutationKey = getResetSystemPromptMutationKey();
+const mutationKey = getResetSystemPromptSectionsMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -2280,10 +2370,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetSystemPrompt>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetSystemPromptSections>>, void> = () => {
 
 
-          return  resetSystemPrompt(requestOptions)
+          return  resetSystemPromptSections(requestOptions)
         }
 
 
@@ -2293,23 +2383,186 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type ResetSystemPromptMutationResult = NonNullable<Awaited<ReturnType<typeof resetSystemPrompt>>>
+    export type ResetSystemPromptSectionsMutationResult = NonNullable<Awaited<ReturnType<typeof resetSystemPromptSections>>>
 
-    export type ResetSystemPromptMutationError = unknown
+    export type ResetSystemPromptSectionsMutationError = unknown
 
 
     /**
- * @summary Reset System Prompt
+ * @summary Reset System Prompt Sections
  */
-export const useResetSystemPrompt = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetSystemPrompt>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+export const useResetSystemPromptSections = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetSystemPromptSections>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof resetSystemPrompt>>,
+        Awaited<ReturnType<typeof resetSystemPromptSections>>,
         TError,
         void,
         TContext
       > => {
-      return useMutation(getResetSystemPromptMutationOptions(options), queryClient);
+      return useMutation(getResetSystemPromptSectionsMutationOptions(options), queryClient);
+    }
+    export const getDeleteSystemPromptSectionUrl = (sectionId: number,) => {
+
+
+
+
+  return `/api/v1/agent/settings/system-prompt/${sectionId}`
+}
+
+/**
+ * Hard-delete one section.
+ * @summary Delete System Prompt Section
+ */
+export const deleteSystemPromptSection = async (sectionId: number, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+
+  return apiFetch<void>(getDeleteSystemPromptSectionUrl(sectionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteSystemPromptSectionMutationKey = () => ['deleteSystemPromptSection'] as const;
+
+export const getDeleteSystemPromptSectionMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSystemPromptSection>>, TError,DeleteSystemPromptSectionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSystemPromptSection>>, TError,DeleteSystemPromptSectionMutationVariables, TContext> => {
+
+const mutationKey = getDeleteSystemPromptSectionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSystemPromptSection>>, DeleteSystemPromptSectionMutationVariables> = (props) => {
+          const {sectionId} = props ?? {};
+
+          return  deleteSystemPromptSection(sectionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSystemPromptSectionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSystemPromptSection>>>
+
+    export type DeleteSystemPromptSectionMutationError = HTTPValidationError
+    export type DeleteSystemPromptSectionMutationVariables = {sectionId: number}
+
+    /**
+ * @summary Delete System Prompt Section
+ */
+export const useDeleteSystemPromptSection = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSystemPromptSection>>, TError,DeleteSystemPromptSectionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSystemPromptSection>>,
+        TError,
+        DeleteSystemPromptSectionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteSystemPromptSectionMutationOptions(options), queryClient);
+    }
+    export const getUpdateSystemPromptSectionUrl = (sectionId: number,) => {
+
+
+
+
+  return `/api/v1/agent/settings/system-prompt/${sectionId}`
+}
+
+/**
+ * Replace one section and return the updated list.
+ * @summary Update System Prompt Section
+ */
+export const updateSystemPromptSection = async (sectionId: number,
+    systemPromptSectionUpdateSchema: SystemPromptSectionUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<ListResponseSchemaSystemPromptSectionReadSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<ListResponseSchemaSystemPromptSectionReadSchema>(getUpdateSystemPromptSectionUrl(sectionId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(systemPromptSectionUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateSystemPromptSectionMutationKey = () => ['updateSystemPromptSection'] as const;
+
+export const getUpdateSystemPromptSectionMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSystemPromptSection>>, TError,UpdateSystemPromptSectionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSystemPromptSection>>, TError,UpdateSystemPromptSectionMutationVariables, TContext> => {
+
+const mutationKey = getUpdateSystemPromptSectionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSystemPromptSection>>, UpdateSystemPromptSectionMutationVariables> = (props) => {
+          const {sectionId,data} = props ?? {};
+
+          return  updateSystemPromptSection(sectionId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSystemPromptSectionMutationResult = NonNullable<Awaited<ReturnType<typeof updateSystemPromptSection>>>
+    export type UpdateSystemPromptSectionMutationBody = SystemPromptSectionUpdateSchema
+    export type UpdateSystemPromptSectionMutationError = HTTPValidationError
+    export type UpdateSystemPromptSectionMutationVariables = {sectionId: number;data: SystemPromptSectionUpdateSchema}
+
+    /**
+ * @summary Update System Prompt Section
+ */
+export const useUpdateSystemPromptSection = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSystemPromptSection>>, TError,UpdateSystemPromptSectionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateSystemPromptSection>>,
+        TError,
+        UpdateSystemPromptSectionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateSystemPromptSectionMutationOptions(options), queryClient);
     }
     export const getListAgentToolsUrl = () => {
 
