@@ -52,10 +52,10 @@ export const insights = {
       updating: "更新中…",
       updatingAria: "正在更新结果",
       fileChunks: "文件分段",
-      memoryCrystals: "记忆结晶",
+      memoryCrystals: "记忆",
       summaries: "摘要",
       emptyFiles: "没有文件分段符合这个查询。",
-      emptyMemories: "没有记忆结晶符合这个查询。",
+      emptyMemories: "没有记忆符合这个查询。",
       emptySummaries: "没有摘要符合这个查询。",
     },
     card: {
@@ -85,10 +85,10 @@ export const insights = {
       eyebrow: "档案馆已就绪",
       title: "在你提问之前，什么都不会被检索。",
       description:
-        "一次查询会同时经过文本路径与向量路径。融合后的候选会以文件分段、记忆结晶与摘要的形式返回，每一项都附上真实分数，以及命中它的路径。",
+        "一次查询会同时经过文本路径与向量路径。融合后的候选会以文件分段、记忆与摘要的形式返回，每一项都附上真实分数，以及命中它的路径。",
       kindsAria: "可搜索的来源类型",
       fileChunks: "文件分段",
-      memoryCrystals: "记忆结晶",
+      memoryCrystals: "记忆",
       summaries: "摘要",
     },
     loading: {
@@ -148,7 +148,7 @@ export const insights = {
         "在选定的范围内，按比例采样记忆、摘要与文件更新。每一道空隙都会如实记录采样器略过了多少事件，而每个范围都直接读取运行中的档案馆。",
       readingWindow: "正在读取范围",
       windowSpan: "范围跨度",
-      recordMemory: "记录记忆结晶",
+      recordMemory: "记录记忆",
     },
     controls: {
       aria: "时间线范围控件",
@@ -223,7 +223,7 @@ export const insights = {
       collapseSummary: "收起摘要",
       edit: "编辑",
       deprecate: "淘汰",
-      readMemory: "阅读记忆结晶",
+      readMemory: "阅读记忆",
       openLibrary: "在文件库中打开",
       skipAria:
         "两次采样之间略过了 {events}（{composition}），时间从 {from} 到 {to}",
