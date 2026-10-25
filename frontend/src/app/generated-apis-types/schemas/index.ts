@@ -50,6 +50,7 @@ export * from './embeddingReindexSchema';
 export * from './fileChunksSchema';
 export * from './fileCopySchema';
 export * from './fileMoveSchema';
+export * from './fileRenameSchema';
 export * from './fileSchema';
 export * from './fileSearchResultSchema';
 export * from './fileSearchResultSchemaMatchedByItem';

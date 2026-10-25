@@ -47,6 +47,7 @@ import { LibraryUploadTray } from "./component/LibraryUploadTray";
 import { MarkdownEditorDialog } from "./component/MarkdownEditorDialog";
 import { MoveCopyDialog } from "./component/MoveCopyDialog";
 import { NewFolderDialog } from "./component/NewFolderDialog";
+import { RenameFileDialog } from "./component/RenameFileDialog";
 import { UploadDialog } from "./component/UploadDialog";
 import {
   IMAGE_UPLOAD_ACCEPT,
@@ -111,6 +112,29 @@ function resolveView(rawView: string | null, isDesktop: boolean): LibraryView {
   return isDesktop ? "board" : "list";
 }
 
+interface RenameRequestDialogProps {
+  readonly request: FileOperationTarget | null;
+  readonly onClose: () => void;
+}
+
+/** Renders the optional rename dialog without adding another branch to the page. */
+function RenameRequestDialog({
+  request,
+  onClose,
+}: RenameRequestDialogProps) {
+  if (!request) {
+    return null;
+  }
+  return (
+    <RenameFileDialog
+      key={request.file_id}
+      file={request}
+      onClose={onClose}
+      onRenamed={onClose}
+    />
+  );
+}
+
 /**
  * The unified file workspace. One `readPath` listing feeds both the Files tab
  * and the image-only Media gallery; the preview modal keeps the shelf behind
@@ -141,6 +165,9 @@ export function LibraryPage() {
   );
   const [moveCopyRequest, setMoveCopyRequest] = useState<MoveCopyRequest | null>(null);
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
+  const [renameRequest, setRenameRequest] = useState<FileOperationTarget | null>(
+    null,
+  );
   const [selecting, setSelecting] = useState(false);
   const [selectedFileIds, setSelectedFileIds] = useState<ReadonlySet<number>>(
     () => new Set<number>(),
@@ -521,6 +548,10 @@ export function LibraryPage() {
     });
   }, []);
 
+  const handleRequestRename = useCallback((file: FileOperationTarget) => {
+    setRenameRequest(file);
+  }, []);
+
   const handleDeleted = useCallback(
     (deletedFileId: number) => {
       setDeleteRequest(null);
@@ -795,6 +826,13 @@ export function LibraryPage() {
         });
       }
 
+      items.push({
+        id: "rename",
+        label: t("library.common.rename"),
+        icon: "pencil",
+        onSelect: () => handleRequestRename(file),
+      });
+
       if (file.has_original) {
         items.push({
           id: "download",
@@ -867,6 +905,7 @@ export function LibraryPage() {
     downloadArchiveFile,
     handleRequestDelete,
     handleRequestMoveCopy,
+    handleRequestRename,
     openFolder,
     openMarkdownEditor,
     openNewMarkdown,
@@ -1076,6 +1115,11 @@ export function LibraryPage() {
         />
       ) : null}
 
+      <RenameRequestDialog
+        request={renameRequest}
+        onClose={() => setRenameRequest(null)}
+      />
+
       {batchMoveFiles ? (
         <BatchMoveDialog
           files={batchMoveFiles}
@@ -1112,6 +1156,7 @@ export function LibraryPage() {
           onEditModeChange={handleEditModeChange}
           onMove={(target) => handleRequestMoveCopy(target, "move")}
           onCopy={(target) => handleRequestMoveCopy(target, "copy")}
+          onRename={handleRequestRename}
           onDelete={handleRequestDelete}
         />
       ) : null}
