@@ -7,10 +7,10 @@ import { HybridSearchDiagram } from "./component/HybridSearchDiagram";
 import "./method.css";
 
 /**
- * The method essay: two provenance shapes, one retrieval index, and the
+ * The About essay: two provenance shapes, one retrieval index, and the
  * citation contract that keeps answers inspectable.
  */
-export function MethodPage() {
+export function AboutPage() {
   const { t } = useI18n();
 
   const principles = [

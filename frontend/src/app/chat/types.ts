@@ -62,11 +62,6 @@ export interface ToolResultInfo {
   readonly meta: ToolResultMeta;
 }
 
-export interface SystemVersions {
-  readonly promptVersion: string | null;
-  readonly toolsVersion: string | null;
-}
-
 export function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -543,15 +538,6 @@ export function noticeText(
     stringValue(data?.notice) ??
     fallback
   );
-}
-
-export function systemVersions(entries: readonly AgentEntrySchema[]): SystemVersions {
-  const system = entries.find((entry) => entry.kind === "pi.system");
-  const data = asRecord(system?.data);
-  return {
-    promptVersion: stringValue(data?.prompt_version),
-    toolsVersion: stringValue(data?.tools_version),
-  };
 }
 
 export function mergeEntries(
