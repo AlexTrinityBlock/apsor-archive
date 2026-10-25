@@ -5,6 +5,7 @@ import { copyFile, moveFile } from "../../generated-apis-types/files/files";
 import { basename, parentPath } from "../../../lib/format";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { LibraryDialog } from "./LibraryDialog";
 import {
   describeError,
@@ -50,6 +51,7 @@ export function MoveCopyDialog({
   onClose,
   onDone,
 }: MoveCopyDialogProps) {
+  const { t } = useI18n();
   const baseId = useId();
   const folderId = `${baseId}-destination-folder`;
   const nameId = `${baseId}-destination-name`;
@@ -65,25 +67,25 @@ export function MoveCopyDialog({
   const normalizedName = targetName.trim();
   const targetPath = joinArchivePath(normalizedFolder, normalizedName);
   const isCurrentPath = sameArchivePath(targetPath, file.raw_file_path);
-  const verb = mode === "move" ? "Move" : "Copy";
-  const progressLabel = mode === "move" ? "Moving…" : "Copying…";
+  const progressLabel =
+    mode === "move" ? t("library.moveCopy.moving") : t("library.moveCopy.copying");
+  const submitLabel =
+    mode === "move" ? t("library.moveCopy.submitMove") : t("library.moveCopy.submitCopy");
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLocalError(null);
     setServerError(null);
     if (normalizedFolder.length === 0) {
-      setLocalError("Choose a destination folder.");
+      setLocalError(t("library.moveCopy.errorFolder"));
       return;
     }
     if (!isSafeUploadName(normalizedName)) {
-      setLocalError("Enter one file name without slashes.");
+      setLocalError(t("library.moveCopy.errorName"));
       return;
     }
     if (mode === "move" && isCurrentPath) {
-      setLocalError(
-        "That is the file's current path. Choose a different branch folder or file name.",
-      );
+      setLocalError(t("library.moveCopy.errorCurrent"));
       return;
     }
 
@@ -103,25 +105,35 @@ export function MoveCopyDialog({
 
   return (
     <LibraryDialog
-      eyebrow={mode === "move" ? "Move leaf" : "Copy leaf"}
-      title={`${verb} “${file.file_name}”`}
+      eyebrow={
+        mode === "move"
+          ? t("library.moveCopy.eyebrowMove")
+          : t("library.moveCopy.eyebrowCopy")
+      }
+      title={
+        mode === "move"
+          ? t("library.moveCopy.titleMove", { name: file.file_name })
+          : t("library.moveCopy.titleCopy", { name: file.file_name })
+      }
       description={
         mode === "move"
-          ? "Move keeps the same file id, version, and chunks; only the branch path changes. The reader link follows the new path."
-          : "Copy creates a new file id with fresh chunks and leaves the original leaf untouched."
+          ? t("library.moveCopy.descriptionMove")
+          : t("library.moveCopy.descriptionCopy")
       }
       onClose={onClose}
       dismissible={!pending}
       className="library-move-copy"
     >
       <div className="library-confirm__path">
-        <span className="eyebrow">Current path</span>
+        <span className="eyebrow">{t("library.moveCopy.currentPath")}</span>
         <code>{file.raw_file_path}</code>
       </div>
 
       <form className="library-form" onSubmit={handleSubmit}>
         <label className="library-field" htmlFor={folderId}>
-          <span className="library-field__label">Destination folder</span>
+          <span className="library-field__label">
+            {t("library.moveCopy.destinationFolder")}
+          </span>
           <input
             id={folderId}
             className="library-input"
@@ -134,12 +146,15 @@ export function MoveCopyDialog({
             data-autofocus
           />
           <span className="library-field__hint">
-            Full folder path. Missing folders are created by the archive.
+            {t("library.moveCopy.folderHint")}
           </span>
         </label>
 
         {suggestions.length > 0 ? (
-          <div className="library-move__suggestions" aria-label="Suggested destination folders">
+          <div
+            className="library-move__suggestions"
+            aria-label={t("library.moveCopy.suggestionsAria")}
+          >
             {suggestions.map((suggestion) => (
               <button
                 key={suggestion}
@@ -154,14 +169,16 @@ export function MoveCopyDialog({
                 disabled={pending}
               >
                 <Icon name="folder" size={12} />
-                {suggestion === "/" ? "Archive root" : basename(suggestion)}
+                {suggestion === "/"
+                  ? t("library.common.archiveRoot")
+                  : basename(suggestion)}
               </button>
             ))}
           </div>
         ) : null}
 
         <label className="library-field" htmlFor={nameId}>
-          <span className="library-field__label">File name</span>
+          <span className="library-field__label">{t("library.moveCopy.fileName")}</span>
           <input
             id={nameId}
             className="library-input"
@@ -174,7 +191,7 @@ export function MoveCopyDialog({
         </label>
 
         <div className="library-move__preview">
-          <span className="eyebrow">Destination path</span>
+          <span className="eyebrow">{t("library.moveCopy.destinationPath")}</span>
           <code>{targetPath || "—"}</code>
         </div>
 
@@ -193,10 +210,10 @@ export function MoveCopyDialog({
 
         <div className="library-form__actions">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
-            Cancel
+            {t("library.common.cancel")}
           </Button>
           <Button type="submit" variant="primary" size="sm" disabled={pending}>
-            {pending ? progressLabel : `${verb} file`}
+            {pending ? progressLabel : submitLabel}
             <Icon name={mode === "move" ? "branch" : "copy"} size={15} />
           </Button>
         </div>

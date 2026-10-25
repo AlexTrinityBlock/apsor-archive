@@ -1,6 +1,6 @@
-import { formatNumber } from "../../../lib/format";
+import { useI18n } from "../../i18n";
 import {
-  INGEST_STAGE_LABELS,
+  INGEST_STAGE_KEYS,
   type IngestStage,
 } from "./library-utils";
 
@@ -42,21 +42,6 @@ function resolvePercent(
   return 0;
 }
 
-function buildValueText(
-  stageLabel: string,
-  countLabel: string | null,
-  roundedPercent: number,
-  indeterminate: boolean,
-): string {
-  if (indeterminate) {
-    return `${stageLabel} · progress not measured yet`;
-  }
-  if (countLabel !== null) {
-    return `${stageLabel} · ${countLabel} · ${roundedPercent}%`;
-  }
-  return `${stageLabel} · ${roundedPercent}%`;
-}
-
 /**
  * One ingestion meter shared by the intake dialog and the drag-and-drop tray.
  * The bar is determinate once the backend reports a percentage or embedding
@@ -71,6 +56,7 @@ export function IngestProgress({
   label,
   className,
 }: IngestProgressProps) {
+  const { t, formatNumber } = useI18n();
   const isReady = stage === "ready";
   const isFailed = stage === "failed";
   const hasCounts =
@@ -90,11 +76,35 @@ export function IngestProgress({
   );
   const percent = clampPercent(measuredPct);
   const roundedPercent = Math.round(percent);
-  const stageLabel = label ?? (stage === null ? "Preparing" : INGEST_STAGE_LABELS[stage]);
+  const percentText = t("library.ingest.percent", {
+    percent: formatNumber(roundedPercent),
+  });
+  const stageLabel =
+    label ?? (stage === null ? t("library.ingest.preparing") : t(INGEST_STAGE_KEYS[stage]));
   const countLabel = hasCounts
-    ? `Embedding ${formatNumber(chunksEmbedded)} / ${formatNumber(chunksTotal)}`
+    ? t("library.ingest.embeddingCount", {
+        done: formatNumber(chunksEmbedded),
+        total: formatNumber(chunksTotal),
+      })
     : null;
-  const valueText = buildValueText(stageLabel, countLabel, roundedPercent, indeterminate);
+  let valueText: string;
+  if (indeterminate) {
+    valueText = t("library.ingest.valueIndeterminate", {
+      stage: stageLabel,
+      note: t("library.ingest.notMeasured"),
+    });
+  } else if (countLabel !== null) {
+    valueText = t("library.ingest.valueWithCount", {
+      stage: stageLabel,
+      count: countLabel,
+      percent: percentText,
+    });
+  } else {
+    valueText = t("library.ingest.value", {
+      stage: stageLabel,
+      percent: percentText,
+    });
+  }
 
   const classes = [
     "ingest-progress",
@@ -112,13 +122,13 @@ export function IngestProgress({
       <div className="ingest-progress__head">
         <span className="ingest-progress__stage">{stageLabel}</span>
         {indeterminate ? null : (
-          <span className="ingest-progress__percent">{roundedPercent}%</span>
+          <span className="ingest-progress__percent">{percentText}</span>
         )}
       </div>
       <div
         className="ingest-progress__track"
         role="progressbar"
-        aria-label={`${stageLabel} progress`}
+        aria-label={t("library.ingest.ariaProgress", { stage: stageLabel })}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={indeterminate ? undefined : roundedPercent}

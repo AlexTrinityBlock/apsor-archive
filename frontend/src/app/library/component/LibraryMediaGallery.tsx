@@ -1,9 +1,10 @@
 import type { PathFileSchema } from "../../generated-apis-types/schemas";
 import { getGetFileContentUrl } from "../../generated-apis-types/files/files";
-import { formatBytes, formatDateTime } from "../../../lib/format";
+import { formatBytes } from "../../../lib/format";
 import { Button } from "../../component/Button";
 import { EmptyState } from "../../component/EmptyState";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { fileKindLabel } from "./library-utils";
 
 interface LibraryMediaGalleryProps {
@@ -40,9 +41,18 @@ function MediaToolbar({
   onClearFilter,
   onUploadImage,
 }: MediaToolbarProps) {
+  const { t, formatNumber } = useI18n();
   const hasFilter = filter.trim().length > 0;
-  const countLabel = `${totalImages} ${totalImages === 1 ? "image" : "images"}`;
-  const statusLabel = hasFilter ? `${images} of ${totalImages} images` : countLabel;
+  const countLabel = t(
+    totalImages === 1 ? "library.units.imageOne" : "library.units.imageOther",
+    { count: formatNumber(totalImages) },
+  );
+  const statusLabel = hasFilter
+    ? t("library.media.filteredStatus", {
+        shown: formatNumber(images),
+        total: formatNumber(totalImages),
+      })
+    : countLabel;
 
   return (
     <div className="library-media-toolbar">
@@ -51,14 +61,14 @@ function MediaToolbar({
           <Icon name="search" size={14} />
         </span>
         <label className="visually-hidden" htmlFor="library-media-filter">
-          Filter images by name or path
+          {t("library.media.filterLabel")}
         </label>
         <input
           id="library-media-filter"
           type="search"
           value={filter}
           onChange={(event) => onFilterChange(event.target.value)}
-          placeholder="Filter images by name or path…"
+          placeholder={t("library.media.filterPlaceholder")}
           autoComplete="off"
           spellCheck={false}
         />
@@ -67,7 +77,7 @@ function MediaToolbar({
             type="button"
             className="library-search-mini__clear"
             onClick={onClearFilter}
-            aria-label="Clear image filter"
+            aria-label={t("library.media.clearFilterAria")}
           >
             <Icon name="close" size={13} />
           </button>
@@ -80,11 +90,11 @@ function MediaToolbar({
 
       <div className="library-media-toolbar__actions">
         <Button variant="secondary" size="sm" onClick={onClearFilter} disabled={!hasFilter}>
-          Clear
+          {t("library.common.clear")}
         </Button>
         <Button variant="primary" size="sm" onClick={onUploadImage}>
           <Icon name="plus" size={14} />
-          Upload image
+          {t("library.media.uploadImage")}
         </Button>
       </div>
     </div>
@@ -92,13 +102,14 @@ function MediaToolbar({
 }
 
 function MediaCard({ file, onOpen }: MediaCardProps) {
+  const { t, formatDateTime, formatNumber } = useI18n();
   return (
     <article className="library-media-card">
       <button
         type="button"
         className="library-media-card__open"
         onClick={() => onOpen(file.file_id)}
-        aria-label={`Preview ${file.file_name}`}
+        aria-label={t("library.media.previewImage", { name: file.file_name })}
       >
         <span className="library-media-card__figure">
           <img
@@ -114,8 +125,13 @@ function MediaCard({ file, onOpen }: MediaCardProps) {
         <span className="library-media-card__body">
           <span className="library-media-card__name">{file.file_name}</span>
           <span className="library-media-card__meta">
-            {formatBytes(file.size_bytes)} · {file.total_chunks}{" "}
-            {file.total_chunks === 1 ? "chunk" : "chunks"}
+            {formatBytes(file.size_bytes)} ·{" "}
+            {t(
+              file.total_chunks === 1
+                ? "library.units.chunkOne"
+                : "library.units.chunkOther",
+              { count: formatNumber(file.total_chunks) },
+            )}
           </span>
           <code className="library-media-card__path">{file.raw_file_path}</code>
           <time className="library-media-card__time" dateTime={file.update_time}>
@@ -137,23 +153,24 @@ function MediaResults({
   onUploadImage,
   onOpenRoot,
 }: Omit<LibraryMediaGalleryProps, "onFilterChange">) {
+  const { t } = useI18n();
   if (totalImages === 0) {
     return (
       <EmptyState
         icon="ring"
-        eyebrow="Media gallery"
-        title="No images in this folder."
-        description="Images are ordinary files. Upload a JPEG, PNG, or WebP through the file ingest queue and it appears here as a thumbnail."
+        eyebrow={t("library.media.eyebrow")}
+        title={t("library.media.emptyTitle")}
+        description={t("library.media.emptyDescription")}
         className="library-media__empty"
         action={
           <div className="empty-state__actions">
             <Button variant="ink" size="sm" onClick={onUploadImage}>
               <Icon name="plus" size={15} />
-              Upload image
+              {t("library.media.uploadImage")}
             </Button>
             {path !== "/" ? (
               <Button variant="ghost" size="sm" onClick={onOpenRoot}>
-                Back to archive root
+                {t("library.common.backToRoot")}
               </Button>
             ) : null}
           </div>
@@ -165,13 +182,13 @@ function MediaResults({
     return (
       <EmptyState
         icon="search"
-        eyebrow="Image filter"
-        title={`No images match “${filter.trim()}”.`}
-        description="Try fewer characters or another fragment of the file name or path."
+        eyebrow={t("library.media.filterEyebrow")}
+        title={t("library.media.noMatchTitle", { query: filter.trim() })}
+        description={t("library.media.noMatchDescription")}
         className="library-media__empty"
         action={
           <Button variant="secondary" size="sm" onClick={onClearFilter}>
-            Clear filter
+            {t("library.media.clearFilter")}
           </Button>
         }
       />
@@ -202,8 +219,9 @@ export function LibraryMediaGallery({
   onUploadImage,
   onOpenRoot,
 }: LibraryMediaGalleryProps) {
+  const { t } = useI18n();
   return (
-    <section className="library-media" aria-label="Media gallery">
+    <section className="library-media" aria-label={t("library.media.aria")}>
       <MediaToolbar
         images={images.length}
         totalImages={totalImages}

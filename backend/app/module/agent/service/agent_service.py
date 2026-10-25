@@ -169,12 +169,11 @@ class AgentService:
             provider = "deepseek"
         model = payload.model or self.default_model or "deepseek-flash"
         now = utcnow()
-        custom_sections, builtin_sections = await self.system_prompt_service.get_active_sections()
+        sections = await self.system_prompt_service.get_active_sections()
         system_data = build_system_data(
             provider=provider,
             model=model,
-            custom_sections=custom_sections,
-            builtin_sections=builtin_sections,
+            sections=sections,
             user_profile=user_profile,
         )
         system_model = build_system_model(system_data)

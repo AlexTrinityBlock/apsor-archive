@@ -7,6 +7,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { ViewerErrorState, ViewerLoading } from "./ViewerStates";
 import { useElementWidth } from "./useElementWidth";
 import { fetchViewerBinary } from "./viewer-utils";
@@ -36,6 +37,7 @@ const PDF_OPTIONS = {
  * import so the viewer never fetches a remote script.
  */
 export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps) {
+  const { t, formatNumber } = useI18n();
   const [numPages, setNumPages] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1);
@@ -80,14 +82,14 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
   };
 
   if (binaryQuery.isLoading) {
-    return <ViewerLoading label="Fetching the PDF original" />;
+    return <ViewerLoading label={t("library.viewer.loading.pdfOriginal")} />;
   }
 
   if (binaryQuery.error) {
     return (
       <ViewerErrorState
         error={binaryQuery.error}
-        title="The PDF original could not be read"
+        title={t("library.viewer.pdf.errorOriginal")}
         onRetry={() => void binaryQuery.refetch()}
         downloadUrl={downloadUrl}
         downloadName={fileName}
@@ -103,7 +105,7 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
     return (
       <ViewerErrorState
         error={documentError}
-        title="PDF.js could not lay out this document"
+        title={t("library.viewer.pdf.errorLayout")}
         onRetry={() => setDocumentError(null)}
         downloadUrl={downloadUrl}
         downloadName={fileName}
@@ -121,22 +123,22 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
             iconOnly
             onClick={() => setPage(pageNumber - 1)}
             disabled={pageNumber <= 1}
-            aria-label="Previous page"
-            title="Previous page"
+            aria-label={t("library.viewer.pdf.previousPage")}
+            title={t("library.viewer.pdf.previousPage")}
           >
             <Icon name="chevron-right" size={16} className="viewer-back-icon" />
           </Button>
           <label className="viewer-pdf__page-field">
-            <span className="visually-hidden">Page number</span>
+            <span className="visually-hidden">{t("library.viewer.pdf.pageNumber")}</span>
             <input
               type="number"
               min={1}
               max={Math.max(1, numPages)}
               value={pageNumber}
               onChange={(event) => setPage(Number(event.target.value))}
-              aria-label="Page number"
+              aria-label={t("library.viewer.pdf.pageNumber")}
             />
-            <span aria-hidden="true">/ {numPages || "—"}</span>
+            <span aria-hidden="true">/ {numPages ? formatNumber(numPages) : "—"}</span>
           </label>
           <Button
             variant="ghost"
@@ -144,8 +146,8 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
             iconOnly
             onClick={() => setPage(pageNumber + 1)}
             disabled={numPages === 0 || pageNumber >= numPages}
-            aria-label="Next page"
-            title="Next page"
+            aria-label={t("library.viewer.pdf.nextPage")}
+            title={t("library.viewer.pdf.nextPage")}
           >
             <Icon name="chevron-right" size={16} />
           </Button>
@@ -157,19 +159,21 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
             size="sm"
             iconOnly
             onClick={() => zoomBy(-0.15)}
-            aria-label="Zoom out"
-            title="Zoom out"
+            aria-label={t("library.viewer.zoomOut")}
+            title={t("library.viewer.zoomOut")}
           >
             <span aria-hidden="true">−</span>
           </Button>
-          <span className="viewer-pdf__zoom">{Math.round(activeScale * 100)}%</span>
+          <span className="viewer-pdf__zoom">
+            {formatNumber(Math.round(activeScale * 100))}%
+          </span>
           <Button
             variant="ghost"
             size="sm"
             iconOnly
             onClick={() => zoomBy(0.15)}
-            aria-label="Zoom in"
-            title="Zoom in"
+            aria-label={t("library.viewer.zoomIn")}
+            title={t("library.viewer.zoomIn")}
           >
             <span aria-hidden="true">+</span>
           </Button>
@@ -179,7 +183,7 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
             onClick={() => setFitWidth(true)}
             aria-pressed={fitWidth}
           >
-            Fit width
+            {t("library.viewer.pdf.fitWidth")}
           </Button>
           <Button
             variant="ghost"
@@ -198,7 +202,7 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
         <Document
           file={documentSource}
           options={PDF_OPTIONS}
-          loading={<ViewerLoading label="Laying out the PDF pages" />}
+          loading={<ViewerLoading label={t("library.viewer.loading.pdfPages")} />}
           onLoadSuccess={(document) => {
             setNumPages(document.numPages);
             setPageNumber(1);
@@ -222,7 +226,11 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
             renderTextLayer
             renderAnnotationLayer={false}
             canvasBackground="#fdfaf3"
-            loading={<ViewerLoading label={`Rendering page ${pageNumber}`} />}
+            loading={
+              <ViewerLoading
+                label={t("library.viewer.loading.pdfPage", { page: pageNumber })}
+              />
+            }
             onLoadSuccess={(page) => {
               const width = page.getViewport({ scale: 1 }).width;
               if (width > 0) {
@@ -234,7 +242,7 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
       </div>
 
       <p className="viewer-pdf__foot">
-        PDF.js {pdfjs.version} · text layer enabled · script evaluation disabled
+        {t("library.viewer.pdf.foot", { version: pdfjs.version })}
       </p>
     </div>
   );

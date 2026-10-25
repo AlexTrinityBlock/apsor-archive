@@ -7,6 +7,7 @@ import {
 
 import { Icon } from "../../component/Icon";
 import { useScrollLock } from "../../hook/useScrollLock";
+import { useI18n } from "../../i18n";
 
 interface SettingsDialogProps {
   readonly eyebrow: string;
@@ -32,6 +33,7 @@ export function SettingsDialog({
   actions,
   onClose,
 }: SettingsDialogProps) {
+  const { t } = useI18n();
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -125,7 +127,7 @@ export function SettingsDialog({
             type="button"
             className="modal-btn-close"
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={t("settings.common.closeDialog")}
           >
             <Icon name="close" size={18} />
           </button>

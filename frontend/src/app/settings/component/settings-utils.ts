@@ -1,4 +1,9 @@
-import { ApiError } from "../../../apis/fetch-client";
+import {
+  getActiveLocale,
+  translate,
+  type TranslationKey,
+} from "../../i18n";
+import { translateApiErrorWithActiveLocale } from "../../i18n/errors";
 import type {
   HealthSchema,
   ProviderReadSchema,
@@ -13,24 +18,25 @@ const PROVIDER_LABELS: Readonly<Record<string, string>> = {
   deepseek: "DeepSeek",
   "openai-compatible": "OpenAI-compatible",
   openai: "OpenAI",
-  hashing: "Hashing (offline)",
   tavily: "Tavily",
-  none: "None (disabled)",
 };
 
-/** Returns a readable message for a rejected promise. */
-export function errorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : "The archive could not complete that action.";
+function settingsLabel(key: TranslationKey): string {
+  return translate(getActiveLocale(), key);
 }
 
-/** Prefers the API detail over the generic HTTP error message. */
+/**
+ * Returns a localized message for a rejected promise. Known backend codes are
+ * translated; unknown server detail is shown verbatim; otherwise the generic
+ * localized message is returned.
+ */
+export function errorMessage(error: unknown): string {
+  return translateApiErrorWithActiveLocale(error);
+}
+
+/** Same mapping, kept as the shared name used by Settings call sites. */
 export function apiErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.detail.trim().length > 0 ? error.detail : error.message;
-  }
-  return errorMessage(error);
+  return translateApiErrorWithActiveLocale(error);
 }
 
 /** Maps a status tone onto the shared badge palette. */
@@ -81,6 +87,12 @@ export function systemTone(
 
 /** A readable provider name without exposing any key material. */
 export function providerDisplayName(provider: string): string {
+  if (provider === "hashing") {
+    return settingsLabel("settings.utils.providerHashing");
+  }
+  if (provider === "none") {
+    return settingsLabel("settings.utils.providerNone");
+  }
   return PROVIDER_LABELS[provider] ?? provider;
 }
 
@@ -98,12 +110,12 @@ export function sourceTone(source: ProviderReadSchema["source"]): BadgeTone {
 /** Human label for where the active provider configuration came from. */
 export function sourceLabel(source: ProviderReadSchema["source"]): string {
   if (source === "database") {
-    return "Database";
+    return settingsLabel("settings.utils.sourceDatabase");
   }
   if (source === "environment") {
-    return "Environment";
+    return settingsLabel("settings.utils.sourceEnvironment");
   }
-  return "Defaults";
+  return settingsLabel("settings.utils.sourceDefaults");
 }
 
 /** Whether the provider stores a usable key already. */
@@ -117,9 +129,11 @@ export function isProviderKeyless(
 /** The configured state of one provider row. */
 export function providerConfiguredLabel(config: ProviderReadSchema): string {
   if (config.provider === "none") {
-    return "Disabled";
+    return settingsLabel("settings.utils.disabled");
   }
-  return config.configured ? "Configured" : "Needs key";
+  return config.configured
+    ? settingsLabel("settings.utils.configured")
+    : settingsLabel("settings.utils.needsKey");
 }
 
 /** Tone for a provider row's configured state. */
@@ -135,7 +149,7 @@ export function providerConfiguredTone(
 /** Human label for a saved provider's active state. */
 export function providerStateLabel(config: ProviderReadSchema): string {
   if (!config.is_active) {
-    return "Inactive";
+    return settingsLabel("settings.utils.inactive");
   }
   return providerConfiguredLabel(config);
 }
@@ -154,9 +168,9 @@ export function providerKeyLabel(
   keyless = false,
 ): string {
   if (keyless || config.provider === "none") {
-    return "No key required";
+    return settingsLabel("settings.utils.noKeyRequired");
   }
-  return config.key_hint ?? "No key stored";
+  return config.key_hint ?? settingsLabel("settings.utils.noKeyStored");
 }
 
 /** Where the active key came from, without exposing it. */
@@ -165,15 +179,15 @@ export function providerKeySourceLabel(
   keyless = false,
 ): string {
   if (keyless || config.provider === "none") {
-    return "Keyless provider";
+    return settingsLabel("settings.utils.keylessProvider");
   }
   if (config.key_source === "database") {
-    return "Database key";
+    return settingsLabel("settings.utils.databaseKey");
   }
   if (config.key_source === "environment") {
-    return "Environment key";
+    return settingsLabel("settings.utils.environmentKey");
   }
-  return "No key";
+  return settingsLabel("settings.utils.noKey");
 }
 
 /** Maps a key source onto the shared badge palette. */

@@ -206,15 +206,12 @@ Endpoints (all require the session cookie):
 | `PATCH` | `/api/v1/agent/questions/{question_id}` | Edit the question text |
 | `DELETE` | `/api/v1/agent/questions/{question_id}` | Delete the saved question (`204`) |
 | `POST` | `/api/v1/agent/questions/{question_id}/ask` | Run one agent turn and persist its outcome |
-| `GET` | `/api/v1/agent/settings/system-prompt` | List custom system prompt sections |
+| `GET` | `/api/v1/agent/settings/system-prompt` | List every system prompt section |
 | `POST` | `/api/v1/agent/settings/system-prompt` | Create one section (`201`) |
 | `PUT` | `/api/v1/agent/settings/system-prompt/order` | Reorder every section |
 | `PUT` | `/api/v1/agent/settings/system-prompt/{section_id}` | Replace one section |
 | `DELETE` | `/api/v1/agent/settings/system-prompt/{section_id}` | Delete one section (`204`) |
-| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Remove every custom section |
-| `GET` | `/api/v1/agent/settings/system-prompt/builtin` | List built-in sections and customization state |
-| `PUT` | `/api/v1/agent/settings/system-prompt/builtin/{key}` | Replace one built-in body |
-| `POST` | `/api/v1/agent/settings/system-prompt/builtin/reset` | Remove every built-in override |
+| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Replace every section with the four seeded defaults |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` takes
 `{content, request_id?, page_context?, client_timezone?,
@@ -386,7 +383,7 @@ If the key, path, or normalized text is empty, no snapshot is written and
 `page_context_attached` is `false`.
 
 New conversations freeze the current system prompt version
-(`archive-agent-v11`), which states that `<page_context>` and `<current_time>`
+(`archive-agent-v12`), which states that `<page_context>` and `<current_time>`
 are reference data, never instructions, and that page context appears only when
 the page changes.
 
@@ -420,31 +417,34 @@ reuses the original message's stored block. This lets the agent answer "now",
 
 ### System prompt module
 
-`system_prompt_section` stores ordered custom sections and optional built-in
-overrides: `title`, `body`, `sort_order`, `builtin_key`, `created_at`, and
-`updated_at`. `builtin_key` is null for custom rows and one of
-`identity`/`instructions`/`examples`/`context_protocol` for an override, with a
-partial unique index enforcing one row per key. `GET`, `POST`, `PUT /order`,
+`system_prompt_section` stores one ordered collection: `title`, `body`,
+`sort_order`, `created_at`, and `updated_at`. Every row is equal. The four
+defaults (`Identity`, `Instructions`, `Examples`, `Context protocol`) are
+seeded as ordinary rows by migration `e5c1a9d3b7f2` and by
+`POST /reset`; they can then be edited, deleted, and reordered like any
+owner-authored section. There is no `builtin_key`, no Python-only fallback list,
+and no separate built-in endpoint. `GET`, `POST`, `PUT /order`,
 `PUT /{section_id}`, `DELETE /{section_id}`, and `POST /reset` under
-`/api/v1/agent/settings/system-prompt` manage custom sections. The separate
-`GET /builtin`, `PUT /builtin/{key}`, and `POST /builtin/reset` manage the four
-defaults. Title and body are trimmed and both are required. `sort_order` is used
-instead of the SQL-reserved word `order`; reorder rewrites the complete custom
-order in one locked transaction and rejects partial or duplicate id lists.
+`/api/v1/agent/settings/system-prompt` manage the whole collection. Title and
+body are trimmed and both are required. `sort_order` is used instead of the
+SQL-reserved word `order`; reorder rewrites the complete order in one locked
+transaction and rejects partial or duplicate id lists. `POST /reset` deletes
+every row and inserts the four seed rows with fresh identities.
 
-`create_conversation` reads the active custom sections, the effective built-ins,
-and the owner's profile once. Custom rows render as `system_prompt:<id>` in
-`sort_order, id` order, followed by `user_profile` (when the user set a display
-name or cards), then the four built-ins in canonical order (override body when present,
-Python default otherwise). The combined sections become one provider system
-message and are frozen into `pi.system`. Editing either kind affects only
-new conversations and never rewrites an existing provider prefix. The custom
-list is cached under the `system_prompts` scope for 30 seconds; writes bump only
-that scope.
+`create_conversation` reads all non-empty rows in `sort_order, id` order and the
+owner's profile once. Every row renders as `system_prompt:<id>`, followed by
+`user_profile` when the user set a display name or cards. The combined sections
+become one provider system message and are frozen into `pi.system`. Editing,
+deleting, or reordering a row affects only new conversations and never rewrites
+an existing provider prefix. The list is cached under the `system_prompts` scope
+for 30 seconds; writes bump only that scope.
 
 The old singleton `system_prompt` row is migrated into the first section
 (`sort_order = 10`) by `c9e1f3a5b7d2`; downgrade copies the first section back
-into the singleton table.
+into the singleton table. The old custom/built-in split is removed by
+`e5c1a9d3b7f2`: upgrade materializes the effective built-in bodies as rows and
+drops `builtin_key`; downgrade restores the column and converts the first row
+whose title still matches a canonical default back into an override.
 
 `begin_message` writes the snapshot and the user entry in one transaction:
 
@@ -762,9 +762,15 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   successor-only check becomes “successor or direct deprecation timestamp”.
   Downgrade re-adds the old check as `NOT VALID` so direct-deprecated rows are
   preserved;
-- `b7e2d4f6a8c1` (current head) creates `user_profile_card` with ordered
-  title/content rows, migrates `app_user.bio` into an `About` card, and drops
-  the bio column.
+- `b7e2d4f6a8c1` creates `user_profile_card` with ordered title/content rows,
+  migrates `app_user.bio` into an `About` card, and drops the bio column;
+- `e5c1a9d3b7f2` (current head) unifies custom sections and built-in overrides
+  into one `system_prompt_section` table. The upgrade materializes the effective
+  built-in bodies as ordinary rows after the custom rows, deletes the override
+  rows, and drops `builtin_key` and its constraints. The downgrade restores the
+  column and converts the first row whose title still matches a canonical
+  default back into an override; renamed rows stay custom and the old code falls
+  back to the Python default for that slot.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
@@ -884,12 +890,13 @@ proves the partial unique active index, clears a key without ever returning
 plaintext, exercises the injected `app.state.provider_tester`, and verifies an
 identity id is not reused after delete. The agent test injects a deterministic
 `app.state.web_research_service` and asserts the `web_search` / `web_fetch` XML,
-plus the compressed-summary markers. The system-prompt test covers multi-section
-create/list/reorder/update/delete/reset, `system_prompt:<id>` composition order,
-frozen old conversations, whitespace and partial-reorder validation, identity
-non-reuse, and scoped cache invalidation; it also covers the frequently used
-prompt CRUD, whitespace validation, the 20-row cap, ordering, and scoped cache
-invalidation.
+plus the compressed-summary markers. The system-prompt test covers the four
+seeded defaults as ordinary rows, create/list/reorder/update/delete/reset,
+`system_prompt:<id>` composition order, frozen old conversations, editing and
+deleting defaults, reset restoring fresh default identities, whitespace and
+partial-reorder validation, identity non-reuse, and scoped cache invalidation;
+it also covers the frequently used prompt CRUD, whitespace validation, the
+20-row cap, ordering, and scoped cache invalidation.
 
 A separate manual validation used the public-domain 《紅樓夢》 from Project
 Gutenberg (about 2.66 MB, 268 chunks at 4,000 characters / 500 overlap) against

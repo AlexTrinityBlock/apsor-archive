@@ -4,12 +4,15 @@ import { Button } from "../component/Button";
 import { Loader } from "../component/Loader";
 import { TreeMark } from "../component/TreeMark";
 import { TreeRings } from "../component/TreeRings";
+import { useI18n } from "../i18n";
 import { useAuth } from "./AuthProvider";
 import { LoginScreen } from "./component/LoginScreen";
 import { SetupScreen } from "./component/SetupScreen";
 import "./auth.css";
 
 function AuthLoading() {
+  const { t } = useI18n();
+
   return (
     <main className="auth-loading" aria-busy="true">
       <div className="auth-loading__rings" aria-hidden="true">
@@ -18,14 +21,22 @@ function AuthLoading() {
       <span className="auth-loading__mark">
         <TreeMark size={34} />
       </span>
-      <p className="eyebrow">Apsor Archive · local archive</p>
-      <Loader size={38} label="Checking the keeper session" />
-      <p>Opening the archive…</p>
+      <p className="eyebrow">{t("core.auth.loadingEyebrow")}</p>
+      <Loader size={38} label={t("core.auth.loadingLabel")} />
+      <p>{t("core.auth.opening")}</p>
     </main>
   );
 }
 
-function AuthLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+function AuthLoadError({
+  message,
+  onRetry,
+}: {
+  readonly message: string;
+  readonly onRetry: () => void;
+}) {
+  const { t } = useI18n();
+
   return (
     <main className="auth-loading auth-loading--error" role="alert">
       <div className="auth-loading__rings" aria-hidden="true">
@@ -34,11 +45,11 @@ function AuthLoadError({ message, onRetry }: { message: string; onRetry: () => v
       <span className="auth-loading__mark">
         <TreeMark size={32} />
       </span>
-      <p className="eyebrow">The archive did not answer</p>
-      <h1>We could not check the session.</h1>
+      <p className="eyebrow">{t("core.auth.loadErrorEyebrow")}</p>
+      <h1>{t("core.auth.loadErrorTitle")}</h1>
       <p>{message}</p>
       <Button variant="primary" onClick={onRetry}>
-        Try again
+        {t("core.auth.tryAgain")}
       </Button>
     </main>
   );

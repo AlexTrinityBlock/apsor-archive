@@ -1,4 +1,4 @@
-"""Persistence contract for ordered custom system prompt sections."""
+"""Persistence contract for ordered system prompt sections."""
 
 from datetime import datetime
 from typing import Protocol
@@ -7,7 +7,7 @@ from app.module.agent.domain.system_prompt_domain import SystemPromptSection
 
 
 class SystemPromptRepositoryProtocol(Protocol):
-    """CRUD and reordering over owner-authored prompt sections."""
+    """CRUD and reordering over every prompt section."""
 
     async def list_sections(self) -> list[SystemPromptSection]: ...
 
@@ -49,25 +49,20 @@ class SystemPromptRepositoryProtocol(Protocol):
         ``section_ids`` must contain every existing section exactly once. The
         repository raises ``ValueError`` when the set is incomplete or contains
         duplicates; the service translates that into the stable 422 domain
-        error. 驗證必須在 ``FOR UPDATE`` 鎖住全部列之後進行，否則兩個並行
-        reorder 可能在讀取與寫入之間插入新 section，造成遺漏。
+        error. Validation happens after ``FOR UPDATE`` locks every row so two
+        concurrent reorders cannot insert or omit a section between the read and
+        the write.
         """
         ...
 
-    async def clear_sections(self) -> None: ...
-
-    async def list_builtin_overrides(self) -> dict[str, SystemPromptSection]: ...
-
-    async def upsert_builtin_override(
+    async def replace_with_defaults(
         self,
+        defaults: list[dict[str, str]],
         *,
-        key: str,
-        title: str,
-        body: str,
         now: datetime,
-    ) -> SystemPromptSection: ...
-
-    async def clear_builtin_overrides(self) -> None: ...
+    ) -> list[SystemPromptSection]:
+        """Delete every row and insert the seeded defaults in one transaction."""
+        ...
 
 
 __all__ = ["SystemPromptRepositoryProtocol"]

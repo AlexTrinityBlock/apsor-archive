@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { isRouteErrorResponse, useRouteError } from "react-router-dom";
 
+import { useI18n, type Translate } from "../i18n";
 import { Button } from "./Button";
 import { TreeMark } from "./TreeMark";
 import { TreeRings } from "./TreeRings";
@@ -18,14 +19,14 @@ function isChunkError(error: unknown): boolean {
   return typeof error === "string" && CHUNK_ERROR_PATTERN.test(error);
 }
 
-function errorDetail(error: unknown): string {
+function errorDetail(error: unknown, t: Translate): string {
   if (isRouteErrorResponse(error)) {
     return `${error.status} ${error.statusText}`.trim();
   }
   if (error instanceof Error && error.message.trim()) {
     return error.message;
   }
-  return "The archive could not open this view.";
+  return t("core.route.unknownError");
 }
 
 /**
@@ -34,6 +35,7 @@ function errorDetail(error: unknown): string {
  * instead of React Router's default "Unexpected Application Error" screen.
  */
 export function RouteError() {
+  const { t } = useI18n();
   const error = useRouteError();
   const chunkError = isChunkError(error);
 
@@ -61,22 +63,28 @@ export function RouteError() {
         <span className="route-error__mark" aria-hidden="true">
           <TreeMark size={30} />
         </span>
-        <p className="eyebrow">Archive · route error</p>
-        <h1>{chunkError ? "A newer build is ready." : "The archive could not open this view."}</h1>
+        <p className="eyebrow">{t("core.route.errorEyebrow")}</p>
+        <h1>
+          {chunkError
+            ? t("core.route.chunkTitle")
+            : t("core.route.errorTitle")}
+        </h1>
         <p className="route-error__description">
           {chunkError
-            ? "Reload to collect the current build. This usually happens right after a deployment while an older tab is still open."
-            : "The page stopped before it could render. Your files and memories are unchanged."}
+            ? t("core.route.chunkDescription")
+            : t("core.route.errorDescription")}
         </p>
         <div className="route-error__actions">
           <Button variant="primary" onClick={() => window.location.reload()}>
-            Reload archive
+            {t("core.route.reload")}
           </Button>
           <a className="btn btn--secondary btn--md" href="/">
-            Back to overview
+            {t("core.route.backToOverview")}
           </a>
         </div>
-        {chunkError ? null : <p className="route-error__detail">{errorDetail(error)}</p>}
+        {chunkError ? null : (
+          <p className="route-error__detail">{errorDetail(error, t)}</p>
+        )}
       </section>
     </main>
   );

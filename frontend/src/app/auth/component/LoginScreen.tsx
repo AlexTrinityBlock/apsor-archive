@@ -2,11 +2,13 @@ import { useId, useState, type FormEvent } from "react";
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { useAuth } from "../AuthProvider";
 import { AuthFrame } from "./AuthFrame";
 
 /** Sign-in form for the single keeper account. */
 export function LoginScreen() {
+  const { t } = useI18n();
   const { login, isSubmitting, error } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -21,20 +23,15 @@ export function LoginScreen() {
 
   return (
     <AuthFrame
-      eyebrow="Keeper sign-in"
-      title="Return to the archive."
-      description="The archive is private. Enter the account created on this machine to read its files and memories."
-      footer={
-        <p>
-          No account yet? The setup screen appears automatically when the archive
-          has no keeper. There is no cloud recovery.
-        </p>
-      }
+      eyebrow={t("core.auth.login.eyebrow")}
+      title={t("core.auth.login.title")}
+      description={t("core.auth.login.description")}
+      footer={<p>{t("core.auth.login.footer")}</p>}
     >
       <form className="auth-form" onSubmit={handleSubmit}>
         <div className="field">
           <label className="field-label" htmlFor={usernameId}>
-            Username
+            {t("core.auth.login.username")}
           </label>
           <input
             className="input"
@@ -52,7 +49,7 @@ export function LoginScreen() {
 
         <div className="field">
           <label className="field-label" htmlFor={passwordId}>
-            Password
+            {t("core.auth.login.credentialLabel")}
           </label>
           <div className="auth-password">
             <input
@@ -70,12 +67,18 @@ export function LoginScreen() {
               type="button"
               className="auth-password__toggle"
               onClick={() => setShowPassword((current) => !current)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={
+                showPassword
+                  ? t("core.auth.login.hidePassword")
+                  : t("core.auth.login.showPassword")
+              }
               aria-pressed={showPassword}
               aria-controls={passwordId}
               disabled={isSubmitting}
             >
-              {showPassword ? "Hide" : "Show"}
+              {showPassword
+                ? t("core.auth.login.hide")
+                : t("core.auth.login.show")}
             </button>
           </div>
         </div>
@@ -88,7 +91,9 @@ export function LoginScreen() {
         ) : null}
 
         <Button type="submit" variant="primary" size="lg" block disabled={isSubmitting}>
-          {isSubmitting ? "Opening the archive…" : "Enter the archive"}
+          {isSubmitting
+            ? t("core.auth.login.submitting")
+            : t("core.auth.login.submit")}
           {!isSubmitting ? <Icon name="arrow-right" size={17} /> : null}
         </Button>
       </form>

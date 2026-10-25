@@ -1,7 +1,6 @@
 import { useId, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-import { formatDate, formatDateTime } from "../../../lib/format";
 import { highlightTerms, snippetAround } from "../../../lib/highlight";
 import { Badge } from "../../component/Badge";
 import { Button, ButtonLink } from "../../component/Button";
@@ -11,6 +10,7 @@ import type {
   MemorySearchResultSchema,
   SummarySearchResultSchema,
 } from "../../generated-apis-types/schemas";
+import { useI18n, type Translate } from "../../i18n";
 
 const SNIPPET_LIMIT = 380;
 
@@ -27,6 +27,16 @@ function rankLabel(rank: number): string {
   return String(rank).padStart(2, "0");
 }
 
+function memoryStatusLabel(status: string, t: Translate): string {
+  if (status === "active") {
+    return t("insights.search.card.statusActive");
+  }
+  if (status === "deprecated") {
+    return t("insights.search.card.statusDeprecated");
+  }
+  return status;
+}
+
 function libraryHref(fileId: number, chunk: number): string {
   const params = new URLSearchParams({
     tab: "files",
@@ -37,14 +47,19 @@ function libraryHref(fileId: number, chunk: number): string {
 }
 
 function MatchedByBadges({ matchedBy }: { readonly matchedBy: readonly MatchSource[] }) {
+  const { t } = useI18n();
   if (matchedBy.length === 0) {
     return null;
   }
   return (
-    <span className="search-result__badges" aria-label="Matched by">
+    <span className="search-result__badges" aria-label={t("insights.search.card.matchedBy")}>
       {matchedBy.map((source) => (
         <Badge key={source} tone={source === "text" ? "moss" : "ochre"}>
-          {source.toUpperCase()}
+          {t(
+            source === "text"
+              ? "insights.search.card.matchedText"
+              : "insights.search.card.matchedVector",
+          )}
         </Badge>
       ))}
     </span>
@@ -52,14 +67,16 @@ function MatchedByBadges({ matchedBy }: { readonly matchedBy: readonly MatchSour
 }
 
 function FusedScore({ value }: { readonly value: number }) {
+  const { t } = useI18n();
+  const score = value.toFixed(6);
   return (
     <span
       className="search-result__score"
-      title="Reciprocal-rank fusion score returned by the search API"
-      aria-label={`Fused score ${value.toFixed(6)}`}
+      title={t("insights.search.card.fusedTitle")}
+      aria-label={t("insights.search.card.fusedLabel", { score })}
     >
-      <span>Fused</span>
-      <strong>{value.toFixed(6)}</strong>
+      <span>{t("insights.search.card.fused")}</span>
+      <strong>{score}</strong>
     </span>
   );
 }
@@ -73,10 +90,11 @@ function CardFrame({
   readonly rank: number;
   readonly children: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <article className={`search-result search-result--${tone}`}>
       <span className="search-result__rank">
-        <span className="visually-hidden">Rank </span>
+        <span className="visually-hidden">{t("insights.search.card.rank")} </span>
         {rankLabel(rank)}
       </span>
       <div className="search-result__body">{children}</div>
@@ -86,6 +104,7 @@ function CardFrame({
 
 /** A file chunk with a pointer into the Library preview modal. */
 export function FileResultCard({ result, query, rank }: CardProps<FileSearchResultSchema>) {
+  const { t, formatDateTime } = useI18n();
   const href = libraryHref(result.file_id, result.chunk);
 
   return (
@@ -97,13 +116,21 @@ export function FileResultCard({ result, query, rank }: CardProps<FileSearchResu
             <Link className="search-result__path" to={href}>
               {result.raw_file_path}
             </Link>
-            <Badge>Chunk #{result.chunk}</Badge>
-            {!result.is_current ? <Badge tone="ochre">history</Badge> : null}
+            <Badge>
+              {t("insights.search.card.chunk", {
+                chunk: String(result.chunk),
+              })}
+            </Badge>
+            {!result.is_current ? (
+              <Badge tone="ochre">{t("insights.search.card.history")}</Badge>
+            ) : null}
           </span>
           <span className="search-result__meta">
             <span>
-              Updated{" "}
-              <time dateTime={result.update_time}>{formatDateTime(result.update_time)}</time>
+              {t("insights.search.card.updated")}{" "}
+              <time dateTime={result.update_time}>
+                {formatDateTime(result.update_time)}
+              </time>
             </span>
           </span>
         </div>
@@ -119,7 +146,7 @@ export function FileResultCard({ result, query, rank }: CardProps<FileSearchResu
 
       <div className="search-result__foot">
         <ButtonLink to={href} variant="secondary" size="sm">
-          Open in library
+          {t("insights.search.card.openLibrary")}
           <Icon name="arrow-up-right" size={14} />
         </ButtonLink>
       </div>
@@ -129,6 +156,7 @@ export function FileResultCard({ result, query, rank }: CardProps<FileSearchResu
 
 /** A memory crystal with its status and a link to the memory reader. */
 export function MemoryResultCard({ result, query, rank }: CardProps<MemorySearchResultSchema>) {
+  const { t, formatDateTime } = useI18n();
   const href = `/memory/${result.memory_id}`;
 
   return (
@@ -138,16 +166,20 @@ export function MemoryResultCard({ result, query, rank }: CardProps<MemorySearch
           <span className="search-result__label">
             <Icon name="memory" size={15} className="search-result__kind-icon" />
             <Link className="search-result__path" to={href}>
-              Memory #{result.memory_id}
+              {t("insights.search.card.memory", {
+                id: String(result.memory_id),
+              })}
             </Link>
             <Badge tone={result.status === "active" ? "moss" : "ochre"} dot>
-              {result.status}
+              {memoryStatusLabel(result.status, t)}
             </Badge>
           </span>
           <span className="search-result__meta">
             <span>
-              Recorded{" "}
-              <time dateTime={result.update_time}>{formatDateTime(result.update_time)}</time>
+              {t("insights.search.card.recorded")}{" "}
+              <time dateTime={result.update_time}>
+                {formatDateTime(result.update_time)}
+              </time>
             </span>
           </span>
         </div>
@@ -163,7 +195,7 @@ export function MemoryResultCard({ result, query, rank }: CardProps<MemorySearch
 
       <div className="search-result__foot">
         <ButtonLink to={href} variant="secondary" size="sm">
-          Trace memory
+          {t("insights.search.card.traceMemory")}
           <Icon name="arrow-right" size={14} />
         </ButtonLink>
       </div>
@@ -177,6 +209,7 @@ export function SummaryResultCard({
   query,
   rank,
 }: CardProps<SummarySearchResultSchema>) {
+  const { t, formatDate } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
   const body = expanded
@@ -190,12 +223,17 @@ export function SummaryResultCard({
           <span className="search-result__label">
             <Icon name="layers" size={15} className="search-result__kind-icon" />
             <span className="search-result__path search-result__path--static">
-              Summary #{result.memory_summary_id}
+              {t("insights.search.card.summary", {
+                id: String(result.memory_summary_id),
+              })}
             </span>
           </span>
           <span className="search-result__meta">
             <span>
-              Period {formatDate(result.period_start)} – {formatDate(result.period_end)}
+              {t("insights.search.card.period", {
+                start: formatDate(result.period_start),
+                end: formatDate(result.period_end),
+              })}
             </span>
           </span>
         </div>
@@ -217,7 +255,10 @@ export function SummaryResultCard({
       </p>
 
       {result.themes.length > 0 ? (
-        <p className="search-result__themes" aria-label="Summary themes">
+        <p
+          className="search-result__themes"
+          aria-label={t("insights.search.card.themes")}
+        >
           {result.themes.map((theme, index) => (
             <span key={`${theme}-${index}`}>#{theme}</span>
           ))}
@@ -233,7 +274,9 @@ export function SummaryResultCard({
           aria-controls={contentId}
           onClick={() => setExpanded((current) => !current)}
         >
-          {expanded ? "Collapse summary" : "Read full summary"}
+          {expanded
+            ? t("insights.search.card.collapse")
+            : t("insights.search.card.readFull")}
           <Icon name={expanded ? "chevron-down" : "chevron-right"} size={14} />
         </Button>
       </div>

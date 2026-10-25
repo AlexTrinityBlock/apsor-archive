@@ -7,6 +7,7 @@ import {
   uploadFileAsync,
 } from "../../generated-apis-types/files/files";
 import { useToast } from "../../component/Toast";
+import { useI18n } from "../../i18n";
 import { parentPath } from "../../../lib/format";
 import {
   ACCEPTED_FILE_HINT,
@@ -38,6 +39,7 @@ export interface LibraryUploadsState {
 export function useLibraryUploads(): LibraryUploadsState {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { t, formatNumber } = useI18n();
   const nextUploadId = useRef(1);
   const controllers = useRef<Map<number, AbortController>>(new Map());
   const [tasks, setTasks] = useState<readonly LibraryUploadTask[]>([]);
@@ -66,7 +68,7 @@ export function useLibraryUploads(): LibraryUploadsState {
       updateTask(id, {
         ...taskProgressFromJob(job),
         status: "done",
-        message: `Archived in ${targetFolder}`,
+        message: t("library.tray.archivedIn", { folder: targetFolder }),
         rejected: false,
       });
       invalidateLibraryQueries(queryClient, {
@@ -77,7 +79,7 @@ export function useLibraryUploads(): LibraryUploadsState {
         fileIds: job.file_id !== null ? [job.file_id] : [],
       });
     },
-    [queryClient, updateTask],
+    [queryClient, t, updateTask],
   );
 
   const followJob = useCallback(
@@ -158,7 +160,7 @@ export function useLibraryUploads(): LibraryUploadsState {
         } else {
           updateTask(task.id, {
             status: "error",
-            message: "This task cannot be retried. Upload the file again.",
+            message: t("library.tray.cannotRetry"),
           });
           return false;
         }
@@ -186,7 +188,7 @@ export function useLibraryUploads(): LibraryUploadsState {
         controllers.current.delete(task.id);
       }
     },
-    [followJob, updateTask],
+    [followJob, t, updateTask],
   );
 
   const enqueueFiles = useCallback(
@@ -201,7 +203,7 @@ export function useLibraryUploads(): LibraryUploadsState {
       for (const file of files) {
         const id = nextUploadId.current;
         nextUploadId.current += 1;
-        const displayName = file.name.trim() || "Unnamed file";
+        const displayName = file.name.trim() || t("library.tray.unnamedFile");
         const targetPath = joinArchivePath(targetFolder, file.name);
         if (!isSafeUploadName(file.name) || !isAcceptedFileName(file.name)) {
           rejected.push({
@@ -210,7 +212,7 @@ export function useLibraryUploads(): LibraryUploadsState {
             targetPath,
             status: "error",
             rejected: true,
-            message: `Allowed types: ${ACCEPTED_FILE_HINT}.`,
+            message: t("library.tray.allowedTypes", { types: ACCEPTED_FILE_HINT }),
           });
           continue;
         }
@@ -221,7 +223,7 @@ export function useLibraryUploads(): LibraryUploadsState {
             targetPath,
             status: "error",
             rejected: true,
-            message: "Larger than the 10 MB upload limit.",
+            message: t("library.tray.tooLarge"),
           });
           continue;
         }
@@ -242,7 +244,12 @@ export function useLibraryUploads(): LibraryUploadsState {
       }
       if (rejected.length > 0) {
         toast.error(
-          `${rejected.length} ${rejected.length === 1 ? "file was" : "files were"} rejected. See the intake queue.`,
+          t(
+            rejected.length === 1
+              ? "library.tray.rejectedToastOne"
+              : "library.tray.rejectedToastOther",
+            { count: formatNumber(rejected.length) },
+          ),
         );
       }
       if (accepted.length === 0) {
@@ -257,11 +264,16 @@ export function useLibraryUploads(): LibraryUploadsState {
       const archived = results.filter(Boolean).length;
       if (archived > 0) {
         toast.success(
-          `${archived} ${archived === 1 ? "file" : "files"} archived in ${targetFolder}.`,
+          t(
+            archived === 1
+              ? "library.tray.archivedToastOne"
+              : "library.tray.archivedToastOther",
+            { count: formatNumber(archived), folder: targetFolder },
+          ),
         );
       }
     },
-    [runUpload, toast],
+    [formatNumber, runUpload, t, toast],
   );
 
   const retryTask = useCallback(

@@ -8,6 +8,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { readFile } from "../../generated-apis-types/files/files";
+import { getActiveLocale, translate } from "../../i18n";
 import { joinChunkContents, ViewerResourceError } from "./viewer-utils";
 
 interface ChunkedText {
@@ -50,7 +51,7 @@ export function useChunkedText(
         throw new ViewerResourceError(
           404,
           "file_content_unavailable",
-          "This record has no stored original and no indexed chunks.",
+          translate(getActiveLocale(), "library.ingest.noChunks"),
         );
       }
       return { text: joinChunkContents(chunks), chunkCount: chunks.length };

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { useI18n } from "../i18n";
 import { Icon } from "./Icon";
 import { useToast } from "./Toast";
 
@@ -40,14 +41,16 @@ async function writeClipboard(value: string): Promise<void> {
  */
 export function CopyButton({
   value,
-  label = "Copy",
+  label,
   title,
   className,
   disabled = false,
   iconOnly = false,
 }: CopyButtonProps) {
+  const { t } = useI18n();
   const toast = useToast();
   const [copied, setCopied] = useState(false);
+  const resolvedLabel = label ?? t("core.copy.copy");
 
   useEffect(() => {
     if (!copied) {
@@ -64,9 +67,9 @@ export function CopyButton({
     try {
       await writeClipboard(value);
       setCopied(true);
-      toast.success(`${label} copied.`);
+      toast.success(t("core.copy.copiedToast"));
     } catch {
-      toast.error("The browser could not copy that text.");
+      toast.error(t("core.copy.failed"));
     }
   };
 
@@ -82,12 +85,14 @@ export function CopyButton({
         .join(" ")}
       onClick={() => void copy()}
       disabled={disabled || value.length === 0}
-      title={title ?? label}
-      aria-label={label}
+      title={title ?? resolvedLabel}
+      aria-label={resolvedLabel}
     >
       <Icon name={copied ? "check" : "copy"} size={13} />
       {iconOnly ? null : (
-        <span aria-live="polite">{copied ? "Copied" : label}</span>
+        <span aria-live="polite">
+          {copied ? t("core.copy.copied") : resolvedLabel}
+        </span>
       )}
     </button>
   );

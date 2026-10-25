@@ -19,6 +19,7 @@ import type {
   FrequentlyUsedPromptUpdateSchema,
   ListResponseSchemaFrequentlyUsedPromptReadSchema,
 } from "../../generated-apis-types/schemas";
+import { useI18n } from "../../i18n";
 import { apiErrorMessage } from "./settings-utils";
 import { SettingsDialog } from "./SettingsDialog";
 
@@ -64,6 +65,7 @@ function PromptEditorDialog({
     data: FrequentlyUsedPromptCreateSchema | FrequentlyUsedPromptUpdateSchema,
   ) => void;
 }) {
+  const { t, formatNumber } = useI18n();
   const formId = useId();
   const fieldId = useId();
   const [title, setTitle] = useState(prompt?.title ?? "");
@@ -76,34 +78,36 @@ function PromptEditorDialog({
   const titleId = `${fieldId}-title`;
   const textId = `${fieldId}-text`;
   const orderId = `${fieldId}-order`;
-  let submitLabel = prompt ? "Save prompt" : "Add prompt";
+  let submitLabel = prompt
+    ? t("settings.prompts.submitSave")
+    : t("settings.prompts.submitAdd");
   if (saving) {
-    submitLabel = "Saving…";
+    submitLabel = t("settings.prompts.saving");
   }
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedTitle = title.trim();
     if (trimmedTitle.length === 0) {
-      setFormError("Title is required.");
+      setFormError(t("settings.prompts.errors.titleRequired"));
       return;
     }
     if (trimmedTitle.length > 80) {
-      setFormError("Title must be 80 characters or fewer.");
+      setFormError(t("settings.prompts.errors.titleMax"));
       return;
     }
     const trimmedText = promptText.trim();
     if (trimmedText.length === 0) {
-      setFormError("Prompt text is required.");
+      setFormError(t("settings.prompts.errors.textRequired"));
       return;
     }
     if (trimmedText.length > 4000) {
-      setFormError("Prompt text must be 4,000 characters or fewer.");
+      setFormError(t("settings.prompts.errors.textMax"));
       return;
     }
     const parsedOrder = Number(sortOrder.trim().length === 0 ? "0" : sortOrder);
     if (!Number.isInteger(parsedOrder) || parsedOrder < 0) {
-      setFormError("Sort order must be a whole number of zero or more.");
+      setFormError(t("settings.prompts.errors.sortOrder"));
       return;
     }
     setFormError(null);
@@ -116,9 +120,13 @@ function PromptEditorDialog({
 
   return (
     <SettingsDialog
-      eyebrow="Settings · frequent prompts"
-      title={prompt ? "Edit frequent prompt" : "Add frequent prompt"}
-      description="These shortcuts appear on the empty chat page. Clicking one fills the composer with the full prompt text."
+      eyebrow={t("settings.prompts.dialogEyebrow")}
+      title={
+        prompt
+          ? t("settings.prompts.editTitle")
+          : t("settings.prompts.addTitle")
+      }
+      description={t("settings.prompts.dialogDescription")}
       onClose={onClose}
       actions={
         <>
@@ -129,7 +137,7 @@ function PromptEditorDialog({
             onClick={onClose}
             disabled={saving}
           >
-            Cancel
+            {t("settings.common.cancel")}
           </Button>
           <Button
             type="submit"
@@ -151,7 +159,7 @@ function PromptEditorDialog({
         noValidate
       >
         <label className="field" htmlFor={titleId}>
-          <span className="field-label">Title</span>
+          <span className="field-label">{t("settings.prompts.fieldTitle")}</span>
           <input
             id={titleId}
             className="input"
@@ -162,15 +170,17 @@ function PromptEditorDialog({
               setFormError(null);
             }}
             maxLength={80}
-            placeholder="Trace a memory"
+            placeholder={t("settings.prompts.titlePlaceholder")}
             disabled={saving}
             data-autofocus
           />
-          <span className="field-help">Up to 80 characters.</span>
+          <span className="field-help">{t("settings.prompts.titleHelp")}</span>
         </label>
 
         <label className="field" htmlFor={orderId}>
-          <span className="field-label">Sort order</span>
+          <span className="field-label">
+            {t("settings.prompts.fieldSortOrder")}
+          </span>
           <input
             id={orderId}
             className="input prompt-form__order"
@@ -184,13 +194,13 @@ function PromptEditorDialog({
             }}
             disabled={saving}
           />
-          <span className="field-help">
-            Lower numbers appear first. Blank is treated as zero.
-          </span>
+          <span className="field-help">{t("settings.prompts.sortHelp")}</span>
         </label>
 
         <label className="field" htmlFor={textId}>
-          <span className="field-label">Prompt text</span>
+          <span className="field-label">
+            {t("settings.prompts.fieldPromptText")}
+          </span>
           <textarea
             id={textId}
             className="textarea prompt-form__text"
@@ -201,11 +211,13 @@ function PromptEditorDialog({
             }}
             maxLength={4000}
             rows={7}
-            placeholder="Trace the lineage of the most recent memory and explain what changed."
+            placeholder={t("settings.prompts.promptPlaceholder")}
             disabled={saving}
           />
           <span className="field-help prompt-form__count">
-            {promptText.length.toLocaleString()} / 4,000 characters
+            {t("settings.prompts.charCount", {
+              count: formatNumber(promptText.length),
+            })}
           </span>
         </label>
 
@@ -222,6 +234,7 @@ function PromptEditorDialog({
 
 /** Editable prompt shortcuts shown on the empty chat page. */
 export function FrequentlyUsedPromptsPanel() {
+  const { t, formatNumber } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const query = useListFrequentlyUsedPrompts({
@@ -260,7 +273,7 @@ export function FrequentlyUsedPromptsPanel() {
         );
         await invalidateList();
         setEditor(null);
-        toast.success("Frequent prompt added.");
+        toast.success(t("settings.prompts.addedToast"));
       },
       onError: (error) => {
         setMutationError(apiErrorMessage(error));
@@ -288,7 +301,7 @@ export function FrequentlyUsedPromptsPanel() {
         );
         await invalidateList();
         setEditor(null);
-        toast.success("Frequent prompt updated.");
+        toast.success(t("settings.prompts.updatedToast"));
       },
       onError: (error) => {
         setMutationError(apiErrorMessage(error));
@@ -314,7 +327,7 @@ export function FrequentlyUsedPromptsPanel() {
         );
         await invalidateList();
         setDeleteTarget(null);
-        toast.success("Frequent prompt deleted.");
+        toast.success(t("settings.prompts.deletedToast"));
       },
       onError: (error) => {
         toast.error(apiErrorMessage(error));
@@ -352,7 +365,7 @@ export function FrequentlyUsedPromptsPanel() {
       <div className="settings-inline-error" role="alert">
         <Icon name="info" size={16} />
         <div>
-          <strong>Frequent prompts did not answer.</strong>
+          <strong>{t("settings.prompts.loadErrorTitle")}</strong>
           <p>{apiErrorMessage(query.error)}</p>
           <Button
             type="button"
@@ -362,7 +375,9 @@ export function FrequentlyUsedPromptsPanel() {
             disabled={query.isFetching}
           >
             <Icon name="ring" size={14} />
-            {query.isFetching ? "Retrying…" : "Retry"}
+            {query.isFetching
+              ? t("core.common.retrying")
+              : t("core.common.retry")}
           </Button>
         </div>
       </div>
@@ -370,14 +385,15 @@ export function FrequentlyUsedPromptsPanel() {
   } else if (prompts.length === 0) {
     body = (
       <div className="prompt-empty">
-        <p className="prompt-empty__title">No frequent prompts yet.</p>
+        <p className="prompt-empty__title">
+          {t("settings.prompts.emptyTitle")}
+        </p>
         <p className="prompt-empty__copy">
-          Add up to 20 shortcuts. Each one appears on the empty chat page and
-          fills the composer when clicked.
+          {t("settings.prompts.emptyCopy")}
         </p>
         <Button type="button" variant="ink" size="sm" onClick={openCreate}>
           <Icon name="plus" size={13} />
-          Add the first prompt
+          {t("settings.prompts.addFirst")}
         </Button>
       </div>
     );
@@ -390,7 +406,9 @@ export function FrequentlyUsedPromptsPanel() {
               <div className="prompt-row__title">
                 <h3>{prompt.title}</h3>
                 <span className="prompt-row__order">
-                  Order {prompt.sort_order}
+                  {t("settings.prompts.order", {
+                    order: formatNumber(prompt.sort_order),
+                  })}
                 </span>
               </div>
               <p className="prompt-row__preview" title={prompt.prompt_text}>
@@ -406,7 +424,7 @@ export function FrequentlyUsedPromptsPanel() {
                 disabled={saving || deleteMutation.isPending}
               >
                 <Icon name="pencil" size={13} />
-                Edit
+                {t("settings.prompts.edit")}
               </Button>
               <Button
                 type="button"
@@ -416,7 +434,7 @@ export function FrequentlyUsedPromptsPanel() {
                 disabled={saving || deleteMutation.isPending}
               >
                 <Icon name="trash" size={13} />
-                Delete
+                {t("settings.prompts.delete")}
               </Button>
             </div>
           </article>
@@ -432,12 +450,14 @@ export function FrequentlyUsedPromptsPanel() {
         title={
           <span className="settings-panel__title">
             <Icon name="quote" size={16} />
-            Frequently used prompts
+            {t("settings.prompts.title")}
           </span>
         }
         action={
           <div className="settings-panel__badges">
-            <Badge tone="neutral">{prompts.length} / 20</Badge>
+            <Badge tone="neutral">
+              {formatNumber(prompts.length)} / 20
+            </Badge>
             <Button
               type="button"
               variant="secondary"
@@ -446,24 +466,17 @@ export function FrequentlyUsedPromptsPanel() {
               disabled={query.isPending || query.isError || limitReached}
             >
               <Icon name="plus" size={13} />
-              Add prompt
+              {t("settings.prompts.add")}
             </Button>
           </div>
         }
         className="settings-panel prompt-panel"
       >
-        <p className="settings-lede">
-          Shortcuts for the empty chat room. The list is stored in PostgreSQL
-          and appears in the order below; editing it never changes existing
-          conversations.
-        </p>
+        <p className="settings-lede">{t("settings.prompts.lede")}</p>
 
         {body}
 
-        <p className="settings-hint">
-          Up to 20 prompts. Title and prompt text are trimmed; blank values are
-          rejected. Lower sort orders appear first.
-        </p>
+        <p className="settings-hint">{t("settings.prompts.hint")}</p>
       </Panel>
 
       {editor ? (
@@ -494,9 +507,11 @@ export function FrequentlyUsedPromptsPanel() {
 
       {deleteTarget ? (
         <SettingsDialog
-          eyebrow="Settings · frequent prompts"
-          title="Delete this prompt?"
-          description={`“${deleteTarget.title}” will disappear from the chat page immediately.`}
+          eyebrow={t("settings.prompts.dialogEyebrow")}
+          title={t("settings.prompts.deleteDialogTitle")}
+          description={t("settings.prompts.deleteDialogDescription", {
+            title: deleteTarget.title,
+          })}
           onClose={() => {
             if (!deleteMutation.isPending) {
               setDeleteTarget(null);
@@ -512,7 +527,7 @@ export function FrequentlyUsedPromptsPanel() {
                 disabled={deleteMutation.isPending}
                 data-autofocus
               >
-                Cancel
+                {t("settings.common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -523,14 +538,15 @@ export function FrequentlyUsedPromptsPanel() {
                 }
                 disabled={deleteMutation.isPending}
               >
-                {deleteMutation.isPending ? "Deleting…" : "Delete prompt"}
+                {deleteMutation.isPending
+                  ? t("settings.prompts.deleting")
+                  : t("settings.prompts.deletePrompt")}
               </Button>
             </>
           }
         >
           <p className="settings-lede">
-            Existing conversations keep their transcripts. This only removes
-            the shortcut from the empty chat page.
+            {t("settings.prompts.deleteDialogCopy")}
           </p>
         </SettingsDialog>
       ) : null}

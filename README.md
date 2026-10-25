@@ -80,6 +80,10 @@ result carries its source, chunk number, and time.
 - **Documents choose their extractor.** PDFs try text first and fall back to
   vision for scanned pages. DOCX, TXT, JSON, CSV, and logs use text, with AI
   structured metadata; images use vision or the filename fallback.
+- **The interface speaks three languages.** English, Traditional Chinese, and
+  Simplified Chinese can be switched from the Settings page. The choice is
+  stored per browser and applies to the whole interface, never to archive
+  content.
 - **The archive is local and single-owner.** It binds to `127.0.0.1` by default
   and is protected by one owner account with an Argon2 password hash and an
   HttpOnly session cookie. Run it on your own machine; put it behind Cloudflare
@@ -575,24 +579,22 @@ failure never becomes an HTTP 500.
 | `POST` | `/api/v1/agent/approvals/{approval_id}/approve` | Execute once, append the tool result, resume |
 | `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | Append `memory_rejected`, resume without writing |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog plus prompt/tools versions |
-| `GET` | `/api/v1/agent/settings/system-prompt` | List custom system prompt sections |
+| `GET` | `/api/v1/agent/settings/system-prompt` | List every system prompt section |
 | `POST` | `/api/v1/agent/settings/system-prompt` | Create one section (`201`) |
 | `PUT` | `/api/v1/agent/settings/system-prompt/order` | Reorder every section |
 | `PUT` | `/api/v1/agent/settings/system-prompt/{section_id}` | Replace one section |
 | `DELETE` | `/api/v1/agent/settings/system-prompt/{section_id}` | Delete one section (`204`) |
-| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Remove every custom section |
-| `GET` | `/api/v1/agent/settings/system-prompt/builtin` | List the four built-in sections and whether each is customized |
-| `PUT` | `/api/v1/agent/settings/system-prompt/builtin/{key}` | Replace one built-in body (`identity`, `instructions`, `examples`, `context_protocol`) |
-| `POST` | `/api/v1/agent/settings/system-prompt/builtin/reset` | Remove every built-in override |
+| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Replace every section with the four seeded defaults |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` accepts
 `{content, request_id?, page_context?, client_timezone?,
 client_utc_offset_minutes?}` and `.../retry` accepts `{request_id?}`. Both stream
 `text/event-stream` by default. The client timezone is stored with a
 server-rendered `<current_time>` block on each user entry; the block is appended
-after the message text exactly once. The ordered custom system sections and the
-four built-in sections are written at conversation creation and frozen into that
-thread; Settings lets the owner edit either kind. The event names are
+after the message text exactly once. The ordered system prompt sections are
+written at conversation creation and frozen into that thread. The four defaults
+are seeded as ordinary rows; Settings lets the owner edit, delete, or reorder
+every row. The event names are
 `run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
 `tool_end`, `approval_required`, `run_end`, and `error`. `run_start` reports
 `page_context_entry_id` (or `null`), `page_context_attached`, and `resumed` so
@@ -1268,9 +1270,15 @@ after `agent_config` on this branch are:
   `app_user.display_name` / `bio`. The old “deprecated must have a successor”
   check becomes “successor or direct deprecation timestamp”. The downgrade
   re-adds the old check as `NOT VALID` so direct deprecations keep their rows;
-- `b7e2d4f6a8c1` (current head) creates `user_profile_card` with ordered
-  title/content rows, migrates the existing `app_user.bio` into an `About` card,
-  and drops the single bio column.
+- `b7e2d4f6a8c1` creates `user_profile_card` with ordered title/content rows,
+  migrates the existing `app_user.bio` into an `About` card, and drops the
+  single bio column;
+- `e5c1a9d3b7f2` (current head) unifies custom sections and built-in overrides
+  into one `system_prompt_section` table. The upgrade materializes the effective
+  built-in bodies as ordinary rows after the custom rows, deletes the override
+  rows, and drops `builtin_key` and its constraints. All rows are now editable,
+  deletable, and reorderable; `reset` replaces the collection with the four
+  seeded defaults.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so

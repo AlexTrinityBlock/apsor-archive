@@ -1,5 +1,6 @@
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { viewerErrorMessage } from "./viewer-utils";
 
 interface LoadingProps {
@@ -7,7 +8,8 @@ interface LoadingProps {
 }
 
 /** A quiet archive placeholder while a renderer or chunk loads. */
-export function ViewerLoading({ label = "Opening the file" }: LoadingProps) {
+export function ViewerLoading({ label }: LoadingProps) {
+  const { t } = useI18n();
   return (
     <div className="viewer-state viewer-state--loading" role="status" aria-live="polite">
       <span className="viewer-loader" aria-hidden="true">
@@ -15,7 +17,7 @@ export function ViewerLoading({ label = "Opening the file" }: LoadingProps) {
         <span />
         <span />
       </span>
-      <p className="viewer-state__label">{label}</p>
+      <p className="viewer-state__label">{label ?? t("library.viewer.loadingDefault")}</p>
     </div>
   );
 }
@@ -36,19 +38,20 @@ export function ViewerErrorState({
   downloadUrl,
   downloadName,
 }: ErrorProps) {
+  const { t } = useI18n();
   return (
     <section className="viewer-state viewer-state--error" role="alert">
       <span className="viewer-state__mark" aria-hidden="true">
         <Icon name="info" size={22} />
       </span>
-      <p className="eyebrow">Preview interrupted</p>
+      <p className="eyebrow">{t("library.viewer.errorsEyebrow")}</p>
       <h2>{title}</h2>
-      <p>{viewerErrorMessage(error)}</p>
+      <p>{viewerErrorMessage(error, t)}</p>
       <div className="viewer-state__actions">
         {onRetry ? (
           <Button variant="secondary" size="sm" onClick={onRetry}>
             <Icon name="history" size={15} />
-            Try again
+            {t("library.viewer.retry")}
           </Button>
         ) : null}
         {downloadUrl ? (
@@ -58,7 +61,7 @@ export function ViewerErrorState({
             download={downloadName}
           >
             <Icon name="arrow-down" size={15} />
-            Download original
+            {t("library.viewer.downloadOriginal")}
           </a>
         ) : null}
       </div>

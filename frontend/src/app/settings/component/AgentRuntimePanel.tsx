@@ -6,7 +6,7 @@ import {
   type FormEvent,
 } from "react";
 
-import { formatNumber } from "../../../lib/format";
+import { useI18n, type Translate, type TranslationKey } from "../../i18n";
 import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import { Panel } from "../../component/Panel";
@@ -61,108 +61,124 @@ type DraftValues = { readonly [Key in NumericField]: string } & {
   readonly [Key in BooleanField]: boolean;
 };
 
-interface NumericFieldSpec extends RuntimeNumberSpec {
+interface NumericFieldSpec
+  extends Omit<RuntimeNumberSpec, "label" | "unit" | "hint"> {
   readonly key: NumericField;
+  readonly labelKey: TranslationKey;
+  readonly unitKey: TranslationKey;
+  readonly hintKey: TranslationKey;
 }
 
 const CONTEXT_FIELDS: readonly NumericFieldSpec[] = [
   {
     key: "context_window_tokens",
-    label: "Model context window",
-    unit: "tokens",
+    labelKey: "settings.agent.fieldContextWindowLabel",
+    unitKey: "settings.agent.fieldContextWindowUnit",
     min: 8000,
     max: 2000000,
     step: 50000,
-    hint: "Provider/model input capacity, separate from the turn budget. DeepSeek V4.1 Flash is about 1,000,000 input tokens.",
+    hintKey: "settings.agent.fieldContextWindowHint",
   },
   {
     key: "max_total_tokens",
-    label: "Turn token budget",
-    unit: "tokens",
+    labelKey: "settings.agent.fieldTurnBudgetLabel",
+    unitKey: "settings.agent.fieldTurnBudgetUnit",
     min: 8000,
     max: 200000,
     step: 5000,
-    hint: "Cumulative model-step budget for one agent turn, including tool results. It does not raise the model context window.",
+    hintKey: "settings.agent.fieldTurnBudgetHint",
   },
   {
     key: "compaction_threshold_tokens",
-    label: "Auto-compaction threshold",
-    unit: "tokens",
+    labelKey: "settings.agent.fieldThresholdLabel",
+    unitKey: "settings.agent.fieldThresholdUnit",
     min: 1000,
     max: 200000,
     step: 5000,
-    hint: "Auto compaction starts before a new turn once the transcript passes this share of the turn budget.",
+    hintKey: "settings.agent.fieldThresholdHint",
   },
   {
     key: "max_steps",
-    label: "Max steps",
-    unit: "steps",
+    labelKey: "settings.agent.fieldMaxStepsLabel",
+    unitKey: "settings.agent.fieldMaxStepsUnit",
     min: 1,
     max: 32,
     step: 1,
-    hint: "Think-and-act rounds allowed in a single turn; 24 is the default, 32 the max.",
+    hintKey: "settings.agent.fieldMaxStepsHint",
   },
   {
     key: "max_page_context_chars",
-    label: "Page context",
-    unit: "chars",
+    labelKey: "settings.agent.fieldPageContextLabel",
+    unitKey: "settings.agent.fieldPageContextUnit",
     min: 500,
     max: 50000,
     step: 500,
-    hint: "Maximum page text attached to a turn.",
+    hintKey: "settings.agent.fieldPageContextHint",
   },
 ];
 
 const TOOL_FIELDS: readonly NumericFieldSpec[] = [
   {
     key: "max_parallel_tools",
-    label: "Max parallel tools",
-    unit: "tools",
+    labelKey: "settings.agent.fieldParallelToolsLabel",
+    unitKey: "settings.agent.fieldParallelToolsUnit",
     min: 1,
     max: 24,
     step: 1,
-    hint: "Tools that may execute at the same time.",
+    hintKey: "settings.agent.fieldParallelToolsHint",
   },
   {
     key: "max_tool_calls_per_turn",
-    label: "Tool calls per turn",
-    unit: "calls",
+    labelKey: "settings.agent.fieldToolCallsLabel",
+    unitKey: "settings.agent.fieldToolCallsUnit",
     min: 1,
     max: 24,
     step: 1,
-    hint: "Total tool invocations allowed in one turn.",
+    hintKey: "settings.agent.fieldToolCallsHint",
   },
   {
     key: "max_tool_result_chars",
-    label: "Chars per tool result",
-    unit: "chars",
+    labelKey: "settings.agent.fieldToolResultCharsLabel",
+    unitKey: "settings.agent.fieldToolResultCharsUnit",
     min: 1000,
     max: 200000,
     step: 5000,
-    hint: "Each result is clipped independently; 100k fits about 25 four-kilochar chunks.",
+    hintKey: "settings.agent.fieldToolResultCharsHint",
   },
 ];
 
 const COMPACTION_FIELDS: readonly NumericFieldSpec[] = [
   {
     key: "max_compaction_summary_chars",
-    label: "Summary chars",
-    unit: "chars",
+    labelKey: "settings.agent.fieldSummaryCharsLabel",
+    unitKey: "settings.agent.fieldSummaryCharsUnit",
     min: 1000,
     max: 20000,
     step: 500,
-    hint: "Size reserved for the folded-turn summary.",
+    hintKey: "settings.agent.fieldSummaryCharsHint",
   },
   {
     key: "max_compaction_last_user_chars",
-    label: "Last user input chars",
-    unit: "chars",
+    labelKey: "settings.agent.fieldLastUserCharsLabel",
+    unitKey: "settings.agent.fieldLastUserCharsUnit",
     min: 500,
     max: 10000,
     step: 500,
-    hint: "Most recent user message kept verbatim.",
+    hintKey: "settings.agent.fieldLastUserCharsHint",
   },
 ];
+
+function localizeSpec(
+  spec: NumericFieldSpec,
+  t: Translate,
+): NumericFieldSpec & RuntimeNumberSpec {
+  return {
+    ...spec,
+    label: t(spec.labelKey),
+    unit: t(spec.unitKey),
+    hint: t(spec.hintKey),
+  };
+}
 
 const ALL_FIELD_SPECS: readonly NumericFieldSpec[] = [
   ...CONTEXT_FIELDS,
@@ -248,23 +264,30 @@ interface ValidationResult {
   readonly parsed: AgentRuntimeValues | null;
 }
 
-function validateDraft(draft: DraftValues): ValidationResult {
+function validateDraft(
+  draft: DraftValues,
+  t: Translate,
+  formatNumber: (value: number) => string,
+): ValidationResult {
   const fieldErrors: Partial<Record<NumericField, string>> = {};
   const numbers: Partial<Record<NumericField, number>> = {};
 
   for (const spec of ALL_FIELD_SPECS) {
     const raw = draft[spec.key].trim();
     if (raw.length === 0) {
-      fieldErrors[spec.key] = "A value is required.";
+      fieldErrors[spec.key] = t("settings.runtime.errors.required");
       continue;
     }
     const parsed = Number(raw);
     if (!Number.isInteger(parsed)) {
-      fieldErrors[spec.key] = "Enter a whole number.";
+      fieldErrors[spec.key] = t("settings.runtime.errors.wholeNumber");
       continue;
     }
     if (parsed < spec.min || parsed > spec.max) {
-      fieldErrors[spec.key] = `Enter a value between ${formatNumber(spec.min)} and ${formatNumber(spec.max)}.`;
+      fieldErrors[spec.key] = t("settings.runtime.errors.range", {
+        min: formatNumber(spec.min),
+        max: formatNumber(spec.max),
+      });
       continue;
     }
     numbers[spec.key] = parsed;
@@ -278,7 +301,10 @@ function validateDraft(draft: DraftValues): ValidationResult {
     threshold >= totalTokens &&
     fieldErrors.compaction_threshold_tokens === undefined
   ) {
-    fieldErrors.compaction_threshold_tokens = `Must be lower than the max total (${formatNumber(totalTokens)}).`;
+    fieldErrors.compaction_threshold_tokens = t(
+      "settings.runtime.errors.thresholdBelowTotal",
+      { total: formatNumber(totalTokens) },
+    );
   }
 
   const parallelTools = numbers.max_parallel_tools;
@@ -289,7 +315,10 @@ function validateDraft(draft: DraftValues): ValidationResult {
     parallelTools > toolCalls &&
     fieldErrors.max_parallel_tools === undefined
   ) {
-    fieldErrors.max_parallel_tools = `Must not exceed tool calls per turn (${formatNumber(toolCalls)}).`;
+    fieldErrors.max_parallel_tools = t(
+      "settings.runtime.errors.parallelWithinCalls",
+      { calls: formatNumber(toolCalls) },
+    );
   }
 
   const hasErrors = Object.keys(fieldErrors).length > 0;
@@ -324,6 +353,7 @@ export function AgentRuntimePanel({
   onReset,
   className,
 }: AgentRuntimePanelProps) {
+  const { t, formatNumber } = useI18n();
   const [draft, setDraft] = useState<DraftValues>(() => toDraft(values));
   const [confirmingReset, setConfirmingReset] = useState(false);
 
@@ -339,7 +369,7 @@ export function AgentRuntimePanel({
     setConfirmingReset(false);
   }, [currentValuesKey, values]);
 
-  const validation = validateDraft(draft);
+  const validation = validateDraft(draft, t, formatNumber);
   const isDirty = !draftMatchesValues(draft, values);
   const isInvalid = Object.keys(validation.fieldErrors).length > 0;
   const canSave = isDirty && !isInvalid && !saving;
@@ -357,6 +387,10 @@ export function AgentRuntimePanel({
   const budgetStyle = {
     "--runtime-budget-fill": `${thresholdPercent}%`,
   } as CSSProperties;
+
+  const contextFields = CONTEXT_FIELDS.map((spec) => localizeSpec(spec, t));
+  const toolFields = TOOL_FIELDS.map((spec) => localizeSpec(spec, t));
+  const compactionFields = COMPACTION_FIELDS.map((spec) => localizeSpec(spec, t));
 
   const updateNumber = (field: NumericField, next: string) => {
     setDraft((current) => ({ ...current, [field]: next }));
@@ -388,42 +422,48 @@ export function AgentRuntimePanel({
       title={
         <span className="settings-panel__title">
           <Icon name="spark" size={16} />
-          Agent runtime
+          {t("settings.agent.title")}
         </span>
       }
       action={
         <Badge>
-          {formatNumber(values.max_steps)} steps ·{" "}
-          {formatNumber(values.max_tool_calls_per_turn)} tool calls
+          {t("settings.agent.badge", {
+            steps: formatNumber(values.max_steps),
+            calls: formatNumber(values.max_tool_calls_per_turn),
+          })}
         </Badge>
       }
       className={panelClassName}
     >
-      <p className="settings-lede">
-        These bounds are stored in PostgreSQL and apply to new runs. An active
-        run keeps the snapshot it started with.
-      </p>
+      <p className="settings-lede">{t("settings.agent.lede")}</p>
 
       <RuntimeStatus
         source={source}
         updatedAt={updatedAt}
-        summary={`${formatNumber(values.context_window_tokens)} model context · ${formatNumber(values.max_total_tokens)} turn budget · ${formatNumber(values.compaction_threshold_tokens)} compaction`}
+        summary={t("settings.agent.statusSummary", {
+          context: formatNumber(values.context_window_tokens),
+          budget: formatNumber(values.max_total_tokens),
+          compaction: formatNumber(values.compaction_threshold_tokens),
+        })}
         dirty={isDirty}
       />
 
       <div className="runtime-budget">
         <div className="runtime-budget__head">
           <span className="runtime-budget__label">
-            Auto-compaction threshold
+            {t("settings.agent.budgetLabel")}
           </span>
           <span className="runtime-budget__value">
-            {formatNumber(draftThreshold)} / {formatNumber(draftTotal)} tokens
+            {t("settings.agent.budgetValue", {
+              threshold: formatNumber(draftThreshold),
+              total: formatNumber(draftTotal),
+            })}
           </span>
         </div>
         <div
           className="runtime-budget__meter"
           role="progressbar"
-          aria-label="Compaction threshold as a share of the turn budget"
+          aria-label={t("settings.agent.budgetAria")}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={thresholdPercent}
@@ -433,8 +473,16 @@ export function AgentRuntimePanel({
           <span className="runtime-budget__threshold" aria-hidden="true" />
         </div>
         <div className="runtime-budget__foot">
-          <span>{thresholdPercent}% of the turn budget</span>
-          <span>{formatNumber(headroom)} tokens headroom</span>
+          <span>
+            {t("settings.agent.budgetPercent", {
+              percent: formatNumber(thresholdPercent),
+            })}
+          </span>
+          <span>
+            {t("settings.agent.budgetHeadroom", {
+              tokens: formatNumber(headroom),
+            })}
+          </span>
         </div>
       </div>
 
@@ -446,12 +494,12 @@ export function AgentRuntimePanel({
       >
         <div className="runtime-groups">
           <RuntimeGroup
-            slot="Group 01"
-            title="Context budget"
-            description="The model's input capacity, the ceiling for a single turn, when older material is folded away, and how much page text the agent may read. The context window is model metadata; it is not the turn budget."
+            slot={t("settings.agent.groupContextSlot")}
+            title={t("settings.agent.groupContextTitle")}
+            description={t("settings.agent.groupContextDescription")}
           >
             <RuntimeNumberField
-              spec={CONTEXT_FIELDS[0]}
+              spec={contextFields[0]}
               value={draft.context_window_tokens}
               defaultValue={defaults.context_window_tokens}
               disabled={saving}
@@ -461,7 +509,7 @@ export function AgentRuntimePanel({
               }
             />
             <RuntimeNumberField
-              spec={CONTEXT_FIELDS[1]}
+              spec={contextFields[1]}
               value={draft.max_total_tokens}
               defaultValue={defaults.max_total_tokens}
               disabled={saving}
@@ -469,7 +517,7 @@ export function AgentRuntimePanel({
               onValueChange={(next) => updateNumber("max_total_tokens", next)}
             />
             <RuntimeNumberField
-              spec={CONTEXT_FIELDS[2]}
+              spec={contextFields[2]}
               value={draft.compaction_threshold_tokens}
               defaultValue={defaults.compaction_threshold_tokens}
               disabled={saving}
@@ -480,8 +528,8 @@ export function AgentRuntimePanel({
             />
             <div className="runtime-field runtime-field--wide">
               <SwitchField
-                label="Auto compaction"
-                hint="Fold older turns into a summary when the threshold is reached."
+                label={t("settings.agent.toggleAutoCompactionLabel")}
+                hint={t("settings.agent.toggleAutoCompactionHint")}
                 checked={draft.auto_compaction_enabled}
                 disabled={saving}
                 onChange={(next) =>
@@ -490,7 +538,7 @@ export function AgentRuntimePanel({
               />
             </div>
             <RuntimeNumberField
-              spec={CONTEXT_FIELDS[3]}
+              spec={contextFields[3]}
               value={draft.max_steps}
               defaultValue={defaults.max_steps}
               disabled={saving}
@@ -498,7 +546,7 @@ export function AgentRuntimePanel({
               onValueChange={(next) => updateNumber("max_steps", next)}
             />
             <RuntimeNumberField
-              spec={CONTEXT_FIELDS[4]}
+              spec={contextFields[4]}
               value={draft.max_page_context_chars}
               defaultValue={defaults.max_page_context_chars}
               disabled={saving}
@@ -510,14 +558,14 @@ export function AgentRuntimePanel({
           </RuntimeGroup>
 
           <RuntimeGroup
-            slot="Group 02"
-            title="Tool execution"
-            description="How many tools may run, how often they may be called, and how much their results may carry."
+            slot={t("settings.agent.groupToolsSlot")}
+            title={t("settings.agent.groupToolsTitle")}
+            description={t("settings.agent.groupToolsDescription")}
           >
             <div className="runtime-field runtime-field--wide">
               <SwitchField
-                label="Parallel tools"
-                hint="Let independent tool calls run at the same time."
+                label={t("settings.agent.toggleParallelToolsLabel")}
+                hint={t("settings.agent.toggleParallelToolsHint")}
                 checked={draft.parallel_tools_enabled}
                 disabled={saving}
                 onChange={(next) =>
@@ -527,8 +575,8 @@ export function AgentRuntimePanel({
             </div>
             <div className="runtime-field runtime-field--wide">
               <SwitchField
-                label="Require manual approval for memory writes"
-                hint="When on, the agent's save_memory request (including a direct deprecation) waits for your Approve/Reject decision. When off, the agent may write only after its existing prompt-level confirmation. Manual approval is on by default."
+                label={t("settings.agent.toggleMemoryApprovalLabel")}
+                hint={t("settings.agent.toggleMemoryApprovalHint")}
                 checked={draft.save_memory_requires_approval}
                 disabled={saving}
                 onChange={(next) =>
@@ -537,7 +585,7 @@ export function AgentRuntimePanel({
               />
             </div>
             <RuntimeNumberField
-              spec={TOOL_FIELDS[0]}
+              spec={toolFields[0]}
               value={draft.max_parallel_tools}
               defaultValue={defaults.max_parallel_tools}
               disabled={saving}
@@ -545,7 +593,7 @@ export function AgentRuntimePanel({
               onValueChange={(next) => updateNumber("max_parallel_tools", next)}
             />
             <RuntimeNumberField
-              spec={TOOL_FIELDS[1]}
+              spec={toolFields[1]}
               value={draft.max_tool_calls_per_turn}
               defaultValue={defaults.max_tool_calls_per_turn}
               disabled={saving}
@@ -555,7 +603,7 @@ export function AgentRuntimePanel({
               }
             />
             <RuntimeNumberField
-              spec={TOOL_FIELDS[2]}
+              spec={toolFields[2]}
               value={draft.max_tool_result_chars}
               defaultValue={defaults.max_tool_result_chars}
               disabled={saving}
@@ -567,13 +615,13 @@ export function AgentRuntimePanel({
           </RuntimeGroup>
 
           <RuntimeGroup
-            slot="Group 03"
-            title="Compaction detail"
-            description="How much material the summarizer keeps when older turns are folded away."
+            slot={t("settings.agent.groupCompactionSlot")}
+            title={t("settings.agent.groupCompactionTitle")}
+            description={t("settings.agent.groupCompactionDescription")}
             advanced
           >
             <RuntimeNumberField
-              spec={COMPACTION_FIELDS[0]}
+              spec={compactionFields[0]}
               value={draft.max_compaction_summary_chars}
               defaultValue={defaults.max_compaction_summary_chars}
               disabled={saving}
@@ -583,7 +631,7 @@ export function AgentRuntimePanel({
               }
             />
             <RuntimeNumberField
-              spec={COMPACTION_FIELDS[1]}
+              spec={compactionFields[1]}
               value={draft.max_compaction_last_user_chars}
               defaultValue={defaults.max_compaction_last_user_chars}
               disabled={saving}

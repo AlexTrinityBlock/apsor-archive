@@ -5,6 +5,7 @@ import { ApiError } from "../../../apis/fetch-client";
 import { buttonClassName } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useToast } from "../../component/Toast";
+import { useI18n, type Translate, translateApiError } from "../../i18n";
 import {
   useClearAgentConversation,
   useCompactAgentConversation,
@@ -22,20 +23,20 @@ interface ContextActionsProps {
   readonly onApplied?: (entry: AgentEntrySchema) => void;
 }
 
-function describeContextError(error: unknown): string {
+function describeContextError(error: unknown, t: Translate): string {
   if (error instanceof ApiError) {
     if (error.code === "agent_conversation_busy") {
-      return "A run is still active on this thread. Stop it or wait for it to finish, then try again.";
+      return t("chat.contextActions.busy");
     }
     if (error.code === "agent_conversation_archived") {
-      return "This thread is archived. Restore it before changing the context.";
+      return t("chat.contextActions.archived");
     }
-    return error.detail;
+    return translateApiError(error, t, "chat.contextActions.fallback");
   }
   if (error instanceof Error && error.message.length > 0) {
     return error.message;
   }
-  return "The context boundary could not be written.";
+  return t("chat.contextActions.fallback");
 }
 
 function shouldRefetch(error: unknown): boolean {
@@ -64,6 +65,7 @@ export function ContextActions({
 }: ContextActionsProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const compactConversation = useCompactAgentConversation();
   const clearConversation = useClearAgentConversation();
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -109,10 +111,12 @@ export function ContextActions({
       onApplied?.(entry);
       await invalidateConversation(queryClient, conversationId);
       toast.success(
-        kind === "compact" ? "Context compacted." : "Context cleared.",
+        kind === "compact"
+          ? t("chat.contextActions.compacted")
+          : t("chat.contextActions.cleared"),
       );
     } catch (caught) {
-      setError(describeContextError(caught));
+      setError(describeContextError(caught, t));
       if (shouldRefetch(caught)) {
         void invalidateConversation(queryClient, conversationId);
       }
@@ -129,16 +133,18 @@ export function ContextActions({
     <div
       className={rootClassName}
       role="group"
-      aria-label="Conversation context actions"
+      aria-label={t("chat.contextActions.groupAria")}
       aria-busy={pending}
     >
       {confirmingClear ? (
         <div
           className="context-actions__confirm"
           role="group"
-          aria-label="Confirm clearing the context"
+          aria-label={t("chat.contextActions.confirmAria")}
         >
-          <span className="context-actions__question">Clear context?</span>
+          <span className="context-actions__question">
+            {t("chat.contextActions.confirmQuestion")}
+          </span>
           <button
             ref={cancelRef}
             type="button"
@@ -146,16 +152,18 @@ export function ContextActions({
             onClick={cancelClear}
             data-context-cancel
           >
-            Cancel
+            {t("chat.contextActions.cancel")}
           </button>
           <button
             type="button"
             className={buttonClassName({ variant: "ink", size: "sm" })}
             onClick={() => void applyBoundary("clear")}
             disabled={blocked}
-            aria-label="Confirm clearing the conversation context"
+            aria-label={t("chat.contextActions.confirmClearAria")}
           >
-            {clearConversation.isPending ? "Clearing…" : "Clear"}
+            {clearConversation.isPending
+              ? t("chat.contextActions.clearing")
+              : t("chat.contextActions.clear")}
           </button>
         </div>
       ) : (
@@ -165,11 +173,13 @@ export function ContextActions({
             className={buttonClassName({ variant: "ghost", size: "sm" })}
             onClick={() => void applyBoundary("compact")}
             disabled={blocked}
-            title="Summarize the active context into a new boundary"
-            aria-label="Compact the conversation context"
+            title={t("chat.contextActions.compactTitle")}
+            aria-label={t("chat.contextActions.compactAria")}
           >
             <Icon name="layers" size={14} />
-            {compactConversation.isPending ? "Compacting…" : "Compact"}
+            {compactConversation.isPending
+              ? t("chat.contextActions.compacting")
+              : t("chat.contextActions.compact")}
           </button>
           <button
             ref={clearTriggerRef}
@@ -180,11 +190,11 @@ export function ContextActions({
               setConfirmingClear(true);
             }}
             disabled={blocked}
-            title="Start a new active context; the transcript is kept"
-            aria-label="Clear the conversation context"
+            title={t("chat.contextActions.clearTitle")}
+            aria-label={t("chat.contextActions.clearAria")}
           >
             <Icon name="archive" size={14} />
-            Clear
+            {t("chat.contextActions.clear")}
           </button>
         </>
       )}

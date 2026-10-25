@@ -3,10 +3,10 @@ import { useMemo } from "react";
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
-import { formatNumber } from "../../../lib/format";
+import { useI18n } from "../../i18n";
 import { formatArgumentValue } from "../../chat/format";
 import { MarkdownBody } from "../../chat/component/MarkdownBody";
-import { toolStatusTone } from "../../chat/component/status";
+import { toolStatusLabel, toolStatusTone } from "../../chat/component/status";
 import {
   currentTraceIndex,
   itemResourceTarget,
@@ -31,7 +31,10 @@ interface AgentInspectorProps {
   readonly onFollow: () => void;
 }
 
-function formatDuration(value: number | null): string | null {
+function formatDuration(
+  value: number | null,
+  formatNumber: (value: number) => string,
+): string | null {
   if (value === null) {
     return null;
   }
@@ -55,19 +58,24 @@ function preservedTargetFor(
 }
 
 function PreservedResource({ target }: { readonly target: ResourceTarget }) {
+  const { t } = useI18n();
   return (
     <section className="pi-inspector__preserved">
       <header className="pi-inspector__preserved-head">
         <div>
-          <p className="eyebrow">Still on the desk</p>
-          <strong>Last viewed resource</strong>
+          <p className="eyebrow">{t("chat.workbench.stillOnDesk")}</p>
+          <strong>{t("chat.workbench.lastViewed")}</strong>
           <code>
             {target.type}:{target.id}
-            {target.chunk !== null ? ` · chunk ${target.chunk}` : ""}
+            {target.chunk !== null
+              ? ` · ${t("chat.common.chunk", { chunk: target.chunk })}`
+              : ""}
           </code>
         </div>
         <PanelLink to={viewerHref(target)}>
-          {target.type === "file" ? "Open file" : "Open memory"}
+          {target.type === "file"
+            ? t("chat.workbench.openFile")
+            : t("chat.workbench.openMemory")}
         </PanelLink>
       </header>
       {target.type === "file" ? (
@@ -79,10 +87,11 @@ function PreservedResource({ target }: { readonly target: ResourceTarget }) {
 }
 
 function TraceBody({ item }: { readonly item: TraceItem }) {
+  const { t } = useI18n();
   if (item.kind === "assistant" && item.text) {
     return (
       <article className="pi-inspector__assistant">
-        <p className="eyebrow">Recorded prose · composing</p>
+        <p className="eyebrow">{t("chat.workbench.composingEyebrow")}</p>
         <MarkdownBody markdown={item.text} />
       </article>
     );
@@ -91,8 +100,8 @@ function TraceBody({ item }: { readonly item: TraceItem }) {
     return (
       <PanelEmpty
         icon="layers"
-        title="Orienting"
-        detail="The run has opened and the model is choosing its first operation. No hidden reasoning is shown here."
+        title={t("chat.workbench.orientingTitle")}
+        detail={t("chat.workbench.orientingDetail")}
       />
     );
   }
@@ -100,16 +109,22 @@ function TraceBody({ item }: { readonly item: TraceItem }) {
 }
 
 function TraceMeta({ item }: { readonly item: TraceItem }) {
-  const duration = formatDuration(item.durationMs);
+  const { t, formatNumber } = useI18n();
+  const duration = formatDuration(item.durationMs, formatNumber);
   const argumentsList = item.arguments ? Object.entries(item.arguments) : [];
+  const statusLabel = toolStatusLabel(item.status, t, item.status);
 
   return (
     <>
       <div className="pi-inspector__meta">
-        <Badge tone={toolStatusTone(item.status)}>{item.status}</Badge>
-        {item.step !== null ? <span>step {item.step}</span> : null}
+        <Badge tone={toolStatusTone(item.status)}>{statusLabel}</Badge>
+        {item.step !== null ? (
+          <span>{t("chat.workbench.step", { step: item.step })}</span>
+        ) : null}
         {duration ? <span>{duration}</span> : null}
-        {item.entryId !== null ? <span>entry #{item.entryId}</span> : null}
+        {item.entryId !== null ? (
+          <span>{t("chat.workbench.entry", { id: item.entryId })}</span>
+        ) : null}
         {item.errorCode ? (
           <span className="pi-inspector__error-code">{item.errorCode}</span>
         ) : null}
@@ -117,7 +132,7 @@ function TraceMeta({ item }: { readonly item: TraceItem }) {
 
       {argumentsList.length > 0 ? (
         <details className="pi-inspector__args">
-          <summary>Tool arguments</summary>
+          <summary>{t("chat.workbench.toolArguments")}</summary>
           <dl>
             {argumentsList.map(([key, value]) => (
               <div key={key}>
@@ -144,6 +159,7 @@ export function AgentInspector({
   pinnedId,
   onFollow,
 }: AgentInspectorProps) {
+  const { t } = useI18n();
   const pinnedIndex = useMemo(
     () => (pinnedId === null ? -1 : items.findIndex((item) => item.id === pinnedId)),
     [items, pinnedId],
@@ -156,19 +172,25 @@ export function AgentInspector({
   const preserved = item && !target ? preservedTargetFor(items, index) : null;
 
   return (
-    <aside className="pi-inspector" aria-label="Agent workbench">
+    <aside className="pi-inspector" aria-label={t("chat.workbench.aria")}>
       <header className="pi-inspector__head">
         <div>
-          <p className="eyebrow">Workbench · {following ? "live follow" : "pinned"}</p>
-          <h2>{item ? traceLabel(item) : "No work yet"}</h2>
+          <p className="eyebrow">
+            {following
+              ? t("chat.workbench.eyebrowLive")
+              : t("chat.workbench.eyebrowPinned")}
+          </p>
+          <h2>{item ? traceLabel(item) : t("chat.workbench.noWork")}</h2>
           {item ? (
             <p className="pi-inspector__phase">
               <span className={`pi-phase-dot pi-phase-dot--${phaseForItem(item)}`} aria-hidden="true" />
               {phaseLabel(phaseForItem(item))}
-              {item.live ? " · live" : " · recorded"}
+              {item.live
+                ? t("chat.workbench.live")
+                : t("chat.workbench.recorded")}
             </p>
           ) : (
-            <p className="pi-inspector__phase">The bench waits for the first operation.</p>
+            <p className="pi-inspector__phase">{t("chat.workbench.waiting")}</p>
           )}
         </div>
         <Button
@@ -179,7 +201,7 @@ export function AgentInspector({
           className="pi-inspector__follow"
         >
           <Icon name="timeline" size={14} />
-          Follow current
+          {t("chat.workbench.follow")}
         </Button>
       </header>
 
@@ -192,12 +214,12 @@ export function AgentInspector({
             <footer className="pi-inspector__foot">
               <span>
                 {following
-                  ? "Auto-following the newest recorded tool. Click a trace row to pin it."
-                  : "Pinned. Later tool calls will not steal this view."}
+                  ? t("chat.workbench.autoFollow")
+                  : t("chat.workbench.pinnedNote")}
               </span>
               {!following ? (
                 <button type="button" onClick={onFollow}>
-                  Return to live
+                  {t("chat.workbench.returnLive")}
                 </button>
               ) : null}
             </footer>
@@ -207,12 +229,8 @@ export function AgentInspector({
             <span className="pi-inspector__empty-mark" aria-hidden="true">
               <Icon name="layers" size={22} />
             </span>
-            <h3>A clean bench</h3>
-            <p>
-              Send a note in this thread. Every recorded search, read,
-              comparison, save, and presentation appears here with its real
-              preview and resource.
-            </p>
+            <h3>{t("chat.workbench.clean")}</h3>
+            <p>{t("chat.workbench.cleanDetail")}</p>
           </div>
         )}
       </div>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { Icon, type IconName } from "../../component/Icon";
 import { useReadMemory } from "../../generated-apis-types/memories/memories";
+import { useI18n } from "../../i18n";
 import {
   citationHref,
   citationLabel,
@@ -31,6 +32,7 @@ export function CitationChip({
   memoryTitle,
   onOpen,
 }: CitationChipProps) {
+  const { t } = useI18n();
   const needsMemoryTitle = token.kind === "memory" && !memoryTitle;
   const memoryQuery = useReadMemory(
     token.id,
@@ -54,7 +56,9 @@ export function CitationChip({
   // resolves to /memory/{id}.
   let text = label ?? citationLabel(token);
   if (token.kind === "memory") {
-    text = resolvedTitle ? `Memory: ${resolvedTitle}` : `Memory: #${token.id}`;
+    text = resolvedTitle
+      ? t("chat.citation.memoryTitle", { title: resolvedTitle })
+      : t("chat.citation.memoryId", { id: token.id });
   }
   const className = `citation-chip ${token.kind}`;
   const content = (
@@ -72,7 +76,7 @@ export function CitationChip({
         type="button"
         className={className}
         onClick={() => onOpen(token)}
-        title={`Open ${accessibleLabel}`}
+        title={t("chat.common.open", { label: accessibleLabel })}
       >
         {content}
       </button>
@@ -82,7 +86,11 @@ export function CitationChip({
   const href = citationHref(token);
   if (href) {
     return (
-      <Link className={className} to={href} title={`Open ${accessibleLabel}`}>
+      <Link
+        className={className}
+        to={href}
+        title={t("chat.common.open", { label: accessibleLabel })}
+      >
         {content}
       </Link>
     );

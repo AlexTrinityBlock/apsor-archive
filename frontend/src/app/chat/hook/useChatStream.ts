@@ -13,6 +13,11 @@ import {
   type AgentPageContextPayload,
   type AgentStreamEvent,
 } from "../../../apis/agent-stream";
+import {
+  getActiveLocale,
+  translate,
+  translateApiErrorWithActiveLocale,
+} from "../../i18n";
 import { invalidateConversation } from "../query";
 import { readResource, type JsonRecord, type ResourceMeta } from "../types";
 
@@ -62,12 +67,15 @@ interface UseChatStreamResult {
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
-    return error.detail;
+    return translateApiErrorWithActiveLocale(
+      error,
+      "chat.errors.agentUnanswered",
+    );
   }
   if (error instanceof Error && error.message.length > 0) {
     return error.message;
   }
-  return "The agent could not answer.";
+  return translate(getActiveLocale(), "chat.errors.agentUnanswered");
 }
 
 function upsertTool(
@@ -251,7 +259,9 @@ export function useChatStream(
         await execute(controller.signal, handleEvent);
         if (!terminal && !controller.signal.aborted) {
           ok = false;
-          onErrorRef.current("The stream closed before the run finished.");
+          onErrorRef.current(
+            translate(getActiveLocale(), "chat.errors.streamClosed"),
+          );
         }
       } catch (error) {
         if (!controller.signal.aborted) {

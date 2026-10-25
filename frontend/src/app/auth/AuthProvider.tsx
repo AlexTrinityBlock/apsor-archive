@@ -9,7 +9,6 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { ApiError } from "../../apis/fetch-client";
 import {
   getGetAuthStatusQueryKey,
   useGetAuthStatus,
@@ -23,6 +22,8 @@ import type {
   SetupSchema,
   UserSchema,
 } from "../generated-apis-types/schemas";
+import { useI18n } from "../i18n";
+import { translateApiError } from "../i18n/errors";
 
 interface AuthContextValue {
   readonly status: AuthStatusSchema | undefined;
@@ -43,16 +44,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const UNAUTHORIZED_EVENT = "apsor-archive:unauthorized";
 
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.detail;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "The archive could not complete the request.";
-}
-
 function unauthenticatedStatus(): AuthStatusSchema {
   return { requires_setup: false, authenticated: false, user: null };
 }
@@ -62,7 +53,8 @@ function unauthenticatedStatus(): AuthStatusSchema {
  * every archive route reads this context, so a lost cookie returns the reader
  * to the login screen without a page reload.
  */
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children }: { readonly children: ReactNode }) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const statusQuery = useGetAuthStatus({
@@ -72,6 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refetchOnWindowFocus: true,
     },
   });
+
+  const localizeError = useCallback(
+    (caught: unknown): string => translateApiError(caught, t),
+    [t],
+  );
 
   const markSignedIn = useCallback(
     (user: UserSchema) => {
@@ -124,10 +121,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await setupMutation.mutateAsync({ data: payload });
       } catch (caught) {
-        setError(errorMessage(caught));
+        setError(localizeError(caught));
       }
     },
-    [setupMutation],
+    [localizeError, setupMutation],
   );
 
   const login = useCallback(
@@ -136,10 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await loginMutation.mutateAsync({ data: payload });
       } catch (caught) {
-        setError(errorMessage(caught));
+        setError(localizeError(caught));
       }
     },
-    [loginMutation],
+    [localizeError, loginMutation],
   );
 
   const logout = useCallback(async () => {
@@ -147,9 +144,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await logoutMutation.mutateAsync();
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(localizeError(caught));
     }
-  }, [logoutMutation]);
+  }, [localizeError, logoutMutation]);
 
   const value = useMemo<AuthContextValue>(() => {
     const status = statusQuery.data;
@@ -162,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isSubmitting:
         setupMutation.isPending || loginMutation.isPending || logoutMutation.isPending,
       error,
-      loadError: statusQuery.error ? errorMessage(statusQuery.error) : null,
+      loadError: statusQuery.error ? localizeError(statusQuery.error) : null,
       retry: () => {
         void statusQuery.refetch();
       },
@@ -172,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [
     error,
+    localizeError,
     login,
     loginMutation.isPending,
     logout,

@@ -1,8 +1,9 @@
 import { lazy, Suspense, type ReactNode } from "react";
 
 import type { FileSchema } from "../../generated-apis-types/schemas";
-import { formatBytes, formatNumber } from "../../../lib/format";
+import { formatBytes } from "../../../lib/format";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { CitedChunk } from "./CitedChunk";
 import { TextSheet } from "./TextSheet";
 import { ViewerLoading } from "./ViewerStates";
@@ -24,29 +25,30 @@ const ImageView = lazy(() =>
 );
 
 function UnsupportedViewer({ file }: { readonly file: FileSchema }) {
+  const { t, formatNumber } = useI18n();
   return (
     <section className="viewer-unsupported">
       <span className="viewer-unsupported__mark" aria-hidden="true">
         <Icon name="file" size={30} />
       </span>
-      <p className="eyebrow">No inline renderer</p>
-      <h2>This original is safe to download, but not to render here.</h2>
+      <p className="eyebrow">{t("library.viewer.unsupported.eyebrow")}</p>
+      <h2>{t("library.viewer.unsupported.title")}</h2>
       <p>
-        The stored type is <code>{file.mime_type}</code>. The viewer deliberately renders
-        only PDF, DOCX, images, and text-like formats; other binaries never execute in the
-        archive.
+        {t("library.viewer.unsupported.descriptionBefore")}
+        <code>{file.mime_type}</code>
+        {t("library.viewer.unsupported.descriptionAfter")}
       </p>
       <dl className="viewer-unsupported__meta">
         <div>
-          <dt>File name</dt>
+          <dt>{t("library.viewer.unsupported.fileName")}</dt>
           <dd>{file.file_name}</dd>
         </div>
         <div>
-          <dt>Size</dt>
+          <dt>{t("library.viewer.unsupported.size")}</dt>
           <dd>{formatBytes(file.size_bytes)}</dd>
         </div>
         <div>
-          <dt>Indexed chunks</dt>
+          <dt>{t("library.viewer.unsupported.indexedChunks")}</dt>
           <dd>{formatNumber(file.total_chunks)}</dd>
         </div>
       </dl>
@@ -57,7 +59,7 @@ function UnsupportedViewer({ file }: { readonly file: FileSchema }) {
           download={file.file_name}
         >
           <Icon name="arrow-down" size={15} />
-          Download original
+          {t("library.viewer.downloadOriginal")}
         </a>
         <a
           className="btn btn--ghost btn--sm"
@@ -66,7 +68,7 @@ function UnsupportedViewer({ file }: { readonly file: FileSchema }) {
           rel="noopener noreferrer"
         >
           <Icon name="external" size={15} />
-          Open raw content
+          {t("library.viewer.unsupported.openRaw")}
         </a>
       </div>
     </section>
@@ -125,10 +127,13 @@ interface FileRendererProps {
  * PDF/DOCX/image/text behavior has one implementation.
  */
 export function FileRenderer({ file, chunk = null }: FileRendererProps) {
+  const { t } = useI18n();
   return (
     <>
       {chunk !== null ? <CitedChunk fileId={file.id} chunk={chunk} /> : null}
-      <Suspense fallback={<ViewerLoading label="Preparing the renderer" />}>
+      <Suspense
+        fallback={<ViewerLoading label={t("library.viewer.loading.rendering")} />}
+      >
         {rendererFor(file)}
       </Suspense>
     </>

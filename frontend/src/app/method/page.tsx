@@ -1,147 +1,171 @@
 import { Link } from "react-router-dom";
 
 import { Icon } from "../component/Icon";
+import { useI18n } from "../i18n";
 import { FileVsMemoryDiagram } from "./component/FileVsMemoryDiagram";
 import { HybridSearchDiagram } from "./component/HybridSearchDiagram";
 import "./method.css";
-
-const PRINCIPLES = [
-  {
-    index: "01",
-    eyebrow: "Two libraries",
-    title: "Paths for files, moments for memory.",
-    body: (
-      <>
-        <strong>File library:</strong> every file keeps a stable path coordinate and
-        immutable bytes. Re-uploading the same path creates a new edition, not an
-        overwrite. <strong>Memory library:</strong> every entry carries its own moment and
-        can supersede an earlier belief without erasing it. One index searches both.
-      </>
-    ),
-  },
-  {
-    index: "02",
-    eyebrow: "Hybrid retrieval",
-    title: "Lexical precision plus semantic reach.",
-    body: (
-      <>
-        BM25 reads CJK bigrams, word n-grams, and character trigrams. A vector lane reads
-        cosine similarity. Each lane returns its own candidates; reciprocal rank fusion
-        merges them, and the response reports{" "}
-        <code>text_candidates</code>, <code>vector_candidates</code>,{" "}
-        <code>merged</code>, and <code>deduplicated</code> so the search can be audited.
-      </>
-    ),
-  },
-  {
-    index: "03",
-    eyebrow: "Timeline sampling",
-    title: "Sparse anchors, explicit gaps.",
-    body: (
-      <>
-        A long range returns five anchors per event type instead of every row. Gaps are
-        reported as <code>skips</code>, and a day-by-day <code>density</code> strip keeps
-        the shape of the interval visible. An empty range returns an empty list, not an
-        invented event.
-      </>
-    ),
-  },
-  {
-    index: "04",
-    eyebrow: "Citation contract",
-    title: "An answer without a receipt is a rumour.",
-    body: (
-      <>
-        Answers are written only from retrieved passages and must cite{" "}
-        <code>[file:12#15]</code> or <code>[memory:1015]</code>. Without a configured
-        provider the endpoint returns <code>503 ai_not_configured</code> rather than
-        generating prose.
-      </>
-    ),
-  },
-] as const;
-
-const CITATION_LOOP = [
-  {
-    index: "01",
-    title: "Retrieve",
-    body: "One hybrid query selects passages from files, memories, and summaries. Each passage keeps its source kind, source id, and chunk index.",
-  },
-  {
-    index: "02",
-    title: "Answer",
-    body: "The model answers from those excerpts only and emits citation tags. Those tags are the answer's receipts, not decoration.",
-  },
-  {
-    index: "03",
-    title: "Verify",
-    body: "A file citation opens the File Library at the cited chunk. A memory citation opens the Memory vault at that entry.",
-  },
-  {
-    index: "04",
-    title: "Keep",
-    body: "The answer, its citation chips, and the conversation stay beside the saved question, so the verification can be repeated.",
-  },
-] as const;
 
 /**
  * The method essay: two provenance shapes, one retrieval index, and the
  * citation contract that keeps answers inspectable.
  */
 export function MethodPage() {
+  const { t } = useI18n();
+
+  const principles = [
+    {
+      index: "01",
+      eyebrow: t("insights.method.principles.twoLibrariesEyebrow"),
+      title: t("insights.method.principles.twoLibrariesTitle"),
+      body: (
+        <>
+          <strong>
+            {t("insights.method.principles.twoLibrariesFileLabel")}
+          </strong>
+          {t("insights.method.principles.twoLibrariesFileBody")}{" "}
+          <strong>
+            {t("insights.method.principles.twoLibrariesMemoryLabel")}
+          </strong>
+          {t("insights.method.principles.twoLibrariesMemoryBody")}
+        </>
+      ),
+    },
+    {
+      index: "02",
+      eyebrow: t("insights.method.principles.hybridEyebrow"),
+      title: t("insights.method.principles.hybridTitle"),
+      body: (
+        <>
+          {t("insights.method.principles.hybridBodyBefore")}
+          <code>text_candidates</code>, <code>vector_candidates</code>,{" "}
+          <code>merged</code>
+          {t("insights.method.principles.hybridBodyAnd")}
+          <code>deduplicated</code>
+          {t("insights.method.principles.hybridBodyAfter")}
+        </>
+      ),
+    },
+    {
+      index: "03",
+      eyebrow: t("insights.method.principles.timelineEyebrow"),
+      title: t("insights.method.principles.timelineTitle"),
+      body: (
+        <>
+          {t("insights.method.principles.timelineBodyBefore")}
+          <code>skips</code>
+          {t("insights.method.principles.timelineBodyMid")}
+          <code>density</code>
+          {t("insights.method.principles.timelineBodyAfter")}
+        </>
+      ),
+    },
+    {
+      index: "04",
+      eyebrow: t("insights.method.principles.citationEyebrow"),
+      title: t("insights.method.principles.citationTitle"),
+      body: (
+        <>
+          {t("insights.method.principles.citationBodyBefore")}
+          <code>[file:12#15]</code>
+          {t("insights.method.principles.citationBodyOr")}
+          <code>[memory:1015]</code>
+          {t("insights.method.principles.citationBodyAfter")}
+          <code>503 ai_not_configured</code>
+          {t("insights.method.principles.citationBodyTail")}
+        </>
+      ),
+    },
+  ] as const;
+
+  const citationLoop = [
+    {
+      index: "01",
+      title: t("insights.method.citation.retrieveTitle"),
+      body: t("insights.method.citation.retrieveBody"),
+    },
+    {
+      index: "02",
+      title: t("insights.method.citation.answerTitle"),
+      body: t("insights.method.citation.answerBody"),
+    },
+    {
+      index: "03",
+      title: t("insights.method.citation.verifyTitle"),
+      body: t("insights.method.citation.verifyBody"),
+    },
+    {
+      index: "04",
+      title: t("insights.method.citation.keepTitle"),
+      body: t("insights.method.citation.keepBody"),
+    },
+  ] as const;
+
   return (
     <div className="page method-page">
       <div className="content-container content-container--reading">
         <header className="method-hero">
           <div className="method-hero__top">
-            <span className="shell-tag">Method · field notes // Rev. 2026.10</span>
-            <span className="mono-label">Two libraries. One index.</span>
+            <span className="shell-tag">{t("insights.method.hero.kicker")}</span>
+            <span className="mono-label">
+              {t("insights.method.hero.eyebrow")}
+            </span>
           </div>
           <h1 className="method-hero__title">
-            Two libraries.
+            {t("insights.method.hero.titleLine1")}
             <span>
-              One <em>tree.</em>
+              {t("insights.method.hero.titleLine2Prefix")}
+              <em>{t("insights.method.hero.titleAccent")}</em>
             </span>
           </h1>
           <p className="method-hero__lede">
-            Most knowledge tools flatten an archive into a bag of vectors. Apsor Archive
-            keeps two shapes at once: the branching path of a file and the linear grain
-            of a memory. Both are indexed, cited, and read in the same archive.
+            {t("insights.method.hero.lede")}
           </p>
           <p className="method-hero__note">
             <Icon name="info" size={15} />
-            <span>
-              The tree is a conceptual figure for how paths and memories are filed. It
-              is not a workspace, a data source, or a route in this interface.
-            </span>
+            <span>{t("insights.method.hero.note")}</span>
           </p>
           <dl className="meta-grid method-meta">
             <div className="meta-item">
-              <dt className="meta-key">Archive</dt>
-              <dd className="meta-value">Files, memories, summaries</dd>
+              <dt className="meta-key">{t("insights.method.hero.metaArchiveKey")}</dt>
+              <dd className="meta-value">
+                {t("insights.method.hero.metaArchiveValue")}
+              </dd>
             </div>
             <div className="meta-item">
-              <dt className="meta-key">Retrieval</dt>
-              <dd className="meta-value">BM25 + vector lanes</dd>
+              <dt className="meta-key">
+                {t("insights.method.hero.metaRetrievalKey")}
+              </dt>
+              <dd className="meta-value">
+                {t("insights.method.hero.metaRetrievalValue")}
+              </dd>
             </div>
             <div className="meta-item">
-              <dt className="meta-key">Fusion</dt>
-              <dd className="meta-value">Reciprocal rank fusion</dd>
+              <dt className="meta-key">{t("insights.method.hero.metaFusionKey")}</dt>
+              <dd className="meta-value">
+                {t("insights.method.hero.metaFusionValue")}
+              </dd>
             </div>
             <div className="meta-item">
-              <dt className="meta-key">Contract</dt>
-              <dd className="meta-value">Chunk-level receipts</dd>
+              <dt className="meta-key">
+                {t("insights.method.hero.metaContractKey")}
+              </dt>
+              <dd className="meta-value">
+                {t("insights.method.hero.metaContractValue")}
+              </dd>
             </div>
           </dl>
         </header>
 
         <section className="method-principles" aria-labelledby="principles-title">
           <header className="method-block-head">
-            <p className="eyebrow">Structural principles</p>
-            <h2 id="principles-title">Four commitments the archive keeps.</h2>
+            <p className="eyebrow">{t("insights.method.principles.eyebrow")}</p>
+            <h2 id="principles-title">
+              {t("insights.method.principles.title")}
+            </h2>
           </header>
           <div className="method-principles__grid">
-            {PRINCIPLES.map((principle) => (
+            {principles.map((principle) => (
               <article className="principle-card" key={principle.index}>
                 <span className="principle-card__num">
                   {principle.index} // {principle.eyebrow.toUpperCase()}
@@ -155,9 +179,7 @@ export function MethodPage() {
 
         <blockquote className="method-pullquote">
           <Icon name="quote" size={24} />
-          <p>
-            A path answers where. A timestamp answers when. Neither is sufficient alone.
-          </p>
+          <p>{t("insights.method.pullquote")}</p>
         </blockquote>
 
         <section
@@ -168,30 +190,22 @@ export function MethodPage() {
           <header className="method-section__head">
             <span className="method-section__number">01</span>
             <div>
-              <p className="eyebrow">Two shapes of provenance</p>
+              <p className="eyebrow">
+                {t("insights.method.twoLibraries.eyebrow")}
+              </p>
               <h2 id="two-libraries-title">
-                A file is known by its path. A memory is known by its moment.
+                {t("insights.method.twoLibraries.title")}
               </h2>
             </div>
           </header>
           <div className="method-prose">
             <p>
-              Drop a file into <code>/history/industry/automobiles</code> and you have
-              made two claims at once: it belongs here, and this is what it is called.
-              The path is a retrievable coordinate. Every chunk of the file is indexed
-              against it, and the original bytes stay untouched.
+              {t("insights.method.twoLibraries.paragraph1Before")}
+              <code>/history/industry/automobiles</code>
+              {t("insights.method.twoLibraries.paragraph1After")}
             </p>
-            <p>
-              A memory has no folder. It arrives in sequence, accumulates, and sometimes
-              replaces an earlier belief. Saving a new memory can point at the entries it
-              supersedes; those older entries become deprecated, leave the default search
-              surface, and remain behind an explicit trace.
-            </p>
-            <p>
-              The two libraries share one search index, one citation grammar, and one
-              reading room. They differ in their geometry: a path is spatial, a timestamp
-              is temporal.
-            </p>
+            <p>{t("insights.method.twoLibraries.paragraph2")}</p>
+            <p>{t("insights.method.twoLibraries.paragraph3")}</p>
           </div>
           <FileVsMemoryDiagram />
         </section>
@@ -204,41 +218,41 @@ export function MethodPage() {
           <header className="method-section__head">
             <span className="method-section__number">02</span>
             <div>
-              <p className="eyebrow">Hybrid retrieval</p>
-              <h2 id="hybrid-title">Two lanes in, one ranked set out.</h2>
+              <p className="eyebrow">{t("insights.method.hybrid.eyebrow")}</p>
+              <h2 id="hybrid-title">{t("insights.method.hybrid.title")}</h2>
             </div>
           </header>
           <div className="method-prose">
             <p>
-              One index would be easier to explain and worse to use. A semantic query
-              such as <em>when did my thinking about urban trees change?</em> needs
-              vectors. A precise query such as <code>2026_automobile_history.md</code>{" "}
-              needs literal matching. The archive asks both.
+              {t("insights.method.hybrid.paragraph1Before")}
+              <em>{t("insights.method.hybrid.semanticExample")}</em>
+              {t("insights.method.hybrid.paragraph1Middle")}
+              <code>2026_automobile_history.md</code>
+              {t("insights.method.hybrid.paragraph1After")}
             </p>
+            <p>{t("insights.method.hybrid.paragraph2")}</p>
             <p>
-              BM25 runs over CJK bigrams, Latin word n-grams, and character trigrams.
-              Cosine similarity runs over the configured embedding vectors. Each lane
-              returns its own top N, two by default. The lanes merge through reciprocal
-              rank fusion and deduplicate by source kind, source id, and chunk index, so
-              a passage found by both routes rises naturally.
-            </p>
-            <p>
-              The response is explicit about its own weather: <code>matched_by</code>,{" "}
-              <code>text_candidates</code>, <code>vector_candidates</code>,{" "}
-              <code>merged</code>, and <code>deduplicated</code>. You can audit the
-              search, not just trust it.
+              {t("insights.method.hybrid.paragraph3Before")}
+              <code>matched_by</code>
+              {t("insights.method.hybrid.paragraph3And")}
+              <code>text_candidates</code>
+              {t("insights.method.hybrid.paragraph3And")}
+              <code>vector_candidates</code>
+              {t("insights.method.hybrid.paragraph3And")}
+              <code>merged</code>
+              {t("insights.method.principles.hybridBodyAnd")}
+              <code>deduplicated</code>
+              {t("insights.method.hybrid.paragraph3After")}
             </p>
           </div>
           <HybridSearchDiagram />
           <aside className="method-note">
             <span className="method-note__marker" aria-hidden="true" />
             <div>
-              <p className="eyebrow">Graceful degradation</p>
-              <p>
-                If embeddings are unavailable, the vector lane is skipped without
-                blocking writes. If a bigram lookup finds nothing, unigram recall keeps
-                the search from going dark. The response reports which lane answered.
+              <p className="eyebrow">
+                {t("insights.method.hybrid.noteEyebrow")}
               </p>
+              <p>{t("insights.method.hybrid.noteBody")}</p>
             </div>
           </aside>
         </section>
@@ -251,21 +265,19 @@ export function MethodPage() {
           <header className="method-section__head">
             <span className="method-section__number">03</span>
             <div>
-              <p className="eyebrow">The citation contract</p>
-              <h2 id="citation-title">The receipt is part of the answer.</h2>
+              <p className="eyebrow">
+                {t("insights.method.citation.eyebrow")}
+              </p>
+              <h2 id="citation-title">
+                {t("insights.method.citation.title")}
+              </h2>
             </div>
           </header>
           <div className="method-prose">
-            <p>
-              In a loose retrieval pipeline, passages arrive without provenance and the
-              reader has no way to check which page supported a claim. Here a citation
-              names both the source and the exact window that answered: chunk indexes
-              start at one, and every searchable passage carries its source kind, source
-              id, and chunk index.
-            </p>
+            <p>{t("insights.method.citation.paragraph")}</p>
           </div>
           <ol className="method-loop">
-            {CITATION_LOOP.map((step) => (
+            {citationLoop.map((step) => (
               <li className="method-loop__step" key={step.index}>
                 <span className="method-loop__index">{step.index}</span>
                 <div>
@@ -276,26 +288,27 @@ export function MethodPage() {
             ))}
           </ol>
           <p className="method-prose__closing">
-            Summaries follow the same rule. A summary citation is shown inline with the
-            answer because a summary has no separate room in this interface; the trace
-            still points back to the record that produced it.
+            {t("insights.method.citation.closing")}
           </p>
         </section>
 
         <footer className="method-colophon">
           <div className="method-colophon__mark">
-            <span className="shell-tag">Method</span>
-            <p>Apsor Archive · The annual ring archive · Rev. 2026.10</p>
+            <span className="shell-tag">{t("insights.method.colophon.tag")}</span>
+            <p>{t("insights.method.colophon.line")}</p>
           </div>
-          <nav className="method-colophon__links" aria-label="Archive links">
+          <nav
+            className="method-colophon__links"
+            aria-label={t("insights.method.colophon.linksAria")}
+          >
             <Link className="text-link" to="/dashboard">
-              Dashboard
+              {t("core.nav.dashboard")}
             </Link>
             <Link className="text-link" to="/questions">
-              Questions
+              {t("insights.method.colophon.questions")}
             </Link>
             <Link className="text-link" to="/settings">
-              Settings
+              {t("core.nav.settings")}
             </Link>
           </nav>
         </footer>

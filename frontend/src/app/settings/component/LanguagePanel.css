@@ -1,0 +1,107 @@
+/* Interface language panel. Owned separately from settings.css. */
+
+.language-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.language-panel__intro,
+.language-panel__note {
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.language-panel__note {
+  padding-top: 12px;
+  color: var(--mono-l3);
+  border-top: 0.7px solid var(--mono-grid);
+  font-size: 12px;
+}
+
+.language-panel__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.language-panel__option {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 13px;
+  color: var(--mono-ink);
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 3px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.language-panel__option:hover {
+  background: var(--mono-card-warm);
+  border-color: var(--mono-faint);
+}
+
+.language-panel__option.is-selected {
+  background: var(--mono-card-warm);
+  border-color: var(--mono-ink);
+  box-shadow: inset 2px 0 0 var(--accent-seal);
+}
+
+.language-panel__option:focus-visible,
+.language-panel__option:focus-within {
+  outline: 2px solid var(--accent-seal);
+  outline-offset: 2px;
+}
+
+.language-panel__option-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.language-panel__option-label {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.language-panel__option-code {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.language-panel__option-mark {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  place-items: center;
+  color: var(--accent-seal);
+}
+
+@media (max-width: 760px) {
+  .language-panel__options {
+    grid-template-columns: 1fr;
+  }
+}

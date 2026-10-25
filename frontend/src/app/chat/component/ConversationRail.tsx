@@ -12,7 +12,7 @@ import {
   useUpdateAgentConversation,
 } from "../../generated-apis-types/agent/agent";
 import type { AgentConversationSchema } from "../../generated-apis-types/schemas";
-import { formatRelative } from "../../../lib/format";
+import { useI18n, getActiveLocale, translate, translateApiErrorWithActiveLocale } from "../../i18n";
 import {
   invalidateConversation,
   invalidateConversationList,
@@ -34,20 +34,26 @@ interface ConversationRailProps {
 
 type SessionGroup = "today" | "week" | "earlier";
 
-const GROUP_ORDER: ReadonlyArray<{ key: SessionGroup; label: string }> = [
-  { key: "today", label: "Today" },
-  { key: "week", label: "Previous 7 days" },
-  { key: "earlier", label: "Earlier" },
+const GROUP_ORDER: ReadonlyArray<{
+  key: SessionGroup;
+  labelKey:
+    | "chat.rail.today"
+    | "chat.rail.week"
+    | "chat.rail.earlier";
+}> = [
+  { key: "today", labelKey: "chat.rail.today" },
+  { key: "week", labelKey: "chat.rail.week" },
+  { key: "earlier", labelKey: "chat.rail.earlier" },
 ];
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
-    return error.detail;
+    return translateApiErrorWithActiveLocale(error, "chat.rail.listError");
   }
   if (error instanceof Error && error.message.length > 0) {
     return error.message;
   }
-  return "The conversation list could not be read.";
+  return translate(getActiveLocale(), "chat.rail.listError");
 }
 
 function timestampOf(conversation: AgentConversationSchema): number {
@@ -92,6 +98,7 @@ export const ConversationRail = memo(function ConversationRail({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
+  const { t, formatNumber, formatRelative } = useI18n();
   const updateConversation = useUpdateAgentConversation();
   const forkConversation = useForkAgentConversation();
 
@@ -176,7 +183,7 @@ export const ConversationRail = memo(function ConversationRail({
       });
       await refresh(conversation.id);
       setEditingId(null);
-      toast.success("Conversation renamed.");
+      toast.success(t("chat.rail.renamed"));
     } catch (caught) {
       toast.error(describeError(caught));
     } finally {
@@ -198,7 +205,9 @@ export const ConversationRail = memo(function ConversationRail({
       });
       await refresh(conversation.id);
       toast.success(
-        nextStatus === "archived" ? "Conversation archived." : "Conversation restored.",
+        nextStatus === "archived"
+          ? t("chat.rail.archivedToast")
+          : t("chat.rail.restoredToast"),
       );
       if (nextStatus === "archived" && activeId === conversation.id) {
         clearLastChatConversation();
@@ -227,7 +236,7 @@ export const ConversationRail = memo(function ConversationRail({
         data: {},
       });
       await invalidateConversationList(queryClient);
-      toast.success(`Forked “${conversation.title}”.`);
+      toast.success(t("chat.rail.forkToast", { title: conversation.title }));
       navigate(`/chat/${forked.id}`);
       onNavigate();
     } catch (caught) {
@@ -249,8 +258,8 @@ export const ConversationRail = memo(function ConversationRail({
   if (loading) {
     body = (
       <div className="chat-sessions__state" role="status" aria-live="polite">
-        <Loader size={22} label="Reading the conversation list" />
-        <span>Reading the desk…</span>
+        <Loader size={22} label={t("chat.rail.loadingLabel")} />
+        <span>{t("chat.rail.loading")}</span>
       </div>
     );
   } else if (error) {
@@ -258,15 +267,15 @@ export const ConversationRail = memo(function ConversationRail({
       <div className="chat-sessions__state chat-sessions__state--error" role="alert">
         <p>{describeError(error)}</p>
         <Button variant="secondary" size="sm" onClick={onRetry}>
-          Try again
+          {t("chat.rail.retry")}
         </Button>
       </div>
     );
   } else if (conversations.length === 0) {
     body = (
       <div className="chat-sessions__state">
-        <p className="mono-label">No conversations</p>
-        <p>The first question opens a thread and keeps its sources.</p>
+        <p className="mono-label">{t("chat.rail.emptyLabel")}</p>
+        <p>{t("chat.rail.emptyDetail")}</p>
       </div>
     );
   } else {
@@ -275,7 +284,9 @@ export const ConversationRail = memo(function ConversationRail({
         {grouped.map((group) =>
           group.items.length === 0 ? null : (
             <section className="chat-sessions__group" key={group.key}>
-              <p className="chat-sessions__group-label">{group.label}</p>
+              <p className="chat-sessions__group-label">
+                {t(group.labelKey)}
+              </p>
               <ul className="chat-sessions__list">
                 {group.items.map((conversation) => {
                   const active = conversation.id === activeId;
@@ -309,7 +320,7 @@ export const ConversationRail = memo(function ConversationRail({
                             className="visually-hidden"
                             htmlFor={`chat-session-title-${conversation.id}`}
                           >
-                            Conversation title
+                            {t("chat.rail.titleLabel")}
                           </label>
                           <input
                             id={`chat-session-title-${conversation.id}`}
@@ -333,7 +344,7 @@ export const ConversationRail = memo(function ConversationRail({
                               variant="ink"
                               disabled={busy}
                             >
-                              Save
+                              {t("chat.rail.save")}
                             </Button>
                             <Button
                               type="button"
@@ -341,7 +352,7 @@ export const ConversationRail = memo(function ConversationRail({
                               variant="ghost"
                               onClick={() => setEditingId(null)}
                             >
-                              Cancel
+                              {t("chat.rail.cancel")}
                             </Button>
                           </div>
                         </form>
@@ -373,7 +384,7 @@ export const ConversationRail = memo(function ConversationRail({
                                   <>
                                     <span aria-hidden="true">·</span>
                                     <span className="chat-session__flag">
-                                      archived
+                                      {t("chat.rail.archivedFlag")}
                                     </span>
                                   </>
                                 ) : null}
@@ -384,7 +395,7 @@ export const ConversationRail = memo(function ConversationRail({
                           {active ? (
                             <span
                               className="chat-session__dot"
-                              aria-label="Current conversation"
+                              aria-label={t("chat.rail.current")}
                             />
                           ) : null}
 
@@ -398,7 +409,9 @@ export const ConversationRail = memo(function ConversationRail({
                               onClick={() =>
                                 setMenuId(menuOpen ? null : conversation.id)
                               }
-                              aria-label={`Actions for ${conversation.title}`}
+                              aria-label={t("chat.rail.actionsFor", {
+                                title: conversation.title,
+                              })}
                               aria-expanded={menuOpen}
                               disabled={busy || forking}
                             >
@@ -408,7 +421,9 @@ export const ConversationRail = memo(function ConversationRail({
                               <div
                                 className="chat-session__menu-panel"
                                 role="group"
-                                aria-label={`Actions for ${conversation.title}`}
+                                aria-label={t("chat.rail.actionsFor", {
+                                  title: conversation.title,
+                                })}
                               >
                                 <button
                                   type="button"
@@ -419,7 +434,7 @@ export const ConversationRail = memo(function ConversationRail({
                                   }}
                                 >
                                   <Icon name="pencil" size={13} />
-                                  Rename
+                                  {t("chat.rail.rename")}
                                 </button>
                                 <button
                                   type="button"
@@ -432,7 +447,9 @@ export const ConversationRail = memo(function ConversationRail({
                                     name={archived ? "history" : "archive"}
                                     size={13}
                                   />
-                                  {archived ? "Restore" : "Archive"}
+                                  {archived
+                                    ? t("chat.rail.restore")
+                                    : t("chat.rail.archive")}
                                 </button>
                                 <button
                                   type="button"
@@ -443,16 +460,19 @@ export const ConversationRail = memo(function ConversationRail({
                                   disabled={archived}
                                   title={
                                     archived
-                                      ? "Restore the conversation before forking."
-                                      : "Fork this conversation"
+                                      ? t("chat.rail.forkDisabled")
+                                      : t("chat.rail.forkTitle")
                                   }
                                 >
                                   {forking ? (
-                                    <Loader size={12} label="Forking" />
+                                    <Loader
+                                      size={12}
+                                      label={t("chat.rail.forkingLabel")}
+                                    />
                                   ) : (
                                     <Icon name="branch" size={13} />
                                   )}
-                                  Fork
+                                  {t("chat.rail.fork")}
                                 </button>
                               </div>
                             ) : null}
@@ -487,7 +507,7 @@ export const ConversationRail = memo(function ConversationRail({
           type="button"
           className="chat-scrim"
           onClick={onClose}
-          aria-label="Close conversations"
+          aria-label={t("chat.rail.close")}
         />
       ) : null}
       <aside
@@ -497,17 +517,17 @@ export const ConversationRail = memo(function ConversationRail({
             ? "chat-sessions chat-sessions--overlay is-open"
             : "chat-sessions is-open"
         }
-        aria-label="Conversations"
+        aria-label={t("chat.rail.aria")}
       >
         <div className="chat-sessions__head">
           <div className="chat-sessions__head-row">
-            <span className="mono-label">Conversations</span>
+            <span className="mono-label">{t("chat.rail.heading")}</span>
             <button
               type="button"
               className="chat-sessions__collapse"
               onClick={onClose}
-              aria-label="Collapse conversations"
-              title="Collapse conversations"
+              aria-label={t("chat.rail.collapse")}
+              title={t("chat.rail.collapse")}
             >
               <Icon name="chevron-right" size={13} />
             </button>
@@ -523,7 +543,7 @@ export const ConversationRail = memo(function ConversationRail({
             }}
           >
             <Icon name="plus" size={13} />
-            New chat
+            {t("chat.rail.newChat")}
           </Button>
         </div>
 
@@ -531,7 +551,10 @@ export const ConversationRail = memo(function ConversationRail({
 
         <div className="chat-sessions__foot">
           <span>
-            {activeCount} active · {archivedCount} archived
+            {t("chat.rail.counts", {
+              active: formatNumber(activeCount),
+              archived: formatNumber(archivedCount),
+            })}
           </span>
         </div>
       </aside>

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { TreeMark } from "../../component/TreeMark";
 import { TreeRings } from "../../component/TreeRings";
+import { useI18n } from "../../i18n";
 import "../auth.css";
 
 interface AuthFrameProps {
@@ -24,6 +25,8 @@ export function AuthFrame({
   children,
   footer,
 }: AuthFrameProps) {
+  const { t } = useI18n();
+
   return (
     <main className="auth-screen">
       <div className="auth-screen__rings" aria-hidden="true">
@@ -31,7 +34,7 @@ export function AuthFrame({
       </div>
 
       <div className="auth-shell">
-        <section className="auth-aside" aria-label="Apsor Archive">
+        <section className="auth-aside" aria-label={t("core.auth.frame.asideAria")}>
           <div className="auth-aside__rings" aria-hidden="true">
             <TreeRings variant="quiet" />
           </div>
@@ -41,31 +44,28 @@ export function AuthFrame({
               <TreeMark size={28} />
             </span>
             <span className="auth-brand__meta">
-              <span className="auth-brand__name">Apsor Archive</span>
-              <span className="auth-brand__sub">Archive Studio</span>
+              <span className="auth-brand__name">{t("core.app.name")}</span>
+              <span className="auth-brand__sub">{t("core.app.studio")}</span>
             </span>
           </header>
 
           <div className="auth-aside__copy">
-            <p className="eyebrow">Private field station · Vol. 01</p>
+            <p className="eyebrow">{t("core.auth.frame.asideEyebrow")}</p>
             <p className="auth-aside__headline">
-              Memory is not data.
-              <span>It is growth.</span>
+              {t("core.auth.frame.asideHeadline")}
+              <span>{t("core.auth.frame.asideHeadlineAccent")}</span>
             </p>
-            <p>
-              A local-first archive of files, memories, and the passages between
-              them. One keeper; no cloud account; the rings stay on this machine.
-            </p>
+            <p>{t("core.auth.frame.asideDescription")}</p>
             <ul className="auth-aside__facts">
-              <li>Local-first</li>
-              <li>Single keeper</li>
-              <li>No telemetry</li>
+              <li>{t("core.auth.frame.localFirst")}</li>
+              <li>{t("core.auth.frame.singleKeeper")}</li>
+              <li>{t("core.auth.frame.noTelemetry")}</li>
             </ul>
           </div>
 
           <footer className="auth-aside__foot">
-            <span>0.7px hairline protocol</span>
-            <span>MMXXVI</span>
+            <span>{t("core.auth.frame.footerProtocol")}</span>
+            <span>{t("core.auth.frame.footerYear")}</span>
           </footer>
         </section>
 

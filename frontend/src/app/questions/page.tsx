@@ -3,7 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../apis/fetch-client";
-import { formatNumber } from "../../lib/format";
+import {
+  useApiErrorMessage,
+  useI18n,
+  type Translate,
+  type TranslationKey,
+} from "../i18n";
 import { Button } from "../component/Button";
 import { EmptyState } from "../component/EmptyState";
 import { Icon } from "../component/Icon";
@@ -35,13 +40,25 @@ type StatusFilter = "all" | "answered" | "running" | "failed";
 
 const STATUS_TABS: readonly {
   readonly value: StatusFilter;
-  readonly label: string;
+  readonly labelKey: TranslationKey;
   readonly dot: "answered" | "running" | "failed" | null;
 }[] = [
-  { value: "all", label: "All", dot: null },
-  { value: "answered", label: "Answered", dot: "answered" },
-  { value: "running", label: "Running", dot: "running" },
-  { value: "failed", label: "Failed", dot: "failed" },
+  { value: "all", labelKey: "memory.questions.statusAll", dot: null },
+  {
+    value: "answered",
+    labelKey: "memory.questions.statusAnswered",
+    dot: "answered",
+  },
+  {
+    value: "running",
+    labelKey: "memory.questions.statusRunning",
+    dot: "running",
+  },
+  {
+    value: "failed",
+    labelKey: "memory.questions.statusFailed",
+    dot: "failed",
+  },
 ];
 
 type DialogState =
@@ -51,17 +68,6 @@ type DialogState =
 interface CardActionError {
   readonly id: number;
   readonly message: string;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    const detail = error.detail.trim();
-    return detail.length > 0 ? detail : error.message;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "The archive could not complete that request.";
 }
 
 function isAiUnavailable(error: unknown): boolean {
@@ -153,16 +159,28 @@ function buildToolbarNote(
   total: number,
   filteredCount: number,
   filtersActive: boolean,
+  t: Translate,
+  formatNumber: (value: number) => string,
 ): string {
   if (!list) {
-    return "Reading the loaded page";
+    return t("memory.questions.toolbarNoPage");
   }
-  const base = `Page ${formatNumber(pageNumber)} of ${formatNumber(totalPages)} · ${formatNumber(loaded)} loaded of ${formatNumber(total)} saved · status counts and text filter cover only the loaded page`;
+  const base = t("memory.questions.toolbarPage", {
+    page: formatNumber(pageNumber),
+    totalPages: formatNumber(totalPages),
+    loaded: formatNumber(loaded),
+    total: formatNumber(total),
+  });
   if (!filtersActive) {
     return base;
   }
-  const noun = filteredCount === 1 ? "match" : "matches";
-  return `${base} · ${formatNumber(filteredCount)} ${noun}`;
+  const suffix = t(
+    filteredCount === 1
+      ? "memory.questions.toolbarMatchOne"
+      : "memory.questions.toolbarMatchOther",
+    { count: formatNumber(filteredCount) },
+  );
+  return `${base}${suffix}`;
 }
 
 interface QuestionShelfBodyProps {
@@ -219,12 +237,15 @@ function QuestionShelfBody({
   onDelete,
   onOffsetChange,
 }: QuestionShelfBodyProps) {
+  const { t, formatNumber } = useI18n();
+  const apiErrorMessage = useApiErrorMessage();
+
   if (isPending) {
     return (
       <div
         className="question-list"
         aria-busy="true"
-        aria-label="Reading saved questions"
+        aria-label={t("memory.questions.loadingAria")}
         role="status"
       >
         <QuestionCardSkeleton />
@@ -238,9 +259,11 @@ function QuestionShelfBody({
     return (
       <Panel tone="plain" className="question-error">
         <div className="question-error__body">
-          <p className="eyebrow">Reading interrupted</p>
-          <h2>The shelf did not answer.</h2>
-          <p>{errorMessage(error)}</p>
+          <p className="eyebrow">{t("memory.questions.loadErrorEyebrow")}</p>
+          <h2>{t("memory.questions.loadErrorTitle")}</h2>
+          <p>
+            {apiErrorMessage(error, "memory.questions.toast.couldNotComplete")}
+          </p>
           <Button
             type="button"
             variant="secondary"
@@ -249,7 +272,9 @@ function QuestionShelfBody({
             disabled={isFetching}
           >
             <Icon name="ring" size={14} />
-            {isFetching ? "Retrying…" : "Retry"}
+            {isFetching
+              ? t("memory.questions.retrying")
+              : t("memory.questions.retry")}
           </Button>
         </div>
       </Panel>
@@ -260,13 +285,13 @@ function QuestionShelfBody({
     return (
       <EmptyState
         icon="quote"
-        eyebrow="Blank pages"
-        title="No saved questions yet."
-        description="Write a question and keep it here until you are ready to ask it. Answers, citations, and their conversation stay beside it."
+        eyebrow={t("memory.questions.emptyEyebrow")}
+        title={t("memory.questions.emptyTitle")}
+        description={t("memory.questions.emptyDescription")}
         action={
           <Button type="button" variant="primary" size="md" onClick={onCreate}>
             <Icon name="plus" size={14} />
-            Save question
+            {t("memory.questions.saveQuestion")}
           </Button>
         }
       />
@@ -277,12 +302,9 @@ function QuestionShelfBody({
     return (
       <Panel tone="plain" className="question-error">
         <div className="question-error__body">
-          <p className="eyebrow">Past the last page</p>
-          <h2>This page of the shelf is empty.</h2>
-          <p>
-            The shelf changed while this page was open. Return to the newest
-            entries to continue reading.
-          </p>
+          <p className="eyebrow">{t("memory.questions.pastPageEyebrow")}</p>
+          <h2>{t("memory.questions.pastPageTitle")}</h2>
+          <p>{t("memory.questions.pastPageDescription")}</p>
           <Button
             type="button"
             variant="secondary"
@@ -290,7 +312,7 @@ function QuestionShelfBody({
             onClick={onBackToFirstPage}
           >
             <Icon name="arrow-right" size={14} className="is-flipped" />
-            Back to the first page
+            {t("memory.questions.backToFirstPage")}
           </Button>
         </div>
       </Panel>
@@ -301,12 +323,12 @@ function QuestionShelfBody({
     return (
       <EmptyState
         icon="filter"
-        eyebrow="No matches on this page"
-        title="Nothing matches these filters."
-        description="Status tabs and the text filter only cover the questions loaded on this page. Clear the filters to see the rest of the page."
+        eyebrow={t("memory.questions.filteredEyebrow")}
+        title={t("memory.questions.filteredTitle")}
+        description={t("memory.questions.filteredDescription")}
         action={
           <Button type="button" variant="secondary" size="sm" onClick={onClearFilters}>
-            Clear filters
+            {t("memory.questions.clearFilters")}
           </Button>
         }
       />
@@ -331,19 +353,26 @@ function QuestionShelfBody({
       </div>
 
       {total > PAGE_SIZE ? (
-        <nav className="pagination question-pagination" aria-label="Saved question pages">
+        <nav
+          className="pagination question-pagination"
+          aria-label={t("memory.questions.paginationAria")}
+        >
           <button
             type="button"
             className="pagination__btn"
             onClick={() => onOffsetChange(Math.max(0, offset - PAGE_SIZE))}
             disabled={offset === 0 || isFetching}
           >
-            Previous
+            {t("memory.questions.previous")}
           </button>
           <span className="question-pagination__label">
-            Page {formatNumber(pageNumber)} of {formatNumber(totalPages)} ·{" "}
-            {formatNumber(rangeStart)}–{formatNumber(rangeEnd)} of{" "}
-            {formatNumber(total)}
+            {t("memory.questions.pageOf", {
+              page: formatNumber(pageNumber),
+              totalPages: formatNumber(totalPages),
+              start: formatNumber(rangeStart),
+              end: formatNumber(rangeEnd),
+              total: formatNumber(total),
+            })}
           </span>
           <button
             type="button"
@@ -351,7 +380,7 @@ function QuestionShelfBody({
             onClick={() => onOffsetChange(offset + PAGE_SIZE)}
             disabled={offset + PAGE_SIZE >= total || isFetching}
           >
-            Next
+            {t("memory.questions.next")}
           </button>
         </nav>
       ) : null}
@@ -367,6 +396,8 @@ function QuestionShelfBody({
  * runs one synchronous agent turn and then opens its conversation in Chat.
  */
 export function QuestionsPage() {
+  const { t, formatNumber } = useI18n();
+  const apiErrorMessage = useApiErrorMessage();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const toast = useToast();
@@ -442,7 +473,7 @@ export function QuestionsPage() {
         setStatusFilter("all");
         setTextFilter("");
         setOffset(0);
-        toast.success("Question saved to the shelf.");
+        toast.success(t("memory.questions.toast.saved"));
         queryClient.setQueryData<SavedQuestionListSchema>(
           getListSavedQuestionsQueryKey({ limit: PAGE_SIZE, offset: 0 }),
           (current) =>
@@ -459,7 +490,9 @@ export function QuestionsPage() {
         });
       },
       onError: (error) => {
-        setDialogError(errorMessage(error));
+        setDialogError(
+          apiErrorMessage(error, "memory.questions.toast.couldNotComplete"),
+        );
       },
     },
   });
@@ -476,8 +509,8 @@ export function QuestionsPage() {
         setDialogError(null);
         toast.success(
           changed && hadAnswer
-            ? "Question updated. The previous answer was cleared."
-            : "Question updated.",
+            ? t("memory.questions.toast.updatedAnswerCleared")
+            : t("memory.questions.toast.updated"),
         );
         queryClient.setQueryData<SavedQuestionListSchema>(listQueryKey, (current) =>
           replaceQuestion(current, updated),
@@ -487,7 +520,9 @@ export function QuestionsPage() {
         });
       },
       onError: (error) => {
-        setDialogError(errorMessage(error));
+        setDialogError(
+          apiErrorMessage(error, "memory.questions.toast.couldNotComplete"),
+        );
       },
     },
   });
@@ -504,13 +539,11 @@ export function QuestionsPage() {
           replaceQuestion(current, updated),
         );
         if (updated.run_status === "failed") {
-          toast.error(
-            "The agent run failed. The question and its error detail were kept.",
-          );
+          toast.error(t("memory.questions.toast.askFailed"));
         } else if (updated.run_status === "cancelled") {
-          toast.info("The agent run was cancelled. The card was kept.");
+          toast.info(t("memory.questions.toast.askCancelled"));
         } else {
-          toast.success("Answer saved to the question shelf.");
+          toast.success(t("memory.questions.toast.answerSaved"));
         }
         await invalidateAfterAsk(queryClient, updated.conversation_id);
         if (updated.conversation_id !== null) {
@@ -519,10 +552,15 @@ export function QuestionsPage() {
       },
       onError: (error, variables) => {
         if (isAiUnavailable(error)) {
-          setAiNotice(errorMessage(error));
-          toast.error("AI provider is not configured. Open Settings to add one.");
+          setAiNotice(
+            apiErrorMessage(error, "memory.questions.toast.couldNotComplete"),
+          );
+          toast.error(t("memory.questions.toast.aiNotConfigured"));
         } else {
-          const detail = errorMessage(error);
+          const detail = apiErrorMessage(
+            error,
+            "memory.questions.toast.couldNotComplete",
+          );
           setActionError({ id: variables.questionId, message: detail });
           toast.error(detail);
         }
@@ -540,7 +578,7 @@ export function QuestionsPage() {
         setActionError(null);
       },
       onSuccess: async (_result, variables) => {
-        toast.success("Question removed from the shelf.");
+        toast.success(t("memory.questions.toast.removed"));
         queryClient.setQueryData<SavedQuestionListSchema>(listQueryKey, (current) =>
           current
             ? {
@@ -560,7 +598,10 @@ export function QuestionsPage() {
         }
       },
       onError: (error, variables) => {
-        const detail = errorMessage(error);
+        const detail = apiErrorMessage(
+          error,
+          "memory.questions.toast.couldNotComplete",
+        );
         setActionError({ id: variables.questionId, message: detail });
         toast.error(detail);
       },
@@ -613,29 +654,37 @@ export function QuestionsPage() {
     total,
     filtered.length,
     filtersActive,
+    t,
+    formatNumber,
   );
 
   return (
     <div className="page questions-page">
       <div className="content-container">
         <PageHeader
-          eyebrow="Questions · saved shelf"
-          title="The inquiry shelf."
-          description="Keep a question before you have an answer. Run it in Chat when you are ready; the answer, its citations, and the conversation return here."
+          eyebrow={t("memory.questions.eyebrow")}
+          title={t("memory.questions.title")}
+          description={t("memory.questions.description")}
           meta={
             <span>
               {list
-                ? `${formatNumber(resources.length)} loaded · ${formatNumber(total)} saved`
-                : "Reading shelf"}
+                ? t("memory.questions.metaLoadedSaved", {
+                    loaded: formatNumber(resources.length),
+                    total: formatNumber(total),
+                  })
+                : t("memory.questions.metaReading")}
             </span>
           }
         />
 
-        <section className="question-toolbar" aria-label="Shelf controls">
+        <section
+          className="question-toolbar"
+          aria-label={t("memory.questions.shelfControlsAria")}
+        >
           <div
             className="question-toolbar__tabs"
             role="group"
-            aria-label="Filter by status"
+            aria-label={t("memory.questions.filterAria")}
           >
             {STATUS_TABS.map((tab) => {
               const active = statusFilter === tab.value;
@@ -653,10 +702,10 @@ export function QuestionsPage() {
                       aria-hidden="true"
                     />
                   ) : null}
-                  <span>{tab.label}</span>
+                  <span>{t(tab.labelKey)}</span>
                   <span
                     className="question-tab__count"
-                    title="Count on the loaded page"
+                    title={t("memory.questions.countOnPageTitle")}
                   >
                     {formatNumber(counts[tab.value])}
                   </span>
@@ -669,14 +718,14 @@ export function QuestionsPage() {
             <div className="question-filter" role="search">
               <Icon name="search" size={15} />
               <label className="visually-hidden" htmlFor={filterId}>
-                Filter loaded questions by text
+                {t("memory.questions.textFilterLabel")}
               </label>
               <input
                 id={filterId}
                 type="search"
                 value={textFilter}
                 onChange={(event) => setTextFilter(event.target.value)}
-                placeholder="Filter this page…"
+                placeholder={t("memory.questions.textFilterPlaceholder")}
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -684,7 +733,7 @@ export function QuestionsPage() {
                 <button
                   type="button"
                   className="question-filter__clear"
-                  aria-label="Clear text filter"
+                  aria-label={t("memory.questions.clearTextFilterAria")}
                   onClick={() => setTextFilter("")}
                 >
                   <Icon name="close" size={13} />
@@ -693,7 +742,7 @@ export function QuestionsPage() {
             </div>
             <Button type="button" variant="ink" size="md" onClick={openCreate}>
               <Icon name="plus" size={14} />
-              Save question
+              {t("memory.questions.saveQuestion")}
             </Button>
           </div>
 
@@ -704,17 +753,17 @@ export function QuestionsPage() {
           <div className="question-notice question-notice--seal" role="status">
             <Icon name="info" size={15} />
             <p>
-              <strong>AI provider not configured.</strong>{" "}
-              {aiNotice} Answers cannot be generated until a provider is saved.
+              <strong>{t("memory.questions.aiNoticeTitle")}</strong>{" "}
+              {aiNotice} {t("memory.questions.aiNoticeBody")}
             </p>
             <Link className="question-notice__link" to="/settings">
-              Open Settings
+              {t("memory.questions.openSettings")}
               <Icon name="arrow-right" size={13} />
             </Link>
             <button
               type="button"
               className="question-notice__dismiss"
-              aria-label="Dismiss provider notice"
+              aria-label={t("memory.questions.dismissProviderNotice")}
               onClick={() => setAiNotice(null)}
             >
               <Icon name="close" size={14} />
@@ -725,7 +774,14 @@ export function QuestionsPage() {
         {listQuery.isError && list ? (
           <div className="question-notice" role="alert">
             <Icon name="info" size={15} />
-            <p>The shelf could not refresh. {errorMessage(listQuery.error)}</p>
+            <p>
+              {t("memory.questions.refreshFailed", {
+                detail: apiErrorMessage(
+                  listQuery.error,
+                  "memory.questions.toast.couldNotComplete",
+                ),
+              })}
+            </p>
             <Button
               type="button"
               variant="ghost"
@@ -733,7 +789,9 @@ export function QuestionsPage() {
               onClick={() => void listQuery.refetch()}
               disabled={listQuery.isFetching}
             >
-              {listQuery.isFetching ? "Retrying…" : "Retry"}
+              {listQuery.isFetching
+                ? t("memory.questions.retrying")
+                : t("memory.questions.retry")}
             </Button>
           </div>
         ) : null}

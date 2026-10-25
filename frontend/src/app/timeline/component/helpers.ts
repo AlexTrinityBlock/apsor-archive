@@ -1,6 +1,7 @@
 /** Date, URL, and formatting helpers for the timeline workspace. */
 
 import type { TimelineEventSchema } from "../../generated-apis-types/schemas";
+import type { Translate } from "../../i18n";
 
 const DATE_INPUT = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})/;
@@ -145,75 +146,37 @@ export function isWithinApiRange(date: Date): boolean {
   return date.getFullYear() >= MIN_YEAR && date.getFullYear() <= MAX_YEAR;
 }
 
-function asValidDate(value: string | Date): Date | null {
-  const date = typeof value === "string" ? parseIsoDay(value) : value;
-  return date && !Number.isNaN(date.getTime()) ? date : null;
-}
-
-/** `YYYY.MM.DD`, used by the archive's folio-style metadata pills. */
-export function formatDotDay(value: string | Date): string {
-  const date = asValidDate(value);
-  if (!date) {
-    return typeof value === "string" ? value : "—";
-  }
-  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`;
-}
-
+/** `YYYY.MM.DD`, used by the archive's folio-style range labels. */
 export function formatDotRange(start: string, end: string): string {
   const startDay = start.slice(0, 10).replaceAll("-", ".");
   const endDay = end.slice(0, 10).replaceAll("-", ".");
   return `${startDay} \u2500 ${endDay}`;
 }
 
-const FULL_DATE = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-
-const SHORT_DATE = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-});
-
-function formatDayString(value: string, withYear: boolean): string {
-  const date = parseIsoDay(value);
-  if (!date) {
-    return value.slice(0, 10);
-  }
-  return (withYear ? FULL_DATE : SHORT_DATE).format(date);
-}
-
-/** A compact, locale-stable range caption such as `01 Sep – 30 Sep 2026`. */
-export function formatRangeCaption(start: string, end: string): string {
+/** A localized range caption, for example `01 Sep 2026 – 30 Sep 2026`. */
+export function formatRangeCaption(
+  start: string,
+  end: string,
+  formatDate: (value: string | Date) => string,
+): string {
   const startDay = start.slice(0, 10);
   const endDay = end.slice(0, 10);
-  if (startDay === endDay) {
-    return formatDayString(endDay, true);
-  }
   const startDate = parseIsoDay(startDay);
   const endDate = parseIsoDay(endDay);
-  const sameYear =
-    startDate !== null && endDate !== null && startDate.getFullYear() === endDate.getFullYear();
-  return `${formatDayString(startDay, !sameYear)} \u2013 ${formatDayString(endDay, true)}`;
-}
-
-export function formatCalendarDay(value: string | Date): string {
-  const date = asValidDate(value);
-  return date ? FULL_DATE.format(date) : "—";
-}
-
-export function formatShortDay(value: string | Date): string {
-  const date = asValidDate(value);
-  return date ? SHORT_DATE.format(date) : "—";
+  if (startDay === endDay) {
+    return formatDate(endDate ?? endDay);
+  }
+  return `${formatDate(startDate ?? startDay)} \u2013 ${formatDate(
+    endDate ?? endDay,
+  )}`;
 }
 
 /** Human-readable read error copy without leaking request internals. */
-export function errorText(error: unknown): string {
+export function errorText(error: unknown, t: Translate): string {
   if (error instanceof Error && error.message.trim().length > 0) {
     return error.message;
   }
-  return "The archive did not answer.";
+  return t("insights.timeline.states.archiveDidNotAnswer");
 }
 
 /**

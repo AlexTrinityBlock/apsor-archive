@@ -2,9 +2,9 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import type { FileSchema } from "../../generated-apis-types/schemas";
-import { formatNumber } from "../../../lib/format";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { CsvSheet } from "./CsvSheet";
 import { ViewerErrorState, ViewerLoading } from "./ViewerStates";
 import { useChunkedText } from "./useChunkedText";
@@ -50,18 +50,21 @@ function TextToolbar({
   onToggleWrap,
   onCopy,
 }: TextToolbarProps) {
+  const { t, formatNumber } = useI18n();
   return (
     <div className="viewer-toolbar">
       <div className="viewer-toolbar__stats">
-        <span className="viewer-toolbar__kind">{kindLabel(kind)}</span>
-        <span>{formatNumber(content.length)} chars</span>
+        <span className="viewer-toolbar__kind">{kindLabel(kind, t)}</span>
+        <span>{t("library.viewer.text.chars", { count: formatNumber(content.length) })}</span>
         <span aria-hidden="true">·</span>
-        <span>{formatNumber(lineCount)} lines</span>
-        {usingChunks ? <span className="viewer-chip">Indexed chunks</span> : null}
+        <span>{t("library.viewer.text.lines", { count: formatNumber(lineCount) })}</span>
+        {usingChunks ? (
+          <span className="viewer-chip">{t("library.viewer.text.indexedChunks")}</span>
+        ) : null}
       </div>
       <div className="viewer-toolbar__actions">
         <Button variant="ghost" size="sm" onClick={onToggleWrap} aria-pressed={wrap}>
-          {wrap ? "No wrap" : "Wrap"}
+          {wrap ? t("library.viewer.text.noWrap") : t("library.viewer.text.wrap")}
         </Button>
         <Button
           variant="ghost"
@@ -70,7 +73,9 @@ function TextToolbar({
           disabled={content.length === 0}
         >
           <Icon name={copied ? "check" : "copy"} size={15} />
-          <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
+          <span aria-live="polite">
+            {copied ? t("core.copy.copied") : t("core.copy.copy")}
+          </span>
         </Button>
         {usingChunks ? null : (
           <a
@@ -79,7 +84,7 @@ function TextToolbar({
             download={file.file_name}
           >
             <Icon name="arrow-down" size={15} />
-            Download
+            {t("library.common.download")}
           </a>
         )}
       </div>
@@ -88,13 +93,14 @@ function TextToolbar({
 }
 
 function JsonSheet({ content, wrap }: { readonly content: string; readonly wrap: boolean }) {
+  const { t } = useI18n();
   const json = useMemo(() => prettyJson(content), [content]);
   return (
     <div className="viewer-sheet">
       {json.valid ? null : (
         <div className="viewer-notice" role="note">
           <Icon name="info" size={16} />
-          <p>This file is labelled JSON but is not valid JSON; showing the raw text.</p>
+          <p>{t("library.viewer.text.jsonNotice")}</p>
         </div>
       )}
       <pre className={wrap ? "viewer-pre is-wrapped" : "viewer-pre"}>{json.formatted}</pre>
@@ -109,10 +115,11 @@ interface TextBodyProps {
 }
 
 function TextBody({ mode, content, wrap }: TextBodyProps) {
+  const { t } = useI18n();
   if (mode === "markdown") {
     return (
       <div className="viewer-sheet">
-        <Suspense fallback={<ViewerLoading label="Typesetting the Markdown" />}>
+        <Suspense fallback={<ViewerLoading label={t("library.viewer.loading.markdown")} />}>
           <MarkdownSheet content={content} />
         </Suspense>
       </div>
@@ -136,13 +143,17 @@ function TextBody({ mode, content, wrap }: TextBodyProps) {
 }
 
 function SourceNotice({ chunkCount }: { readonly chunkCount: number }) {
+  const { t, formatNumber } = useI18n();
   return (
     <div className="viewer-notice" role="note">
       <Icon name="info" size={16} />
       <p>
-        The original bytes are not stored for this record. The sheet was rebuilt from{" "}
-        {formatNumber(chunkCount)} indexed chunks; overlaps can add a line break at window
-        boundaries.
+        {t(
+          chunkCount === 1
+            ? "library.viewer.text.sourceNoticeOne"
+            : "library.viewer.text.sourceNoticeOther",
+          { count: formatNumber(chunkCount) },
+        )}
       </p>
     </div>
   );
@@ -160,6 +171,7 @@ function isUnavailable(error: unknown): boolean {
  * images suppressed; JSON is pretty-printed, never evaluated.
  */
 export function TextSheet({ file }: TextSheetProps) {
+  const { t } = useI18n();
   const kind = classifyFile(file);
   const mode = textMode(kind);
   const [wrap, setWrap] = useState(mode !== "json" && mode !== "csv");
@@ -205,14 +217,14 @@ export function TextSheet({ file }: TextSheetProps) {
   };
 
   if (loading) {
-    return <ViewerLoading label="Reading the stored text" />;
+    return <ViewerLoading label={t("library.viewer.loading.storedText")} />;
   }
 
   if (unavailable && chunksQuery.error) {
     return (
       <ViewerErrorState
         error={chunksQuery.error}
-        title="Neither the original nor its indexed chunks could be read"
+        title={t("library.viewer.text.errorBoth")}
         onRetry={() => void chunksQuery.refetch()}
       />
     );
@@ -222,7 +234,7 @@ export function TextSheet({ file }: TextSheetProps) {
     return (
       <ViewerErrorState
         error={contentQuery.error}
-        title="The stored original could not be read"
+        title={t("library.viewer.text.errorOriginal")}
         onRetry={() => void contentQuery.refetch()}
         downloadUrl={fileDownloadUrl(file.id)}
         downloadName={file.file_name}
@@ -237,10 +249,10 @@ export function TextSheet({ file }: TextSheetProps) {
           new ViewerResourceError(
             404,
             "file_content_unavailable",
-            "This record was created as text and has no stored original or indexed chunks.",
+            t("library.viewer.text.noBodyMessage"),
           )
         }
-        title="This leaf has no readable body"
+        title={t("library.viewer.text.noBodyTitle")}
       />
     );
   }
