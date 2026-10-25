@@ -6,14 +6,15 @@
  */
 
 /**
- * Replace the custom prompt; both fields are required after trimming.
+ * Replace one section; omitted ``sort_order`` preserves the current value.
  */
-export interface SystemPromptUpdateSchema {
+export interface SystemPromptSectionUpdateSchema {
   /**
      * @minLength 1
      * @maxLength 32000
      */
   body: string;
+  sort_order?: number | null;
   /**
      * @minLength 1
      * @maxLength 200

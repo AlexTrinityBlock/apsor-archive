@@ -17,6 +17,7 @@ from app.module.agent.exception.domain_error import (
     AgentRunNotActiveError,
     AgentRunNotFoundError,
     AgentRunNotRetryableError,
+    AgentSystemPromptNotFoundError,
     SavedQuestionNotFoundError,
 )
 from app.shared.exception.registry import ExceptionRegistry
@@ -39,6 +40,11 @@ def register_exceptions() -> None:
         AgentInvalidSystemPromptError,
         422,
         "agent_invalid_system_prompt",
+    )
+    ExceptionRegistry.register(
+        AgentSystemPromptNotFoundError,
+        404,
+        "agent_system_prompt_not_found",
     )
     ExceptionRegistry.register(AgentApprovalNotFoundError, 404, "agent_approval_not_found")
     ExceptionRegistry.register(AgentApprovalNotPendingError, 409, "agent_approval_not_pending")

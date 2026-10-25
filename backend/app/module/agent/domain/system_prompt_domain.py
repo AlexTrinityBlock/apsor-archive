@@ -1,13 +1,25 @@
-"""Immutable system-prompt text passed to the context builder."""
+"""Immutable system-prompt sections passed to the context builder."""
 
 from dataclasses import dataclass
 from datetime import datetime
 
 
 @dataclass(frozen=True)
-class SystemPromptText:
-    """One custom prompt section; empty bodies mean the built-in prompt only."""
+class SystemPromptSection:
+    """One ordered owner-authored prompt section.
 
+    The frozen dataclass crosses the repository/service boundary so callers do
+    not receive a live ORM row. ``body`` is still filtered for whitespace at
+    composition time: a row copied by the migration or edited directly in SQL
+    must never inject an empty heading into the provider prompt.
+    """
+
+    id: int
     title: str
     body: str
-    updated_at: datetime | None = None
+    sort_order: int
+    created_at: datetime
+    updated_at: datetime
+
+
+__all__ = ["SystemPromptSection"]

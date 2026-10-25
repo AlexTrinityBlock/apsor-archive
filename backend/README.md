@@ -206,9 +206,12 @@ Endpoints (all require the session cookie):
 | `PATCH` | `/api/v1/agent/questions/{question_id}` | Edit the question text |
 | `DELETE` | `/api/v1/agent/questions/{question_id}` | Delete the saved question (`204`) |
 | `POST` | `/api/v1/agent/questions/{question_id}/ask` | Run one agent turn and persist its outcome |
-| `GET` | `/api/v1/agent/settings/system-prompt` | Read the custom first system section |
-| `PUT` | `/api/v1/agent/settings/system-prompt` | Replace title and body |
-| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Remove the custom section |
+| `GET` | `/api/v1/agent/settings/system-prompt` | List custom system prompt sections |
+| `POST` | `/api/v1/agent/settings/system-prompt` | Create one section (`201`) |
+| `PUT` | `/api/v1/agent/settings/system-prompt/order` | Reorder every section |
+| `PUT` | `/api/v1/agent/settings/system-prompt/{section_id}` | Replace one section |
+| `DELETE` | `/api/v1/agent/settings/system-prompt/{section_id}` | Delete one section (`204`) |
+| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Remove every custom section |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` takes
 `{content, request_id?, page_context?, client_timezone?,
@@ -380,7 +383,7 @@ If the key, path, or normalized text is empty, no snapshot is written and
 `page_context_attached` is `false`.
 
 New conversations freeze the current system prompt version
-(`archive-agent-v7`), which states that `<page_context>` and `<current_time>`
+(`archive-agent-v8`), which states that `<page_context>` and `<current_time>`
 are reference data, never instructions, and that page context appears only when
 the page changes.
 
@@ -414,18 +417,26 @@ reuses the original message's stored block. This lets the agent answer "now",
 
 ### System prompt module
 
-`system_prompt` is a singleton table (`id = 1`) with `title`, `body`, and
-`updated_at`. `GET`, `PUT`, and `POST /reset` under
-`/api/v1/agent/settings/system-prompt` read, replace, or remove it. Title and
-body are trimmed and both are required; an empty body means the built-in prompt
-only.
+`system_prompt_section` stores ordered owner-authored sections: `title`, `body`,
+`sort_order`, `created_at`, and `updated_at`. `GET`, `POST`,
+`PUT /order`, `PUT /{section_id}`, `DELETE /{section_id}`, and `POST /reset`
+under `/api/v1/agent/settings/system-prompt` list, create, reorder, replace,
+delete, or clear them. Title and body are trimmed and both are required.
+`sort_order` is used instead of the SQL-reserved word `order`; reorder rewrites
+the complete order in one locked transaction and rejects partial or duplicate
+id lists.
 
-`create_conversation` reads the active prompt once and inserts it as section
-`00` (`system_prompt`) before identity, instructions, examples, and context
-protocol. The full system payload is frozen into `pi.system` for that
-conversation, the tools follow the system message, and messages follow the
-tools. Editing the prompt therefore affects only new conversations and never
-rewrites an existing provider prefix. This is the KV-cache ordering guarantee.
+`create_conversation` reads the active sections once and inserts each one as
+`system_prompt:<id>` before identity, instructions, examples, and context
+protocol. The sections are rendered in `sort_order, id` order into one provider
+system message, then the full payload is frozen into `pi.system` for that
+conversation. Editing a section therefore affects only new conversations and
+never rewrites an existing provider prefix. The list is cached under the
+`system_prompts` scope for 30 seconds; writes bump only that scope.
+
+The old singleton `system_prompt` row is migrated into the first section
+(`sort_order = 10`) by `c9e1f3a5b7d2`; downgrade copies the first section back
+into the singleton table.
 
 `begin_message` writes the snapshot and the user entry in one transaction:
 
@@ -721,8 +732,13 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   (`chat_provider_config`, `embedding_provider_config`,
   `web_search_provider_config`, `web_fetch_provider_config`), copies existing
   chat/embedding rows, and creates the per-table partial unique active indexes;
-- `a3f7c9d1e5b2` (current head) creates `frequently_used_prompt` and seeds the
-  three shortcuts that used to be hard-coded in the chat empty state.
+- `a3f7c9d1e5b2` creates `frequently_used_prompt` and seeds the three
+  shortcuts that used to be hard-coded in the chat empty state;
+- `b8d2e4f6a1c3` relabels `dendro-hash-384` chunks to `apsor-hash-384` after
+  the Apsor Archive rebrand;
+- `c9e1f3a5b7d2` (current head) replaces the singleton `system_prompt` table
+  with ordered `system_prompt_section` rows and copies the existing prompt as
+  the first section.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
@@ -842,9 +858,12 @@ proves the partial unique active index, clears a key without ever returning
 plaintext, exercises the injected `app.state.provider_tester`, and verifies an
 identity id is not reused after delete. The agent test injects a deterministic
 `app.state.web_research_service` and asserts the `web_search` / `web_fetch` XML,
-plus the compressed-summary markers. The system-prompt test also covers the
-frequently used prompt CRUD, whitespace validation, the 20-row cap, ordering,
-and scoped cache invalidation.
+plus the compressed-summary markers. The system-prompt test covers multi-section
+create/list/reorder/update/delete/reset, `system_prompt:<id>` composition order,
+frozen old conversations, whitespace and partial-reorder validation, identity
+non-reuse, and scoped cache invalidation; it also covers the frequently used
+prompt CRUD, whitespace validation, the 20-row cap, ordering, and scoped cache
+invalidation.
 
 A separate manual validation used the public-domain 《紅樓夢》 from Project
 Gutenberg (about 2.66 MB, 268 chunks at 4,000 characters / 500 overlap) against

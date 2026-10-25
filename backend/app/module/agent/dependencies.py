@@ -18,6 +18,9 @@ from app.infrastructure.database.session import Database, get_db_session
 from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
 from app.module.agent.exception.domain_error import AgentNotConfiguredError
 from app.module.agent.protocol.chat_generator_protocol import ChatGeneratorProtocol
+from app.module.agent.protocol.system_prompt_cache_protocol import (
+    SystemPromptCacheProtocol,
+)
 from app.module.agent.protocol.tool_service_protocol import (
     AgentToolServices,
     ToolServiceScopeProtocol,
@@ -104,9 +107,19 @@ async def get_agent_runtime_config(request: Request) -> AgentRuntimeConfig:
 
 
 def get_system_prompt_service(request: Request) -> SystemPromptService:
-    """Build the singleton prompt service on a short-lived session factory."""
+    """Build the section service on the app cache and short-lived sessions.
+
+    The cache is injected through the agent slice's own
+    ``SystemPromptCacheProtocol`` so the service never imports another slice's
+    protocol. 版本 scope 由 service 管理，這裡只負責把 ``app.state.cache``
+    接進來。
+    """
     database = cast(Database, request.app.state.db)
-    return SystemPromptService(SystemPromptRepository(database.session_factory))
+    cache = cast(SystemPromptCacheProtocol, request.app.state.cache)
+    return SystemPromptService(
+        repository=SystemPromptRepository(database.session_factory),
+        cache=cache,
+    )
 
 
 def get_agent_service(

@@ -166,11 +166,11 @@ class AgentService:
             provider = "deepseek"
         model = payload.model or self.default_model or "deepseek-flash"
         now = utcnow()
-        custom_prompt = await self.system_prompt_service.get_active()
+        custom_sections = await self.system_prompt_service.get_active_sections()
         system_data = build_system_data(
             provider=provider,
             model=model,
-            custom_prompt=custom_prompt,
+            custom_sections=custom_sections,
         )
         system_model = build_system_model(system_data)
         conversation, _entry = await self.repository.create_conversation(
