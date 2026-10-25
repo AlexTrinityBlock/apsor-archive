@@ -1,10 +1,20 @@
-import type { PathFileSchema, PathListingSchema } from "../../generated-apis-types/schemas";
+import type {
+  DirectorySchema,
+  PathFileSchema,
+  PathListingSchema,
+} from "../../generated-apis-types/schemas";
 import { formatBytes } from "../../../lib/format";
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
-import { fileKindLabel, type FileOperationMode } from "./library-utils";
+import {
+  contextMenuTriggerFromKeyboard,
+  fileKindLabel,
+  isContextMenuKey,
+  type FileOperationMode,
+  type LibraryContextMenuTrigger,
+} from "./library-utils";
 
 interface LibraryResultsProps {
   readonly listing: PathListingSchema;
@@ -14,6 +24,14 @@ interface LibraryResultsProps {
   readonly onToggleSelected: (fileId: number) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onOpenFile: (fileId: number) => void;
+  readonly onFileContextMenu: (
+    event: LibraryContextMenuTrigger,
+    file: PathFileSchema,
+  ) => void;
+  readonly onFolderContextMenu: (
+    event: LibraryContextMenuTrigger,
+    folder: DirectorySchema,
+  ) => void;
   readonly onRequestMove: (file: PathFileSchema, mode: FileOperationMode) => void;
   readonly onRequestDelete: (file: PathFileSchema) => void;
 }
@@ -27,6 +45,8 @@ export function LibraryResults({
   onToggleSelected,
   onOpenFolder,
   onOpenFile,
+  onFileContextMenu,
+  onFolderContextMenu,
   onRequestMove,
   onRequestDelete,
 }: LibraryResultsProps) {
@@ -63,6 +83,8 @@ export function LibraryResults({
               className="library-row library-row--folder"
               key={folder.path}
               onClick={() => onOpenFolder(folder.path)}
+              onContextMenu={(event) => onFolderContextMenu(event, folder)}
+              tabIndex={-1}
             >
               {selecting ? <td className="library-table__select" aria-hidden="true" /> : null}
               <td data-label={t("library.list.name")}>
@@ -72,6 +94,17 @@ export function LibraryResults({
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenFolder(folder.path);
+                  }}
+                  onKeyDown={(event) => {
+                    if (!isContextMenuKey(event)) {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onFolderContextMenu(
+                      contextMenuTriggerFromKeyboard(event.currentTarget),
+                      folder,
+                    );
                   }}
                 >
                   <span className="library-row__icon library-row__icon--folder" aria-hidden="true">
@@ -111,6 +144,8 @@ export function LibraryResults({
               }
               key={file.file_id}
               onClick={() => onOpenFile(file.file_id)}
+              onContextMenu={(event) => onFileContextMenu(event, file)}
+              tabIndex={-1}
             >
               {selecting ? (
                 <td className="library-table__select" data-label={t("library.list.select")}>
@@ -137,6 +172,17 @@ export function LibraryResults({
                   onClick={(event) => {
                     event.stopPropagation();
                     onOpenFile(file.file_id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (!isContextMenuKey(event)) {
+                      return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onFileContextMenu(
+                      contextMenuTriggerFromKeyboard(event.currentTarget),
+                      file,
+                    );
                   }}
                 >
                   <span className="library-row__icon library-row__icon--file" aria-hidden="true">

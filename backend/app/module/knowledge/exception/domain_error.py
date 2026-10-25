@@ -55,6 +55,14 @@ class FileTooLargeError(KnowledgeError):
         super().__init__(f"File size {size} exceeds the {limit}-byte limit.")
 
 
+class FileVersionConflictError(KnowledgeError):
+    def __init__(self, file_id: int, expected_version: int, actual_version: int) -> None:
+        super().__init__(
+            f"File {file_id} is at version {actual_version}; "
+            f"the client expected version {expected_version}."
+        )
+
+
 class EmptyContentError(KnowledgeError):
     def __init__(self) -> None:
         super().__init__("The document contains no extractable text.")

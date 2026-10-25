@@ -11,6 +11,7 @@
 export interface PathFileSchema {
   file_id: number;
   file_name: string;
+  has_original: boolean;
   raw_file_path: string;
   size_bytes: number;
   total_chunks: number;

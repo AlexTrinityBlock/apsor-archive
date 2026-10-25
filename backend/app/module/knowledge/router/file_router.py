@@ -30,6 +30,7 @@ from app.module.knowledge.schema.file_schema import (
     FileMoveSchema,
     FileSchema,
     FileTextCreateSchema,
+    FileTextUpdateSchema,
     IngestJobListSchema,
     IngestJobSchema,
 )
@@ -333,6 +334,25 @@ async def get_file_content(
         status_code=status.HTTP_206_PARTIAL_CONTENT,
         media_type=original.mime_type,
         headers=headers,
+    )
+
+
+@router.put(
+    "/{file_id}/content",
+    response_model=FileSchema,
+    status_code=status.HTTP_200_OK,
+    operation_id="updateFileContent",
+)
+async def update_file_content(
+    file_id: int,
+    payload: FileTextUpdateSchema,
+    file_service: FileService = Depends(get_file_service),
+) -> FileSchema:
+    """更新既有 Markdown 檔案內容，建立新版本並重建索引。"""
+    return await file_service.update_markdown_content(
+        file_id,
+        content=payload.content,
+        expected_version=payload.expected_version,
     )
 
 

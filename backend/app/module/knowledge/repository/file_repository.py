@@ -58,6 +58,11 @@ class FileRepository:
         )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
+    async def get_current_for_update(self, file_id: int) -> FileModel | None:
+        """以資料列鎖定指定檔案，供版本化內容更新在同一個交易內完成。"""
+        statement = select(FileModel).where(FileModel.id == file_id).with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
     async def list_by_ids(self, file_ids: Sequence[int]) -> list[FileModel]:
         if not file_ids:
             return []
