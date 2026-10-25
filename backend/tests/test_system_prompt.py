@@ -506,6 +506,94 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     ordering_after_delete = client.get(prompts_url).json()["resources"]
     assert [item["title"] for item in ordering_after_delete] == ["Direct database title"]
 
+    # ------------------------------------------------------------------
+    # Drag reorder: one request carries the complete order, and the server
+    # rewrites sort_order as 10/20/30. Add two rows so three prompts exist.
+    # ------------------------------------------------------------------
+    gamma_prompt_created = client.post(
+        prompts_url,
+        json={
+            "title": "Gamma prompt",
+            "prompt_text": "Compare three sources.",
+            "sort_order": 30,
+        },
+    )
+    assert gamma_prompt_created.status_code == 201, gamma_prompt_created.text
+    gamma_prompt_id = gamma_prompt_created.json()["id"]
+
+    delta_prompt_created = client.post(
+        prompts_url,
+        json={
+            "title": "Delta prompt",
+            "prompt_text": "Draft a weekly summary.",
+            "sort_order": 40,
+        },
+    )
+    assert delta_prompt_created.status_code == 201, delta_prompt_created.text
+    delta_prompt_id = delta_prompt_created.json()["id"]
+
+    initial_prompt_ids = [second_prompt_id, gamma_prompt_id, delta_prompt_id]
+    reordered_prompt_ids = list(reversed(initial_prompt_ids))
+    reorder_response = client.post(
+        f"{prompts_url}/reorder",
+        json={"prompt_ids": reordered_prompt_ids},
+    )
+    assert reorder_response.status_code == 200, reorder_response.text
+    reordered_prompts = reorder_response.json()["resources"]
+    assert [item["id"] for item in reordered_prompts] == reordered_prompt_ids
+    assert [item["sort_order"] for item in reordered_prompts] == [10, 20, 30]
+
+    persisted_prompts = client.get(prompts_url).json()["resources"]
+    assert [item["id"] for item in persisted_prompts] == reordered_prompt_ids
+    assert [item["sort_order"] for item in persisted_prompts] == [10, 20, 30]
+
+    # 重送同一份順序必須 idempotent，回傳與資料庫都維持相同結果。
+    repeated_reorder = client.post(
+        f"{prompts_url}/reorder",
+        json={"prompt_ids": reordered_prompt_ids},
+    )
+    assert repeated_reorder.status_code == 200, repeated_reorder.text
+    assert [item["id"] for item in repeated_reorder.json()["resources"]] == reordered_prompt_ids
+    assert [item["sort_order"] for item in repeated_reorder.json()["resources"]] == [10, 20, 30]
+
+    # 缺少 id、重複 id、未知 id 都是 422，且不會改動已儲存的順序。
+    missing_reorder = client.post(
+        f"{prompts_url}/reorder",
+        json={"prompt_ids": reordered_prompt_ids[:-1]},
+    )
+    assert missing_reorder.status_code == 422, missing_reorder.text
+    assert missing_reorder.json()["error"] == "invalid_frequent_prompt"
+
+    duplicate_reorder = client.post(
+        f"{prompts_url}/reorder",
+        json={"prompt_ids": [*reordered_prompt_ids, reordered_prompt_ids[0]]},
+    )
+    assert duplicate_reorder.status_code == 422, duplicate_reorder.text
+    assert duplicate_reorder.json()["error"] == "invalid_frequent_prompt"
+
+    unknown_reorder = client.post(
+        f"{prompts_url}/reorder",
+        json={"prompt_ids": [*reordered_prompt_ids, 999_999]},
+    )
+    assert unknown_reorder.status_code == 422, unknown_reorder.text
+    assert unknown_reorder.json()["error"] == "invalid_frequent_prompt"
+
+    # 空清單由 Pydantic 的 min_length 擋下，走共用的 invalid_request envelope。
+    empty_reorder = client.post(f"{prompts_url}/reorder", json={"prompt_ids": []})
+    assert empty_reorder.status_code == 400, empty_reorder.text
+    assert empty_reorder.json()["error"] == "invalid_request"
+
+    unchanged_after_rejections = client.get(prompts_url).json()["resources"]
+    assert [item["id"] for item in unchanged_after_rejections] == reordered_prompt_ids
+    assert [item["sort_order"] for item in unchanged_after_rejections] == [10, 20, 30]
+
+    # 移除額外建立的兩筆，讓後面的 20 筆上限測試仍從單一 prompt 開始。
+    assert client.delete(f"{prompts_url}/{gamma_prompt_id}").status_code == 204
+    assert client.delete(f"{prompts_url}/{delta_prompt_id}").status_code == 204
+    assert [item["id"] for item in client.get(prompts_url).json()["resources"]] == [
+        second_prompt_id
+    ]
+
     # Fill to exactly 20 rows, then reject the 21st.
     for index in range(19):
         created_prompt = client.post(

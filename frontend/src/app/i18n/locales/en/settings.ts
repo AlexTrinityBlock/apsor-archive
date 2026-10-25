@@ -329,15 +329,16 @@ export const settings = {
     lede:
       "Shortcuts for the empty chat room. The list is stored in PostgreSQL and appears in the order below; editing it never changes existing conversations.",
     hint:
-      "Up to 20 prompts. Title and prompt text are trimmed; blank values are rejected. Lower sort orders appear first.",
+      "Up to 20 prompts. Title and prompt text are trimmed; blank values are rejected. Drag prompts to reorder them; this order is the order shown on the empty chat page.",
     add: "Add prompt",
     emptyTitle: "No frequent prompts yet.",
     emptyCopy:
       "Add up to 20 shortcuts. Each one appears on the empty chat page and fills the composer when clicked.",
     addFirst: "Add the first prompt",
-    order: "Order {order}",
     edit: "Edit",
     delete: "Delete",
+    reorderAria: "Reorder {title}",
+    reorderTitle: "Drag to reorder",
     loadErrorTitle: "Frequent prompts did not answer.",
     dialogEyebrow: "Settings · frequent prompts",
     editTitle: "Edit frequent prompt",
@@ -350,8 +351,6 @@ export const settings = {
     fieldTitle: "Title",
     titlePlaceholder: "Trace a memory",
     titleHelp: "Up to 80 characters.",
-    fieldSortOrder: "Sort order",
-    sortHelp: "Lower numbers appear first. Blank is treated as zero.",
     fieldPromptText: "Prompt text",
     promptPlaceholder:
       "Trace the lineage of the most recent memory and explain what changed.",
@@ -361,7 +360,6 @@ export const settings = {
       titleMax: "Title must be 80 characters or fewer.",
       textRequired: "Prompt text is required.",
       textMax: "Prompt text must be 4,000 characters or fewer.",
-      sortOrder: "Sort order must be a whole number of zero or more.",
     },
     addedToast: "Frequent prompt added.",
     updatedToast: "Frequent prompt updated.",
