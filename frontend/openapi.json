@@ -1839,6 +1839,7 @@
         "description": "Create a text file directly; used by the UI and tests.",
         "properties": {
           "content": {
+            "maxLength": 2000000,
             "minLength": 1,
             "title": "Content",
             "type": "string"
@@ -1874,6 +1875,7 @@
         "description": "\u66f4\u65b0\u65e2\u6709 Markdown \u6a94\u6848\u5167\u5bb9\uff1bexpected_version \u7528\u65bc\u6a02\u89c0\u9396\u3002",
         "properties": {
           "content": {
+            "maxLength": 2000000,
             "minLength": 1,
             "title": "Content",
             "type": "string"

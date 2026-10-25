@@ -2833,6 +2833,32 @@ button.library-crumb:hover {
   text-transform: uppercase;
 }
 
+/* chunk-only 檔案的編輯警告；沿用既有的 ochre 警示色，不阻擋儲存。 */
+.markdown-editor__reconstruction {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 14px;
+  color: var(--accent-ochre);
+  background: rgba(180, 83, 9, 0.07);
+  border-bottom: 0.7px solid rgba(180, 83, 9, 0.28);
+  font-family: var(--mono-font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.markdown-editor__reconstruction svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.markdown-editor__reconstruction p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .markdown-editor__head-side {
   display: flex;
   flex: none;
