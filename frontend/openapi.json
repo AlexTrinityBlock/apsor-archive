@@ -2568,6 +2568,37 @@
         "title": "ListResponseSchema[SummarySchema]",
         "type": "object"
       },
+      "ListResponseSchema_SystemPromptSectionReadSchema_": {
+        "properties": {
+          "items_per_page": {
+            "title": "Items Per Page",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/SystemPromptSectionReadSchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "start_index": {
+            "title": "Start Index",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "start_index",
+          "items_per_page",
+          "resources"
+        ],
+        "title": "ListResponseSchema[SystemPromptSectionReadSchema]",
+        "type": "object"
+      },
       "LoginSchema": {
         "additionalProperties": false,
         "properties": {
@@ -3971,52 +4002,47 @@
         "title": "SummarySearchResultSchema",
         "type": "object"
       },
-      "SystemPromptReadSchema": {
-        "description": "The persisted prompt and whether it adds a custom first section.",
+      "SystemPromptReorderSchema": {
+        "additionalProperties": false,
+        "description": "The complete new order; every existing section id must appear once.",
         "properties": {
-          "body": {
-            "title": "Body",
-            "type": "string"
-          },
-          "is_custom": {
-            "title": "Is Custom",
-            "type": "boolean"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
+          "section_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Section Ids",
+            "type": "array"
           }
         },
         "required": [
-          "title",
-          "body",
-          "is_custom",
-          "updated_at"
+          "section_ids"
         ],
-        "title": "SystemPromptReadSchema",
+        "title": "SystemPromptReorderSchema",
         "type": "object"
       },
-      "SystemPromptUpdateSchema": {
+      "SystemPromptSectionCreateSchema": {
         "additionalProperties": false,
-        "description": "Replace the custom prompt; both fields are required after trimming.",
+        "description": "Create one section.\n\nThe schema does not strip whitespace: the service trims both fields and\nraises ``agent_invalid_system_prompt`` for whitespace-only input, so the\nbrowser gets the same stable error code for blank and too-short values.",
         "properties": {
           "body": {
             "maxLength": 32000,
             "minLength": 1,
             "title": "Body",
             "type": "string"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
           },
           "title": {
             "maxLength": 200,
@@ -4029,7 +4055,84 @@
           "title",
           "body"
         ],
-        "title": "SystemPromptUpdateSchema",
+        "title": "SystemPromptSectionCreateSchema",
+        "type": "object"
+      },
+      "SystemPromptSectionReadSchema": {
+        "description": "One persisted section returned to the browser.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "body",
+          "sort_order",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SystemPromptSectionReadSchema",
+        "type": "object"
+      },
+      "SystemPromptSectionUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace one section; omitted ``sort_order`` preserves the current value.",
+        "properties": {
+          "body": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "title": "SystemPromptSectionUpdateSchema",
         "type": "object"
       },
       "TimelineDensitySchema": {
@@ -5518,44 +5621,44 @@
     },
     "/api/v1/agent/settings/system-prompt": {
       "get": {
-        "description": "Return the owner-authored prompt and whether it is active.",
-        "operationId": "getSystemPrompt",
+        "description": "List every custom section in display order.",
+        "operationId": "listSystemPromptSections",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SystemPromptReadSchema"
+                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptSectionReadSchema_"
                 }
               }
             },
             "description": "Successful Response"
           }
         },
-        "summary": "Get System Prompt",
+        "summary": "List System Prompt Sections",
         "tags": [
           "agent"
         ]
       },
-      "put": {
-        "description": "Replace the prompt used by future conversations.",
-        "operationId": "updateSystemPrompt",
+      "post": {
+        "description": "Create one section and return the updated list.",
+        "operationId": "createSystemPromptSection",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SystemPromptUpdateSchema"
+                "$ref": "#/components/schemas/SystemPromptSectionCreateSchema"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SystemPromptReadSchema"
+                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptSectionReadSchema_"
                 }
               }
             },
@@ -5572,7 +5675,49 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update System Prompt",
+        "summary": "Create System Prompt Section",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/settings/system-prompt/order": {
+      "put": {
+        "description": "Replace the complete section order.",
+        "operationId": "reorderSystemPromptSections",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemPromptReorderSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptSectionReadSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder System Prompt Sections",
         "tags": [
           "agent"
         ]
@@ -5580,21 +5725,108 @@
     },
     "/api/v1/agent/settings/system-prompt/reset": {
       "post": {
-        "description": "Remove the custom section and return to the built-in prompt.",
-        "operationId": "resetSystemPrompt",
+        "description": "Delete every custom section; the built-in prompt remains.",
+        "operationId": "resetSystemPromptSections",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SystemPromptReadSchema"
+                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptSectionReadSchema_"
                 }
               }
             },
             "description": "Successful Response"
           }
         },
-        "summary": "Reset System Prompt",
+        "summary": "Reset System Prompt Sections",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/settings/system-prompt/{section_id}": {
+      "delete": {
+        "description": "Hard-delete one section.",
+        "operationId": "deleteSystemPromptSection",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "section_id",
+            "required": true,
+            "schema": {
+              "title": "Section Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete System Prompt Section",
+        "tags": [
+          "agent"
+        ]
+      },
+      "put": {
+        "description": "Replace one section and return the updated list.",
+        "operationId": "updateSystemPromptSection",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "section_id",
+            "required": true,
+            "schema": {
+              "title": "Section Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemPromptSectionUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptSectionReadSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update System Prompt Section",
         "tags": [
           "agent"
         ]

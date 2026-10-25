@@ -552,17 +552,20 @@ failure never becomes an HTTP 500.
 | `POST` | `/api/v1/agent/approvals/{approval_id}/approve` | Execute once, append the tool result, resume |
 | `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | Append `memory_rejected`, resume without writing |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog plus prompt/tools versions |
-| `GET` | `/api/v1/agent/settings/system-prompt` | Custom system prompt title/body |
-| `PUT` | `/api/v1/agent/settings/system-prompt` | Save the custom first system section |
-| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Return to built-in sections only |
+| `GET` | `/api/v1/agent/settings/system-prompt` | List custom system prompt sections |
+| `POST` | `/api/v1/agent/settings/system-prompt` | Create one section (`201`) |
+| `PUT` | `/api/v1/agent/settings/system-prompt/order` | Reorder every section |
+| `PUT` | `/api/v1/agent/settings/system-prompt/{section_id}` | Replace one section |
+| `DELETE` | `/api/v1/agent/settings/system-prompt/{section_id}` | Delete one section (`204`) |
+| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Remove every custom section |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` accepts
 `{content, request_id?, page_context?, client_timezone?,
 client_utc_offset_minutes?}` and `.../retry` accepts `{request_id?}`. Both stream
 `text/event-stream` by default. The client timezone is stored with a
 server-rendered `<current_time>` block on each user entry; the block is appended
-after the message text exactly once. The custom first system section is written
-at conversation creation and frozen into that thread. The event names are
+after the message text exactly once. The ordered custom system sections are
+written at conversation creation and frozen into that thread. The event names are
 `run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
 `tool_end`, `approval_required`, `run_end`, and `error`. `run_start` reports
 `page_context_entry_id` (or `null`), `page_context_attached`, and `resumed` so
@@ -1180,7 +1183,7 @@ orders by `sort_order`, caps at 20 rows, and deletes frequently used prompts. Th
 file-library test also uploads an image without a vision provider and verifies
 the filename caption, stored original, path listing, and search result.
 
-The latest migration is `a3f7c9d1e5b2`, after `d5e9f3a7b2c1`. The migrations
+The latest migration is `c9e1f3a5b7d2`, after `b8d2e4f6a1c3`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1213,8 +1216,13 @@ after `agent_config` on this branch are:
   (`chat_provider_config`, `embedding_provider_config`,
   `web_search_provider_config`, `web_fetch_provider_config`), copies existing
   chat/embedding rows, and creates the per-table partial unique active indexes;
-- `a3f7c9d1e5b2` (current head) creates `frequently_used_prompt` and seeds the
-  three shortcuts that used to be hard-coded in the chat empty state.
+- `a3f7c9d1e5b2` creates `frequently_used_prompt` and seeds the three
+  shortcuts that used to be hard-coded in the chat empty state;
+- `b8d2e4f6a1c3` relabels `dendro-hash-384` chunks to `apsor-hash-384` after
+  the Apsor Archive rebrand;
+- `c9e1f3a5b7d2` (current head) replaces the singleton `system_prompt` table
+  with ordered `system_prompt_section` rows and copies the existing prompt as
+  the first section.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so
