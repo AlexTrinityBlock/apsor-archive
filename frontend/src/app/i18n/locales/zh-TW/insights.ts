@@ -165,8 +165,6 @@ export const insights = {
       includeHistory: "包含歷史",
       historyIncluded: "已包含淘汰的記憶",
       historyActiveOnly: "僅包含有效記憶",
-      demoSeason: "試看示範季節",
-      demoSeasonTitle: "讀取種子資料中的示範季節",
     },
     states: {
       skeleton: "正在讀取時間軸範圍",
@@ -255,7 +253,6 @@ export const insights = {
         "檔案館在這個範圍內沒有回傳任何記憶、摘要或檔案更新（{caption}）。請移動範圍、加寬長度，或搜尋下方的較早範圍。",
       emptyHistoryNote:
         " 已淘汰的記憶目前被排除；開啟「包含歷史」即可擴大讀取範圍。",
-      demoSeason: "試看示範季節",
       jumpToday: "跳到今天",
     },
   },

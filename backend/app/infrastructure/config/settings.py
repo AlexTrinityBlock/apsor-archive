@@ -109,7 +109,6 @@ class Settings(BaseSettings):
     auto_summary_threshold: int = 10
     summary_min_memories: int = 2
 
-    seed_demo: bool = False
     run_migrations: bool = True
     timezone: str = "Asia/Taipei"
     gzip_minimum_size: int = 500

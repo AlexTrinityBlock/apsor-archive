@@ -184,17 +184,6 @@ export const settings = {
     readingVersion: "Reading version",
     versionUnavailable: "Version unavailable",
     version: "v{version}",
-    seedDetailDefault:
-      "Adds four sample documents, a small set of baseline memories, and one summary. Existing data is never overwritten.",
-    seedDetailExisting:
-      "The archive already holds {files} files and {memories} memories. The seed endpoint only accepts an empty archive.",
-    seedDetailPending: "Checking the archive before seeding.",
-    seedDetailError:
-      "The archive counts could not be read. The API will refuse to seed a non-empty archive.",
-    demoArchive: "Demo archive",
-    seedTitle: "Seed the sample corpus",
-    seedAction: "Seed demo archive",
-    seeding: "Seeding…",
     access: "Access",
     accessTitle: "Single owner account",
     accessCopyBefore:
@@ -203,19 +192,6 @@ export const settings = {
       ". There is no cloud account, password recovery, or per-user permission model. Sign out from the rail when you leave a shared machine.",
     keeperFallback: "the keeper",
     readMethod: "Read the method",
-    dialogEyebrow: "Maintenance · demo seed",
-    dialogTitle: "Seed the demo archive?",
-    dialogDescriptionExisting:
-      "This archive already holds {files} files and {memories} memories.",
-    dialogDescriptionUnknown:
-      "The current archive counts could not be read.",
-    requestSeed: "Request seed",
-    dialogCopy:
-      "The seed endpoint only fills an empty archive. It will refuse this request if any files or memories already exist; nothing is deleted or overwritten either way.",
-    seededOne:
-      "Seeded {files} files, {memories} memories, and {summaries} summary.",
-    seededOther:
-      "Seeded {files} files, {memories} memories, and {summaries} summaries.",
   },
   diagnostics: {
     title: "System diagnostics",

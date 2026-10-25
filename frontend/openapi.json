@@ -1480,30 +1480,6 @@
         "title": "ChunkSchema",
         "type": "object"
       },
-      "DemoSeedSchema": {
-        "description": "What the demo seed created.",
-        "properties": {
-          "files_created": {
-            "title": "Files Created",
-            "type": "integer"
-          },
-          "memories_created": {
-            "title": "Memories Created",
-            "type": "integer"
-          },
-          "summaries_created": {
-            "title": "Summaries Created",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "files_created",
-          "memories_created",
-          "summaries_created"
-        ],
-        "title": "DemoSeedSchema",
-        "type": "object"
-      },
       "DirectorySchema": {
         "description": "One directory in a path listing.",
         "properties": {
@@ -6397,28 +6373,6 @@
         "summary": "Get Auth Status",
         "tags": [
           "auth"
-        ]
-      }
-    },
-    "/api/v1/demo/seed": {
-      "post": {
-        "description": "Populate an empty library with a small demo archive.",
-        "operationId": "seedDemo",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DemoSeedSchema"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Seed Demo",
-        "tags": [
-          "system"
         ]
       }
     },

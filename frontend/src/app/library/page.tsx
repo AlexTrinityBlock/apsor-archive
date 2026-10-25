@@ -23,7 +23,6 @@ import {
   copyFile,
   moveFile,
 } from "../generated-apis-types/files/files";
-import { useSeedDemo } from "../generated-apis-types/system/system";
 import { useReadPath } from "../generated-apis-types/tree/tree";
 import { basename, parentPath, pathSegments } from "../../lib/format";
 import { Button } from "../component/Button";
@@ -267,24 +266,6 @@ export function LibraryPage() {
     setSelectedFolderPaths(new Set<string>());
     setSelectionPath(null);
   }, []);
-
-  const seedMutation = useSeedDemo({
-    mutation: {
-      onSuccess: () => {
-        toast.success(t("library.page.seedSuccess"));
-        void queryClient.invalidateQueries();
-        setSelecting(false);
-        setSelectedFileIds(new Set<number>());
-        setSelectedFolderPaths(new Set<string>());
-        setSelectionPath(null);
-        setMediaFilter("");
-        setSearchParams(new URLSearchParams(), { replace: true });
-      },
-      onError: (error) => {
-        toast.error(describeError(error));
-      },
-    },
-  });
 
   const updateParams = useCallback(
     (updates: ParamUpdates, options?: { readonly replace?: boolean }) => {
@@ -1093,7 +1074,6 @@ export function LibraryPage() {
         path={path}
         query={activeQuery}
         view={view}
-        seeding={seedMutation.isPending}
         selecting={selecting}
         selectedFileIds={activeSelectedFileIds}
         selectedFolderPaths={activeSelectedFolderPaths}
@@ -1109,7 +1089,6 @@ export function LibraryPage() {
         onNewFolder={() => setNewFolderOpen(true)}
         onClearSearch={clearQuery}
         onOpenRoot={() => openFolder("/")}
-        onSeed={() => seedMutation.mutate()}
         onRequestMove={handleRequestMoveCopy}
         onRequestDelete={handleRequestDelete}
         onMoveFile={(file, targetFolder, mode) => {

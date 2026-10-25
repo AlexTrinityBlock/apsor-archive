@@ -20,7 +20,6 @@ interface TimelineControlsProps {
   readonly onShift: (days: number) => void;
   readonly onRangeChange: (range: number) => void;
   readonly onHistoryChange: (includeHistory: boolean) => void;
-  readonly onDemoSeason: () => void;
 }
 
 /** Compact functional controls for the timeline's date window and sampling. */
@@ -34,7 +33,6 @@ export function TimelineControls({
   onShift,
   onRangeChange,
   onHistoryChange,
-  onDemoSeason,
 }: TimelineControlsProps) {
   const { t, formatNumber } = useI18n();
   const handleDateChange = (value: string) => {
@@ -136,16 +134,6 @@ export function TimelineControls({
           </span>
         </span>
       </label>
-
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={onDemoSeason}
-        title={t("insights.timeline.controls.demoSeasonTitle")}
-      >
-        <Icon name="ring" size={13} />
-        {t("insights.timeline.controls.demoSeason")}
-      </Button>
     </section>
   );
 }

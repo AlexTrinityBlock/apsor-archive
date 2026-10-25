@@ -6,24 +6,20 @@ import { useI18n } from "../../i18n";
 interface LibraryEmptyStateProps {
   readonly path: string;
   readonly query: string;
-  readonly seeding: boolean;
   readonly onUpload: () => void;
   readonly onNewFolder: () => void;
   readonly onClearSearch: () => void;
   readonly onOpenRoot: () => void;
-  readonly onSeed: () => void;
 }
 
 /** Empty, first-run, and no-match states for the Files tab. */
 export function LibraryEmptyState({
   path,
   query,
-  seeding,
   onUpload,
   onNewFolder,
   onClearSearch,
   onOpenRoot,
-  onSeed,
 }: LibraryEmptyStateProps) {
   const { t } = useI18n();
   if (query) {
@@ -73,12 +69,7 @@ export function LibraryEmptyState({
             <Icon name="folder" size={15} />
             {t("library.common.newFolder")}
           </Button>
-          {isRoot ? (
-            <Button variant="ghost" size="sm" onClick={onSeed} disabled={seeding} aria-busy={seeding}>
-              {seeding ? t("library.empty.seeding") : t("library.empty.seed")}
-              {seeding ? null : <Icon name="spark" size={15} />}
-            </Button>
-          ) : (
+          {isRoot ? null : (
             <Button variant="ghost" size="sm" onClick={onOpenRoot}>
               {t("library.common.backToRoot")}
             </Button>

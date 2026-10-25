@@ -180,17 +180,6 @@ export const settings = {
     readingVersion: "正在讀取版本",
     versionUnavailable: "無法取得版本",
     version: "v{version}",
-    seedDetailDefault:
-      "新增四份範例文件、一組小型基準記憶與一則摘要。既有資料永遠不會被覆寫。",
-    seedDetailExisting:
-      "檔案館目前已有 {files} 個檔案與 {memories} 筆記憶。種子端點只接受空的檔案館。",
-    seedDetailPending: "正在檢查檔案館，準備建立種子資料。",
-    seedDetailError:
-      "無法讀取檔案館計數。API 會拒絕在非空檔案館中建立種子資料。",
-    demoArchive: "示範檔案館",
-    seedTitle: "建立範例語料",
-    seedAction: "建立示範檔案館",
-    seeding: "建立中…",
     access: "存取",
     accessTitle: "單一擁有者帳號",
     accessCopyBefore:
@@ -199,18 +188,6 @@ export const settings = {
       "」登入。沒有雲端帳號、密碼復原，也沒有依使用者劃分的權限模型。離開共用機器時，請從側欄登出。",
     keeperFallback: "館長",
     readMethod: "閱讀方法",
-    dialogEyebrow: "維護 · 示範種子資料",
-    dialogTitle: "要建立示範檔案館嗎？",
-    dialogDescriptionExisting:
-      "這座檔案館目前已有 {files} 個檔案與 {memories} 筆記憶。",
-    dialogDescriptionUnknown: "無法讀取目前的檔案館計數。",
-    requestSeed: "請求建立種子資料",
-    dialogCopy:
-      "種子端點只會填充空的檔案館。只要已有任何檔案或記憶，它就會拒絕這個請求；無論如何都不會刪除或覆寫任何內容。",
-    seededOne:
-      "已建立 {files} 個檔案、{memories} 筆記憶與 {summaries} 則摘要。",
-    seededOther:
-      "已建立 {files} 個檔案、{memories} 筆記憶與 {summaries} 則摘要。",
   },
   diagnostics: {
     title: "系統診斷",

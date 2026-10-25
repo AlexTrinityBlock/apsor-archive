@@ -213,18 +213,6 @@ export const core = {
     openInLibrary: "Open in File Library",
     statsErrorTitle: "Live counts are unavailable.",
     statsErrorFallback: "The stats endpoint did not answer.",
-    seedEyebrow: "Empty archive",
-    seedTitle: "Seed the demo archive.",
-    seedDescription:
-      "The shelves are ready but empty. Seed a small, coherent archive of text files, memories, and one summary, then watch the counts and timeline fill in. The seed only writes to an empty archive.",
-    seedPending: "Seeding the archive…",
-    seedAction: "Seed demo archive",
-    uploadFirstFile: "Upload first file",
-    seedErrorFallback: "The demo archive could not be seeded.",
-    seedSuccessOne:
-      "Seeded {files} files, {memories} memories, and {summaries} summary.",
-    seedSuccessOther:
-      "Seeded {files} files, {memories} memories, and {summaries} summaries.",
   },
   languagePanel: {
     eyebrow: "Interface",
