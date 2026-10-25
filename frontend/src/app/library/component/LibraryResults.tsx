@@ -21,7 +21,9 @@ interface LibraryResultsProps {
   readonly query: string;
   readonly selecting: boolean;
   readonly selectedFileIds: ReadonlySet<number>;
+  readonly selectedFolderPaths: ReadonlySet<string>;
   readonly onToggleSelected: (fileId: number) => void;
+  readonly onToggleSelectedFolder: (path: string) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onOpenFile: (fileId: number) => void;
   readonly onFileContextMenu: (
@@ -42,7 +44,9 @@ export function LibraryResults({
   query,
   selecting,
   selectedFileIds,
+  selectedFolderPaths,
   onToggleSelected,
+  onToggleSelectedFolder,
   onOpenFolder,
   onOpenFile,
   onFileContextMenu,
@@ -80,13 +84,34 @@ export function LibraryResults({
         <tbody>
           {folders.map((folder) => (
             <tr
-              className="library-row library-row--folder"
+              className={
+                selectedFolderPaths.has(folder.path)
+                  ? "library-row library-row--folder is-selected"
+                  : "library-row library-row--folder"
+              }
               key={folder.path}
               onClick={() => onOpenFolder(folder.path)}
               onContextMenu={(event) => onFolderContextMenu(event, folder)}
               tabIndex={-1}
             >
-              {selecting ? <td className="library-table__select" aria-hidden="true" /> : null}
+              {selecting ? (
+                <td className="library-table__select" data-label={t("library.list.select")}>
+                  <label
+                    className="library-checkbox"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedFolderPaths.has(folder.path)}
+                      onChange={() => onToggleSelectedFolder(folder.path)}
+                      aria-label={t("library.a11y.selectFolder", { name: folder.name })}
+                    />
+                    <span className="library-checkbox__box" aria-hidden="true">
+                      <Icon name="check" size={12} />
+                    </span>
+                  </label>
+                </td>
+              ) : null}
               <td data-label={t("library.list.name")}>
                 <button
                   type="button"

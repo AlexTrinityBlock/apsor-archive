@@ -32,6 +32,13 @@ class FileRepositoryProtocol(Protocol):
 
     async def list_by_ids(self, file_ids: Sequence[int]) -> list[FileModel]: ...
 
+    async def list_current_for_update(
+        self,
+        *,
+        file_ids: Sequence[int],
+        folder_paths: Sequence[str],
+    ) -> list[FileModel]: ...
+
     async def list_files_in_directory(self, directory: str) -> list[FileModel]: ...
 
     async def search_paths(self, prefix: str, query: str, limit: int) -> list[FileModel]: ...

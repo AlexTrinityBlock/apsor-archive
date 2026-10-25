@@ -511,6 +511,151 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert any(item["file_id"] == image_id for item in image_search.json()["file_results"])
 
 
+def test_delete_library_selection_soft_deletes_folder_tree(client: TestClient) -> None:
+    """批次刪除資料夾時遞迴軟刪除 current files，folder rows 直接移除。"""
+    # 先建立 /journal、/journal/archive、/journal/archive/2026 三層資料夾。
+    for path in ("/journal", "/journal/archive", "/journal/archive/2026"):
+        created_folder = client.post("/api/v1/folders", json={"path": path})
+        assert created_folder.status_code == 201, created_folder.text
+
+    old_v1 = create_text(
+        client,
+        "/journal/archive/old.md",
+        "Archived old entry. " * 40,
+        "2026-09-01T09:00:00Z",
+    )
+    new_file = create_text(
+        client,
+        "/journal/archive/2026/new.md",
+        "Fresh yearly entry. " * 40,
+        "2026-09-02T09:00:00Z",
+    )
+    keep = create_text(
+        client,
+        "/journal/keep.md",
+        "Keep this journal entry. " * 40,
+        "2026-09-03T09:00:00Z",
+    )
+    outside = create_text(
+        client,
+        "/outside/keep.md",
+        "Outside the selected folder tree. " * 40,
+        "2026-09-04T09:00:00Z",
+    )
+
+    # 先更新 old.md 產生 v2，讓 v1 成為歷史版本，稍後驗證它仍然可讀。
+    updated = client.put(
+        f"/api/v1/files/{int(old_v1['id'])}/content",
+        json={"content": "Revised archived entry. " * 40, "expected_version": 1},
+    )
+    assert updated.status_code == 200, updated.text
+    old_v1_id = int(old_v1["id"])
+    old_v2_id = int(updated.json()["id"])
+    assert old_v2_id != old_v1_id
+
+    response = client.post(
+        "/api/v1/files/batch-delete",
+        json={
+            "folder_paths": ["/journal/archive"],
+            "file_ids": [int(outside["id"])],
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["deleted_files"] == 3
+    assert body["deleted_folders"] >= 2
+    assert body["deleted_folder_paths"] == ["/journal/archive"]
+    assert set(body["deleted_file_ids"]) == {
+        old_v2_id,
+        int(new_file["id"]),
+        int(outside["id"]),
+    }
+
+    # /journal 還在，archive 子樹消失，/journal/keep.md 仍是 current file。
+    journal_listing = client.get(
+        "/api/v1/paths",
+        params={"path": "/journal", "path_depth": 1},
+    )
+    assert journal_listing.status_code == 200, journal_listing.text
+    assert journal_listing.json()["directories"] == []
+    assert [item["file_id"] for item in journal_listing.json()["files"]] == [int(keep["id"])]
+    assert client.get("/api/v1/paths", params={"path": "/journal/archive"}).status_code == 404
+    assert client.get("/api/v1/paths", params={"path": "/journal/archive/2026"}).status_code == 404
+
+    # 未選取的資料夾 row 會保留；它底下的檔案已被直接選取刪除。
+    outside_listing = client.get("/api/v1/paths", params={"path": "/outside"})
+    assert outside_listing.status_code == 200
+    assert outside_listing.json()["files"] == []
+
+    # 被刪除的檔案都變成非 current 並帶 deleted_at，chunks 也全部非 current。
+    for file_id in (old_v2_id, int(new_file["id"]), int(outside["id"])):
+        detail = client.get(f"/api/v1/files/{file_id}")
+        assert detail.status_code == 200
+        assert detail.json()["is_current"] is False
+        assert detail.json()["deleted_at"] is not None
+        window = client.get(f"/api/v1/files/{file_id}/chunks/1")
+        assert window.status_code == 200
+        assert window.json()["chunks"]
+        assert all(chunk["is_current"] is False for chunk in window.json()["chunks"])
+
+    # 歷史 v1 row 沒有被刪除，仍可用原本的 id 讀取。
+    historical = client.get(f"/api/v1/files/{old_v1_id}")
+    assert historical.status_code == 200
+    assert historical.json()["is_current"] is False
+    assert historical.json()["raw_file_path"] == "/journal/archive/old.md"
+
+    # root 不可刪除，錯誤一律回穩定的 domain error code。
+    root_delete = client.post(
+        "/api/v1/files/batch-delete",
+        json={"folder_paths": ["/"]},
+    )
+    assert root_delete.status_code == 422
+    assert root_delete.json()["error"] == "invalid_path"
+
+    missing_folder = client.post(
+        "/api/v1/files/batch-delete",
+        json={"folder_paths": ["/journal/missing"]},
+    )
+    assert missing_folder.status_code == 404
+    assert missing_folder.json()["error"] == "path_not_found"
+
+    historical_delete = client.post(
+        "/api/v1/files/batch-delete",
+        json={"file_ids": [old_v1_id]},
+    )
+    assert historical_delete.status_code == 404
+    assert historical_delete.json()["error"] == "file_not_found"
+
+    deleted_delete = client.post(
+        "/api/v1/files/batch-delete",
+        json={"file_ids": [int(outside["id"])]},
+    )
+    assert deleted_delete.status_code == 404
+    assert deleted_delete.json()["error"] == "file_not_found"
+
+    empty_delete = client.post("/api/v1/files/batch-delete", json={})
+    assert empty_delete.status_code == 400
+    assert empty_delete.json()["error"] == "invalid_request"
+    assert client.get(f"/api/v1/files/{int(keep['id'])}").json()["is_current"] is True
+
+    # 同時選父資料夾與子資料夾只處理最上層；重複的 file id 只算一次。
+    bulk_note = create_text(client, "/bulk/child/note.md", "Bulk note. " * 40)
+    bulk_note_id = int(bulk_note["id"])
+    deduped = client.post(
+        "/api/v1/files/batch-delete",
+        json={
+            "folder_paths": ["/bulk/child/", "/bulk"],
+            "file_ids": [bulk_note_id, bulk_note_id],
+        },
+    )
+    assert deduped.status_code == 200, deduped.text
+    deduped_body = deduped.json()
+    assert deduped_body["deleted_folder_paths"] == ["/bulk"]
+    assert deduped_body["deleted_folders"] == 2
+    assert deduped_body["deleted_file_ids"] == [bulk_note_id]
+    assert deduped_body["deleted_files"] == 1
+
+
 def test_rename_file_keeps_identity_and_rejects_path_changes(client: TestClient) -> None:
     """重新命名只改最後段檔名，保留檔案身分、版本、chunks 與原始資料。"""
     created = create_text(
