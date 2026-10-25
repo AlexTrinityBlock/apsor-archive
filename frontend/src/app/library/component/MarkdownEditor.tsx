@@ -55,21 +55,51 @@ export interface MarkdownEditorProps {
 
 type MobilePane = "write" | "preview";
 
-function defaultNewPath(directory: string | undefined): string {
-  return joinArchivePath(directory ?? "/", "untitled.md");
+const DEFAULT_NEW_FILE_NAME = "untitled.md";
+
+/** 新筆記的資料夾在對話框開啟期間固定，並正規化為絕對資料夾路徑。 */
+function normalizeNewNoteDirectory(directory: string | undefined): string {
+  const normalized = normalizeArchivePath(directory ?? "/");
+  return normalized.length === 0 ? "/" : normalized;
 }
 
-/** 未帶 Markdown 副檔名時補上 `.md`，其餘路徑保持使用者輸入的形狀。 */
-function ensureMarkdownPath(rawPath: string): string {
-  const normalized = normalizeArchivePath(rawPath);
-  if (normalized.length === 0 || normalized === "/") {
+/** 未帶 Markdown 副檔名時補上 `.md`，其餘檔名保持使用者輸入的形狀。 */
+function ensureMarkdownFileName(rawName: string): string {
+  const name = rawName.trim();
+  if (name.length === 0) {
     return "";
   }
-  const lower = normalized.toLowerCase();
+  const lower = name.toLowerCase();
   if (lower.endsWith(".md") || lower.endsWith(".markdown")) {
-    return normalized;
+    return name;
   }
-  return `${normalized}.md`;
+  return `${name}.md`;
+}
+
+/** 控制字元（C0、DEL 與 C1）不得出現在檔名中。 */
+function hasControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint < 0x20 || (codePoint >= 0x7f && codePoint <= 0x9f)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** 只允許單一檔名：不可空白、不可含路徑分隔符，也不可是 `.` 或 `..`。 */
+function isValidNewFileName(rawName: string): boolean {
+  if (hasControlCharacter(rawName)) {
+    return false;
+  }
+  const name = rawName.trim();
+  return (
+    name.length > 0 &&
+    name !== "." &&
+    name !== ".." &&
+    !name.includes("/") &&
+    !name.includes("\\")
+  );
 }
 
 function countWords(value: string): number {
@@ -77,18 +107,40 @@ function countWords(value: string): number {
   return trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length;
 }
 
-/** 新檔案除了內容之外也比對 path；既有檔案只比較內容。 */
+/** 新檔案除了內容之外也比對檔名；既有檔案只比較內容。 */
 function isDocumentDirty(
   mode: "edit" | "new",
   content: string,
   initialContent: string | null,
-  path: string,
-  initialPath: string,
+  fileName: string,
+  initialFileName: string,
 ): boolean {
   if (mode === "new") {
-    return content !== (initialContent ?? "") || path !== initialPath;
+    return content !== (initialContent ?? "") || fileName !== initialFileName;
   }
   return initialContent !== null && content !== initialContent;
+}
+
+interface NewNoteLocation {
+  readonly invalid: boolean;
+  readonly error: string | null;
+  readonly prefix: string;
+  readonly resolvedPath: string;
+}
+
+/** 由固定資料夾與檔名推導前綴、行內錯誤與實際建立路徑。 */
+function resolveNewNoteLocation(
+  directory: string,
+  fileName: string,
+  t: Translate,
+): NewNoteLocation {
+  const invalid = !isValidNewFileName(fileName);
+  return {
+    invalid,
+    error: invalid ? t("library.editor.fileNameError") : null,
+    prefix: directory === "/" ? "/" : `${directory}/`,
+    resolvedPath: joinArchivePath(directory, ensureMarkdownFileName(fileName)),
+  };
 }
 
 function isVersionConflict(error: unknown): boolean {
@@ -155,6 +207,62 @@ function saveFailureMessage(
   return detail === t("library.errors.generic")
     ? t("library.editor.saveError")
     : detail;
+}
+
+interface NewNotePathFieldProps {
+  readonly prefix: string;
+  readonly fileName: string;
+  readonly error: string | null;
+  readonly disabled: boolean;
+  readonly onFileNameChange: (nextValue: string) => void;
+}
+
+/** 新筆記的固定資料夾前綴與唯一可編輯的檔名欄位。 */
+function NewNotePathField({
+  prefix,
+  fileName,
+  error,
+  disabled,
+  onFileNameChange,
+}: NewNotePathFieldProps) {
+  const { t } = useI18n();
+  const fileNameId = useId();
+  const errorId = useId();
+
+  return (
+    <div className="markdown-editor__path">
+      <span className="markdown-editor__path-label">
+        {t("library.editor.folderLabel")}
+      </span>
+      <code className="markdown-editor__path-prefix" title={prefix}>
+        {prefix}
+      </code>
+      <label className="markdown-editor__path-label" htmlFor={fileNameId}>
+        {t("library.editor.fileNameLabel")}
+      </label>
+      <input
+        id={fileNameId}
+        className="markdown-editor__path-input"
+        type="text"
+        value={fileName}
+        onChange={(event) => onFileNameChange(event.target.value)}
+        placeholder={t("library.editor.fileNamePlaceholder")}
+        autoComplete="off"
+        spellCheck={false}
+        disabled={disabled}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+      />
+      {error ? (
+        <span id={errorId} className="markdown-editor__path-error" role="alert">
+          {error}
+        </span>
+      ) : null}
+      <span className="markdown-editor__path-hint">
+        {t("library.editor.newNoteDescription")}
+      </span>
+    </div>
+  );
 }
 
 interface MarkdownEditorBodyProps {
@@ -295,14 +403,15 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const { t, formatNumber } = useI18n();
     const queryClient = useQueryClient();
     const toast = useToast();
-    const pathId = useId();
     const discardBodyId = useId();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const initializedRef = useRef(mode === "new");
     const focusedRef = useRef(false);
 
-    const [initialPath] = useState(() => defaultNewPath(defaultDirectory));
-    const [path, setPath] = useState(initialPath);
+    const [fixedDirectory] = useState(() =>
+      normalizeNewNoteDirectory(defaultDirectory),
+    );
+    const [fileName, setFileName] = useState(DEFAULT_NEW_FILE_NAME);
     const [content, setContent] = useState("");
     const [initialContent, setInitialContent] = useState<string | null>(
       mode === "new" ? "" : null,
@@ -340,8 +449,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       mode,
       content,
       initialContent,
-      path,
-      initialPath,
+      fileName,
+      DEFAULT_NEW_FILE_NAME,
     );
 
     useEffect(() => {
@@ -376,14 +485,17 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         !markdownDocument.loading &&
         markdownDocument.error === null);
 
-    const resolvedPath = ensureMarkdownPath(path);
+    const newNoteLocation = resolveNewNoteLocation(fixedDirectory, fileName, t);
+    const resolvedPath = newNoteLocation.resolvedPath;
     const normalizedContent = content.trim();
     const canSave =
       editorReady &&
       !isSaving &&
       dirty &&
       normalizedContent.length > 0 &&
-      (mode === "new" ? resolvedPath.length > 1 : file !== undefined);
+      (mode === "new"
+        ? !newNoteLocation.invalid && newNoteLocation.resolvedPath.length > 1
+        : file !== undefined);
 
     useEffect(() => {
       if (!editorReady || focusedRef.current) {
@@ -603,25 +715,13 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         />
 
         {mode === "new" ? (
-          <div className="markdown-editor__path">
-            <label className="markdown-editor__path-label" htmlFor={pathId}>
-              {t("library.editor.pathLabel")}
-            </label>
-            <input
-              id={pathId}
-              className="markdown-editor__path-input"
-              type="text"
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
-              placeholder={t("library.editor.pathPlaceholder")}
-              autoComplete="off"
-              spellCheck={false}
-              disabled={isSaving}
-            />
-            <span className="markdown-editor__path-hint">
-              {t("library.editor.newNoteDescription")}
-            </span>
-          </div>
+          <NewNotePathField
+            prefix={newNoteLocation.prefix}
+            fileName={fileName}
+            error={newNoteLocation.error}
+            disabled={isSaving}
+            onFileNameChange={setFileName}
+          />
         ) : null}
 
         <MarkdownToolbar

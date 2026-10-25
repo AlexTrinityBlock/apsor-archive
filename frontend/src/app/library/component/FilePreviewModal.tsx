@@ -51,6 +51,7 @@ interface FilePreviewModalProps {
   readonly onEditModeChange?: (editing: boolean) => void;
   readonly onMove: (target: FileOperationTarget) => void;
   readonly onCopy: (target: FileOperationTarget) => void;
+  readonly onRename: (target: FileOperationTarget) => void;
   readonly onDelete: (target: FileOperationTarget) => void;
 }
 
@@ -459,12 +460,14 @@ function PreviewActions({
   onEdit,
   onMove,
   onCopy,
+  onRename,
   onDelete,
 }: {
   readonly file: FileSchema;
   readonly onEdit: () => void;
   readonly onMove: (target: FileOperationTarget) => void;
   readonly onCopy: (target: FileOperationTarget) => void;
+  readonly onRename: (target: FileOperationTarget) => void;
   readonly onDelete: (target: FileOperationTarget) => void;
 }) {
   const { t, formatNumber } = useI18n();
@@ -510,6 +513,10 @@ function PreviewActions({
         )}
         {file.deleted_at ? null : (
           <>
+            <Button variant="ghost" size="sm" onClick={() => onRename(operationTarget(file))}>
+              <Icon name="pencil" size={14} />
+              {t("library.common.rename")}
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => onMove(operationTarget(file))}>
               <Icon name="branch" size={14} />
               {t("library.common.move")}
@@ -549,6 +556,7 @@ export function FilePreviewModal({
   onEditModeChange,
   onMove,
   onCopy,
+  onRename,
   onDelete,
 }: FilePreviewModalProps) {
   const { t } = useI18n();
@@ -561,7 +569,6 @@ export function FilePreviewModal({
     requestedChunk > 1 ? "chunk" : "page",
   );
   const [editing, setEditing] = useState(false);
-  const [editorDirty, setEditorDirty] = useState(false);
 
   useScrollLock(true);
 
@@ -578,7 +585,6 @@ export function FilePreviewModal({
   useEffect(() => {
     startInEditAppliedRef.current = false;
     setEditing(false);
-    setEditorDirty(false);
   }, [fileId]);
 
   // 深層連結可能在檔案查詢完成前就要求進入編輯模式。
@@ -670,14 +676,12 @@ export function FilePreviewModal({
   const kind = file ? classifyFile(file) : null;
 
   const handleCancelEdit = useCallback(() => {
-    setEditorDirty(false);
     setEditing(false);
     onEditModeChange?.(false);
   }, [onEditModeChange]);
 
   const handleSaved = useCallback(
     (updatedFile: FileSchema) => {
-      setEditorDirty(false);
       // 兩個 callback 可能在同一輪事件中各自更新 query string。先清掉
       // `mode`，再讓 `onFileVersionChange` 同時帶入新 file id 與 mode=null，
       // 確保最後一次導覽不會退回舊版本。
@@ -712,23 +716,26 @@ export function FilePreviewModal({
         className="modal-dialog library-preview__dialog"
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        aria-labelledby={editing ? undefined : titleId}
+        aria-label={editing ? t("library.editor.editing") : undefined}
         tabIndex={-1}
       >
-        <header className="modal-head library-preview__head">
-          <div className="library-preview__identity">
-            <p className="eyebrow">
-              {kind
-                ? t("library.preview.eyebrowKind", { kind: kindLabel(kind, t) })
-                : t("library.preview.eyebrow")}
-            </p>
-            <h2 id={titleId} className="library-preview__title">
-              {file?.file_name ?? t("library.preview.fileIdFallback", { id: fileId })}
-            </h2>
-            {file ? <code className="library-preview__path">{file.raw_file_path}</code> : null}
-          </div>
+        {editing ? null : (
+          <header className="modal-head library-preview__head">
+            <div className="library-preview__identity">
+              <p className="eyebrow">
+                {kind
+                  ? t("library.preview.eyebrowKind", { kind: kindLabel(kind, t) })
+                  : t("library.preview.eyebrow")}
+              </p>
+              <h2 id={titleId} className="library-preview__title">
+                {file?.file_name ?? t("library.preview.fileIdFallback", { id: fileId })}
+              </h2>
+              {file ? (
+                <code className="library-preview__path">{file.raw_file_path}</code>
+              ) : null}
+            </div>
 
-          {editing ? null : (
             <div
               className="tabs library-preview__tabs"
               role="tablist"
@@ -748,36 +755,18 @@ export function FilePreviewModal({
                 </button>
               ))}
             </div>
-          )}
 
-          {editing && editorDirty ? (
-            <span className="visually-hidden" role="status">
-              {t("library.editor.unsaved")}
-            </span>
-          ) : null}
-
-          <button
-            type="button"
-            className="modal-btn-close"
-            onClick={
-              editing
-                ? () => editorRef.current?.requestClose()
-                : onClose
-            }
-            aria-label={
-              editing
-                ? t("library.editor.closeEditor")
-                : t("library.common.closePreview")
-            }
-            title={
-              editing
-                ? t("library.editor.closeEditor")
-                : t("library.common.closePreview")
-            }
-          >
-            <Icon name="close" size={18} />
-          </button>
-        </header>
+            <button
+              type="button"
+              className="modal-btn-close"
+              onClick={onClose}
+              aria-label={t("library.common.closePreview")}
+              title={t("library.common.closePreview")}
+            >
+              <Icon name="close" size={18} />
+            </button>
+          </header>
+        )}
 
         {file && !editing ? (
           <PreviewActions
@@ -785,6 +774,7 @@ export function FilePreviewModal({
             onEdit={handleStartEdit}
             onMove={onMove}
             onCopy={onCopy}
+            onRename={onRename}
             onDelete={onDelete}
           />
         ) : null}
@@ -803,7 +793,6 @@ export function FilePreviewModal({
               file={file}
               onCancel={handleCancelEdit}
               onSaved={handleSaved}
-              onDirtyChange={setEditorDirty}
             />
           ) : (
             <PreviewBody

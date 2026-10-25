@@ -1642,6 +1642,23 @@
         "title": "FileMoveSchema",
         "type": "object"
       },
+      "FileRenameSchema": {
+        "additionalProperties": false,
+        "description": "Rename one current file without changing its parent folder.",
+        "properties": {
+          "file_name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "File Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_name"
+        ],
+        "title": "FileRenameSchema",
+        "type": "object"
+      },
       "FileSchema": {
         "description": "File metadata returned by the API.",
         "properties": {
@@ -7042,6 +7059,59 @@
           }
         },
         "summary": "Move File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/rename": {
+      "post": {
+        "description": "Rename a current file without changing its parent folder.",
+        "operationId": "renameFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileRenameSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename File",
         "tags": [
           "files"
         ]
