@@ -251,7 +251,7 @@ model step. A duplicate, expired, or orphaned resolution returns `409
 agent_approval_not_pending`; a non-earliest approval in a multi-call batch
 returns `409 agent_approval_out_of_order`.
 
-The runtime defaults cap a turn at 24 model steps, 6 tool calls, 6 parallel
+The runtime defaults cap a turn at 24 model steps, 20 tool calls, 6 parallel
 tools, 100,000 total tokens, and 100,000 characters per tool result. Each result
 is clipped independently with a visible truncation marker; there is no
 turn-wide result budget. `context_window_tokens` (default 1,000,000) records
@@ -293,7 +293,7 @@ replacement rather than a patch.
 | `compaction_threshold_tokens` | 75,000 | 1,000–200,000; `< max_total_tokens` |
 | `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model context metadata, not a turn budget |
 | `max_steps` | 24 | 1–32 |
-| `max_tool_calls_per_turn` | 6 | 1–24 |
+| `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24; `<= max_tool_calls_per_turn` |
 | `max_tool_result_chars` | 100,000 | 1,000–200,000 |
 | `max_page_context_chars` | 6,000 | 500–50,000 |

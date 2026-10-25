@@ -161,7 +161,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "compaction_threshold_tokens": 75_000,
         "context_window_tokens": 1_000_000,
         "max_steps": 24,
-        "max_tool_calls_per_turn": 6,
+        "max_tool_calls_per_turn": 20,
         "max_parallel_tools": 6,
         "max_tool_result_chars": 100_000,
         "max_page_context_chars": 6_000,
