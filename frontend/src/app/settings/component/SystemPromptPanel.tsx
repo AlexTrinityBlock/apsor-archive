@@ -987,6 +987,7 @@ export function SystemPromptPanel() {
     });
 
   const sections = query.data?.resources ?? [];
+  const sectionNoun = sections.length === 1 ? "section" : "sections";
   const saving = updateMutation.isPending;
   const busy =
     createMutation.isPending ||
@@ -1014,13 +1015,21 @@ export function SystemPromptPanel() {
     setDeleteTarget(section);
   };
 
-  let countBadge = <Badge tone="neutral">{sections.length} sections</Badge>;
+  let countBadge = (
+    <Badge tone="neutral">
+      {sections.length} {sectionNoun}
+    </Badge>
+  );
   if (query.isPending) {
     countBadge = <Badge tone="neutral">Loading</Badge>;
   } else if (query.isError) {
     countBadge = <Badge tone="vermilion">Unavailable</Badge>;
   } else if (sections.length > 0) {
-    countBadge = <Badge tone="moss">{sections.length} sections</Badge>;
+    countBadge = (
+      <Badge tone="moss">
+        {sections.length} {sectionNoun}
+      </Badge>
+    );
   }
 
   let listBody = null;
