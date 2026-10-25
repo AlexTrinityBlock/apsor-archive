@@ -70,6 +70,11 @@ class AgentInvalidSystemPromptError(AgentError):
         super().__init__(detail)
 
 
+class AgentSystemPromptNotFoundError(AgentError):
+    def __init__(self, section_id: int) -> None:
+        super().__init__(f"System prompt section {section_id} was not found.")
+
+
 class AgentApprovalNotFoundError(AgentError):
     def __init__(self, approval_id: int) -> None:
         super().__init__(f"Agent approval {approval_id} was not found.")

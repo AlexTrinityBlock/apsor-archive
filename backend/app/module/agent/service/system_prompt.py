@@ -7,7 +7,7 @@ mutated; a future prompt change creates a new conversation (or a system delta).
 
 from typing import Any
 
-from app.module.agent.domain.system_prompt_domain import SystemPromptText
+from app.module.agent.domain.system_prompt_domain import SystemPromptSection
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
     TOOLS_VERSION,
@@ -163,25 +163,32 @@ def build_system_data(
     *,
     provider: str,
     model: str,
-    custom_prompt: SystemPromptText | None = None,
+    custom_sections: list[SystemPromptSection] | None = None,
 ) -> dict[str, Any]:
     """Build the immutable data payload for the initial system entry.
 
-    A custom prompt is inserted as the first section so the provider request
-    order is stable: custom system prompt, built-in sections, tools, then
-    messages. The payload is created once per conversation, so editing the
-    prompt never rewrites an existing KV-cache prefix.
+    Every owner-authored section is inserted before the built-in sections, so
+    the provider request order is stable: ``system_prompt:<id>`` (in
+    ``sort_order, id`` order), built-in identity/instructions/examples/context
+    protocol, tools, then messages. The payload is created once per
+    conversation, so editing a section never rewrites an existing KV-cache
+    prefix. 每條 section 使用 ``system_prompt:<id>`` 作為 provider-visible
+    name，讓舊對話的 ``pi.system`` 可以逐條辨識來源；id 不會因排序改變，
+    因此 reorder 只影響新對話，不會讓既有對話的內容看起來被替換。
     """
-    sections = prompt_sections()
-    if custom_prompt is not None and custom_prompt.body.strip():
-        sections.insert(
-            0,
-            {
-                "name": "system_prompt",
-                "title": custom_prompt.title.strip() or "System prompt",
-                "content": custom_prompt.body.strip(),
-            },
-        )
+    sections = [
+        {
+            "name": f"system_prompt:{section.id}",
+            "title": section.title,
+            "content": section.body,
+        }
+        for section in (custom_sections or [])
+        # 空白 body 在 migration 或直接 SQL 編輯後仍可能存在；跳過它可避免
+        # provider 收到只有標題的空 section。內容是否有效由 service 把關，
+        # 這裡是最後一道防線。
+        if section.body.strip()
+    ]
+    sections.extend(prompt_sections())
     return {
         "prompt_version": PROMPT_VERSION,
         "tools_version": TOOLS_VERSION,
