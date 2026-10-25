@@ -439,6 +439,13 @@ or `/viewer/memory/{id}` and never fetches the resource. The client redirects
 file links into the File Library preview modal and memory links into the memory
 reader.
 
+In the chat inspector, `web_search` opens the query, provider, retrieval time,
+and every result with a clickable URL, excerpt, and score; `web_fetch` opens the
+source metadata and the fetched body. Web result URLs and fetched content have
+copy actions. Memory citations display as `Memory: <generated title>` for people
+while the model and tooltip keep the stable `[memory:id]`. Memory text, each file
+chunk, and the conversation transcript also have one-click copy actions.
+
 Every memory row stores a short auto-generated `title`. On save and edit the
 backend asks the configured chat provider for a name before the single insert or
 update, so the body and title are stored atomically. If the provider is
