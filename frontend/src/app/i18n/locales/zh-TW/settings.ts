@@ -251,7 +251,7 @@ export const settings = {
     statsSectionLabel: "檔案館規模",
     statFiles: "已歸檔檔案",
     statChunks: "已索引分段",
-    statMemories: "記憶結晶",
+    statMemories: "記憶",
     statActive: "{count} 筆有效",
     statSummaries: "AI 摘要",
     factStorage: "儲存空間",

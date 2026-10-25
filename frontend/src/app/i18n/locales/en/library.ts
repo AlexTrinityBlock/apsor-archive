@@ -35,6 +35,7 @@ export const library = {
     download: "Download",
     move: "Move",
     copy: "Copy",
+    rename: "Rename",
     delete: "Delete",
   },
   units: {
@@ -276,6 +277,19 @@ export const library = {
     submit: "Soft delete file",
     deletedToast: "“{name}” was soft-deleted. Its history remains traceable.",
   },
+  rename: {
+    eyebrow: "Rename leaf",
+    title: "Rename “{name}”",
+    description:
+      "Only the file name changes. The folder and extension stay fixed; the file id, version, and chunks are preserved.",
+    folder: "Folder",
+    fileName: "File name",
+    errorName: "Enter one file name without slashes.",
+    cancel: "Cancel",
+    pending: "Renaming…",
+    submit: "Rename file",
+    renamedToast: "“{old}” renamed to “{new}”.",
+  },
   ingest: {
     progressAria: "Ingestion progress",
     jobId: "Job #{id}",
@@ -508,11 +522,14 @@ export const library = {
     newNote: "New note",
     newNoteTitle: "New Markdown note",
     newNoteDescription:
-      "Draft a versioned Markdown leaf in the archive. Missing folders are created automatically.",
+      "This note is created in the folder shown here. Only the file name can be changed.",
     editFile: "Edit Markdown",
     editing: "Editing Markdown",
-    pathLabel: "Archive path",
-    pathPlaceholder: "/notes/untitled.md",
+    folderLabel: "Folder",
+    fileNameLabel: "File name",
+    fileNamePlaceholder: "untitled.md",
+    fileNameError:
+      "Enter one file name without slashes; “.” and “..” are not valid names.",
     write: "Write",
     preview: "Preview",
     toolbarLabel: "Markdown formatting",
@@ -546,7 +563,8 @@ export const library = {
     saveError: "The note could not be saved",
     versionConflict:
       "This file was updated elsewhere. Reload the preview before saving again.",
-    pathConflict: "A folder already uses this path. Choose a different path.",
+    pathConflict:
+      "A file or folder already uses this name. Choose a different file name.",
     emptyContent: "Write some content before saving.",
     characters: "{count} characters",
     words: "{count} words",
