@@ -264,6 +264,8 @@ export const chat = {
     entry: "条目 #{id}",
   },
   citation: {
+    fileTitle: "文件：{title}",
+    fileId: "文件：#{id}",
     memoryTitle: "记忆：{title}",
     memoryId: "记忆：#{id}",
     archiveCitation: "档案馆引用 {label}",
