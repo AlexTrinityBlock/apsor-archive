@@ -14,10 +14,10 @@ logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
-    """Runtime configuration for the DendroMatrix API."""
+    """Runtime configuration for the Apsor Archive API."""
 
     model_config = SettingsConfigDict(
-        env_prefix="DENDRO_",
+        env_prefix="APSOR_",
         env_file=(
             ".env",
             "../.env",
@@ -31,12 +31,12 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    app_name: str = "DendroMatrix"
+    app_name: str = "Apsor Archive"
     version: str = "0.1.0"
     environment: str = "local"
     debug: bool = False
 
-    database_url: str = "postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendromatrix"
+    database_url: str = "postgresql+psycopg://apsor:apsor@127.0.0.1:55432/apsor_archive"
     data_dir: Path = BACKEND_ROOT / "data"
     static_dir: Path = REPOSITORY_ROOT / "frontend" / "dist"
     cors_origins: list[str] = Field(
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     # Durable ingestion worker. The lifespan task is a convenience for local
     # single-process development; production can run ``python -m app.worker``
-    # (or ``dendromatrix worker``) as a dedicated service.
+    # (or ``apsor-archive worker``) as a dedicated service.
     #
     # These values seed the database-backed singleton on a fresh installation;
     # the worker reads the database row and uses these only as a fallback.
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
 
     embedding_provider: Literal["hashing", "openai", "none"] = "hashing"
     embedding_dimension: int = 384
-    embedding_model: str = "dendro-hash-384"
+    embedding_model: str = "apsor-hash-384"
     embedding_base_url: str | None = None
     embedding_api_key: SecretStr | None = None
     embedding_timeout_seconds: float = 30.0
@@ -116,7 +116,7 @@ class Settings(BaseSettings):
 
     # Cookie session for the single owner account.
     session_ttl_hours: int = 24 * 30
-    cookie_name: str = "dendro_session"
+    cookie_name: str = "apsor_session"
     cookie_secure: bool = False
     login_attempt_limit: int = 10
     login_window_minutes: int = 5

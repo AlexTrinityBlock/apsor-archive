@@ -31,7 +31,7 @@ export function AuthFrame({
       </div>
 
       <div className="auth-shell">
-        <section className="auth-aside" aria-label="DendroMatrix">
+        <section className="auth-aside" aria-label="Apsor Archive">
           <div className="auth-aside__rings" aria-hidden="true">
             <TreeRings variant="quiet" />
           </div>
@@ -41,7 +41,7 @@ export function AuthFrame({
               <TreeMark size={28} />
             </span>
             <span className="auth-brand__meta">
-              <span className="auth-brand__name">DendroMatrix</span>
+              <span className="auth-brand__name">Apsor Archive</span>
               <span className="auth-brand__sub">Archive Studio</span>
             </span>
           </header>

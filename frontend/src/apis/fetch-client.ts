@@ -125,7 +125,7 @@ export async function apiFetch<T>(url: string, options: RequestInit = {}): Promi
 
   if (!response.ok) {
     if (response.status === 401 && typeof window !== "undefined") {
-      window.dispatchEvent(new Event("dendromatrix:unauthorized"));
+      window.dispatchEvent(new Event("apsor-archive:unauthorized"));
     }
     const payload = await parseResponsePayload(response);
     throw new ApiError(

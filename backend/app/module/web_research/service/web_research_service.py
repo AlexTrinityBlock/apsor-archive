@@ -224,9 +224,9 @@ def _validate_cached[T: (WebSearchResponse, WebFetchResponse)](
 def _cache_key(version: int, namespace: str, *parts: str) -> str:
     """Build a versioned cache key whose parts are hashed, never stored raw.
 
-    格式與 knowledge 片的 ``cache_key`` 相同（``dendro:<version>:<namespace>:<digest>``）。
+    格式與 knowledge 片的 ``cache_key`` 相同（``apsor:<version>:<namespace>:<digest>``）。
     web slice 不得 import 另一片的 service 模組，因此在本地保留這份純函式。
     digest 讓原始 query / URL 不會以明文出現在 cache key 中。
     """
     digest = hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:24]
-    return f"dendro:{version}:{namespace}:{digest}"
+    return f"apsor:{version}:{namespace}:{digest}"

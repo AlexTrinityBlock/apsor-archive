@@ -887,7 +887,7 @@ export function HomePage() {
       <header className="overview-masthead">
         <div className="overview-masthead__top">
           <div className="overview-title-group">
-            <p className="eyebrow eyebrow--plain">Dendrochronological Intelligence Hub</p>
+            <p className="eyebrow eyebrow--plain">Archive Intelligence Hub</p>
             <h1 className="overview-title">Archive Overview</h1>
           </div>
           <StatusChip
@@ -903,7 +903,7 @@ export function HomePage() {
             onChange={setQuery}
             onSubmit={handleSearch}
             size="lg"
-            label="Search the DendroMatrix archive"
+            label="Search the Apsor Archive"
             placeholder="Search files, memories, summaries, or a path…"
             submitLabel="Search"
           />

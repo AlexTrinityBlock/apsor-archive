@@ -23,7 +23,7 @@ import {
   type FileOperationMode,
 } from "./library-utils";
 
-const INTERNAL_DRAG_MIME = "application/x-dendromatrix-file";
+const INTERNAL_DRAG_MIME = "application/x-apsor-archive-file";
 
 type DragKind = "file" | "external";
 

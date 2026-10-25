@@ -8,7 +8,7 @@ chunking, embedding, and publishing.
 Two deployment shapes share this service:
 
 * the FastAPI lifespan starts one in-process worker for local development;
-* ``python -m app.worker`` / ``dendromatrix worker`` runs a dedicated process.
+* ``python -m app.worker`` / ``apsor-archive worker`` runs a dedicated process.
 
 The lifespan task is convenient but shares an event loop and process with the
 API. The dedicated process is preferred in production because parsing and

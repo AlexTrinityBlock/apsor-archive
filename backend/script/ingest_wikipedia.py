@@ -1,4 +1,4 @@
-"""Ingest Wikipedia articles into a running DendroMatrix instance.
+"""Ingest Wikipedia articles into a running Apsor Archive instance.
 
 Example:
     uv run python -m script.ingest_wikipedia \
@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-USER_AGENT = "DendroMatrix/0.1 (local knowledge archive)"
+USER_AGENT = "ApsorArchive/0.1 (local knowledge archive)"
 
 
 def _slug(title: str) -> str:
@@ -49,7 +49,7 @@ def fetch_extract(client: httpx.Client, lang: str, title: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingest Wikipedia extracts into DendroMatrix.")
+    parser = argparse.ArgumentParser(description="Ingest Wikipedia extracts into Apsor Archive.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--lang", default="en")
     parser.add_argument("--prefix", default="/wikipedia/en")

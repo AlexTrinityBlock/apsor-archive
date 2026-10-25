@@ -12,7 +12,7 @@ if [[ -f .secrets/deepseek.env ]]; then
   set +a
 fi
 
-if [[ -z "${DENDRO_DATABASE_URL:-}" ]]; then
+if [[ -z "${APSOR_DATABASE_URL:-}" ]]; then
   if command -v docker >/dev/null 2>&1; then
     docker compose -f docker-compose.dev.yml up -d --wait
   fi
@@ -25,4 +25,4 @@ fi
 
 cd backend
 uv sync
-exec uv run dendromatrix --host "${DENDRO_HOST:-127.0.0.1}" --port "${DENDRO_PORT:-8000}" "$@"
+exec uv run apsor-archive --host "${APSOR_HOST:-127.0.0.1}" --port "${APSOR_PORT:-8000}" "$@"

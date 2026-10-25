@@ -17,7 +17,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
 
-if (-not $env:DENDRO_DATABASE_URL) {
+if (-not $env:APSOR_DATABASE_URL) {
   if (Get-Command docker -ErrorAction SilentlyContinue) {
     docker compose -f docker-compose.dev.yml up -d --wait
   }

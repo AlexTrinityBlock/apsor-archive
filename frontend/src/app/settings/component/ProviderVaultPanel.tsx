@@ -60,7 +60,7 @@ const CAPABILITY_ORDER: readonly Capability[] = [
 
 const PROVIDER_DEFAULT_MODELS: Readonly<Record<string, string>> = {
   deepseek: "deepseek-flash",
-  hashing: "dendro-hash-384",
+  hashing: "apsor-hash-384",
   none: "none",
 };
 

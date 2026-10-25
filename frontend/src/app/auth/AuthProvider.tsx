@@ -41,7 +41,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const UNAUTHORIZED_EVENT = "dendromatrix:unauthorized";
+const UNAUTHORIZED_EVENT = "apsor-archive:unauthorized";
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
