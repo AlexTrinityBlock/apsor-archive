@@ -486,10 +486,17 @@ failure never becomes an HTTP 500.
 | `POST` | `/api/v1/agent/approvals/{approval_id}/approve` | Execute once, append the tool result, resume |
 | `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | Append `memory_rejected`, resume without writing |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog plus prompt/tools versions |
+| `GET` | `/api/v1/agent/settings/system-prompt` | Custom system prompt title/body |
+| `PUT` | `/api/v1/agent/settings/system-prompt` | Save the custom first system section |
+| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Return to built-in sections only |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` accepts
-`{content, request_id?, page_context?}` and `.../retry` accepts
-`{request_id?}`. Both stream `text/event-stream` by default. The event names are
+`{content, request_id?, page_context?, client_timezone?,
+client_utc_offset_minutes?}` and `.../retry` accepts `{request_id?}`. Both stream
+`text/event-stream` by default. The client timezone is stored with a
+server-rendered `<current_time>` block on each user entry; the block is appended
+after the message text exactly once. The custom first system section is written
+at conversation creation and frozen into that thread. The event names are
 `run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
 `tool_end`, `approval_required`, `run_end`, and `error`. `run_start` reports
 `page_context_entry_id` (or `null`), `page_context_attached`, and `resumed` so
@@ -1085,7 +1092,7 @@ bun audit
 
 The integration suite uses one real PostgreSQL test database
 (`dendromatrix_test`) on the same instance, runs sequentially, and resets every
-table between tests. There are exactly eleven tests; each one exercises the real
+table between tests. There are exactly twelve tests; each one exercises the real
 HTTP surface and database. The agent test covers runtime settings defaults,
 full PUT/reset, validation, the runtime snapshot used by later runs, auto and
 manual compaction, clear, page-context reattachment at a boundary, retry,
@@ -1102,7 +1109,7 @@ the existing agent and file-library tests. A separate file-library test uploads
 an image without a vision provider and verifies the filename caption, stored
 original, path listing, and search result.
 
-The latest migration is `c4d8e2f6a1b9`, after `8f4b2c6d9e01`. The migrations
+The latest migration is `d5e9f3a7b2c1`, after `c4d8e2f6a1b9`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1125,10 +1132,12 @@ after `agent_config` on this branch are:
   pending `(run_id, tool_call_id)` index;
 - `8f4b2c6d9e01` drops the retired `media_ngram` and `media_asset` tables. Its
   downgrade recreates the original media schema;
-- `c4d8e2f6a1b9` (current head) creates the explicit `folder` table, copies
-  current folder rows from `tree_node` with their ids, and drops `tree_node`.
-  File leaves are now derived from `file.raw_file_path`. The downgrade recreates
-  current folder rows and current file leaves.
+- `c4d8e2f6a1b9` creates the explicit `folder` table, copies current folder rows
+  from `tree_node` with their ids, and drops `tree_node`. File leaves are now
+  derived from `file.raw_file_path`. The downgrade recreates current folder rows
+  and current file leaves;
+- `d5e9f3a7b2c1` (current head) creates the singleton `system_prompt` table for
+  the owner-authored first system section.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so
@@ -1155,7 +1164,7 @@ backend/
     module/agent/               transcript, runtime settings, compaction, tools,
                                 saved questions, SSE
   alembic/                      migrations
-  tests/                        eleven integration tests
+  tests/                        twelve integration tests
 frontend/
   src/app/
     component/                  shared archive UI

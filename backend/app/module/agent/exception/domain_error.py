@@ -65,6 +65,11 @@ class AgentInvalidEntryError(AgentError):
         super().__init__(detail)
 
 
+class AgentInvalidSystemPromptError(AgentError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+
+
 class AgentApprovalNotFoundError(AgentError):
     def __init__(self, approval_id: int) -> None:
         super().__init__(f"Agent approval {approval_id} was not found.")

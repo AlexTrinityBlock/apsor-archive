@@ -69,6 +69,13 @@ class AgentMessageCreateSchema(BaseModel):
     content: str = Field(min_length=1, max_length=32_000)
     request_id: str | None = Field(default=None, min_length=1, max_length=128)
     page_context: AgentPageContextSchema | None = None
+    client_timezone: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_+\-/]+$",
+    )
+    client_utc_offset_minutes: int | None = Field(default=None, ge=-840, le=840)
 
 
 class AgentRetrySchema(BaseModel):

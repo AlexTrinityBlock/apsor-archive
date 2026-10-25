@@ -16,6 +16,7 @@ import {
   errorText,
   formatDotDay,
   formatRangeCaption,
+  timelineNewestFirst,
   toDateInput,
 } from "./helpers";
 
@@ -251,9 +252,7 @@ function SkipRow({ skip }: { readonly skip: TimelineSkipSchema }) {
 }
 
 function WindowBody({ data }: { readonly data: TimelineResponseSchema }) {
-  const ordered = [...data.events].sort(
-    (left, right) => Date.parse(right.time) - Date.parse(left.time),
-  );
+  const ordered = timelineNewestFirst(data.events);
   const skipByGap = new Map<string, TimelineSkipSchema>();
   for (const skip of data.skips) {
     skipByGap.set(skipKey(skip.from_time, skip.to_time), skip);

@@ -20,7 +20,7 @@ TEST_DATABASE_NAME = "dendromatrix_test"
 TRUNCATE_STATEMENT = (
     "TRUNCATE TABLE agent_approval, saved_question, file_ingest_job, ingest_config, "
     "agent_entry, agent_run, agent_conversation, agent_config, chunk_ngram, chunk, "
-    "folder, file, memory_summary, memory, "
+    "folder, file, memory_summary, memory, system_prompt, "
     "ai_provider_config, user_session, app_user "
     "RESTART IDENTITY CASCADE"
 )

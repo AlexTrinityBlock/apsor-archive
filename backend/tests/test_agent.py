@@ -48,7 +48,7 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v4"
+PROMPT_VERSION = "archive-agent-v5"
 TOOLS_VERSION = "archive-tools-v2"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
@@ -234,6 +234,8 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         json={
             "content": first_question,
             "request_id": "turn-1",
+            "client_timezone": "Asia/Taipei",
+            "client_utc_offset_minutes": 480,
             "page_context": {
                 "key": PAGE_KEY,
                 "path": PAGE_PATH,
@@ -282,6 +284,9 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         }
     ]
     assert entries[1]["model"] == [{"role": "user", "content": first_question}]
+    assert entries[1]["data"]["client_timezone"] == "Asia/Taipei"
+    assert entries[1]["data"]["client_utc_offset_minutes"] == 480
+    assert "<current_time>" in entries[1]["data"]["time_context"]
 
     tool_call_entry = entries[2]
     tool_calls = tool_call_entry["model"][0]["tool_calls"]
@@ -351,7 +356,13 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     ]
     assert first_request.messages[1]["content"].startswith(f'<page_context key="{PAGE_KEY}"')
     assert PAGE_TEXT in first_request.messages[1]["content"]
-    assert first_request.messages[2]["content"] == first_question
+    timed_question = first_request.messages[2]["content"]
+    assert timed_question.startswith(first_question)
+    assert "utc: " in timed_question
+    assert "timezone: Asia/Taipei (UTC+08:00)" in timed_question
+    assert "timezone_source: browser" in timed_question
+    assert "local: " in timed_question
+    assert "<current_time>" in timed_question
 
     first_detail = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     assert first_detail["last_page_context_key"] == PAGE_KEY
@@ -556,19 +567,21 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         f'<page_context key="{SECOND_PAGE_KEY}"'
     )
     assert PAGE_TEXT in final_request.messages[1]["content"]
-    assert final_request.messages[2]["content"] == first_question
+    assert final_request.messages[2]["content"].startswith(first_question)
+    assert final_request.messages[2]["content"] == fake.requests[0].messages[2]["content"]
     assert final_request.messages[3]["tool_calls"][0]["id"] == "call_search_1"
     assert final_request.messages[4]["tool_call_id"] == "call_search_1"
     assert final_request.messages[5]["tool_calls"][0]["id"] == "call_read_1"
     assert final_request.messages[6]["tool_call_id"] == "call_read_1"
     assert final_request.messages[7]["content"] == final_answer
-    assert final_request.messages[8]["content"] == second_question
+    assert final_request.messages[8]["content"].startswith(second_question)
     assert final_request.messages[9]["content"] == second_answer
     assert final_request.messages[10]["content"].startswith(
         f'<page_context key="{SECOND_PAGE_KEY}"'
     )
     assert SECOND_PAGE_TEXT in final_request.messages[10]["content"]
-    assert final_request.messages[11]["content"] == third_question
+    assert final_request.messages[11]["content"].startswith(third_question)
+    assert "<current_time>" in final_request.messages[11]["content"]
     assert final_request.model == conversation["model"]
 
     cleared = client.post(f"/api/v1/agent/conversations/{conversation_id}/clear")
@@ -698,10 +711,12 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert fork_request.messages[0]["role"] == "system"
     assert "You are DendroMatrix" in fork_request.messages[0]["content"]
     assert any(
-        message.get("role") == "user" and message.get("content") == first_question
+        message.get("role") == "user"
+        and isinstance(message.get("content"), str)
+        and message["content"].startswith(first_question)
         for message in fork_request.messages
     )
-    assert fork_request.messages[-1]["content"] == "Continue in the fork."
+    assert fork_request.messages[-1]["content"].startswith("Continue in the fork.")
 
     source_after = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     assert source_after["entries"] == source_entries
@@ -1090,7 +1105,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert first_compact_question in auto_request.messages[1]["content"]
     assert auto_page_context["model"][0]["content"].startswith("<page_context")
     assert auto_request.messages[2]["content"] == auto_page_context["model"][0]["content"]
-    assert auto_request.messages[3]["content"] == second_compact_question
+    assert auto_request.messages[3]["content"].startswith(second_compact_question)
 
     manual_compaction = client.post(
         f"/api/v1/agent/conversations/{compact_conversation_id}/compact"
@@ -1145,7 +1160,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert post_compaction_request.messages[1]["content"].startswith("<compaction>")
     assert second_compact_question in post_compaction_request.messages[1]["content"]
     assert post_compaction_request.messages[2]["content"].startswith("<page_context")
-    assert post_compaction_request.messages[3]["content"] == third_compact_question
+    assert post_compaction_request.messages[3]["content"].startswith(third_compact_question)
 
     cleared = client.post(f"/api/v1/agent/conversations/{compact_conversation_id}/clear")
     assert cleared.status_code == 200, cleared.text
@@ -1186,7 +1201,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "user",
     ]
     assert after_clear_request.messages[1]["content"].startswith("<page_context")
-    assert after_clear_request.messages[2]["content"] == fourth_compact_question
+    assert after_clear_request.messages[2]["content"].startswith(fourth_compact_question)
     history = [
         message.get("content")
         for message in after_clear_request.messages[1:]
@@ -1356,7 +1371,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         entry for entry in asked_conversation_entries if entry["kind"] == "pi.user"
     ]
     assert [entry["model"][0]["content"] for entry in asked_user_entries] == [saved_first_question]
-    assert saved_fake.requests[0].messages[-1]["content"] == saved_first_question
+    assert saved_fake.requests[0].messages[-1]["content"].startswith(saved_first_question)
 
     after_ask_library = client.get(
         "/api/v1/agent/questions",
