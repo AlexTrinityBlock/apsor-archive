@@ -1,6 +1,8 @@
 """SQLAlchemy persistence for File Library folders."""
 
-from sqlalchemy import or_, select
+from collections.abc import Sequence
+
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +50,29 @@ class FolderRepository:
         )
         statement = select(FolderModel).where(condition).order_by(FolderModel.name)
         return list((await self.session.execute(statement)).scalars().all())
+
+    async def list_for_update(self, paths: Sequence[str]) -> list[FolderModel]:
+        """鎖定所選資料夾與其所有 descendants。"""
+        if not paths:
+            return []
+        conditions = [
+            clause
+            for path in paths
+            for clause in (
+                FolderModel.path == path,
+                FolderModel.path.startswith(f"{path.rstrip('/')}/"),
+            )
+        ]
+        statement = select(FolderModel).where(or_(*conditions)).with_for_update()
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def delete_many(self, folders: Sequence[FolderModel]) -> None:
+        """以單一 DELETE 移除整個資料夾子樹，避免父子刪除順序問題。"""
+        if not folders:
+            return
+        await self.session.execute(
+            delete(FolderModel).where(FolderModel.id.in_([folder.id for folder in folders]))
+        )
 
     async def list_descendants(
         self,

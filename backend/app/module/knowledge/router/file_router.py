@@ -34,6 +34,8 @@ from app.module.knowledge.schema.file_schema import (
     FileTextUpdateSchema,
     IngestJobListSchema,
     IngestJobSchema,
+    LibraryDeleteResultSchema,
+    LibraryDeleteSchema,
 )
 from app.module.knowledge.service.file_service import FileOriginal, FileService
 from app.module.knowledge.service.ingest_job_service import IngestJobService
@@ -284,6 +286,23 @@ async def rename_file(
 ) -> FileSchema:
     """Rename a current file without changing its parent folder."""
     return await file_service.rename_file(file_id, file_name_value=payload.file_name)
+
+
+@router.post(
+    "/batch-delete",
+    response_model=LibraryDeleteResultSchema,
+    status_code=status.HTTP_200_OK,
+    operation_id="deleteLibrarySelection",
+)
+async def delete_library_selection(
+    payload: LibraryDeleteSchema,
+    file_service: FileService = Depends(get_file_service),
+) -> LibraryDeleteResultSchema:
+    """Soft-delete selected files and recursively soft-delete folder contents."""
+    return await file_service.delete_library_selection(
+        file_ids=payload.file_ids,
+        folder_paths=payload.folder_paths,
+    )
 
 
 @router.get("/{file_id}", response_model=FileSchema, operation_id="getFile")

@@ -305,7 +305,7 @@ export function LibraryToolbar({
                 className={selecting ? "library-select-toggle is-active" : "library-select-toggle"}
                 aria-pressed={selecting}
                 onClick={onToggleSelecting}
-                disabled={!selecting && fileCount === 0}
+                disabled={!selecting && fileCount === 0 && folderCount === 0}
               >
                 <Icon name="check" size={13} />
                 {selecting ? t("library.toolbar.selecting") : t("library.toolbar.select")}

@@ -36,6 +36,8 @@ import type {
   HTTPValidationError,
   IngestJobListSchema,
   IngestJobSchema,
+  LibraryDeleteResultSchema,
+  LibraryDeleteSchema,
   ListIngestJobsParams,
   ReadFileParams
 } from '../schemas';
@@ -224,6 +226,94 @@ export const useUploadFileAsync = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getUploadFileAsyncMutationOptions(options), queryClient);
+    }
+    export const getDeleteLibrarySelectionUrl = () => {
+
+
+
+
+  return `/api/v1/files/batch-delete`
+}
+
+/**
+ * Soft-delete selected files and recursively soft-delete folder contents.
+ * @summary Delete Library Selection
+ */
+export const deleteLibrarySelection = async (libraryDeleteSchema: LibraryDeleteSchema, options?: Parameters<typeof apiFetch>[1]): Promise<LibraryDeleteResultSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<LibraryDeleteResultSchema>(getDeleteLibrarySelectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(libraryDeleteSchema)
+  }
+);}
+
+
+
+
+
+export const getDeleteLibrarySelectionMutationKey = () => ['deleteLibrarySelection'] as const;
+
+export const getDeleteLibrarySelectionMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLibrarySelection>>, TError,DeleteLibrarySelectionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteLibrarySelection>>, TError,DeleteLibrarySelectionMutationVariables, TContext> => {
+
+const mutationKey = getDeleteLibrarySelectionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteLibrarySelection>>, DeleteLibrarySelectionMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  deleteLibrarySelection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteLibrarySelectionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteLibrarySelection>>>
+    export type DeleteLibrarySelectionMutationBody = LibraryDeleteSchema
+    export type DeleteLibrarySelectionMutationError = HTTPValidationError
+    export type DeleteLibrarySelectionMutationVariables = {data: LibraryDeleteSchema}
+
+    /**
+ * @summary Delete Library Selection
+ */
+export const useDeleteLibrarySelection = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLibrarySelection>>, TError,DeleteLibrarySelectionMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteLibrarySelection>>,
+        TError,
+        DeleteLibrarySelectionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteLibrarySelectionMutationOptions(options), queryClient);
     }
     export const getListIngestJobsUrl = (params?: ListIngestJobsParams,) => {
   const normalizedParams = new URLSearchParams();
