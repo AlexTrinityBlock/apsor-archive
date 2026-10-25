@@ -10,6 +10,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.datastructures import State
 
+from app.infrastructure.ai.provider_factory import ProviderClientTester, ProviderFactory
 from app.infrastructure.ai.runtime import AiRuntime
 from app.infrastructure.ai.vision_extractor import (
     DeepSeekVisionExtractor,
@@ -21,10 +22,10 @@ from app.module.knowledge.domain.ingest_config_domain import IngestRuntimeConfig
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
+from app.module.knowledge.protocol.provider_tester_protocol import ProviderTesterProtocol
 from app.module.knowledge.protocol.secret_cipher_protocol import SecretCipherProtocol
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 from app.module.knowledge.protocol.vision_extractor_protocol import VisionExtractorProtocol
-from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
 from app.module.knowledge.repository.chunk_repository import ChunkRepository
 from app.module.knowledge.repository.file_repository import FileRepository
 from app.module.knowledge.repository.folder_repository import FolderRepository
@@ -33,9 +34,11 @@ from app.module.knowledge.repository.ingest_config_repository import (
 )
 from app.module.knowledge.repository.ingest_job_repository import IngestJobRepository
 from app.module.knowledge.repository.memory_repository import MemoryRepository
+from app.module.knowledge.repository.provider_config_repository import (
+    ProviderConfigRepository,
+)
 from app.module.knowledge.repository.stats_repository import StatsRepository
 from app.module.knowledge.repository.summary_repository import SummaryRepository
-from app.module.knowledge.service.ai_config_service import AiConfigService
 from app.module.knowledge.service.ai_service import AiService
 from app.module.knowledge.service.demo_service import DemoService
 from app.module.knowledge.service.file_service import CpuRunner, FileService
@@ -43,6 +46,7 @@ from app.module.knowledge.service.indexer_service import IndexerService
 from app.module.knowledge.service.ingest_job_service import IngestJobService, IngestWorker
 from app.module.knowledge.service.ingest_settings_service import IngestSettingsService
 from app.module.knowledge.service.memory_service import MemoryService
+from app.module.knowledge.service.provider_config_service import ProviderConfigService
 from app.module.knowledge.service.search_service import SearchService
 from app.module.knowledge.service.stats_service import StatsService
 from app.module.knowledge.service.summary_service import SummaryService
@@ -85,7 +89,7 @@ def _vision_extractor_for_state(state: State) -> VisionExtractorProtocol:
         return DeepSeekVisionExtractor(
             api_key=chat_config.api_key,
             base_url=chat_config.base_url or settings.deepseek_base_url,
-            model=chat_config.model,
+            model=chat_config.model or settings.deepseek_model,
             timeout_seconds=settings.deepseek_timeout_seconds,
         )
     return NullVisionExtractor()
@@ -285,6 +289,8 @@ def _services(
     )
     ai_service = AiService(
         text_generator=text_generator,
+        chat_provider=runtime.chat_config.provider,
+        chat_model=runtime.chat_config.model,
         embedding_provider=runtime.embedding_config.provider,
         embedding_model=embedder.model_name,
         vector_enabled=runtime.vector_enabled,
@@ -391,18 +397,28 @@ def get_demo_service(
     )
 
 
-def get_ai_config_service(
+def get_provider_config_service(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-) -> AiConfigService:
+) -> ProviderConfigService:
+    """Build the registry service, honouring the provider-tester test seam.
+
+    Tests set ``app.state.provider_tester`` to a deterministic fake so creating
+    or testing a provider never reaches DeepSeek, OpenAI, or Tavily.
+    """
     runtime = get_ai_runtime(request)
-    return AiConfigService(
-        repository=AiProviderConfigRepository(session),
+    tester = getattr(request.app.state, "provider_tester", None)
+    if tester is None:
+        settings = get_app_settings(request)
+        tester = ProviderClientTester(ProviderFactory(settings), settings)
+    return ProviderConfigService(
+        repository=ProviderConfigRepository(session),
         runtime=runtime,
         cipher=get_secret_cipher(request),
         defaults=runtime.defaults,
         chunk_repository=ChunkRepository(session),
         cache=get_cache(request),
+        tester=cast(ProviderTesterProtocol, tester),
     )
 
 

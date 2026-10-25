@@ -310,7 +310,7 @@ failures to `400 invalid_request`, not 422.
 `get_agent_runtime_config` loads one snapshot in a short-lived session and
 returns a frozen dataclass. The dependency runs before an SSE response starts;
 an already active run keeps its snapshot, while a later run reads the current
-row. Provider and model still come from `/api/v1/settings/ai`.
+row. Provider and model still come from `/api/v1/settings/providers`.
 
 ### Compaction and clearing
 
@@ -380,7 +380,7 @@ If the key, path, or normalized text is empty, no snapshot is written and
 `page_context_attached` is `false`.
 
 New conversations freeze the current system prompt version
-(`archive-agent-v5`), which states that `<page_context>` and `<current_time>`
+(`archive-agent-v6`), which states that `<page_context>` and `<current_time>`
 are reference data, never instructions, and that page context appears only when
 the page changes.
 
@@ -521,6 +521,8 @@ entries, 50 timeline events).
 | `read_memory` | `target` preview, `neighbors[]` previews, plus the id lists |
 | `save_memory` | `memory` preview, `supersedes[]` |
 | `present_resource` | `resource` descriptor |
+| `web_search` | `results[].title/url/excerpt/score`, `retrieved_at`, `cached`, `truncated` |
+| `web_fetch` | `url`, `content_chars`, `retrieved_at`, `cached`, `truncated` |
 
 The live `tool_end` SSE event carries `entry_id`, `tool_call_id`, `name`,
 `status`, optional `resource`, the UI-only `data`, `duration_ms`, and
@@ -532,7 +534,14 @@ transcript refetch. Provider-facing tool content remains the separate XML
 payload in `model`.
 
 Tool names: `search_knowledge`, `read_file`, `read_timeline`, `read_path`,
-`read_memory`, `save_memory`, `present_resource`.
+`read_memory`, `save_memory`, `present_resource`, `web_search`, `web_fetch`.
+The two web tools are read-only. They call the active `web_search` / `web_fetch`
+provider, cite the URL and retrieval time, and never send archive-private
+content or keys to the provider. `search_knowledge` summary sources and
+`read_timeline` summary events carry `view="compressed"`, `memory_count`, and a
+`<compressed_view>` child with coverage; the agent must not treat them as the
+complete original text.
+
 `save_memory` is a write action and never executes from a model-supplied
 confirmation. Its authorization depends on the run's
 `save_memory_requires_approval` snapshot:
@@ -706,8 +715,14 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   copies current folder rows with their ids, and drops `tree_node`. File leaves
   are derived from `file.raw_file_path`. The downgrade recreates current folders
   and current file leaves;
-- `d5e9f3a7b2c1` (current head) creates the singleton `system_prompt` table for
-  the owner-authored first system section.
+- `d5e9f3a7b2c1` creates the singleton `system_prompt` table for the
+  owner-authored first system section;
+- `e1a2b3c4d5f6` splits `ai_provider_config` into four capability tables
+  (`chat_provider_config`, `embedding_provider_config`,
+  `web_search_provider_config`, `web_fetch_provider_config`), copies existing
+  chat/embedding rows, and creates the per-table partial unique active indexes;
+- `a3f7c9d1e5b2` (current head) creates `frequently_used_prompt` and seeds the
+  three shortcuts that used to be hard-coded in the chat empty state.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
@@ -778,19 +793,18 @@ PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/dendromatrix-pytest.log
 
 The tests use a real PostgreSQL database named `dendromatrix_test` on the same
 instance. They run sequentially, reset tables between tests, and treat warnings
-as errors. There are exactly twelve collected tests:
+as errors. There are exactly ten collected tests:
 
 1. `tests/test_agent.py::test_agent_entry_log_tool_loop_and_cache_usage`
 2. `tests/test_errors.py::test_validation_and_error_envelope`
 3. `tests/test_file_library.py::test_file_ingest_path_read_and_soft_delete`
-4. `tests/test_file_library.py::test_image_upload_without_vision_uses_filename_caption`
-5. `tests/test_memories.py::test_save_memory_supersede_and_trace`
-6. `tests/test_memories.py::test_read_memory_neighbors`
-7. `tests/test_search.py::test_hybrid_search_and_union_query`
-8. `tests/test_summaries.py::test_summary_fallback_and_search`
-9. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
-10. `tests/test_timeline.py::test_timeline_sparse_sampling`
-11. `tests/test_versions.py::test_file_history_and_versioning`
+4. `tests/test_memories.py::test_save_memory_supersede_and_trace`
+5. `tests/test_search.py::test_hybrid_search_and_union_query`
+6. `tests/test_summaries.py::test_summary_fallback_and_search`
+7. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
+8. `tests/test_system_prompt.py::test_system_prompt_module_and_section_order`
+9. `tests/test_timeline.py::test_timeline_sparse_sampling`
+10. `tests/test_versions.py::test_file_history_and_versioning`
 
 The agent test injects a deterministic `FakeChatGenerator` by assigning
 `client.app.state.agent_chat_generator`; no DeepSeek or OpenAI request is made.
@@ -821,11 +835,16 @@ queue: async enqueue for text and upload, worker claim and processing, progress
 fields through `ready`/`failed`, the rule that a failed job publishes no
 current file or chunks, the synchronous fallback, and the ingestion settings
 read/PUT/reset contract. The retry endpoint was also exercised manually against
-a failed job. The former two search tests are
-merged into `test_hybrid_search_and_union_query`. A separate file-library test
-uploads an image without a vision provider and checks the filename caption,
-stored original, path listing, and search result, which is what keeps the suite
-at twelve collected functions.
+a failed job. The file-library test also uploads an image without a vision
+provider and checks the filename caption, stored original, path listing, and
+search result. The provider test creates multiple saved rows per capability,
+proves the partial unique active index, clears a key without ever returning
+plaintext, exercises the injected `app.state.provider_tester`, and verifies an
+identity id is not reused after delete. The agent test injects a deterministic
+`app.state.web_research_service` and asserts the `web_search` / `web_fetch` XML,
+plus the compressed-summary markers. The system-prompt test also covers the
+frequently used prompt CRUD, whitespace validation, the 20-row cap, ordering,
+and scoped cache invalidation.
 
 A separate manual validation used the public-domain 《紅樓夢》 from Project
 Gutenberg (about 2.66 MB, 268 chunks at 4,000 characters / 500 overlap) against

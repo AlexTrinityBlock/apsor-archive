@@ -80,8 +80,17 @@
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
   --z-resizer: 25;
   --z-float: 40;
+
+  /*
+   * Layer scale / 層級順序：
+   * modal (300) > drawer (200) > mobile bar (150) > rail (50).
+   * Modals must sit above all app chrome; drawers and scrims must stay below modals.
+   * Modal 必須高於所有 app chrome；drawer 與 scrim 不得高於 modal。
+   */
   --z-rail: 50;
-  --z-modal: 100;
+  --z-mobile-bar: 150;
+  --z-drawer: 200;
+  --z-modal: 300;
   --z-tooltip: 999;
   --z-toast: 1000;
 

@@ -23,6 +23,10 @@ class TimelineEventSchema(BaseModel):
     raw_file_path: str | None = None
     action: str | None = None
     status: str | None = None
+    # Summary events only: coverage metadata makes the compressed view explicit.
+    memory_count: int | None = None
+    period_start: datetime | None = None
+    period_end: datetime | None = None
 
 
 class TimelineSkipSchema(BaseModel):

@@ -1,9 +1,9 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import {
-  getGetAiSettingsQueryKey,
   getGetAiStatusQueryKey,
   getGetHealthQueryKey,
+  getGetProviderRegistryQueryKey,
   getGetStatsQueryKey,
 } from "../../generated-apis-types";
 
@@ -18,20 +18,18 @@ export async function invalidateProviderQueries(
   queryClient: QueryClient,
 ): Promise<void> {
   await Promise.all([
-    queryClient.invalidateQueries({ queryKey: getGetAiSettingsQueryKey() }),
+    queryClient.invalidateQueries({
+      queryKey: getGetProviderRegistryQueryKey(),
+    }),
     queryClient.invalidateQueries({ queryKey: getGetAiStatusQueryKey() }),
     queryClient.invalidateQueries({ queryKey: getGetHealthQueryKey() }),
     queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() }),
   ]);
 }
 
-/** Refresh the AI surfaces after re-embedding the corpus. */
+/** Refresh the provider and AI surfaces after re-embedding the corpus. */
 export async function invalidateReindexQueries(
   queryClient: QueryClient,
 ): Promise<void> {
-  await Promise.all([
-    queryClient.invalidateQueries({ queryKey: getGetAiSettingsQueryKey() }),
-    queryClient.invalidateQueries({ queryKey: getGetAiStatusQueryKey() }),
-    queryClient.invalidateQueries({ queryKey: getGetStatsQueryKey() }),
-  ]);
+  await invalidateProviderQueries(queryClient);
 }

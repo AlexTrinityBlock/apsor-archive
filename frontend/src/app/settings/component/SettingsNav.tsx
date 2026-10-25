@@ -10,11 +10,20 @@ interface SettingsSection {
 
 const SECTIONS: readonly SettingsSection[] = [
   { id: "settings-system-prompt", label: "System prompt", index: "01" },
-  { id: "settings-providers", label: "AI provider vault", index: "02" },
-  { id: "settings-diagnostics", label: "Diagnostics", index: "03" },
-  { id: "settings-agent-runtime", label: "Agent runtime", index: "04" },
-  { id: "settings-ingest-runtime", label: "Ingestion runtime", index: "05" },
-  { id: "settings-maintenance", label: "Maintenance", index: "06" },
+  {
+    id: "settings-frequent-prompts",
+    label: "Frequent prompts",
+    index: "02",
+  },
+  { id: "settings-providers", label: "Provider registry", index: "03" },
+  { id: "settings-diagnostics", label: "Diagnostics", index: "04" },
+  { id: "settings-agent-runtime", label: "Agent runtime", index: "05" },
+  {
+    id: "settings-ingest-runtime",
+    label: "Ingestion runtime",
+    index: "06",
+  },
+  { id: "settings-maintenance", label: "Maintenance", index: "07" },
 ];
 
 const COLLAPSE_KEY = "dendromatrix.settings.navCollapsed";

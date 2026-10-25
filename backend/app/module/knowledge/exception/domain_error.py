@@ -30,6 +30,11 @@ class InvalidProviderConfigError(KnowledgeError):
         super().__init__(detail)
 
 
+class ProviderNotFoundError(KnowledgeError):
+    def __init__(self, provider_id: int) -> None:
+        super().__init__(f"Provider {provider_id} was not found.")
+
+
 class PathNotFoundError(KnowledgeError):
     def __init__(self, path: str) -> None:
         super().__init__(f"Path {path} was not found.")

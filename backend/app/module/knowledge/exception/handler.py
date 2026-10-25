@@ -22,6 +22,7 @@ from app.module.knowledge.exception.domain_error import (
     MemoryNotFoundError,
     MemorySupersedeTargetError,
     PathNotFoundError,
+    ProviderNotFoundError,
     SummaryNotEnoughMemoriesError,
     SummaryNotFoundError,
     TooManyChunksError,
@@ -39,6 +40,7 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(SummaryNotFoundError, 404, "summary_not_found")
     ExceptionRegistry.register(InvalidPathError, 422, "invalid_path")
     ExceptionRegistry.register(InvalidProviderConfigError, 422, "invalid_provider_config")
+    ExceptionRegistry.register(ProviderNotFoundError, 404, "provider_not_found")
     ExceptionRegistry.register(PathNotFoundError, 404, "path_not_found")
     ExceptionRegistry.register(FileContentUnavailableError, 404, "file_content_unavailable")
     ExceptionRegistry.register(UnsupportedFileTypeError, 422, "unsupported_file_type")
