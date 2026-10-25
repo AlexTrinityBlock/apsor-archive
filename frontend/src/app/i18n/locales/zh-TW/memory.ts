@@ -4,7 +4,7 @@
  */
 export const memory = {
   common: {
-    crystal: "結晶 #{id}",
+    crystal: "記憶 #{id}",
     untitledMemory: "未命名記憶",
     breadcrumbAria: "路徑導覽",
     copyMemory: "複製記憶",
@@ -34,7 +34,7 @@ export const memory = {
     eyebrow: "記憶 · 記憶庫",
     title: "記憶庫",
     description:
-      "每一則壓印的記憶，依發生時間由新到舊排列。有效的結晶仍會出現在搜尋與時間軸；已淘汰的結晶仍可連同系譜閱讀。",
+      "每一則壓印的記憶，依發生時間由新到舊排列。有效的記憶仍會出現在搜尋與時間軸；已淘汰的記憶仍可連同系譜閱讀。",
     activeLabel: "則有效",
     deprecatedLabel: "則已淘汰",
     pressMemory: "壓印記憶",
@@ -64,14 +64,14 @@ export const memory = {
     searchErrorTitle: "記憶庫搜尋沒有回應。",
     searchErrorDescription: "記憶搜尋請求在任何結果傳回前就失敗了。",
     noMatchEyebrow: "沒有符合",
-    noMatchTitle: "沒有結晶回應這段詞句。",
+    noMatchTitle: "沒有記憶回應這段詞句。",
     noMatchDescription:
       "搜尋「{query}」沒有找到任何記憶。請嘗試更廣泛的詞句，或搜尋整座檔案館以尋找相關檔案與摘要。",
     clearSearch: "清除搜尋",
     searchWholeArchive: "搜尋整座檔案館",
     filteredEyebrow: "已被篩除",
-    filteredSearchTitle: "這些結果中沒有{status}結晶。",
-    filteredBrowseTitle: "已載入的紀錄中沒有{status}結晶。",
+    filteredSearchTitle: "這些結果中沒有{status}的記憶。",
+    filteredBrowseTitle: "已載入的紀錄中沒有{status}的記憶。",
     filteredSearchDescription:
       "搜尋有傳回結果，但沒有符合所選狀態的項目。請清除狀態篩選以查看所有結果。",
     filteredBrowseMoreDescription:
@@ -85,7 +85,7 @@ export const memory = {
     emptyEyebrow: "空記憶庫",
     emptyTitle: "還沒有任何記憶被壓印。",
     emptyDescription:
-      "記憶記錄一個決定、一項觀察，或一次想法轉變。壓印第一顆結晶，開啟記憶庫。",
+      "記憶記錄一個決定、一項觀察，或一次想法轉變。壓印第一則記憶，開啟記憶庫。",
     pressFirstMemory: "壓印第一則記憶",
     loadMoreError: "下一頁記憶沒有載入。",
     retryOlderRecords: "重試較舊紀錄",
@@ -177,7 +177,7 @@ export const memory = {
   reader: {
     eyebrow: "記憶 · 閱讀器",
     description:
-      "一則壓印的記憶，連同其直接系譜、時間上的相鄰記憶，以及完整的取代鏈。已淘汰的結晶離開搜尋與時間軸後，仍可閱讀。",
+      "一則壓印的記憶，連同其直接系譜、時間上的相鄰記憶，以及完整的取代鏈。已淘汰的記憶離開搜尋與時間軸後，仍可閱讀。",
     readingRecord: "正在讀取紀錄",
     editText: "編輯文字",
     deprecate: "淘汰",
@@ -185,7 +185,7 @@ export const memory = {
     skeleton: "正在讀取記憶軌跡",
     errorTitle: "記憶軌跡沒有回應。",
     errorDescription:
-      "無法讀取這筆紀錄。請重試，或返回記憶庫選擇另一顆結晶。",
+      "無法讀取這筆紀錄。請重試，或返回記憶庫選擇另一則記憶。",
     saveReceipt: {
       eyebrow: "剛剛壓印",
       title: "記憶已儲存",
@@ -203,7 +203,7 @@ export const memory = {
     record: {
       deprecatedNote:
         "這則記憶已淘汰。它已離開預設搜尋與時間軸，但仍可在此閱讀。",
-      readSuccessor: "閱讀後繼結晶 #{id}",
+      readSuccessor: "閱讀後繼記憶 #{id}",
       retiredDirectly: "它已被直接淘汰；沒有後繼紀錄取代它。",
     },
     lineage: {
@@ -240,7 +240,7 @@ export const memory = {
     eyebrow: "記憶 · 編輯",
     title: "編輯記憶文字",
     description:
-      "結晶 #{id}。標題會依新文字重新產生；紀錄會保留其 ID 與發生時間。",
+      "記憶 #{id}。標題會依新文字重新產生；紀錄會保留其 ID 與發生時間。",
     label: "記憶文字",
     count: "{count} / 8,000 個字元",
     emptyError: "記憶文字不能空白。",
@@ -252,7 +252,7 @@ export const memory = {
     eyebrow: "記憶 · 淘汰",
     title: "要淘汰這則記憶嗎？",
     description:
-      "結晶 #{id} 會保留文字並維持可讀，但會離開預設搜尋與時間軸。不會寫入取代的記憶。",
+      "記憶 #{id} 會保留文字並維持可讀，但會離開預設搜尋與時間軸。不會寫入取代的記憶。",
     reasonLabel: "原因（選填）",
     reasonPlaceholder: "例如：已經購買、已經取消，或已不再成立。",
     reasonHelp: "會儲存在已淘汰的紀錄上，供日後溯源。",
@@ -271,7 +271,7 @@ export const memory = {
     missingDescriptionFallback:
       "這個路由上的記憶不在檔案館中。它可能已被移除，或這個 ID 從未存在。",
     backToVault: "返回記憶庫",
-    emptyEyebrow: "這個位址沒有結晶",
+    emptyEyebrow: "這個位址沒有記憶",
     emptyTitle: "這則記憶不在檔案館中。",
     emptyDescription:
       "已淘汰的記憶仍可閱讀，因此找不到紀錄代表它確實不存在，而不只是被淘汰。請返回記憶庫瀏覽仍存續的系譜。",
