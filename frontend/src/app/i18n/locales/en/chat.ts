@@ -278,6 +278,8 @@ export const chat = {
     entry: "entry #{id}",
   },
   citation: {
+    fileTitle: "File: {title}",
+    fileId: "File: #{id}",
     memoryTitle: "Memory: {title}",
     memoryId: "Memory: #{id}",
     archiveCitation: "Archive citation {label}",
