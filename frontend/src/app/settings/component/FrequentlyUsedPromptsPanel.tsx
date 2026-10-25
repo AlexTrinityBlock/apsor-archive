@@ -446,7 +446,6 @@ export function FrequentlyUsedPromptsPanel() {
   return (
     <>
       <Panel
-        id="settings-frequent-prompts"
         title={
           <span className="settings-panel__title">
             <Icon name="quote" size={16} />
