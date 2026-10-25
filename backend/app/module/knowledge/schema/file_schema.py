@@ -1,9 +1,9 @@
 """Schemas for files, chunks, and the File Library tree listing."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 IngestJobStatus = Literal[
     "queued",
@@ -134,6 +134,32 @@ class FileRenameSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     file_name: str = Field(min_length=1, max_length=255)
+
+
+class LibraryDeleteSchema(BaseModel):
+    """Batch delete selection of current files and whole folder trees."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_ids: list[int] = Field(default_factory=list, max_length=1000)
+    folder_paths: list[str] = Field(default_factory=list, max_length=1000)
+
+    @model_validator(mode="after")
+    def _require_selection(self) -> Self:
+        if not self.file_ids and not self.folder_paths:
+            raise ValueError("Select at least one file or folder.")
+        return self
+
+
+class LibraryDeleteResultSchema(BaseModel):
+    """Deletion counts and identifiers returned by one atomic batch delete."""
+
+    model_config = ConfigDict(frozen=True)
+
+    deleted_file_ids: list[int]
+    deleted_folder_paths: list[str]
+    deleted_files: int
+    deleted_folders: int
 
 
 class ChunkSchema(BaseModel):

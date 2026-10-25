@@ -348,6 +348,9 @@ interface FolderCardProps extends DropHandlers {
   readonly folder: DirectorySchema;
   readonly dropLabel: string | null;
   readonly dropAllowed: boolean;
+  readonly selecting: boolean;
+  readonly selected: boolean;
+  readonly onToggleSelected: (path: string) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onUploadHere: (path: string) => void;
   readonly onFolderContextMenu: (
@@ -360,6 +363,9 @@ function FolderCard({
   folder,
   dropLabel,
   dropAllowed,
+  selecting,
+  selected,
+  onToggleSelected,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -372,6 +378,8 @@ function FolderCard({
     "library-folder-card",
     dropLabel ? "is-drop-target" : null,
     dropLabel && !dropAllowed ? "is-drop-blocked" : null,
+    selected ? "is-selected" : null,
+    selecting ? "is-selecting" : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -385,6 +393,20 @@ function FolderCard({
       onContextMenu={(event) => onFolderContextMenu(event, folder)}
       tabIndex={-1}
     >
+      {selecting ? (
+        <label className="library-checkbox library-folder-card__check">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={() => onToggleSelected(folder.path)}
+            aria-label={t("library.a11y.selectFolder", { name: folder.name })}
+          />
+          <span className="library-checkbox__box" aria-hidden="true">
+            <Icon name="check" size={12} />
+          </span>
+        </label>
+      ) : null}
+
       <button
         type="button"
         className="library-folder-card__open"
@@ -430,7 +452,9 @@ interface LibraryBoardProps {
   readonly query: string;
   readonly selecting: boolean;
   readonly selectedFileIds: ReadonlySet<number>;
+  readonly selectedFolderPaths: ReadonlySet<string>;
   readonly onToggleSelected: (fileId: number) => void;
+  readonly onToggleSelectedFolder: (path: string) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onOpenFile: (fileId: number) => void;
   readonly onEditFile: (fileId: number) => void;
@@ -465,7 +489,9 @@ export function LibraryBoard({
   query,
   selecting,
   selectedFileIds,
+  selectedFolderPaths,
   onToggleSelected,
+  onToggleSelectedFolder,
   onOpenFolder,
   onOpenFile,
   onEditFile,
@@ -660,6 +686,9 @@ export function LibraryBoard({
                       folder={folder}
                       dropLabel={dropLabelFor(folder.path)}
                       dropAllowed={dropAllowed}
+                      selecting={selecting}
+                      selected={selectedFolderPaths.has(folder.path)}
+                      onToggleSelected={onToggleSelectedFolder}
                       onOpenFolder={onOpenFolder}
                       onUploadHere={onUploadHere}
                       onFolderContextMenu={onFolderContextMenu}

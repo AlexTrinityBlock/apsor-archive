@@ -1,5 +1,6 @@
 """Persistence contract for explicit File Library folders."""
 
+from collections.abc import Sequence
 from typing import Protocol
 
 from app.module.knowledge.model.folder_model import FolderModel
@@ -13,6 +14,10 @@ class FolderRepositoryProtocol(Protocol):
     async def get_by_path(self, path: str) -> FolderModel | None: ...
 
     async def get_children(self, parent_id: int | None) -> list[FolderModel]: ...
+
+    async def list_for_update(self, paths: Sequence[str]) -> list[FolderModel]: ...
+
+    async def delete_many(self, folders: Sequence[FolderModel]) -> None: ...
 
     async def list_descendants(
         self,
