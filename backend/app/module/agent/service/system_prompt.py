@@ -1,8 +1,14 @@
-"""The frozen prompt sections and system-entry builder.
+"""The seeded prompt sections and the frozen system-entry builder.
 
-New conversations receive one ``pi.system`` entry containing these ordered
-sections, the complete tool snapshot, and both version strings. The entry is never
-mutated; a future prompt change creates a new conversation (or a system delta).
+New conversations receive one ``pi.system`` entry containing the ordered rows
+from ``system_prompt_section``, an optional user-profile section, the complete
+tool snapshot, and both version strings. The entry is never mutated; a future
+prompt change creates a new conversation (or a system delta).
+
+The four bodies below are seed data only. They are inserted as ordinary rows by
+the migration and by the reset endpoint, and the owner can then edit, delete, or
+reorder them like any other section. Composition never re-appends a Python-only
+copy.
 """
 
 from typing import Any
@@ -15,16 +21,17 @@ from app.module.agent.domain.tool_catalog import (
 )
 from app.module.agent.domain.user_profile_domain import UserProfile
 
-# 提示詞協定（維護者說明）：
-# - 每個 section 的 content 都是 provider-facing 英文，順序固定；任何改動都會改變
-#   pi.system 的前綴，因此必須同步 bump PROMPT_VERSION。
-# - <current_time> 由 agent service 附加在使用者文字「之後」，這裡的描述必須與實際
-#   組裝順序一致，否則模型會誤判訊息邊界。
-# - <compressed_view> 是 summary 的壓縮視圖標記。XML 本身已帶 view="compressed"、
-#   memory_count 與 coverage，提示詞只是第二道保險，避免模型把摘要當成原文引用。
-_SECTIONS: tuple[dict[str, str], ...] = (
+# Maintainer notes:
+# - Every default body is provider-facing English. Changing a body changes the
+#   system prefix of new conversations, so bump PROMPT_VERSION at the same time.
+# - <current_time> is appended after the user text by the agent service. The
+#   description here must match the actual assembly order or the model may
+#   misread the message boundary.
+# - <compressed_view> marks a periodic summary. The XML already carries
+#   view="compressed", memory_count, and coverage; the instruction is a second
+#   guard so the model does not quote a derived view as original text.
+_DEFAULT_SECTIONS: tuple[dict[str, str], ...] = (
     {
-        "name": "identity",
         "title": "Identity",
         "content": (
             "You are Apsor Archive, the owner's archive research agent. "
@@ -36,7 +43,6 @@ _SECTIONS: tuple[dict[str, str], ...] = (
         ),
     },
     {
-        "name": "instructions",
         "title": "Instructions",
         "content": (
             "- Use tools before making factual claims about the archive.\n"
@@ -92,7 +98,6 @@ _SECTIONS: tuple[dict[str, str], ...] = (
         ),
     },
     {
-        "name": "examples",
         "title": "Examples",
         "content": (
             "<example>\n"
@@ -112,7 +117,6 @@ _SECTIONS: tuple[dict[str, str], ...] = (
         ),
     },
     {
-        "name": "context_protocol",
         "title": "Context protocol",
         "content": (
             "Tool results arrive as XML inside a <tool_result> element. Source "
@@ -141,18 +145,19 @@ _SECTIONS: tuple[dict[str, str], ...] = (
 )
 
 
-BUILTIN_PROMPT_KEYS: tuple[str, ...] = tuple(section["name"] for section in _SECTIONS)
+def default_sections() -> list[dict[str, str]]:
+    """Return a fresh copy of the four seeded default sections.
 
-
-def prompt_sections() -> list[dict[str, Any]]:
-    """Return a fresh copy of the ordered built-in section list."""
+    Reset and the data migration use this list as seed data. It is not a
+    read-time fallback: after seeding, every default is an ordinary row that the
+    owner may edit, delete, or reorder.
+    """
     return [
         {
-            "name": section["name"],
             "title": section["title"],
-            "content": section["content"],
+            "body": section["content"],
         }
-        for section in _SECTIONS
+        for section in _DEFAULT_SECTIONS
     ]
 
 
@@ -171,51 +176,47 @@ def build_system_data(
     *,
     provider: str,
     model: str,
-    custom_sections: list[SystemPromptSection] | None = None,
-    builtin_sections: list[dict[str, Any]] | None = None,
+    sections: list[SystemPromptSection] | None = None,
     user_profile: UserProfile | None = None,
 ) -> dict[str, Any]:
     """Build the immutable data payload for the initial system entry.
 
-    Every user-authored section is inserted before the built-in sections, so
-    the provider request order is stable: ``system_prompt:<id>`` (in
-    ``sort_order, id`` order), built-in identity/instructions/examples/context
-    protocol, tools, then messages. The payload is created once per
-    conversation, so editing a section never rewrites an existing KV-cache
-    prefix. 每條 section 使用 ``system_prompt:<id>`` 作為 provider-visible
-    name，讓舊對話的 ``pi.system`` 可以逐條辨識來源；id 不會因排序改變，
-    因此 reorder 只影響新對話，不會讓既有對話的內容看起來被替換。
+    The provider request order is stable: every row from
+    ``system_prompt_section`` in ``sort_order, id`` order, an optional
+    ``user_profile`` section, the tool snapshot, then messages. Every row uses
+    ``system_prompt:<id>`` as its provider-visible name so an old ``pi.system``
+    can identify each source. The id does not change when rows are reordered,
+    so reorder only affects new conversations and never makes an existing
+    conversation look as if its content was replaced.
+
+    The payload is created once per conversation, so editing a section never
+    rewrites an existing KV-cache prefix.
     """
-    sections = [
+    rendered_sections = [
         {
             "name": f"system_prompt:{section.id}",
             "title": section.title,
             "content": section.body,
         }
-        for section in (custom_sections or [])
-        # 空白 body 在 migration 或直接 SQL 編輯後仍可能存在；跳過它可避免
-        # provider 收到只有標題的空 section。內容是否有效由 service 把關，
-        # 這裡是最後一道防線。
+        for section in (sections or [])
+        # A whitespace-only body can still exist after a direct SQL edit. Skip
+        # it so the provider never receives a heading with no content.
         if section.body.strip()
     ]
     if user_profile is not None and user_profile.has_content:
-        sections.append(
+        rendered_sections.append(
             {
                 "name": "user_profile",
                 "title": "User profile",
                 "content": "\n".join(user_profile.prompt_lines()),
             }
         )
-    # ``builtin_sections`` carries the owner-edited defaults in canonical order.
-    # Callers that build a prompt directly (for example a unit test) may omit
-    # it and still receive the pristine built-in prompt.
-    sections.extend(builtin_sections if builtin_sections is not None else prompt_sections())
     return {
         "prompt_version": PROMPT_VERSION,
         "tools_version": TOOLS_VERSION,
         "provider": provider,
         "model": model,
-        "sections": sections,
+        "sections": rendered_sections,
         "tools": tool_definitions(),
     }
 

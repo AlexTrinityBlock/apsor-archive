@@ -14,7 +14,8 @@ import { Icon } from "../../component/Icon";
 import { PageHeader } from "../../component/PageHeader";
 import { Panel } from "../../component/Panel";
 import { useReadMemory } from "../../generated-apis-types/memories/memories";
-import { formatDate, formatDateTime, formatNumber, truncate } from "../../../lib/format";
+import { useI18n } from "../../i18n";
+import { truncate } from "../../../lib/format";
 
 import {
   MemoryDeprecateDialog,
@@ -33,6 +34,8 @@ interface MemoryReadViewProps {
 }
 
 function MemoryMiniCard({ memory }: { readonly memory: MemorySchema }) {
+  const { t, formatDateTime } = useI18n();
+
   return (
     <Link
       className={[
@@ -42,7 +45,9 @@ function MemoryMiniCard({ memory }: { readonly memory: MemorySchema }) {
       to={`/memory/${memory.memory_id}`}
     >
       <span className="memory-mini__head">
-        <span className="memory-mini__id">CRYSTAL #{memory.memory_id}</span>
+        <span className="memory-mini__id">
+          {t("memory.common.crystal", { id: memory.memory_id })}
+        </span>
         <MemoryStatus status={memory.status} small />
       </span>
       <time className="memory-mini__time" dateTime={memory.update_time}>
@@ -64,17 +69,22 @@ function MiniList({ memories }: { readonly memories: readonly MemorySchema[] }) 
 }
 
 function SaveReceipt({ receipt }: { readonly receipt: MemorySaveReceipt }) {
+  const { t, formatDate, formatNumber } = useI18n();
   const count = receipt.deprecated.length;
-  let copy = "No earlier memory was deprecated by this save. The new record is active.";
-  if (count > 0) {
-    const noun = count === 1 ? "memory was" : "memories were";
-    copy = `${count} earlier ${noun} marked deprecated. The records remain readable and stay in the supersession chain.`;
+  let copy = t("memory.reader.saveReceipt.noDeprecated");
+  if (count === 1) {
+    copy = t("memory.reader.saveReceipt.deprecatedOne");
+  } else if (count > 1) {
+    copy = t("memory.reader.saveReceipt.deprecatedOther", {
+      count: formatNumber(count),
+    });
   }
+
   return (
     <Panel
       tone="plain"
-      eyebrow="Just pressed"
-      title="Memory saved"
+      eyebrow={t("memory.reader.saveReceipt.eyebrow")}
+      title={t("memory.reader.saveReceipt.title")}
       className="memory-receipt"
     >
       <p className="memory-receipt__copy">{copy}</p>
@@ -88,7 +98,9 @@ function SaveReceipt({ receipt }: { readonly receipt: MemorySaveReceipt }) {
         <div className="memory-receipt__summary">
           <header className="memory-receipt__summary-head">
             <div>
-              <p className="eyebrow">Auto-created summary</p>
+              <p className="eyebrow">
+                {t("memory.reader.saveReceipt.autoSummary")}
+              </p>
               <strong>summary:{receipt.summary.memory_summary_id}</strong>
             </div>
             <Badge tone={receipt.summary.generator === "deepseek" ? "moss" : "ochre"} dot>
@@ -98,17 +110,19 @@ function SaveReceipt({ receipt }: { readonly receipt: MemorySaveReceipt }) {
           <p className="memory-receipt__summary-content">{receipt.summary.content}</p>
           <dl className="memory-receipt__summary-meta">
             <div>
-              <dt>Model</dt>
+              <dt>{t("memory.reader.saveReceipt.model")}</dt>
               <dd>
-                <span className="code-inline">{receipt.summary.model ?? "not reported"}</span>
+                <span className="code-inline">
+                  {receipt.summary.model ?? t("memory.common.notReported")}
+                </span>
               </dd>
             </div>
             <div>
-              <dt>Memories</dt>
+              <dt>{t("memory.reader.saveReceipt.memories")}</dt>
               <dd>{formatNumber(receipt.summary.memory_count)}</dd>
             </div>
             <div>
-              <dt>Period</dt>
+              <dt>{t("memory.reader.saveReceipt.period")}</dt>
               <dd>
                 {formatDate(receipt.summary.period_start)} {"\u2013"}{" "}
                 {formatDate(receipt.summary.period_end)}
@@ -122,10 +136,14 @@ function SaveReceipt({ receipt }: { readonly receipt: MemorySaveReceipt }) {
 }
 
 function MemoryRecord({ target }: { readonly target: MemorySchema }) {
+  const { t, formatDateTime } = useI18n();
+
   return (
     <article className="memory-record">
       <header className="memory-record__head">
-        <span className="memory-record__id">CRYSTAL #{target.memory_id}</span>
+        <span className="memory-record__id">
+          {t("memory.common.crystal", { id: target.memory_id })}
+        </span>
         <MemoryStatus status={target.status} />
       </header>
 
@@ -135,19 +153,22 @@ function MemoryRecord({ target }: { readonly target: MemorySchema }) {
         <div className="memory-record__deprecated" role="note">
           <Icon name="history" size={17} />
           <p>
-            This memory is deprecated. It left default search and the timeline, but remains
-            readable here.{" "}
+            {t("memory.reader.record.deprecatedNote")}{" "}
             {target.superseded_by_id ? (
               <Link to={`/memory/${target.superseded_by_id}`}>
-                Read successor CRYSTAL #{target.superseded_by_id}
+                {t("memory.reader.record.readSuccessor", {
+                  id: target.superseded_by_id,
+                })}
               </Link>
             ) : (
-              "It was retired directly; no successor replaced it."
+              t("memory.reader.record.retiredDirectly")
             )}
           </p>
           {target.deprecated_reason ? (
             <p className="memory-record__reason">
-              Reason: {target.deprecated_reason}
+              {t("memory.common.reason", {
+                reason: target.deprecated_reason,
+              })}
             </p>
           ) : null}
         </div>
@@ -158,23 +179,23 @@ function MemoryRecord({ target }: { readonly target: MemorySchema }) {
       {/* The API exposes occurrence time as update_time; created_at is press time. */}
       <dl className="meta-grid memory-record__meta">
         <div className="meta-item">
-          <dt className="meta-key">Occurred</dt>
+          <dt className="meta-key">{t("memory.common.occurred")}</dt>
           <dd className="meta-value">
             <time dateTime={target.update_time}>{formatDateTime(target.update_time)}</time>
           </dd>
         </div>
         <div className="meta-item">
-          <dt className="meta-key">Pressed</dt>
+          <dt className="meta-key">{t("memory.common.pressed")}</dt>
           <dd className="meta-value">
             <time dateTime={target.created_at}>{formatDateTime(target.created_at)}</time>
           </dd>
         </div>
         <div className="meta-item">
-          <dt className="meta-key">Source</dt>
+          <dt className="meta-key">{t("memory.common.source")}</dt>
           <dd className="meta-value">{target.source}</dd>
         </div>
         <div className="meta-item">
-          <dt className="meta-key">Record id</dt>
+          <dt className="meta-key">{t("memory.common.recordId")}</dt>
           <dd className="meta-value">memory:{target.memory_id}</dd>
         </div>
       </dl>
@@ -183,30 +204,38 @@ function MemoryRecord({ target }: { readonly target: MemorySchema }) {
 }
 
 function Lineage({ data }: { readonly data: MemoryReadSchema }) {
+  const { t } = useI18n();
+
   return (
     <Panel
-      eyebrow="Direct lineage"
-      title="What this memory replaces"
+      eyebrow={t("memory.reader.lineage.eyebrow")}
+      title={t("memory.reader.lineage.title")}
       className="memory-lineage-panel"
     >
       <div className="memory-lineage">
         <section className="memory-lineage__column">
-          <h3 className="memory-subhead">This memory supersedes</h3>
+          <h3 className="memory-subhead">
+            {t("memory.reader.lineage.supersedesHeading")}
+          </h3>
           {data.supersedes.length > 0 ? (
             <MiniList memories={data.supersedes} />
           ) : (
-            <p className="memory-note">No earlier memories are listed on this record.</p>
+            <p className="memory-note">
+              {t("memory.reader.lineage.supersedesEmpty")}
+            </p>
           )}
         </section>
         <section className="memory-lineage__column">
-          <h3 className="memory-subhead">Superseded by</h3>
+          <h3 className="memory-subhead">
+            {t("memory.reader.lineage.supersededByHeading")}
+          </h3>
           {data.superseded_by ? (
             <MiniList memories={[data.superseded_by]} />
           ) : (
             <p className="memory-note">
               {data.target.status === "deprecated"
-                ? "This memory was retired directly. No later record replaced it."
-                : "Nothing has replaced this memory. It remains the current leaf in its chain."}
+                ? t("memory.reader.lineage.retiredEmpty")
+                : t("memory.reader.lineage.currentEmpty")}
             </p>
           )}
         </section>
@@ -216,27 +245,37 @@ function Lineage({ data }: { readonly data: MemoryReadSchema }) {
 }
 
 function Neighbours({ data }: { readonly data: MemoryReadSchema }) {
+  const { t } = useI18n();
+
   return (
     <Panel
-      eyebrow="Adjacent in occurrence order"
-      title="Neighbouring memories"
+      eyebrow={t("memory.reader.neighbours.eyebrow")}
+      title={t("memory.reader.neighbours.title")}
       className="memory-neighbours-panel"
     >
       <div className="memory-neighbours">
         <section className="memory-neighbours__column">
-          <h3 className="memory-subhead">Before</h3>
+          <h3 className="memory-subhead">
+            {t("memory.reader.neighbours.before")}
+          </h3>
           {data.neighbors_before.length > 0 ? (
             <MiniList memories={data.neighbors_before} />
           ) : (
-            <p className="memory-note">This is the earliest memory in the archive.</p>
+            <p className="memory-note">
+              {t("memory.reader.neighbours.earliest")}
+            </p>
           )}
         </section>
         <section className="memory-neighbours__column">
-          <h3 className="memory-subhead">After</h3>
+          <h3 className="memory-subhead">
+            {t("memory.reader.neighbours.after")}
+          </h3>
           {data.neighbors_after.length > 0 ? (
             <MiniList memories={data.neighbors_after} />
           ) : (
-            <p className="memory-note">This is the latest memory in the archive.</p>
+            <p className="memory-note">
+              {t("memory.reader.neighbours.latest")}
+            </p>
           )}
         </section>
       </div>
@@ -245,16 +284,16 @@ function Neighbours({ data }: { readonly data: MemoryReadSchema }) {
 }
 
 function Chain({ data }: { readonly data: MemoryReadSchema }) {
+  const { t, formatDateTime } = useI18n();
+
   return (
     <Panel
-      eyebrow="Full chain"
-      title="Supersession history"
+      eyebrow={t("memory.reader.chain.eyebrow")}
+      title={t("memory.reader.chain.title")}
       className="memory-chain-panel"
     >
       {data.chain.length <= 1 ? (
-        <p className="memory-note">
-          No supersession links are recorded for this memory. It stands alone in the chain.
-        </p>
+        <p className="memory-note">{t("memory.reader.chain.empty")}</p>
       ) : (
         <>
           <ol className="memory-chain">
@@ -277,7 +316,7 @@ function Chain({ data }: { readonly data: MemoryReadSchema }) {
                   aria-current={memory.memory_id === data.target.memory_id ? "page" : undefined}
                 >
                   <span className="memory-chain__head">
-                    <span>CRYSTAL #{memory.memory_id}</span>
+                    <span>{t("memory.common.crystal", { id: memory.memory_id })}</span>
                     <MemoryStatus status={memory.status} small />
                   </span>
                   <time className="memory-chain__time" dateTime={memory.update_time}>
@@ -290,8 +329,8 @@ function Chain({ data }: { readonly data: MemoryReadSchema }) {
           </ol>
           <p className="memory-chain__note">
             {data.chain.length >= 20
-              ? "The API returns at most 20 linked records; this chain is at that cap."
-              : "Oldest at the top. Each step moves toward the current memory, including deprecated leaves."}
+              ? t("memory.reader.chain.capped")
+              : t("memory.reader.chain.order")}
           </p>
         </>
       )}
@@ -300,16 +339,18 @@ function Chain({ data }: { readonly data: MemoryReadSchema }) {
 }
 
 function SupersedeAction({ target }: { readonly target: MemorySchema }) {
+  const { t } = useI18n();
+
   if (target.status !== "active") {
     return (
       <Button
         variant="secondary"
         size="sm"
         disabled
-        title="This memory is already deprecated."
+        title={t("memory.reader.supersede.disabledTitle")}
       >
         <Icon name="branch" size={15} />
-        Supersede this memory
+        {t("memory.reader.supersede.action")}
       </Button>
     );
   }
@@ -320,7 +361,7 @@ function SupersedeAction({ target }: { readonly target: MemorySchema }) {
       size="sm"
     >
       <Icon name="branch" size={15} />
-      Supersede this memory
+      {t("memory.reader.supersede.action")}
     </ButtonLink>
   );
 }
@@ -349,6 +390,7 @@ function ReadBody({
 
 /** Single-memory reader with lineage, neighbours, and a save receipt when present. */
 export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
+  const { t } = useI18n();
   const location = useLocation();
   const receipt = parseMemorySaveReceipt(location.state);
   const query = useReadMemory(
@@ -367,23 +409,25 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
 
   return (
     <div className="content-container memory-page memory-reader-page">
-      <nav className="memory-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/memory">Memory Vault</Link>
+      <nav className="memory-breadcrumb" aria-label={t("memory.common.breadcrumbAria")}>
+        <Link to="/memory">{t("memory.vault.title")}</Link>
         <span aria-hidden="true">/</span>
         <span className="memory-breadcrumb__current" aria-current="page">
-          CRYSTAL #{memoryId}
+          {t("memory.common.crystal", { id: memoryId })}
         </span>
       </nav>
 
       <PageHeader
-        eyebrow="Memory · reader"
-        title={`CRYSTAL #${memoryId}`}
-        description="One pressed memory with its direct lineage, its temporal neighbours, and the full supersession chain. Deprecated crystals remain readable after they leave search and the timeline."
+        eyebrow={t("memory.reader.eyebrow")}
+        title={t("memory.common.crystal", { id: memoryId })}
+        description={t("memory.reader.description")}
         meta={
           target ? (
             <MemoryStatus status={target.status} small />
           ) : (
-            <span className="memory-page-header__meta">Reading record</span>
+            <span className="memory-page-header__meta">
+              {t("memory.reader.readingRecord")}
+            </span>
           )
         }
         actions={
@@ -391,8 +435,8 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
             {target ? (
               <CopyButton
                 value={target.content}
-                label="Copy memory"
-                title="Copy the memory text"
+                label={t("memory.common.copyMemory")}
+                title={t("memory.common.copyMemoryTitle")}
               />
             ) : null}
             {target ? (
@@ -402,7 +446,7 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
                 onClick={() => setEditOpen(true)}
               >
                 <Icon name="pencil" size={14} />
-                Edit text
+                {t("memory.reader.editText")}
               </Button>
             ) : null}
             {target?.status === "active" ? (
@@ -412,23 +456,25 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
                 onClick={() => setDeprecateOpen(true)}
               >
                 <Icon name="history" size={14} />
-                Deprecate
+                {t("memory.reader.deprecate")}
               </Button>
             ) : null}
             {target ? <SupersedeAction target={target} /> : null}
             <ButtonLink to="/memory" variant="ghost" size="sm">
               <Icon name="arrow-right" size={15} className="memory-back-icon" />
-              Back to vault
+              {t("memory.reader.backToVault")}
             </ButtonLink>
           </div>
         }
       />
 
-      {query.isPending ? <MemorySkeleton label="Reading the memory trace" count={2} /> : null}
+      {query.isPending ? (
+        <MemorySkeleton label={t("memory.reader.skeleton")} count={2} />
+      ) : null}
       {query.isError ? (
         <MemoryErrorState
-          title="The memory trace did not answer."
-          description="The record could not be read. Retry, or return to the vault and choose another crystal."
+          title={t("memory.reader.errorTitle")}
+          description={t("memory.reader.errorDescription")}
           error={query.error}
           onRetry={() => {
             void query.refetch();

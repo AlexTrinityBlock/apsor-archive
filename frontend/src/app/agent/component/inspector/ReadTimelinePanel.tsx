@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
-import { formatDateTime, formatNumber, truncate } from "../../../../lib/format";
+import { useI18n } from "../../../i18n";
+import { truncate } from "../../../../lib/format";
 import {
   excerptOf,
   numberField,
@@ -45,7 +46,7 @@ function eventsOf(data: Record<string, unknown> | null): TimelineEvent[] {
   return recordList(data?.events).map((record) => {
     const time = textField(record, "time");
     return {
-      kind: textField(record, "kind") ?? "event",
+      kind: textField(record, "kind") ?? "",
       time,
       content: excerptOf(record, ["content", "excerpt"], 300),
       memoryId: recordId(record, "memory_id"),
@@ -76,12 +77,15 @@ function DensityBars({ events }: { readonly events: readonly TimelineEvent[] }) 
 }
 
 function EventCard({ event }: { readonly event: TimelineEvent }) {
+  const { t, formatDateTime } = useI18n();
   return (
     <li className="pi-ribbon__event">
       <span className="pi-ribbon__event-dot" aria-hidden="true" />
       <div className="pi-ribbon__event-body">
         <header>
-          <span className="pi-ribbon__event-kind">{event.kind}</span>
+          <span className="pi-ribbon__event-kind">
+            {event.kind || t("chat.panels.timeline.eventFallback")}
+          </span>
           {event.time ? (
             <time dateTime={event.time}>{formatDateTime(event.time)}</time>
           ) : null}
@@ -89,7 +93,7 @@ function EventCard({ event }: { readonly event: TimelineEvent }) {
         {event.content.length > 0 ? (
           <p>{truncate(event.content, 300)}</p>
         ) : (
-          <p className="is-muted">No inline event text was recorded.</p>
+          <p className="is-muted">{t("chat.panels.timeline.noText")}</p>
         )}
         <div className="pi-ribbon__event-links">
           {event.memoryId !== null ? (
@@ -106,15 +110,18 @@ function EventCard({ event }: { readonly event: TimelineEvent }) {
 
 /** `read_timeline`: a temporal ribbon, density strip, and event cards. */
 export function ReadTimelinePanel({ item }: PanelProps) {
+  const { t, formatDateTime, formatNumber } = useI18n();
   if (item.live || item.status.toLowerCase() === "running") {
-    return <LivePanel item={item} detail="Sampling the requested date window." />;
+    return (
+      <LivePanel item={item} detail={t("chat.panels.timeline.liveDetail")} />
+    );
   }
   if (item.status.toLowerCase() === "error") {
     return (
       <PanelEmpty
         icon="timeline"
-        title="The timeline window could not be read"
-        detail={item.detail ?? "No structured result was recorded."}
+        title={t("chat.panels.timeline.errorTitle")}
+        detail={item.detail ?? t("chat.panels.common.noStructured")}
       />
     );
   }
@@ -128,16 +135,31 @@ export function ReadTimelinePanel({ item }: PanelProps) {
     <div className="pi-ribbon">
       <header className="pi-ribbon__head">
         <div>
-          <p className="eyebrow">Temporal ribbon</p>
+          <p className="eyebrow">{t("chat.panels.timeline.heading")}</p>
           <strong>
-            {textField(data, "range_start") ?? "Unbounded"} →{" "}
-            {textField(data, "range_end") ?? "now"}
+            {textField(data, "range_start")
+              ? formatDateTime(textField(data, "range_start") ?? "")
+              : t("chat.panels.timeline.unbounded")}{" "}
+            →{" "}
+            {textField(data, "range_end")
+              ? formatDateTime(textField(data, "range_end") ?? "")
+              : t("chat.panels.timeline.now")}
           </strong>
         </div>
         <p className="pi-ribbon__stats">
-          {formatNumber(events.length)} shown
-          {total !== null ? ` · ${formatNumber(total)} events` : ""}
-          {sampled !== null && sampled !== total ? ` · ${formatNumber(sampled)} sampled` : ""}
+          {t("chat.panels.timeline.shown", {
+            count: formatNumber(events.length),
+          })}
+          {total !== null
+            ? ` · ${t("chat.panels.timeline.events", {
+                count: formatNumber(total),
+              })}`
+            : ""}
+          {sampled !== null && sampled !== total
+            ? ` · ${t("chat.panels.timeline.sampled", {
+                count: formatNumber(sampled),
+              })}`
+            : ""}
         </p>
       </header>
 
@@ -150,7 +172,13 @@ export function ReadTimelinePanel({ item }: PanelProps) {
               key={`${event.time ?? "event"}-${index}`}
               style={{ left: `${event.position * 100}%` }}
               data-kind={event.kind}
-              title={`${event.kind} · ${event.time ?? "undated"}`}
+              title={`${
+                event.kind || t("chat.panels.timeline.eventFallback")
+              } · ${
+                event.time
+                  ? formatDateTime(event.time)
+                  : t("chat.panels.timeline.undated")
+              }`}
             />
           ))}
         </div>
@@ -159,8 +187,8 @@ export function ReadTimelinePanel({ item }: PanelProps) {
       {events.length === 0 ? (
         <PanelEmpty
           icon="timeline"
-          title="No events in this range"
-          detail="The range was sampled, but no memory, summary, or file event fell inside it."
+          title={t("chat.panels.timeline.emptyTitle")}
+          detail={t("chat.panels.timeline.emptyDetail")}
         />
       ) : (
         <ol className="pi-ribbon__events">

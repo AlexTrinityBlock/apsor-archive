@@ -11,9 +11,10 @@ import {
   useRetryIngestJob,
   useUploadFileAsync,
 } from "../../generated-apis-types/files/files";
-import { formatBytes, formatNumber } from "../../../lib/format";
+import { formatBytes } from "../../../lib/format";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n, type Translate } from "../../i18n";
 import { IngestProgress } from "./IngestProgress";
 import { LibraryDialog } from "./LibraryDialog";
 import {
@@ -76,24 +77,35 @@ function pathWithFileName(
   return folder === "" || folder === "/" ? `/${fileName}` : `${folder}/${fileName}`;
 }
 
-function intakeSubmitLabel(tab: IntakeTab, phase: IngestRunPhase): string {
+function intakeSubmitLabel(
+  t: Translate,
+  tab: IntakeTab,
+  phase: IngestRunPhase,
+): string {
   if (phase === "enqueueing") {
-    return tab === "upload" ? "Uploading…" : "Creating…";
+    return tab === "upload"
+      ? t("library.upload.uploading")
+      : t("library.upload.creating");
   }
   if (phase === "processing") {
-    return "Processing…";
+    return t("library.upload.processing");
   }
-  return tab === "upload" ? "Upload file" : "Create text file";
+  return tab === "upload"
+    ? t("library.upload.submitUpload")
+    : t("library.upload.submitText");
 }
 
 function enqueueProgressLabel(
+  t: Translate,
   tab: IntakeTab,
   phase: IngestRunPhase,
 ): string | undefined {
   if (phase !== "enqueueing") {
     return undefined;
   }
-  return tab === "upload" ? "Uploading" : "Queuing";
+  return tab === "upload"
+    ? t("library.upload.uploadingLabel")
+    : t("library.upload.queuing");
 }
 
 function FormError({ message }: { readonly message: string }) {
@@ -138,15 +150,16 @@ function IntakeActions({
   readonly onCancel: () => void;
   readonly onRetry: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="library-form__actions">
       <Button variant="ghost" size="sm" onClick={onCancel}>
-        {busy ? "Stop waiting" : "Cancel"}
+        {busy ? t("library.upload.stopWaiting") : t("library.common.cancel")}
       </Button>
       {canRetry ? (
         <Button variant="secondary" size="sm" onClick={onRetry} disabled={busy}>
           <Icon name="history" size={15} />
-          Retry ingest
+          {t("library.upload.retryIngest")}
         </Button>
       ) : null}
       <Button type="submit" variant="primary" size="sm" disabled={busy}>
@@ -174,23 +187,32 @@ function IntakeProgressPanel({
   uploadPath,
   textPath,
 }: ProgressPanelProps) {
+  const { t } = useI18n();
   if (job === null && phase === "idle") {
     return null;
   }
 
   const activePath = normalizeArchivePath(tab === "upload" ? uploadPath : textPath);
-  const fileNameFromPath = activePath.split("/").filter(Boolean).pop() ?? "New file";
+  const fileNameFromPath =
+    activePath.split("/").filter(Boolean).pop() ?? t("library.upload.newFileFallback");
   const progressName =
     job?.file_name ?? (tab === "upload" ? selectedFile?.name : null) ?? fileNameFromPath;
   const progressPath = job?.path ?? (activePath || "/");
-  const progressLabel = enqueueProgressLabel(tab, phase);
+  const progressLabel = enqueueProgressLabel(t, tab, phase);
 
   return (
-    <section className="library-intake__progress" aria-label="Ingestion progress">
+    <section
+      className="library-intake__progress"
+      aria-label={t("library.ingest.progressAria")}
+    >
       <div className="library-intake__progress-file">
         <Icon name="file" size={15} />
         <span className="library-intake__progress-name">{progressName}</span>
-        {job ? <span className="library-intake__progress-job">Job #{job.id}</span> : null}
+        {job ? (
+          <span className="library-intake__progress-job">
+            {t("library.ingest.jobId", { id: job.id })}
+          </span>
+        ) : null}
       </div>
       <code className="library-intake__progress-path">{progressPath}</code>
       <IngestProgress
@@ -203,7 +225,7 @@ function IntakeProgressPanel({
       />
       {phase === "idle" ? null : (
         <p className="library-intake__progress-note">
-          Closing this dialog stops the progress view only; the durable job keeps running.
+          {t("library.upload.closeNote")}
         </p>
       )}
     </section>
@@ -249,11 +271,12 @@ function UploadTabPanel({
   onCancel,
   onRetry,
 }: UploadTabPanelProps) {
+  const { t } = useI18n();
   return (
     <div role="tabpanel" id={uploadPanelId} aria-labelledby={uploadTabId}>
       <form className="library-form" onSubmit={onSubmit}>
         <label className="library-field" htmlFor={uploadPathId}>
-          <span className="library-field__label">Archive path</span>
+          <span className="library-field__label">{t("library.upload.archivePath")}</span>
           <input
             id={uploadPathId}
             className="library-input"
@@ -267,12 +290,12 @@ function UploadTabPanel({
             data-autofocus
           />
           <span className="library-field__hint">
-            Full path, including the file name. Missing folders are created.
+            {t("library.upload.pathHint")}
           </span>
         </label>
 
         <label className="library-field" htmlFor={uploadFileId}>
-          <span className="library-field__label">File</span>
+          <span className="library-field__label">{t("library.upload.fileLabel")}</span>
           <input
             id={uploadFileId}
             className="library-input library-input--file"
@@ -282,8 +305,7 @@ function UploadTabPanel({
             disabled={busy}
           />
           <span className="library-field__hint">
-            One file · up to 10 MB · .md, .txt, .csv, .json, .log, .pdf,
-            .docx, .jpg, .jpeg, .png, .webp
+            {t("library.upload.fileHint")}
           </span>
         </label>
 
@@ -351,11 +373,12 @@ function TextTabPanel({
   onCancel,
   onRetry,
 }: TextTabPanelProps) {
+  const { t, formatNumber } = useI18n();
   return (
     <div role="tabpanel" id={textPanelId} aria-labelledby={textTabId}>
       <form className="library-form" onSubmit={onSubmit}>
         <label className="library-field" htmlFor={textPathId}>
-          <span className="library-field__label">Archive path</span>
+          <span className="library-field__label">{t("library.upload.archivePath")}</span>
           <input
             id={textPathId}
             className="library-input"
@@ -369,26 +392,28 @@ function TextTabPanel({
             data-autofocus
           />
           <span className="library-field__hint">
-            Full path, including the file name. Missing folders are created.
+            {t("library.upload.pathHint")}
           </span>
         </label>
 
         <label className="library-field" htmlFor={textContentId}>
-          <span className="library-field__label">Content</span>
+          <span className="library-field__label">{t("library.upload.contentLabel")}</span>
           <textarea
             id={textContentId}
             className="library-textarea"
             value={textContent}
             onChange={(event) => onContentChange(event.target.value)}
-            placeholder="# Reading list&#10;&#10;A note written straight into the archive."
+            placeholder={t("library.upload.textPlaceholder")}
             rows={10}
             spellCheck={false}
             aria-invalid={textBytes > MAX_TEXT_BYTES}
             disabled={busy}
           />
           <span className="library-field__hint">
-            Plain UTF-8 text · up to 2 MB · {formatNumber(textContent.length)} characters ·{" "}
-            {formatBytes(textBytes)}
+            {t("library.upload.textHint", {
+              characters: formatNumber(textContent.length),
+              size: formatBytes(textBytes),
+            })}
           </span>
         </label>
 
@@ -413,6 +438,7 @@ function TextTabPanel({
  * that job's stage and progress until the published file can be opened.
  */
 export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogProps) {
+  const { t } = useI18n();
   const baseId = useId();
   const uploadPathId = `${baseId}-upload-path`;
   const uploadFileId = `${baseId}-upload-file`;
@@ -438,7 +464,7 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
   const textBytes = textByteLength(textContent);
   const busy = run.phase !== "idle";
   const canRetry = typeof run.failure?.retryJobId === "number";
-  const submitLabel = intakeSubmitLabel(tab, run.phase);
+  const submitLabel = intakeSubmitLabel(t, tab, run.phase);
   const progress: ProgressPanelProps = {
     tab,
     phase: run.phase,
@@ -468,13 +494,13 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
     if (!isAcceptedFileName(file.name)) {
       setSelectedFile(null);
       event.target.value = "";
-      setLocalError("Choose a Markdown, text, CSV, JSON, log, PDF, DOCX, or image file.");
+      setLocalError(t("library.upload.errorType"));
       return;
     }
     if (file.size > MAX_UPLOAD_BYTES) {
       setSelectedFile(null);
       event.target.value = "";
-      setLocalError("This file is larger than the 10 MB upload limit.");
+      setLocalError(t("library.upload.errorTooLarge"));
       return;
     }
     setSelectedFile(file);
@@ -489,11 +515,11 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
     setLocalError(null);
     const path = normalizeArchivePath(uploadPath);
     if (!hasFileName(path)) {
-      setLocalError("Enter the full archive path, including the file name.");
+      setLocalError(t("library.upload.errorPath"));
       return;
     }
     if (!selectedFile) {
-      setLocalError("Choose a file to upload.");
+      setLocalError(t("library.upload.errorFile"));
       return;
     }
     run.start(() => uploadMutation.mutateAsync({ data: { path, file: selectedFile } }));
@@ -507,15 +533,15 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
     setLocalError(null);
     const path = normalizeArchivePath(textPath);
     if (!hasFileName(path)) {
-      setLocalError("Enter the full archive path, including the file name.");
+      setLocalError(t("library.upload.errorPath"));
       return;
     }
     if (textContent.trim().length === 0) {
-      setLocalError("Write some content before creating the file.");
+      setLocalError(t("library.upload.errorContent"));
       return;
     }
     if (textBytes > MAX_TEXT_BYTES) {
-      setLocalError("This text is larger than the 2 MB creation limit.");
+      setLocalError(t("library.upload.errorTextTooLarge"));
       return;
     }
     run.start(() => textMutation.mutateAsync({ data: { path, content: textContent } }));
@@ -538,14 +564,18 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
 
   return (
     <LibraryDialog
-      eyebrow="Intake desk"
-      title="Add a file to the archive"
-      description="A path becomes a leaf. Re-uploading the same path creates a new version and keeps the old one in history."
+      eyebrow={t("library.upload.eyebrow")}
+      title={t("library.upload.title")}
+      description={t("library.upload.description")}
       onClose={onClose}
       dismissible={!busy}
       className="library-intake"
     >
-      <div className="library-tabs" role="tablist" aria-label="Intake method">
+      <div
+        className="library-tabs"
+        role="tablist"
+        aria-label={t("library.upload.methodAria")}
+      >
         <button
           type="button"
           role="tab"
@@ -557,7 +587,7 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
           disabled={busy}
         >
           <Icon name="arrow-down" size={15} />
-          Upload file
+          {t("library.upload.uploadTab")}
         </button>
         <button
           type="button"
@@ -570,7 +600,7 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
           disabled={busy}
         >
           <Icon name="file" size={15} />
-          New text file
+          {t("library.upload.textTab")}
         </button>
       </div>
 

@@ -7,6 +7,7 @@ import {
 
 import { useScrollLock } from "../../hook/useScrollLock";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 
 interface LibraryDialogProps {
   readonly eyebrow: string;
@@ -35,6 +36,7 @@ export function LibraryDialog({
   className,
   dismissible = true,
 }: LibraryDialogProps) {
+  const { t } = useI18n();
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -130,7 +132,7 @@ export function LibraryDialog({
             type="button"
             className="library-dialog__close"
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={t("library.a11y.closeDialog")}
             disabled={!dismissible}
           >
             <Icon name="close" size={18} />

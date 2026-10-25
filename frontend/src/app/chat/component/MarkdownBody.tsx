@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 
 import { CitationChip } from "./CitationChip";
 import { remarkCitations } from "./remarkCitations";
+import { useI18n, type Translate } from "../../i18n";
 import type { CitationToken } from "../types";
 
 const SUMMARY_HREF = /^#citation-summary-(\d+)$/;
@@ -71,6 +72,7 @@ function citationFromHref(href: string): CitationToken | null {
 function buildComponents(
   onOpenCitation: ((token: CitationToken) => void) | undefined,
   memoryTitles: ReadonlyMap<number, string>,
+  t: Translate,
 ): Components {
   return {
     a: ({ href, children }) => {
@@ -127,7 +129,9 @@ function buildComponents(
     },
     img: ({ alt }) => (
       <span className="chat-markdown__image-note">
-        Image omitted from the transcript{alt ? `: ${alt}` : ""}
+        {alt
+          ? t("chat.markdown.imageOmittedAlt", { alt })
+          : t("chat.markdown.imageOmitted")}
       </span>
     ),
     table: ({ children }) => (
@@ -155,9 +159,10 @@ export const MarkdownBody = memo(function MarkdownBody({
   memoryTitles = NO_MEMORY_TITLES,
   onOpenCitation,
 }: MarkdownBodyProps) {
+  const { t } = useI18n();
   const components = useMemo(
-    () => buildComponents(onOpenCitation, memoryTitles),
-    [memoryTitles, onOpenCitation],
+    () => buildComponents(onOpenCitation, memoryTitles, t),
+    [memoryTitles, onOpenCitation, t],
   );
 
   return (

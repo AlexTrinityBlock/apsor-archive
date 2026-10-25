@@ -2,6 +2,8 @@ import type { ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { useI18n } from "../../i18n";
+
 function MarkdownLink({ href, children }: ComponentProps<"a">) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer nofollow">
@@ -11,7 +13,14 @@ function MarkdownLink({ href, children }: ComponentProps<"a">) {
 }
 
 function MarkdownImage({ alt }: ComponentProps<"img">) {
-  return <span className="viewer-md__image">[image: {alt || "untitled"}]</span>;
+  const { t } = useI18n();
+  return (
+    <span className="viewer-md__image">
+      {t("library.viewer.markdown.imagePlaceholder", {
+        alt: alt || t("library.viewer.markdown.untitled"),
+      })}
+    </span>
+  );
 }
 
 /**

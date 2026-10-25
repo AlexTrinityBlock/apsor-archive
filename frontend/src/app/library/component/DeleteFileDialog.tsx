@@ -4,6 +4,7 @@ import { useDeleteFile } from "../../generated-apis-types/files/files";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useToast } from "../../component/Toast";
+import { useI18n } from "../../i18n";
 import { LibraryDialog } from "./LibraryDialog";
 import { describeError, invalidateLibraryQueries } from "./library-utils";
 
@@ -26,13 +27,14 @@ export function DeleteFileDialog({
   onClose,
   onDeleted,
 }: DeleteFileDialogProps) {
+  const { t } = useI18n();
   const toast = useToast();
   const queryClient = useQueryClient();
 
   const deleteMutation = useDeleteFile({
     mutation: {
       onSuccess: () => {
-        toast.success(`“${fileName}” was soft-deleted. Its history remains traceable.`);
+        toast.success(t("library.delete.deletedToast", { name: fileName }));
         invalidateLibraryQueries(queryClient, {
           paths: true,
           stats: true,
@@ -50,15 +52,15 @@ export function DeleteFileDialog({
 
   return (
     <LibraryDialog
-      eyebrow="Soft delete"
-      title={`Delete “${fileName}”?`}
-      description="This removes the current file from the shelf, search, and path listings. Nothing is erased: the version chain and earlier editions stay addressable through history."
+      eyebrow={t("library.delete.eyebrow")}
+      title={t("library.delete.title", { name: fileName })}
+      description={t("library.delete.description")}
       onClose={onClose}
       dismissible={!pending}
       className="library-confirm"
     >
       <div className="library-confirm__path">
-        <span className="eyebrow">Path</span>
+        <span className="eyebrow">{t("library.delete.path")}</span>
         <code>{rawFilePath}</code>
       </div>
 
@@ -71,7 +73,7 @@ export function DeleteFileDialog({
 
       <div className="library-form__actions">
         <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
-          Keep file
+          {t("library.delete.keep")}
         </Button>
         <Button
           variant="primary"
@@ -80,7 +82,7 @@ export function DeleteFileDialog({
           onClick={() => deleteMutation.mutate({ fileId })}
           disabled={pending}
         >
-          {pending ? "Soft-deleting…" : "Soft delete file"}
+          {pending ? t("library.delete.pending") : t("library.delete.submit")}
           <Icon name="history" size={15} />
         </Button>
       </div>

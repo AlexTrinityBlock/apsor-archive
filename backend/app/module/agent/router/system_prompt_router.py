@@ -4,8 +4,6 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.module.agent.dependencies import get_system_prompt_service
 from app.module.agent.schema.system_prompt_schema import (
-    SystemPromptBuiltinSectionSchema,
-    SystemPromptBuiltinUpdateSchema,
     SystemPromptReorderSchema,
     SystemPromptSectionCreateSchema,
     SystemPromptSectionReadSchema,
@@ -17,9 +15,9 @@ from app.shared.types.list_response import ListResponseSchema
 router = APIRouter(prefix="/settings/system-prompt", tags=["agent"])
 
 
-# 路由順序很重要：``/order`` 與 ``/reset`` 必須宣告在 ``/{section_id}``
-# 之前，否則 Starlette 會先用 path param 匹配，讓固定字串被當成 int 解析而
-# 回傳 422。
+# Route order matters: ``/order`` and ``/reset`` must be declared before
+# ``/{section_id}`` or Starlette matches the fixed strings as a path parameter
+# and returns a 422 while trying to parse them as integers.
 
 
 @router.get(
@@ -30,7 +28,7 @@ router = APIRouter(prefix="/settings/system-prompt", tags=["agent"])
 async def list_system_prompt_sections(
     service: SystemPromptService = Depends(get_system_prompt_service),
 ) -> ListResponseSchema[SystemPromptSectionReadSchema]:
-    """List every custom section in display order."""
+    """List every section in display order."""
     return await service.list_sections()
 
 
@@ -46,44 +44,6 @@ async def create_system_prompt_section(
 ) -> ListResponseSchema[SystemPromptSectionReadSchema]:
     """Create one section and return the updated list."""
     return await service.create_section(payload)
-
-
-@router.get(
-    "/builtin",
-    response_model=ListResponseSchema[SystemPromptBuiltinSectionSchema],
-    operation_id="listBuiltinSystemPromptSections",
-)
-async def list_builtin_system_prompt_sections(
-    service: SystemPromptService = Depends(get_system_prompt_service),
-) -> ListResponseSchema[SystemPromptBuiltinSectionSchema]:
-    """List the four built-in prompt sections with any owner overrides."""
-    return await service.list_builtin_sections()
-
-
-@router.put(
-    "/builtin/{key}",
-    response_model=ListResponseSchema[SystemPromptBuiltinSectionSchema],
-    operation_id="updateBuiltinSystemPromptSection",
-)
-async def update_builtin_system_prompt_section(
-    key: str,
-    payload: SystemPromptBuiltinUpdateSchema,
-    service: SystemPromptService = Depends(get_system_prompt_service),
-) -> ListResponseSchema[SystemPromptBuiltinSectionSchema]:
-    """Replace one built-in body; its title and position stay canonical."""
-    return await service.update_builtin_section(key, payload)
-
-
-@router.post(
-    "/builtin/reset",
-    response_model=ListResponseSchema[SystemPromptBuiltinSectionSchema],
-    operation_id="resetBuiltinSystemPromptSections",
-)
-async def reset_builtin_system_prompt_sections(
-    service: SystemPromptService = Depends(get_system_prompt_service),
-) -> ListResponseSchema[SystemPromptBuiltinSectionSchema]:
-    """Remove every built-in override."""
-    return await service.reset_builtin_sections()
 
 
 @router.put(
@@ -107,7 +67,7 @@ async def reorder_system_prompt_sections(
 async def reset_system_prompt_sections(
     service: SystemPromptService = Depends(get_system_prompt_service),
 ) -> ListResponseSchema[SystemPromptSectionReadSchema]:
-    """Delete every custom section; the built-in prompt remains."""
+    """Replace every section with the four seeded defaults."""
     return await service.reset_sections()
 
 

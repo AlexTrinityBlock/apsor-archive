@@ -1,16 +1,17 @@
-"""Ordered system prompt sections plus the DB-backed frequently used prompts."""
+"""Unified system prompt sections plus the DB-backed frequently used prompts."""
 
 from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
+from app.module.agent.service.system_prompt import default_sections
 from app.module.agent.test.fake_chat_generator import FakeChatGenerator
 from tests.conftest import TEST_DATABASE_URL
 
 SYSTEM_PROMPT_URL = "/api/v1/agent/settings/system-prompt"
 FREQUENT_PROMPTS_URL = "/api/v1/settings/frequent-prompts"
-BUILTIN_SECTION_NAMES = ["identity", "instructions", "examples", "context_protocol"]
+DEFAULT_TITLES = ["Identity", "Instructions", "Examples", "Context protocol"]
 
 
 def _list_sections(client: TestClient) -> dict[str, Any]:
@@ -68,240 +69,214 @@ def _prompt(system_entry: dict[str, Any]) -> str:
 
 
 def test_system_prompt_module_and_section_order(client: TestClient) -> None:
-    """Sections are CRUD-managed, ordered, frozen, and cache-invalidated."""
+    """Defaults are ordinary rows: editable, deletable, reorderable, and frozen."""
     client.app.state.agent_chat_generator = FakeChatGenerator([])
 
     # ------------------------------------------------------------------
-    # 1. The collection starts empty.
+    # 1. A fresh database contains the four seeded defaults. They are the same
+    # kind of row as every owner-authored section, and their bodies are the
+    # seed bodies, not a read-time Python fallback.
     # ------------------------------------------------------------------
     initial = _list_sections(client)
-    assert initial["total_results"] == 0
-    assert initial["resources"] == []
+    assert initial["total_results"] == 4
     assert initial["start_index"] == 1
-    assert initial["items_per_page"] == 0
+    assert initial["items_per_page"] == 4
+    assert [item["title"] for item in initial["resources"]] == DEFAULT_TITLES
+    assert [item["sort_order"] for item in initial["resources"]] == [10, 20, 30, 40]
+    assert [item["body"] for item in initial["resources"]] == [
+        section["body"] for section in default_sections()
+    ]
+    default_ids = [item["id"] for item in initial["resources"]]
 
     # ------------------------------------------------------------------
-    # 2. Create two sections; the list follows sort_order and id. The first
-    # created row has a higher sort_order, so it must not lead the list.
+    # 2. Create two sections: one appends at max + 10, one is inserted before
+    # the defaults. The list follows sort_order and then id.
     # ------------------------------------------------------------------
-    first_created = _create_section(client, title="Title 1", body="Body one.", sort_order=20)
-    first_section = _find_section(first_created, "Title 1")
-    first_id = first_section["id"]
-    assert first_section["sort_order"] == 20
+    late_created = _create_section(client, title="Late", body="Late body.")
+    late_id = _find_section(late_created, "Late")["id"]
+    assert _find_section(late_created, "Late")["sort_order"] == 50
 
-    second_created = _create_section(client, title="Title 2", body="Body two.", sort_order=10)
-    second_section = _find_section(second_created, "Title 2")
-    second_id = second_section["id"]
-    assert second_section["sort_order"] == 10
-    assert second_id > first_id
+    early_created = _create_section(
+        client,
+        title="Early",
+        body="Early body.",
+        sort_order=5,
+    )
+    early_id = _find_section(early_created, "Early")["id"]
+    assert _find_section(early_created, "Early")["sort_order"] == 5
 
     listed = _list_sections(client)
-    assert listed["total_results"] == 2
-    assert [item["title"] for item in listed["resources"]] == ["Title 2", "Title 1"]
-    assert [item["sort_order"] for item in listed["resources"]] == [10, 20]
+    assert listed["total_results"] == 6
+    assert [item["title"] for item in listed["resources"]] == [
+        "Early",
+        *DEFAULT_TITLES,
+        "Late",
+    ]
+    assert [item["sort_order"] for item in listed["resources"]] == [5, 10, 20, 30, 40, 50]
 
     # ------------------------------------------------------------------
-    # 3. Reorder the complete collection. A missing or unknown id must be
-    # rejected without changing the stored order.
+    # 3. Reorder the complete collection. A missing, unknown, or duplicate id
+    # must be rejected without changing the stored order.
     # ------------------------------------------------------------------
+    reordered_ids = [late_id, *reversed(default_ids), early_id]
     reordered = client.put(
         f"{SYSTEM_PROMPT_URL}/order",
-        json={"section_ids": [first_id, second_id]},
+        json={"section_ids": reordered_ids},
     )
     assert reordered.status_code == 200, reordered.text
-    assert [item["id"] for item in reordered.json()["resources"]] == [first_id, second_id]
-    assert [item["sort_order"] for item in reordered.json()["resources"]] == [10, 20]
-    assert [item["id"] for item in _list_sections(client)["resources"]] == [first_id, second_id]
+    assert [item["id"] for item in reordered.json()["resources"]] == reordered_ids
+    assert [item["sort_order"] for item in reordered.json()["resources"]] == [
+        10,
+        20,
+        30,
+        40,
+        50,
+        60,
+    ]
+    assert [item["id"] for item in _list_sections(client)["resources"]] == reordered_ids
 
     missing_id = client.put(
         f"{SYSTEM_PROMPT_URL}/order",
-        json={"section_ids": [first_id]},
+        json={"section_ids": [late_id]},
     )
     assert missing_id.status_code == 422, missing_id.text
     assert missing_id.json()["error"] == "agent_invalid_system_prompt"
 
     unknown_id = client.put(
         f"{SYSTEM_PROMPT_URL}/order",
-        json={"section_ids": [first_id, second_id, 999_999]},
+        json={"section_ids": [*reordered_ids, 999_999]},
     )
     assert unknown_id.status_code == 422, unknown_id.text
     assert unknown_id.json()["error"] == "agent_invalid_system_prompt"
 
     duplicate_id = client.put(
         f"{SYSTEM_PROMPT_URL}/order",
-        json={"section_ids": [first_id, first_id]},
+        json={"section_ids": [late_id, late_id, *default_ids, early_id]},
     )
     assert duplicate_id.status_code == 422, duplicate_id.text
     assert duplicate_id.json()["error"] == "agent_invalid_system_prompt"
-
-    assert [item["id"] for item in _list_sections(client)["resources"]] == [first_id, second_id]
+    assert [item["id"] for item in _list_sections(client)["resources"]] == reordered_ids
 
     # ------------------------------------------------------------------
-    # 4. A new conversation freezes both custom sections before the four
-    # built-in sections and renders them in order.
+    # 4. A new conversation freezes every row in the current order. The
+    # provider sees ``system_prompt:<id>`` for all rows, including defaults.
     # ------------------------------------------------------------------
     conversation_id = _create_conversation(client, "Ordered sections")
     system_entry = _system_entry(client, conversation_id)
     assert _section_names(system_entry) == [
-        f"system_prompt:{first_id}",
-        f"system_prompt:{second_id}",
-        "identity",
-        "instructions",
-        "examples",
-        "context_protocol",
+        f"system_prompt:{section_id}" for section_id in reordered_ids
     ]
-    assert system_entry["data"]["prompt_version"] == "archive-agent-v11"
+    assert system_entry["data"]["prompt_version"] == "archive-agent-v12"
     sections = system_entry["data"]["sections"]
     assert sections[0] == {
-        "name": f"system_prompt:{first_id}",
-        "title": "Title 1",
-        "content": "Body one.",
+        "name": f"system_prompt:{late_id}",
+        "title": "Late",
+        "content": "Late body.",
     }
-    assert sections[1] == {
-        "name": f"system_prompt:{second_id}",
-        "title": "Title 2",
-        "content": "Body two.",
+    assert sections[5] == {
+        "name": f"system_prompt:{early_id}",
+        "title": "Early",
+        "content": "Early body.",
     }
     prompt = _prompt(system_entry)
-    assert "# Title 1" in prompt
-    assert "# Title 2" in prompt
-    assert prompt.index("# Title 1") < prompt.index("# Title 2") < prompt.index("# Identity")
+    assert "# Late" in prompt
+    assert "# Early" in prompt
+    assert prompt.index("# Late") < prompt.index("# Context protocol") < prompt.index("# Early")
 
     # ------------------------------------------------------------------
-    # 5. Editing a section only affects conversations created afterwards.
+    # 5. Editing any row, including a default, only affects conversations
+    # created afterwards. The old ``pi.system`` entry stays byte-identical.
     # ------------------------------------------------------------------
-    edited = client.put(
-        f"{SYSTEM_PROMPT_URL}/{first_id}",
-        json={"title": "Title 1 edited", "body": "Body one edited."},
+    identity_id = default_ids[0]
+    edited_default = client.put(
+        f"{SYSTEM_PROMPT_URL}/{identity_id}",
+        json={"title": "Who I am", "body": "Edited identity body."},
     )
-    assert edited.status_code == 200, edited.text
-    edited_section = _find_section(edited.json(), "Title 1 edited")
-    assert edited_section["id"] == first_id
-    assert edited_section["sort_order"] == 10
+    assert edited_default.status_code == 200, edited_default.text
+    edited_identity = _find_section(edited_default.json(), "Who I am")
+    assert edited_identity["id"] == identity_id
+    assert edited_identity["sort_order"] == 50
+
+    edited_custom = client.put(
+        f"{SYSTEM_PROMPT_URL}/{early_id}",
+        json={"title": "Early edited", "body": "Early body edited."},
+    )
+    assert edited_custom.status_code == 200, edited_custom.text
 
     frozen = _system_entry(client, conversation_id)
     assert frozen["model"] == system_entry["model"]
     assert frozen["data"] == system_entry["data"]
-    assert "# Title 1 edited" not in _prompt(frozen)
+    assert "# Who I am" not in _prompt(frozen)
+    assert "# Early edited" not in _prompt(frozen)
 
     edited_conversation_id = _create_conversation(client, "Edited sections")
     edited_entry = _system_entry(client, edited_conversation_id)
-    assert _section_names(edited_entry)[:2] == [
-        f"system_prompt:{first_id}",
-        f"system_prompt:{second_id}",
+    assert _section_names(edited_entry) == [
+        f"system_prompt:{section_id}" for section_id in reordered_ids
     ]
-    assert edited_entry["data"]["sections"][0]["title"] == "Title 1 edited"
-    assert edited_entry["data"]["sections"][0]["content"] == "Body one edited."
+    assert edited_entry["data"]["sections"][4]["title"] == "Who I am"
+    assert edited_entry["data"]["sections"][4]["content"] == "Edited identity body."
+    assert edited_entry["data"]["sections"][-1]["title"] == "Early edited"
     edited_prompt = _prompt(edited_entry)
-    assert "# Title 1 edited" in edited_prompt
-    assert edited_prompt.index("# Title 1 edited") < edited_prompt.index("# Title 2")
+    assert "# Who I am" in edited_prompt
+    assert "# Early edited" in edited_prompt
 
     # ------------------------------------------------------------------
-    # 6. Deleting one section leaves the other custom section and the
-    # built-ins in new conversations; older conversations stay frozen.
+    # 6. Deleting a default and a custom row removes both from new
+    # conversations. Older conversations keep their frozen copy.
     # ------------------------------------------------------------------
-    deleted = client.delete(f"{SYSTEM_PROMPT_URL}/{first_id}")
-    assert deleted.status_code == 204, deleted.text
+    examples_id = default_ids[2]
+    assert client.delete(f"{SYSTEM_PROMPT_URL}/{examples_id}").status_code == 204
+    assert client.delete(f"{SYSTEM_PROMPT_URL}/{late_id}").status_code == 204
     remaining = _list_sections(client)
-    assert remaining["total_results"] == 1
-    assert [item["id"] for item in remaining["resources"]] == [second_id]
+    assert remaining["total_results"] == 4
+    assert [item["id"] for item in remaining["resources"]] == [
+        default_ids[3],
+        default_ids[1],
+        identity_id,
+        early_id,
+    ]
 
     after_delete_id = _create_conversation(client, "After delete")
     after_delete_entry = _system_entry(client, after_delete_id)
     assert _section_names(after_delete_entry) == [
-        f"system_prompt:{second_id}",
-        "identity",
-        "instructions",
-        "examples",
-        "context_protocol",
+        f"system_prompt:{section_id}"
+        for section_id in [default_ids[3], default_ids[1], identity_id, early_id]
     ]
     after_delete_prompt = _prompt(after_delete_entry)
-    assert "# Title 1 edited" not in after_delete_prompt
-    assert "# Title 2" in after_delete_prompt
-    assert _section_names(_system_entry(client, edited_conversation_id))[:2] == [
-        f"system_prompt:{first_id}",
-        f"system_prompt:{second_id}",
+    assert "# Examples" not in after_delete_prompt
+    assert "# Late" not in after_delete_prompt
+    assert "# Who I am" in after_delete_prompt
+    assert _section_names(_system_entry(client, edited_conversation_id)) == [
+        f"system_prompt:{section_id}" for section_id in reordered_ids
     ]
 
     # ------------------------------------------------------------------
-    # 7. Reset clears the collection; new conversations use built-ins only.
+    # 7. Reset removes custom rows and restores the four defaults as fresh
+    # rows. New conversations see only the defaults in canonical order.
     # ------------------------------------------------------------------
+    previous_max = max(item["id"] for item in remaining["resources"])
     reset = client.post(f"{SYSTEM_PROMPT_URL}/reset")
     assert reset.status_code == 200, reset.text
-    assert reset.json()["total_results"] == 0
-    assert reset.json()["resources"] == []
-    assert _list_sections(client)["total_results"] == 0
+    reset_body = reset.json()
+    assert reset_body["total_results"] == 4
+    assert [item["title"] for item in reset_body["resources"]] == DEFAULT_TITLES
+    assert [item["sort_order"] for item in reset_body["resources"]] == [10, 20, 30, 40]
+    assert all(item["id"] > previous_max for item in reset_body["resources"])
+    assert _list_sections(client)["total_results"] == 4
 
     reset_conversation_id = _create_conversation(client, "After reset")
     reset_entry = _system_entry(client, reset_conversation_id)
-    assert _section_names(reset_entry) == BUILTIN_SECTION_NAMES
+    assert _section_names(reset_entry) == [
+        f"system_prompt:{item['id']}" for item in reset_body["resources"]
+    ]
     reset_prompt = _prompt(reset_entry)
-    assert "# Title 1 edited" not in reset_prompt
-    assert "# Title 2" not in reset_prompt
+    assert "# Identity" in reset_prompt
+    assert "# Who I am" not in reset_prompt
+    assert "# Early edited" not in reset_prompt
 
     # ------------------------------------------------------------------
-    # 8. The four built-in sections are readable and editable. An override is
-    # frozen into new conversations; reset restores the Python default.
-    # ------------------------------------------------------------------
-    builtin_url = f"{SYSTEM_PROMPT_URL}/builtin"
-    builtins = client.get(builtin_url)
-    assert builtins.status_code == 200, builtins.text
-    builtin_body = builtins.json()
-    assert [item["key"] for item in builtin_body["resources"]] == BUILTIN_SECTION_NAMES
-    assert all(item["customized"] is False for item in builtin_body["resources"])
-    default_instructions = next(
-        item["body"] for item in builtin_body["resources"] if item["key"] == "instructions"
-    )
-
-    custom_instructions = "Edited built-in instructions for this test."
-    edited_builtin = client.put(
-        f"{builtin_url}/instructions",
-        json={"body": custom_instructions},
-    )
-    assert edited_builtin.status_code == 200, edited_builtin.text
-    edited_instructions = next(
-        item for item in edited_builtin.json()["resources"] if item["key"] == "instructions"
-    )
-    assert edited_instructions["customized"] is True
-    assert edited_instructions["body"] == custom_instructions
-
-    builtin_conversation_id = _create_conversation(client, "Edited built-in")
-    builtin_entry = _system_entry(client, builtin_conversation_id)
-    assert _section_names(builtin_entry) == BUILTIN_SECTION_NAMES
-    rendered_instructions = next(
-        section
-        for section in builtin_entry["data"]["sections"]
-        if section["name"] == "instructions"
-    )
-    assert rendered_instructions["content"] == custom_instructions
-    assert custom_instructions in _prompt(builtin_entry)
-
-    unknown_builtin = client.put(f"{builtin_url}/not_a_section", json={"body": "Body."})
-    assert unknown_builtin.status_code == 404
-    blank_builtin = client.put(f"{builtin_url}/instructions", json={"body": "   "})
-    assert blank_builtin.status_code == 422
-    assert blank_builtin.json()["error"] == "agent_invalid_system_prompt"
-
-    reset_builtin = client.post(f"{builtin_url}/reset")
-    assert reset_builtin.status_code == 200, reset_builtin.text
-    assert all(item["customized"] is False for item in reset_builtin.json()["resources"])
-    reset_instructions = next(
-        item["body"] for item in reset_builtin.json()["resources"] if item["key"] == "instructions"
-    )
-    assert reset_instructions == default_instructions
-
-    restored_conversation_id = _create_conversation(client, "Restored built-in")
-    restored_entry = _system_entry(client, restored_conversation_id)
-    restored_instructions = next(
-        section
-        for section in restored_entry["data"]["sections"]
-        if section["name"] == "instructions"
-    )
-    assert restored_instructions["content"] == default_instructions
-    assert custom_instructions not in _prompt(restored_entry)
-
-    # ------------------------------------------------------------------
-    # 9. Whitespace-only titles and bodies are rejected on create and update
+    # 8. Whitespace-only titles and bodies are rejected on create and update
     # with the stable agent_invalid_system_prompt error.
     # ------------------------------------------------------------------
     blank_title = client.post(SYSTEM_PROMPT_URL, json={"title": "   ", "body": "A body."})
@@ -311,7 +286,7 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     blank_body = client.post(SYSTEM_PROMPT_URL, json={"title": "A title", "body": "\n\t "})
     assert blank_body.status_code == 422, blank_body.text
     assert blank_body.json()["error"] == "agent_invalid_system_prompt"
-    assert _list_sections(client)["total_results"] == 0
+    assert _list_sections(client)["total_results"] == 4
 
     editable_created = _create_section(client, title="Editable", body="Original body.")
     editable_id = _find_section(editable_created, "Editable")["id"]
@@ -330,8 +305,9 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     assert blank_update_body.status_code == 422, blank_update_body.text
     assert blank_update_body.json()["error"] == "agent_invalid_system_prompt"
 
-    unchanged = _list_sections(client)["resources"][0]
-    assert unchanged["id"] == editable_id
+    unchanged = next(
+        item for item in _list_sections(client)["resources"] if item["id"] == editable_id
+    )
     assert unchanged["title"] == "Editable"
     assert unchanged["body"] == "Original body."
 
@@ -342,7 +318,7 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     fresh_created = _create_section(client, title="Fresh", body="Fresh body.")
     fresh_id = _find_section(fresh_created, "Fresh")["id"]
     assert fresh_id > editable_id
-    assert [item["id"] for item in fresh_created["resources"]] == [fresh_id]
+    assert fresh_id > max(item["id"] for item in reset_body["resources"])
 
     # ------------------------------------------------------------------
     # 10. The list is cached under the system_prompts scope. A direct database
@@ -359,7 +335,10 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     index_before = client.portal.call(cache.get_version, "index")
 
     primed = _list_sections(client)
-    assert [item["title"] for item in primed["resources"]] == ["Cached title"]
+    assert [item["title"] for item in primed["resources"]] == [
+        *DEFAULT_TITLES,
+        "Cached title",
+    ]
 
     engine = create_engine(TEST_DATABASE_URL)
     with engine.begin() as connection:
@@ -382,7 +361,10 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     assert direct_title == "Direct database title"
 
     stale = _list_sections(client)
-    assert [item["title"] for item in stale["resources"]] == ["Cached title"]
+    assert [item["title"] for item in stale["resources"]] == [
+        *DEFAULT_TITLES,
+        "Cached title",
+    ]
 
     second_created = _create_section(client, title="Cache buster", body="Second body.")
     second_id = _find_section(second_created, "Cache buster")["id"]
@@ -394,10 +376,13 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     assert index_after == index_before
 
     refreshed = _list_sections(client)
-    assert refreshed["total_results"] == 2
-    assert [item["id"] for item in refreshed["resources"]] == [cached_id, second_id]
-    assert refreshed["resources"][0]["title"] == "Direct database title"
-    assert refreshed["resources"][0]["body"] == "Direct database body."
+    assert refreshed["total_results"] == 6
+    assert [item["title"] for item in refreshed["resources"]] == [
+        *DEFAULT_TITLES,
+        "Direct database title",
+        "Cache buster",
+    ]
+    assert refreshed["resources"][4]["body"] == "Direct database body."
 
     # ------------------------------------------------------------------
     # Frequently used prompts: CRUD, whitespace validation, ordering, the

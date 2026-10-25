@@ -1,5 +1,6 @@
 import { pathSegments } from "../../../lib/format";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 
 interface LibraryBreadcrumbsProps {
   readonly path: string;
@@ -11,10 +12,11 @@ interface LibraryBreadcrumbsProps {
  * updates the `path` query parameter; the current leaf stays a quiet marker.
  */
 export function LibraryBreadcrumbs({ path, onNavigate }: LibraryBreadcrumbsProps) {
+  const { t } = useI18n();
   const segments = pathSegments(path);
 
   return (
-    <nav className="library-crumbs" aria-label="Breadcrumb">
+    <nav className="library-crumbs" aria-label={t("library.breadcrumbs.aria")}>
       <ol>
         <li>
           <button
@@ -23,7 +25,7 @@ export function LibraryBreadcrumbs({ path, onNavigate }: LibraryBreadcrumbsProps
             onClick={() => onNavigate("/")}
           >
             <Icon name="library" size={15} />
-            <span>File library</span>
+            <span>{t("library.breadcrumbs.root")}</span>
           </button>
         </li>
         {segments.map((segment, index) => {

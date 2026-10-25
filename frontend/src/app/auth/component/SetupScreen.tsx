@@ -2,11 +2,13 @@ import { useId, useState, type FormEvent } from "react";
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { useAuth } from "../AuthProvider";
 import { AuthFrame } from "./AuthFrame";
 
 /** First-run form: create the only account and sign in immediately. */
 export function SetupScreen() {
+  const { t } = useI18n();
   const { setup, isSubmitting, error } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -23,14 +25,14 @@ export function SetupScreen() {
     event.preventDefault();
     setLocalError(null);
     if (password.length < 10) {
-      setLocalError("Use at least 10 characters for the password.");
+      setLocalError(t("core.auth.setup.credentialTooShort"));
       return;
     }
     // This is a local UX confirmation, not a secret comparison; the server
     // verifies the actual password with Argon2.
     // eslint-disable-next-line security/detect-possible-timing-attacks
     if (password !== confirmPassword) {
-      setLocalError("The password confirmation does not match.");
+      setLocalError(t("core.auth.setup.credentialMismatch"));
       return;
     }
     void setup({
@@ -42,20 +44,15 @@ export function SetupScreen() {
 
   return (
     <AuthFrame
-      eyebrow="First run · create keeper"
-      title="Press the first ring."
-      description="This archive has no keeper yet. Create the single account that will protect every file and memory on this machine."
-      footer={
-        <p>
-          The password is hashed with Argon2. There is no email recovery, no cloud
-          reset, and no second account. Keep it somewhere safe.
-        </p>
-      }
+      eyebrow={t("core.auth.setup.eyebrow")}
+      title={t("core.auth.setup.title")}
+      description={t("core.auth.setup.description")}
+      footer={<p>{t("core.auth.setup.footer")}</p>}
     >
       <form className="auth-form" onSubmit={handleSubmit}>
         <div className="field">
           <label className="field-label" htmlFor={usernameId}>
-            Username
+            {t("core.auth.setup.username")}
           </label>
           <input
             className="input"
@@ -73,13 +70,13 @@ export function SetupScreen() {
             disabled={isSubmitting}
           />
           <small className="field-help" id={usernameHintId}>
-            3–64 characters; letters, digits, dot, dash, underscore.
+            {t("core.auth.setup.usernameHint")}
           </small>
         </div>
 
         <div className="field">
           <label className="field-label" htmlFor={passwordId}>
-            Password
+            {t("core.auth.setup.credentialLabel")}
           </label>
           <div className="auth-password">
             <input
@@ -100,22 +97,28 @@ export function SetupScreen() {
               type="button"
               className="auth-password__toggle"
               onClick={() => setShowPassword((current) => !current)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={
+                showPassword
+                  ? t("core.auth.login.hidePassword")
+                  : t("core.auth.login.showPassword")
+              }
               aria-pressed={showPassword}
               aria-controls={passwordId}
               disabled={isSubmitting}
             >
-              {showPassword ? "Hide" : "Show"}
+              {showPassword
+                ? t("core.auth.login.hide")
+                : t("core.auth.login.show")}
             </button>
           </div>
           <small className="field-help" id={passwordHintId}>
-            At least 10 characters. There is no recovery.
+            {t("core.auth.setup.credentialHint")}
           </small>
         </div>
 
         <div className="field">
           <label className="field-label" htmlFor={confirmId}>
-            Confirm password
+            {t("core.auth.setup.confirmCredential")}
           </label>
           <input
             className="input"
@@ -140,7 +143,9 @@ export function SetupScreen() {
         ) : null}
 
         <Button type="submit" variant="primary" size="lg" block disabled={isSubmitting}>
-          {isSubmitting ? "Pressing the first ring…" : "Create the archive keeper"}
+          {isSubmitting
+            ? t("core.auth.setup.submitting")
+            : t("core.auth.setup.submit")}
           {!isSubmitting ? <Icon name="arrow-right" size={17} /> : null}
         </Button>
       </form>

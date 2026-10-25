@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
-import { formatNumber } from "../../../lib/format";
+import { useI18n, type TranslationKey } from "../../i18n";
 import {
   assistantText,
   parseCitationLabel,
@@ -27,18 +27,28 @@ interface AssistantEntryProps {
   readonly onOpenCitation?: (token: CitationToken) => void;
 }
 
+type UsageKey = "prompt" | "completion" | "total" | "cacheHit" | "cacheMiss";
+
 function usageRows(
   usage: Readonly<Record<string, number>>,
-): ReadonlyArray<{ label: string; value: number }> {
-  const rows: Array<{ label: string; value: number }> = [
-    { label: "prompt", value: usage.prompt_tokens ?? 0 },
-    { label: "completion", value: usage.completion_tokens ?? 0 },
-    { label: "total", value: usage.total_tokens ?? 0 },
-    { label: "cache hit", value: usage.prompt_cache_hit_tokens ?? 0 },
-    { label: "cache miss", value: usage.prompt_cache_miss_tokens ?? 0 },
+): ReadonlyArray<{ key: UsageKey; value: number }> {
+  const rows: Array<{ key: UsageKey; value: number }> = [
+    { key: "prompt", value: usage.prompt_tokens ?? 0 },
+    { key: "completion", value: usage.completion_tokens ?? 0 },
+    { key: "total", value: usage.total_tokens ?? 0 },
+    { key: "cacheHit", value: usage.prompt_cache_hit_tokens ?? 0 },
+    { key: "cacheMiss", value: usage.prompt_cache_miss_tokens ?? 0 },
   ];
   return rows.filter((row) => row.value > 0);
 }
+
+const USAGE_LABEL_KEYS: Readonly<Record<UsageKey, TranslationKey>> = {
+  prompt: "chat.assistant.usagePrompt",
+  completion: "chat.assistant.usageCompletion",
+  total: "chat.assistant.usageTotal",
+  cacheHit: "chat.assistant.usageCacheHit",
+  cacheMiss: "chat.assistant.usageCacheMiss",
+};
 
 /** An archival assistant turn: tool step chips, prose, citations, and usage. */
 export function AssistantEntry({
@@ -50,6 +60,7 @@ export function AssistantEntry({
   onSelectTrace,
   onOpenCitation,
 }: AssistantEntryProps) {
+  const { t, formatNumber } = useI18n();
   const meta = readAssistantMeta(entry);
   const text = assistantText(entry);
   const calls = readToolCalls(entry);
@@ -81,7 +92,9 @@ export function AssistantEntry({
       </div>
     );
   } else if (calls.length === 0 && !meta.error) {
-    body = <p className="chat-turn__silent">No prose was recorded for this step.</p>;
+    body = (
+      <p className="chat-turn__silent">{t("chat.assistant.silent")}</p>
+    );
   }
 
   return (
@@ -92,12 +105,18 @@ export function AssistantEntry({
         </span>
         <span>Apsor Archive Agent</span>
         <span className="chat-turn__meta">
-          {[meta.provider, meta.model, meta.step === null ? null : `step ${meta.step}`]
+          {[
+            meta.provider,
+            meta.model,
+            meta.step === null
+              ? null
+              : t("chat.assistant.step", { step: meta.step }),
+          ]
             .filter((item): item is string => Boolean(item))
             .join(" · ")}
         </span>
         <Badge tone={finishReasonTone(meta.finishReason)}>
-          {meta.finishReason ?? "recorded"}
+          {meta.finishReason ?? t("chat.common.recorded")}
         </Badge>
         {action}
       </header>
@@ -149,8 +168,8 @@ export function AssistantEntry({
       {usage.length > 0 ? (
         <dl className="chat-turn__usage">
           {usage.map((row) => (
-            <div key={row.label}>
-              <dt>{row.label}</dt>
+            <div key={row.key}>
+              <dt>{t(USAGE_LABEL_KEYS[row.key])}</dt>
               <dd>{formatNumber(row.value)}</dd>
             </div>
           ))}

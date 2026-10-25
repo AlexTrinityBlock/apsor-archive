@@ -8,6 +8,7 @@ import type {
   AgentConversationDetailSchema,
   AgentEntrySchema,
 } from "../generated-apis-types/schemas";
+import { getActiveLocale, translate, type Locale } from "../i18n";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -139,20 +140,27 @@ export function assistantText(entry: AgentEntrySchema): string {
 }
 
 /** A plain-text export of the visible user/assistant conversation. */
-export function transcriptText(entries: readonly AgentEntrySchema[]): string {
+export function transcriptText(
+  entries: readonly AgentEntrySchema[],
+  locale: Locale = getActiveLocale(),
+): string {
   const parts: string[] = [];
   for (const entry of entries) {
     if (entry.kind === "pi.user") {
       const text = userText(entry).trim();
       if (text.length > 0) {
-        parts.push(`User: ${text}`);
+        parts.push(
+          `${translate(locale, "chat.transcript.user")} ${text}`,
+        );
       }
       continue;
     }
     if (entry.kind === "pi.assistant") {
       const text = assistantText(entry).trim();
       if (text.length > 0) {
-        parts.push(`Assistant: ${text}`);
+        parts.push(
+          `${translate(locale, "chat.transcript.assistant")} ${text}`,
+        );
       }
     }
   }
@@ -204,7 +212,9 @@ export function readAssistantMeta(entry: AgentEntrySchema): AssistantMeta {
     error: errorRecord
       ? {
           code: stringValue(errorRecord.code) ?? "agent_error",
-          detail: stringValue(errorRecord.detail) ?? "The assistant step failed.",
+          detail:
+            stringValue(errorRecord.detail) ??
+            translate(getActiveLocale(), "chat.assistant.errorFallback"),
         }
       : null,
   };
@@ -313,6 +323,7 @@ function idleRetryState(lastUserText: string): RetryState {
 function assistantRetryState(
   entry: AgentEntrySchema,
   lastUserText: string,
+  locale: Locale,
 ): RetryState | null {
   if (entry.kind !== "pi.assistant") {
     return null;
@@ -328,7 +339,11 @@ function assistantRetryState(
     errorCode: meta.error?.code ?? null,
     errorDetail:
       meta.error?.detail ??
-      (meta.finishReason ? `The run finished with ${meta.finishReason}.` : null),
+      (meta.finishReason
+        ? translate(locale, "chat.assistant.runFinished", {
+            reason: meta.finishReason,
+          })
+        : null),
     reason: "assistant_failure",
   };
 }
@@ -336,6 +351,7 @@ function assistantRetryState(
 function toolLimitRetryState(
   entry: AgentEntrySchema,
   lastUserText: string,
+  locale: Locale,
 ): RetryState | null {
   if (entry.kind !== "pi.tool-result") {
     return null;
@@ -353,7 +369,9 @@ function toolLimitRetryState(
     retryable: true,
     lastUserText,
     errorCode: code,
-    errorDetail: meta.detail ?? "The run stopped at a tool or token limit.",
+    errorDetail:
+      meta.detail ??
+      translate(locale, "chat.assistant.limitStopped"),
     reason: "limit_error",
   };
 }
@@ -392,15 +410,16 @@ function streamRetryState(
 export function readRetryState(
   entries: readonly AgentEntrySchema[],
   fallback: RetryFailureFallback | null = null,
+  locale: Locale = getActiveLocale(),
 ): RetryState {
   const latestUser = latestUserEntry(entries);
   const latest = entries.at(-1);
   if (latest) {
-    const assistant = assistantRetryState(latest, latestUser.text);
+    const assistant = assistantRetryState(latest, latestUser.text, locale);
     if (assistant) {
       return assistant;
     }
-    const toolLimit = toolLimitRetryState(latest, latestUser.text);
+    const toolLimit = toolLimitRetryState(latest, latestUser.text, locale);
     if (toolLimit) {
       return toolLimit;
     }
@@ -512,14 +531,17 @@ export function resourceHref(resource: ResourceMeta): string | null {
   return `/memory/${resource.resourceId}`;
 }
 
-export function noticeText(entry: AgentEntrySchema): string {
+export function noticeText(
+  entry: AgentEntrySchema,
+  fallback: string,
+): string {
   const data = asRecord(entry.data);
   return (
     stringValue(data?.message) ??
     stringValue(data?.text) ??
     stringValue(data?.detail) ??
     stringValue(data?.notice) ??
-    "A quiet note was added to this thread."
+    fallback
   );
 }
 

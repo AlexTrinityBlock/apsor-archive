@@ -5,6 +5,7 @@ import { renderAsync } from "docx-preview";
 import { ChunkFallback } from "./ChunkFallback";
 import { ViewerErrorState, ViewerLoading } from "./ViewerStates";
 import { fetchViewerBinary, fileDownloadUrl } from "./viewer-utils";
+import { useI18n } from "../../i18n";
 
 interface DocxViewProps {
   readonly fileId: number;
@@ -73,6 +74,7 @@ function hardenFrame(document: Document) {
  * component. If layout fails, the indexed chunks remain readable.
  */
 export function DocxView({ fileId, fileUrl, fileName, totalChunks }: DocxViewProps) {
+  const { t } = useI18n();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [frameReady, setFrameReady] = useState(false);
   const [rendering, setRendering] = useState(true);
@@ -92,7 +94,7 @@ export function DocxView({ fileId, fileUrl, fileName, totalChunks }: DocxViewPro
     }
     const frameDocument = iframe.contentDocument;
     if (!frameDocument) {
-      setRenderError("The sandboxed preview frame was not available.");
+      setRenderError(t("library.viewer.docx.frameUnavailable"));
       setRendering(false);
       return;
     }
@@ -131,7 +133,7 @@ export function DocxView({ fileId, fileUrl, fileName, totalChunks }: DocxViewPro
         setRenderError(
           error instanceof Error && error.message.length > 0
             ? error.message
-            : "The DOCX layout engine could not read this document.",
+            : t("library.viewer.docx.engineFallback"),
         );
       });
 
@@ -139,17 +141,17 @@ export function DocxView({ fileId, fileUrl, fileName, totalChunks }: DocxViewPro
       cancelled = true;
       observer.disconnect();
     };
-  }, [binaryQuery.data, frameReady]);
+  }, [binaryQuery.data, frameReady, t]);
 
   if (binaryQuery.isLoading) {
-    return <ViewerLoading label="Fetching the DOCX original" />;
+    return <ViewerLoading label={t("library.viewer.loading.docxOriginal")} />;
   }
 
   if (binaryQuery.error) {
     return (
       <ViewerErrorState
         error={binaryQuery.error}
-        title="The DOCX original could not be read"
+        title={t("library.viewer.docx.errorOriginal")}
         onRetry={() => void binaryQuery.refetch()}
         downloadUrl={fileDownloadUrl(fileId)}
         downloadName={fileName}
@@ -162,7 +164,7 @@ export function DocxView({ fileId, fileUrl, fileName, totalChunks }: DocxViewPro
       <ChunkFallback
         fileId={fileId}
         totalChunks={totalChunks}
-        reason={`The DOCX layout could not be rendered (${renderError}).`}
+        reason={t("library.viewer.docx.renderFallback", { reason: renderError })}
       />
     );
   }
@@ -170,22 +172,19 @@ export function DocxView({ fileId, fileUrl, fileName, totalChunks }: DocxViewPro
   return (
     <div className="viewer-docx">
       <div className="viewer-notice" role="note">
-        <span className="viewer-chip">Sandboxed preview</span>
-        <p>
-          Rendered in a script-disabled frame. External images and active media stay
-          blocked; the extracted text remains available if layout fails.
-        </p>
+        <span className="viewer-chip">{t("library.viewer.docx.chip")}</span>
+        <p>{t("library.viewer.docx.notice")}</p>
       </div>
       <div className="viewer-docx__frame-wrap">
         {rendering ? (
           <div className="viewer-docx__overlay">
-            <ViewerLoading label="Laying out the Word document" />
+            <ViewerLoading label={t("library.viewer.loading.docxLayout")} />
           </div>
         ) : null}
         <iframe
           ref={iframeRef}
           className="viewer-docx__frame"
-          title={`${fileName} preview`}
+          title={t("library.viewer.docx.frameTitle", { name: fileName })}
           sandbox="allow-same-origin"
           srcDoc={DOCX_FRAME}
           onLoad={() => setFrameReady(true)}

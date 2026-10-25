@@ -12,6 +12,7 @@ bun run dev               # pdf-assets, then Vite on 127.0.0.1:5173
 bun run build             # pdf-assets, tsc -b, vite build
 bun run typecheck
 bun run lint
+bun run i18n:check
 bun run api:generate      # Orval from the committed ./openapi.json
 bun run api:generate:live # Orval from a running API on :8000
 ```
@@ -47,6 +48,61 @@ scripts/copy-pdfjs-assets.mjs   pinned PDF.js runtime assets
 Each page owns its components under `<page>/component/` and its page-specific
 CSS under `<page>/<page>.css`. Shared visual primitives live in
 `app/component/`; the design tokens live in `styles/tokens.css`.
+
+## Internationalization
+
+The interface ships in English (`en`), Traditional Chinese (`zh-TW`), and
+Simplified Chinese (`zh-CN`). No i18n package is used: `app/i18n/` provides a
+small context provider, a dot-path translator, and `Intl` formatters.
+
+```text
+app/i18n/
+  I18nProvider.tsx      locale state, persistence, document lang, useI18n()
+  locale.ts             detection, storage key, native option labels
+  translate.ts          lookup -> English fallback -> key, {name} interpolation
+  format.ts             formatDate / formatDateTime / formatNumber / formatRelative
+  errors.ts             stable backend code -> core.errors.* mapping
+  status.ts             service-state values (ok, degraded, configured, ...)
+  locales/
+    index.ts            combines namespaces, types keys, key-check helpers
+    en/{core,chat,library,memory,insights,settings,systemPrompt}.ts
+    zh-TW/...           same seven namespace files
+    zh-CN/...           same seven namespace files
+```
+
+`I18nProvider` is the outermost app provider in `app/providers.tsx`, so auth,
+setup, route errors, and toasts can translate. The active locale persists in
+`localStorage` under `apsor-archive.locale`; first load detects
+`navigator.languages` (`zh-TW`/`zh-Hant` → Traditional, `zh-CN`/`zh-Hans` →
+Simplified, `en` → English) and otherwise defaults to English. Changing the
+locale also sets `document.documentElement.lang`. Readers switch languages on
+`/settings` (section 08, `LanguagePanel`); there is no Save button.
+
+The English dictionary is the source of truth. Each namespace is a separate
+file so surface agents can fill one area without editing a shared dictionary.
+Keys are dot paths into the namespace object, for example
+`core.home.recentFilesTitle` or `settings.provider.title`. `t(key, vars)`
+substitutes `{name}` placeholders. A missing active-locale string falls back to
+English, then to the key itself.
+
+A namespace may begin as an empty placeholder; empty placeholders are valid and
+pass the key check when all three locales are empty. Fill all three language
+files for a namespace together. To add a namespace, create the file in all
+three locale directories, import it in `locales/index.ts`, and add the property
+to `TranslationDictionary` and `NAMESPACES`.
+
+To add a language: add the locale tag to `LOCALES`, create the seven namespace
+files under `locales/<tag>/`, add the dictionary and option label, then run
+`bun run i18n:check`. Missing and extra keys are reported per namespace; the
+check fails on any mismatch.
+
+Known backend error codes are translated in `core.errors.*` through
+`app/i18n/errors.ts`. `apiErrorMessage()` in settings uses the active locale;
+unknown codes show the server `detail` verbatim, then a localized generic
+message. Provider/server text is never translated.
+
+User-authored content, file names, citations, model/provider names, tool names,
+raw URLs, code, and HTTP status text are intentionally not translated.
 
 ## API generation
 
@@ -420,20 +476,22 @@ The visual language is a herbarium / dendrochronology archive:
 - paper grain, tree rings, hairline rules, corner ticks;
 - staggered page-load reveals, branch drawing, and a night archive dark theme.
 
-All committed copy is English. Chinese text is supported as user content through
-the CJK font fallbacks.
+All committed UI copy is available in English, Traditional Chinese, and
+Simplified Chinese. Chinese text is supported as user content through the CJK
+font fallbacks; archive content is never translated.
 
 ## Checks
 
 ```bash
 bun run lint
 bun run typecheck
+bun run i18n:check
 bun run build
 bun audit
 ```
 
-The checks above cover type safety, linting, the production build, and
-dependency audit. After frontend changes, rebuild and commit `dist/` (and
+The checks above cover type safety, linting, locale key parity, the production
+build, and dependency audit. After frontend changes, rebuild and commit `dist/` (and
 `dist/pdfjs/` when it changes) because the Docker image serves the committed
 client and does not run a build. The `save_memory` receipt remains a record of
 the write; the shared approval card is the human gate that authorizes it.

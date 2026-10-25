@@ -1,7 +1,9 @@
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { truncate } from "../../../lib/format";
 import { formatArgumentValue } from "../format";
 import type { ToolCallMeta, ToolResultMeta } from "../types";
+import { toolStatusLabel } from "./status";
 
 interface ToolCallCardProps {
   readonly call: ToolCallMeta;
@@ -11,7 +13,7 @@ interface ToolCallCardProps {
   readonly onSelect?: (callId: string) => void;
 }
 
-function argumentSummary(call: ToolCallMeta): string {
+function argumentSummary(call: ToolCallMeta, noArguments: string): string {
   if (call.arguments) {
     const first = Object.entries(call.arguments)[0];
     if (first) {
@@ -21,7 +23,7 @@ function argumentSummary(call: ToolCallMeta): string {
   if (call.rawArguments) {
     return truncate(call.rawArguments, 90);
   }
-  return "no arguments";
+  return noArguments;
 }
 
 function formatDuration(value: number | null | undefined): string | null {
@@ -42,8 +44,13 @@ export function ToolCallCard({
   selected = false,
   onSelect,
 }: ToolCallCardProps) {
+  const { t } = useI18n();
   const status = result?.status ?? null;
-  const statusLabel = status ?? (result ? "recorded" : "awaiting result");
+  const statusLabel = toolStatusLabel(
+    status,
+    t,
+    result ? t("chat.common.recorded") : t("chat.tool.awaitingResult"),
+  );
   const duration = formatDuration(result?.durationMs);
   const isError = status?.toLowerCase() === "error";
 
@@ -61,7 +68,7 @@ export function ToolCallCard({
       className={className}
       onClick={onSelect ? () => onSelect(call.id) : undefined}
       aria-pressed={onSelect ? selected : undefined}
-      title={onSelect ? "Inspect this tool step" : undefined}
+      title={onSelect ? t("chat.tool.inspect") : undefined}
     >
       <span className="tool-step-chip__left">
         <span className="tool-step-chip__index" aria-hidden="true">
@@ -69,7 +76,9 @@ export function ToolCallCard({
         </span>
         <Icon name="spark" size={12} />
         <code className="tool-step-chip__name">{call.name}</code>
-        <span className="tool-step-chip__args">{argumentSummary(call)}</span>
+        <span className="tool-step-chip__args">
+          {argumentSummary(call, t("chat.tool.noArguments"))}
+        </span>
       </span>
       <span className="tool-step-chip__right">
         {duration ? <span>{duration}</span> : null}

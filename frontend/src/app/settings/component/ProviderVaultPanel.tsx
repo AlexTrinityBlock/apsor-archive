@@ -26,7 +26,7 @@ import type {
   ProviderTestResultSchema,
   ProviderUpdateSchema,
 } from "../../generated-apis-types/schemas";
-import { formatDateTime, formatNumber } from "../../../lib/format";
+import { useI18n, type Translate } from "../../i18n";
 import {
   apiErrorMessage,
   isProviderKeyless,
@@ -34,7 +34,6 @@ import {
   providerConfiguredLabel,
   providerConfiguredTone,
   providerDisplayName,
-  providerEndpointSummary,
   providerKeyLabel,
   providerKeySourceLabel,
   providerRegistryCardKey,
@@ -115,39 +114,41 @@ function keyPlaceholder(
   provider: string,
   keyless: boolean,
   keyHint: string | null,
+  t: Translate,
 ): string {
   if (keyless || provider === "none") {
-    return "No key required";
+    return t("settings.providers.keyPlaceholderNoKey");
   }
   if (keyHint) {
-    return `Leave blank to keep ${keyHint}`;
+    return t("settings.providers.keyPlaceholderKeep", { hint: keyHint });
   }
-  return "Paste a key";
+  return t("settings.providers.keyPlaceholderPaste");
 }
 
-function baseUrlError(value: string): string | null {
+function baseUrlError(value: string, t: Translate): string | null {
   if (value.length === 0) {
     return null;
   }
   if (value.length > 500) {
-    return "Base URL must be 500 characters or fewer.";
+    return t("settings.providers.errors.baseUrlMax");
   }
   try {
     const url = new URL(value);
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return "Base URL must start with http:// or https://.";
+      return t("settings.providers.errors.baseUrlProtocol");
     }
     if (url.username.length > 0 || url.password.length > 0) {
-      return "Base URL must not contain a username or password.";
+      return t("settings.providers.errors.baseUrlCredentials");
     }
   } catch {
-    return "Enter a complete URL, for example https://api.example.com/v1.";
+    return t("settings.providers.errors.baseUrlInvalid");
   }
   return null;
 }
 
 function dimensionResult(
   value: string,
+  t: Translate,
 ): { readonly value: number | null; readonly error: string | null } {
   const trimmed = value.trim();
   if (trimmed.length === 0) {
@@ -157,7 +158,7 @@ function dimensionResult(
   if (!Number.isInteger(parsed) || parsed < 16 || parsed > 4096) {
     return {
       value: null,
-      error: "Dimension must be a whole number between 16 and 4096.",
+      error: t("settings.providers.errors.dimension"),
     };
   }
   return { value: parsed, error: null };
@@ -167,14 +168,55 @@ function vectorBadgeLabel(
   pending: boolean,
   enabled: boolean | undefined,
   isError: boolean,
+  t: Translate,
 ): string {
   if (pending) {
-    return "Reading vector";
+    return t("settings.providers.vectorReading");
   }
   if (isError) {
-    return "Vector unavailable";
+    return t("settings.providers.vectorUnavailable");
   }
-  return enabled ? "Vector on" : "Vector off";
+  return enabled
+    ? t("settings.providers.vectorOn")
+    : t("settings.providers.vectorOff");
+}
+
+function capabilityLabel(capability: Capability, t: Translate): string {
+  switch (capability) {
+    case "chat":
+      return t("settings.providers.capabilityChat");
+    case "embedding":
+      return t("settings.providers.capabilityEmbedding");
+    case "web_search":
+      return t("settings.providers.capabilityWebSearch");
+    case "web_fetch":
+      return t("settings.providers.capabilityWebFetch");
+  }
+}
+
+function providerSummaryParts(
+  config: ProviderReadSchema,
+  supportsModel: boolean,
+  supportsDimension: boolean,
+  t: Translate,
+): readonly string[] {
+  const parts: string[] = [providerDisplayName(config.provider)];
+  if (supportsModel && config.model) {
+    parts.push(config.model);
+  }
+  if (config.base_url) {
+    parts.push(config.base_url);
+  }
+  if (supportsDimension) {
+    parts.push(
+      config.dimension === null
+        ? t("settings.providers.providerDefault")
+        : t("settings.providers.dimension", {
+            dimension: String(config.dimension),
+          }),
+    );
+  }
+  return parts;
 }
 
 function testTargetKey(capability: string, providerId: number): string {
@@ -215,6 +257,7 @@ function ProviderTestLog({
   readonly error: string | null;
   readonly title: string;
 }) {
+  const { t, formatNumber } = useI18n();
   if (!result && !error) {
     return null;
   }
@@ -223,10 +266,10 @@ function ProviderTestLog({
     return (
       <div className="vault-log is-error" role="alert">
         <span className="vault-log__line vault-log__line--info">
-          {`> ${title} · saved configuration`}
+          {t("settings.providers.testLogConfig", { title })}
         </span>
         <span className="vault-log__line vault-log__line--error">
-          {"> FAILED · "}
+          {t("settings.providers.testLogFailed")}
           {error}
         </span>
       </div>
@@ -244,7 +287,7 @@ function ProviderTestLog({
       aria-live="polite"
     >
       <span className="vault-log__line vault-log__line--info">
-        {`> ${title} · saved configuration`}
+        {t("settings.providers.testLogConfig", { title })}
       </span>
       <span
         className={
@@ -253,10 +296,17 @@ function ProviderTestLog({
             : "vault-log__line vault-log__line--error"
         }
       >
-        {`> ${result.ok ? "OK" : "FAILED"} · ${providerDisplayName(result.provider)} · ${result.label} · ${result.latency_ms} ms`}
+        {t("settings.providers.testLogResult", {
+          status: result.ok
+            ? t("settings.providers.testStatusOk")
+            : t("settings.providers.testStatusFailed"),
+          provider: providerDisplayName(result.provider),
+          label: result.label,
+          latency: formatNumber(result.latency_ms),
+        })}
       </span>
       <span className="vault-log__line vault-log__line--detail">
-        {`> ${result.detail}`}
+        {t("settings.providers.testLogDetail", { detail: result.detail })}
       </span>
     </div>
   );
@@ -306,6 +356,7 @@ function ProviderEditorDialog({
   readonly onClose: () => void;
   readonly onSubmit: (draft: ProviderEditorDraft) => void;
 }) {
+  const { t } = useI18n();
   const formId = useId();
   const fieldId = useId();
   const [provider, setProvider] = useState(
@@ -348,9 +399,11 @@ function ProviderEditorDialog({
   const baseUrlFieldId = `${fieldId}-base-url`;
   const dimensionFieldId = `${fieldId}-dimension`;
   const keyFieldId = `${fieldId}-key`;
-  let submitLabel = initial ? "Save provider" : "Add provider";
+  let submitLabel = initial
+    ? t("settings.providers.submitSave")
+    : t("settings.providers.submitAdd");
   if (saving) {
-    submitLabel = "Saving…";
+    submitLabel = t("settings.providers.saving");
   }
 
   const handleProviderChange = (next: string) => {
@@ -380,32 +433,32 @@ function ProviderEditorDialog({
     event.preventDefault();
     const trimmedLabel = label.trim();
     if (trimmedLabel.length > 80) {
-      setFormError("Label must be 80 characters or fewer.");
+      setFormError(t("settings.providers.errors.labelMax"));
       return;
     }
     const trimmedModel = model.trim();
     if (group.supports_model && !isNone && trimmedModel.length === 0) {
-      setFormError("Model is required for this provider.");
+      setFormError(t("settings.providers.errors.modelRequired"));
       return;
     }
     const trimmedBaseUrl = baseUrl.trim();
     if (provider === "openai-compatible" && trimmedBaseUrl.length === 0) {
-      setFormError("OpenAI-compatible providers require a base URL.");
+      setFormError(t("settings.providers.errors.baseUrlRequired"));
       return;
     }
-    const urlError = baseUrlError(trimmedBaseUrl);
+    const urlError = baseUrlError(trimmedBaseUrl, t);
     if (urlError) {
       setFormError(urlError);
       return;
     }
-    const parsedDimension = dimensionResult(dimension);
+    const parsedDimension = dimensionResult(dimension, t);
     if (group.supports_dimension && parsedDimension.error) {
       setFormError(parsedDimension.error);
       return;
     }
     const trimmedKey = apiKey.trim();
     if (trimmedKey.length > 500) {
-      setFormError("API key must be 500 characters or fewer.");
+      setFormError(t("settings.providers.errors.apiKeyMax"));
       return;
     }
 
@@ -434,8 +487,14 @@ function ProviderEditorDialog({
 
   return (
     <SettingsDialog
-      eyebrow={`Settings · ${group.title.toLowerCase()} provider`}
-      title={initial ? "Edit provider" : "Add provider"}
+      eyebrow={t("settings.providers.editorEyebrow", {
+        capability: capabilityLabel(group.capability, t),
+      })}
+      title={
+        initial
+          ? t("settings.providers.editTitle")
+          : t("settings.providers.addTitle")
+      }
       description={group.description}
       onClose={onClose}
       actions={
@@ -447,7 +506,7 @@ function ProviderEditorDialog({
             onClick={onClose}
             disabled={saving}
           >
-            Cancel
+            {t("settings.common.cancel")}
           </Button>
           <Button
             type="submit"
@@ -470,7 +529,9 @@ function ProviderEditorDialog({
       >
         <div className="registry-form__grid">
           <label className="field" htmlFor={providerFieldId}>
-            <span className="field-label">Provider</span>
+            <span className="field-label">
+              {t("settings.providers.fieldProvider")}
+            </span>
             <select
               id={providerFieldId}
               className="select"
@@ -486,12 +547,14 @@ function ProviderEditorDialog({
               ))}
             </select>
             <span className="field-help">
-              Allowed kinds come from the API for this capability.
+              {t("settings.providers.providerHelp")}
             </span>
           </label>
 
           <label className="field" htmlFor={labelFieldId}>
-            <span className="field-label">Label</span>
+            <span className="field-label">
+              {t("settings.providers.fieldLabel")}
+            </span>
             <input
               id={labelFieldId}
               className="input"
@@ -506,13 +569,15 @@ function ProviderEditorDialog({
               disabled={saving}
             />
             <span className="field-help">
-              An optional display name. Blank uses the provider kind.
+              {t("settings.providers.labelHelp")}
             </span>
           </label>
 
           {group.supports_model ? (
             <label className="field" htmlFor={modelFieldId}>
-              <span className="field-label">Model</span>
+              <span className="field-label">
+                {t("settings.providers.fieldModel")}
+              </span>
               <input
                 id={modelFieldId}
                 className="input registry-input"
@@ -534,14 +599,16 @@ function ProviderEditorDialog({
               />
               <span className="field-help">
                 {group.capability === "embedding"
-                  ? "Recorded for new chunks. Changing it requires re-embedding."
-                  : "The model id sent to this provider."}
+                  ? t("settings.providers.modelHelpEmbedding")
+                  : t("settings.providers.modelHelp")}
               </span>
             </label>
           ) : null}
 
           <label className="field" htmlFor={baseUrlFieldId}>
-            <span className="field-label">Base URL</span>
+            <span className="field-label">
+              {t("settings.providers.fieldBaseUrl")}
+            </span>
             <input
               id={baseUrlFieldId}
               className="input registry-input"
@@ -560,14 +627,19 @@ function ProviderEditorDialog({
               }
             />
             <span className="field-help">
-              Leave blank to use the provider default
-              {group.default_base_url ? ` (${group.default_base_url})` : ""}.
+              {group.default_base_url
+                ? t("settings.providers.baseUrlHelpDefault", {
+                    url: group.default_base_url,
+                  })
+                : t("settings.providers.baseUrlHelp")}
             </span>
           </label>
 
           {group.supports_dimension ? (
             <label className="field" htmlFor={dimensionFieldId}>
-              <span className="field-label">Dimension</span>
+              <span className="field-label">
+                {t("settings.providers.fieldDimension")}
+              </span>
               <input
                 id={dimensionFieldId}
                 className="input registry-input"
@@ -581,17 +653,17 @@ function ProviderEditorDialog({
                   setFormError(null);
                 }}
                 disabled={saving || isNone}
-                placeholder="Provider default"
+                placeholder={t("settings.providers.providerDefault")}
               />
               <span className="field-help">
-                16–4096. Blank uses the provider default, 384 for hashing.
+                {t("settings.providers.dimensionHelp")}
               </span>
             </label>
           ) : null}
 
           <div className="field registry-form__wide">
             <label className="field-label" htmlFor={keyFieldId}>
-              API key
+              {t("settings.providers.fieldApiKey")}
             </label>
             <input
               id={keyFieldId}
@@ -603,7 +675,7 @@ function ProviderEditorDialog({
                 setClearKey(false);
                 setFormError(null);
               }}
-              placeholder={keyPlaceholder(provider, keyless, keyHint)}
+              placeholder={keyPlaceholder(provider, keyless, keyHint, t)}
               autoComplete="new-password"
               maxLength={500}
               spellCheck={false}
@@ -612,16 +684,16 @@ function ProviderEditorDialog({
             />
             <span className="field-help">
               {keyless
-                ? "This provider needs no key. Saving clears any stored key for the row."
-                : "Encrypted on the server and never returned to this page. Leave blank to keep the current key."}
+                ? t("settings.providers.keyHelpKeyless")
+                : t("settings.providers.keyHelp")}
             </span>
           </div>
 
           {canClearKey ? (
             <div className="registry-form__wide">
               <ProviderFormCheck
-                label="Clear stored key"
-                hint="Removes the database key. Environment fallback may still apply to the active provider."
+                label={t("settings.providers.clearKey")}
+                hint={t("settings.providers.clearKeyHint")}
                 checked={clearKey}
                 disabled={saving || apiKey.trim().length > 0}
                 onChange={setClearKey}
@@ -631,11 +703,11 @@ function ProviderEditorDialog({
 
           <div className="registry-form__wide">
             <ProviderFormCheck
-              label="Activate after saving"
+              label={t("settings.providers.activateAfterSave")}
               hint={
                 activeLocked
-                  ? "This row is active. Use Deactivate in the registry to turn it off."
-                  : "Makes this row the only active provider for this capability."
+                  ? t("settings.providers.activateHintLocked")
+                  : t("settings.providers.activateHint")
               }
               checked={activate}
               disabled={saving || isNone || activeLocked}
@@ -647,9 +719,7 @@ function ProviderEditorDialog({
         {group.capability === "web_search" ||
         group.capability === "web_fetch" ? (
           <p className="settings-hint">
-            Web search and web fetch use separate credentials. Paste this
-            capability&apos;s Tavily key here even if the other capability uses
-            the same value.
+            {t("settings.providers.webCredentialsNote")}
           </p>
         ) : null}
 
@@ -679,12 +749,14 @@ function ActiveProviderCard({
   readonly onDeactivate: () => void;
   readonly onTest: (provider: ProviderReadSchema) => void;
 }) {
+  const { t, formatDateTime } = useI18n();
   const keyless = isProviderKeyless(provider, group.keyless_providers);
   const runtimeFallback = provider.id === null;
-  const summary = providerEndpointSummary(
+  const summary = providerSummaryParts(
     provider,
     group.supports_model,
     group.supports_dimension,
+    t,
   );
 
   return (
@@ -696,7 +768,9 @@ function ActiveProviderCard({
       <div className="registry-active__head">
         <div className="registry-active__heading">
           <p className="mono-label">
-            {runtimeFallback ? "Runtime fallback" : "Active provider"}
+            {runtimeFallback
+              ? t("settings.providers.runtimeFallback")
+              : t("settings.providers.activeProvider")}
           </p>
           <h3 className="registry-active__title">
             {provider.label || providerDisplayName(provider.provider)}
@@ -725,60 +799,62 @@ function ActiveProviderCard({
 
       <dl className="meta-grid registry-meta">
         <div className="meta-item">
-          <dt className="meta-key">Provider</dt>
+          <dt className="meta-key">{t("settings.providers.metaProvider")}</dt>
           <dd className="meta-value">
             {providerDisplayName(provider.provider)}
           </dd>
         </div>
         {group.supports_model ? (
           <div className="meta-item">
-            <dt className="meta-key">Model</dt>
+            <dt className="meta-key">{t("settings.providers.metaModel")}</dt>
             <dd className="meta-value">{provider.model ?? "—"}</dd>
           </div>
         ) : null}
         <div className="meta-item">
-          <dt className="meta-key">Base URL</dt>
+          <dt className="meta-key">{t("settings.providers.metaBaseUrl")}</dt>
           <dd className="meta-value" title={provider.base_url ?? undefined}>
-            {provider.base_url ?? "Provider default"}
+            {provider.base_url ?? t("settings.providers.providerDefault")}
           </dd>
         </div>
         {group.supports_dimension ? (
           <div className="meta-item">
-            <dt className="meta-key">Dimension</dt>
+            <dt className="meta-key">{t("settings.providers.metaDimension")}</dt>
             <dd className="meta-value">
               {provider.dimension === null
-                ? "Provider default"
-                : `${provider.dimension}-D`}
+                ? t("settings.providers.providerDefault")
+                : t("settings.providers.dimension", {
+                    dimension: String(provider.dimension),
+                  })}
             </dd>
           </div>
         ) : null}
         <div className="meta-item">
-          <dt className="meta-key">Key</dt>
+          <dt className="meta-key">{t("settings.providers.metaKey")}</dt>
           <dd className="meta-value" title={providerKeyLabel(provider, keyless)}>
             {providerKeyLabel(provider, keyless)}
           </dd>
         </div>
         <div className="meta-item">
-          <dt className="meta-key">Key source</dt>
+          <dt className="meta-key">{t("settings.providers.metaKeySource")}</dt>
           <dd className="meta-value">
             {providerKeySourceLabel(provider, keyless)}
           </dd>
         </div>
         <div className="meta-item">
-          <dt className="meta-key">Configured</dt>
+          <dt className="meta-key">{t("settings.providers.metaConfigured")}</dt>
           <dd className="meta-value">
             {providerConfiguredLabel(provider)}
           </dd>
         </div>
         <div className="meta-item">
-          <dt className="meta-key">Updated</dt>
+          <dt className="meta-key">{t("settings.providers.metaUpdated")}</dt>
           <dd className="meta-value">
             {provider.updated_at ? (
               <time dateTime={provider.updated_at}>
                 {formatDateTime(provider.updated_at)}
               </time>
             ) : (
-              "Runtime fallback"
+              t("settings.providers.runtimeFallback")
             )}
           </dd>
         </div>
@@ -786,8 +862,7 @@ function ActiveProviderCard({
 
       {runtimeFallback ? (
         <p className="registry-active__note">
-          No saved row is active. This state comes from the server environment
-          or the built-in defaults; add and activate a provider to override it.
+          {t("settings.providers.fallbackNote")}
         </p>
       ) : null}
 
@@ -801,7 +876,7 @@ function ActiveProviderCard({
             disabled={busy}
           >
             <Icon name="spark" size={13} />
-            Test connection
+            {t("settings.providers.testConnection")}
           </Button>
           <Button
             type="button"
@@ -811,7 +886,7 @@ function ActiveProviderCard({
             disabled={busy}
           >
             <Icon name="pencil" size={13} />
-            Edit
+            {t("settings.providers.edit")}
           </Button>
           <Button
             type="button"
@@ -821,7 +896,7 @@ function ActiveProviderCard({
             disabled={busy}
           >
             <Icon name="stop" size={13} />
-            Deactivate
+            {t("settings.providers.deactivate")}
           </Button>
         </div>
       ) : null}
@@ -848,11 +923,13 @@ function SavedProviderRow({
   readonly onDelete: (provider: ProviderReadSchema) => void;
   readonly onTest: (provider: ProviderReadSchema) => void;
 }) {
+  const { t, formatDateTime } = useI18n();
   const keyless = isProviderKeyless(provider, group.keyless_providers);
-  const summary = providerEndpointSummary(
+  const summary = providerSummaryParts(
     provider,
     group.supports_model,
     group.supports_dimension,
+    t,
   );
 
   return (
@@ -868,10 +945,10 @@ function SavedProviderRow({
           </span>
           {provider.is_active ? (
             <Badge tone="moss" dot>
-              Active
+              {t("settings.providers.active")}
             </Badge>
           ) : (
-            <Badge tone="neutral">Saved</Badge>
+            <Badge tone="neutral">{t("settings.providers.saved")}</Badge>
           )}
           <Badge tone={providerStateTone(provider)}>
             {providerStateLabel(provider)}
@@ -912,7 +989,7 @@ function SavedProviderRow({
             disabled={busy}
           >
             <Icon name="spark" size={13} />
-            Test
+            {t("settings.providers.test")}
           </Button>
           <Button
             type="button"
@@ -922,7 +999,7 @@ function SavedProviderRow({
             disabled={busy}
           >
             <Icon name="pencil" size={13} />
-            Edit
+            {t("settings.providers.edit")}
           </Button>
           {provider.is_active ? (
             <Button
@@ -933,7 +1010,7 @@ function SavedProviderRow({
               disabled={busy}
             >
               <Icon name="stop" size={13} />
-              Deactivate
+              {t("settings.providers.deactivate")}
             </Button>
           ) : (
             <Button
@@ -944,7 +1021,7 @@ function SavedProviderRow({
               disabled={busy}
             >
               <Icon name="check" size={13} />
-              Activate
+              {t("settings.providers.activate")}
             </Button>
           )}
           <Button
@@ -955,7 +1032,7 @@ function SavedProviderRow({
             disabled={busy}
           >
             <Icon name="trash" size={13} />
-            Delete
+            {t("settings.providers.delete")}
           </Button>
         </div>
       ) : null}
@@ -988,6 +1065,7 @@ function RegistrySection({
   readonly onDelete: (provider: ProviderReadSchema) => void;
   readonly onTest: (provider: ProviderReadSchema) => void;
 }) {
+  const { t, formatNumber } = useI18n();
   const active = group.active;
   const sectionTest =
     testState && testState.key.startsWith(`${group.capability}:`)
@@ -999,7 +1077,8 @@ function RegistrySection({
       <div className="registry-section__head">
         <div className="registry-section__heading">
           <p className="mono-label">
-            {String(index).padStart(2, "0")} · {group.capability}
+            {String(index).padStart(2, "0")} ·{" "}
+            {capabilityLabel(group.capability, t)}
           </p>
           <h3 className="registry-section__title" id={`${group.capability}-title`}>
             {group.title}
@@ -1015,7 +1094,7 @@ function RegistrySection({
             disabled={busy}
           >
             <Icon name="plus" size={13} />
-            Add provider
+            {t("settings.providers.add")}
           </Button>
         </div>
       </div>
@@ -1031,20 +1110,22 @@ function RegistrySection({
         />
       ) : (
         <p className="registry-empty">
-          No provider state is available for this capability yet.
+          {t("settings.providers.noProviderState")}
         </p>
       )}
 
       <div className="registry-list">
         <div className="registry-list__head">
-          <p className="mono-label">Saved providers</p>
+          <p className="mono-label">{t("settings.providers.savedProviders")}</p>
           <span className="registry-list__count">
-            {group.providers.length} saved
+            {t("settings.providers.savedCount", {
+              count: formatNumber(group.providers.length),
+            })}
           </span>
         </div>
         {group.providers.length === 0 ? (
           <p className="registry-empty">
-            No saved rows. Add one to pin this capability to a provider.
+            {t("settings.providers.noSavedRows")}
           </p>
         ) : (
           group.providers.map((provider) => (
@@ -1103,13 +1184,13 @@ function ReindexAction({
   readonly error: string | null;
   readonly onRequest: () => void;
 }) {
+  const { t, formatNumber } = useI18n();
   return (
     <div className="registry-reindex">
       <div className="registry-reindex__copy">
-        <p className="mono-label">Vector maintenance</p>
+        <p className="mono-label">{t("settings.reindex.eyebrow")}</p>
         <p className="registry-reindex__text">
-          Recompute every current chunk with the active embedding provider after
-          changing its model or dimension.
+          {t("settings.reindex.providerCopy")}
         </p>
       </div>
       <div className="registry-reindex__actions">
@@ -1121,15 +1202,19 @@ function ReindexAction({
           disabled={!enabled || pending}
         >
           <Icon name="history" size={13} />
-          {pending ? "Re-embedding…" : "Re-index embeddings"}
+          {pending
+            ? t("settings.reindex.reembedding")
+            : t("settings.reindex.action")}
         </Button>
       </div>
       {result ? (
         <p className="reindex__result" role="status">
           <Icon name="check" size={14} />
-          Re-embedded {formatNumber(result.reindexed)} chunks ·{" "}
-          {formatNumber(result.dimension)}-D ·{" "}
-          {formatNumber(result.elapsed_ms)} ms.
+          {t("settings.reindex.resultShort", {
+            count: formatNumber(result.reindexed),
+            dimension: String(result.dimension),
+            ms: formatNumber(result.elapsed_ms),
+          })}
         </p>
       ) : null}
       {error ? (
@@ -1185,6 +1270,7 @@ function ProviderDialogs({
   readonly onCloseReindex: () => void;
   readonly onConfirmReindex: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <>
       {editor ? (
@@ -1209,9 +1295,14 @@ function ProviderDialogs({
 
       {deleteTarget ? (
         <SettingsDialog
-          eyebrow="Settings · provider registry"
-          title="Delete this provider?"
-          description={`${deleteTarget.label || providerDisplayName(deleteTarget.provider)} will be removed from the ${deleteTarget.capability.replace("_", " ")} slot.`}
+          eyebrow={t("settings.providers.deleteDialogEyebrow")}
+          title={t("settings.providers.deleteDialogTitle")}
+          description={t("settings.providers.deleteDialogDescription", {
+            name:
+              deleteTarget.label ||
+              providerDisplayName(deleteTarget.provider),
+            capability: capabilityLabel(deleteTarget.capability, t),
+          })}
           onClose={onCloseDelete}
           actions={
             <>
@@ -1223,7 +1314,7 @@ function ProviderDialogs({
                 disabled={deletePending}
                 data-autofocus
               >
-                Cancel
+                {t("settings.common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -1239,24 +1330,26 @@ function ProviderDialogs({
                 }}
                 disabled={deletePending}
               >
-                {deletePending ? "Deleting…" : "Delete provider"}
+                {deletePending
+                  ? t("settings.providers.deleting")
+                  : t("settings.providers.deleteProvider")}
               </Button>
             </>
           }
         >
           <p className="settings-lede">
             {deleteTarget.is_active
-              ? "This row is active. Deleting it falls the capability back to the server environment or built-in defaults."
-              : "This removes only the saved row. Other providers in this capability are unchanged."}
+              ? t("settings.providers.deleteActiveNote")
+              : t("settings.providers.deleteInactiveNote")}
           </p>
         </SettingsDialog>
       ) : null}
 
       {reindexOpen ? (
         <SettingsDialog
-          eyebrow="Settings · embedding"
-          title="Re-embed every current chunk?"
-          description="Re-indexing recomputes stored vectors with the active embedding provider. It runs synchronously and may take a while."
+          eyebrow={t("settings.reindex.dialogEyebrow")}
+          title={t("settings.reindex.dialogTitle")}
+          description={t("settings.reindex.dialogDescription")}
           onClose={onCloseReindex}
           actions={
             <>
@@ -1268,7 +1361,7 @@ function ProviderDialogs({
                 disabled={reindexPending}
                 data-autofocus
               >
-                Cancel
+                {t("settings.common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -1277,15 +1370,14 @@ function ProviderDialogs({
                 onClick={onConfirmReindex}
                 disabled={reindexPending}
               >
-                {reindexPending ? "Re-embedding…" : "Start re-index"}
+                {reindexPending
+                  ? t("settings.reindex.reembedding")
+                  : t("settings.reindex.start")}
               </Button>
             </>
           }
         >
-          <p className="settings-lede">
-            The embedding model and dimension must match the active provider
-            before new files are ingested.
-          </p>
+          <p className="settings-lede">{t("settings.reindex.dialogCopy")}</p>
         </SettingsDialog>
       ) : null}
     </>
@@ -1294,6 +1386,7 @@ function ProviderDialogs({
 
 /** Four capability slots, their saved rows, and their encrypted key state. */
 export function ProviderVaultPanel() {
+  const { t, formatNumber } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const registryQuery = useGetProviderRegistry({
@@ -1323,7 +1416,7 @@ export function ProviderVaultPanel() {
       onSuccess: async (data) => {
         await applyRegistry(data);
         setEditor(null);
-        toast.success("Provider added to the registry.");
+        toast.success(t("settings.providers.addedToast"));
       },
       onError: (error) => {
         setEditorError(apiErrorMessage(error));
@@ -1337,7 +1430,7 @@ export function ProviderVaultPanel() {
       onSuccess: async (data) => {
         await applyRegistry(data);
         setEditor(null);
-        toast.success("Provider updated.");
+        toast.success(t("settings.providers.updatedToast"));
       },
       onError: (error) => {
         setEditorError(apiErrorMessage(error));
@@ -1349,7 +1442,7 @@ export function ProviderVaultPanel() {
     mutation: {
       onSuccess: async (data) => {
         await applyRegistry(data);
-        toast.success("Provider activated.");
+        toast.success(t("settings.providers.activatedToast"));
       },
       onError: (error) => {
         toast.error(apiErrorMessage(error));
@@ -1361,7 +1454,7 @@ export function ProviderVaultPanel() {
     mutation: {
       onSuccess: async (data) => {
         await applyRegistry(data);
-        toast.success("Provider deactivated. The runtime falls back.");
+        toast.success(t("settings.providers.deactivatedToast"));
       },
       onError: (error) => {
         toast.error(apiErrorMessage(error));
@@ -1374,7 +1467,7 @@ export function ProviderVaultPanel() {
       onSuccess: async (data) => {
         await applyRegistry(data);
         setDeleteTarget(null);
-        toast.success("Provider deleted.");
+        toast.success(t("settings.providers.deletedToast"));
       },
       onError: (error) => {
         toast.error(apiErrorMessage(error));
@@ -1411,7 +1504,10 @@ export function ProviderVaultPanel() {
         setReindexError(null);
         setReindexOpen(false);
         toast.success(
-          `Re-embedded ${formatNumber(data.reindexed)} chunks with ${data.model}.`,
+          t("settings.reindex.toast", {
+            count: formatNumber(data.reindexed),
+            model: data.model,
+          }),
         );
         await invalidateReindexQueries(queryClient);
       },
@@ -1471,7 +1567,7 @@ export function ProviderVaultPanel() {
         className="registry-stack"
         role="status"
         aria-busy="true"
-        aria-label="Reading provider registry"
+        aria-label={t("settings.providers.loadReadingAria")}
       >
         {CAPABILITY_ORDER.map((capability) => (
           <ProviderSectionSkeleton key={capability} />
@@ -1483,7 +1579,7 @@ export function ProviderVaultPanel() {
       <div className="settings-inline-error" role="alert">
         <Icon name="info" size={16} />
         <div>
-          <strong>The provider registry did not answer.</strong>
+          <strong>{t("settings.providers.loadErrorTitle")}</strong>
           <p>{apiErrorMessage(registryQuery.error)}</p>
           <Button
             type="button"
@@ -1493,7 +1589,9 @@ export function ProviderVaultPanel() {
             disabled={registryQuery.isFetching}
           >
             <Icon name="ring" size={14} />
-            {registryQuery.isFetching ? "Retrying…" : "Retry"}
+            {registryQuery.isFetching
+              ? t("core.common.retrying")
+              : t("core.common.retry")}
           </Button>
         </div>
       </div>
@@ -1543,14 +1641,14 @@ export function ProviderVaultPanel() {
         title={
           <span className="settings-panel__title">
             <Icon name="database" size={16} />
-            Provider registry
+            {t("settings.providers.title")}
           </span>
         }
         action={
           <div className="settings-panel__badges">
             {registry?.reindex_required ? (
               <Badge tone="ochre" dot>
-                Re-index required
+                {t("settings.providers.reindexRequired")}
               </Badge>
             ) : null}
             <Badge tone={registry?.vector_enabled ? "moss" : "neutral"} dot>
@@ -1558,20 +1656,14 @@ export function ProviderVaultPanel() {
                 registryQuery.isPending,
                 registry?.vector_enabled,
                 registryQuery.isError,
+                t,
               )}
             </Badge>
           </div>
         }
         className="settings-panel"
       >
-        <p className="settings-lede">
-          Four capability slots stored in PostgreSQL: chat, embedding, web
-          search, and web fetch. One row is active per slot; saving reloads the
-          runtime immediately. Web search and web fetch use{" "}
-          <strong>separate credentials</strong>; if both should use the same
-          Tavily key, paste it into each section. Keys are encrypted at rest,
-          never returned to the browser, and never prefilled here.
-        </p>
+        <p className="settings-lede">{t("settings.providers.lede")}</p>
 
         {body}
 
@@ -1579,21 +1671,13 @@ export function ProviderVaultPanel() {
           <div className="settings-callout settings-callout--warn" role="status">
             <Icon name="history" size={18} />
             <div>
-              <strong>Re-index required</strong>
-              <p>
-                Existing chunks were embedded with a different model. New files
-                use the active embedding provider. Re-embed the library from the
-                embedding section or System diagnostics to align the corpus.
-              </p>
+              <strong>{t("settings.providers.reindexRequired")}</strong>
+              <p>{t("settings.providers.reindexRequiredBody")}</p>
             </div>
           </div>
         ) : null}
 
-        <p className="settings-hint">
-          Database rows take precedence over environment fallbacks. Leaving a
-          key field blank preserves the stored key. Use Deactivate to fall back
-          to the server environment or built-in defaults for one capability.
-        </p>
+        <p className="settings-hint">{t("settings.providers.hint")}</p>
       </Panel>
 
       <ProviderDialogs

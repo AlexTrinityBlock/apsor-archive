@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
 import { Icon } from "../../../component/Icon";
-import { basename, formatNumber, truncate } from "../../../../lib/format";
+import { useI18n, type Translate } from "../../../i18n";
+import { basename, truncate } from "../../../../lib/format";
 import {
   excerptOf,
   numberField,
@@ -34,14 +35,17 @@ function targetOf(
   return id === null ? null : { type, id, chunk, title };
 }
 
-function fileResults(data: Record<string, unknown> | null): ResultTarget[] {
+function fileResults(
+  data: Record<string, unknown> | null,
+  t: Translate,
+): ResultTarget[] {
   return recordList(data?.file_results).map((record) => {
     const id = recordId(record, "file_id");
     const chunk = numberField(record, "chunk");
     const path =
       textField(record, "raw_file_path") ??
       textField(record, "path") ??
-      `file ${id ?? "?"}`;
+      `${t("chat.resource.file")} ${id ?? "?"}`;
     return {
       record,
       id,
@@ -55,23 +59,30 @@ function fileResults(data: Record<string, unknown> | null): ResultTarget[] {
   });
 }
 
-function memoryResults(data: Record<string, unknown> | null): ResultTarget[] {
+function memoryResults(
+  data: Record<string, unknown> | null,
+  t: Translate,
+): ResultTarget[] {
   return recordList(data?.memory_results).map((record) => {
     const id = recordId(record, "memory_id");
     return {
       record,
       id,
       chunk: null,
-      title: id === null ? "memory" : `memory:${id}`,
+      title:
+        id === null ? t("chat.resource.memory") : `memory:${id}`,
       detail: textField(record, "path"),
       excerpt: excerptOf(record, ["excerpt", "content"]),
       score: numberField(record, "score"),
-      target: targetOf("memory", id, null, "memory"),
+      target: targetOf("memory", id, null, t("chat.resource.memory")),
     };
   });
 }
 
-function summaryResults(data: Record<string, unknown> | null): ResultTarget[] {
+function summaryResults(
+  data: Record<string, unknown> | null,
+  t: Translate,
+): ResultTarget[] {
   return recordList(data?.summary_results).map((record) => {
     const id = recordId(record, "memory_summary_id");
     const start = textField(record, "start") ?? textField(record, "period_start");
@@ -80,7 +91,10 @@ function summaryResults(data: Record<string, unknown> | null): ResultTarget[] {
       record,
       id,
       chunk: null,
-      title: id === null ? "summary" : `summary:${id}`,
+      title:
+        id === null
+          ? t("chat.panels.search.summaryFallback")
+          : `summary:${id}`,
       detail: start && end ? `${start} → ${end}` : start,
       excerpt: excerptOf(record, ["excerpt", "content"]),
       score: numberField(record, "score"),
@@ -98,12 +112,15 @@ function resultKey(kind: string, result: ResultTarget, index: number): string {
 function ResultGroup({
   kind,
   label,
+  empty,
   results,
 }: {
   readonly kind: string;
   readonly label: string;
+  readonly empty: string;
   readonly results: readonly ResultTarget[];
 }) {
+  const { t, formatNumber } = useI18n();
   return (
     <section className="pi-constellation__group" data-kind={kind}>
       <header className="pi-constellation__group-head">
@@ -111,10 +128,12 @@ function ResultGroup({
           <span />
         </span>
         <span>{label}</span>
-        <span className="pi-constellation__count">{results.length}</span>
+        <span className="pi-constellation__count">
+          {formatNumber(results.length)}
+        </span>
       </header>
       {results.length === 0 ? (
-        <p className="pi-constellation__quiet">No {label.toLowerCase()} in this pass.</p>
+        <p className="pi-constellation__quiet">{empty}</p>
       ) : (
         <ul className="pi-constellation__list">
           {results.map((result, index) => {
@@ -134,10 +153,14 @@ function ResultGroup({
                   <p className="pi-constellation__excerpt">{result.excerpt}</p>
                 ) : (
                   <p className="pi-constellation__excerpt is-muted">
-                    No inline excerpt was recorded for this result.
+                    {t("chat.panels.search.noExcerpt")}
                   </p>
                 )}
-                {href ? <PanelLink to={href}>View result</PanelLink> : null}
+                {href ? (
+                  <PanelLink to={href}>
+                    {t("chat.panels.search.viewResult")}
+                  </PanelLink>
+                ) : null}
               </li>
             );
           })}
@@ -148,13 +171,14 @@ function ResultGroup({
 }
 
 function ConstellationBody({ item }: PanelProps): ReactNode {
+  const { t, formatNumber } = useI18n();
   const data = item.data;
   if (!data) {
     return (
       <PanelEmpty
         icon="search"
-        title="No structured search preview"
-        detail="The search ran, but this result has no UI preview payload. The recorded query and arguments remain below."
+        title={t("chat.panels.search.noPreviewTitle")}
+        detail={t("chat.panels.search.noPreviewDetail")}
       />
     );
   }
@@ -167,31 +191,55 @@ function ConstellationBody({ item }: PanelProps): ReactNode {
       </div>
       <p className="pi-constellation__query">
         <Icon name="search" size={13} />
-        <span>{textField(data, "query") ?? textField(item.arguments, "query") ?? "search"}</span>
+        <span>
+          {textField(data, "query") ??
+            textField(item.arguments, "query") ??
+            t("chat.panels.search.queryFallback")}
+        </span>
         {numberField(data, "result_number") !== null ? (
           <span className="pi-constellation__limit">
-            top {formatNumber(numberField(data, "result_number") ?? 0)} each
+            {t("chat.panels.search.topEach", {
+              count: formatNumber(numberField(data, "result_number") ?? 0),
+            })}
           </span>
         ) : null}
       </p>
-      <ResultGroup kind="file" label="File leaves" results={fileResults(data)} />
-      <ResultGroup kind="memory" label="Memory leaves" results={memoryResults(data)} />
-      <ResultGroup kind="summary" label="Season summaries" results={summaryResults(data)} />
+      <ResultGroup
+        kind="file"
+        label={t("chat.panels.search.fileLeaves")}
+        empty={t("chat.panels.search.fileEmpty")}
+        results={fileResults(data, t)}
+      />
+      <ResultGroup
+        kind="memory"
+        label={t("chat.panels.search.memoryLeaves")}
+        empty={t("chat.panels.search.memoryEmpty")}
+        results={memoryResults(data, t)}
+      />
+      <ResultGroup
+        kind="summary"
+        label={t("chat.panels.search.seasonSummaries")}
+        empty={t("chat.panels.search.summaryEmpty")}
+        results={summaryResults(data, t)}
+      />
     </div>
   );
 }
 
 /** `search_knowledge`: a three-layer result constellation with excerpts. */
 export function SearchKnowledgePanel({ item }: PanelProps) {
+  const { t } = useI18n();
   if (item.live || item.status.toLowerCase() === "running") {
-    return <LivePanel item={item} detail="Searching files, memories, and summaries." />;
+    return (
+      <LivePanel item={item} detail={t("chat.panels.search.liveDetail")} />
+    );
   }
   if (item.status.toLowerCase() === "error") {
     return (
       <PanelEmpty
         icon="search"
-        title="The search did not return"
-        detail={item.detail ?? "No structured result was recorded."}
+        title={t("chat.panels.search.errorTitle")}
+        detail={item.detail ?? t("chat.panels.common.noStructured")}
       />
     );
   }

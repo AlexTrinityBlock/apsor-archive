@@ -14,7 +14,11 @@ import type { MemorySchema } from "../../generated-apis-types/schemas";
 import { useSearchKnowledge } from "../../generated-apis-types/search/search";
 import { useGetStats } from "../../generated-apis-types/system/system";
 import { useDebouncedValue } from "../../hook/useDebouncedValue";
-import { formatDate, formatDateTime, formatNumber } from "../../../lib/format";
+import {
+  useI18n,
+  type Translate,
+  type TranslationKey,
+} from "../../i18n";
 
 import {
   MemoryDeprecateDialog,
@@ -36,10 +40,13 @@ const SEARCH_INPUT_MAX = 200;
 
 type StatusFilter = "all" | "active" | "deprecated";
 
-const STATUS_FILTERS: ReadonlyArray<{ readonly value: StatusFilter; readonly label: string }> = [
-  { value: "all", label: "All" },
-  { value: "active", label: "Active" },
-  { value: "deprecated", label: "Deprecated" },
+const STATUS_FILTERS: ReadonlyArray<{
+  readonly value: StatusFilter;
+  readonly labelKey: TranslationKey;
+}> = [
+  { value: "all", labelKey: "memory.status.filterAll" },
+  { value: "active", labelKey: "memory.status.filterActive" },
+  { value: "deprecated", labelKey: "memory.status.filterDeprecated" },
 ];
 
 interface MemoryCardModel {
@@ -61,14 +68,14 @@ function matchesStatus(memory: MemoryCardModel, filter: StatusFilter): boolean {
   return filter === "all" || memory.status === filter;
 }
 
-function filterNoun(filter: StatusFilter): string {
+function filterNounKey(filter: StatusFilter): TranslationKey {
   if (filter === "active") {
-    return "active";
+    return "memory.status.nounActive";
   }
   if (filter === "deprecated") {
-    return "deprecated";
+    return "memory.status.nounDeprecated";
   }
-  return "matching";
+  return "memory.status.nounMatching";
 }
 
 function buildFilterNote(
@@ -78,21 +85,34 @@ function buildFilterNote(
   loadedCount: number,
   hasMore: boolean,
   loading: boolean,
+  t: Translate,
+  formatNumber: (value: number) => string,
 ): string | null {
   if (loading || filter === "all") {
     return null;
   }
   if (searchMode) {
-    return `The status filter applies to the ${formatNumber(searchMatchCount)} memory matches returned by this search.`;
+    return t("memory.vault.filterNoteSearch", {
+      count: formatNumber(searchMatchCount),
+    });
   }
-  return `The status filter applies to the ${formatNumber(loadedCount)} loaded records${hasMore ? "; load older records to widen the scan." : "."}`;
+  return t(
+    hasMore
+      ? "memory.vault.filterNoteLoadedMore"
+      : "memory.vault.filterNoteLoaded",
+    { count: formatNumber(loadedCount) },
+  );
 }
 
-function buildSearchNote(searchMode: boolean, searchEnabled: boolean): string | null {
+function buildSearchNote(
+  searchMode: boolean,
+  searchEnabled: boolean,
+  t: Translate,
+): string | null {
   if (!searchMode || !searchEnabled) {
     return null;
   }
-  return `Search is capped at ${SEARCH_RESULT_LIMIT} memory matches and ranked by fused text and vector score. Refine the phrase to narrow the set.`;
+  return t("memory.vault.searchNote", { limit: SEARCH_RESULT_LIMIT });
 }
 
 function MemoryStatusFilter({
@@ -102,8 +122,14 @@ function MemoryStatusFilter({
   readonly value: StatusFilter;
   readonly onChange: (value: StatusFilter) => void;
 }) {
+  const { t } = useI18n();
+
   return (
-    <div className="tabs tabs--light memory-filter" role="group" aria-label="Filter memories by status">
+    <div
+      className="tabs tabs--light memory-filter"
+      role="group"
+      aria-label={t("memory.status.filterAria")}
+    >
       {STATUS_FILTERS.map((option) => (
         <button
           key={option.value}
@@ -114,7 +140,7 @@ function MemoryStatusFilter({
           aria-pressed={value === option.value}
           onClick={() => onChange(option.value)}
         >
-          {option.label}
+          {t(option.labelKey)}
         </button>
       ))}
     </div>
@@ -122,25 +148,27 @@ function MemoryStatusFilter({
 }
 
 function SupersedeBanner({ memory }: { readonly memory: MemoryCardModel }) {
+  const { t } = useI18n();
+
   if (memory.status === "deprecated") {
     return (
       <div className="memory-card__banner is-deprecated">
         <span>
           {memory.superseded_by_id !== null && memory.superseded_by_id !== undefined ? (
             <>
-              Superseded by{" "}
+              {t("memory.card.supersededByPrefix")}
               <Link to={`/memory/${memory.superseded_by_id}`}>
-                CRYSTAL #{memory.superseded_by_id}
+                {t("memory.common.crystal", { id: memory.superseded_by_id })}
               </Link>
-              . Kept in the ledger; no longer retrieved.
+              {t("memory.card.supersededBySuffix")}
             </>
           ) : (
-            "Deprecated directly and kept in the ledger for provenance."
+            t("memory.card.deprecatedDirectly")
           )}
         </span>
         {memory.deprecated_reason ? (
           <span className="memory-card__banner-reason">
-            Reason: {memory.deprecated_reason}
+            {t("memory.common.reason", { reason: memory.deprecated_reason })}
           </span>
         ) : null}
       </div>
@@ -150,14 +178,16 @@ function SupersedeBanner({ memory }: { readonly memory: MemoryCardModel }) {
     return (
       <div className="memory-card__banner">
         <span>
-          Replaces{" "}
+          {t("memory.card.replacesPrefix")}
           {memory.supersedes_ids.map((id, index) => (
             <span key={id}>
               {index > 0 ? ", " : null}
-              <Link to={`/memory/${id}`}>CRYSTAL #{id}</Link>
+              <Link to={`/memory/${id}`}>
+                {t("memory.common.crystal", { id })}
+              </Link>
             </span>
           ))}
-          .
+          {t("memory.card.replacesSuffix")}
         </span>
       </div>
     );
@@ -176,7 +206,11 @@ function MemoryCard({
   readonly onEdit: (memory: MemoryCardModel) => void;
   readonly onDeprecate: (memory: MemoryCardModel) => void;
 }) {
-  const preview = splitMemoryPreview(memory.content);
+  const { t, formatDate, formatDateTime } = useI18n();
+  const preview = splitMemoryPreview(
+    memory.content,
+    t("memory.common.untitledMemory"),
+  );
   const href = `/memory/${memory.memory_id}`;
   return (
     <article
@@ -187,12 +221,13 @@ function MemoryCard({
       <header className="memory-card__head">
         <div className="memory-card__ids">
           <Link className="memory-card__id" to={href}>
-            CRYSTAL #{memory.memory_id}
+            {t("memory.common.crystal", { id: memory.memory_id })}
           </Link>
           <MemoryStatus status={memory.status} />
         </div>
         <span className="memory-card__epoch">
-          Occurred <time dateTime={memory.update_time}>{formatDateTime(memory.update_time)}</time>
+          {t("memory.common.occurred")}{" "}
+          <time dateTime={memory.update_time}>{formatDateTime(memory.update_time)}</time>
         </span>
       </header>
 
@@ -206,36 +241,48 @@ function MemoryCard({
       <footer className="memory-card__foot">
         <div className="memory-card__meta">
           {memory.source ? (
-            <span className="memory-card__tag">source: {memory.source}</span>
+            <span className="memory-card__tag">
+              {t("memory.common.sourceValue", { source: memory.source })}
+            </span>
           ) : null}
           {searchMode && memory.matched_by && memory.matched_by.length > 0 ? (
             <span className="memory-card__tag">
-              matched by {memory.matched_by.join(" + ")}
+              {t("memory.card.matchedBy", {
+                by: memory.matched_by.join(" + "),
+              })}
             </span>
           ) : null}
           {searchMode && typeof memory.score === "number" ? (
             <span
               className="memory-card__score"
-              title="Fused text and vector rank score returned by search"
+              title={t("memory.card.fusedScoreTitle")}
             >
-              fused {memory.score.toFixed(4)}
+              {t("memory.card.fusedScore", {
+                score: memory.score.toFixed(4),
+              })}
             </span>
           ) : null}
         </div>
         <div className="memory-card__meta">
-          {memory.created_at ? <span>pressed {formatDate(memory.created_at)}</span> : null}
+          {memory.created_at ? (
+            <span>
+              {t("memory.card.pressedAt", {
+                date: formatDate(memory.created_at),
+              })}
+            </span>
+          ) : null}
           <CopyButton
             value={memory.content}
-            label="Copy memory"
+            label={t("memory.common.copyMemory")}
             iconOnly
-            title="Copy the memory text"
+            title={t("memory.common.copyMemoryTitle")}
           />
           <button
             type="button"
             className="memory-card__action"
             onClick={() => onEdit(memory)}
           >
-            Edit
+            {t("memory.card.edit")}
           </button>
           {memory.status === "active" ? (
             <button
@@ -243,11 +290,11 @@ function MemoryCard({
               className="memory-card__action is-danger"
               onClick={() => onDeprecate(memory)}
             >
-              Deprecate
+              {t("memory.card.deprecate")}
             </button>
           ) : null}
           <Link className="memory-card__read" to={href}>
-            Read record
+            {t("memory.card.readRecord")}
             <Icon name="arrow-right" size={13} />
           </Link>
         </div>
@@ -281,11 +328,21 @@ function VaultTelemetry({
   readonly filter: StatusFilter;
   readonly onFilterChange: (value: StatusFilter) => void;
 }) {
-  let countLabel = `${formatNumber(visibleCount)} shown · ${formatNumber(loadedCount)} loaded · ${formatNumber(total)} total`;
+  const { t, formatNumber } = useI18n();
+  let countLabel = t("memory.vault.shownLoadedTotal", {
+    visible: formatNumber(visibleCount),
+    loaded: formatNumber(loadedCount),
+    total: formatNumber(total),
+  });
   if (loading) {
-    countLabel = searchMode ? "Searching memories…" : "Reading memories…";
+    countLabel = searchMode
+      ? t("memory.vault.searchingMemories")
+      : t("memory.vault.readingMemories");
   } else if (searchMode) {
-    countLabel = `${formatNumber(visibleCount)} of ${formatNumber(loadedCount)} memory matches`;
+    countLabel = t("memory.vault.searchMatchesCount", {
+      visible: formatNumber(visibleCount),
+      loaded: formatNumber(loadedCount),
+    });
   }
 
   return (
@@ -298,24 +355,29 @@ function VaultTelemetry({
               .join(" ")}
             aria-hidden="true"
           />
-          {searchMode ? "Text + vector search" : "Newest occurrence first"}
+          {searchMode
+            ? t("memory.vault.searchModeTextVector")
+            : t("memory.vault.searchModeNewest")}
         </span>
         <span className="memory-telemetry__count" aria-live="polite">
           {countLabel}
         </span>
         {searchMode && searchStats ? (
           <span className="memory-telemetry__diagnostics">
-            <span title="Selected text candidates across all result kinds">
-              text <strong>{formatNumber(searchStats.text_candidates)}</strong>
+            <span title={t("memory.vault.textCandidatesTitle")}>
+              {t("memory.vault.diagnosticText")}{" "}
+              <strong>{formatNumber(searchStats.text_candidates)}</strong>
             </span>
-            <span title="Selected vector candidates across all result kinds">
-              vector <strong>{formatNumber(searchStats.vector_candidates)}</strong>
+            <span title={t("memory.vault.vectorCandidatesTitle")}>
+              {t("memory.vault.diagnosticVector")}{" "}
+              <strong>{formatNumber(searchStats.vector_candidates)}</strong>
             </span>
-            <span title="Deduplicated union of text and vector candidates">
-              merged <strong>{formatNumber(searchStats.merged)}</strong>
+            <span title={t("memory.vault.mergedCandidatesTitle")}>
+              {t("memory.vault.diagnosticMerged")}{" "}
+              <strong>{formatNumber(searchStats.merged)}</strong>
             </span>
             {typeof searchElapsed === "number" ? (
-              <span title="Server search duration">
+              <span title={t("memory.vault.serverDurationTitle")}>
                 <strong>{formatNumber(searchElapsed)}</strong> ms
               </span>
             ) : null}
@@ -358,14 +420,16 @@ function SearchResults({
   onEdit,
   onDeprecate,
 }: SearchResultsProps) {
+  const { t } = useI18n();
+
   if (loading) {
-    return <MemorySkeleton label="Searching the vault" count={3} />;
+    return <MemorySkeleton label={t("memory.vault.searchSkeleton")} count={3} />;
   }
   if (enabled && isError) {
     return (
       <MemoryErrorState
-        title="The vault search did not answer."
-        description="The memory search request failed before any results were returned."
+        title={t("memory.vault.searchErrorTitle")}
+        description={t("memory.vault.searchErrorDescription")}
         error={error}
         onRetry={onRetry}
       />
@@ -393,20 +457,20 @@ function SearchResults({
     return (
       <MemoryEmptyState
         icon="search"
-        eyebrow="No match"
-        title="No crystal answers this phrase."
-        description={`Search returned no memory matches for “${query}”. Try a broader phrase, or search the whole archive for related files and summaries.`}
+        eyebrow={t("memory.vault.noMatchEyebrow")}
+        title={t("memory.vault.noMatchTitle")}
+        description={t("memory.vault.noMatchDescription", { query })}
         action={
           <>
             <Button variant="secondary" size="sm" onClick={onClearSearch}>
-              Clear search
+              {t("memory.vault.clearSearch")}
             </Button>
             <ButtonLink
               to={`/search?query=${encodeURIComponent(query)}`}
               variant="ghost"
               size="sm"
             >
-              Search the whole archive
+              {t("memory.vault.searchWholeArchive")}
               <Icon name="arrow-right" size={14} />
             </ButtonLink>
           </>
@@ -416,12 +480,14 @@ function SearchResults({
   }
   return (
     <MemoryEmptyState
-      eyebrow="Filtered out"
-      title={`No ${filterNoun(filter)} crystals in these matches.`}
-      description="The search returned matches, but none have the selected status. Clear the status filter to see every match."
+      eyebrow={t("memory.vault.filteredEyebrow")}
+      title={t("memory.vault.filteredSearchTitle", {
+        status: t(filterNounKey(filter)),
+      })}
+      description={t("memory.vault.filteredSearchDescription")}
       action={
         <Button variant="secondary" size="sm" onClick={onShowAll}>
-          Show all statuses
+          {t("memory.vault.showAllStatuses")}
         </Button>
       }
     />
@@ -465,14 +531,16 @@ function BrowseResults({
   onEdit,
   onDeprecate,
 }: BrowseResultsProps) {
+  const { t, formatNumber } = useI18n();
+
   if (loading) {
-    return <MemorySkeleton label="Reading the memory vault" count={3} />;
+    return <MemorySkeleton label={t("memory.vault.browseSkeleton")} count={3} />;
   }
   if (failed) {
     return (
       <MemoryErrorState
-        title="The vault did not answer."
-        description="The memory list request failed before any records were returned."
+        title={t("memory.vault.browseErrorTitle")}
+        description={t("memory.vault.browseErrorDescription")}
         error={error}
         onRetry={onRetry}
       />
@@ -481,13 +549,13 @@ function BrowseResults({
   if (total === 0) {
     return (
       <MemoryEmptyState
-        eyebrow="Empty vault"
-        title="No memories have been pressed yet."
-        description="A memory records a decision, an observation, or a change of mind. Press the first crystal to open the vault."
+        eyebrow={t("memory.vault.emptyEyebrow")}
+        title={t("memory.vault.emptyTitle")}
+        description={t("memory.vault.emptyDescription")}
         action={
           <ButtonLink to="/memory/new" variant="ink" size="sm">
             <Icon name="plus" size={15} />
-            Press the first memory
+            {t("memory.vault.pressFirstMemory")}
           </ButtonLink>
         }
       />
@@ -498,9 +566,9 @@ function BrowseResults({
   if (loadMoreError) {
     loadControl = (
       <div className="memory-load__error" role="alert">
-        <span>The next page of memories did not load.</span>
+        <span>{t("memory.vault.loadMoreError")}</span>
         <Button variant="secondary" size="sm" onClick={onRetryLoadMore}>
-          Retry older records
+          {t("memory.vault.retryOlderRecords")}
         </Button>
       </div>
     );
@@ -508,7 +576,10 @@ function BrowseResults({
     loadControl = (
       <>
         <p className="memory-load__note">
-          {formatNumber(loadedCount)} of {formatNumber(total)} records loaded
+          {t("memory.vault.loadedOfTotal", {
+            loaded: formatNumber(loadedCount),
+            total: formatNumber(total),
+          })}
         </p>
         <Button
           variant="secondary"
@@ -516,14 +587,18 @@ function BrowseResults({
           disabled={loadMoreLoading}
           onClick={onLoadMore}
         >
-          {loadMoreLoading ? "Loading older records…" : "Load older memories"}
+          {loadMoreLoading
+            ? t("memory.vault.loadingOlder")
+            : t("memory.vault.loadOlder")}
         </Button>
       </>
     );
   } else {
     loadControl = (
       <p className="memory-end">
-        End of the vault · {formatNumber(loadedCount)} memories read
+        {t("memory.vault.endOfVault", {
+          count: formatNumber(loadedCount),
+        })}
       </p>
     );
   }
@@ -532,16 +607,18 @@ function BrowseResults({
     <>
       {filtered.length === 0 ? (
         <MemoryEmptyState
-          eyebrow="Filtered out"
-          title={`No ${filterNoun(filter)} crystals in the loaded records.`}
+          eyebrow={t("memory.vault.filteredEyebrow")}
+          title={t("memory.vault.filteredBrowseTitle", {
+            status: t(filterNounKey(filter)),
+          })}
           description={
             hasMore
-              ? "The status filter only scans records already loaded. Load older records below, or clear the filter."
-              : "Every loaded record has a different status. Clear the filter to see the full vault."
+              ? t("memory.vault.filteredBrowseMoreDescription")
+              : t("memory.vault.filteredBrowseEndDescription")
           }
           action={
             <Button variant="secondary" size="sm" onClick={onShowAll}>
-              Show all statuses
+              {t("memory.vault.showAllStatuses")}
             </Button>
           }
         />
@@ -601,6 +678,7 @@ function toActionTarget(memory: MemoryCardModel): MemoryActionTarget {
 
 /** The vault index at `/memory`: browse, search, filter, and load older pages. */
 export function MemoryVault() {
+  const { t, formatNumber } = useI18n();
   const searchInputId = useId();
   const [searchDraft, setSearchDraft] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -717,9 +795,11 @@ export function MemoryVault() {
     loadedCount,
     hasMore,
     loadingNow,
+    t,
+    formatNumber,
   );
 
-  const searchNote = buildSearchNote(isSearchMode, searchEnabled);
+  const searchNote = buildSearchNote(isSearchMode, searchEnabled, t);
 
   const handleLoadMore = () => {
     setRequestedPages((count) => count + 1);
@@ -740,27 +820,32 @@ export function MemoryVault() {
   return (
     <div className="content-container memory-page memory-vault">
       <PageHeader
-        eyebrow="Memory · vault"
-        title="Memory Vault"
-        description="Every pressed memory, newest occurrence first. Active crystals stay in search and the timeline; deprecated crystals remain readable with their lineage."
+        eyebrow={t("memory.vault.eyebrow")}
+        title={t("memory.vault.title")}
+        description={t("memory.vault.description")}
         meta={
           <span className="memory-masthead__counts">
             <span>
-              <strong>{activeCount !== undefined ? formatNumber(activeCount) : "—"}</strong> active
+              <strong>
+                {activeCount !== undefined ? formatNumber(activeCount) : "—"}
+              </strong>{" "}
+              {t("memory.vault.activeLabel")}
             </span>
             <span className="memory-masthead__sep" aria-hidden="true">
               ·
             </span>
             <span>
-              <strong>{supersededCount !== undefined ? formatNumber(supersededCount) : "—"}</strong>{" "}
-              deprecated
+              {supersededCount !== undefined
+                ? formatNumber(supersededCount)
+                : "—"}{" "}
+              {t("memory.vault.deprecatedLabel")}
             </span>
           </span>
         }
         actions={
           <ButtonLink to="/memory/new" variant="primary" size="md">
             <Icon name="plus" size={15} />
-            Press memory
+            {t("memory.vault.pressMemory")}
           </ButtonLink>
         }
       />
@@ -775,7 +860,7 @@ export function MemoryVault() {
             <Icon name="search" size={20} />
           </span>
           <label className="visually-hidden" htmlFor={searchInputId}>
-            Search memories
+            {t("memory.vault.searchLabel")}
           </label>
           <input
             id={searchInputId}
@@ -784,7 +869,7 @@ export function MemoryVault() {
             value={searchDraft}
             maxLength={SEARCH_INPUT_MAX}
             onChange={(event) => setSearchDraft(event.target.value)}
-            placeholder="Search memories by phrase or keyword…"
+            placeholder={t("memory.vault.searchPlaceholder")}
             autoComplete="off"
             spellCheck={false}
           />
@@ -793,7 +878,7 @@ export function MemoryVault() {
               type="button"
               className="memory-search__clear"
               onClick={handleClearSearch}
-              aria-label="Clear memory search"
+              aria-label={t("memory.vault.clearSearchAria")}
             >
               <Icon name="close" size={13} />
             </button>

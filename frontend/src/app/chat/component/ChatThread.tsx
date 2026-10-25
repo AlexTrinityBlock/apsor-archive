@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 
 import { Icon } from "../../component/Icon";
 import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
+import { useI18n } from "../../i18n";
 import {
   readToolCalls,
   readToolResultCallId,
@@ -44,6 +45,7 @@ function ForkEntryAction({
   readonly forking: boolean;
   readonly onFork: (entryId: number) => void;
 }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
@@ -52,14 +54,14 @@ function ForkEntryAction({
       disabled={disabled}
       title={
         disabled
-          ? "Forking is unavailable while the thread is archived or busy."
-          : "Fork a new thread from this entry"
+          ? t("chat.thread.forkDisabled")
+          : t("chat.thread.forkHere")
       }
-      aria-label={`Fork conversation from entry ${entryId}`}
+      aria-label={t("chat.thread.forkAria", { entryId })}
       aria-busy={forking || undefined}
     >
       <Icon name="branch" size={11} />
-      {forking ? "Forking…" : "Fork"}
+      {forking ? t("chat.thread.forking") : t("chat.thread.fork")}
     </button>
   );
 }

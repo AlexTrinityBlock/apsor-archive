@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 
+import { useApiErrorMessage, useI18n } from "../../i18n";
 import { Button } from "../../component/Button";
 import { Icon, type IconName } from "../../component/Icon";
-
-import { errorText } from "./helpers";
 
 interface MemorySkeletonProps {
   readonly label?: string;
@@ -11,10 +10,13 @@ interface MemorySkeletonProps {
 }
 
 /** Loading placeholders shaped like the vault cards they replace. */
-export function MemorySkeleton({ label = "Reading memories", count = 3 }: MemorySkeletonProps) {
+export function MemorySkeleton({ label, count = 3 }: MemorySkeletonProps) {
+  const { t } = useI18n();
+  const resolvedLabel = label ?? t("memory.states.readingMemories");
+
   return (
     <div className="memory-skeleton-list" role="status" aria-live="polite">
-      <span className="visually-hidden">{label}</span>
+      <span className="visually-hidden">{resolvedLabel}</span>
       {Array.from({ length: count }, (_, index) => (
         <div className="memory-skeleton" key={index} aria-hidden="true">
           <div className="memory-skeleton__row">
@@ -44,18 +46,23 @@ export function MemoryErrorState({
   error,
   onRetry,
 }: MemoryErrorStateProps) {
+  const { t } = useI18n();
+  const apiErrorMessage = useApiErrorMessage();
+
   return (
     <section className="memory-state memory-state--error" role="alert" aria-label={title}>
       <div className="memory-state__mark" aria-hidden="true">
         <Icon name="info" size={24} />
       </div>
-      <p className="eyebrow">Read interrupted</p>
+      <p className="eyebrow">{t("memory.states.readInterrupted")}</p>
       <h2>{title}</h2>
       <p>{description}</p>
-      <p className="memory-state__detail">{errorText(error)}</p>
+      <p className="memory-state__detail">
+        {apiErrorMessage(error, "memory.states.didNotAnswer")}
+      </p>
       <div className="memory-state__actions">
         <Button variant="ink" size="sm" onClick={onRetry}>
-          Retry
+          {t("memory.states.retry")}
         </Button>
       </div>
     </section>

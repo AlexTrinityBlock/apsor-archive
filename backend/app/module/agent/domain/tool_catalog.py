@@ -22,11 +22,12 @@ from app.module.agent.domain.tool_args import (
     WebSearchArgs,
 )
 
-# v8 將單一 custom system prompt 改為多條 owner-authored sections：每條以
-# ``system_prompt:<id>`` 插在 built-in identity 之前。composition 改變會影響
-# 新對話的 provider 前綴，因此必須 bump PROMPT_VERSION；舊對話仍保存自己的
-# pi.system 與舊版本字串，KV cache 不會被這次變更破壞。
-PROMPT_VERSION = "archive-agent-v11"
+# v12 unifies custom sections and the four seeded defaults into one ordered
+# collection: every row uses ``system_prompt:<id>`` and there is no read-time
+# built-in append. Composition changed, so the new-conversation prefix changes;
+# existing conversations keep their frozen ``pi.system`` and old version string,
+# so their KV cache lineage is untouched.
+PROMPT_VERSION = "archive-agent-v12"
 TOOLS_VERSION = "archive-tools-v4"
 
 

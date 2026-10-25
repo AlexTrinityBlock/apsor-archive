@@ -1,30 +1,54 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { formatDateTime, formatRelative } from "../../../lib/format";
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
 import type { SavedQuestionReadSchema } from "../../generated-apis-types/schemas";
+import { useI18n, type Translate, type TranslationKey } from "../../i18n";
 import type { BadgeTone } from "../../type/ui";
 import { QuestionCitations } from "./citations";
 
 interface StatusMeta {
-  readonly label: string;
+  readonly labelKey: TranslationKey;
   readonly tone: BadgeTone;
   readonly dot: boolean;
 }
 
 const STATUS: Record<string, StatusMeta> = {
-  completed: { label: "Answered", tone: "moss", dot: true },
-  running: { label: "Running", tone: "ochre", dot: true },
-  waiting: { label: "Running", tone: "ochre", dot: true },
-  failed: { label: "Failed", tone: "vermilion", dot: true },
-  cancelled: { label: "Cancelled", tone: "neutral", dot: false },
+  completed: {
+    labelKey: "memory.questions.statusAnswered",
+    tone: "moss",
+    dot: true,
+  },
+  running: {
+    labelKey: "memory.questions.statusRunning",
+    tone: "ochre",
+    dot: true,
+  },
+  waiting: {
+    labelKey: "memory.questions.statusRunning",
+    tone: "ochre",
+    dot: true,
+  },
+  failed: {
+    labelKey: "memory.questions.statusFailed",
+    tone: "vermilion",
+    dot: true,
+  },
+  cancelled: {
+    labelKey: "memory.questions.statusCancelled",
+    tone: "neutral",
+    dot: false,
+  },
 };
 
-const NOT_ASKED: StatusMeta = { label: "Not asked", tone: "neutral", dot: false };
+const NOT_ASKED: StatusMeta = {
+  labelKey: "memory.questions.statusNotAsked",
+  tone: "neutral",
+  dot: false,
+};
 
 function statusMeta(status: SavedQuestionReadSchema["run_status"]): StatusMeta {
   return status === null ? NOT_ASKED : (STATUS[status] ?? NOT_ASKED);
@@ -34,37 +58,55 @@ function isRunActive(status: SavedQuestionReadSchema["run_status"]): boolean {
   return status === "running" || status === "waiting";
 }
 
-function answerPlaceholder(item: SavedQuestionReadSchema): string {
+function answerPlaceholder(
+  item: SavedQuestionReadSchema,
+  t: Translate,
+): string {
   if (item.run_status === "failed") {
-    return "The run failed before an answer was recorded.";
+    return t("memory.questions.card.answerFailed");
   }
   if (item.run_status === "cancelled") {
-    return "The run was cancelled before an answer was recorded.";
+    return t("memory.questions.card.answerCancelled");
   }
   if (isRunActive(item.run_status)) {
-    return "The agent is still working on this question.";
+    return t("memory.questions.card.answerRunning");
   }
-  return "Not asked yet. Run this question in Chat to record an answer.";
+  return t("memory.questions.card.answerNotAsked");
 }
 
-function errorTitle(item: SavedQuestionReadSchema): string {
-  return item.run_status === "cancelled" ? "Run cancelled" : "Run failed";
-}
-
-function errorFallback(item: SavedQuestionReadSchema): string {
+function errorTitle(
+  item: SavedQuestionReadSchema,
+  t: Translate,
+): string {
   return item.run_status === "cancelled"
-    ? "The run was cancelled before the agent returned an answer."
-    : "The agent did not return a readable error detail.";
+    ? t("memory.questions.card.runCancelled")
+    : t("memory.questions.card.runFailed");
 }
 
-function runButtonLabel(asking: boolean, runActive: boolean, retry: boolean): string {
+function errorFallback(
+  item: SavedQuestionReadSchema,
+  t: Translate,
+): string {
+  return item.run_status === "cancelled"
+    ? t("memory.questions.card.runCancelledFallback")
+    : t("memory.questions.card.runFailedFallback");
+}
+
+function runButtonLabel(
+  t: Translate,
+  asking: boolean,
+  runActive: boolean,
+  retry: boolean,
+): string {
   if (asking) {
-    return "Asking…";
+    return t("memory.questions.card.asking");
   }
   if (runActive) {
-    return "Running…";
+    return t("memory.questions.card.running");
   }
-  return retry ? "Retry" : "Run in Chat";
+  return retry
+    ? t("memory.questions.card.retry")
+    : t("memory.questions.card.runInChat");
 }
 
 interface QuestionCardProps {
@@ -87,6 +129,7 @@ export function QuestionCard({
   onEdit,
   onDelete,
 }: QuestionCardProps) {
+  const { t, formatDateTime, formatRelative } = useI18n();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const status = statusMeta(item.run_status);
   const runActive = isRunActive(item.run_status);
@@ -108,10 +151,12 @@ export function QuestionCard({
     <article className={classes} aria-busy={busy}>
       <header className="question-card__head">
         <span className="question-card__folio">
-          FOLIO Q-{String(item.id).padStart(3, "0")}
+          {t("memory.questions.card.folio", {
+            number: String(item.id).padStart(3, "0"),
+          })}
         </span>
         <Badge tone={status.tone} dot={status.dot}>
-          {status.label}
+          {t(status.labelKey)}
         </Badge>
       </header>
 
@@ -121,11 +166,10 @@ export function QuestionCard({
         <div className="question-banner question-banner--running" role="status">
           <span className="question-banner__pulse" aria-hidden="true" />
           <div>
-            <p className="question-banner__title">Run in progress</p>
-            <p>
-              The agent is still working on this question. The shelf refreshes
-              while a run is active.
+            <p className="question-banner__title">
+              {t("memory.questions.card.runInProgress")}
             </p>
+            <p>{t("memory.questions.card.runInProgressDescription")}</p>
           </div>
         </div>
       ) : null}
@@ -140,30 +184,30 @@ export function QuestionCard({
           <Icon name="info" size={16} />
           <div>
             <p className="question-banner__title">
-              {errorTitle(item)}
+              {errorTitle(item, t)}
               {item.error_code ? (
                 <code className="question-banner__code">{item.error_code}</code>
               ) : null}
             </p>
-            <p>{item.error_detail ?? errorFallback(item)}</p>
+            <p>{item.error_detail ?? errorFallback(item, t)}</p>
           </div>
         </div>
       ) : null}
 
       <div className="question-card__answer">
-        <p className="mono-label">Answer</p>
+        <p className="mono-label">{t("memory.questions.card.answer")}</p>
         {item.answer !== null && item.answer.trim().length > 0 ? (
           <p className="question-card__answer-text">{item.answer}</p>
         ) : (
-          <p className="question-card__quiet">{answerPlaceholder(item)}</p>
+          <p className="question-card__quiet">{answerPlaceholder(item, t)}</p>
         )}
         <QuestionCitations citations={item.citations} />
       </div>
 
       {asking ? (
         <p className="question-banner question-banner--asking">
-          <Loader size={14} label="Asking the archive" />
-          Asking the archive. This can take several seconds.
+          <Loader size={14} label={t("memory.questions.card.askingLoader")} />
+          {t("memory.questions.card.askingMessage")}
         </p>
       ) : null}
 
@@ -180,7 +224,7 @@ export function QuestionCard({
             <Icon name="clock" size={12} />
             {item.last_asked_at ? (
               <>
-                Asked{" "}
+                {t("memory.questions.card.askedLabel")}{" "}
                 <time
                   dateTime={item.last_asked_at}
                   title={formatDateTime(item.last_asked_at)}
@@ -190,7 +234,7 @@ export function QuestionCard({
               </>
             ) : (
               <>
-                Saved{" "}
+                {t("memory.questions.card.savedLabel")}{" "}
                 <time
                   dateTime={item.created_at}
                   title={formatDateTime(item.created_at)}
@@ -201,7 +245,7 @@ export function QuestionCard({
             )}
           </span>
           <span className="question-card__meta-item">
-            Updated{" "}
+            {t("memory.questions.card.updatedLabel")}{" "}
             <time
               dateTime={item.updated_at}
               title={formatDateTime(item.updated_at)}
@@ -215,7 +259,9 @@ export function QuestionCard({
               to={`/chat/${item.conversation_id}`}
             >
               <Icon name="chat" size={12} />
-              Conversation #{item.conversation_id}
+              {t("memory.questions.card.conversation", {
+                id: item.conversation_id,
+              })}
             </Link>
           ) : null}
         </div>
@@ -229,23 +275,27 @@ export function QuestionCard({
             disabled={busy}
           >
             <Icon name="pencil" size={13} />
-            Edit
+            {t("memory.questions.card.edit")}
           </Button>
 
           {confirmingDelete ? (
             <div
               className="question-delete-confirm"
               role="group"
-              aria-label="Confirm deleting this question"
+              aria-label={t("memory.questions.card.deleteConfirmAria")}
             >
-              <span className="question-delete-confirm__label">Delete?</span>
+              <span className="question-delete-confirm__label">
+                {t("memory.questions.card.deleteConfirm")}
+              </span>
               <button
                 type="button"
                 className="btn btn--danger btn--sm"
                 onClick={() => onDelete(item)}
                 disabled={deleting}
               >
-                {deleting ? "Deleting…" : "Delete"}
+                {deleting
+                  ? t("memory.questions.card.deleting")
+                  : t("memory.questions.card.delete")}
               </button>
               <Button
                 type="button"
@@ -254,7 +304,7 @@ export function QuestionCard({
                 onClick={() => setConfirmingDelete(false)}
                 disabled={deleting}
               >
-                Cancel
+                {t("memory.questions.card.cancel")}
               </Button>
             </div>
           ) : (
@@ -266,7 +316,7 @@ export function QuestionCard({
               disabled={busy}
             >
               <Icon name="trash" size={13} />
-              Delete
+              {t("memory.questions.card.delete")}
             </Button>
           )}
 
@@ -278,7 +328,7 @@ export function QuestionCard({
             disabled={busy || runActive}
           >
             <Icon name={retry ? "history" : "spark"} size={13} />
-            {runButtonLabel(asking, runActive, retry)}
+            {runButtonLabel(t, asking, runActive, retry)}
           </Button>
         </div>
       </footer>

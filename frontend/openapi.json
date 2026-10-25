@@ -2568,37 +2568,6 @@
         "title": "ListResponseSchema[SummarySchema]",
         "type": "object"
       },
-      "ListResponseSchema_SystemPromptBuiltinSectionSchema_": {
-        "properties": {
-          "items_per_page": {
-            "title": "Items Per Page",
-            "type": "integer"
-          },
-          "resources": {
-            "items": {
-              "$ref": "#/components/schemas/SystemPromptBuiltinSectionSchema"
-            },
-            "title": "Resources",
-            "type": "array"
-          },
-          "start_index": {
-            "title": "Start Index",
-            "type": "integer"
-          },
-          "total_results": {
-            "title": "Total Results",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "total_results",
-          "start_index",
-          "items_per_page",
-          "resources"
-        ],
-        "title": "ListResponseSchema[SystemPromptBuiltinSectionSchema]",
-        "type": "object"
-      },
       "ListResponseSchema_SystemPromptSectionReadSchema_": {
         "properties": {
           "items_per_page": {
@@ -4105,65 +4074,6 @@
         "title": "SummarySearchResultSchema",
         "type": "object"
       },
-      "SystemPromptBuiltinSectionSchema": {
-        "description": "One built-in prompt section, with its effective body and edit state.",
-        "properties": {
-          "body": {
-            "title": "Body",
-            "type": "string"
-          },
-          "customized": {
-            "title": "Customized",
-            "type": "boolean"
-          },
-          "key": {
-            "title": "Key",
-            "type": "string"
-          },
-          "title": {
-            "title": "Title",
-            "type": "string"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "required": [
-          "key",
-          "title",
-          "body",
-          "customized",
-          "updated_at"
-        ],
-        "title": "SystemPromptBuiltinSectionSchema",
-        "type": "object"
-      },
-      "SystemPromptBuiltinUpdateSchema": {
-        "additionalProperties": false,
-        "description": "Replace one built-in section body; titles and order stay canonical.",
-        "properties": {
-          "body": {
-            "maxLength": 32000,
-            "minLength": 1,
-            "title": "Body",
-            "type": "string"
-          }
-        },
-        "required": [
-          "body"
-        ],
-        "title": "SystemPromptBuiltinUpdateSchema",
-        "type": "object"
-      },
       "SystemPromptReorderSchema": {
         "additionalProperties": false,
         "description": "The complete new order; every existing section id must appear once.",
@@ -4221,7 +4131,7 @@
         "type": "object"
       },
       "SystemPromptSectionReadSchema": {
-        "description": "One persisted custom section returned to the browser.",
+        "description": "One persisted section returned to the browser.",
         "properties": {
           "body": {
             "title": "Body",
@@ -5906,7 +5816,7 @@
     },
     "/api/v1/agent/settings/system-prompt": {
       "get": {
-        "description": "List every custom section in display order.",
+        "description": "List every section in display order.",
         "operationId": "listSystemPromptSections",
         "responses": {
           "200": {
@@ -5966,103 +5876,6 @@
         ]
       }
     },
-    "/api/v1/agent/settings/system-prompt/builtin": {
-      "get": {
-        "description": "List the four built-in prompt sections with any owner overrides.",
-        "operationId": "listBuiltinSystemPromptSections",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptBuiltinSectionSchema_"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Builtin System Prompt Sections",
-        "tags": [
-          "agent"
-        ]
-      }
-    },
-    "/api/v1/agent/settings/system-prompt/builtin/reset": {
-      "post": {
-        "description": "Remove every built-in override.",
-        "operationId": "resetBuiltinSystemPromptSections",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptBuiltinSectionSchema_"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Reset Builtin System Prompt Sections",
-        "tags": [
-          "agent"
-        ]
-      }
-    },
-    "/api/v1/agent/settings/system-prompt/builtin/{key}": {
-      "put": {
-        "description": "Replace one built-in body; its title and position stay canonical.",
-        "operationId": "updateBuiltinSystemPromptSection",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "key",
-            "required": true,
-            "schema": {
-              "title": "Key",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SystemPromptBuiltinUpdateSchema"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptBuiltinSectionSchema_"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Update Builtin System Prompt Section",
-        "tags": [
-          "agent"
-        ]
-      }
-    },
     "/api/v1/agent/settings/system-prompt/order": {
       "put": {
         "description": "Replace the complete section order.",
@@ -6107,7 +5920,7 @@
     },
     "/api/v1/agent/settings/system-prompt/reset": {
       "post": {
-        "description": "Delete every custom section; the built-in prompt remains.",
+        "description": "Replace every section with the four seeded defaults.",
         "operationId": "resetSystemPromptSections",
         "responses": {
           "200": {

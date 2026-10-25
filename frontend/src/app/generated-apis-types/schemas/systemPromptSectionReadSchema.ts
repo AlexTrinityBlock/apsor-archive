@@ -6,7 +6,7 @@
  */
 
 /**
- * One persisted custom section returned to the browser.
+ * One persisted section returned to the browser.
  */
 export interface SystemPromptSectionReadSchema {
   body: string;

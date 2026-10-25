@@ -10,13 +10,14 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useGetHealth } from "../generated-apis-types";
 import { useAuth } from "../auth/AuthProvider";
 import { useScrollLock } from "../hook/useScrollLock";
+import { localizeStatus, useI18n, type TranslationKey } from "../i18n";
 import { Icon, type IconName } from "./Icon";
 import { RouteFallback } from "./RouteFallback";
 import { TreeMark } from "./TreeMark";
 
 interface NavItem {
   readonly to: string;
-  readonly label: string;
+  readonly labelKey: TranslationKey;
   readonly index: string;
   readonly icon: IconName;
   readonly end?: boolean;
@@ -27,13 +28,19 @@ interface NavItem {
  * Order is part of the interface: Chat is the entry point, Settings the exit.
  */
 const NAV_ITEMS: readonly NavItem[] = [
-  { to: "/chat", label: "Chat", index: "01", icon: "chat" },
-  { to: "/library", label: "File library", index: "02", icon: "library" },
-  { to: "/timeline", label: "Timeline", index: "03", icon: "timeline" },
-  { to: "/memory", label: "Memory", index: "04", icon: "memory" },
-  { to: "/search", label: "Search", index: "05", icon: "search" },
-  { to: "/dashboard", label: "Dashboard", index: "06", icon: "database", end: true },
-  { to: "/settings", label: "Settings", index: "07", icon: "settings" },
+  { to: "/chat", labelKey: "core.nav.chat", index: "01", icon: "chat" },
+  { to: "/library", labelKey: "core.nav.library", index: "02", icon: "library" },
+  { to: "/timeline", labelKey: "core.nav.timeline", index: "03", icon: "timeline" },
+  { to: "/memory", labelKey: "core.nav.memory", index: "04", icon: "memory" },
+  { to: "/search", labelKey: "core.nav.search", index: "05", icon: "search" },
+  {
+    to: "/dashboard",
+    labelKey: "core.nav.dashboard",
+    index: "06",
+    icon: "database",
+    end: true,
+  },
+  { to: "/settings", labelKey: "core.nav.settings", index: "07", icon: "settings" },
 ];
 
 type StatusTone = "ok" | "degraded" | "error" | "loading";
@@ -67,6 +74,7 @@ function readRailPreference(): boolean {
  * agent dock were deliberately removed by the template audit matrix.
  */
 export function AppShell() {
+  const { t } = useI18n();
   const [railCollapsed, setRailCollapsed] = useState(readRailPreference);
   const location = useLocation();
   const [drawer, setDrawer] = useState({
@@ -82,7 +90,7 @@ export function AppShell() {
     },
   });
   const { user, logout, isSubmitting } = useAuth();
-  const displayName = user?.display_name || user?.username || "Owner";
+  const displayName = user?.display_name || user?.username || t("core.nav.owner");
 
   useScrollLock(drawerOpen);
 
@@ -126,10 +134,10 @@ export function AppShell() {
 
   const health = healthQuery.data;
   let statusTone: StatusTone = "loading";
-  let statusDetail = "Checking local services";
+  let statusDetail = t("core.nav.checkingServices");
   if (healthQuery.isError) {
     statusTone = "error";
-    statusDetail = "API offline";
+    statusDetail = t("core.nav.apiOffline");
   } else if (health) {
     if (health.status !== "ok" || health.database !== "ok") {
       statusTone = "error";
@@ -138,8 +146,15 @@ export function AppShell() {
     } else {
       statusTone = "ok";
     }
-    const aiState = health.ai === "configured" ? "configured" : "missing";
-    statusDetail = `DB ${health.database} · cache ${health.cache} · AI ${aiState}`;
+    const aiState =
+      health.ai === "configured"
+        ? localizeStatus(t, "configured")
+        : localizeStatus(t, "missing");
+    statusDetail = t("core.status.detail", {
+      database: localizeStatus(t, health.database),
+      cache: localizeStatus(t, health.cache),
+      ai: aiState,
+    });
   }
   const statusDotClassName =
     statusTone === "loading"
@@ -150,7 +165,7 @@ export function AppShell() {
   return (
     <div className={railCollapsed ? "app-shell rail-collapsed" : "app-shell"}>
       <a className="skip-link" href="#main-content">
-        Skip to the archive
+        {t("core.nav.skipToArchive")}
       </a>
 
       <header className="mobile-bar">
@@ -160,13 +175,13 @@ export function AppShell() {
           onClick={openDrawer}
           aria-expanded={drawerOpen}
           aria-controls="archive-navigation"
-          aria-label="Open navigation"
+          aria-label={t("core.nav.openNavigation")}
         >
           <Icon name="menu" size={20} />
         </button>
         <NavLink to="/" className="mobile-bar__brand" end>
           <TreeMark size={26} />
-          <span>Apsor Archive</span>
+          <span>{t("core.app.name")}</span>
         </NavLink>
         <span
           className={statusDotClassName}
@@ -181,31 +196,44 @@ export function AppShell() {
           type="button"
           className="rail-scrim"
           onClick={closeDrawer}
-          aria-label="Close navigation"
+          aria-label={t("core.nav.closeNavigation")}
         />
       ) : null}
 
       <aside
         id="archive-navigation"
         className={drawerOpen ? "nav-rail is-open" : "nav-rail"}
-        aria-label="Archive navigation"
+        aria-label={t("core.nav.ariaArchive")}
       >
         <div className="rail-header">
-          <NavLink to="/" className="brand-cluster" onClick={closeDrawer} title="Apsor Archive">
+          <NavLink
+            to="/"
+            className="brand-cluster"
+            onClick={closeDrawer}
+            title={t("core.app.name")}
+          >
             <span className="brand-seal" aria-hidden="true">
               <TreeMark size={24} />
             </span>
             <span className="brand-meta">
-              <span className="brand-title">Apsor Archive</span>
-              <span className="brand-sub">Archive Studio</span>
+              <span className="brand-title">{t("core.app.name")}</span>
+              <span className="brand-sub">{t("core.app.studio")}</span>
             </span>
           </NavLink>
           <button
             type="button"
             className="rail-toggle-btn"
             onClick={toggleRail}
-            aria-label={railCollapsed ? "Expand navigation rail" : "Collapse navigation rail"}
-            title={railCollapsed ? "Expand navigation rail" : "Collapse navigation rail"}
+            aria-label={
+              railCollapsed
+                ? t("core.nav.expandRail")
+                : t("core.nav.collapseRail")
+            }
+            title={
+              railCollapsed
+                ? t("core.nav.expandRail")
+                : t("core.nav.collapseRail")
+            }
           >
             <Icon name={railCollapsed ? "chevron-right" : "chevron-down"} size={12} />
           </button>
@@ -213,21 +241,22 @@ export function AppShell() {
             type="button"
             className="rail-close-btn"
             onClick={closeDrawer}
-            aria-label="Close navigation"
+            aria-label={t("core.nav.closeNavigation")}
           >
             <Icon name="close" size={18} />
           </button>
         </div>
 
-        <nav className="rail-menu" aria-label="Primary">
+        <nav className="rail-menu" aria-label={t("core.nav.ariaPrimary")}>
           {NAV_ITEMS.map((item) => {
+            const label = t(item.labelKey);
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.end}
                 onClick={closeDrawer}
-                data-tooltip={`${item.label} (${item.index})`}
+                data-tooltip={`${label} (${item.index})`}
                 className={({ isActive }) =>
                   isActive ? "rail-item active" : "rail-item"
                 }
@@ -235,7 +264,7 @@ export function AppShell() {
                 <span className="rail-item-icon" aria-hidden="true">
                   <Icon name={item.icon} size={18} />
                 </span>
-                <span className="rail-item-text">{item.label}</span>
+                <span className="rail-item-text">{label}</span>
                 <span className="rail-item-badge" aria-hidden="true">
                   {item.index}
                 </span>
@@ -251,13 +280,13 @@ export function AppShell() {
                 className="rail-account__identity"
                 to="/profile"
                 onClick={closeDrawer}
-                title="Open User Profile"
+                title={t("core.nav.openProfile")}
               >
                 <span className="rail-account__mark" aria-hidden="true">
                   {displayName.slice(0, 2).toUpperCase()}
                 </span>
                 <span className="rail-account__copy">
-                  <span>User profile</span>
+                  <span>{t("core.nav.userProfile")}</span>
                   <strong>{displayName}</strong>
                 </span>
               </Link>
@@ -266,22 +295,24 @@ export function AppShell() {
                 className="rail-account__action"
                 onClick={() => void logout()}
                 disabled={isSubmitting}
-                aria-label="Sign out"
-                title="Sign out"
+                aria-label={t("core.nav.signOut")}
+                title={t("core.nav.signOut")}
               >
                 <Icon name="logout" size={15} />
               </button>
             </div>
           ) : null}
 
-          <div className="rail-status" aria-label="System status">
+          <div className="rail-status" aria-label={t("core.nav.systemStatus")}>
             <span
               className={statusDotClassName}
               style={statusDotStyle}
               aria-hidden="true"
             />
             <span className="rail-status__copy">
-              <span className="rail-status__label">Local archive</span>
+              <span className="rail-status__label">
+                {t("core.nav.localArchive")}
+              </span>
               <span className="rail-status__detail">{statusDetail}</span>
             </span>
           </div>
@@ -290,16 +321,24 @@ export function AppShell() {
             type="button"
             className="rail-footer-btn"
             onClick={toggleRail}
-            title="Expand or collapse sidebar"
+            title={t("core.nav.expandOrCollapseSidebar")}
           >
             <Icon name="chevron-right" size={14} />
-            <span>{railCollapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
+            <span>
+              {railCollapsed
+                ? t("core.nav.expandSidebar")
+                : t("core.nav.collapseSidebar")}
+            </span>
           </button>
 
           <div className="rail-colophon">
-            <span>v{health?.version ?? "—"}</span>
+            <span>
+              {t("core.nav.version", {
+                version: health?.version ?? t("core.common.notAvailable"),
+              })}
+            </span>
             <span aria-hidden="true">·</span>
-            <span>Local-first</span>
+            <span>{t("core.nav.localFirst")}</span>
           </div>
         </div>
       </aside>

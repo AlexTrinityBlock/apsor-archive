@@ -12,12 +12,13 @@ import {
   useGetStats,
   useSeedDemo,
 } from "../../generated-apis-types";
-import { formatNumber } from "../../../lib/format";
+import { useI18n } from "../../i18n";
 import { apiErrorMessage } from "./settings-utils";
 import { SettingsDialog } from "./SettingsDialog";
 
 /** Seed controls, access notes, version, and colophon. */
 export function MaintenancePanel() {
+  const { t, formatNumber } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { user } = useAuth();
@@ -31,10 +32,17 @@ export function MaintenancePanel() {
       onSuccess: async (result) => {
         setSeedError(null);
         setDialogOpen(false);
-        const summaryWord =
-          result.summaries_created === 1 ? "summary" : "summaries";
         toast.success(
-          `Seeded ${formatNumber(result.files_created)} files, ${formatNumber(result.memories_created)} memories, and ${formatNumber(result.summaries_created)} ${summaryWord}.`,
+          t(
+            result.summaries_created === 1
+              ? "settings.maintenance.seededOne"
+              : "settings.maintenance.seededOther",
+            {
+              files: formatNumber(result.files_created),
+              memories: formatNumber(result.memories_created),
+              summaries: formatNumber(result.summaries_created),
+            },
+          ),
         );
         // Seeding touches every surface; this is the one allowed blanket refresh.
         await queryClient.invalidateQueries();
@@ -52,22 +60,23 @@ export function MaintenancePanel() {
     stats !== undefined && stats.file_count + stats.memory_count > 0;
   const countsUnknown = stats === undefined;
   const version = healthQuery.data?.version;
-  let versionLabel = "Reading version";
+  let versionLabel = t("settings.maintenance.readingVersion");
   if (healthQuery.isError) {
-    versionLabel = "Version unavailable";
+    versionLabel = t("settings.maintenance.versionUnavailable");
   } else if (version) {
-    versionLabel = `v${version}`;
+    versionLabel = t("settings.maintenance.version", { version });
   }
 
-  let seedDetail =
-    "Adds four sample documents, a small set of baseline memories, and one summary. Existing data is never overwritten.";
+  let seedDetail = t("settings.maintenance.seedDetailDefault");
   if (archiveHasData && stats) {
-    seedDetail = `The archive already holds ${formatNumber(stats.file_count)} files and ${formatNumber(stats.memory_count)} memories. The seed endpoint only accepts an empty archive.`;
+    seedDetail = t("settings.maintenance.seedDetailExisting", {
+      files: formatNumber(stats.file_count),
+      memories: formatNumber(stats.memory_count),
+    });
   } else if (statsQuery.isPending) {
-    seedDetail = "Checking the archive before seeding.";
+    seedDetail = t("settings.maintenance.seedDetailPending");
   } else if (statsQuery.isError) {
-    seedDetail =
-      "The archive counts could not be read. The API will refuse to seed a non-empty archive.";
+    seedDetail = t("settings.maintenance.seedDetailError");
   }
 
   const requestSeed = () => {
@@ -81,8 +90,11 @@ export function MaintenancePanel() {
 
   const dialogDescription =
     stats !== undefined && archiveHasData
-      ? `This archive already holds ${formatNumber(stats.file_count)} files and ${formatNumber(stats.memory_count)} memories.`
-      : "The current archive counts could not be read.";
+      ? t("settings.maintenance.dialogDescriptionExisting", {
+          files: formatNumber(stats.file_count),
+          memories: formatNumber(stats.memory_count),
+        })
+      : t("settings.maintenance.dialogDescriptionUnknown");
 
   return (
     <>
@@ -90,7 +102,7 @@ export function MaintenancePanel() {
           title={
           <span className="settings-panel__title">
             <Icon name="archive" size={16} />
-            Maintenance & colophon
+            {t("settings.maintenance.title")}
           </span>
         }
         action={
@@ -100,8 +112,10 @@ export function MaintenancePanel() {
       >
         <div className="maintenance-grid">
           <section className="maintenance-block">
-            <p className="mono-label">Demo archive</p>
-            <h3 className="maintenance-block__title">Seed the sample corpus</h3>
+            <p className="mono-label">{t("settings.maintenance.demoArchive")}</p>
+            <h3 className="maintenance-block__title">
+              {t("settings.maintenance.seedTitle")}
+            </h3>
             <p className="maintenance-block__copy">{seedDetail}</p>
             <div className="maintenance-actions">
               <Button
@@ -112,7 +126,9 @@ export function MaintenancePanel() {
                 disabled={seedDemo.isPending || statsQuery.isPending}
               >
                 <Icon name="leaf" size={14} />
-                {seedDemo.isPending ? "Seeding…" : "Seed demo archive"}
+                {seedDemo.isPending
+                  ? t("settings.maintenance.seeding")
+                  : t("settings.maintenance.seedAction")}
               </Button>
               <code className="code-inline">POST /api/v1/demo/seed</code>
             </div>
@@ -125,14 +141,16 @@ export function MaintenancePanel() {
           </section>
 
           <section className="maintenance-block">
-            <p className="mono-label">Access</p>
-            <h3 className="maintenance-block__title">Single owner account</h3>
+            <p className="mono-label">{t("settings.maintenance.access")}</p>
+            <h3 className="maintenance-block__title">
+              {t("settings.maintenance.accessTitle")}
+            </h3>
             <p className="maintenance-block__copy">
-              This archive is protected by one keeper account and a server-side
-              session cookie. You are signed in as{" "}
-              <strong>{user?.username ?? "the keeper"}</strong>. There is no
-              cloud account, password recovery, or per-user permission model.
-              Sign out from the rail when you leave a shared machine.
+              {t("settings.maintenance.accessCopyBefore")}
+              <strong>
+                {user?.username ?? t("settings.maintenance.keeperFallback")}
+              </strong>
+              {t("settings.maintenance.accessCopyAfter")}
             </p>
           </section>
         </div>
@@ -143,7 +161,7 @@ export function MaintenancePanel() {
           </span>
           <span>React 19 + Vite · PostgreSQL · local-first</span>
           <ButtonLink to="/method" variant="ghost" size="sm">
-            Read the method
+            {t("settings.maintenance.readMethod")}
             <Icon name="arrow-right" size={14} />
           </ButtonLink>
         </div>
@@ -151,8 +169,8 @@ export function MaintenancePanel() {
 
       {dialogOpen ? (
         <SettingsDialog
-          eyebrow="Maintenance · demo seed"
-          title="Seed the demo archive?"
+          eyebrow={t("settings.maintenance.dialogEyebrow")}
+          title={t("settings.maintenance.dialogTitle")}
           description={dialogDescription}
           onClose={() => {
             if (!seedDemo.isPending) {
@@ -169,7 +187,7 @@ export function MaintenancePanel() {
                 disabled={seedDemo.isPending}
                 data-autofocus
               >
-                Cancel
+                {t("settings.common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -179,15 +197,15 @@ export function MaintenancePanel() {
                 disabled={seedDemo.isPending}
               >
                 <Icon name="leaf" size={14} />
-                {seedDemo.isPending ? "Seeding…" : "Request seed"}
+                {seedDemo.isPending
+                  ? t("settings.maintenance.seeding")
+                  : t("settings.maintenance.requestSeed")}
               </Button>
             </>
           }
         >
           <p className="settings-dialog__copy">
-            The seed endpoint only fills an empty archive. It will refuse this
-            request if any files or memories already exist; nothing is deleted
-            or overwritten either way.
+            {t("settings.maintenance.dialogCopy")}
           </p>
           {seedError ? (
             <p className="vault-feedback vault-feedback--error" role="alert">

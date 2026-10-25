@@ -18,9 +18,11 @@ import {
 import { AgentRuntimePanel } from "./AgentRuntimePanel";
 import { IngestRuntimePanel } from "./IngestRuntimePanel";
 import { apiErrorMessage } from "./settings-utils";
+import { useI18n } from "../../i18n";
 
 /** Loads, saves, and resets the database-backed agent runtime limits. */
 export function AgentRuntimeSettingsPanel() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export function AgentRuntimeSettingsPanel() {
       onSuccess: async (settings) => {
         queryClient.setQueryData(getGetAgentSettingsQueryKey(), settings);
         setMutationError(null);
-        toast.success("Agent runtime settings saved to the database.");
+        toast.success(t("settings.agentMessages.savedToast"));
         await refreshSettings();
       },
       onError: (error) => {
@@ -55,7 +57,7 @@ export function AgentRuntimeSettingsPanel() {
         queryClient.setQueryData(getGetAgentSettingsQueryKey(), settings);
         setMutationError(null);
         setPanelRevision((current) => current + 1);
-        toast.success("Agent runtime settings reset to defaults.");
+        toast.success(t("settings.agentMessages.resetToast"));
         await refreshSettings();
       },
       onError: (error) => {
@@ -72,7 +74,7 @@ export function AgentRuntimeSettingsPanel() {
         title={
           <span className="settings-panel__title">
             <Icon name="spark" size={16} />
-            Agent runtime
+            {t("settings.agent.title")}
           </span>
         }
         className="settings-panel runtime-panel"
@@ -81,7 +83,7 @@ export function AgentRuntimeSettingsPanel() {
           className="runtime-loading"
           role="status"
           aria-busy="true"
-          aria-label="Reading agent runtime settings"
+          aria-label={t("settings.agent.loadReadingAria")}
         >
           <span className="settings-skeleton settings-skeleton--line" />
           <span className="settings-skeleton settings-skeleton--line is-short" />
@@ -98,7 +100,7 @@ export function AgentRuntimeSettingsPanel() {
         title={
           <span className="settings-panel__title">
             <Icon name="spark" size={16} />
-            Agent runtime
+            {t("settings.agent.title")}
           </span>
         }
         className="settings-panel runtime-panel"
@@ -106,7 +108,7 @@ export function AgentRuntimeSettingsPanel() {
         <div className="settings-inline-error" role="alert">
           <Icon name="info" size={16} />
           <div>
-            <strong>Agent runtime settings did not answer.</strong>
+            <strong>{t("settings.agent.loadErrorTitle")}</strong>
             <p>{apiErrorMessage(settingsQuery.error)}</p>
             <Button
               type="button"
@@ -116,7 +118,9 @@ export function AgentRuntimeSettingsPanel() {
               disabled={settingsQuery.isFetching}
             >
               <Icon name="ring" size={14} />
-              {settingsQuery.isFetching ? "Retrying…" : "Retry"}
+              {settingsQuery.isFetching
+                ? t("core.common.retrying")
+                : t("core.common.retry")}
             </Button>
           </div>
         </div>
@@ -149,6 +153,7 @@ export function AgentRuntimeSettingsPanel() {
 
 /** Loads, saves, and resets the database-backed ingestion worker settings. */
 export function IngestRuntimeSettingsPanel() {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -168,7 +173,7 @@ export function IngestRuntimeSettingsPanel() {
       onSuccess: async (settings) => {
         queryClient.setQueryData(getGetIngestSettingsQueryKey(), settings);
         setMutationError(null);
-        toast.success("Ingestion runtime settings saved to the database.");
+        toast.success(t("settings.ingest.savedToast"));
         await refreshSettings();
       },
       onError: (error) => {
@@ -183,7 +188,7 @@ export function IngestRuntimeSettingsPanel() {
         queryClient.setQueryData(getGetIngestSettingsQueryKey(), settings);
         setMutationError(null);
         setPanelRevision((current) => current + 1);
-        toast.success("Ingestion runtime settings reset to defaults.");
+        toast.success(t("settings.ingest.resetToast"));
         await refreshSettings();
       },
       onError: (error) => {
@@ -200,7 +205,7 @@ export function IngestRuntimeSettingsPanel() {
         title={
           <span className="settings-panel__title">
             <Icon name="layers" size={16} />
-            Ingestion runtime
+            {t("settings.ingest.title")}
           </span>
         }
         className="settings-panel runtime-panel"
@@ -209,7 +214,7 @@ export function IngestRuntimeSettingsPanel() {
           className="runtime-loading"
           role="status"
           aria-busy="true"
-          aria-label="Reading ingestion runtime settings"
+          aria-label={t("settings.ingest.loadReadingAria")}
         >
           <span className="settings-skeleton settings-skeleton--line" />
           <span className="settings-skeleton settings-skeleton--line is-short" />
@@ -226,7 +231,7 @@ export function IngestRuntimeSettingsPanel() {
         title={
           <span className="settings-panel__title">
             <Icon name="layers" size={16} />
-            Ingestion runtime
+            {t("settings.ingest.title")}
           </span>
         }
         className="settings-panel runtime-panel"
@@ -234,7 +239,7 @@ export function IngestRuntimeSettingsPanel() {
         <div className="settings-inline-error" role="alert">
           <Icon name="info" size={16} />
           <div>
-            <strong>Ingestion runtime settings did not answer.</strong>
+            <strong>{t("settings.ingest.loadErrorTitle")}</strong>
             <p>{apiErrorMessage(settingsQuery.error)}</p>
             <Button
               type="button"
@@ -244,7 +249,9 @@ export function IngestRuntimeSettingsPanel() {
               disabled={settingsQuery.isFetching}
             >
               <Icon name="ring" size={14} />
-              {settingsQuery.isFetching ? "Retrying…" : "Retry"}
+              {settingsQuery.isFetching
+                ? t("core.common.retrying")
+                : t("core.common.retry")}
             </Button>
           </div>
         </div>

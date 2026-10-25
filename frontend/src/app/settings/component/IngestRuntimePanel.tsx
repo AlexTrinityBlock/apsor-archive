@@ -5,7 +5,7 @@ import {
   type FormEvent,
 } from "react";
 
-import { formatNumber } from "../../../lib/format";
+import { useI18n, type Translate, type TranslationKey } from "../../i18n";
 import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import { Panel } from "../../component/Panel";
@@ -44,75 +44,91 @@ export interface IngestRuntimePanelProps {
 type NumericField = keyof IngestRuntimeValues;
 type DraftValues = { readonly [Key in NumericField]: string };
 
-interface NumericFieldSpec extends RuntimeNumberSpec {
+interface NumericFieldSpec
+  extends Omit<RuntimeNumberSpec, "label" | "unit" | "hint"> {
   readonly key: NumericField;
+  readonly labelKey: TranslationKey;
+  readonly unitKey: TranslationKey;
+  readonly hintKey: TranslationKey;
 }
 
 const WORKER_FIELDS: readonly NumericFieldSpec[] = [
   {
     key: "poll_seconds",
-    label: "Poll seconds",
-    unit: "seconds",
+    labelKey: "settings.ingest.fieldPollSecondsLabel",
+    unitKey: "settings.ingest.fieldPollSecondsUnit",
     min: 0.25,
     max: 30,
     step: 0.25,
     integer: false,
-    hint: "Idle wait between database claims.",
+    hintKey: "settings.ingest.fieldPollSecondsHint",
   },
   {
     key: "extract_workers",
-    label: "Extract threads",
-    unit: "threads",
+    labelKey: "settings.ingest.fieldExtractThreadsLabel",
+    unitKey: "settings.ingest.fieldExtractThreadsUnit",
     min: 1,
     max: 8,
     step: 1,
     integer: true,
-    hint: "Bounded CPU threads for parsing and chunking.",
+    hintKey: "settings.ingest.fieldExtractThreadsHint",
   },
   {
     key: "max_inflight_jobs",
-    label: "Max in-flight jobs",
-    unit: "jobs",
+    labelKey: "settings.ingest.fieldMaxInflightLabel",
+    unitKey: "settings.ingest.fieldMaxInflightUnit",
     min: 1,
     max: 4,
     step: 1,
     integer: true,
-    hint: "Jobs one worker process may hold at a time.",
+    hintKey: "settings.ingest.fieldMaxInflightHint",
   },
   {
     key: "embedding_concurrency",
-    label: "Embedding concurrency",
-    unit: "requests",
+    labelKey: "settings.ingest.fieldEmbeddingConcurrencyLabel",
+    unitKey: "settings.ingest.fieldEmbeddingConcurrencyUnit",
     min: 1,
     max: 32,
     step: 1,
     integer: true,
-    hint: "Global async embedding limit shared across jobs.",
+    hintKey: "settings.ingest.fieldEmbeddingConcurrencyHint",
   },
 ];
 
 const CHUNK_FIELDS: readonly NumericFieldSpec[] = [
   {
     key: "chunk_target_chars",
-    label: "Target chars",
-    unit: "chars",
+    labelKey: "settings.ingest.fieldChunkTargetLabel",
+    unitKey: "settings.ingest.fieldChunkTargetUnit",
     min: 1000,
     max: 20000,
     step: 500,
     integer: true,
-    hint: "Preferred size of one indexed chunk.",
+    hintKey: "settings.ingest.fieldChunkTargetHint",
   },
   {
     key: "chunk_overlap_chars",
-    label: "Overlap chars",
-    unit: "chars",
+    labelKey: "settings.ingest.fieldChunkOverlapLabel",
+    unitKey: "settings.ingest.fieldChunkOverlapUnit",
     min: 0,
     max: 5000,
     step: 100,
     integer: true,
-    hint: "Text repeated at the start of the next chunk.",
+    hintKey: "settings.ingest.fieldChunkOverlapHint",
   },
 ];
+
+function localizeSpec(
+  spec: NumericFieldSpec,
+  t: Translate,
+): NumericFieldSpec & RuntimeNumberSpec {
+  return {
+    ...spec,
+    label: t(spec.labelKey),
+    unit: t(spec.unitKey),
+    hint: t(spec.hintKey),
+  };
+}
 
 const ALL_FIELD_SPECS: readonly NumericFieldSpec[] = [
   ...WORKER_FIELDS,
@@ -169,27 +185,34 @@ interface ValidationResult {
   readonly parsed: IngestRuntimeValues | null;
 }
 
-function validateDraft(draft: DraftValues): ValidationResult {
+function validateDraft(
+  draft: DraftValues,
+  t: Translate,
+  formatNumber: (value: number) => string,
+): ValidationResult {
   const fieldErrors: Partial<Record<NumericField, string>> = {};
   const numbers: Partial<Record<NumericField, number>> = {};
 
   for (const spec of ALL_FIELD_SPECS) {
     const raw = draft[spec.key].trim();
     if (raw.length === 0) {
-      fieldErrors[spec.key] = "A value is required.";
+      fieldErrors[spec.key] = t("settings.runtime.errors.required");
       continue;
     }
     const parsed = Number(raw);
     if (spec.integer && !Number.isInteger(parsed)) {
-      fieldErrors[spec.key] = "Enter a whole number.";
+      fieldErrors[spec.key] = t("settings.runtime.errors.wholeNumber");
       continue;
     }
     if (!Number.isFinite(parsed)) {
-      fieldErrors[spec.key] = "Enter a number.";
+      fieldErrors[spec.key] = t("settings.runtime.errors.number");
       continue;
     }
     if (parsed < spec.min || parsed > spec.max) {
-      fieldErrors[spec.key] = `Enter a value between ${formatNumber(spec.min)} and ${formatNumber(spec.max)}.`;
+      fieldErrors[spec.key] = t("settings.runtime.errors.range", {
+        min: formatNumber(spec.min),
+        max: formatNumber(spec.max),
+      });
       continue;
     }
     numbers[spec.key] = parsed;
@@ -203,7 +226,10 @@ function validateDraft(draft: DraftValues): ValidationResult {
     overlap >= target &&
     fieldErrors.chunk_overlap_chars === undefined
   ) {
-    fieldErrors.chunk_overlap_chars = `Must be lower than target chars (${formatNumber(target)}).`;
+    fieldErrors.chunk_overlap_chars = t(
+      "settings.runtime.errors.overlapBelowTarget",
+      { target: formatNumber(target) },
+    );
   }
 
   const hasErrors = Object.keys(fieldErrors).length > 0;
@@ -230,6 +256,7 @@ export function IngestRuntimePanel({
   onReset,
   className,
 }: IngestRuntimePanelProps) {
+  const { t, formatNumber } = useI18n();
   const [draft, setDraft] = useState<DraftValues>(() => toDraft(values));
   const [confirmingReset, setConfirmingReset] = useState(false);
 
@@ -245,10 +272,13 @@ export function IngestRuntimePanel({
     setConfirmingReset(false);
   }, [currentValuesKey, values]);
 
-  const validation = validateDraft(draft);
+  const validation = validateDraft(draft, t, formatNumber);
   const isDirty = !draftMatchesValues(draft, values);
   const isInvalid = Object.keys(validation.fieldErrors).length > 0;
   const canSave = isDirty && !isInvalid && !saving;
+
+  const workerFields = WORKER_FIELDS.map((spec) => localizeSpec(spec, t));
+  const chunkFields = CHUNK_FIELDS.map((spec) => localizeSpec(spec, t));
 
   const updateNumber = (field: NumericField, next: string) => {
     setDraft((current) => ({ ...current, [field]: next }));
@@ -276,36 +306,35 @@ export function IngestRuntimePanel({
       title={
         <span className="settings-panel__title">
           <Icon name="layers" size={16} />
-          Ingestion runtime
+          {t("settings.ingest.title")}
         </span>
       }
       action={
         <Badge>
-          {formatNumber(values.chunk_target_chars)} /{" "}
-          {formatNumber(values.chunk_overlap_chars)} chars
+          {t("settings.ingest.badge", {
+            target: formatNumber(values.chunk_target_chars),
+            overlap: formatNumber(values.chunk_overlap_chars),
+          })}
         </Badge>
       }
       className={panelClassName}
     >
-      <p className="settings-lede">
-        The worker reads one snapshot per loop or job. Saving here changes the
-        next claim; a job already running keeps the settings it started with.
-      </p>
+      <p className="settings-lede">{t("settings.ingest.lede")}</p>
 
       <RuntimeStatus
         source={source}
         updatedAt={updatedAt}
-        summary={`${formatNumber(values.poll_seconds)}s poll · ${formatNumber(values.extract_workers)} threads · ${formatNumber(values.max_inflight_jobs)} in flight`}
+        summary={t("settings.ingest.statusSummary", {
+          poll: formatNumber(values.poll_seconds),
+          threads: formatNumber(values.extract_workers),
+          inflight: formatNumber(values.max_inflight_jobs),
+        })}
         dirty={isDirty}
       />
 
       <div className="runtime-warning" role="note">
         <Icon name="info" size={15} />
-        <span>
-          Worker settings apply to the next loop or job. Changing chunk sizes
-          only affects files ingested after saving; existing files must be
-          re-ingested before their chunk boundaries match.
-        </span>
+        <span>{t("settings.ingest.warning")}</span>
       </div>
 
       <form
@@ -316,11 +345,11 @@ export function IngestRuntimePanel({
       >
         <div className="runtime-groups">
           <RuntimeGroup
-            slot="Group 01"
-            title="Worker"
-            description="How often the worker polls, how much CPU work it may fan out, and how many jobs and embedding requests it may hold at once."
+            slot={t("settings.ingest.groupWorkerSlot")}
+            title={t("settings.ingest.groupWorkerTitle")}
+            description={t("settings.ingest.groupWorkerDescription")}
           >
-            {WORKER_FIELDS.map((spec) => (
+            {workerFields.map((spec) => (
               <RuntimeNumberField
                 key={spec.key}
                 spec={spec}
@@ -334,11 +363,11 @@ export function IngestRuntimePanel({
           </RuntimeGroup>
 
           <RuntimeGroup
-            slot="Group 02"
-            title="Chunking"
-            description="Chunk boundaries decide retrieval granularity. The overlap must stay below the target size."
+            slot={t("settings.ingest.groupChunkingSlot")}
+            title={t("settings.ingest.groupChunkingTitle")}
+            description={t("settings.ingest.groupChunkingDescription")}
           >
-            {CHUNK_FIELDS.map((spec) => (
+            {chunkFields.map((spec) => (
               <RuntimeNumberField
                 key={spec.key}
                 spec={spec}

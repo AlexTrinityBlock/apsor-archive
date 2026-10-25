@@ -1,7 +1,7 @@
 import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
-import { formatNumber } from "../../../lib/format";
+import { useI18n } from "../../i18n";
 import { readPageContextEntry } from "../page-context";
 
 /**
@@ -12,6 +12,7 @@ import { readPageContextEntry } from "../page-context";
  * because the model receives it as a data envelope.
  */
 export function PageContextCard({ entry }: { readonly entry: AgentEntrySchema }) {
+  const { t, formatNumber } = useI18n();
   const context = readPageContextEntry(entry);
   if (!context) {
     return null;
@@ -25,8 +26,10 @@ export function PageContextCard({ entry }: { readonly entry: AgentEntrySchema })
         </span>
         <span className="pi-context-card__copy">
           <span className="pi-context-card__eyebrow">
-            Page context · captured
-            {context.truncated ? <Badge tone="ochre">trimmed</Badge> : null}
+            {t("chat.pageContext.eyebrow")}
+            {context.truncated ? (
+              <Badge tone="ochre">{t("chat.pageContext.trimmed")}</Badge>
+            ) : null}
           </span>
           <span className="pi-context-card__title">
             {context.title ?? context.path}
@@ -34,21 +37,19 @@ export function PageContextCard({ entry }: { readonly entry: AgentEntrySchema })
           <code className="pi-context-card__path">{context.path}</code>
         </span>
         <span className="pi-context-card__meta">
-          {formatNumber(context.textChars)} chars
+          {t("chat.pageContext.chars", {
+            count: formatNumber(context.textChars),
+          })}
           <Icon name="chevron-down" size={13} />
         </span>
       </summary>
       <div className="pi-context-card__body">
-        <p className="pi-context-card__note">
-          A plain-text snapshot was added once when the page changed. The
-          transcript keeps it as an append-only context entry.
-        </p>
+        <p className="pi-context-card__note">{t("chat.pageContext.note")}</p>
         {context.text.length > 0 ? (
           <pre className="pi-context-card__text">{context.text}</pre>
         ) : (
           <p className="pi-context-card__empty">
-            The provider envelope is recorded, but its text could not be
-            decoded in this browser.
+            {t("chat.pageContext.empty")}
           </p>
         )}
       </div>

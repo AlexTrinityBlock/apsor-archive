@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 import { useReadFile } from "../../generated-apis-types/files/files";
 import { Icon } from "../../component/Icon";
-import { formatNumber } from "../../../lib/format";
+import { useI18n } from "../../i18n";
 
 interface CitedChunkProps {
   readonly fileId: number;
@@ -11,34 +11,43 @@ interface CitedChunkProps {
 
 /** A compact cited-passage card for `?chunk=N` deep links from the agent. */
 export function CitedChunk({ fileId, chunk }: CitedChunkProps) {
+  const { t, formatNumber } = useI18n();
   const query = useReadFile(fileId, chunk, { chunk_range: 0 }, { query: { retry: false } });
 
   return (
-    <aside className="viewer-citation" aria-label={`Cited chunk ${chunk}`}>
+    <aside
+      className="viewer-citation"
+      aria-label={t("library.viewer.citation.aria", { chunk })}
+    >
       <div className="viewer-citation__head">
         <span className="eyebrow">
-          <Icon name="quote" size={13} /> Cited passage · chunk {chunk}
+          <Icon name="quote" size={13} />{" "}
+          {t("library.viewer.citation.eyebrow", { chunk })}
         </span>
         <Link to={`/library?tab=files&file=${fileId}`} className="viewer-citation__clear">
-          Open in library
+          {t("library.viewer.citation.openInLibrary")}
         </Link>
       </div>
       {query.isLoading ? (
-        <p className="viewer-citation__note">Reading the cited window…</p>
+        <p className="viewer-citation__note">{t("library.viewer.citation.loading")}</p>
       ) : null}
       {query.error ? (
         <p className="viewer-citation__note">
-          Chunk {chunk} is outside this file&apos;s readable window.
+          {t("library.viewer.citation.outside", { chunk })}
         </p>
       ) : null}
       {query.data ? (
         <>
           <pre className="viewer-citation__text">
-            {query.data.chunks[0]?.content ?? "The cited chunk is empty."}
+            {query.data.chunks[0]?.content ?? t("library.viewer.citation.empty")}
           </pre>
           <p className="viewer-citation__meta">
-            {formatNumber(query.data.chunks[0]?.char_count ?? 0)} chars · window{" "}
-            {query.data.chunk_start}–{query.data.chunk_end} of {formatNumber(query.data.total_chunks)}
+            {t("library.viewer.citation.meta", {
+              chars: formatNumber(query.data.chunks[0]?.char_count ?? 0),
+              start: query.data.chunk_start,
+              end: query.data.chunk_end,
+              total: formatNumber(query.data.total_chunks),
+            })}
           </p>
         </>
       ) : null}

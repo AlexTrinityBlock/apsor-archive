@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { formatNumber } from "../../../lib/format";
+import { useI18n } from "../../i18n";
 import { parseCsv } from "./viewer-utils";
 
 interface CsvSheetProps {
@@ -10,10 +10,11 @@ interface CsvSheetProps {
 
 /** A bounded, read-only CSV sheet with a sticky header and row numbers. */
 export function CsvSheet({ content, wrap }: CsvSheetProps) {
+  const { t, formatNumber } = useI18n();
   const table = useMemo(() => parseCsv(content), [content]);
 
   if (table.headers.length === 0) {
-    return <p className="viewer-empty">This CSV file has no rows.</p>;
+    return <p className="viewer-empty">{t("library.viewer.csv.empty")}</p>;
   }
 
   return (
@@ -27,7 +28,9 @@ export function CsvSheet({ content, wrap }: CsvSheetProps) {
               </th>
               {table.headers.map((header, index) => (
                 <th scope="col" key={`header-${index}`}>
-                  {header.trim().length > 0 ? header : `Column ${index + 1}`}
+                  {header.trim().length > 0
+                    ? header
+                    : t("library.viewer.csv.column", { index: index + 1 })}
                 </th>
               ))}
             </tr>
@@ -49,9 +52,16 @@ export function CsvSheet({ content, wrap }: CsvSheetProps) {
         </table>
       </div>
       <p className="viewer-csv__note">
-        {formatNumber(table.rows.length)} of {formatNumber(table.totalRows)} rows
-        {table.truncated ? " shown (bounded preview)" : ""}. Quoted commas and line breaks
-        are preserved.
+        {table.truncated
+          ? t("library.viewer.csv.truncated", {
+              shown: formatNumber(table.rows.length),
+              total: formatNumber(table.totalRows),
+            })
+          : t("library.viewer.csv.rows", {
+              shown: formatNumber(table.rows.length),
+              total: formatNumber(table.totalRows),
+            })}{" "}
+        {t("library.viewer.csv.note")}
       </p>
     </div>
   );

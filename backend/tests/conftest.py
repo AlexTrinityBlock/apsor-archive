@@ -5,11 +5,12 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import Connection, create_engine, text
 
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
 from app.module.agent import model as agent_model  # noqa: F401
+from app.module.agent.service.system_prompt import default_sections
 from app.module.auth import model as auth_model  # noqa: F401
 from app.module.knowledge.model import Base
 from app.module.prompt import model as prompt_model  # noqa: F401
@@ -58,6 +59,27 @@ def test_database() -> Iterator[None]:
     yield
 
 
+def _seed_system_prompt_defaults(connection: Connection) -> None:
+    """Insert the four seed rows a real migration writes into a fresh database.
+
+    Tests build the schema from metadata instead of running Alembic, so the
+    seed data has to be applied explicitly. These rows are ordinary sections:
+    the test suite may edit, delete, or reorder them.
+    """
+    for index, section in enumerate(default_sections(), start=1):
+        connection.execute(
+            text(
+                "INSERT INTO system_prompt_section (title, body, sort_order) "
+                "VALUES (:title, :body, :sort_order)"
+            ),
+            {
+                "title": section["title"],
+                "body": section["body"],
+                "sort_order": index * 10,
+            },
+        )
+
+
 @pytest.fixture(autouse=True)
 def clean_database(test_database: None, tmp_path: Path) -> Iterator[None]:
     """Reset every knowledge table before each test."""
@@ -65,6 +87,7 @@ def clean_database(test_database: None, tmp_path: Path) -> Iterator[None]:
     with engine.begin() as connection:
         connection.execute(text(TRUNCATE_STATEMENT))
         connection.execute(text("ALTER SEQUENCE agent_commit_seq RESTART WITH 1"))
+        _seed_system_prompt_defaults(connection)
     engine.dispose()
     yield
 
