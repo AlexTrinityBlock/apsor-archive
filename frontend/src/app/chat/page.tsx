@@ -47,6 +47,10 @@ import { useChatSplit } from "./hook/useChatSplit";
 import { useChatStream } from "./hook/useChatStream";
 import { invalidateConversation, invalidateConversationList } from "./query";
 import {
+  clearLastChatConversation,
+  rememberLastChatConversation,
+} from "./session-storage";
+import {
   isRecord,
   mergeEntries,
   readRetryState,
@@ -236,6 +240,23 @@ export function ChatPage() {
   const forkConversation = useForkAgentConversation();
   const toast = useToast();
   const [forkingEntryId, setForkingEntryId] = useState<number | null>(null);
+
+  // Persist only the route id; the transcript itself never touches storage.
+  useEffect(() => {
+    if (conversationId !== null) {
+      rememberLastChatConversation(conversationId);
+    }
+  }, [conversationId]);
+
+  // A missing conversation must not leave `/chat` redirecting back to it.
+  useEffect(() => {
+    if (
+      conversationQuery.error instanceof ApiError &&
+      conversationQuery.error.status === 404
+    ) {
+      clearLastChatConversation();
+    }
+  }, [conversationQuery.error]);
 
   const handleStreamError = useCallback((message: string) => {
     stickToBottomRef.current = true;
@@ -509,6 +530,7 @@ export function ChatPage() {
   };
 
   const startNewConversation = useCallback(() => {
+    clearLastChatConversation();
     setDraft("");
     setLastError(null);
     setPinnedId(null);
@@ -624,7 +646,12 @@ export function ChatPage() {
           title="That conversation address is not valid."
           detail="Conversation addresses are positive integers. The desk is still open."
           action={
-            <ButtonLink to="/chat" variant="ink" size="sm">
+            <ButtonLink
+              to="/chat"
+              variant="ink"
+              size="sm"
+              onClick={() => clearLastChatConversation()}
+            >
               Back to chat
             </ButtonLink>
           }
@@ -663,7 +690,12 @@ export function ChatPage() {
               >
                 Try again
               </Button>
-              <ButtonLink to="/chat" variant="ink" size="sm">
+              <ButtonLink
+                to="/chat"
+                variant="ink"
+                size="sm"
+                onClick={() => clearLastChatConversation()}
+              >
                 Back to chat
               </ButtonLink>
             </div>

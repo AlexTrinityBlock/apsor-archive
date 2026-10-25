@@ -2507,6 +2507,10 @@
     padding: 14px 12px 20px;
   }
 
+  .chat-turn__usage {
+    margin-bottom: 10px;
+  }
+
   .chat-composer-dock {
     padding: 8px;
   }
