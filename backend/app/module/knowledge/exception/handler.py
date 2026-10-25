@@ -3,7 +3,6 @@
 from app.module.knowledge.exception.domain_error import (
     AiNotConfiguredError,
     AiProviderError,
-    DemoAlreadySeededError,
     EmbeddingProviderError,
     EmptyContentError,
     FileContentUnavailableError,
@@ -63,5 +62,4 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(IngestJobNotFoundError, 404, "ingest_job_not_found")
     ExceptionRegistry.register(IngestJobConflictError, 409, "ingest_job_conflict")
     ExceptionRegistry.register(IngestJobNotRetryableError, 409, "ingest_job_not_retryable")
-    ExceptionRegistry.register(DemoAlreadySeededError, 409, "demo_already_seeded")
     ExceptionRegistry.register(KnowledgeError, 500, "knowledge_error")

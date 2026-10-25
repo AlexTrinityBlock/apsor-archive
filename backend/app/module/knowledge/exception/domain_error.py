@@ -141,8 +141,3 @@ class IngestJobConflictError(KnowledgeError):
 class IngestJobNotRetryableError(KnowledgeError):
     def __init__(self, job_id: int, detail: str) -> None:
         super().__init__(f"Ingestion job {job_id} cannot be retried: {detail}")
-
-
-class DemoAlreadySeededError(KnowledgeError):
-    def __init__(self) -> None:
-        super().__init__("Demo data can only be seeded into an empty library.")

@@ -180,17 +180,6 @@ export const settings = {
     readingVersion: "正在读取版本",
     versionUnavailable: "无法获取版本",
     version: "v{version}",
-    seedDetailDefault:
-      "添加四份示例文档、一组小型基准记忆与一则摘要。现有数据永远不会被覆盖。",
-    seedDetailExisting:
-      "档案馆目前已有 {files} 个文件与 {memories} 条记忆。种子端点只接受空的档案馆。",
-    seedDetailPending: "正在检查档案馆，准备生成种子数据。",
-    seedDetailError:
-      "无法读取档案馆计数。API 会拒绝在非空档案馆中生成种子数据。",
-    demoArchive: "演示档案馆",
-    seedTitle: "生成示例语料",
-    seedAction: "生成演示档案馆",
-    seeding: "生成中…",
     access: "访问",
     accessTitle: "单一所有者账号",
     accessCopyBefore:
@@ -199,18 +188,6 @@ export const settings = {
       "”登录。没有云端账号、密码恢复，也没有按用户划分的权限模型。离开共享机器时，请从侧栏退出登录。",
     keeperFallback: "馆长",
     readMethod: "阅读方法",
-    dialogEyebrow: "维护 · 演示种子数据",
-    dialogTitle: "要生成演示档案馆吗？",
-    dialogDescriptionExisting:
-      "这座档案馆目前已有 {files} 个文件与 {memories} 条记忆。",
-    dialogDescriptionUnknown: "无法读取当前的档案馆计数。",
-    requestSeed: "请求生成种子数据",
-    dialogCopy:
-      "种子端点只会填充空的档案馆。只要已有任何文件或记忆，它就会拒绝这个请求；无论如何都不会删除或覆盖任何内容。",
-    seededOne:
-      "已生成 {files} 个文件、{memories} 条记忆与 {summaries} 则摘要。",
-    seededOther:
-      "已生成 {files} 个文件、{memories} 条记忆与 {summaries} 则摘要。",
   },
   diagnostics: {
     title: "系统诊断",

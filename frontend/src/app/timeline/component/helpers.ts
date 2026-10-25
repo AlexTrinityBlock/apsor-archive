@@ -14,10 +14,6 @@ export const MAX_YEAR = 2200;
 export const RANGE_OPTIONS = [7, 14, 30, 90, 365] as const;
 export const DEFAULT_RANGE = 30;
 
-/** The demo seed writes events between August and September 2026. */
-export const DEMO_SEASON_ANCHOR = new Date(2026, 8, 30);
-export const DEMO_SEASON_RANGE = 90;
-
 function pad(value: number): string {
   return String(value).padStart(2, "0");
 }

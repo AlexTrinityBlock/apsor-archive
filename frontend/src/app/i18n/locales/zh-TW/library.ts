@@ -11,7 +11,6 @@ export const library = {
     pathNotFoundBefore: "檔案館目前沒有位於 ",
     pathNotFoundAfter:
       " 的資料夾。它可能已隨最後一個檔案移除，或這個連結已失效。",
-    seedSuccess: "已建立示範檔案館。檔案架已準備就緒。",
     imagePickerError: "請選擇 JPEG、PNG 或 WebP 圖片。",
     archivedToast: "「{name}」已歸檔為版本 {version}。",
     movedToast: "「{name}」已移至 {folder}。",
@@ -158,8 +157,6 @@ export const library = {
     folderDescription:
       "將檔案拖放到這個工作區的任何位置，即可歸檔到 {path}，或建立資料夾分支。上層資料夾會自動建立。",
     dropZone: "拖放區 · 每個檔案 10 MB · 可接受的檔案類型",
-    seeding: "正在建立示範檔案館…",
-    seed: "建立示範檔案館",
   },
   media: {
     aria: "媒體庫",

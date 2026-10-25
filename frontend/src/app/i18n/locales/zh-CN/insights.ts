@@ -165,8 +165,6 @@ export const insights = {
       includeHistory: "包含历史",
       historyIncluded: "已包含淘汰的记忆",
       historyActiveOnly: "仅包含有效记忆",
-      demoSeason: "试看演示季节",
-      demoSeasonTitle: "读取种子数据中的演示季节",
     },
     states: {
       skeleton: "正在读取时间线范围",
@@ -255,7 +253,6 @@ export const insights = {
         "档案馆在这个范围内没有返回任何记忆、摘要或文件更新（{caption}）。请移动范围、加宽长度，或搜索下方的更早范围。",
       emptyHistoryNote:
         " 已淘汰的记忆目前被排除；开启“包含历史”即可扩大读取范围。",
-      demoSeason: "试看演示季节",
       jumpToday: "跳到今天",
     },
   },

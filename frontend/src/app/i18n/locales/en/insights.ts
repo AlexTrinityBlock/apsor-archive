@@ -168,8 +168,6 @@ export const insights = {
       includeHistory: "Include history",
       historyIncluded: "Deprecated memories included",
       historyActiveOnly: "Active memories only",
-      demoSeason: "Try demo season",
-      demoSeasonTitle: "Read the seeded demo season",
     },
     states: {
       skeleton: "Reading the timeline window",
@@ -260,7 +258,6 @@ export const insights = {
         "The archive returned no memories, summaries, or file updates ending in this window ({caption}). Move the window, widen the range, or search the earlier window below.",
       emptyHistoryNote:
         " Deprecated memories are excluded; turn on Include history to widen the read.",
-      demoSeason: "Try demo season",
       jumpToday: "Jump to today",
     },
   },
