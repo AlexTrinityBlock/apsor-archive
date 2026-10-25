@@ -16,6 +16,7 @@ import "../viewer/viewer.css";
 import type {
   DirectorySchema,
   FileSchema,
+  LibraryDeleteResultSchema,
   PathFileSchema,
 } from "../generated-apis-types/schemas";
 import {
@@ -38,6 +39,7 @@ import { useDebouncedValue } from "../hook/useDebouncedValue";
 import { fileDownloadUrl } from "../viewer/component/viewer-utils";
 import { BatchMoveDialog, type BatchMoveResult } from "./component/BatchMoveDialog";
 import { DeleteFileDialog } from "./component/DeleteFileDialog";
+import { DeleteSelectionDialog } from "./component/DeleteSelectionDialog";
 import { FilePreviewModal } from "./component/FilePreviewModal";
 import { LibraryFilesContent } from "./component/LibraryFilesContent";
 import { LibraryMediaGallery } from "./component/LibraryMediaGallery";
@@ -92,6 +94,11 @@ interface DeleteRequest {
   readonly raw_file_path: string;
 }
 
+interface DeleteSelectionRequest {
+  readonly files: readonly PathFileSchema[];
+  readonly folders: readonly DirectorySchema[];
+}
+
 type LibraryContextTarget =
   | { readonly kind: "file"; readonly file: PathFileSchema }
   | { readonly kind: "folder"; readonly folder: DirectorySchema };
@@ -104,6 +111,7 @@ interface LibraryContextMenuState {
 }
 
 const EMPTY_SELECTED_FILE_IDS: ReadonlySet<number> = new Set<number>();
+const EMPTY_SELECTED_FOLDER_PATHS: ReadonlySet<string> = new Set<string>();
 
 function resolveView(rawView: string | null, isDesktop: boolean): LibraryView {
   if (rawView === "board" || rawView === "list") {
@@ -133,6 +141,56 @@ function RenameRequestDialog({
       onRenamed={onClose}
     />
   );
+}
+
+interface DeleteSelectionDialogRequestProps {
+  readonly request: DeleteSelectionRequest | null;
+  readonly onClose: () => void;
+  readonly onDeleted: (result: LibraryDeleteResultSchema) => void;
+}
+
+/** Renders the batch-delete dialog without adding another branch to the page. */
+function DeleteSelectionDialogRequest({
+  request,
+  onClose,
+  onDeleted,
+}: DeleteSelectionDialogRequestProps) {
+  if (!request) {
+    return null;
+  }
+  return (
+    <DeleteSelectionDialog
+      files={request.files}
+      folders={request.folders}
+      onClose={onClose}
+      onDeleted={onDeleted}
+    />
+  );
+}
+
+interface LibrarySelectionBarSlotProps {
+  readonly tab: LibraryTab;
+  readonly selecting: boolean;
+  readonly selectedFileCount: number;
+  readonly selectedFolderCount: number;
+  readonly visibleCount: number;
+  readonly onSelectAll: () => void;
+  readonly onClear: () => void;
+  readonly onMoveSelected: () => void;
+  readonly onDeleteSelected: () => void;
+  readonly onExit: () => void;
+}
+
+/** Renders the Files-tab selection bar without branching in the page body. */
+function LibrarySelectionBarSlot({
+  tab,
+  selecting,
+  ...barProps
+}: LibrarySelectionBarSlotProps) {
+  if (tab !== "files" || !selecting) {
+    return null;
+  }
+  return <LibrarySelectionBar {...barProps} />;
 }
 
 /**
@@ -172,8 +230,13 @@ export function LibraryPage() {
   const [selectedFileIds, setSelectedFileIds] = useState<ReadonlySet<number>>(
     () => new Set<number>(),
   );
+  const [selectedFolderPaths, setSelectedFolderPaths] = useState<
+    ReadonlySet<string>
+  >(() => new Set<string>());
   const [selectionPath, setSelectionPath] = useState<string | null>(null);
   const [batchMoveFiles, setBatchMoveFiles] = useState<readonly PathFileSchema[] | null>(null);
+  const [deleteSelectionRequest, setDeleteSelectionRequest] =
+    useState<DeleteSelectionRequest | null>(null);
   const [sort, setSort] = useState<LibrarySort>("modified");
   const [mediaFilter, setMediaFilter] = useState("");
 
@@ -200,6 +263,7 @@ export function LibraryPage() {
   const resetSelection = useCallback(() => {
     setSelecting(false);
     setSelectedFileIds(new Set<number>());
+    setSelectedFolderPaths(new Set<string>());
     setSelectionPath(null);
   }, []);
 
@@ -210,6 +274,7 @@ export function LibraryPage() {
         void queryClient.invalidateQueries();
         setSelecting(false);
         setSelectedFileIds(new Set<number>());
+        setSelectedFolderPaths(new Set<string>());
         setSelectionPath(null);
         setMediaFilter("");
         setSearchParams(new URLSearchParams(), { replace: true });
@@ -592,14 +657,21 @@ export function LibraryPage() {
 
   const activeSelectedFileIds =
     selectionPath === path ? selectedFileIds : EMPTY_SELECTED_FILE_IDS;
+  const activeSelectedFolderPaths =
+    selectionPath === path ? selectedFolderPaths : EMPTY_SELECTED_FOLDER_PATHS;
   const selectedFiles = useMemo(
     () => visibleFiles.filter((file) => activeSelectedFileIds.has(file.file_id)),
     [activeSelectedFileIds, visibleFiles],
+  );
+  const selectedFolders = useMemo(
+    () => visibleFolders.filter((folder) => activeSelectedFolderPaths.has(folder.path)),
+    [activeSelectedFolderPaths, visibleFolders],
   );
 
   const toggleSelecting = useCallback(() => {
     setSelecting((current) => !current);
     setSelectedFileIds(new Set<number>());
+    setSelectedFolderPaths(new Set<string>());
     setSelectionPath(path);
   }, [path]);
 
@@ -619,18 +691,37 @@ export function LibraryPage() {
     [path, selectionPath],
   );
 
+  const toggleSelectedFolder = useCallback(
+    (folderPath: string) => {
+      setSelectedFolderPaths((current) => {
+        const next = new Set(selectionPath === path ? current : []);
+        if (next.has(folderPath)) {
+          next.delete(folderPath);
+        } else {
+          next.add(folderPath);
+        }
+        return next;
+      });
+      setSelectionPath(path);
+    },
+    [path, selectionPath],
+  );
+
   const selectAllVisible = useCallback(() => {
     setSelectedFileIds(new Set(visibleFiles.map((file) => file.file_id)));
+    setSelectedFolderPaths(new Set(visibleFolders.map((folder) => folder.path)));
     setSelectionPath(path);
-  }, [path, visibleFiles]);
+  }, [path, visibleFiles, visibleFolders]);
 
   const clearSelection = useCallback(() => {
     setSelectedFileIds(new Set<number>());
+    setSelectedFolderPaths(new Set<string>());
   }, []);
 
   const exitSelection = useCallback(() => {
     setSelecting(false);
     setSelectedFileIds(new Set<number>());
+    setSelectedFolderPaths(new Set<string>());
   }, []);
 
   const requestBatchMove = useCallback(() => {
@@ -639,6 +730,28 @@ export function LibraryPage() {
     }
     setBatchMoveFiles(selectedFiles);
   }, [selectedFiles]);
+
+  const requestDeleteSelected = useCallback(() => {
+    const selectedCount = selectedFiles.length + selectedFolders.length;
+    if (selectedCount === 0) {
+      return;
+    }
+    setDeleteSelectionRequest({ files: selectedFiles, folders: selectedFolders });
+  }, [selectedFiles, selectedFolders]);
+
+  const handleSelectionDeleted = useCallback(
+    (result: LibraryDeleteResultSchema) => {
+      setDeleteSelectionRequest(null);
+      exitSelection();
+      if (result.deleted_file_ids.includes(previewFileId ?? -1)) {
+        updateParams(
+          { file: null, media: null, chunk: null, mode: null },
+          { replace: true },
+        );
+      }
+    },
+    [exitSelection, previewFileId, updateParams],
+  );
 
   const handleBatchMoveFinished = useCallback(
     (result: BatchMoveResult) => {
@@ -949,7 +1062,9 @@ export function LibraryPage() {
         seeding={seedMutation.isPending}
         selecting={selecting}
         selectedFileIds={activeSelectedFileIds}
+        selectedFolderPaths={activeSelectedFolderPaths}
         onToggleSelected={toggleSelected}
+        onToggleSelectedFolder={toggleSelectedFolder}
         onOpenFolder={openFolder}
         onOpenFile={openPreview}
         onEditFile={openMarkdownEditor}
@@ -1029,16 +1144,18 @@ export function LibraryPage() {
           onDismiss={dismissUploads}
         />
 
-        {tab === "files" && selecting ? (
-          <LibrarySelectionBar
-            selectedCount={selectedFiles.length}
-            visibleCount={visibleFiles.length}
-            onSelectAll={selectAllVisible}
-            onClear={clearSelection}
-            onMoveSelected={requestBatchMove}
-            onExit={exitSelection}
-          />
-        ) : null}
+        <LibrarySelectionBarSlot
+          tab={tab}
+          selecting={selecting}
+          selectedFileCount={selectedFiles.length}
+          selectedFolderCount={selectedFolders.length}
+          visibleCount={visibleFiles.length + visibleFolders.length}
+          onSelectAll={selectAllVisible}
+          onClear={clearSelection}
+          onMoveSelected={requestBatchMove}
+          onDeleteSelected={requestDeleteSelected}
+          onExit={exitSelection}
+        />
 
         {browseQuery.error && isNotFoundError(browseQuery.error) ? (
           <Panel tone="plain" className="library-not-found">
@@ -1129,6 +1246,12 @@ export function LibraryPage() {
           onFinished={handleBatchMoveFinished}
         />
       ) : null}
+
+      <DeleteSelectionDialogRequest
+        request={deleteSelectionRequest}
+        onClose={() => setDeleteSelectionRequest(null)}
+        onDeleted={handleSelectionDeleted}
+      />
 
       {deleteRequest ? (
         <DeleteFileDialog

@@ -2474,6 +2474,65 @@
         "title": "IngestSettingsValuesSchema",
         "type": "object"
       },
+      "LibraryDeleteResultSchema": {
+        "description": "Deletion counts and identifiers returned by one atomic batch delete.",
+        "properties": {
+          "deleted_file_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Deleted File Ids",
+            "type": "array"
+          },
+          "deleted_files": {
+            "title": "Deleted Files",
+            "type": "integer"
+          },
+          "deleted_folder_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Deleted Folder Paths",
+            "type": "array"
+          },
+          "deleted_folders": {
+            "title": "Deleted Folders",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted_file_ids",
+          "deleted_folder_paths",
+          "deleted_files",
+          "deleted_folders"
+        ],
+        "title": "LibraryDeleteResultSchema",
+        "type": "object"
+      },
+      "LibraryDeleteSchema": {
+        "additionalProperties": false,
+        "description": "Batch delete selection of current files and whole folder trees.",
+        "properties": {
+          "file_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 1000,
+            "title": "File Ids",
+            "type": "array"
+          },
+          "folder_paths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Folder Paths",
+            "type": "array"
+          }
+        },
+        "title": "LibraryDeleteSchema",
+        "type": "object"
+      },
       "ListResponseSchema_AgentApprovalSchema_": {
         "properties": {
           "items_per_page": {
@@ -6442,6 +6501,48 @@
           }
         },
         "summary": "Upload File Async",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/batch-delete": {
+      "post": {
+        "description": "Soft-delete selected files and recursively soft-delete folder contents.",
+        "operationId": "deleteLibrarySelection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LibraryDeleteSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LibraryDeleteResultSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Library Selection",
         "tags": [
           "files"
         ]

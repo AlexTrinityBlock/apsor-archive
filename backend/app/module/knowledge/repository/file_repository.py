@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.module.knowledge.model.file_model import FileModel
@@ -67,6 +67,31 @@ class FileRepository:
         if not file_ids:
             return []
         statement = select(FileModel).where(FileModel.id.in_(file_ids))
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def list_current_for_update(
+        self,
+        *,
+        file_ids: Sequence[int],
+        folder_paths: Sequence[str],
+    ) -> list[FileModel]:
+        """鎖定選取的 current files 與所選資料夾底下的所有 current files。"""
+        conditions: list[ColumnElement[bool]] = [FileModel.id.in_(file_ids)] if file_ids else []
+        conditions.extend(
+            FileModel.raw_file_path.startswith(f"{folder.rstrip('/')}/")
+            for folder in folder_paths
+        )
+        if not conditions:
+            return []
+        statement = (
+            select(FileModel)
+            .where(
+                FileModel.is_current.is_(True),
+                FileModel.deleted_at.is_(None),
+                or_(*conditions),
+            )
+            .with_for_update()
+        )
         return list((await self.session.execute(statement)).scalars().all())
 
     @staticmethod
