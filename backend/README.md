@@ -432,10 +432,8 @@ defaults. Title and body are trimmed and both are required. `sort_order` is used
 instead of the SQL-reserved word `order`; reorder rewrites the complete custom
 order in one locked transaction and rejects partial or duplicate id lists.
 
-The Settings page exposes these as two panels: **System default** edits the four
-built-in bodies and resets every override, and **Custom prompt** edits the
-ordered owner-authored sections. `create_conversation` reads the active custom
-sections, the effective built-ins, and the owner's profile once. Custom rows render as `system_prompt:<id>` in
+`create_conversation` reads the active custom sections, the effective built-ins,
+and the owner's profile once. Custom rows render as `system_prompt:<id>` in
 `sort_order, id` order, followed by `user_profile` (when the user set a display
 name or cards), then the four built-ins in canonical order (override body when present,
 Python default otherwise). The combined sections become one provider system
