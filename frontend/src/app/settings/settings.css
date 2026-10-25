@@ -1801,12 +1801,7 @@
     top: 0;
     z-index: 5;
     padding: 9px 10px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .settings-nav::-webkit-scrollbar {
-    display: none;
+    overflow-x: visible;
   }
 
   .settings-nav__head {
@@ -1815,12 +1810,13 @@
 
   .settings-nav__links {
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 4px;
     margin-top: 0;
   }
 
   .settings-nav__link {
-    flex: none;
+    flex: 0 0 auto;
     padding: 6px 9px;
     border: 0.7px solid var(--mono-grid);
   }
@@ -1843,6 +1839,11 @@
 }
 
 @media (max-width: 600px) {
+  .settings-nav__link {
+    flex: 1 1 calc(50% - 2px);
+    min-width: 0;
+  }
+
   .system-prompt__order {
     grid-template-columns: 1fr;
   }

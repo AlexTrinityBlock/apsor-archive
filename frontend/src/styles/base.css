@@ -22,6 +22,7 @@ body,
 
 html {
   min-width: 320px;
+  overflow: hidden;
   scroll-behavior: smooth;
   background: var(--mono-paper);
 }
