@@ -6,13 +6,18 @@
  */
 import type { SummarySearchResultSchemaMatchedByItem } from './summarySearchResultSchemaMatchedByItem';
 
+/**
+ * A summary hit; it is a compressed view, not the original memories.
+ */
 export interface SummarySearchResultSchema {
   content: string;
   matched_by: SummarySearchResultSchemaMatchedByItem[];
+  memory_count: number;
   memory_summary_id: number;
   period_end: string;
   period_start: string;
   score: number;
+  source_memory_ids: number[];
   themes: string[];
   update_time: string;
 }

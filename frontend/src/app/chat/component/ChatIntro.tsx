@@ -1,18 +1,22 @@
+import { Link } from "react-router-dom";
+
 import { Icon } from "../../component/Icon";
+import { useListFrequentlyUsedPrompts } from "../../generated-apis-types";
 
 interface ChatIntroProps {
   readonly onSuggestion: (text: string) => void;
   readonly disabled?: boolean;
 }
 
-const SUGGESTIONS: ReadonlyArray<string> = [
-  "What does the archive hold about the Qing court?",
-  "Open a file from the library and summarise its key claims.",
-  "Trace the lineage of the most recent memory and explain what changed.",
-];
+const SETTINGS_PROMPTS_HREF = "/settings#settings-frequent-prompts";
 
 /** The empty `/chat` room before a transcript exists. */
 export function ChatIntro({ onSuggestion, disabled = false }: ChatIntroProps) {
+  const promptsQuery = useListFrequentlyUsedPrompts({
+    query: { staleTime: 60_000 },
+  });
+  const prompts = promptsQuery.data?.resources ?? [];
+
   return (
     <section className="chat-intro">
       <span className="chat-intro__mark" aria-hidden="true">
@@ -27,16 +31,46 @@ export function ChatIntro({ onSuggestion, disabled = false }: ChatIntroProps) {
       </p>
 
       <div className="chat-intro__suggestions">
-        <p className="mono-label">Suggested prompts</p>
-        {SUGGESTIONS.map((suggestion) => (
+        <p className="mono-label">Frequently used prompts</p>
+
+        {promptsQuery.isPending ? (
+          <p className="chat-intro__prompts-state" role="status">
+            Reading saved prompts…
+          </p>
+        ) : null}
+
+        {promptsQuery.isError ? (
+          <p className="chat-intro__prompts-state" role="status">
+            Saved prompts are unavailable.{" "}
+            <Link to={SETTINGS_PROMPTS_HREF}>Open prompt settings</Link>
+          </p>
+        ) : null}
+
+        {!promptsQuery.isPending &&
+        !promptsQuery.isError &&
+        prompts.length === 0 ? (
+          <p className="chat-intro__prompts-state">
+            No frequent prompts yet.{" "}
+            <Link to={SETTINGS_PROMPTS_HREF}>Add them in Settings</Link>.
+          </p>
+        ) : null}
+
+        {prompts.map((prompt) => (
           <button
-            key={suggestion}
+            key={prompt.id}
             type="button"
             className="chat-intro__suggestion"
-            onClick={() => onSuggestion(suggestion)}
+            onClick={() => onSuggestion(prompt.prompt_text)}
             disabled={disabled}
           >
-            <span>{suggestion}</span>
+            <span className="chat-intro__suggestion-copy">
+              <span className="chat-intro__suggestion-title">
+                {prompt.title}
+              </span>
+              <span className="chat-intro__suggestion-preview">
+                {prompt.prompt_text}
+              </span>
+            </span>
             <Icon name="arrow-right" size={14} />
           </button>
         ))}

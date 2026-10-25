@@ -1,74 +1,126 @@
-"""HTTP adapters for database-backed AI provider settings."""
+"""HTTP adapters for the unified multi-provider registry."""
 
 from fastapi import APIRouter, Depends
 
-from app.module.knowledge.dependencies import get_ai_config_service
-from app.module.knowledge.schema.settings_schema import (
-    AiProviderUpdateSchema,
-    AiSettingsReadSchema,
-    AiTestResultSchema,
-    EmbeddingReindexSchema,
+from app.module.knowledge.dependencies import get_provider_config_service
+from app.module.knowledge.schema.provider_config_schema import (
+    ProviderCreateSchema,
+    ProviderRegistryReadSchema,
+    ProviderTestResultSchema,
+    ProviderUpdateSchema,
 )
-from app.module.knowledge.service.ai_config_service import AiConfigService
+from app.module.knowledge.schema.settings_schema import EmbeddingReindexSchema
+from app.module.knowledge.service.provider_config_service import ProviderConfigService
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-@router.get("/ai", response_model=AiSettingsReadSchema, operation_id="getAiSettings")
-async def get_ai_settings(
-    service: AiConfigService = Depends(get_ai_config_service),
-) -> AiSettingsReadSchema:
-    """Return both provider slots with masked key hints."""
-    return await service.get_settings()
+@router.get(
+    "/providers",
+    response_model=ProviderRegistryReadSchema,
+    operation_id="getProviderRegistry",
+)
+async def get_provider_registry(
+    service: ProviderConfigService = Depends(get_provider_config_service),
+) -> ProviderRegistryReadSchema:
+    """Return all four capability groups with active and saved providers."""
+    return await service.get_registry()
+
+
+@router.post(
+    "/providers/{capability}",
+    response_model=ProviderRegistryReadSchema,
+    operation_id="createProvider",
+)
+async def create_provider(
+    capability: str,
+    payload: ProviderCreateSchema,
+    service: ProviderConfigService = Depends(get_provider_config_service),
+) -> ProviderRegistryReadSchema:
+    """Create one provider row and optionally activate it immediately."""
+    return await service.create(capability, payload)
 
 
 @router.put(
-    "/ai/{purpose}",
-    response_model=AiSettingsReadSchema,
-    operation_id="updateAiProvider",
+    "/providers/{capability}/{provider_id}",
+    response_model=ProviderRegistryReadSchema,
+    operation_id="updateProvider",
 )
-async def update_ai_provider(
-    purpose: str,
-    payload: AiProviderUpdateSchema,
-    service: AiConfigService = Depends(get_ai_config_service),
-) -> AiSettingsReadSchema:
-    """Update or create one provider configuration and reload it immediately."""
-    return await service.update(purpose, payload)
-
-
-@router.post(
-    "/ai/{purpose}/test",
-    response_model=AiTestResultSchema,
-    operation_id="testAiProvider",
-)
-async def test_ai_provider(
-    purpose: str,
-    service: AiConfigService = Depends(get_ai_config_service),
-) -> AiTestResultSchema:
-    """Make one small provider request and report latency or the error."""
-    return await service.test(purpose)
+async def update_provider(
+    capability: str,
+    provider_id: int,
+    payload: ProviderUpdateSchema,
+    service: ProviderConfigService = Depends(get_provider_config_service),
+) -> ProviderRegistryReadSchema:
+    """Replace one provider row without ever returning its plaintext key."""
+    return await service.update(capability, provider_id, payload)
 
 
 @router.delete(
-    "/ai/{purpose}/key",
-    response_model=AiSettingsReadSchema,
-    operation_id="clearAiProviderKey",
+    "/providers/{capability}/{provider_id}",
+    response_model=ProviderRegistryReadSchema,
+    operation_id="deleteProvider",
 )
-async def clear_ai_provider_key(
-    purpose: str,
-    service: AiConfigService = Depends(get_ai_config_service),
-) -> AiSettingsReadSchema:
-    """Remove the stored key and reload the provider runtime."""
-    return await service.clear_key(purpose)
+async def delete_provider(
+    capability: str,
+    provider_id: int,
+    service: ProviderConfigService = Depends(get_provider_config_service),
+) -> ProviderRegistryReadSchema:
+    """Delete a provider, deactivating it first when it is the active row."""
+    return await service.delete(capability, provider_id)
 
 
 @router.post(
-    "/ai/embedding/reindex",
+    "/providers/{capability}/{provider_id}/activate",
+    response_model=ProviderRegistryReadSchema,
+    operation_id="activateProvider",
+)
+async def activate_provider(
+    capability: str,
+    provider_id: int,
+    service: ProviderConfigService = Depends(get_provider_config_service),
+) -> ProviderRegistryReadSchema:
+    """Make one row the only active provider for its capability."""
+    return await service.activate(capability, provider_id)
+
+
+@router.post(
+    "/providers/{capability}/deactivate",
+    response_model=ProviderRegistryReadSchema,
+    operation_id="deactivateProvider",
+)
+async def deactivate_provider(
+    capability: str,
+    service: ProviderConfigService = Depends(get_provider_config_service),
+) -> ProviderRegistryReadSchema:
+    """Clear the active row; the runtime falls back to environment/default."""
+    return await service.deactivate(capability)
+
+
+@router.post(
+    "/providers/{capability}/{provider_id}/test",
+    response_model=ProviderTestResultSchema,
+    operation_id="testProvider",
+)
+async def test_provider(
+    capability: str,
+    provider_id: int,
+    service: ProviderConfigService = Depends(get_provider_config_service),
+) -> ProviderTestResultSchema:
+    """Make one small provider request and report latency or the error."""
+    return await service.test(capability, provider_id)
+
+
+@router.post(
+    "/providers/embedding/reindex",
     response_model=EmbeddingReindexSchema,
     operation_id="reindexEmbeddings",
 )
 async def reindex_embeddings(
-    service: AiConfigService = Depends(get_ai_config_service),
+    service: ProviderConfigService = Depends(get_provider_config_service),
 ) -> EmbeddingReindexSchema:
     """Re-embed every current chunk with the active embedding provider."""
     return await service.reindex_embeddings()
+
+
+__all__ = ["router"]

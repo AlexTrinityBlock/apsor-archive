@@ -473,43 +473,39 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert reset_ingest_body["source"] == "database"
     assert reset_ingest_body["config"] == ingest_defaults
 
-
-def test_image_upload_without_vision_uses_filename_caption(
-    client: TestClient,
-) -> None:
-    """Images are normal files even when no vision provider is configured."""
-    uploaded = client.post(
+    # Images are normal files even when no vision provider is configured.
+    uploaded_image = client.post(
         "/api/v1/files",
         data={"path": "/images/blue-square.png"},
         files={"file": ("blue-square.png", BLUE_PNG, "image/png")},
     )
-    assert uploaded.status_code == 201, uploaded.text
-    image = uploaded.json()
+    assert uploaded_image.status_code == 201, uploaded_image.text
+    image = uploaded_image.json()
     image_id = int(image["id"])
     assert image["document_type"] == "image"
     assert image["extraction_method"] == "filename"
     assert image["has_original"] is True
     assert int(image["total_chunks"]) >= 1
 
-    content = client.get(f"/api/v1/files/{image_id}/content")
-    assert content.status_code == 200
-    assert content.content == BLUE_PNG
-    assert content.headers["content-type"].startswith("image/png")
+    image_content = client.get(f"/api/v1/files/{image_id}/content")
+    assert image_content.status_code == 200
+    assert image_content.content == BLUE_PNG
+    assert image_content.headers["content-type"].startswith("image/png")
 
-    chunks = client.get(f"/api/v1/files/{image_id}/chunks/1")
-    assert chunks.status_code == 200
-    assert "blue square image" in chunks.json()["chunks"][0]["content"]
+    image_chunks = client.get(f"/api/v1/files/{image_id}/chunks/1")
+    assert image_chunks.status_code == 200
+    assert "blue square image" in image_chunks.json()["chunks"][0]["content"]
 
-    listing = client.get(
+    image_listing = client.get(
         "/api/v1/paths",
         params={"path": "/images", "path_depth": 1},
     )
-    assert listing.status_code == 200
-    assert [item["file_id"] for item in listing.json()["files"]] == [image_id]
+    assert image_listing.status_code == 200
+    assert [item["file_id"] for item in image_listing.json()["files"]] == [image_id]
 
-    found = client.get(
+    image_search = client.get(
         "/api/v1/search",
         params={"query": "blue square", "result_number": 5},
     )
-    assert found.status_code == 200
-    assert any(item["file_id"] == image_id for item in found.json()["file_results"])
+    assert image_search.status_code == 200
+    assert any(item["file_id"] == image_id for item in image_search.json()["file_results"])

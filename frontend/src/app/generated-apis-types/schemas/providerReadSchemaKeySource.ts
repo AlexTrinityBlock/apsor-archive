@@ -5,10 +5,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type AiProviderReadSchemaKeySource = typeof AiProviderReadSchemaKeySource[keyof typeof AiProviderReadSchemaKeySource];
+export type ProviderReadSchemaKeySource = typeof ProviderReadSchemaKeySource[keyof typeof ProviderReadSchemaKeySource];
 
 
-export const AiProviderReadSchemaKeySource = {
+export const ProviderReadSchemaKeySource = {
   database: 'database',
   environment: 'environment',
   none: 'none',

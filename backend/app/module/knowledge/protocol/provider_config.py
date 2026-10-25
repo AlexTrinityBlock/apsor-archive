@@ -1,24 +1,28 @@
 """Provider configuration value objects shared by the service and runtime."""
 
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-ProviderSource = Literal["database", "environment", "default"]
+from app.module.knowledge.domain.provider_config_domain import ProviderCapability
 
-CHAT_PROVIDERS = frozenset({"deepseek", "openai-compatible", "none"})
-EMBEDDING_PROVIDERS = frozenset({"hashing", "openai", "openai-compatible", "none"})
-KEYLESS_PROVIDERS = frozenset({"hashing", "none"})
+ProviderSource = Literal["database", "environment", "default"]
 
 
 class ProviderConfig(BaseModel):
-    """Resolved provider settings; ``api_key`` is plaintext only in memory."""
+    """Resolved provider settings; ``api_key`` is plaintext only in memory.
+
+    This object is internal to the server.  It must never be returned from a
+    router because it carries the decrypted API key.
+    """
 
     model_config = ConfigDict(frozen=True)
 
-    purpose: Literal["chat", "embedding"]
+    capability: ProviderCapability
     provider: str
-    model: str
+    label: str
+    model: str | None
     base_url: str | None
     api_key: str | None
     dimension: int | None
@@ -40,3 +44,28 @@ class ProviderDefaults(BaseModel):
     embedding_base_url: str | None
     embedding_api_key: str | None
     embedding_dimension: int
+    web_search_provider: str = "none"
+    web_search_base_url: str = "https://api.tavily.com"
+    web_search_api_key: str | None = None
+    web_fetch_provider: str = "none"
+    web_fetch_base_url: str = "https://api.tavily.com"
+    web_fetch_api_key: str | None = None
+
+
+@dataclass(frozen=True)
+class ProviderSnapshot:
+    """The four resolved capability slots loaded by ``AiRuntime.reload``."""
+
+    chat: ProviderConfig
+    embedding: ProviderConfig
+    web_search: ProviderConfig
+    web_fetch: ProviderConfig
+
+
+__all__ = [
+    "ProviderCapability",
+    "ProviderConfig",
+    "ProviderDefaults",
+    "ProviderSnapshot",
+    "ProviderSource",
+]

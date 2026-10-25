@@ -42,7 +42,9 @@ from app.module.knowledge.dependencies import (
     ingest_runtime_defaults,
     load_ingest_runtime_config,
 )
-from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
+from app.module.knowledge.repository.provider_config_repository import (
+    ProviderConfigRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +78,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
     )
     try:
         async with database.session_factory() as session:
-            await runtime.reload(AiProviderConfigRepository(session))
+            await runtime.reload(ProviderConfigRepository(session))
 
         state = State()
         state.settings = settings

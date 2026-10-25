@@ -4,6 +4,7 @@ export * from './auth/auth';
 export * from './files/files';
 export * from './folders/folders';
 export * from './memories/memories';
+export * from './prompts/prompts';
 export * from './search/search';
 export * from './settings/settings';
 export * from './system/system';

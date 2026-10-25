@@ -1,5 +1,6 @@
 import { PageHeader } from "../component/PageHeader";
 import { DiagnosticsPanel } from "./component/DiagnosticsPanel";
+import { FrequentlyUsedPromptsPanel } from "./component/FrequentlyUsedPromptsPanel";
 import { MaintenancePanel } from "./component/MaintenancePanel";
 import { ProviderVaultPanel } from "./component/ProviderVaultPanel";
 import {
@@ -11,9 +12,9 @@ import { SystemPromptPanel } from "./component/SystemPromptPanel";
 import "./settings.css";
 
 /**
- * Settings: the custom system prompt, AI vault, live diagnostics, runtime
- * limits, and archive maintenance. The template is light-only, so no theme
- * control is exposed here.
+ * Settings: frequent prompts, the unified provider registry, live diagnostics,
+ * runtime limits, and archive maintenance. The template is light-only, so no
+ * theme control is exposed here.
  */
 export function SettingsPage() {
   return (
@@ -24,12 +25,14 @@ export function SettingsPage() {
         <div className="settings-content">
           <PageHeader
             eyebrow="Settings · system configuration"
-            title="System settings & provider vault."
-            description="Write the first section of every new conversation, configure the two AI provider slots, inspect live service diagnostics, and calibrate the ingestion and agent runtime limits. Stored keys stay on the server and are never returned to this page."
+            title="System settings & provider registry."
+            description="Write the first section of every conversation, curate the prompts shown on the empty chat page, and configure the four capability slots: chat, embedding, web search, and web fetch. Stored keys stay on the server and are never returned to this page."
             meta={<span>Settings 07 · local-first archive</span>}
           />
 
           <SystemPromptPanel />
+
+          <FrequentlyUsedPromptsPanel />
 
           <div id="settings-providers" className="settings-anchor">
             <ProviderVaultPanel />

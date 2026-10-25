@@ -116,6 +116,9 @@ class TimelineService:
                     date_label=summary.period_end.astimezone(self.timezone).date().isoformat(),
                     content=summary.content,
                     title=", ".join(summary.themes),
+                    memory_count=summary.memory_count,
+                    period_start=summary.period_start,
+                    period_end=summary.period_end,
                 )
             )
         for file in files[:MAX_EVENTS_PER_KIND]:
@@ -175,6 +178,9 @@ class TimelineService:
                     raw_file_path=event.title if event.kind == "file_update" else None,
                     action=event.action,
                     status=event.status,
+                    memory_count=event.memory_count if event.kind == "summary" else None,
+                    period_start=event.period_start if event.kind == "summary" else None,
+                    period_end=event.period_end if event.kind == "summary" else None,
                 )
             )
         skips = [

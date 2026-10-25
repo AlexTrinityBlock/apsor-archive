@@ -1,9 +1,11 @@
 """Trusted current-time metadata for provider turns.
 
 The frozen system prompt cannot carry a clock: it is created once per
-conversation. Instead each provider request prefixes the newest user message
-with a small ``<current_time>`` block. The server supplies authoritative UTC;
-the browser supplies its IANA timezone (or a fixed offset as a fallback).
+conversation. Instead the user entry stores one small ``<current_time>`` block
+that is appended after the message text when the message is created. The server
+supplies authoritative UTC; the browser supplies its IANA timezone (or a fixed
+offset as a fallback). Historical blocks are immutable, so retries never rewrite
+the provider prefix.
 """
 
 from datetime import UTC, datetime, timedelta, timezone, tzinfo

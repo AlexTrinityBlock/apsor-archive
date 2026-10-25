@@ -48,6 +48,8 @@ class MemorySearchResultSchema(BaseModel):
 
 
 class SummarySearchResultSchema(BaseModel):
+    """A summary hit; it is a compressed view, not the original memories."""
+
     model_config = ConfigDict(frozen=True)
 
     memory_summary_id: int
@@ -56,6 +58,8 @@ class SummarySearchResultSchema(BaseModel):
     period_start: datetime
     period_end: datetime
     themes: list[str]
+    memory_count: int
+    source_memory_ids: list[int]
     score: float
     matched_by: list[MatchSource]
 

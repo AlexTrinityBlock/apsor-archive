@@ -90,6 +90,17 @@ class Settings(BaseSettings):
     deepseek_max_tokens: int = 1800
     deepseek_temperature: float = 0.2
 
+    # Tavily is the environment fallback for the two independent web
+    # capabilities.  A database row always wins; when neither capability has an
+    # active row, both resolve to TAVILY_API_KEY as specified by the plan.
+    tavily_api_key: SecretStr | None = None
+    tavily_base_url: str = "https://api.tavily.com"
+    web_search_timeout_seconds: float = 25.0
+    web_fetch_timeout_seconds: float = 30.0
+    web_search_cache_ttl_seconds: int = 900
+    web_fetch_cache_ttl_seconds: int = 3600
+    web_fetch_max_chars: int = 20_000
+
     # Master key for encrypting API keys stored in the database. When unset, a
     # 0600 key file is created under the data directory.
     secret_key: SecretStr | None = None
