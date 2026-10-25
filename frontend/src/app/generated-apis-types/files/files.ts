@@ -31,6 +31,7 @@ import type {
   FileMoveSchema,
   FileSchema,
   FileTextCreateSchema,
+  FileTextUpdateSchema,
   HTTPValidationError,
   IngestJobListSchema,
   IngestJobSchema,
@@ -1081,7 +1082,96 @@ export function useGetFileContent<TData = Awaited<ReturnType<typeof getFileConte
 
 
 
-export const getCopyFileUrl = (fileId: number,) => {
+export const getUpdateFileContentUrl = (fileId: number,) => {
+
+
+
+
+  return `/api/v1/files/${fileId}/content`
+}
+
+/**
+ * 更新既有 Markdown 檔案內容，建立新版本並重建索引。
+ * @summary Update File Content
+ */
+export const updateFileContent = async (fileId: number,
+    fileTextUpdateSchema: FileTextUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<FileSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<FileSchema>(getUpdateFileContentUrl(fileId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(fileTextUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateFileContentMutationKey = () => ['updateFileContent'] as const;
+
+export const getUpdateFileContentMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFileContent>>, TError,UpdateFileContentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateFileContent>>, TError,UpdateFileContentMutationVariables, TContext> => {
+
+const mutationKey = getUpdateFileContentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateFileContent>>, UpdateFileContentMutationVariables> = (props) => {
+          const {fileId,data} = props ?? {};
+
+          return  updateFileContent(fileId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateFileContentMutationResult = NonNullable<Awaited<ReturnType<typeof updateFileContent>>>
+    export type UpdateFileContentMutationBody = FileTextUpdateSchema
+    export type UpdateFileContentMutationError = HTTPValidationError
+    export type UpdateFileContentMutationVariables = {fileId: number;data: FileTextUpdateSchema}
+
+    /**
+ * @summary Update File Content
+ */
+export const useUpdateFileContent = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateFileContent>>, TError,UpdateFileContentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateFileContent>>,
+        TError,
+        UpdateFileContentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateFileContentMutationOptions(options), queryClient);
+    }
+    export const getCopyFileUrl = (fileId: number,) => {
 
 
 

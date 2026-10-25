@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 
@@ -19,9 +20,13 @@ import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useI18n, type Translate } from "../../i18n";
 import {
+  contextMenuTriggerFromKeyboard,
   fileKindLabel,
+  isContextMenuKey,
+  isMarkdownFile,
   sameArchivePath,
   type FileOperationMode,
+  type LibraryContextMenuTrigger,
 } from "./library-utils";
 
 const INTERNAL_DRAG_MIME = "application/x-apsor-archive-file";
@@ -104,6 +109,11 @@ interface FileCardProps {
   readonly selected: boolean;
   readonly onToggleSelected: (fileId: number) => void;
   readonly onOpen: (fileId: number) => void;
+  readonly onEditFile: (fileId: number) => void;
+  readonly onFileContextMenu: (
+    event: LibraryContextMenuTrigger,
+    file: PathFileSchema,
+  ) => void;
   readonly onToggleMenu: (fileId: number | null) => void;
   readonly onRequestMove: (file: PathFileSchema, mode: FileOperationMode) => void;
   readonly onRequestDelete: (file: PathFileSchema) => void;
@@ -119,6 +129,8 @@ function FileCard({
   selected,
   onToggleSelected,
   onOpen,
+  onEditFile,
+  onFileContextMenu,
   onToggleMenu,
   onRequestMove,
   onRequestDelete,
@@ -129,6 +141,17 @@ function FileCard({
   const menuId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleContextMenuKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (!isContextMenuKey(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onFileContextMenu(contextMenuTriggerFromKeyboard(event.currentTarget), file);
+  };
 
   useEffect(() => {
     if (!menuOpen) {
@@ -185,6 +208,8 @@ function FileCard({
       data-library-file-id={file.file_id}
       onDragStart={(event) => onDragStart(event, file)}
       onDragEnd={onDragEnd}
+      onContextMenu={(event) => onFileContextMenu(event, file)}
+      tabIndex={-1}
       title={t("library.board.dragTitle")}
     >
       {selecting ? (
@@ -205,6 +230,7 @@ function FileCard({
         type="button"
         className="library-file-card__open"
         onClick={() => onOpen(file.file_id)}
+        onKeyDown={handleContextMenuKeyDown}
         aria-label={t("library.a11y.openPreviewOf", { name: file.file_name })}
       >
         <span className="library-file-card__top">
@@ -262,6 +288,20 @@ function FileCard({
             <Icon name="file" size={15} />
             <span>{t("library.board.openPreview")}</span>
           </button>
+          {isMarkdownFile(file.raw_file_path) ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="library-file-menu__item"
+              onClick={() => {
+                onToggleMenu(null);
+                onEditFile(file.file_id);
+              }}
+            >
+              <Icon name="pencil" size={15} />
+              <span>{t("library.editor.editFile")}</span>
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"
@@ -310,6 +350,10 @@ interface FolderCardProps extends DropHandlers {
   readonly dropAllowed: boolean;
   readonly onOpenFolder: (path: string) => void;
   readonly onUploadHere: (path: string) => void;
+  readonly onFolderContextMenu: (
+    event: LibraryContextMenuTrigger,
+    folder: DirectorySchema,
+  ) => void;
 }
 
 function FolderCard({
@@ -321,6 +365,7 @@ function FolderCard({
   onDrop,
   onOpenFolder,
   onUploadHere,
+  onFolderContextMenu,
 }: FolderCardProps) {
   const { t } = useI18n();
   const classes = [
@@ -337,11 +382,24 @@ function FolderCard({
       onDragOver={(event) => onDragOver(event, folder.path)}
       onDragLeave={(event) => onDragLeave(event, folder.path)}
       onDrop={(event) => onDrop(event, folder.path)}
+      onContextMenu={(event) => onFolderContextMenu(event, folder)}
+      tabIndex={-1}
     >
       <button
         type="button"
         className="library-folder-card__open"
         onClick={() => onOpenFolder(folder.path)}
+        onKeyDown={(event) => {
+          if (!isContextMenuKey(event)) {
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          onFolderContextMenu(
+            contextMenuTriggerFromKeyboard(event.currentTarget),
+            folder,
+          );
+        }}
       >
         <span className="library-folder-card__icon" aria-hidden="true">
           <Icon name="folder" size={20} />
@@ -375,6 +433,15 @@ interface LibraryBoardProps {
   readonly onToggleSelected: (fileId: number) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onOpenFile: (fileId: number) => void;
+  readonly onEditFile: (fileId: number) => void;
+  readonly onFileContextMenu: (
+    event: LibraryContextMenuTrigger,
+    file: PathFileSchema,
+  ) => void;
+  readonly onFolderContextMenu: (
+    event: LibraryContextMenuTrigger,
+    folder: DirectorySchema,
+  ) => void;
   readonly onUploadHere: (path: string) => void;
   readonly onRequestMove: (file: PathFileSchema, mode: FileOperationMode) => void;
   readonly onRequestDelete: (file: PathFileSchema) => void;
@@ -401,6 +468,9 @@ export function LibraryBoard({
   onToggleSelected,
   onOpenFolder,
   onOpenFile,
+  onEditFile,
+  onFileContextMenu,
+  onFolderContextMenu,
   onUploadHere,
   onRequestMove,
   onRequestDelete,
@@ -592,6 +662,7 @@ export function LibraryBoard({
                       dropAllowed={dropAllowed}
                       onOpenFolder={onOpenFolder}
                       onUploadHere={onUploadHere}
+                      onFolderContextMenu={onFolderContextMenu}
                       {...dropHandlers}
                     />
                   ))}
@@ -628,6 +699,8 @@ export function LibraryBoard({
                       selected={selectedFileIds.has(file.file_id)}
                       onToggleSelected={onToggleSelected}
                       onOpen={onOpenFile}
+                      onEditFile={onEditFile}
+                      onFileContextMenu={onFileContextMenu}
                       onToggleMenu={setMenuFileId}
                       onRequestMove={onRequestMove}
                       onRequestDelete={onRequestDelete}

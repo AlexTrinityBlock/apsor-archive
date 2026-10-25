@@ -34,6 +34,7 @@ interface LibraryToolbarProps {
   readonly onToggleSelecting: () => void;
   readonly onUpload: () => void;
   readonly onNewFolder: () => void;
+  readonly onNewMarkdown: () => void;
 }
 
 const SORT_LABEL_KEYS: Record<LibrarySort, TranslationKey> = {
@@ -143,6 +144,7 @@ export function LibraryToolbar({
   onToggleSelecting,
   onUpload,
   onNewFolder,
+  onNewMarkdown,
 }: LibraryToolbarProps) {
   const { t, formatNumber } = useI18n();
   const searchId = useId();
@@ -213,6 +215,10 @@ export function LibraryToolbar({
           <Button variant="secondary" size="sm" onClick={onUpload}>
             <Icon name="arrow-down" size={14} />
             {t("library.common.upload")}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onNewMarkdown}>
+            <Icon name="plus" size={14} />
+            {t("library.editor.newNote")}
           </Button>
           <Button variant="ink" size="sm" onClick={onNewFolder}>
             <Icon name="folder" size={14} />
