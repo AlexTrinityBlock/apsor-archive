@@ -118,6 +118,8 @@ export * from './summarySchema';
 export * from './summarySchemaGenerator';
 export * from './summarySearchResultSchema';
 export * from './summarySearchResultSchemaMatchedByItem';
+export * from './systemPromptReadSchema';
+export * from './systemPromptUpdateSchema';
 export * from './timelineDensitySchema';
 export * from './timelineEventSchema';
 export * from './timelineEventSchemaKind';

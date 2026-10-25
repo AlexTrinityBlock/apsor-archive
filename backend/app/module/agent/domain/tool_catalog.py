@@ -20,7 +20,7 @@ from app.module.agent.domain.tool_args import (
     SearchKnowledgeArgs,
 )
 
-PROMPT_VERSION = "archive-agent-v4"
+PROMPT_VERSION = "archive-agent-v5"
 TOOLS_VERSION = "archive-tools-v2"
 
 

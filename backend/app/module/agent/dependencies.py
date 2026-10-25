@@ -13,6 +13,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.ai.runtime import AiRuntime
+from app.infrastructure.config.settings import Settings
 from app.infrastructure.database.session import Database, get_db_session
 from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
 from app.module.agent.exception.domain_error import AgentNotConfiguredError
@@ -24,9 +25,11 @@ from app.module.agent.protocol.tool_service_protocol import (
 from app.module.agent.repository.agent_config_repository import AgentConfigRepository
 from app.module.agent.repository.agent_repository import AgentRepository
 from app.module.agent.repository.saved_question_repository import SavedQuestionRepository
+from app.module.agent.repository.system_prompt_repository import SystemPromptRepository
 from app.module.agent.service.agent_service import AgentService
 from app.module.agent.service.agent_settings_service import AgentSettingsService
 from app.module.agent.service.saved_question_service import SavedQuestionService
+from app.module.agent.service.system_prompt_service import SystemPromptService
 from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.knowledge.dependencies import (
     get_file_service,
@@ -95,6 +98,12 @@ async def get_agent_runtime_config(request: Request) -> AgentRuntimeConfig:
     return config
 
 
+def get_system_prompt_service(request: Request) -> SystemPromptService:
+    """Build the singleton prompt service on a short-lived session factory."""
+    database = cast(Database, request.app.state.db)
+    return SystemPromptService(SystemPromptRepository(database.session_factory))
+
+
 def get_agent_service(
     request: Request,
     chat_generator: ChatGeneratorProtocol = Depends(get_agent_chat_generator),
@@ -116,6 +125,8 @@ def get_agent_service(
         default_provider=provider,
         default_model=model,
         config=config,
+        system_prompt_service=get_system_prompt_service(request),
+        server_timezone=cast(Settings, request.app.state.settings).timezone,
     )
 
 

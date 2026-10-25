@@ -20,6 +20,7 @@ from app.module.agent.domain.agent_domain import (
     KIND_ASSISTANT,
     KIND_SYSTEM,
     KIND_TOOL_RESULT,
+    KIND_USER,
     ContextEdit,
     ProviderContext,
     TranscriptEntry,
@@ -215,6 +216,13 @@ def _contributions(
                 continue
             normal.append(message)
         if normal:
+            if entry.kind == KIND_USER and isinstance(entry.data, dict):
+                time_context = entry.data.get("time_context")
+                if isinstance(time_context, str) and time_context:
+                    for message in normal:
+                        content = message.get("content")
+                        if message.get("role") == "user" and isinstance(content, str):
+                            message["content"] = f"{content}\n\n{time_context}"
             contributions.append((entry, normal))
             source_entry_ids.append(entry.id)
 

@@ -78,6 +78,8 @@ from app.module.agent.schema.agent_schema import (
     AgentTurnResultSchema,
 )
 from app.module.agent.service.system_prompt import build_system_data, build_system_model
+from app.module.agent.service.system_prompt_service import SystemPromptService
+from app.module.agent.service.time_context import current_time_block
 from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.knowledge.exception.domain_error import AiNotConfiguredError
 from app.shared.time import utcnow
@@ -143,6 +145,8 @@ class AgentService:
         default_provider: str,
         default_model: str,
         config: AgentRuntimeConfig,
+        system_prompt_service: SystemPromptService,
+        server_timezone: str = "Asia/Taipei",
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -150,6 +154,8 @@ class AgentService:
         self.default_provider = default_provider
         self.default_model = default_model
         self.config = config
+        self.system_prompt_service = system_prompt_service
+        self.server_timezone = server_timezone
 
     async def create_conversation(
         self,
@@ -160,7 +166,12 @@ class AgentService:
             provider = "deepseek"
         model = payload.model or self.default_model or "deepseek-flash"
         now = utcnow()
-        system_data = build_system_data(provider=provider, model=model)
+        custom_prompt = await self.system_prompt_service.get_active()
+        system_data = build_system_data(
+            provider=provider,
+            model=model,
+            custom_prompt=custom_prompt,
+        )
         system_model = build_system_model(system_data)
         conversation, _entry = await self.repository.create_conversation(
             title=payload.title or "New conversation",
@@ -303,9 +314,19 @@ class AgentService:
         content = payload.content.strip()
         if not content:
             raise AgentInvalidEntryError("Message content must not be empty.")
-        data: dict[str, Any] | None = None
-        if payload.request_id is not None:
-            data = {"request_id": payload.request_id}
+        now = utcnow()
+        time_context = current_time_block(
+            now=now,
+            client_timezone=payload.client_timezone,
+            client_utc_offset_minutes=payload.client_utc_offset_minutes,
+            server_timezone=self.server_timezone,
+        )
+        data: dict[str, Any] = {
+            "request_id": payload.request_id,
+            "client_timezone": payload.client_timezone,
+            "client_utc_offset_minutes": payload.client_utc_offset_minutes,
+            "time_context": time_context,
+        }
         compaction_draft = await self._auto_compaction_draft(conversation_id)
         page_context_draft, page_context_key = _page_context_draft(
             payload.page_context,
@@ -328,7 +349,7 @@ class AgentService:
             page_context_draft=page_context_draft,
             page_context_key=page_context_key,
             request_id=payload.request_id,
-            now=utcnow(),
+            now=now,
         )
         return AgentTurnState(
             conversation=_conversation_schema(conversation_model),

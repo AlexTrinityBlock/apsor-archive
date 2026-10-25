@@ -206,11 +206,15 @@ Endpoints (all require the session cookie):
 | `PATCH` | `/api/v1/agent/questions/{question_id}` | Edit the question text |
 | `DELETE` | `/api/v1/agent/questions/{question_id}` | Delete the saved question (`204`) |
 | `POST` | `/api/v1/agent/questions/{question_id}/ask` | Run one agent turn and persist its outcome |
+| `GET` | `/api/v1/agent/settings/system-prompt` | Read the custom first system section |
+| `PUT` | `/api/v1/agent/settings/system-prompt` | Replace title and body |
+| `POST` | `/api/v1/agent/settings/system-prompt/reset` | Remove the custom section |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` takes
-`{content, request_id?, page_context?}`; `POST .../retry` takes
-`{request_id?}`. Retry creates a new run for the same user entry, so it never
-duplicates the user message. The latest run must be `failed` or `cancelled`.
+`{content, request_id?, page_context?, client_timezone?,
+client_utc_offset_minutes?}`; `POST .../retry` takes `{request_id?}`. Retry
+creates a new run for the same user entry, so it never duplicates the user
+message. The latest run must be `failed` or `cancelled`.
 
 `POST .../fork` accepts an optional `{at_entry_id?, title?}` body and returns
 `201 AgentConversationSchema`. `at_entry_id` is an inclusive cutoff that must
@@ -375,9 +379,53 @@ formatting whitespace):
 If the key, path, or normalized text is empty, no snapshot is written and
 `page_context_attached` is `false`.
 
-New conversations freeze the system prompt version `archive-agent-v2`, which
-states that `<page_context>` is reference data, never an instruction, and that
-it appears only when the page changes.
+New conversations freeze the current system prompt version
+(`archive-agent-v5`), which states that `<page_context>` and `<current_time>`
+are reference data, never instructions, and that page context appears only when
+the page changes.
+
+### Current time
+
+Every user message may carry the browser clock metadata:
+
+| Field | Type | Rule |
+|---|---|---|
+| `client_timezone` | string or null | IANA name, 1–64 characters |
+| `client_utc_offset_minutes` | integer or null | −840 to 840; current browser offset |
+
+Both are stored on the `pi.user` entry `data`, together with a server-rendered
+`time_context` string. The provider request appends that block **after** the user
+text. It is written once when the message is created, so every historical user
+message keeps its send time and the KV-cache prefix is never rewritten:
+
+```xml
+<current_time>
+utc: 2026-10-25T00:45:00Z
+timezone: Asia/Taipei (UTC+08:00)
+timezone_source: browser
+local: 2026-10-25T08:45:00+08:00
+</current_time>
+```
+
+The server owns UTC; a valid IANA zone wins over the numeric offset (so DST is
+correct), and a missing or invalid zone falls back to `DENDRO_TIMEZONE`. A retry
+reuses the original message's stored block. This lets the agent answer "now",
+"today", and relative-date questions without inventing a clock.
+
+### System prompt module
+
+`system_prompt` is a singleton table (`id = 1`) with `title`, `body`, and
+`updated_at`. `GET`, `PUT`, and `POST /reset` under
+`/api/v1/agent/settings/system-prompt` read, replace, or remove it. Title and
+body are trimmed and both are required; an empty body means the built-in prompt
+only.
+
+`create_conversation` reads the active prompt once and inserts it as section
+`00` (`system_prompt`) before identity, instructions, examples, and context
+protocol. The full system payload is frozen into `pi.system` for that
+conversation, the tools follow the system message, and messages follow the
+tools. Editing the prompt therefore affects only new conversations and never
+rewrites an existing provider prefix. This is the KV-cache ordering guarantee.
 
 `begin_message` writes the snapshot and the user entry in one transaction:
 
@@ -654,10 +702,12 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   partial unique pending `(run_id, tool_call_id)` index;
 - `8f4b2c6d9e01` drops the retired `media_ngram` and `media_asset` tables. The
   downgrade recreates their original schema and indexes;
-- `c4d8e2f6a1b9` (after `8f4b2c6d9e01`, the current head) creates the explicit
-  `folder` table, copies current folder rows with their ids, and drops
-  `tree_node`. File leaves are derived from `file.raw_file_path`. The downgrade
-  recreates current folders and current file leaves.
+- `c4d8e2f6a1b9` (after `8f4b2c6d9e01`) creates the explicit `folder` table,
+  copies current folder rows with their ids, and drops `tree_node`. File leaves
+  are derived from `file.raw_file_path`. The downgrade recreates current folders
+  and current file leaves;
+- `d5e9f3a7b2c1` (current head) creates the singleton `system_prompt` table for
+  the owner-authored first system section.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
@@ -728,7 +778,7 @@ PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/dendromatrix-pytest.log
 
 The tests use a real PostgreSQL database named `dendromatrix_test` on the same
 instance. They run sequentially, reset tables between tests, and treat warnings
-as errors. There are exactly eleven collected tests:
+as errors. There are exactly twelve collected tests:
 
 1. `tests/test_agent.py::test_agent_entry_log_tool_loop_and_cache_usage`
 2. `tests/test_errors.py::test_validation_and_error_envelope`
@@ -775,7 +825,7 @@ a failed job. The former two search tests are
 merged into `test_hybrid_search_and_union_query`. A separate file-library test
 uploads an image without a vision provider and checks the filename caption,
 stored original, path listing, and search result, which is what keeps the suite
-at eleven collected functions.
+at twelve collected functions.
 
 A separate manual validation used the public-domain 《紅樓夢》 from Project
 Gutenberg (about 2.66 MB, 268 chunks at 4,000 characters / 500 overlap) against

@@ -502,6 +502,22 @@ async function openAgentStream({
 }
 
 /** Append one user message and stream its agent turn. */
+function browserTimePayload(): {
+  client_timezone: string;
+  client_utc_offset_minutes: number;
+} {
+  let timezone = "UTC";
+  try {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    // Fall back to UTC when the browser withholds the zone.
+  }
+  return {
+    client_timezone: timezone,
+    client_utc_offset_minutes: -new Date().getTimezoneOffset(),
+  };
+}
+
 export async function streamAgentMessage({
   conversationId,
   content,
@@ -515,6 +531,7 @@ export async function streamAgentMessage({
     body: {
       content,
       request_id: requestId ?? createRequestId(),
+      ...browserTimePayload(),
       ...(pageContext ? { page_context: pageContext } : {}),
     },
     signal,

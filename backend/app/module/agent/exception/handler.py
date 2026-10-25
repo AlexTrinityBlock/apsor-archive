@@ -10,6 +10,7 @@ from app.module.agent.exception.domain_error import (
     AgentError,
     AgentForkEntryInvalidError,
     AgentInvalidEntryError,
+    AgentInvalidSystemPromptError,
     AgentNotConfiguredError,
     AgentProviderError,
     AgentRequestDuplicateError,
@@ -34,6 +35,11 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(AgentNotConfiguredError, 503, "agent_not_configured")
     ExceptionRegistry.register(AgentProviderError, 502, "agent_provider_error")
     ExceptionRegistry.register(AgentInvalidEntryError, 422, "agent_invalid_entry")
+    ExceptionRegistry.register(
+        AgentInvalidSystemPromptError,
+        422,
+        "agent_invalid_system_prompt",
+    )
     ExceptionRegistry.register(AgentApprovalNotFoundError, 404, "agent_approval_not_found")
     ExceptionRegistry.register(AgentApprovalNotPendingError, 409, "agent_approval_not_pending")
     ExceptionRegistry.register(AgentApprovalOutOfOrderError, 409, "agent_approval_out_of_order")
