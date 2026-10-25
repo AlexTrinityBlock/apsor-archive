@@ -71,6 +71,8 @@ export * from './ingestSettingsReadSchema';
 export * from './ingestSettingsReadSchemaSource';
 export * from './ingestSettingsUpdateSchema';
 export * from './ingestSettingsValuesSchema';
+export * from './libraryDeleteResultSchema';
+export * from './libraryDeleteSchema';
 export * from './listAgentApprovalsParams';
 export * from './listAgentApprovalsStatus';
 export * from './listAgentConversationsParams';

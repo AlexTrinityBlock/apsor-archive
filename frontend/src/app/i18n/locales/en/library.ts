@@ -51,6 +51,7 @@ export const library = {
   a11y: {
     closeDialog: "Close dialog",
     selectFile: "Select {name}",
+    selectFolder: "Select folder {name}",
     openPreviewOf: "Open preview of {name}",
     actionsFor: "Actions for {name}",
     moveFile: "Move {name}",
@@ -129,10 +130,18 @@ export const library = {
     aria: "Batch file selection",
     countOne: "file selected",
     countOther: "files selected",
+    totalOne: "item selected",
+    totalOther: "items selected",
+    filesOne: "{count} file",
+    filesOther: "{count} files",
+    foldersOne: "{count} folder",
+    foldersOther: "{count} folders",
     visible: "{count} visible in this folder",
     clearSelection: "Clear selection",
     selectAll: "Select all visible",
     moveSelected: "Move selected",
+    deleteSelected: "Delete selected",
+    foldersOnlyHint: "Folders can only be deleted. Select files alone to move them.",
   },
   empty: {
     searchEyebrow: "Fuzzy path search",
@@ -276,6 +285,34 @@ export const library = {
     pending: "Soft-deleting…",
     submit: "Soft delete file",
     deletedToast: "“{name}” was soft-deleted. Its history remains traceable.",
+  },
+  batchDelete: {
+    eyebrow: "Recursive soft delete",
+    titleOne: "Delete {count} selected item?",
+    titleOther: "Delete {count} selected items?",
+    description:
+      "The selection is removed from the shelf, path listings, and search in one atomic step. Earlier versions stay in history.",
+    filesCountOne: "{count} file selected",
+    filesCountOther: "{count} files selected",
+    foldersCountOne: "{count} folder selected",
+    foldersCountOther: "{count} folders selected",
+    foldersHeading: "Folders being deleted",
+    more: "+{count} more",
+    warningTitle: "Before you delete",
+    warningFiles:
+      "Selected files are soft-deleted: they leave current listings and search but keep their version history.",
+    warningRecursive:
+      "Deleting a folder recursively soft-deletes every current file and subfolder inside it.",
+    warningHistory:
+      "Earlier versions and stored original bytes are not erased; they stay readable through history or by file id.",
+    warningRoot:
+      "The archive root cannot be deleted. Choose a folder inside it instead.",
+    ack: "I understand that the selected folders and their contents are recursively soft-deleted.",
+    submit: "Soft delete selection",
+    pending: "Soft-deleting…",
+    deletedToastOne: "Soft-deleted {count} item · {detail}.",
+    deletedToastOther: "Soft-deleted {count} items · {detail}.",
+    error: "The selection could not be deleted.",
   },
   rename: {
     eyebrow: "Rename leaf",
