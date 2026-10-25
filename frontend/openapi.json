@@ -1997,6 +1997,26 @@
         "title": "FrequentlyUsedPromptReadSchema",
         "type": "object"
       },
+      "FrequentlyUsedPromptReorderSchema": {
+        "additionalProperties": false,
+        "description": "The complete new order; every existing prompt id must appear once.",
+        "properties": {
+          "prompt_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Prompt Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "prompt_ids"
+        ],
+        "title": "FrequentlyUsedPromptReorderSchema",
+        "type": "object"
+      },
       "FrequentlyUsedPromptUpdateSchema": {
         "additionalProperties": false,
         "description": "Replace every editable field of one prompt shortcut.",
@@ -7652,6 +7672,48 @@
           }
         },
         "summary": "Create Frequently Used Prompt",
+        "tags": [
+          "prompts"
+        ]
+      }
+    },
+    "/api/v1/settings/frequent-prompts/reorder": {
+      "post": {
+        "description": "Replace the complete shortcut order atomically.",
+        "operationId": "reorderFrequentlyUsedPrompts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrequentlyUsedPromptReorderSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_FrequentlyUsedPromptReadSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder Frequently Used Prompts",
         "tags": [
           "prompts"
         ]

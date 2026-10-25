@@ -44,8 +44,17 @@ class FrequentlyUsedPromptUpdateSchema(BaseModel):
     sort_order: int = Field(default=0, ge=0)
 
 
+class FrequentlyUsedPromptReorderSchema(BaseModel):
+    """The complete new order; every existing prompt id must appear once."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    prompt_ids: list[int] = Field(min_length=1, max_length=20)
+
+
 __all__ = [
     "FrequentlyUsedPromptCreateSchema",
     "FrequentlyUsedPromptReadSchema",
+    "FrequentlyUsedPromptReorderSchema",
     "FrequentlyUsedPromptUpdateSchema",
 ]
