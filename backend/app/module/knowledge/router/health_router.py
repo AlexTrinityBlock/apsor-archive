@@ -42,6 +42,10 @@ async def get_health(
         cache=cache_status,
         ai="configured" if text_generator.configured else "missing",
         embedding_provider=ai_runtime.embedding_config.provider,
+        web_search_provider=ai_runtime.web_search_client.provider,
+        web_search_configured=ai_runtime.web_search_client.configured,
+        web_fetch_provider=ai_runtime.web_fetch_client.provider,
+        web_fetch_configured=ai_runtime.web_fetch_client.configured,
     )
     if database_status != "ok":
         return JSONResponse(status_code=503, content=payload.model_dump(mode="json"))

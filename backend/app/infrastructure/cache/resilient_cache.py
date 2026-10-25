@@ -39,19 +39,20 @@ class ResilientCache:
                 self._warn("set_json", exc)
         await self._fallback.set_json(key, value, ttl_seconds)
 
-    async def get_version(self) -> int:
+    async def get_version(self, scope: str = "index") -> int:
         if self._primary is not None:
             try:
-                return await self._primary.get_version()
+                return await self._primary.get_version(scope)
             except Exception as exc:
                 self._warn("get_version", exc)
-        return await self._fallback.get_version()
+        return await self._fallback.get_version(scope)
 
-    async def bump_version(self) -> int:
-        version = await self._fallback.bump_version()
+    async def bump_version(self, scope: str = "index") -> int:
+        # 兩層都 bump；Valkey 恢復後才不會讀到舊的 scope version。
+        version = await self._fallback.bump_version(scope)
         if self._primary is not None:
             try:
-                return await self._primary.bump_version()
+                return await self._primary.bump_version(scope)
             except Exception as exc:
                 self._warn("bump_version", exc)
         return version

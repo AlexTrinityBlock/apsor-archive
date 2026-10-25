@@ -24,13 +24,14 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  AiProviderUpdateSchema,
-  AiSettingsReadSchema,
-  AiTestResultSchema,
   EmbeddingReindexSchema,
   HTTPValidationError,
   IngestSettingsReadSchema,
-  IngestSettingsUpdateSchema
+  IngestSettingsUpdateSchema,
+  ProviderCreateSchema,
+  ProviderRegistryReadSchema,
+  ProviderTestResultSchema,
+  ProviderUpdateSchema
 } from '../schemas';
 
 import { apiFetch } from '../../../apis/fetch-client';
@@ -55,419 +56,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getGetAiSettingsUrl = () => {
-
-
-
-
-  return `/api/v1/settings/ai`
-}
-
-/**
- * Return both provider slots with masked key hints.
- * @summary Get Ai Settings
- */
-export const getAiSettings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AiSettingsReadSchema> => {
-
-  return apiFetch<AiSettingsReadSchema>(getGetAiSettingsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-
-
-export const getGetAiSettingsQueryKey = () => {
-    return [
-    `/api/v1/settings/ai`
-    ] as const;
-    }
-
-
-export const getGetAiSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getAiSettings>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
-) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetAiSettingsQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAiSettings>>> = ({ signal }) => getAiSettings({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAiSettings>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
-}
-
-export type GetAiSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getAiSettings>>>
-export type GetAiSettingsQueryError = unknown
-
-
-export function useGetAiSettings<TData = Awaited<ReturnType<typeof getAiSettings>>, TError = unknown>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiSettings>>, TError, TData>> & Pick<
-        DefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getAiSettings>>,
-          TError,
-          Awaited<ReturnType<typeof getAiSettings>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAiSettings<TData = Awaited<ReturnType<typeof getAiSettings>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiSettings>>, TError, TData>> & Pick<
-        UndefinedInitialDataOptions<
-          Awaited<ReturnType<typeof getAiSettings>>,
-          TError,
-          Awaited<ReturnType<typeof getAiSettings>>
-        > , 'initialData'
-      >, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useGetAiSettings<TData = Awaited<ReturnType<typeof getAiSettings>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
-  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-/**
- * @summary Get Ai Settings
- */
-
-export function useGetAiSettings<TData = Awaited<ReturnType<typeof getAiSettings>>, TError = unknown>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAiSettings>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient
- ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-
-  const queryOptions = getGetAiSettingsQueryOptions(options)
-
-  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-
-  return withQueryKey(query, queryOptions.queryKey);
-}
-
-
-
-
-
-
-export const getReindexEmbeddingsUrl = () => {
-
-
-
-
-  return `/api/v1/settings/ai/embedding/reindex`
-}
-
-/**
- * Re-embed every current chunk with the active embedding provider.
- * @summary Reindex Embeddings
- */
-export const reindexEmbeddings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<EmbeddingReindexSchema> => {
-
-  return apiFetch<EmbeddingReindexSchema>(getReindexEmbeddingsUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getReindexEmbeddingsMutationKey = () => ['reindexEmbeddings'] as const;
-
-export const getReindexEmbeddingsMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reindexEmbeddings>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof reindexEmbeddings>>, TError,void, TContext> => {
-
-const mutationKey = getReindexEmbeddingsMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reindexEmbeddings>>, void> = () => {
-
-
-          return  reindexEmbeddings(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ReindexEmbeddingsMutationResult = NonNullable<Awaited<ReturnType<typeof reindexEmbeddings>>>
-
-    export type ReindexEmbeddingsMutationError = unknown
-
-
-    /**
- * @summary Reindex Embeddings
- */
-export const useReindexEmbeddings = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reindexEmbeddings>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof reindexEmbeddings>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getReindexEmbeddingsMutationOptions(options), queryClient);
-    }
-    export const getUpdateAiProviderUrl = (purpose: string,) => {
-
-
-
-
-  return `/api/v1/settings/ai/${purpose}`
-}
-
-/**
- * Update or create one provider configuration and reload it immediately.
- * @summary Update Ai Provider
- */
-export const updateAiProvider = async (purpose: string,
-    aiProviderUpdateSchema: AiProviderUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<AiSettingsReadSchema> => {
-
-    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
-    if (!h) return {};
-    if (h instanceof Headers) return Object.fromEntries(h.entries());
-    if (Symbol.iterator in h) {
-      return Object.fromEntries(
-        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
-      );
-    }
-    const headers: Record<string, string | readonly string[]> = {};
-    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
-      if (value !== undefined) headers[name] = value;
-    }
-    return headers;
-  };
-return apiFetch<AiSettingsReadSchema>(getUpdateAiProviderUrl(purpose),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(aiProviderUpdateSchema)
-  }
-);}
-
-
-
-
-
-export const getUpdateAiProviderMutationKey = () => ['updateAiProvider'] as const;
-
-export const getUpdateAiProviderMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAiProvider>>, TError,UpdateAiProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateAiProvider>>, TError,UpdateAiProviderMutationVariables, TContext> => {
-
-const mutationKey = getUpdateAiProviderMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAiProvider>>, UpdateAiProviderMutationVariables> = (props) => {
-          const {purpose,data} = props ?? {};
-
-          return  updateAiProvider(purpose,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type UpdateAiProviderMutationResult = NonNullable<Awaited<ReturnType<typeof updateAiProvider>>>
-    export type UpdateAiProviderMutationBody = AiProviderUpdateSchema
-    export type UpdateAiProviderMutationError = HTTPValidationError
-    export type UpdateAiProviderMutationVariables = {purpose: string;data: AiProviderUpdateSchema}
-
-    /**
- * @summary Update Ai Provider
- */
-export const useUpdateAiProvider = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAiProvider>>, TError,UpdateAiProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof updateAiProvider>>,
-        TError,
-        UpdateAiProviderMutationVariables,
-        TContext
-      > => {
-      return useMutation(getUpdateAiProviderMutationOptions(options), queryClient);
-    }
-    export const getClearAiProviderKeyUrl = (purpose: string,) => {
-
-
-
-
-  return `/api/v1/settings/ai/${purpose}/key`
-}
-
-/**
- * Remove the stored key and reload the provider runtime.
- * @summary Clear Ai Provider Key
- */
-export const clearAiProviderKey = async (purpose: string, options?: Parameters<typeof apiFetch>[1]): Promise<AiSettingsReadSchema> => {
-
-  return apiFetch<AiSettingsReadSchema>(getClearAiProviderKeyUrl(purpose),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-
-
-
-export const getClearAiProviderKeyMutationKey = () => ['clearAiProviderKey'] as const;
-
-export const getClearAiProviderKeyMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearAiProviderKey>>, TError,ClearAiProviderKeyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof clearAiProviderKey>>, TError,ClearAiProviderKeyMutationVariables, TContext> => {
-
-const mutationKey = getClearAiProviderKeyMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearAiProviderKey>>, ClearAiProviderKeyMutationVariables> = (props) => {
-          const {purpose} = props ?? {};
-
-          return  clearAiProviderKey(purpose,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ClearAiProviderKeyMutationResult = NonNullable<Awaited<ReturnType<typeof clearAiProviderKey>>>
-
-    export type ClearAiProviderKeyMutationError = HTTPValidationError
-    export type ClearAiProviderKeyMutationVariables = {purpose: string}
-
-    /**
- * @summary Clear Ai Provider Key
- */
-export const useClearAiProviderKey = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearAiProviderKey>>, TError,ClearAiProviderKeyMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof clearAiProviderKey>>,
-        TError,
-        ClearAiProviderKeyMutationVariables,
-        TContext
-      > => {
-      return useMutation(getClearAiProviderKeyMutationOptions(options), queryClient);
-    }
-    export const getTestAiProviderUrl = (purpose: string,) => {
-
-
-
-
-  return `/api/v1/settings/ai/${purpose}/test`
-}
-
-/**
- * Make one small provider request and report latency or the error.
- * @summary Test Ai Provider
- */
-export const testAiProvider = async (purpose: string, options?: Parameters<typeof apiFetch>[1]): Promise<AiTestResultSchema> => {
-
-  return apiFetch<AiTestResultSchema>(getTestAiProviderUrl(purpose),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getTestAiProviderMutationKey = () => ['testAiProvider'] as const;
-
-export const getTestAiProviderMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testAiProvider>>, TError,TestAiProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof testAiProvider>>, TError,TestAiProviderMutationVariables, TContext> => {
-
-const mutationKey = getTestAiProviderMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testAiProvider>>, TestAiProviderMutationVariables> = (props) => {
-          const {purpose} = props ?? {};
-
-          return  testAiProvider(purpose,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type TestAiProviderMutationResult = NonNullable<Awaited<ReturnType<typeof testAiProvider>>>
-
-    export type TestAiProviderMutationError = HTTPValidationError
-    export type TestAiProviderMutationVariables = {purpose: string}
-
-    /**
- * @summary Test Ai Provider
- */
-export const useTestAiProvider = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testAiProvider>>, TError,TestAiProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof testAiProvider>>,
-        TError,
-        TestAiProviderMutationVariables,
-        TContext
-      > => {
-      return useMutation(getTestAiProviderMutationOptions(options), queryClient);
-    }
-    export const getGetIngestSettingsUrl = () => {
+export const getGetIngestSettingsUrl = () => {
 
 
 
@@ -729,4 +318,661 @@ export const useResetIngestSettings = <TError = unknown,
         TContext
       > => {
       return useMutation(getResetIngestSettingsMutationOptions(options), queryClient);
+    }
+    export const getGetProviderRegistryUrl = () => {
+
+
+
+
+  return `/api/v1/settings/providers`
+}
+
+/**
+ * Return all four capability groups with active and saved providers.
+ * @summary Get Provider Registry
+ */
+export const getProviderRegistry = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
+
+  return apiFetch<ProviderRegistryReadSchema>(getGetProviderRegistryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProviderRegistryQueryKey = () => {
+    return [
+    `/api/v1/settings/providers`
+    ] as const;
+    }
+
+
+export const getGetProviderRegistryQueryOptions = <TData = Awaited<ReturnType<typeof getProviderRegistry>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegistry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProviderRegistryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProviderRegistry>>> = ({ signal }) => getProviderRegistry({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProviderRegistry>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetProviderRegistryQueryResult = NonNullable<Awaited<ReturnType<typeof getProviderRegistry>>>
+export type GetProviderRegistryQueryError = unknown
+
+
+export function useGetProviderRegistry<TData = Awaited<ReturnType<typeof getProviderRegistry>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegistry>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProviderRegistry>>,
+          TError,
+          Awaited<ReturnType<typeof getProviderRegistry>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetProviderRegistry<TData = Awaited<ReturnType<typeof getProviderRegistry>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegistry>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProviderRegistry>>,
+          TError,
+          Awaited<ReturnType<typeof getProviderRegistry>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetProviderRegistry<TData = Awaited<ReturnType<typeof getProviderRegistry>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegistry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Provider Registry
+ */
+
+export function useGetProviderRegistry<TData = Awaited<ReturnType<typeof getProviderRegistry>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProviderRegistry>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetProviderRegistryQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getReindexEmbeddingsUrl = () => {
+
+
+
+
+  return `/api/v1/settings/providers/embedding/reindex`
+}
+
+/**
+ * Re-embed every current chunk with the active embedding provider.
+ * @summary Reindex Embeddings
+ */
+export const reindexEmbeddings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<EmbeddingReindexSchema> => {
+
+  return apiFetch<EmbeddingReindexSchema>(getReindexEmbeddingsUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getReindexEmbeddingsMutationKey = () => ['reindexEmbeddings'] as const;
+
+export const getReindexEmbeddingsMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reindexEmbeddings>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reindexEmbeddings>>, TError,void, TContext> => {
+
+const mutationKey = getReindexEmbeddingsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reindexEmbeddings>>, void> = () => {
+
+
+          return  reindexEmbeddings(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReindexEmbeddingsMutationResult = NonNullable<Awaited<ReturnType<typeof reindexEmbeddings>>>
+
+    export type ReindexEmbeddingsMutationError = unknown
+
+
+    /**
+ * @summary Reindex Embeddings
+ */
+export const useReindexEmbeddings = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reindexEmbeddings>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof reindexEmbeddings>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getReindexEmbeddingsMutationOptions(options), queryClient);
+    }
+    export const getCreateProviderUrl = (capability: string,) => {
+
+
+
+
+  return `/api/v1/settings/providers/${capability}`
+}
+
+/**
+ * Create one provider row and optionally activate it immediately.
+ * @summary Create Provider
+ */
+export const createProvider = async (capability: string,
+    providerCreateSchema: ProviderCreateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<ProviderRegistryReadSchema>(getCreateProviderUrl(capability),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(providerCreateSchema)
+  }
+);}
+
+
+
+
+
+export const getCreateProviderMutationKey = () => ['createProvider'] as const;
+
+export const getCreateProviderMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProvider>>, TError,CreateProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createProvider>>, TError,CreateProviderMutationVariables, TContext> => {
+
+const mutationKey = getCreateProviderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createProvider>>, CreateProviderMutationVariables> = (props) => {
+          const {capability,data} = props ?? {};
+
+          return  createProvider(capability,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateProviderMutationResult = NonNullable<Awaited<ReturnType<typeof createProvider>>>
+    export type CreateProviderMutationBody = ProviderCreateSchema
+    export type CreateProviderMutationError = HTTPValidationError
+    export type CreateProviderMutationVariables = {capability: string;data: ProviderCreateSchema}
+
+    /**
+ * @summary Create Provider
+ */
+export const useCreateProvider = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProvider>>, TError,CreateProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createProvider>>,
+        TError,
+        CreateProviderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateProviderMutationOptions(options), queryClient);
+    }
+    export const getDeactivateProviderUrl = (capability: string,) => {
+
+
+
+
+  return `/api/v1/settings/providers/${capability}/deactivate`
+}
+
+/**
+ * Clear the active row; the runtime falls back to environment/default.
+ * @summary Deactivate Provider
+ */
+export const deactivateProvider = async (capability: string, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
+
+  return apiFetch<ProviderRegistryReadSchema>(getDeactivateProviderUrl(capability),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeactivateProviderMutationKey = () => ['deactivateProvider'] as const;
+
+export const getDeactivateProviderMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateProvider>>, TError,DeactivateProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deactivateProvider>>, TError,DeactivateProviderMutationVariables, TContext> => {
+
+const mutationKey = getDeactivateProviderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deactivateProvider>>, DeactivateProviderMutationVariables> = (props) => {
+          const {capability} = props ?? {};
+
+          return  deactivateProvider(capability,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeactivateProviderMutationResult = NonNullable<Awaited<ReturnType<typeof deactivateProvider>>>
+
+    export type DeactivateProviderMutationError = HTTPValidationError
+    export type DeactivateProviderMutationVariables = {capability: string}
+
+    /**
+ * @summary Deactivate Provider
+ */
+export const useDeactivateProvider = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateProvider>>, TError,DeactivateProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deactivateProvider>>,
+        TError,
+        DeactivateProviderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeactivateProviderMutationOptions(options), queryClient);
+    }
+    export const getDeleteProviderUrl = (capability: string,
+    providerId: number,) => {
+
+
+
+
+  return `/api/v1/settings/providers/${capability}/${providerId}`
+}
+
+/**
+ * Delete a provider, deactivating it first when it is the active row.
+ * @summary Delete Provider
+ */
+export const deleteProvider = async (capability: string,
+    providerId: number, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
+
+  return apiFetch<ProviderRegistryReadSchema>(getDeleteProviderUrl(capability,providerId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteProviderMutationKey = () => ['deleteProvider'] as const;
+
+export const getDeleteProviderMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProvider>>, TError,DeleteProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProvider>>, TError,DeleteProviderMutationVariables, TContext> => {
+
+const mutationKey = getDeleteProviderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProvider>>, DeleteProviderMutationVariables> = (props) => {
+          const {capability,providerId} = props ?? {};
+
+          return  deleteProvider(capability,providerId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProviderMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProvider>>>
+
+    export type DeleteProviderMutationError = HTTPValidationError
+    export type DeleteProviderMutationVariables = {capability: string;providerId: number}
+
+    /**
+ * @summary Delete Provider
+ */
+export const useDeleteProvider = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProvider>>, TError,DeleteProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProvider>>,
+        TError,
+        DeleteProviderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteProviderMutationOptions(options), queryClient);
+    }
+    export const getUpdateProviderUrl = (capability: string,
+    providerId: number,) => {
+
+
+
+
+  return `/api/v1/settings/providers/${capability}/${providerId}`
+}
+
+/**
+ * Replace one provider row without ever returning its plaintext key.
+ * @summary Update Provider
+ */
+export const updateProvider = async (capability: string,
+    providerId: number,
+    providerUpdateSchema: ProviderUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<ProviderRegistryReadSchema>(getUpdateProviderUrl(capability,providerId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(providerUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateProviderMutationKey = () => ['updateProvider'] as const;
+
+export const getUpdateProviderMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProvider>>, TError,UpdateProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateProvider>>, TError,UpdateProviderMutationVariables, TContext> => {
+
+const mutationKey = getUpdateProviderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateProvider>>, UpdateProviderMutationVariables> = (props) => {
+          const {capability,providerId,data} = props ?? {};
+
+          return  updateProvider(capability,providerId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateProviderMutationResult = NonNullable<Awaited<ReturnType<typeof updateProvider>>>
+    export type UpdateProviderMutationBody = ProviderUpdateSchema
+    export type UpdateProviderMutationError = HTTPValidationError
+    export type UpdateProviderMutationVariables = {capability: string;providerId: number;data: ProviderUpdateSchema}
+
+    /**
+ * @summary Update Provider
+ */
+export const useUpdateProvider = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProvider>>, TError,UpdateProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateProvider>>,
+        TError,
+        UpdateProviderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateProviderMutationOptions(options), queryClient);
+    }
+    export const getActivateProviderUrl = (capability: string,
+    providerId: number,) => {
+
+
+
+
+  return `/api/v1/settings/providers/${capability}/${providerId}/activate`
+}
+
+/**
+ * Make one row the only active provider for its capability.
+ * @summary Activate Provider
+ */
+export const activateProvider = async (capability: string,
+    providerId: number, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
+
+  return apiFetch<ProviderRegistryReadSchema>(getActivateProviderUrl(capability,providerId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getActivateProviderMutationKey = () => ['activateProvider'] as const;
+
+export const getActivateProviderMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateProvider>>, TError,ActivateProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof activateProvider>>, TError,ActivateProviderMutationVariables, TContext> => {
+
+const mutationKey = getActivateProviderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof activateProvider>>, ActivateProviderMutationVariables> = (props) => {
+          const {capability,providerId} = props ?? {};
+
+          return  activateProvider(capability,providerId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActivateProviderMutationResult = NonNullable<Awaited<ReturnType<typeof activateProvider>>>
+
+    export type ActivateProviderMutationError = HTTPValidationError
+    export type ActivateProviderMutationVariables = {capability: string;providerId: number}
+
+    /**
+ * @summary Activate Provider
+ */
+export const useActivateProvider = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof activateProvider>>, TError,ActivateProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof activateProvider>>,
+        TError,
+        ActivateProviderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getActivateProviderMutationOptions(options), queryClient);
+    }
+    export const getTestProviderUrl = (capability: string,
+    providerId: number,) => {
+
+
+
+
+  return `/api/v1/settings/providers/${capability}/${providerId}/test`
+}
+
+/**
+ * Make one small provider request and report latency or the error.
+ * @summary Test Provider
+ */
+export const testProvider = async (capability: string,
+    providerId: number, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderTestResultSchema> => {
+
+  return apiFetch<ProviderTestResultSchema>(getTestProviderUrl(capability,providerId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getTestProviderMutationKey = () => ['testProvider'] as const;
+
+export const getTestProviderMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testProvider>>, TError,TestProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof testProvider>>, TError,TestProviderMutationVariables, TContext> => {
+
+const mutationKey = getTestProviderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof testProvider>>, TestProviderMutationVariables> = (props) => {
+          const {capability,providerId} = props ?? {};
+
+          return  testProvider(capability,providerId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TestProviderMutationResult = NonNullable<Awaited<ReturnType<typeof testProvider>>>
+
+    export type TestProviderMutationError = HTTPValidationError
+    export type TestProviderMutationVariables = {capability: string;providerId: number}
+
+    /**
+ * @summary Test Provider
+ */
+export const useTestProvider = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof testProvider>>, TError,TestProviderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof testProvider>>,
+        TError,
+        TestProviderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getTestProviderMutationOptions(options), queryClient);
     }

@@ -1,6 +1,8 @@
 """Pi-shaped agent transcript, tool loop, cache usage, and lifecycle."""
 
 import json
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
@@ -13,12 +15,17 @@ from app.module.agent.test.fake_chat_generator import (
     tool_call_result,
     tool_calls_result,
 )
+from app.module.web_research.schema.web_research_schema import (
+    WebFetchResponse,
+    WebSearchHit,
+    WebSearchResponse,
+)
 from tests.conftest import (
     OWNER_PASSWORD,
     OWNER_USERNAME,
     TEST_DATABASE_URL,
 )
-from tests.helpers import create_text
+from tests.helpers import create_memory, create_text
 
 TOOL_USAGE = {
     "prompt_tokens": 21,
@@ -48,8 +55,8 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v5"
-TOOLS_VERSION = "archive-tools-v2"
+PROMPT_VERSION = "archive-agent-v6"
+TOOLS_VERSION = "archive-tools-v3"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -64,7 +71,71 @@ TOOL_NAMES = [
     "read_memory",
     "save_memory",
     "present_resource",
+    "web_search",
+    "web_fetch",
 ]
+
+
+class FakeWebResearchService:
+    """Deterministic web service injected through ``app.state``."""
+
+    def __init__(self) -> None:
+        self.retrieved_at = datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
+        self.searches: list[dict[str, Any]] = []
+        self.fetches: list[tuple[str, int]] = []
+
+    async def search(
+        self,
+        query: str,
+        *,
+        max_results: int,
+        search_depth: str,
+        include_domains: list[str],
+        exclude_domains: list[str],
+    ) -> WebSearchResponse:
+        self.searches.append(
+            {
+                "query": query,
+                "max_results": max_results,
+                "search_depth": search_depth,
+                "include_domains": include_domains,
+                "exclude_domains": exclude_domains,
+            }
+        )
+        return WebSearchResponse(
+            provider="tavily",
+            query=query,
+            results=[
+                WebSearchHit(
+                    title="Tavily search guide",
+                    url="https://example.com/tavily-search",
+                    content="Tavily is a search API for agents.",
+                    score=0.93,
+                ),
+                WebSearchHit(
+                    title="Research notes",
+                    url="https://example.com/search-notes",
+                    content="Use web_fetch when the excerpt is insufficient.",
+                    score=0.71,
+                ),
+            ][:max_results],
+            elapsed_ms=3,
+            truncated=False,
+            cached=False,
+            retrieved_at=self.retrieved_at,
+        )
+
+    async def fetch(self, url: str, *, max_chars: int) -> WebFetchResponse:
+        self.fetches.append((url, max_chars))
+        return WebFetchResponse(
+            provider="tavily",
+            url=url,
+            content="# Extracted page\n\nMarkdown body for the fetched page.",
+            elapsed_ms=4,
+            truncated=False,
+            cached=False,
+            retrieved_at=self.retrieved_at,
+        )
 
 
 def test_agent_entry_log_tool_loop_and_cache_usage(
@@ -1903,3 +1974,175 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     final_settings_body = final_settings_reset.json()
     assert final_settings_body["config"] == defaults
     assert final_settings_body["config"]["save_memory_requires_approval"] is True
+
+    # ------------------------------------------------------------------
+    # Read-only web research tools use the injected service, never Tavily.
+    # ------------------------------------------------------------------
+    web_fake = FakeWebResearchService()
+    client.app.state.web_research_service = web_fake
+    web_answer = "Web research completed from the public sources."
+    web_chat = FakeChatGenerator(
+        [
+            tool_calls_result(
+                [
+                    ("web_search", {"query": "tavily agent search", "max_results": 2}),
+                    (
+                        "web_fetch",
+                        {
+                            "url": "https://example.com/research/page",
+                            "max_chars": 4_000,
+                        },
+                    ),
+                ],
+                call_ids=["call_web_search", "call_web_fetch"],
+                usage=TOOL_USAGE,
+            ),
+            text_result(web_answer, usage=ANSWER_USAGE),
+        ]
+    )
+    client.app.state.agent_chat_generator = web_chat
+    web_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Web research"},
+    )
+    assert web_conversation.status_code == 201, web_conversation.text
+    web_turn = client.post(
+        f"/api/v1/agent/conversations/{web_conversation.json()['id']}/messages",
+        json={"content": "Research Tavily and read its guide."},
+        headers={"Accept": "application/json"},
+    )
+    assert web_turn.status_code == 200, web_turn.text
+    web_body = web_turn.json()
+    assert web_body["run"]["status"] == "completed"
+    assert web_body["answer"] == web_answer
+    assert [entry["kind"] for entry in web_body["entries"]] == [
+        "pi.user",
+        "pi.assistant",
+        "pi.tool-result",
+        "pi.tool-result",
+        "pi.assistant",
+    ]
+    web_tools = [entry["data"]["tool"] for entry in web_body["tool_results"]]
+    assert web_tools == ["web_search", "web_fetch"]
+
+    search_result = web_body["tool_results"][0]
+    assert search_result["model"][0]["tool_call_id"] == "call_web_search"
+    search_xml = search_result["model"][0]["content"]
+    assert "<web_search " in search_xml
+    assert 'query="tavily agent search"' in search_xml
+    assert 'provider="tavily"' in search_xml
+    assert 'results="2"' in search_xml
+    assert 'retrieved_at="2026-10-25T00:00:00+00:00"' in search_xml
+    assert 'url="https://example.com/tavily-search"' in search_xml
+    assert "Tavily is a search API for agents." in search_xml
+    search_data = search_result["data"]
+    assert search_data["status"] == "ok"
+    assert search_data["provider"] == "tavily"
+    assert search_data["retrieved_at"] == "2026-10-25T00:00:00+00:00"
+    assert [item["url"] for item in search_data["results"]] == [
+        "https://example.com/tavily-search",
+        "https://example.com/search-notes",
+    ]
+    assert web_fake.searches == [
+        {
+            "query": "tavily agent search",
+            "max_results": 2,
+            "search_depth": "basic",
+            "include_domains": [],
+            "exclude_domains": [],
+        }
+    ]
+
+    fetch_result = web_body["tool_results"][1]
+    assert fetch_result["model"][0]["tool_call_id"] == "call_web_fetch"
+    fetch_xml = fetch_result["model"][0]["content"]
+    assert "<web_fetch " in fetch_xml
+    assert 'url="https://example.com/research/page"' in fetch_xml
+    assert 'provider="tavily"' in fetch_xml
+    assert 'retrieved_at="2026-10-25T00:00:00+00:00"' in fetch_xml
+    assert "Markdown body for the fetched page." in fetch_xml
+    fetch_data = fetch_result["data"]
+    assert fetch_data["status"] == "ok"
+    assert fetch_data["provider"] == "tavily"
+    assert fetch_data["url"] == "https://example.com/research/page"
+    assert fetch_data["truncated"] is False
+    assert web_fake.fetches == [("https://example.com/research/page", 4_000)]
+
+    # ------------------------------------------------------------------
+    # Summary sources must advertise that they are a compressed view, not the
+    # complete original memories, directly in the tool-result XML.
+    # ------------------------------------------------------------------
+    summary_first = create_memory(
+        client,
+        "The obsidian lens arrived for the telescope repair.",
+        "2026-09-20T09:00:00Z",
+    )
+    summary_second = create_memory(
+        client,
+        "The telescope now uses the obsidian lens every night.",
+        "2026-09-21T09:00:00Z",
+    )
+    summary_response = client.post(
+        "/api/v1/summaries",
+        json={
+            "memory_ids": [
+                summary_first["memory"]["memory_id"],
+                summary_second["memory"]["memory_id"],
+            ],
+            "force": True,
+        },
+    )
+    assert summary_response.status_code == 201, summary_response.text
+    summary_body = summary_response.json()
+    assert summary_body["memory_count"] == 2
+    summary_id = summary_body["memory_summary_id"]
+
+    summary_chat = FakeChatGenerator(
+        [
+            tool_call_result(
+                "search_knowledge",
+                {"query": "obsidian", "result_number": 5},
+                call_id="call_summary_search",
+                usage=TOOL_USAGE,
+            ),
+            text_result("The compressed summary is sufficient.", usage=ANSWER_USAGE),
+        ]
+    )
+    client.app.state.agent_chat_generator = summary_chat
+    summary_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Summary compression"},
+    )
+    assert summary_conversation.status_code == 201, summary_conversation.text
+    summary_turn = client.post(
+        f"/api/v1/agent/conversations/{summary_conversation.json()['id']}/messages",
+        json={"content": "What does the archive know about obsidian?"},
+        headers={"Accept": "application/json"},
+    )
+    assert summary_turn.status_code == 200, summary_turn.text
+    summary_turn_body = summary_turn.json()
+    assert summary_turn_body["run"]["status"] == "completed"
+    summary_entry = next(
+        entry
+        for entry in summary_turn_body["tool_results"]
+        if entry["data"]["tool"] == "search_knowledge"
+    )
+    summary_xml = summary_entry["model"][0]["content"]
+    assert f'<source kind="summary" id="{summary_id}"' in summary_xml
+    assert 'view="compressed"' in summary_xml
+    assert 'memory_count="2"' in summary_xml
+    assert "<compressed_view" in summary_xml
+    assert 'source_memory_count="2"' in summary_xml
+    assert "This is a compressed summary of 2 original memories" in summary_xml
+    assert "not the complete original content" in summary_xml
+    summary_results = summary_entry["data"]["summary_results"]
+    assert len(summary_results) == 1
+    assert summary_results[0]["memory_summary_id"] == summary_id
+    assert summary_results[0]["view"] == "compressed"
+    assert summary_results[0]["memory_count"] == 2
+    assert summary_results[0]["source_memory_ids"] == [
+        summary_first["memory"]["memory_id"],
+        summary_second["memory"]["memory_id"],
+    ]
+    assert summary_results[0]["period_start"] == "2026-09-20T09:00:00+00:00"
+    assert summary_results[0]["period_end"] == "2026-09-21T09:00:00+00:00"

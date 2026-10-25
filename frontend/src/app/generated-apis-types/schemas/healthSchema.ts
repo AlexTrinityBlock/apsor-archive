@@ -15,4 +15,8 @@ export interface HealthSchema {
   embedding_provider: string;
   status: string;
   version: string;
+  web_fetch_configured: boolean;
+  web_fetch_provider: string;
+  web_search_configured: boolean;
+  web_search_provider: string;
 }

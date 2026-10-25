@@ -5,6 +5,8 @@ import time
 from collections import defaultdict
 from typing import cast
 
+from pydantic import ValidationError
+
 from app.module.knowledge.exception.domain_error import EmbeddingProviderError, InvalidQueryError
 from app.module.knowledge.model.chunk_model import (
     SOURCE_FILE,
@@ -126,7 +128,12 @@ class SearchService:
         )
         cached = await self.cache.get_json(key)
         if isinstance(cached, dict):
-            return SearchResponseSchema.model_validate(cached)
+            try:
+                return SearchResponseSchema.model_validate(cached)
+            except ValidationError:
+                # 部署後舊 cache 可能缺少新欄位（例如 summary 的 memory_count）。
+                # 這種 payload 視為 cache miss，不要讓使用者在 TTL 到期前看到 500。
+                logger.info("Discarding an incompatible cached search response.")
 
         started = time.perf_counter()
         raw_text = await self.chunk_repository.text_candidates(
@@ -269,6 +276,8 @@ class SearchService:
                     period_start=summary.period_start,
                     period_end=summary.period_end,
                     themes=list(summary.themes),
+                    memory_count=summary.memory_count,
+                    source_memory_ids=list(summary.source_memory_ids),
                     score=round(score, 6),
                     matched_by=self._matched(matched),
                 )

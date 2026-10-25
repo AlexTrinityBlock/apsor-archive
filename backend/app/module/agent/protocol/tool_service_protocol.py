@@ -1,14 +1,18 @@
-"""Consumer-owned protocols for the knowledge services used by tools."""
+"""Consumer-owned protocols for the knowledge and web-research services used by tools."""
 
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
 from app.module.knowledge.schema.file_schema import FileChunksSchema, FileSchema, PathListingSchema
 from app.module.knowledge.schema.memory_schema import MemoryReadSchema, MemorySaveSchema
 from app.module.knowledge.schema.search_schema import SearchResponseSchema
 from app.module.knowledge.schema.timeline_schema import TimelineResponseSchema
+from app.module.web_research.schema.web_research_schema import (
+    WebFetchResponse,
+    WebSearchResponse,
+)
 
 
 class SearchToolServiceProtocol(Protocol):
@@ -73,6 +77,28 @@ class TimelineToolServiceProtocol(Protocol):
     ) -> TimelineResponseSchema: ...
 
 
+class WebResearchServiceProtocol(Protocol):
+    """The two read-only web capabilities the agent tools depend on.
+
+    這是 consumer-owned protocol：agent slice 只宣告自己需要的形狀，實際實作由
+    ``app.module.web_research`` 提供並以結構性型別滿足，所以 agent 不需要 import
+    整個 web service 實作。``search_depth`` 直接沿用工具參數的 Literal，讓
+    provider 實作與工具層對「basic / advanced」有同一個定義。
+    """
+
+    async def search(
+        self,
+        query: str,
+        *,
+        max_results: int,
+        search_depth: Literal["basic", "advanced"],
+        include_domains: list[str],
+        exclude_domains: list[str],
+    ) -> WebSearchResponse: ...
+
+    async def fetch(self, url: str, *, max_chars: int) -> WebFetchResponse: ...
+
+
 @dataclass(frozen=True)
 class AgentToolServices:
     """The live services one tool execution may use."""
@@ -81,6 +107,7 @@ class AgentToolServices:
     file_service: FileToolServiceProtocol
     memory_service: MemoryToolServiceProtocol
     timeline_service: TimelineToolServiceProtocol
+    web_research_service: WebResearchServiceProtocol
 
 
 class ToolServiceScopeProtocol(Protocol):

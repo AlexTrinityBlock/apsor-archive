@@ -6,7 +6,7 @@
  */
 
 /**
- * Configuration state for the AI and vector paths.
+ * Configuration state for the AI, vector, and web paths.
  */
 export interface AiStatusSchema {
   configured: boolean;
@@ -15,4 +15,8 @@ export interface AiStatusSchema {
   model: string;
   provider: string;
   vector_enabled: boolean;
+  web_fetch_configured?: boolean;
+  web_fetch_provider?: string;
+  web_search_configured?: boolean;
+  web_search_provider?: string;
 }

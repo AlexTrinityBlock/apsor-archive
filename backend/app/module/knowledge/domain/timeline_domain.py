@@ -24,6 +24,10 @@ class TimelineEvent(BaseModel):
     action: str | None = None
     status: str | None = None
     raw_file_path: str | None = None
+    # Summary events only; the agent XML uses these to mark a compressed view.
+    memory_count: int | None = None
+    period_start: datetime | None = None
+    period_end: datetime | None = None
 
 
 class TimelineSelection(BaseModel):

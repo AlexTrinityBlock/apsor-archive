@@ -5,13 +5,16 @@ import time
 
 from app.module.knowledge.protocol.cache_protocol import JsonValue
 
+DEFAULT_INDEX_SCOPE = "index"
+
 
 class MemoryCache:
     """A tiny TTL cache scoped to one process."""
 
     def __init__(self) -> None:
         self._values: dict[str, tuple[float, JsonValue]] = {}
-        self._version = 1
+        # 每個 scope 一個 monotonic version（index、providers、prompts…）。
+        self._versions: dict[str, int] = {}
         self._lock = asyncio.Lock()
 
     async def get_json(self, key: str) -> JsonValue | None:
@@ -27,13 +30,14 @@ class MemoryCache:
     async def set_json(self, key: str, value: JsonValue, ttl_seconds: int) -> None:
         self._values[key] = (time.monotonic() + ttl_seconds, value)
 
-    async def get_version(self) -> int:
-        return self._version
+    async def get_version(self, scope: str = DEFAULT_INDEX_SCOPE) -> int:
+        return self._versions.get(scope, 1)
 
-    async def bump_version(self) -> int:
+    async def bump_version(self, scope: str = DEFAULT_INDEX_SCOPE) -> int:
         async with self._lock:
-            self._version += 1
-            return self._version
+            version = self._versions.get(scope, 1) + 1
+            self._versions[scope] = version
+            return version
 
     async def ping(self) -> bool:
         return True

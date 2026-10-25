@@ -7,9 +7,9 @@ import { Icon } from "../../component/Icon";
 import { Panel } from "../../component/Panel";
 import { useToast } from "../../component/Toast";
 import {
-  useGetAiSettings,
   useGetAiStatus,
   useGetHealth,
+  useGetProviderRegistry,
   useGetStats,
   useReindexEmbeddings,
 } from "../../generated-apis-types";
@@ -107,6 +107,26 @@ function vectorStatusLabel(
     return isError ? "Unavailable" : "Reading";
   }
   return enabled ? "Enabled" : "Disabled";
+}
+
+function webStatusLabel(
+  configured: boolean | undefined,
+  isError: boolean,
+): string {
+  if (isError) {
+    return "Unavailable";
+  }
+  if (configured === undefined) {
+    return "Unknown";
+  }
+  return configured ? "Configured" : "Needs key";
+}
+
+function configuredValueLabel(configured: boolean | undefined): string {
+  if (configured === undefined) {
+    return "—";
+  }
+  return configured ? "Yes" : "No";
 }
 
 function dimensionLabel(dimension: number | null | undefined): string {
@@ -258,14 +278,14 @@ function DiagnosticsError({
   healthError,
   aiError,
   statsError,
-  settingsError,
+  registryError,
   refreshing,
   onRetry,
 }: {
   readonly healthError: unknown;
   readonly aiError: unknown;
   readonly statsError: unknown;
-  readonly settingsError: unknown;
+  readonly registryError: unknown;
   readonly refreshing: boolean;
   readonly onRetry: () => void;
 }) {
@@ -279,8 +299,8 @@ function DiagnosticsError({
   if (statsError) {
     parts.push(`Stats: ${apiErrorMessage(statsError)}`);
   }
-  if (settingsError) {
-    parts.push(`Provider settings: ${apiErrorMessage(settingsError)}`);
+  if (registryError) {
+    parts.push(`Provider registry: ${apiErrorMessage(registryError)}`);
   }
 
   return (
@@ -442,28 +462,34 @@ export function DiagnosticsPanel() {
   const healthQuery = useGetHealth({ query: { staleTime: 30_000 } });
   const aiQuery = useGetAiStatus({ query: { staleTime: 60_000 } });
   const statsQuery = useGetStats({ query: { staleTime: 30_000 } });
-  const aiSettingsQuery = useGetAiSettings({ query: { staleTime: 30_000 } });
+  const registryQuery = useGetProviderRegistry({
+    query: { staleTime: 30_000 },
+  });
 
   const health = healthQuery.data;
   const ai = aiQuery.data;
   const stats = statsQuery.data;
-  const aiSettings = aiSettingsQuery.data;
+  const registry = registryQuery.data;
+  const embeddingGroup = registry?.capabilities.find(
+    (group) => group.capability === "embedding",
+  );
+  const embeddingActive = embeddingGroup?.active;
 
   const anyError =
     healthQuery.isError ||
     aiQuery.isError ||
     statsQuery.isError ||
-    aiSettingsQuery.isError;
+    registryQuery.isError;
   const anyPending =
     healthQuery.isPending ||
     aiQuery.isPending ||
     statsQuery.isPending ||
-    aiSettingsQuery.isPending;
+    registryQuery.isPending;
   const refreshing =
     healthQuery.isFetching ||
     aiQuery.isFetching ||
     statsQuery.isFetching ||
-    aiSettingsQuery.isFetching;
+    registryQuery.isFetching;
 
   let overallTone = systemTone(
     health,
@@ -472,29 +498,28 @@ export function DiagnosticsPanel() {
   );
   if (
     !healthQuery.isError &&
-    (aiQuery.isError || statsQuery.isError || aiSettingsQuery.isError)
+    (aiQuery.isError || statsQuery.isError || registryQuery.isError)
   ) {
     overallTone = "degraded";
   }
   const aiConfigured = resolveAiConfigured(ai, health);
   const aiTone = aiToneFor(aiConfigured, aiQuery.isError);
-  const vectorEnabled = aiSettings?.vector_enabled ?? ai?.vector_enabled;
+  const vectorEnabled = registry?.vector_enabled ?? ai?.vector_enabled;
   const vectorTone = vectorToneFor(vectorEnabled);
   const embeddingProvider =
     ai?.embedding_provider ??
-    aiSettings?.embedding.provider ??
+    embeddingActive?.provider ??
     health?.embedding_provider ??
     "—";
-  const embeddingModel =
-    ai?.embedding_model ?? aiSettings?.embedding.model ?? "—";
-  const reindexRequired = aiSettings?.reindex_required;
+  const embeddingModel = ai?.embedding_model ?? embeddingActive?.model ?? "—";
+  const reindexRequired = registry?.reindex_required;
 
   const retryDiagnostics = () => {
     void Promise.all([
       healthQuery.refetch(),
       aiQuery.refetch(),
       statsQuery.refetch(),
-      aiSettingsQuery.refetch(),
+      registryQuery.refetch(),
     ]);
   };
 
@@ -536,8 +561,8 @@ export function DiagnosticsPanel() {
           healthError={healthQuery.isError ? healthQuery.error : null}
           aiError={aiQuery.isError ? aiQuery.error : null}
           statsError={statsQuery.isError ? statsQuery.error : null}
-          settingsError={
-            aiSettingsQuery.isError ? aiSettingsQuery.error : null
+          registryError={
+            registryQuery.isError ? registryQuery.error : null
           }
           refreshing={refreshing}
           onRetry={retryDiagnostics}
@@ -594,18 +619,46 @@ export function DiagnosticsPanel() {
           tone={vectorTone}
           status={vectorStatusLabel(
             vectorEnabled,
-            aiQuery.isError || aiSettingsQuery.isError,
+            aiQuery.isError || registryQuery.isError,
           )}
           rows={[
             { key: "Embedding provider", value: embeddingProvider },
             { key: "Embedding model", value: embeddingModel },
             {
               key: "Dimension",
-              value: dimensionLabel(aiSettings?.embedding.dimension),
+              value: dimensionLabel(embeddingActive?.dimension),
             },
             { key: "Re-index", value: reindexStateLabel(reindexRequired) },
           ]}
-          loading={aiSettingsQuery.isPending}
+          loading={registryQuery.isPending}
+        />
+        <DiagnosticItem
+          title="Web search"
+          tone={aiToneFor(ai?.web_search_configured ?? null, aiQuery.isError)}
+          status={webStatusLabel(ai?.web_search_configured, aiQuery.isError)}
+          rows={[
+            { key: "Provider", value: ai?.web_search_provider ?? "—" },
+            {
+              key: "Configured",
+              value: configuredValueLabel(ai?.web_search_configured),
+            },
+            { key: "Credential", value: "Separate web_search slot" },
+          ]}
+          loading={aiQuery.isPending}
+        />
+        <DiagnosticItem
+          title="Web fetch"
+          tone={aiToneFor(ai?.web_fetch_configured ?? null, aiQuery.isError)}
+          status={webStatusLabel(ai?.web_fetch_configured, aiQuery.isError)}
+          rows={[
+            { key: "Provider", value: ai?.web_fetch_provider ?? "—" },
+            {
+              key: "Configured",
+              value: configuredValueLabel(ai?.web_fetch_configured),
+            },
+            { key: "Credential", value: "Separate web_fetch slot" },
+          ]}
+          loading={aiQuery.isPending}
         />
       </div>
 

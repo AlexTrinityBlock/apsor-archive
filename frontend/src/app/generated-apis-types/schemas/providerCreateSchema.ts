@@ -6,19 +6,16 @@
  */
 
 /**
- * Update one provider; omit ``api_key`` to keep the stored key.
+ * Create one provider row; activate it immediately by default.
  */
-export interface AiProviderUpdateSchema {
+export interface ProviderCreateSchema {
+  activate?: boolean;
   api_key?: string | null;
   base_url?: string | null;
-  clear_api_key?: boolean;
   dimension?: number | null;
-  enabled?: boolean;
-  /**
-     * @minLength 1
-     * @maxLength 128
-     */
-  model: string;
+  /** @maxLength 80 */
+  label?: string;
+  model?: string | null;
   /**
      * @minLength 1
      * @maxLength 32

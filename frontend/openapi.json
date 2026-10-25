@@ -1280,213 +1280,8 @@
         "title": "AgentTurnResultSchema",
         "type": "object"
       },
-      "AiProviderReadSchema": {
-        "description": "Safe provider state; the API key is never included.",
-        "properties": {
-          "base_url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Base Url"
-          },
-          "configured": {
-            "title": "Configured",
-            "type": "boolean"
-          },
-          "dimension": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dimension"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "key_hint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Key Hint"
-          },
-          "key_source": {
-            "enum": [
-              "database",
-              "environment",
-              "none"
-            ],
-            "title": "Key Source",
-            "type": "string"
-          },
-          "model": {
-            "title": "Model",
-            "type": "string"
-          },
-          "provider": {
-            "title": "Provider",
-            "type": "string"
-          },
-          "purpose": {
-            "enum": [
-              "chat",
-              "embedding"
-            ],
-            "title": "Purpose",
-            "type": "string"
-          },
-          "source": {
-            "enum": [
-              "database",
-              "environment",
-              "default"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Updated At"
-          }
-        },
-        "required": [
-          "purpose",
-          "provider",
-          "model",
-          "base_url",
-          "dimension",
-          "enabled",
-          "configured",
-          "key_hint",
-          "key_source",
-          "source",
-          "updated_at"
-        ],
-        "title": "AiProviderReadSchema",
-        "type": "object"
-      },
-      "AiProviderUpdateSchema": {
-        "additionalProperties": false,
-        "description": "Update one provider; omit ``api_key`` to keep the stored key.",
-        "properties": {
-          "api_key": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Api Key"
-          },
-          "base_url": {
-            "anyOf": [
-              {
-                "maxLength": 500,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Base Url"
-          },
-          "clear_api_key": {
-            "default": false,
-            "title": "Clear Api Key",
-            "type": "boolean"
-          },
-          "dimension": {
-            "anyOf": [
-              {
-                "maximum": 4096.0,
-                "minimum": 16.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Dimension"
-          },
-          "enabled": {
-            "default": true,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "model": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Model",
-            "type": "string"
-          },
-          "provider": {
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Provider",
-            "type": "string"
-          }
-        },
-        "required": [
-          "provider",
-          "model"
-        ],
-        "title": "AiProviderUpdateSchema",
-        "type": "object"
-      },
-      "AiSettingsReadSchema": {
-        "description": "Both provider slots plus re-index advice.",
-        "properties": {
-          "chat": {
-            "$ref": "#/components/schemas/AiProviderReadSchema"
-          },
-          "embedding": {
-            "$ref": "#/components/schemas/AiProviderReadSchema"
-          },
-          "reindex_required": {
-            "title": "Reindex Required",
-            "type": "boolean"
-          },
-          "vector_enabled": {
-            "title": "Vector Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "chat",
-          "embedding",
-          "vector_enabled",
-          "reindex_required"
-        ],
-        "title": "AiSettingsReadSchema",
-        "type": "object"
-      },
       "AiStatusSchema": {
-        "description": "Configuration state for the AI and vector paths.",
+        "description": "Configuration state for the AI, vector, and web paths.",
         "properties": {
           "configured": {
             "title": "Configured",
@@ -1511,6 +1306,26 @@
           "vector_enabled": {
             "title": "Vector Enabled",
             "type": "boolean"
+          },
+          "web_fetch_configured": {
+            "default": false,
+            "title": "Web Fetch Configured",
+            "type": "boolean"
+          },
+          "web_fetch_provider": {
+            "default": "none",
+            "title": "Web Fetch Provider",
+            "type": "string"
+          },
+          "web_search_configured": {
+            "default": false,
+            "title": "Web Search Configured",
+            "type": "boolean"
+          },
+          "web_search_provider": {
+            "default": "none",
+            "title": "Web Search Provider",
+            "type": "string"
           }
         },
         "required": [
@@ -1522,49 +1337,6 @@
           "vector_enabled"
         ],
         "title": "AiStatusSchema",
-        "type": "object"
-      },
-      "AiTestResultSchema": {
-        "description": "The outcome of a provider connection test.",
-        "properties": {
-          "detail": {
-            "title": "Detail",
-            "type": "string"
-          },
-          "latency_ms": {
-            "title": "Latency Ms",
-            "type": "integer"
-          },
-          "model": {
-            "title": "Model",
-            "type": "string"
-          },
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          },
-          "provider": {
-            "title": "Provider",
-            "type": "string"
-          },
-          "purpose": {
-            "enum": [
-              "chat",
-              "embedding"
-            ],
-            "title": "Purpose",
-            "type": "string"
-          }
-        },
-        "required": [
-          "ok",
-          "purpose",
-          "provider",
-          "model",
-          "latency_ms",
-          "detail"
-        ],
-        "title": "AiTestResultSchema",
         "type": "object"
       },
       "AuthResponseSchema": {
@@ -2113,6 +1885,107 @@
         "title": "FolderCreateSchema",
         "type": "object"
       },
+      "FrequentlyUsedPromptCreateSchema": {
+        "additionalProperties": false,
+        "description": "Create a prompt shortcut.\n\nThe schema deliberately does not strip whitespace: the service strips the\nvalues and raises ``invalid_frequent_prompt`` for whitespace-only input, so\nthe frontend receives our stable error code instead of FastAPI's generic\nvalidation message.",
+        "properties": {
+          "prompt_text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Prompt Text",
+            "type": "string"
+          },
+          "sort_order": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "prompt_text"
+        ],
+        "title": "FrequentlyUsedPromptCreateSchema",
+        "type": "object"
+      },
+      "FrequentlyUsedPromptReadSchema": {
+        "description": "One persisted prompt shortcut returned to the browser.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "prompt_text": {
+            "title": "Prompt Text",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "prompt_text",
+          "sort_order",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FrequentlyUsedPromptReadSchema",
+        "type": "object"
+      },
+      "FrequentlyUsedPromptUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace every editable field of one prompt shortcut.",
+        "properties": {
+          "prompt_text": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Prompt Text",
+            "type": "string"
+          },
+          "sort_order": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "title": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "prompt_text"
+        ],
+        "title": "FrequentlyUsedPromptUpdateSchema",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2152,6 +2025,22 @@
           "version": {
             "title": "Version",
             "type": "string"
+          },
+          "web_fetch_configured": {
+            "title": "Web Fetch Configured",
+            "type": "boolean"
+          },
+          "web_fetch_provider": {
+            "title": "Web Fetch Provider",
+            "type": "string"
+          },
+          "web_search_configured": {
+            "title": "Web Search Configured",
+            "type": "boolean"
+          },
+          "web_search_provider": {
+            "title": "Web Search Provider",
+            "type": "string"
           }
         },
         "required": [
@@ -2160,7 +2049,11 @@
           "database",
           "cache",
           "ai",
-          "embedding_provider"
+          "embedding_provider",
+          "web_search_provider",
+          "web_search_configured",
+          "web_fetch_provider",
+          "web_fetch_configured"
         ],
         "title": "HealthSchema",
         "type": "object"
@@ -2580,6 +2473,37 @@
           "resources"
         ],
         "title": "ListResponseSchema[AgentConversationSchema]",
+        "type": "object"
+      },
+      "ListResponseSchema_FrequentlyUsedPromptReadSchema_": {
+        "properties": {
+          "items_per_page": {
+            "title": "Items Per Page",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/FrequentlyUsedPromptReadSchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "start_index": {
+            "title": "Start Index",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "start_index",
+          "items_per_page",
+          "resources"
+        ],
+        "title": "ListResponseSchema[FrequentlyUsedPromptReadSchema]",
         "type": "object"
       },
       "ListResponseSchema_MemorySchema_": {
@@ -3011,6 +2935,462 @@
           "files"
         ],
         "title": "PathListingSchema",
+        "type": "object"
+      },
+      "ProviderCapabilityReadSchema": {
+        "description": "One capability group in the registry UI.",
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderReadSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "allowed_providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Providers",
+            "type": "array"
+          },
+          "capability": {
+            "enum": [
+              "chat",
+              "embedding",
+              "web_search",
+              "web_fetch"
+            ],
+            "title": "Capability",
+            "type": "string"
+          },
+          "default_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Base Url"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "keyless_providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keyless Providers",
+            "type": "array"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderReadSchema"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "supports_dimension": {
+            "title": "Supports Dimension",
+            "type": "boolean"
+          },
+          "supports_model": {
+            "title": "Supports Model",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability",
+          "title",
+          "description",
+          "allowed_providers",
+          "keyless_providers",
+          "default_base_url",
+          "supports_model",
+          "supports_dimension",
+          "active",
+          "providers"
+        ],
+        "title": "ProviderCapabilityReadSchema",
+        "type": "object"
+      },
+      "ProviderCreateSchema": {
+        "additionalProperties": false,
+        "description": "Create one provider row; activate it immediately by default.",
+        "properties": {
+          "activate": {
+            "default": true,
+            "title": "Activate",
+            "type": "boolean"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "maximum": 4096.0,
+                "minimum": 16.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "label": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Label",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ProviderCreateSchema",
+        "type": "object"
+      },
+      "ProviderReadSchema": {
+        "description": "Safe provider state; the API key is never included.",
+        "properties": {
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "capability": {
+            "enum": [
+              "chat",
+              "embedding",
+              "web_search",
+              "web_fetch"
+            ],
+            "title": "Capability",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Hint"
+          },
+          "key_source": {
+            "enum": [
+              "database",
+              "environment",
+              "none"
+            ],
+            "title": "Key Source",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "database",
+              "environment",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "capability",
+          "provider",
+          "label",
+          "model",
+          "base_url",
+          "dimension",
+          "is_active",
+          "configured",
+          "key_hint",
+          "key_source",
+          "source",
+          "updated_at"
+        ],
+        "title": "ProviderReadSchema",
+        "type": "object"
+      },
+      "ProviderRegistryReadSchema": {
+        "description": "The complete registry plus vector/re-index advice.",
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderCapabilityReadSchema"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "reindex_required": {
+            "title": "Reindex Required",
+            "type": "boolean"
+          },
+          "vector_enabled": {
+            "title": "Vector Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "capabilities",
+          "vector_enabled",
+          "reindex_required"
+        ],
+        "title": "ProviderRegistryReadSchema",
+        "type": "object"
+      },
+      "ProviderTestResultSchema": {
+        "description": "The outcome of one provider connection test.",
+        "properties": {
+          "capability": {
+            "enum": [
+              "chat",
+              "embedding",
+              "web_search",
+              "web_fetch"
+            ],
+            "title": "Capability",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "capability",
+          "provider_id",
+          "provider",
+          "label",
+          "latency_ms",
+          "detail"
+        ],
+        "title": "ProviderTestResultSchema",
+        "type": "object"
+      },
+      "ProviderUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Full replacement of one provider row.\n\nOmit ``api_key`` to keep the stored key; set ``clear_api_key`` to remove it.\n``activate`` defaults to ``False`` so editing an inactive saved provider\nnever silently makes it the active one; activation must be explicit.  When\n``activate`` is false the row keeps its current active state.",
+        "properties": {
+          "activate": {
+            "default": false,
+            "title": "Activate",
+            "type": "boolean"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url"
+          },
+          "clear_api_key": {
+            "default": false,
+            "title": "Clear Api Key",
+            "type": "boolean"
+          },
+          "dimension": {
+            "anyOf": [
+              {
+                "maximum": 4096.0,
+                "minimum": 16.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimension"
+          },
+          "label": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Label",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ProviderUpdateSchema",
         "type": "object"
       },
       "SavedQuestionCreateSchema": {
@@ -3517,6 +3897,7 @@
         "type": "object"
       },
       "SummarySearchResultSchema": {
+        "description": "A summary hit; it is a compressed view, not the original memories.",
         "properties": {
           "content": {
             "title": "Content",
@@ -3532,6 +3913,10 @@
             },
             "title": "Matched By",
             "type": "array"
+          },
+          "memory_count": {
+            "title": "Memory Count",
+            "type": "integer"
           },
           "memory_summary_id": {
             "title": "Memory Summary Id",
@@ -3550,6 +3935,13 @@
           "score": {
             "title": "Score",
             "type": "number"
+          },
+          "source_memory_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Source Memory Ids",
+            "type": "array"
           },
           "themes": {
             "items": {
@@ -3571,6 +3963,8 @@
           "period_start",
           "period_end",
           "themes",
+          "memory_count",
+          "source_memory_ids",
           "score",
           "matched_by"
         ],
@@ -3709,6 +4103,17 @@
             "title": "Kind",
             "type": "string"
           },
+          "memory_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Count"
+          },
           "memory_id": {
             "anyOf": [
               {
@@ -3730,6 +4135,30 @@
               }
             ],
             "title": "Memory Summary Id"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
           },
           "raw_file_path": {
             "anyOf": [
@@ -6416,62 +6845,114 @@
         ]
       }
     },
-    "/api/v1/settings/ai": {
+    "/api/v1/settings/frequent-prompts": {
       "get": {
-        "description": "Return both provider slots with masked key hints.",
-        "operationId": "getAiSettings",
+        "description": "List every prompt shortcut in display order.",
+        "operationId": "listFrequentlyUsedPrompts",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AiSettingsReadSchema"
+                  "$ref": "#/components/schemas/ListResponseSchema_FrequentlyUsedPromptReadSchema_"
                 }
               }
             },
             "description": "Successful Response"
           }
         },
-        "summary": "Get Ai Settings",
+        "summary": "List Frequently Used Prompts",
         "tags": [
-          "settings"
+          "prompts"
         ]
-      }
-    },
-    "/api/v1/settings/ai/embedding/reindex": {
+      },
       "post": {
-        "description": "Re-embed every current chunk with the active embedding provider.",
-        "operationId": "reindexEmbeddings",
+        "description": "Create a prompt shortcut.",
+        "operationId": "createFrequentlyUsedPrompt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrequentlyUsedPromptCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
-          "200": {
+          "201": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EmbeddingReindexSchema"
+                  "$ref": "#/components/schemas/FrequentlyUsedPromptReadSchema"
                 }
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "summary": "Reindex Embeddings",
+        "summary": "Create Frequently Used Prompt",
         "tags": [
-          "settings"
+          "prompts"
         ]
       }
     },
-    "/api/v1/settings/ai/{purpose}": {
-      "put": {
-        "description": "Update or create one provider configuration and reload it immediately.",
-        "operationId": "updateAiProvider",
+    "/api/v1/settings/frequent-prompts/{prompt_id}": {
+      "delete": {
+        "description": "Hard-delete one prompt shortcut.",
+        "operationId": "deleteFrequentlyUsedPrompt",
         "parameters": [
           {
             "in": "path",
-            "name": "purpose",
+            "name": "prompt_id",
             "required": true,
             "schema": {
-              "title": "Purpose",
-              "type": "string"
+              "title": "Prompt Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Frequently Used Prompt",
+        "tags": [
+          "prompts"
+        ]
+      },
+      "put": {
+        "description": "Replace the title, text, and order of one prompt shortcut.",
+        "operationId": "updateFrequentlyUsedPrompt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "prompt_id",
+            "required": true,
+            "schema": {
+              "title": "Prompt Id",
+              "type": "integer"
             }
           }
         ],
@@ -6479,7 +6960,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AiProviderUpdateSchema"
+                "$ref": "#/components/schemas/FrequentlyUsedPromptUpdateSchema"
               }
             }
           },
@@ -6490,7 +6971,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AiSettingsReadSchema"
+                  "$ref": "#/components/schemas/FrequentlyUsedPromptReadSchema"
                 }
               }
             },
@@ -6507,95 +6988,9 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Ai Provider",
+        "summary": "Update Frequently Used Prompt",
         "tags": [
-          "settings"
-        ]
-      }
-    },
-    "/api/v1/settings/ai/{purpose}/key": {
-      "delete": {
-        "description": "Remove the stored key and reload the provider runtime.",
-        "operationId": "clearAiProviderKey",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "purpose",
-            "required": true,
-            "schema": {
-              "title": "Purpose",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiSettingsReadSchema"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Clear Ai Provider Key",
-        "tags": [
-          "settings"
-        ]
-      }
-    },
-    "/api/v1/settings/ai/{purpose}/test": {
-      "post": {
-        "description": "Make one small provider request and report latency or the error.",
-        "operationId": "testAiProvider",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "purpose",
-            "required": true,
-            "schema": {
-              "title": "Purpose",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AiTestResultSchema"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Test Ai Provider",
-        "tags": [
-          "settings"
+          "prompts"
         ]
       }
     },
@@ -6678,6 +7073,362 @@
           }
         },
         "summary": "Reset Ingest Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/providers": {
+      "get": {
+        "description": "Return all four capability groups with active and saved providers.",
+        "operationId": "getProviderRegistry",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRegistryReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Provider Registry",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/providers/embedding/reindex": {
+      "post": {
+        "description": "Re-embed every current chunk with the active embedding provider.",
+        "operationId": "reindexEmbeddings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingReindexSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reindex Embeddings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/providers/{capability}": {
+      "post": {
+        "description": "Create one provider row and optionally activate it immediately.",
+        "operationId": "createProvider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "title": "Capability",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRegistryReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Provider",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/providers/{capability}/deactivate": {
+      "post": {
+        "description": "Clear the active row; the runtime falls back to environment/default.",
+        "operationId": "deactivateProvider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "title": "Capability",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRegistryReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deactivate Provider",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/providers/{capability}/{provider_id}": {
+      "delete": {
+        "description": "Delete a provider, deactivating it first when it is the active row.",
+        "operationId": "deleteProvider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "title": "Capability",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRegistryReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Provider",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Replace one provider row without ever returning its plaintext key.",
+        "operationId": "updateProvider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "title": "Capability",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProviderUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRegistryReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Provider",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/providers/{capability}/{provider_id}/activate": {
+      "post": {
+        "description": "Make one row the only active provider for its capability.",
+        "operationId": "activateProvider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "title": "Capability",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRegistryReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Provider",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/providers/{capability}/{provider_id}/test": {
+      "post": {
+        "description": "Make one small provider request and report latency or the error.",
+        "operationId": "testProvider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "title": "Capability",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderTestResultSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Provider",
         "tags": [
           "settings"
         ]

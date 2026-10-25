@@ -34,9 +34,16 @@ from app.module.knowledge.dependencies import (
     load_ingest_runtime_config,
 )
 from app.module.knowledge.exception.handler import register_exceptions
-from app.module.knowledge.repository.ai_config_repository import AiProviderConfigRepository
+from app.module.knowledge.repository.provider_config_repository import (
+    ProviderConfigRepository,
+)
 from app.module.knowledge.router import router as knowledge_router
 from app.module.knowledge.router.health_router import router as health_router
+from app.module.prompt.exception.handler import register_prompt_exceptions
+from app.module.prompt.router import router as prompt_router
+from app.module.web_research.exception.handler import (
+    register_exceptions as register_web_research_exceptions,
+)
 from app.shared.exception.registry import ExceptionRegistry
 from app.shared.time import utcnow
 
@@ -80,7 +87,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             defaults=provider_defaults_from_settings(resolved_settings),
         )
         async with app.state.db.session_factory() as session:
-            await runtime.reload(AiProviderConfigRepository(session))
+            await runtime.reload(ProviderConfigRepository(session))
         app.state.secret_cipher = cipher
         app.state.ai_runtime = runtime
         ingest_defaults = ingest_runtime_defaults(resolved_settings)
@@ -137,6 +144,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exceptions()
     register_auth_exceptions()
     register_agent_exceptions()
+    register_web_research_exceptions()
+    register_prompt_exceptions()
     ExceptionRegistry.setup_app(app)
 
     if resolved_settings.cors_origins:
@@ -160,6 +169,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(
         agent_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_authenticated)],
+    )
+    app.include_router(
+        prompt_router,
         prefix="/api/v1",
         dependencies=[Depends(require_authenticated)],
     )

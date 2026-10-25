@@ -138,35 +138,96 @@ Without it, summaries fall back to a deterministic extractive form, image
 uploads use the filename caption, and agent messages return
 `503 agent_not_configured`.
 
-### Configure AI in the app
+### Configure providers in the app
 
-The Settings page is the normal way to configure providers. It writes to the
-`ai_provider_config` table:
+The Settings page is the normal way to configure providers. It writes to four
+independent capability tables, so one capability can never overwrite another:
 
-- **Chat** — DeepSeek or any OpenAI-compatible chat endpoint.
-- **Embedding** — offline `hashing`, or `openai` / `openai-compatible`.
+- **Chat** — `chat_provider_config`: DeepSeek or any OpenAI-compatible chat
+  endpoint. Multiple saved rows are allowed; exactly one is active.
+- **Embedding** — `embedding_provider_config`: offline `hashing`, `openai`, or
+  `openai-compatible`. Multiple saved rows are allowed; exactly one is active.
+- **Web search** — `web_search_provider_config`: Tavily today, with a provider
+  adapter seam for future search APIs. Multiple saved rows are allowed; exactly
+  one is active.
+- **Web fetch** — `web_fetch_provider_config`: Tavily `extract` today. Web search
+  and web fetch are deliberately separate rows, so they can use different
+  providers or different credentials.
 
-The API key is encrypted with Fernet before it is stored. The browser only ever
-receives a hint such as `...14f8`; the plaintext key is never returned, logged,
-or written to Compose output. `DENDRO_SECRET_KEY` supplies the encryption master
-key. If it is unset, a `0600` key file is created at `data/.secret_key` (or
-`/data/.secret_key` in Docker), so the encrypted values survive restarts.
+Every table has a partial unique index on `is_active`; PostgreSQL enforces at
+most one active row per capability. Deleting a row does not reuse its identity
+id. The API never returns a plaintext key: the browser receives only a hint such
+as `...14f8`. `DENDRO_SECRET_KEY` supplies the Fernet master key. If it is unset,
+a `0600` key file is created at `data/.secret_key` (or `/data/.secret_key` in
+Docker), so encrypted values survive restarts. `DENDRO_TAVILY_API_KEY` is an
+optional environment fallback for both web capabilities.
 
-Precedence is: **database row → environment → built-in default**. The Settings
-page labels each provider with its source. Changing the embedding model does not
-rewrite existing vectors; `reindex_required` warns you. Run **Re-embed library**
-(or `POST /api/v1/settings/ai/embedding/reindex`) to refresh current chunks.
-Vector search skips chunks whose dimension does not match the current embedder.
+Precedence is: **active database row → environment → built-in default**. The
+Settings page labels each provider with its source. Changing the embedding model
+does not rewrite existing vectors; `reindex_required` warns you. Run **Re-embed
+library** (or `POST /api/v1/settings/providers/embedding/reindex`) to refresh
+current chunks. Vector search skips chunks whose dimension does not match the
+current embedder.
 
-AI settings API:
+Provider registry API:
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/v1/settings/ai` | Both provider slots, masked hints, source, reindex advice |
-| `PUT` | `/api/v1/settings/ai/{purpose}` | Create/update `chat` or `embedding` |
-| `POST` | `/api/v1/settings/ai/{purpose}/test` | One small provider request + latency |
-| `DELETE` | `/api/v1/settings/ai/{purpose}/key` | Remove the stored key |
-| `POST` | `/api/v1/settings/ai/embedding/reindex` | Re-embed every current chunk with the active provider |
+| `GET` | `/api/v1/settings/providers` | Four capability groups, masked hints, active row, reindex advice |
+| `POST` | `/api/v1/settings/providers/{capability}` | Create one saved provider; optionally activate it |
+| `PUT` | `/api/v1/settings/providers/{capability}/{provider_id}` | Replace one saved provider |
+| `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | Delete one saved provider |
+| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | Make it the only active row for that capability |
+| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | Clear the active row and fall back to environment/default |
+| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/test` | One small provider request plus latency |
+| `POST` | `/api/v1/settings/providers/embedding/reindex` | Re-embed every current chunk with the active provider |
+
+`{capability}` is one of `chat`, `embedding`, `web_search`, or `web_fetch`.
+The registry response is cached for 30 seconds under the `providers` cache
+scope; every provider write bumps that scope.
+
+### Web research tools
+
+The agent has two read-only tools for external research:
+
+| Tool | What it does |
+|---|---|
+| `web_search` | Search the public web with the active `web_search` provider; returns title, URL, score, and a bounded excerpt. |
+| `web_fetch` | Fetch one public `http(s)` URL with the active `web_fetch` provider and return Markdown text. |
+
+Tavily is the first adapter (`/search` and `/extract`). The provider seam is a
+protocol, so another search or fetch API can be added without changing the tool
+layer. Search results are cached for 15 minutes and fetched pages for one hour
+under the `providers` cache scope; provider writes invalidate them. `web_fetch`
+rejects non-HTTP(S), credentials in the URL, `localhost`/`.local`/`.internal`,
+and private or special-use IP literals. Both tools return XML carrying
+`provider`, `retrieved_at`, `cached`, and `truncated`, and the agent is
+instructed to cite the URL and retrieval time.
+
+Summary search results and timeline summary events are explicitly marked as
+compressed views:
+
+```xml
+<source kind="summary" id="12" view="compressed" memory_count="37" ...>
+  <compressed_view coverage_start="..." coverage_end="..." source_memory_count="37">
+    This is a compressed summary of 37 original memories, not the complete original content.
+  </compressed_view>
+  ...
+</source>
+```
+
+The agent sees `view="compressed"`, the coverage window, and the original memory
+count in the tool result itself, so it does not treat a summary as a full
+transcript.
+
+### Frequently used prompts
+
+The **Frequent prompts** panel on `/settings` edits the shortcuts shown on the
+empty `/chat` page. Each row has a title, prompt text, and `sort_order`; the list
+is capped at 20 rows, ordered by `sort_order` then `id`, and cached for 60
+seconds under the `prompts` cache scope. Clicking a shortcut fills the composer
+with its full prompt text; it does not send the message. The API is
+`GET/POST/PUT/DELETE /api/v1/settings/frequent-prompts`.
 
 ### Agent runtime settings
 
@@ -992,7 +1053,7 @@ chmod 644 .secrets/openai.env
 
 The Settings page can also store this configuration in the database. After
 changing the embedding model, open Settings and run **Re-embed library** (or call
-`POST /api/v1/settings/ai/embedding/reindex`) so existing chunks get vectors in
+`POST /api/v1/settings/providers/embedding/reindex`) so existing chunks get vectors in
 the new dimension. Until then, text search still works and vector search skips
 the incompatible chunks.
 
@@ -1044,8 +1105,13 @@ memory_summary ───┘
 - `memory`: linear timeline with `supersedes_ids`, `superseded_by_id`, and
   `status=active|deprecated`.
 - `memory_summary`: period, source memory ids, themes, generator, and model.
-- `ai_provider_config`: one row per purpose (`chat` / `embedding`), with an
-  encrypted API key, a safe hint, and the active model/base URL/dimension.
+- `chat_provider_config` / `embedding_provider_config` /
+  `web_search_provider_config` / `web_fetch_provider_config`: one row per saved
+  provider, with an encrypted API key, a safe hint, and the model/base
+  URL/dimension. A partial unique index on `is_active` enforces one active row
+  per capability. `web_search` and `web_fetch` are independent credentials.
+- `frequently_used_prompt`: owner-editable shortcuts for the empty chat page,
+  ordered by `sort_order` and capped at 20 rows.
 - `agent_conversation` / `agent_entry` / `agent_run`: the persistent agent's
   transcript scope, immutable entry log, and per-submission run state.
   `agent_commit_seq` groups entries written in one transaction. Page snapshots
@@ -1092,7 +1158,7 @@ bun audit
 
 The integration suite uses one real PostgreSQL test database
 (`dendromatrix_test`) on the same instance, runs sequentially, and resets every
-table between tests. There are exactly twelve tests; each one exercises the real
+table between tests. There are exactly ten tests; each one exercises the real
 HTTP surface and database. The agent test covers runtime settings defaults,
 full PUT/reset, validation, the runtime snapshot used by later runs, auto and
 manual compaction, clear, page-context reattachment at a boundary, retry,
@@ -1100,16 +1166,16 @@ parallel/sequential tool execution, human save-memory approval (no write before
 approval, restart survival, exactly-once approve, reject, orphan/archived
 fail-closed recovery), the approval toggle (default waiting path, direct
 backend-authorized write when off, and pending rows surviving a toggle change),
-and the saved-question library. The
-saved-question coverage includes create/list/pagination, ask success, a failed
-ask that keeps the row, edit clearing the answer, delete, not-found errors, and
-the `conversation_id` `ON DELETE SET NULL` behavior. Page-context
-deduplication and ordering, and folder creation plus move/copy coverage, extend
-the existing agent and file-library tests. A separate file-library test uploads
-an image without a vision provider and verifies the filename caption, stored
-original, path listing, and search result.
+the saved-question library, the two read-only web tools, and the
+compressed-summary XML. The provider coverage creates multiple saved rows per
+capability, proves the partial unique active index, clears keys without ever
+returning plaintext, tests the injected provider probe, and verifies identity
+ids are not reused after delete. The prompt coverage creates, lists, updates,
+orders by `sort_order`, caps at 20 rows, and deletes frequently used prompts. The
+file-library test also uploads an image without a vision provider and verifies
+the filename caption, stored original, path listing, and search result.
 
-The latest migration is `d5e9f3a7b2c1`, after `c4d8e2f6a1b9`. The migrations
+The latest migration is `a3f7c9d1e5b2`, after `d5e9f3a7b2c1`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1136,8 +1202,14 @@ after `agent_config` on this branch are:
   from `tree_node` with their ids, and drops `tree_node`. File leaves are now
   derived from `file.raw_file_path`. The downgrade recreates current folder rows
   and current file leaves;
-- `d5e9f3a7b2c1` (current head) creates the singleton `system_prompt` table for
-  the owner-authored first system section.
+- `d5e9f3a7b2c1` creates the singleton `system_prompt` table for the
+  owner-authored first system section;
+- `e1a2b3c4d5f6` splits `ai_provider_config` into four capability tables
+  (`chat_provider_config`, `embedding_provider_config`,
+  `web_search_provider_config`, `web_fetch_provider_config`), copies existing
+  chat/embedding rows, and creates the per-table partial unique active indexes;
+- `a3f7c9d1e5b2` (current head) creates `frequently_used_prompt` and seeds the
+  three shortcuts that used to be hard-coded in the chat empty state.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so
@@ -1152,7 +1224,7 @@ backend/
     main.py                     API assembly, lifespan, gzip, SPA mount
     worker.py                   dedicated durable-ingestion process
     shared/                     error registry and list envelope
-    infrastructure/             config, database, cache, embeddings, AI, files
+    infrastructure/             config, database, cache, embeddings, AI, web, files
     module/knowledge/
       domain/                   chunking, n-grams, BM25 terms, timeline, summary
       model/                    SQLAlchemy models incl. ingest jobs/config
@@ -1163,8 +1235,10 @@ backend/
       exception/                stable error codes
     module/agent/               transcript, runtime settings, compaction, tools,
                                 saved questions, SSE
+    module/prompt/              editable frequently used chat prompts
+    module/web_research/        Tavily search/fetch service, URL safety, cache
   alembic/                      migrations
-  tests/                        twelve integration tests
+  tests/                        ten integration tests
 frontend/
   src/app/
     component/                  shared archive UI
