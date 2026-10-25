@@ -593,7 +593,6 @@ export function DiagnosticsPanel() {
 
   return (
     <Panel
-      id="settings-diagnostics"
       title={
         <span className="settings-panel__title">
           <Icon name="overview" size={16} />
