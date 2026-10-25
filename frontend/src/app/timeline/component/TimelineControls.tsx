@@ -1,5 +1,6 @@
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 
 import {
   MAX_YEAR,
@@ -35,6 +36,7 @@ export function TimelineControls({
   onHistoryChange,
   onDemoSeason,
 }: TimelineControlsProps) {
+  const { t, formatNumber } = useI18n();
   const handleDateChange = (value: string) => {
     const date = parseDateInput(value);
     if (date) {
@@ -43,20 +45,27 @@ export function TimelineControls({
   };
 
   return (
-    <section className="timeline-controls" aria-label="Timeline window controls">
+    <section
+      className="timeline-controls"
+      aria-label={t("insights.timeline.controls.aria")}
+    >
       <div className="timeline-controls__nav">
         <Button
           variant="secondary"
           size="sm"
           onClick={() => onShift(-range)}
           disabled={!canGoEarlier}
-          aria-label={`Previous window, ${range} days earlier`}
+          aria-label={t("insights.timeline.controls.prevAria", {
+            days: formatNumber(range),
+          })}
         >
           <Icon name="chevron-right" size={13} className="timeline-chevron-back" />
-          Prev
+          {t("insights.timeline.controls.prev")}
         </Button>
         <label className="timeline-controls__date">
-          <span className="mono-label">Window end</span>
+          <span className="mono-label">
+            {t("insights.timeline.controls.windowEnd")}
+          </span>
           <input
             className="input timeline-controls__date-input"
             type="date"
@@ -64,7 +73,7 @@ export function TimelineControls({
             min={`${MIN_YEAR}-01-01`}
             max={`${MAX_YEAR}-12-31`}
             onChange={(event) => handleDateChange(event.target.value)}
-            aria-label="Window end date"
+            aria-label={t("insights.timeline.controls.windowEndAria")}
           />
         </label>
         <Button
@@ -72,15 +81,23 @@ export function TimelineControls({
           size="sm"
           onClick={() => onShift(range)}
           disabled={!canGoLater}
-          aria-label={`Next window, ${range} days later`}
+          aria-label={t("insights.timeline.controls.nextAria", {
+            days: formatNumber(range),
+          })}
         >
-          Next
+          {t("insights.timeline.controls.next")}
           <Icon name="chevron-right" size={13} />
         </Button>
       </div>
 
-      <div className="timeline-controls__ranges" role="group" aria-label="Window length">
-        <span className="mono-label">Range</span>
+      <div
+        className="timeline-controls__ranges"
+        role="group"
+        aria-label={t("insights.timeline.controls.rangeAria")}
+      >
+        <span className="mono-label">
+          {t("insights.timeline.controls.range")}
+        </span>
         {RANGE_OPTIONS.map((days) => (
           <Button
             key={days}
@@ -88,9 +105,13 @@ export function TimelineControls({
             size="sm"
             onClick={() => onRangeChange(days)}
             aria-pressed={range === days}
-            aria-label={`${days} day window`}
+            aria-label={t("insights.timeline.controls.dayWindow", {
+              days: formatNumber(days),
+            })}
           >
-            {days}d
+            {t("insights.timeline.controls.dayShort", {
+              days: formatNumber(days),
+            })}
           </Button>
         ))}
       </div>
@@ -105,9 +126,13 @@ export function TimelineControls({
           <span className="timeline-switch__knob" />
         </span>
         <span className="timeline-switch__copy">
-          <span className="timeline-switch__label">Include history</span>
+          <span className="timeline-switch__label">
+            {t("insights.timeline.controls.includeHistory")}
+          </span>
           <span className="timeline-switch__hint">
-            {includeHistory ? "Deprecated memories included" : "Active memories only"}
+            {includeHistory
+              ? t("insights.timeline.controls.historyIncluded")
+              : t("insights.timeline.controls.historyActiveOnly")}
           </span>
         </span>
       </label>
@@ -116,10 +141,10 @@ export function TimelineControls({
         variant="ghost"
         size="sm"
         onClick={onDemoSeason}
-        title="Read the seeded demo season"
+        title={t("insights.timeline.controls.demoSeasonTitle")}
       >
         <Icon name="ring" size={13} />
-        Try demo season
+        {t("insights.timeline.controls.demoSeason")}
       </Button>
     </section>
   );

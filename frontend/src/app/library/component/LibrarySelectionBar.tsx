@@ -1,5 +1,6 @@
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 
 interface LibrarySelectionBarProps {
   readonly selectedCount: number;
@@ -22,15 +23,25 @@ export function LibrarySelectionBar({
   onMoveSelected,
   onExit,
 }: LibrarySelectionBarProps) {
+  const { t, formatNumber } = useI18n();
   const allSelected = visibleCount > 0 && selectedCount === visibleCount;
 
   return (
-    <div className="library-selection-bar reveal" role="region" aria-label="Batch file selection">
+    <div
+      className="library-selection-bar reveal"
+      role="region"
+      aria-label={t("library.selection.aria")}
+    >
       <p className="library-selection-bar__count" role="status" aria-live="polite">
         <Icon name="check" size={14} />
-        <strong>{selectedCount}</strong> {selectedCount === 1 ? "file" : "files"} selected
+        <strong>{formatNumber(selectedCount)}</strong>{" "}
+        {t(
+          selectedCount === 1
+            ? "library.selection.countOne"
+            : "library.selection.countOther",
+        )}
         <span className="library-selection-bar__hint">
-          {visibleCount} visible in this folder
+          {t("library.selection.visible", { count: formatNumber(visibleCount) })}
         </span>
       </p>
       <div className="library-selection-bar__actions">
@@ -40,11 +51,13 @@ export function LibrarySelectionBar({
           onClick={allSelected ? onClear : onSelectAll}
           disabled={visibleCount === 0}
         >
-          {allSelected ? "Clear selection" : "Select all visible"}
+          {allSelected
+            ? t("library.selection.clearSelection")
+            : t("library.selection.selectAll")}
         </Button>
         {selectedCount > 0 && !allSelected ? (
           <Button variant="ghost" size="sm" onClick={onClear}>
-            Clear
+            {t("library.common.clear")}
           </Button>
         ) : null}
         <Button
@@ -54,10 +67,10 @@ export function LibrarySelectionBar({
           disabled={selectedCount === 0}
         >
           <Icon name="branch" size={14} />
-          Move selected
+          {t("library.selection.moveSelected")}
         </Button>
         <Button variant="ghost" size="sm" onClick={onExit}>
-          Done
+          {t("library.common.done")}
         </Button>
       </div>
     </div>

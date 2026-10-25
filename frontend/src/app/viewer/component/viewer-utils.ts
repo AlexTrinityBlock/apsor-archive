@@ -6,6 +6,7 @@
  * Every URL here is derived from a database id or a generated API helper.
  */
 import { ApiError } from "../../../apis/fetch-client";
+import { translateApiError, type Translate } from "../../i18n";
 import {
   getDownloadFileUrl,
   getGetFileContentUrl,
@@ -145,24 +146,24 @@ export function classifyFile(
 }
 
 /** Human label for a viewer kind. */
-export function kindLabel(kind: ViewerKind): string {
+export function kindLabel(kind: ViewerKind, t: Translate): string {
   switch (kind) {
     case "pdf":
-      return "PDF document";
+      return t("library.viewer.kind.pdf");
     case "docx":
-      return "Word document";
+      return t("library.viewer.kind.docx");
     case "image":
-      return "Image";
+      return t("library.viewer.kind.image");
     case "markdown":
-      return "Markdown";
+      return t("library.viewer.kind.markdown");
     case "json":
-      return "JSON";
+      return t("library.viewer.kind.json");
     case "csv":
-      return "CSV sheet";
+      return t("library.viewer.kind.csv");
     case "text":
-      return "Text";
+      return t("library.viewer.kind.text");
     default:
-      return "Original file";
+      return t("library.viewer.kind.unsupported");
   }
 }
 
@@ -192,9 +193,9 @@ export function viewerErrorStatus(error: unknown): number | null {
 }
 
 /** A short, safe error message for viewer states. */
-export function viewerErrorMessage(error: unknown): string {
+export function viewerErrorMessage(error: unknown, t: Translate): string {
   if (error instanceof ApiError) {
-    return error.detail || error.message;
+    return translateApiError(error, t, "library.viewer.errorFallback");
   }
   if (error instanceof ViewerResourceError) {
     return error.message;
@@ -202,7 +203,7 @@ export function viewerErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.length > 0) {
     return error.message;
   }
-  return "The archive could not open this resource.";
+  return t("library.viewer.errorFallback");
 }
 
 /** Pretty-print JSON without ever executing or transforming its values. */

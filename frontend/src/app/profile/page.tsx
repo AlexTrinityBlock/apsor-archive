@@ -18,7 +18,7 @@ import type {
   AuthStatusSchema,
   UserProfileSchema,
 } from "../generated-apis-types/schemas";
-import { apiErrorMessage } from "../settings/component/settings-utils";
+import { useApiErrorMessage, useI18n } from "../i18n";
 import "./profile.css";
 
 interface DraftCard {
@@ -63,8 +63,11 @@ function ProfileCard({
   readonly onMove: (key: string, direction: -1 | 1) => void;
   readonly onDelete: (key: string) => void;
 }) {
+  const { t, formatNumber } = useI18n();
   const titleId = useId();
   const contentId = useId();
+  const cardLabel = card.title || t("memory.profile.cardFallback");
+
   return (
     <article className="profile-card">
       <header className="profile-card__head">
@@ -72,13 +75,15 @@ function ProfileCard({
           {String(index + 1).padStart(2, "0")}
         </span>
         <label className="profile-card__title-field" htmlFor={titleId}>
-          <span className="visually-hidden">Card title</span>
+          <span className="visually-hidden">
+            {t("memory.profile.cardTitleLabel")}
+          </span>
           <input
             id={titleId}
             className="input profile-card__title"
             value={card.title}
             onChange={(event) => onChange(card.key, { title: event.target.value })}
-            placeholder="Card title, for example Work or Answer preferences"
+            placeholder={t("memory.profile.cardTitlePlaceholder")}
             maxLength={120}
             disabled={saving}
           />
@@ -89,8 +94,8 @@ function ProfileCard({
             className="profile-card__action"
             onClick={() => onMove(card.key, -1)}
             disabled={saving || index === 0}
-            aria-label={`Move ${card.title || "card"} up`}
-            title="Move up"
+            aria-label={t("memory.profile.moveUpAria", { title: cardLabel })}
+            title={t("memory.profile.moveUpTitle")}
           >
             ↑
           </button>
@@ -99,8 +104,8 @@ function ProfileCard({
             className="profile-card__action"
             onClick={() => onMove(card.key, 1)}
             disabled={saving || index === total - 1}
-            aria-label={`Move ${card.title || "card"} down`}
-            title="Move down"
+            aria-label={t("memory.profile.moveDownAria", { title: cardLabel })}
+            title={t("memory.profile.moveDownTitle")}
           >
             ↓
           </button>
@@ -109,27 +114,31 @@ function ProfileCard({
             className="profile-card__action is-danger"
             onClick={() => onDelete(card.key)}
             disabled={saving}
-            aria-label={`Delete ${card.title || "card"}`}
-            title="Delete card"
+            aria-label={t("memory.profile.deleteAria", { title: cardLabel })}
+            title={t("memory.profile.deleteTitle")}
           >
             <Icon name="trash" size={13} />
           </button>
         </div>
       </header>
       <label className="profile-card__content-field" htmlFor={contentId}>
-        <span className="visually-hidden">Card content</span>
+        <span className="visually-hidden">
+          {t("memory.profile.cardContentLabel")}
+        </span>
         <textarea
           id={contentId}
           className="textarea profile-card__content"
           value={card.content}
           onChange={(event) => onChange(card.key, { content: event.target.value })}
-          placeholder="Write what the archive should know. This becomes one line in the frozen user profile."
+          placeholder={t("memory.profile.cardContentPlaceholder")}
           maxLength={2000}
           rows={5}
           disabled={saving}
         />
         <span className="field-help">
-          {card.content.length.toLocaleString()} / 2,000 characters
+          {t("memory.profile.cardContentCount", {
+            count: formatNumber(card.content.length),
+          })}
         </span>
       </label>
     </article>
@@ -137,6 +146,8 @@ function ProfileCard({
 }
 
 function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
+  const { t, formatNumber } = useI18n();
+  const apiErrorMessage = useApiErrorMessage();
   const queryClient = useQueryClient();
   const toast = useToast();
   const formId = "profile-form";
@@ -161,10 +172,10 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
           });
         }
         setError(null);
-        toast.success("User profile saved.");
+        toast.success(t("memory.profile.savedToast"));
       },
       onError: (caught) => {
-        const message = apiErrorMessage(caught);
+        const message = apiErrorMessage(caught, "memory.common.genericError");
         setError(message);
         toast.error(message);
       },
@@ -200,7 +211,7 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
     event.preventDefault();
     const cleanName = displayName.trim();
     if (cleanName.length === 0) {
-      setError("A display name is required.");
+      setError(t("memory.profile.displayNameRequired"));
       return;
     }
     const cleanCards = cards.map((card) => ({
@@ -208,7 +219,7 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
       content: card.content.trim(),
     }));
     if (cleanCards.some((card) => card.title.length === 0 || card.content.length === 0)) {
-      setError("Every profile card needs both a title and content.");
+      setError(t("memory.profile.cardFieldsRequired"));
       return;
     }
     setError(null);
@@ -226,12 +237,12 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
     <form id={formId} className="profile-form" onSubmit={submit}>
       <Panel
         tone="plain"
-        eyebrow="Identity"
-        title="Display name"
+        eyebrow={t("memory.profile.identityEyebrow")}
+        title={t("memory.profile.displayNameTitle")}
         className="profile-identity-panel"
       >
         <label className="field" htmlFor={`${formId}-name`}>
-          <span className="field-label">Name / nickname</span>
+          <span className="field-label">{t("memory.profile.nameLabel")}</span>
           <input
             id={`${formId}-name`}
             className="input"
@@ -244,26 +255,26 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
             autoComplete="nickname"
             disabled={saving}
           />
-          <span className="field-help">
-            Shown in the sidebar and on your chat turns. Your sign-in username is
-            managed separately.
-          </span>
+          <span className="field-help">{t("memory.profile.nameHelp")}</span>
         </label>
       </Panel>
 
       <section className="profile-cards" aria-labelledby={`${formId}-cards`}>
         <div className="profile-cards__head">
           <div>
-            <p className="eyebrow">Profile cards</p>
-            <h2 id={`${formId}-cards`}>How the archive should know you</h2>
+            <p className="eyebrow">{t("memory.profile.cardsEyebrow")}</p>
+            <h2 id={`${formId}-cards`}>{t("memory.profile.cardsTitle")}</h2>
             <p className="profile-cards__lede">
-              Each card becomes one titled line in the frozen user profile of new
-              conversations. Cards are ordered top to bottom; existing
-              conversations keep the profile they started with.
+              {t("memory.profile.cardsLede")}
             </p>
           </div>
           <Badge tone={cards.length > 0 ? "moss" : "neutral"}>
-            {cards.length} {cards.length === 1 ? "card" : "cards"}
+            {t(
+              cards.length === 1
+                ? "memory.profile.cardCountOne"
+                : "memory.profile.cardCountOther",
+              { count: formatNumber(cards.length) },
+            )}
           </Badge>
         </div>
 
@@ -284,7 +295,7 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
 
         {cards.length === 0 ? (
           <div className="profile-cards__empty">
-            <p>No profile cards yet. Add one to describe your work, interests, or answer preferences.</p>
+            <p>{t("memory.profile.empty")}</p>
           </div>
         ) : null}
 
@@ -300,9 +311,9 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
             disabled={saving || cards.length >= 20}
           >
             <Icon name="plus" size={13} />
-            Add card
+            {t("memory.profile.addCard")}
           </Button>
-          <span className="field-help">Up to 20 cards.</span>
+          <span className="field-help">{t("memory.profile.cardLimit")}</span>
         </div>
       </section>
 
@@ -314,12 +325,12 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
       ) : null}
 
       <div className="profile-save-bar">
-        <span className="field-help">
-          Saving replaces every card in one transaction and updates the sidebar name.
-        </span>
+        <span className="field-help">{t("memory.profile.saveBarHelp")}</span>
         <Button type="submit" variant="primary" size="sm" disabled={saving}>
           <Icon name="check" size={14} />
-          {saving ? "Saving…" : "Save profile"}
+          {saving
+            ? t("memory.profile.saving")
+            : t("memory.profile.save")}
         </Button>
       </div>
     </form>
@@ -328,13 +339,15 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
 
 /** Editable multi-card user profile; frozen into new agent conversations. */
 export function ProfilePage() {
+  const { t } = useI18n();
+  const apiErrorMessage = useApiErrorMessage();
   const query = useGetUserProfile({ query: { retry: false, staleTime: 15_000 } });
 
   let body = null;
   if (query.isPending) {
     body = (
       <div className="profile-loading" role="status">
-        <Loader size={18} label="Reading the user profile" />
+        <Loader size={18} label={t("memory.profile.loading")} />
       </div>
     );
   } else if (query.isError) {
@@ -342,8 +355,8 @@ export function ProfilePage() {
       <div className="profile-error" role="alert">
         <Icon name="info" size={16} />
         <div>
-          <strong>The user profile did not answer.</strong>
-          <p>{apiErrorMessage(query.error)}</p>
+          <strong>{t("memory.profile.errorTitle")}</strong>
+          <p>{apiErrorMessage(query.error, "memory.common.genericError")}</p>
           <Button
             type="button"
             variant="ghost"
@@ -352,7 +365,9 @@ export function ProfilePage() {
             disabled={query.isFetching}
           >
             <Icon name="ring" size={14} />
-            {query.isFetching ? "Retrying…" : "Retry"}
+            {query.isFetching
+              ? t("memory.profile.retrying")
+              : t("memory.profile.retry")}
           </Button>
         </div>
       </div>
@@ -368,9 +383,9 @@ export function ProfilePage() {
   return (
     <div className="content-container profile-page">
       <PageHeader
-        eyebrow="User · profile"
-        title="User Profile"
-        description="A display name plus ordered cards that describe you. New conversations freeze the current profile into their system prompt; existing conversations keep the profile they started with."
+        eyebrow={t("memory.profile.eyebrow")}
+        title={t("memory.profile.title")}
+        description={t("memory.profile.description")}
         actions={
           <Button
             type="submit"
@@ -380,7 +395,7 @@ export function ProfilePage() {
             disabled={!query.data || query.isError}
           >
             <Icon name="check" size={14} />
-            Save profile
+            {t("memory.profile.save")}
           </Button>
         }
       />

@@ -4,6 +4,7 @@ import { Badge } from "../../component/Badge";
 import { ButtonLink } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { PageHeader } from "../../component/PageHeader";
+import { useI18n } from "../../i18n";
 
 import { MemoryEmptyState } from "./MemoryStates";
 
@@ -14,46 +15,50 @@ interface MemoryMissingProps {
 
 /** Calm 404 and malformed-id state for the memory routes. */
 export function MemoryMissing({ memoryId, invalid = false }: MemoryMissingProps) {
+  const { t } = useI18n();
+  let description = t("memory.missing.missingDescriptionFallback");
+  if (invalid) {
+    description = t("memory.missing.invalidDescription");
+  } else if (memoryId) {
+    description = t("memory.missing.missingDescription", { id: memoryId });
+  }
+
   return (
     <div className="content-container memory-page memory-missing-page">
-      <nav className="memory-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/memory">Memory Vault</Link>
+      <nav className="memory-breadcrumb" aria-label={t("memory.common.breadcrumbAria")}>
+        <Link to="/memory">{t("memory.vault.title")}</Link>
         <span aria-hidden="true">/</span>
         <span className="memory-breadcrumb__current" aria-current="page">
-          Record not found
+          {t("memory.missing.breadcrumbCurrent")}
         </span>
       </nav>
 
       <PageHeader
-        eyebrow="Memory · record not found"
-        title="Memory not found."
-        description={
-          invalid
-            ? "The route did not contain a numeric memory id. Memories are addressed by their stable integer id, not by a title."
-            : `Memory ${memoryId ?? "on this route"} is not in the archive. It may have been removed, or the id may never have existed.`
-        }
+        eyebrow={t("memory.missing.eyebrow")}
+        title={t("memory.missing.title")}
+        description={description}
         meta={<Badge tone="vermilion">404</Badge>}
         actions={
           <ButtonLink to="/memory" variant="secondary" size="sm">
             <Icon name="arrow-right" size={15} className="memory-back-icon" />
-            Back to vault
+            {t("memory.missing.backToVault")}
           </ButtonLink>
         }
       />
 
       <MemoryEmptyState
         icon="memory"
-        eyebrow="No crystal at this address"
-        title="This memory is not in the archive."
-        description="Deprecated memories remain readable, so a missing record means it is genuinely absent rather than merely retired. Return to the vault to browse the surviving lineage."
+        eyebrow={t("memory.missing.emptyEyebrow")}
+        title={t("memory.missing.emptyTitle")}
+        description={t("memory.missing.emptyDescription")}
         action={
           <>
             <ButtonLink to="/memory" variant="ink" size="sm">
-              Browse the vault
+              {t("memory.missing.browseVault")}
               <Icon name="arrow-right" size={15} />
             </ButtonLink>
             <ButtonLink to="/memory/new" variant="ghost" size="sm">
-              Press a new memory
+              {t("memory.missing.pressNew")}
             </ButtonLink>
           </>
         }

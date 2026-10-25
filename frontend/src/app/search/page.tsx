@@ -13,6 +13,7 @@ import {
   useCreateSavedQuestion,
   useSearchKnowledge,
 } from "../generated-apis-types";
+import { useI18n } from "../i18n";
 import { SearchControls } from "./component/SearchControls";
 import {
   FileResultCard,
@@ -52,6 +53,7 @@ interface DraftEdit {
  * drag does not flood the back stack.
  */
 export function SearchPage() {
+  const { t, formatNumber } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -105,7 +107,11 @@ export function SearchPage() {
   const createQuestion = useCreateSavedQuestion({
     mutation: {
       onSuccess: async (saved) => {
-        toast.success(`Saved “${truncate(saved.question, 72)}”.`);
+        toast.success(
+          t("insights.search.saved.success", {
+            question: truncate(saved.question, 72),
+          }),
+        );
         await queryClient.invalidateQueries({
           queryKey: getListSavedQuestionsQueryKey(),
         });
@@ -114,7 +120,7 @@ export function SearchPage() {
         toast.error(
           error instanceof Error && error.message.length > 0
             ? error.message
-            : "The question could not be saved.",
+            : t("insights.search.saved.error"),
         );
       },
     },
@@ -177,13 +183,13 @@ export function SearchPage() {
   return (
     <div className="content-container search-page">
       <PageHeader
-        eyebrow="Search · Hybrid Retrieval Engine"
-        title="Search the grain."
-        description="One query, two lanes. BM25 lexical hits and dense vector candidates are fused with reciprocal rank fusion, then capped per source kind so files, memories, and summaries each receive a balanced hearing."
+        eyebrow={t("insights.search.header.eyebrow")}
+        title={t("insights.search.header.title")}
+        description={t("insights.search.header.description")}
         meta={
           <span className="search-header__flags">
-            <Badge tone="moss">BM25 + cosine fusion</Badge>
-            <span className="shell-tag">RRF · k = 60</span>
+            <Badge tone="moss">{t("insights.search.header.fusionBadge")}</Badge>
+            <span className="shell-tag">{t("insights.search.header.rrfTag")}</span>
           </span>
         }
       />
@@ -233,20 +239,40 @@ export function SearchPage() {
               onClear={handleClear}
             />
           ) : (
-            <section className="search-results" aria-label="Search results">
+            <section
+              className="search-results"
+              aria-label={t("insights.search.results.aria")}
+            >
               <header className="search-results__head">
                 <div>
-                  <p className="eyebrow">Retrieved passages</p>
+                  <p className="eyebrow">
+                    {t("insights.search.results.eyebrow")}
+                  </p>
                   <h2 className="search-results__title">
-                    {`${totalResults} ${totalResults === 1 ? "passage" : "passages"} for “${data.query}”`}
+                    {t(
+                      totalResults === 1
+                        ? "insights.search.results.titleOne"
+                        : "insights.search.results.titleOther",
+                      {
+                        count: formatNumber(totalResults),
+                        query: data.query,
+                      },
+                    )}
                   </h2>
                 </div>
                 <div className="search-results__meta">
-                  <Badge tone="neutral">N = {data.result_number} per kind</Badge>
+                  <Badge tone="neutral">
+                    {t("insights.search.results.perKind", {
+                      count: formatNumber(data.result_number),
+                    })}
+                  </Badge>
                   {search.isFetching ? (
                     <span className="search-results__busy">
-                      <Loader size={12} label="Updating results" />
-                      Updating…
+                      <Loader
+                        size={12}
+                        label={t("insights.search.results.updatingAria")}
+                      />
+                      {t("insights.search.results.updating")}
                     </span>
                   ) : null}
                 </div>
@@ -254,10 +280,10 @@ export function SearchPage() {
 
               <SearchResultGroup
                 index="01"
-                title="File chunks"
+                title={t("insights.search.results.fileChunks")}
                 tone="files"
                 count={data.file_results.length}
-                emptyLabel="No file chunks matched this query."
+                emptyLabel={t("insights.search.results.emptyFiles")}
               >
                 {data.file_results.map((result, index) => (
                   <FileResultCard
@@ -271,10 +297,10 @@ export function SearchPage() {
 
               <SearchResultGroup
                 index="02"
-                title="Memory crystals"
+                title={t("insights.search.results.memoryCrystals")}
                 tone="memories"
                 count={data.memory_results.length}
-                emptyLabel="No memory crystals matched this query."
+                emptyLabel={t("insights.search.results.emptyMemories")}
               >
                 {data.memory_results.map((result, index) => (
                   <MemoryResultCard
@@ -288,10 +314,10 @@ export function SearchPage() {
 
               <SearchResultGroup
                 index="03"
-                title="Summaries"
+                title={t("insights.search.results.summaries")}
                 tone="summaries"
                 count={data.summary_results.length}
-                emptyLabel="No summaries matched this query."
+                emptyLabel={t("insights.search.results.emptySummaries")}
               >
                 {data.summary_results.map((result, index) => (
                   <SummaryResultCard

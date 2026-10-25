@@ -1,4 +1,5 @@
 import type { MemorySchema } from "../../generated-apis-types/schemas";
+import { useI18n } from "../../i18n";
 
 interface MemoryStatusProps {
   readonly status: MemorySchema["status"];
@@ -7,6 +8,8 @@ interface MemoryStatusProps {
 
 /** Editorial status pill shared by vault cards and reader lineage. */
 export function MemoryStatus({ status, small = false }: MemoryStatusProps) {
+  const { t } = useI18n();
+
   return (
     <span
       className={[
@@ -18,7 +21,9 @@ export function MemoryStatus({ status, small = false }: MemoryStatusProps) {
         .join(" ")}
     >
       <span aria-hidden="true">●</span>
-      {status === "active" ? "Active tip" : "Deprecated"}
+      {status === "active"
+        ? t("memory.status.active")
+        : t("memory.status.deprecated")}
     </span>
   );
 }

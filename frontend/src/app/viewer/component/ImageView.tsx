@@ -3,6 +3,7 @@ import { TransformComponent, TransformWrapper, type ReactZoomPanPinchContentRef 
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 
 interface ImageViewProps {
   readonly src: string;
@@ -16,6 +17,7 @@ interface ImageViewProps {
  * 1:1 control based on the image's natural width.
  */
 export function ImageView({ src, alt, downloadUrl, downloadName }: ImageViewProps) {
+  const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   const [naturalScale, setNaturalScale] = useState(1);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -31,13 +33,13 @@ export function ImageView({ src, alt, downloadUrl, downloadName }: ImageViewProp
         <span className="viewer-state__mark" aria-hidden="true">
           <Icon name="info" size={22} />
         </span>
-        <p className="eyebrow">Image unavailable</p>
-        <h2>The browser could not decode this image.</h2>
-        <p>The stored bytes may be damaged or use a format this browser does not support.</p>
+        <p className="eyebrow">{t("library.viewer.image.unavailableEyebrow")}</p>
+        <h2>{t("library.viewer.image.unavailableTitle")}</h2>
+        <p>{t("library.viewer.image.unavailableDescription")}</p>
         {downloadUrl ? (
           <a className="btn btn--ghost btn--sm" href={downloadUrl} download={downloadName}>
             <Icon name="arrow-down" size={15} />
-            Download original
+            {t("library.viewer.downloadOriginal")}
           </a>
         ) : null}
       </div>
@@ -59,15 +61,17 @@ export function ImageView({ src, alt, downloadUrl, downloadName }: ImageViewProp
       {({ zoomIn, zoomOut, resetTransform }) => (
         <div className="viewer-image">
           <div className="viewer-image__bar">
-            <span className="viewer-image__hint">Wheel or pinch to zoom · drag to pan</span>
+            <span className="viewer-image__hint">
+              {t("library.viewer.image.hint")}
+            </span>
             <div className="viewer-image__controls">
               <Button
                 variant="ghost"
                 size="sm"
                 iconOnly
                 onClick={() => zoomOut(0.2)}
-                aria-label="Zoom out"
-                title="Zoom out"
+                aria-label={t("library.viewer.zoomOut")}
+                title={t("library.viewer.zoomOut")}
               >
                 <span aria-hidden="true">−</span>
               </Button>
@@ -76,13 +80,13 @@ export function ImageView({ src, alt, downloadUrl, downloadName }: ImageViewProp
                 size="sm"
                 iconOnly
                 onClick={() => zoomIn(0.2)}
-                aria-label="Zoom in"
-                title="Zoom in"
+                aria-label={t("library.viewer.zoomIn")}
+                title={t("library.viewer.zoomIn")}
               >
                 <span aria-hidden="true">+</span>
               </Button>
               <Button variant="ghost" size="sm" onClick={() => resetTransform(180)}>
-                Fit
+                {t("library.viewer.image.fit")}
               </Button>
               <Button variant="ghost" size="sm" onClick={showActualSize}>
                 1:1

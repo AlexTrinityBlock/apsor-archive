@@ -2,7 +2,7 @@ import { memo, type ReactNode } from "react";
 
 import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
-import { formatNumber } from "../../../lib/format";
+import { useI18n, type Translate } from "../../i18n";
 import type {
   ChatStreamTool,
   ChatStreamView,
@@ -37,14 +37,16 @@ function asCall(tool: ChatStreamTool): ToolCallMeta {
   };
 }
 
-function pageContextLabel(stream: ChatStreamView): string {
+function pageContextLabel(stream: ChatStreamView, t: Translate): string {
   if (!stream.pageContextAttached) {
-    return "This page is already attached to the thread";
+    return t("chat.streaming.pageAttached");
   }
   if (stream.pageContextEntryId === null) {
-    return "Page context captured";
+    return t("chat.streaming.pageCaptured");
   }
-  return `Page context captured · entry #${stream.pageContextEntryId}`;
+  return t("chat.streaming.pageCapturedEntry", {
+    id: stream.pageContextEntryId,
+  });
 }
 
 function asResult(tool: ChatStreamTool): ToolResultMeta {
@@ -69,6 +71,7 @@ export const StreamingTurn = memo(function StreamingTurn({
   onOpenCitation,
   onOpenResource,
 }: StreamingTurnProps) {
+  const { t, formatNumber } = useI18n();
   const total = stream.usage.total_tokens;
 
   let liveBody: ReactNode = null;
@@ -76,7 +79,7 @@ export const StreamingTurn = memo(function StreamingTurn({
     liveBody = (
       <p className="chat-turn__silent is-live" role="status">
         <span className="chat-pulse" aria-hidden="true" />
-        Waiting for your approval before the write can continue.
+        {t("chat.streaming.waitingApproval")}
       </p>
     );
   } else if (stream.assistantText.length > 0) {
@@ -94,8 +97,8 @@ export const StreamingTurn = memo(function StreamingTurn({
       <p className="chat-turn__silent is-live">
         <span className="chat-pulse" aria-hidden="true" />
         {stream.toolCalls.length > 0
-          ? "The tools are being read."
-          : "Waiting for the first line…"}
+          ? t("chat.streaming.readingTools")
+          : t("chat.streaming.waitingFirstLine")}
       </p>
     );
   }
@@ -113,7 +116,9 @@ export const StreamingTurn = memo(function StreamingTurn({
           </span>
           <span>Apsor Archive Agent</span>
           <span className="chat-turn__meta">
-            {stream.runId === null ? "opening a run" : `run #${stream.runId}`}
+            {stream.runId === null
+              ? t("chat.streaming.openingRun")
+              : t("chat.streaming.run", { id: stream.runId })}
           </span>
           {stream.finishReason ? (
             <Badge tone={finishReasonTone(stream.finishReason)}>
@@ -149,7 +154,7 @@ export const StreamingTurn = memo(function StreamingTurn({
         {stream.pageContextKey !== null && stream.runId !== null ? (
           <p className="chat-context-live">
             <Icon name="layers" size={12} />
-            {pageContextLabel(stream)}
+            {pageContextLabel(stream, t)}
           </p>
         ) : null}
 
@@ -165,7 +170,7 @@ export const StreamingTurn = memo(function StreamingTurn({
 
         {total !== undefined && total > 0 ? (
           <p className="chat-turn__usage-note">
-            {formatNumber(total)} tokens on this turn
+            {t("chat.streaming.tokens", { count: formatNumber(total) })}
           </p>
         ) : null}
       </article>

@@ -30,29 +30,23 @@ import { Icon } from "../../component/Icon";
 import { Panel } from "../../component/Panel";
 import { useToast } from "../../component/Toast";
 import {
-  getListBuiltinSystemPromptSectionsQueryKey,
   getListSystemPromptSectionsQueryKey,
   useCreateSystemPromptSection,
   useDeleteSystemPromptSection,
-  useListBuiltinSystemPromptSections,
   useListSystemPromptSections,
   useReorderSystemPromptSections,
-  useResetBuiltinSystemPromptSections,
   useResetSystemPromptSections,
-  useUpdateBuiltinSystemPromptSection,
   useUpdateSystemPromptSection,
 } from "../../generated-apis-types";
 import type {
-  ListResponseSchemaSystemPromptBuiltinSectionSchema,
   ListResponseSchemaSystemPromptSectionReadSchema,
-  SystemPromptBuiltinSectionSchema,
   SystemPromptSectionReadSchema,
 } from "../../generated-apis-types/schemas";
+import { useI18n } from "../../i18n";
 import { apiErrorMessage } from "./settings-utils";
 import { SettingsDialog } from "./SettingsDialog";
 
 type SectionList = ListResponseSchemaSystemPromptSectionReadSchema;
-type BuiltinList = ListResponseSchemaSystemPromptBuiltinSectionSchema;
 
 type PanelActionError =
   | { readonly scope: "create"; readonly message: string }
@@ -67,13 +61,10 @@ type PanelActionError =
 const COLLAPSE_KEY = "apsor-archive.settings.systemPromptOpen";
 const SECTION_OPEN_PREFIX = "apsor-archive.systemPrompt.sectionOpen.";
 
-const BUILT_IN_ORDER = [
-  "Identity",
-  "Instructions",
-  "Examples",
-  "Context protocol",
-  "Tool catalog",
-  "Conversation messages",
+const TRAILING_ORDER = [
+  "systemPrompt.panel.order.userProfile",
+  "systemPrompt.panel.order.toolCatalog",
+  "systemPrompt.panel.order.conversationMessages",
 ] as const;
 
 function initiallyOpen(): boolean {
@@ -100,28 +91,6 @@ function readSectionOpen(id: number): boolean {
 function writeSectionOpen(id: number, value: boolean): void {
   try {
     window.localStorage.setItem(sectionOpenKey(id), String(value));
-  } catch {
-    // Storage can be blocked; the in-memory state still works.
-  }
-}
-
-const BUILTIN_OPEN_PREFIX = "apsor-archive.systemPrompt.builtinOpen.";
-
-function builtinOpenKey(key: string): string {
-  return `${BUILTIN_OPEN_PREFIX}${key}`;
-}
-
-function readBuiltinOpen(key: string): boolean {
-  try {
-    return window.localStorage.getItem(builtinOpenKey(key)) !== "false";
-  } catch {
-    return true;
-  }
-}
-
-function writeBuiltinOpen(key: string, value: boolean): void {
-  try {
-    window.localStorage.setItem(builtinOpenKey(key), String(value));
   } catch {
     // Storage can be blocked; the in-memory state still works.
   }
@@ -167,6 +136,7 @@ function SystemPromptSectionEditor({
   onSave,
   onRequestDelete,
 }: EditorProps) {
+  const { t, formatDateTime, formatNumber } = useI18n();
   const [title, setTitle] = useState(section.title);
   const [body, setBody] = useState(section.body);
   const titleId = useId();
@@ -192,7 +162,7 @@ function SystemPromptSectionEditor({
     >
       <div className="field system-prompt-section__field">
         <label className="field-label" htmlFor={titleId}>
-          Title
+          {t("systemPrompt.editor.title")}
         </label>
         <input
           ref={titleRef}
@@ -201,17 +171,17 @@ function SystemPromptSectionEditor({
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           maxLength={200}
-          placeholder="Archive voice"
+          placeholder={t("systemPrompt.editor.titlePlaceholder")}
           disabled={saving}
         />
         <span className="field-help">
-          Rendered as the Markdown heading of this section.
+          {t("systemPrompt.editor.titleHelp")}
         </span>
       </div>
 
       <div className="field system-prompt-section__field">
         <label className="field-label" htmlFor={bodyId}>
-          Body
+          {t("systemPrompt.editor.body")}
         </label>
         <textarea
           id={bodyId}
@@ -220,11 +190,13 @@ function SystemPromptSectionEditor({
           onChange={(event) => setBody(event.target.value)}
           maxLength={32_000}
           rows={10}
-          placeholder="Add persistent instructions. The built-in identity and tool rules still follow all custom sections."
+          placeholder={t("systemPrompt.editor.bodyPlaceholder")}
           disabled={saving}
         />
         <span className="field-help system-prompt__count">
-          {body.length.toLocaleString()} / 32,000 characters
+          {t("systemPrompt.editor.count", {
+            count: formatNumber(body.length),
+          })}
         </span>
       </div>
 
@@ -243,7 +215,7 @@ function SystemPromptSectionEditor({
           disabled={!valid || !dirty || saving}
         >
           <Icon name="check" size={14} />
-          {saving ? "Saving…" : "Save section"}
+          {saving ? t("systemPrompt.editor.saving") : t("systemPrompt.editor.save")}
         </Button>
         <Button
           type="button"
@@ -253,10 +225,12 @@ function SystemPromptSectionEditor({
           disabled={saving}
         >
           <Icon name="trash" size={14} />
-          Delete
+          {t("systemPrompt.editor.delete")}
         </Button>
         <span className="system-prompt__meta">
-          Updated {new Date(section.updated_at).toLocaleString()}
+          {t("systemPrompt.editor.updated", {
+            date: formatDateTime(section.updated_at),
+          })}
         </span>
       </div>
     </form>
@@ -283,6 +257,7 @@ function SortableSection({
   onSave,
   onRequestDelete,
 }: SortableSectionProps) {
+  const { t, formatNumber } = useI18n();
   const [open, setOpen] = useState(() => readSectionOpen(section.id));
   const titleRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
@@ -323,8 +298,10 @@ function SortableSection({
           className="system-prompt-section__handle"
           {...attributes}
           {...listeners}
-          aria-label={`Reorder ${section.title}`}
-          title="Drag to reorder; press Space then use the arrow keys"
+          aria-label={t("systemPrompt.section.reorderAria", {
+            title: section.title,
+          })}
+          title={t("systemPrompt.section.reorderTitle")}
         >
           <GripIcon />
         </button>
@@ -338,7 +315,12 @@ function SortableSection({
             {section.title}
           </h3>
           <span className="system-prompt-section__meta">
-            {section.body.length.toLocaleString()} characters
+            {t(
+              section.body.length === 1
+                ? "systemPrompt.section.charactersOne"
+                : "systemPrompt.section.charactersOther",
+              { count: formatNumber(section.body.length) },
+            )}
           </span>
         </div>
 
@@ -349,10 +331,18 @@ function SortableSection({
             aria-expanded={open}
             aria-controls={open ? bodyId : undefined}
             onClick={() => setOpenState(!open)}
-            title={open ? "Collapse section" : "Expand section"}
+            title={
+              open
+                ? t("systemPrompt.section.collapseTitle")
+                : t("systemPrompt.section.expandTitle")
+            }
           >
             <Icon name={open ? "chevron-down" : "chevron-right"} size={13} />
-            <span>{open ? "Collapse" : "Expand"}</span>
+            <span>
+              {open
+                ? t("systemPrompt.section.collapse")
+                : t("systemPrompt.section.expand")}
+            </span>
           </button>
           <Button
             type="button"
@@ -362,7 +352,7 @@ function SortableSection({
             disabled={saving}
           >
             <Icon name="pencil" size={13} />
-            Edit
+            {t("systemPrompt.section.edit")}
           </Button>
           <Button
             type="button"
@@ -372,7 +362,7 @@ function SortableSection({
             disabled={saving}
           >
             <Icon name="trash" size={13} />
-            Delete
+            {t("systemPrompt.section.delete")}
           </Button>
         </div>
       </div>
@@ -416,6 +406,7 @@ function SortableSectionList({
   onSave,
   onRequestDelete,
 }: SortableSectionListProps) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const listKey = getListSystemPromptSectionsQueryKey();
@@ -494,7 +485,7 @@ function SortableSectionList({
       >
         <ul
           className="system-prompt-sections"
-          aria-label="Custom system prompt sections"
+          aria-label={t("systemPrompt.panel.sectionsAria")}
         >
           {sections.map((section, index) => (
             <SortableSection
@@ -522,50 +513,52 @@ interface ProviderOrderProps {
   readonly sections: readonly SystemPromptSectionReadSchema[];
 }
 
-/** The provider-facing order: custom sections first, then every built-in one. */
+/** The provider-facing order: every section, then the frozen tool snapshot. */
 function ProviderOrderBlock({ sections }: ProviderOrderProps) {
+  const { t } = useI18n();
   const orderItems = [
     ...sections.map((section) => ({
       key: `section-${section.id}`,
       label: section.title,
-      custom: true,
+      section: true,
     })),
-    ...BUILT_IN_ORDER.map((label) => ({
-      key: `builtin-${label}`,
-      label,
-      custom: false,
+    ...TRAILING_ORDER.map((key) => ({
+      key: `trailing-${key}`,
+      label: t(key),
+      section: false,
     })),
   ];
 
   return (
     <div className="system-prompt__order-block">
-      <p className="mono-label">Provider request order</p>
-      <ol className="system-prompt__order" aria-label="System prompt load order">
-        {orderItems.map((item, index) => {
-          const itemClasses = [
-            index === 0 ? "is-first" : null,
-            item.custom ? "is-custom" : null,
-          ]
-            .filter(Boolean)
-            .join(" ");
-          return (
-            <li key={item.key} className={itemClasses || undefined}>
-              <span className="system-prompt__order-index">
-                {String(index + 1).padStart(2, "0")}
+      <p className="mono-label">{t("systemPrompt.panel.order.heading")}</p>
+      <ol
+        className="system-prompt__order"
+        aria-label={t("systemPrompt.panel.order.ariaLabel")}
+      >
+        {orderItems.map((item, index) => (
+          <li
+            key={item.key}
+            className={[
+              index === 0 ? "is-first" : null,
+              item.section ? "is-custom" : null,
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined}
+          >
+            <span className="system-prompt__order-index">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="system-prompt__order-label">{item.label}</span>
+            {item.section ? (
+              <span className="system-prompt__order-tag">
+                {t("systemPrompt.panel.order.promptTag")}
               </span>
-              <span className="system-prompt__order-label">{item.label}</span>
-              {item.custom ? (
-                <span className="system-prompt__order-tag">custom</span>
-              ) : null}
-            </li>
-          );
-        })}
+            ) : null}
+          </li>
+        ))}
       </ol>
-      <p className="settings-hint">
-        Stable order: one system message → tools → append-only messages. The
-        current time is appended to each user message when it is sent, so
-        history is never rewritten.
-      </p>
+      <p className="settings-hint">{t("systemPrompt.panel.order.hint")}</p>
     </div>
   );
 }
@@ -584,6 +577,7 @@ function AddSectionDialog({
   onClose,
   onSubmit,
 }: AddDialogProps) {
+  const { t, formatNumber } = useI18n();
   const formId = useId();
   const fieldId = useId();
   const [title, setTitle] = useState("");
@@ -597,12 +591,12 @@ function AddSectionDialog({
     event.preventDefault();
     const trimmedTitle = title.trim();
     if (trimmedTitle.length === 0) {
-      setFormError("Title is required.");
+      setFormError(t("systemPrompt.add.titleRequired"));
       return;
     }
     const trimmedBody = body.trim();
     if (trimmedBody.length === 0) {
-      setFormError("Body is required.");
+      setFormError(t("systemPrompt.add.bodyRequired"));
       return;
     }
     setFormError(null);
@@ -611,9 +605,9 @@ function AddSectionDialog({
 
   return (
     <SettingsDialog
-      eyebrow="Settings · system prompt"
-      title="Add a system prompt section"
-      description="New sections are appended after the current last section. Drag them into place once saved."
+      eyebrow={t("systemPrompt.add.eyebrow")}
+      title={t("systemPrompt.add.title")}
+      description={t("systemPrompt.add.description")}
       onClose={onClose}
       actions={
         <>
@@ -624,7 +618,7 @@ function AddSectionDialog({
             onClick={onClose}
             disabled={saving}
           >
-            Cancel
+            {t("systemPrompt.add.cancel")}
           </Button>
           <Button
             type="submit"
@@ -633,7 +627,9 @@ function AddSectionDialog({
             size="sm"
             disabled={saving}
           >
-            {saving ? "Adding…" : "Add section"}
+            {saving
+              ? t("systemPrompt.add.submitting")
+              : t("systemPrompt.add.submit")}
           </Button>
         </>
       }
@@ -646,7 +642,7 @@ function AddSectionDialog({
         noValidate
       >
         <label className="field" htmlFor={titleId}>
-          <span className="field-label">Title</span>
+          <span className="field-label">{t("systemPrompt.add.titleLabel")}</span>
           <input
             id={titleId}
             className="input"
@@ -657,15 +653,15 @@ function AddSectionDialog({
               setFormError(null);
             }}
             maxLength={200}
-            placeholder="Archive voice"
+            placeholder={t("systemPrompt.editor.titlePlaceholder")}
             disabled={saving}
             data-autofocus
           />
-          <span className="field-help">Up to 200 characters.</span>
+          <span className="field-help">{t("systemPrompt.add.titleHelp")}</span>
         </label>
 
         <label className="field" htmlFor={bodyId}>
-          <span className="field-label">Body</span>
+          <span className="field-label">{t("systemPrompt.add.bodyLabel")}</span>
           <textarea
             id={bodyId}
             className="textarea system-prompt-form__body"
@@ -676,11 +672,13 @@ function AddSectionDialog({
             }}
             maxLength={32_000}
             rows={8}
-            placeholder="Add persistent instructions for the archive agent."
+            placeholder={t("systemPrompt.add.bodyPlaceholder")}
             disabled={saving}
           />
           <span className="field-help system-prompt__count">
-            {body.length.toLocaleString()} / 32,000 characters
+            {t("systemPrompt.add.count", {
+              count: formatNumber(body.length),
+            })}
           </span>
         </label>
 
@@ -711,11 +709,14 @@ function DeleteSectionDialog({
   onClose,
   onConfirm,
 }: DeleteDialogProps) {
+  const { t } = useI18n();
   return (
     <SettingsDialog
-      eyebrow="Settings · system prompt"
-      title="Delete this section?"
-      description={`“${target.title}” will be removed from the ordered prompt. Existing conversations keep the prompt frozen at creation.`}
+      eyebrow={t("systemPrompt.delete.eyebrow")}
+      title={t("systemPrompt.delete.title")}
+      description={t("systemPrompt.delete.description", {
+        title: target.title,
+      })}
       onClose={onClose}
       actions={
         <>
@@ -727,7 +728,7 @@ function DeleteSectionDialog({
             disabled={saving}
             data-autofocus
           >
-            Cancel
+            {t("systemPrompt.delete.cancel")}
           </Button>
           <Button
             type="button"
@@ -736,15 +737,14 @@ function DeleteSectionDialog({
             onClick={onConfirm}
             disabled={saving}
           >
-            {saving ? "Deleting…" : "Delete section"}
+            {saving
+              ? t("systemPrompt.delete.deleting")
+              : t("systemPrompt.delete.confirm")}
           </Button>
         </>
       }
     >
-      <p className="settings-lede">
-        The remaining custom sections and the built-in identity still form the
-        prompt for new conversations.
-      </p>
+      <p className="settings-lede">{t("systemPrompt.delete.copy")}</p>
       {error ? (
         <p className="vault-feedback vault-feedback--error" role="alert">
           <Icon name="info" size={14} />
@@ -763,7 +763,7 @@ interface ResetDialogProps {
   readonly onConfirm: () => void;
 }
 
-/** Confirm removal of every custom section. */
+/** Confirm restoration of the four seeded defaults. */
 function ResetSectionsDialog({
   count,
   saving,
@@ -771,17 +771,20 @@ function ResetSectionsDialog({
   onClose,
   onConfirm,
 }: ResetDialogProps) {
-  const sectionNoun = count === 1 ? "section" : "sections";
-  let confirmLabel = `Remove all ${count} ${sectionNoun}`;
+  const { t } = useI18n();
+  let confirmLabel = t(
+    count === 1 ? "systemPrompt.reset.confirmOne" : "systemPrompt.reset.confirmOther",
+    { count },
+  );
   if (saving) {
-    confirmLabel = "Removing…";
+    confirmLabel = t("systemPrompt.reset.resetting");
   }
 
   return (
     <SettingsDialog
-      eyebrow="Settings · system prompt"
-      title="Remove every custom section?"
-      description="New conversations will use the built-in identity, instructions, examples, and context protocol only. Existing conversations keep their frozen prompt."
+      eyebrow={t("systemPrompt.reset.eyebrow")}
+      title={t("systemPrompt.reset.title")}
+      description={t("systemPrompt.reset.description")}
       onClose={onClose}
       actions={
         <>
@@ -793,7 +796,7 @@ function ResetSectionsDialog({
             disabled={saving}
             data-autofocus
           >
-            Cancel
+            {t("systemPrompt.reset.cancel")}
           </Button>
           <Button
             type="button"
@@ -807,9 +810,7 @@ function ResetSectionsDialog({
         </>
       }
     >
-      <p className="settings-lede">
-        All custom sections are deleted at once. This cannot be undone.
-      </p>
+      <p className="settings-lede">{t("systemPrompt.reset.copy")}</p>
       {error ? (
         <p className="vault-feedback vault-feedback--error" role="alert">
           <Icon name="info" size={14} />
@@ -902,6 +903,7 @@ function useSystemPromptMutations({
   onDeleted,
   onReset,
 }: MutationOptions) {
+  const { t } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const listKey = getListSystemPromptSectionsQueryKey();
@@ -919,7 +921,7 @@ function useSystemPromptMutations({
         queryClient.setQueryData<SectionList>(listKey, data);
         await invalidateList();
         onCreated();
-        toast.success("System prompt section added.");
+        toast.success(t("systemPrompt.toast.created"));
       },
       onError: (caught) => {
         setActionError({
@@ -936,7 +938,7 @@ function useSystemPromptMutations({
       onSuccess: async (data) => {
         queryClient.setQueryData<SectionList>(listKey, data);
         await invalidateList();
-        toast.success("System prompt section saved.");
+        toast.success(t("systemPrompt.toast.saved"));
       },
       onError: (caught, variables) => {
         setActionError({
@@ -963,7 +965,7 @@ function useSystemPromptMutations({
         });
         await invalidateList();
         onDeleted();
-        toast.success("System prompt section deleted.");
+        toast.success(t("systemPrompt.toast.deleted"));
       },
       onError: (caught) => {
         const message = apiErrorMessage(caught);
@@ -980,7 +982,7 @@ function useSystemPromptMutations({
         queryClient.setQueryData<SectionList>(listKey, data);
         await invalidateList();
         onReset();
-        toast.success("Custom sections removed. Built-in prompt remains.");
+        toast.success(t("systemPrompt.toast.reset"));
       },
       onError: (caught) => {
         const message = apiErrorMessage(caught);
@@ -993,302 +995,9 @@ function useSystemPromptMutations({
   return { createMutation, updateMutation, deleteMutation, resetMutation };
 }
 
-function BuiltinPromptCard({
-  section,
-  saving,
-  disabled,
-  error,
-  onSave,
-}: {
-  readonly section: SystemPromptBuiltinSectionSchema;
-  readonly saving: boolean;
-  readonly disabled: boolean;
-  readonly error: string | null;
-  readonly onSave: (key: string, body: string) => void;
-}) {
-  const [open, setOpen] = useState(() => readBuiltinOpen(section.key));
-  const [body, setBody] = useState(section.body);
-  const titleId = useId();
-  const bodyId = useId();
-
-  const dirty = body.trim() !== section.body.trim();
-  const setOpenState = (next: boolean) => {
-    setOpen(next);
-    writeBuiltinOpen(section.key, next);
-  };
-
-  return (
-    <article
-      className={[
-        "builtin-prompt-card",
-        open ? "is-open" : "is-collapsed",
-        section.customized ? "is-customized" : null,
-      ]
-        .filter(Boolean)
-        .join(" ")}
-      aria-labelledby={titleId}
-    >
-      <header className="builtin-prompt-card__head">
-        <div className="builtin-prompt-card__title">
-          <p className="eyebrow">Built-in</p>
-          <h4 id={titleId}>{section.title}</h4>
-        </div>
-        {section.customized ? (
-          <Badge tone="ochre">Customized</Badge>
-        ) : (
-          <Badge tone="neutral">Default</Badge>
-        )}
-        <button
-          type="button"
-          className="builtin-prompt-card__toggle"
-          aria-expanded={open}
-          aria-controls={`${bodyId}-panel`}
-          onClick={() => setOpenState(!open)}
-        >
-          {open ? "Collapse" : "Expand"}
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={13} />
-        </button>
-      </header>
-
-      {open ? (
-        <div className="builtin-prompt-card__body" id={`${bodyId}-panel`}>
-          <label className="field" htmlFor={bodyId}>
-            <span className="field-label">Body</span>
-            <textarea
-              id={bodyId}
-              className="textarea builtin-prompt-card__textarea"
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-              maxLength={32_000}
-              rows={10}
-              disabled={saving || disabled}
-            />
-            <span className="field-help">
-              {body.length.toLocaleString()} / 32,000 characters
-            </span>
-          </label>
-          <div className="builtin-prompt-card__foot">
-            <span className="field-help">
-              Applies to conversations created after saving.
-            </span>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={() => onSave(section.key, body.trim())}
-              disabled={
-                saving ||
-                disabled ||
-                !dirty ||
-                body.trim().length === 0
-              }
-            >
-              <Icon name="check" size={13} />
-              {saving ? "Saving…" : "Save section"}
-            </Button>
-          </div>
-          {error ? (
-            <p className="builtin-prompt-card__error" role="alert">
-              <Icon name="info" size={14} />
-              {error}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-    </article>
-  );
-}
-
-/** Edit the four provider-facing default sections without changing their order. */
-function BuiltinPromptBlock() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
-  const query = useListBuiltinSystemPromptSections({
-    query: { retry: false, staleTime: 15_000 },
-  });
-  const [error, setError] = useState<{
-    readonly key: string;
-    readonly message: string;
-  } | null>(null);
-  const [resetOpen, setResetOpen] = useState(false);
-  const listKey = getListBuiltinSystemPromptSectionsQueryKey();
-
-  const updateMutation = useUpdateBuiltinSystemPromptSection({
-    mutation: {
-      onSuccess: (data) => {
-        queryClient.setQueryData<BuiltinList>(listKey, data);
-        setError(null);
-        toast.success("Built-in prompt section saved.");
-      },
-      onError: (caught, variables) => {
-        const message = apiErrorMessage(caught);
-        setError({ key: variables.key, message });
-        toast.error(message);
-      },
-    },
-  });
-
-  const resetMutation = useResetBuiltinSystemPromptSections({
-    mutation: {
-      onSuccess: (data) => {
-        queryClient.setQueryData<BuiltinList>(listKey, data);
-        setError(null);
-        setResetOpen(false);
-        toast.success("Built-in prompt restored to its defaults.");
-      },
-      onError: (caught) => {
-        const message = apiErrorMessage(caught);
-        toast.error(message);
-      },
-    },
-  });
-
-  const headingId = useId();
-  const sections = query.data?.resources ?? [];
-  const customized = sections.filter((section) => section.customized).length;
-
-  let listBody = null;
-  if (query.isPending) {
-    listBody = (
-      <div className="builtin-prompt__list" aria-busy="true">
-        <span className="settings-skeleton settings-skeleton--line" />
-        <span className="settings-skeleton settings-skeleton--field" />
-        <span className="settings-skeleton settings-skeleton--field" />
-      </div>
-    );
-  } else if (query.isError) {
-    listBody = (
-      <div className="settings-inline-error" role="alert">
-        <Icon name="info" size={16} />
-        <div>
-          <strong>The built-in prompt did not answer.</strong>
-          <p>{apiErrorMessage(query.error)}</p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => void query.refetch()}
-            disabled={query.isFetching}
-          >
-            <Icon name="ring" size={14} />
-            {query.isFetching ? "Retrying…" : "Retry"}
-          </Button>
-        </div>
-      </div>
-    );
-  } else {
-    listBody = (
-      <div className="builtin-prompt__list">
-        {sections.map((section) => (
-          <BuiltinPromptCard
-            key={`${section.key}:${section.updated_at ?? "default"}`}
-            section={section}
-            saving={
-              updateMutation.isPending &&
-              updateMutation.variables?.key === section.key
-            }
-            disabled={resetMutation.isPending}
-            error={error?.key === section.key ? error.message : null}
-            onSave={(key, body) =>
-              updateMutation.mutate({ key, data: { body } })
-            }
-          />
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <>
-      <section className="builtin-prompt" aria-labelledby={headingId}>
-        <div className="builtin-prompt__head">
-          <div>
-            <p className="eyebrow">Built-in prompt</p>
-            <h3 id={headingId}>Default sections</h3>
-          </div>
-          <Badge tone={customized > 0 ? "ochre" : "moss"}>
-            {customized > 0 ? `${customized} customized` : "Pristine"}
-          </Badge>
-        </div>
-        <p className="builtin-prompt__lede">
-          These four sections are always present after the custom sections.
-          Editing one stores an override; reset removes every override and
-          restores the pristine wording. The tool catalog and conversation
-          messages remain built by the server.
-        </p>
-        {listBody}
-        <div className="builtin-prompt__foot">
-          <span className="field-help">
-            Changes apply only to conversations created after saving.
-          </span>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setError(null);
-              setResetOpen(true);
-            }}
-            disabled={
-              query.isPending ||
-              query.isError ||
-              customized === 0 ||
-              resetMutation.isPending
-            }
-          >
-            <Icon name="history" size={13} />
-            Reset built-in prompt
-          </Button>
-        </div>
-      </section>
-
-      {resetOpen ? (
-        <SettingsDialog
-          eyebrow="Settings · built-in prompt"
-          title="Reset the built-in prompt?"
-          description="Every built-in override is removed. Custom sections are untouched, and existing conversations keep their frozen prompt."
-          onClose={() => {
-            if (!resetMutation.isPending) {
-              setResetOpen(false);
-            }
-          }}
-          actions={
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setResetOpen(false)}
-                disabled={resetMutation.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={() => resetMutation.mutate()}
-                disabled={resetMutation.isPending}
-              >
-                <Icon name="history" size={14} />
-                {resetMutation.isPending ? "Resetting…" : "Reset built-in"}
-              </Button>
-            </>
-          }
-        >
-          <p className="settings-dialog__copy">
-            {customized === 1
-              ? "One built-in section will return to its default text."
-              : `${customized} built-in sections will return to their default text.`}
-          </p>
-        </SettingsDialog>
-      ) : null}
-    </>
-  );
-}
-
-/** Ordered owner-authored system prompt sections, frozen per conversation. */
+/** One ordered system prompt collection, frozen per conversation. */
 export function SystemPromptPanel() {
+  const { t } = useI18n();
   const query = useListSystemPromptSections({
     query: { retry: false, staleTime: 15_000 },
   });
@@ -1310,7 +1019,6 @@ export function SystemPromptPanel() {
     });
 
   const sections = query.data?.resources ?? [];
-  const sectionNoun = sections.length === 1 ? "section" : "sections";
   const saving = updateMutation.isPending;
   const busy =
     createMutation.isPending ||
@@ -1338,21 +1046,23 @@ export function SystemPromptPanel() {
     setDeleteTarget(section);
   };
 
-  let countBadge = (
-    <Badge tone="neutral">
-      {sections.length} {sectionNoun}
-    </Badge>
+  const countLabel = t(
+    sections.length === 1
+      ? "systemPrompt.panel.sectionCountOne"
+      : "systemPrompt.panel.sectionCountOther",
+    { count: sections.length },
   );
+  let countBadge = <Badge tone="neutral">{countLabel}</Badge>;
   if (query.isPending) {
-    countBadge = <Badge tone="neutral">Loading</Badge>;
-  } else if (query.isError) {
-    countBadge = <Badge tone="vermilion">Unavailable</Badge>;
-  } else if (sections.length > 0) {
     countBadge = (
-      <Badge tone="moss">
-        {sections.length} {sectionNoun}
-      </Badge>
+      <Badge tone="neutral">{t("systemPrompt.panel.loading")}</Badge>
     );
+  } else if (query.isError) {
+    countBadge = (
+      <Badge tone="vermilion">{t("systemPrompt.panel.unavailable")}</Badge>
+    );
+  } else if (sections.length > 0) {
+    countBadge = <Badge tone="moss">{countLabel}</Badge>;
   }
 
   let listBody = null;
@@ -1369,7 +1079,7 @@ export function SystemPromptPanel() {
       <div className="settings-inline-error" role="alert">
         <Icon name="info" size={16} />
         <div>
-          <strong>System prompt sections did not answer.</strong>
+          <strong>{t("systemPrompt.panel.error.title")}</strong>
           <p>{apiErrorMessage(query.error)}</p>
           <Button
             type="button"
@@ -1379,7 +1089,9 @@ export function SystemPromptPanel() {
             disabled={query.isFetching}
           >
             <Icon name="ring" size={14} />
-            {query.isFetching ? "Retrying…" : "Retry"}
+            {query.isFetching
+              ? t("systemPrompt.panel.error.retrying")
+              : t("systemPrompt.panel.error.retry")}
           </Button>
         </div>
       </div>
@@ -1388,11 +1100,11 @@ export function SystemPromptPanel() {
     listBody = (
       <div className="system-prompt-empty">
         <p className="system-prompt-empty__copy">
-          No custom sections. The built-in prompt is used.
+          {t("systemPrompt.panel.empty.copy")}
         </p>
         <Button type="button" variant="ink" size="sm" onClick={openCreate}>
           <Icon name="plus" size={13} />
-          Add the first section
+          {t("systemPrompt.panel.empty.addFirst")}
         </Button>
       </div>
     );
@@ -1424,7 +1136,7 @@ export function SystemPromptPanel() {
         title={
           <span className="settings-panel__title">
             <Icon name="layers" size={16} />
-            System prompt
+            {t("systemPrompt.panel.title")}
           </span>
         }
         action={
@@ -1436,10 +1148,18 @@ export function SystemPromptPanel() {
               aria-expanded={open}
               aria-controls="system-prompt-body"
               onClick={togglePanel}
-              title={open ? "Collapse system prompt" : "Expand system prompt"}
+              title={
+                open
+                  ? t("systemPrompt.panel.collapseTitle")
+                  : t("systemPrompt.panel.expandTitle")
+              }
             >
               <Icon name={open ? "chevron-down" : "chevron-right"} size={14} />
-              <span>{open ? "Collapse" : "Expand"}</span>
+              <span>
+                {open
+                  ? t("systemPrompt.panel.collapse")
+                  : t("systemPrompt.panel.expand")}
+              </span>
             </button>
           </div>
         }
@@ -1447,25 +1167,20 @@ export function SystemPromptPanel() {
         {open ? (
           <div id="system-prompt-body" className="system-prompt">
             <p className="settings-lede">
-              Custom sections are concatenated in order into one provider
-              system message, before the built-in identity, instructions,
-              examples, context protocol, tool catalog, and conversation
-              messages. Drag a grip to rewrite <code>sort_order</code>; existing
-              conversations keep the prompt frozen when they were created.
+              {t("systemPrompt.panel.intro")}
             </p>
 
             <ProviderOrderBlock sections={sections} />
 
-            <BuiltinPromptBlock />
-
             <div className="system-prompt__group-head">
               <div>
-                <p className="eyebrow">Custom sections</p>
-                <h3>Owner-authored prompt</h3>
+                <p className="eyebrow">
+                  {t("systemPrompt.panel.group.eyebrow")}
+                </p>
+                <h3>{t("systemPrompt.panel.group.title")}</h3>
               </div>
               <p className="system-prompt__group-lede">
-                Custom sections render before the built-in prompt, in this
-                drag order.
+                {t("systemPrompt.panel.group.lede")}
               </p>
             </div>
 
@@ -1478,7 +1193,7 @@ export function SystemPromptPanel() {
                 disabled={query.isPending || query.isError}
               >
                 <Icon name="plus" size={13} />
-                Add section
+                {t("systemPrompt.panel.toolbar.add")}
               </Button>
               <Button
                 type="button"
@@ -1488,16 +1203,13 @@ export function SystemPromptPanel() {
                   setActionError(null);
                   setResetOpen(true);
                 }}
-                disabled={
-                  query.isPending || query.isError || sections.length === 0
-                }
+                disabled={query.isPending || query.isError || busy}
               >
                 <Icon name="history" size={13} />
-                Reset custom
+                {t("systemPrompt.panel.toolbar.reset")}
               </Button>
               <span className="system-prompt__toolbar-hint">
-                Drag the grip, or focus it and press Space, then use the arrow
-                keys.
+                {t("systemPrompt.panel.toolbar.hint")}
               </span>
             </div>
 

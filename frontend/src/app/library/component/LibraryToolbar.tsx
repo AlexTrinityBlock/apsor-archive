@@ -2,6 +2,7 @@ import { useId, type FormEvent } from "react";
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n, type TranslationKey } from "../../i18n";
 import { LibraryBreadcrumbs } from "./LibraryBreadcrumbs";
 import {
   LIBRARY_SORT_OPTIONS,
@@ -35,9 +36,12 @@ interface LibraryToolbarProps {
   readonly onNewFolder: () => void;
 }
 
-function countLabel(count: number, singular: string, plural: string): string {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
+const SORT_LABEL_KEYS: Record<LibrarySort, TranslationKey> = {
+  modified: "library.sort.modified",
+  name: "library.sort.name",
+  size: "library.sort.size",
+  type: "library.sort.type",
+};
 
 function StatusLine({
   tab,
@@ -57,29 +61,57 @@ function StatusLine({
   | "loading"
   | "settling"
 >) {
+  const { t, formatNumber } = useI18n();
   if (loading) {
-    return <span className="library-status library-status--busy">Reading the shelf…</span>;
+    return (
+      <span className="library-status library-status--busy">
+        {t("library.toolbar.readingShelf")}
+      </span>
+    );
   }
   if (tab === "media") {
     return (
       <span className="library-status">
-        {countLabel(mediaCount, "image", "images")} in this folder
+        {t(
+          mediaCount === 1
+            ? "library.toolbar.mediaStatusOne"
+            : "library.toolbar.mediaStatusOther",
+          { count: formatNumber(mediaCount) },
+        )}
       </span>
     );
   }
   if (settling) {
-    return <span className="library-status library-status--busy">Reading paths…</span>;
+    return (
+      <span className="library-status library-status--busy">
+        {t("library.toolbar.readingPaths")}
+      </span>
+    );
   }
   if (activeQuery) {
     return (
       <span className="library-status">
-        {countLabel(fileCount, "match", "matches")} for <code>“{activeQuery}”</code>
+        {t(
+          fileCount === 1
+            ? "library.toolbar.matchStatusOne"
+            : "library.toolbar.matchStatusOther",
+          { count: formatNumber(fileCount), query: activeQuery },
+        )}
       </span>
     );
   }
   return (
     <span className="library-status">
-      {countLabel(folderCount, "folder", "folders")} · {countLabel(fileCount, "file", "files")}
+      {t(
+        folderCount === 1
+          ? "library.units.folderOne"
+          : "library.units.folderOther",
+        { count: formatNumber(folderCount) },
+      )}
+      {" · "}
+      {t(fileCount === 1 ? "library.units.fileOne" : "library.units.fileOther", {
+        count: formatNumber(fileCount),
+      })}
     </span>
   );
 }
@@ -112,6 +144,7 @@ export function LibraryToolbar({
   onUpload,
   onNewFolder,
 }: LibraryToolbarProps) {
+  const { t, formatNumber } = useI18n();
   const searchId = useId();
   const sortId = useId();
 
@@ -135,14 +168,14 @@ export function LibraryToolbar({
                   <Icon name="search" size={14} />
                 </span>
                 <label className="visually-hidden" htmlFor={searchId}>
-                  Fuzzy search file paths
+                  {t("library.toolbar.searchLabel")}
                 </label>
                 <input
                   id={searchId}
                   type="search"
                   value={rawQuery}
                   onChange={(event) => onQueryChange(event.target.value)}
-                  placeholder="Search files and folders…"
+                  placeholder={t("library.toolbar.searchPlaceholder")}
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -151,7 +184,7 @@ export function LibraryToolbar({
                     type="button"
                     className="library-search-mini__clear"
                     onClick={onClearQuery}
-                    aria-label="Clear fuzzy search"
+                    aria-label={t("library.toolbar.clearSearch")}
                   >
                     <Icon name="close" size={13} />
                   </button>
@@ -159,7 +192,7 @@ export function LibraryToolbar({
               </form>
 
               <label className="library-sort" htmlFor={sortId}>
-                <span className="visually-hidden">Sort files</span>
+                <span className="visually-hidden">{t("library.sort.label")}</span>
                 <Icon name="arrow-down" size={13} className="library-sort__icon" />
                 <select
                   id={sortId}
@@ -168,8 +201,8 @@ export function LibraryToolbar({
                   onChange={(event) => onSortChange(event.target.value as LibrarySort)}
                 >
                   {LIBRARY_SORT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      Sort: {option.label}
+                    <option key={option} value={option}>
+                      {t("library.sort.prefix", { label: t(SORT_LABEL_KEYS[option]) })}
                     </option>
                   ))}
                 </select>
@@ -179,17 +212,17 @@ export function LibraryToolbar({
 
           <Button variant="secondary" size="sm" onClick={onUpload}>
             <Icon name="arrow-down" size={14} />
-            Upload
+            {t("library.common.upload")}
           </Button>
           <Button variant="ink" size="sm" onClick={onNewFolder}>
             <Icon name="folder" size={14} />
-            New folder
+            {t("library.common.newFolder")}
           </Button>
         </div>
       </div>
 
       <div className="library-viewstrip">
-        <div className="tabs" role="tablist" aria-label="Library workspace">
+        <div className="tabs" role="tablist" aria-label={t("library.toolbar.workspaceTabs")}>
           <button
             type="button"
             role="tab"
@@ -199,8 +232,10 @@ export function LibraryToolbar({
             className={tab === "files" ? "tab is-active" : "tab"}
             onClick={() => onTabChange("files")}
           >
-            Files
-            {loading ? null : <span className="library-tab-count">{fileCount}</span>}
+            {t("library.toolbar.filesTab")}
+            {loading ? null : (
+              <span className="library-tab-count">{formatNumber(fileCount)}</span>
+            )}
           </button>
           <button
             type="button"
@@ -211,8 +246,10 @@ export function LibraryToolbar({
             className={tab === "media" ? "tab is-active" : "tab"}
             onClick={() => onTabChange("media")}
           >
-            Media gallery
-            {loading ? null : <span className="library-tab-count">{mediaCount}</span>}
+            {t("library.toolbar.mediaTab")}
+            {loading ? null : (
+              <span className="library-tab-count">{formatNumber(mediaCount)}</span>
+            )}
           </button>
         </div>
 
@@ -229,7 +266,11 @@ export function LibraryToolbar({
 
           {tab === "files" ? (
             <div className="library-viewstrip__controls">
-              <div className="library-view-toggle" role="group" aria-label="File view">
+              <div
+                className="library-view-toggle"
+                role="group"
+                aria-label={t("library.toolbar.viewLabel")}
+              >
                 <button
                   type="button"
                   className={
@@ -239,7 +280,7 @@ export function LibraryToolbar({
                   onClick={() => onViewChange("board")}
                 >
                   <Icon name="layers" size={13} />
-                  Board
+                  {t("library.toolbar.board")}
                 </button>
                 <button
                   type="button"
@@ -250,7 +291,7 @@ export function LibraryToolbar({
                   onClick={() => onViewChange("list")}
                 >
                   <Icon name="menu" size={13} />
-                  List
+                  {t("library.toolbar.list")}
                 </button>
               </div>
               <button
@@ -261,7 +302,7 @@ export function LibraryToolbar({
                 disabled={!selecting && fileCount === 0}
               >
                 <Icon name="check" size={13} />
-                {selecting ? "Selecting" : "Select"}
+                {selecting ? t("library.toolbar.selecting") : t("library.toolbar.select")}
               </button>
             </div>
           ) : null}

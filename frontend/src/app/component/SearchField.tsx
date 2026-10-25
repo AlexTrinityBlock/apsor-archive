@@ -2,6 +2,7 @@ import { useId, type FormEvent } from "react";
 
 import { Button } from "./Button";
 import { Icon } from "./Icon";
+import { useI18n } from "../i18n";
 
 interface SearchFieldProps {
   readonly value: string;
@@ -22,13 +23,17 @@ export function SearchField({
   value,
   onChange,
   onSubmit,
-  label = "Search files, memories, and summaries",
-  placeholder = "Search files, memories, paths...",
-  submitLabel = "Search",
+  label,
+  placeholder,
+  submitLabel,
   size = "md",
   autoFocus = false,
 }: SearchFieldProps) {
+  const { t } = useI18n();
   const inputId = useId();
+  const resolvedLabel = label ?? t("core.searchField.label");
+  const resolvedPlaceholder = placeholder ?? t("core.searchField.placeholder");
+  const resolvedSubmitLabel = submitLabel ?? t("core.searchField.submit");
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -45,7 +50,7 @@ export function SearchField({
         <Icon name="search" size={size === "lg" ? 22 : 19} />
       </span>
       <label className="visually-hidden" htmlFor={inputId}>
-        {label}
+        {resolvedLabel}
       </label>
       <input
         id={inputId}
@@ -53,7 +58,7 @@ export function SearchField({
         type="search"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
+        placeholder={resolvedPlaceholder}
         autoComplete="off"
         spellCheck={false}
         autoFocus={autoFocus}
@@ -65,7 +70,7 @@ export function SearchField({
         size={size === "lg" ? "md" : "sm"}
         className="search-field__submit"
       >
-        <span>{submitLabel}</span>
+        <span>{resolvedSubmitLabel}</span>
         <Icon name="arrow-right" size={16} />
       </Button>
     </form>

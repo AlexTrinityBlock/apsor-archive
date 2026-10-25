@@ -1,8 +1,8 @@
 import type { SearchStatsSchema } from "../../generated-apis-types/schemas";
-import { formatNumber } from "../../../lib/format";
 import { Badge } from "../../component/Badge";
 import { Panel } from "../../component/Panel";
 import { StatCard } from "../../component/StatCard";
+import { useI18n } from "../../i18n";
 
 interface SearchStatsProps {
   readonly stats: SearchStatsSchema;
@@ -14,25 +14,26 @@ interface SearchStatsProps {
  * the corpus size that was scanned, and the server-reported elapsed time.
  */
 export function SearchStats({ stats, elapsedMs }: SearchStatsProps) {
+  const { t, formatNumber } = useI18n();
   const totalCandidates = stats.text_candidates + stats.vector_candidates;
   const textShare = totalCandidates > 0 ? (stats.text_candidates / totalCandidates) * 100 : 0;
   const vectorShare = totalCandidates > 0 ? (stats.vector_candidates / totalCandidates) * 100 : 0;
 
   return (
     <Panel
-      eyebrow="Retrieval diagnostics"
-      title="Dual-lane candidate fusion"
+      eyebrow={t("insights.search.stats.eyebrow")}
+      title={t("insights.search.stats.title")}
       className="search-diagnostics"
       action={
         <div className="search-diagnostics__badges">
-          <Badge tone="ochre">RRF · 1 / (60 + rank)</Badge>
+          <Badge tone="ochre">{t("insights.search.stats.rrf")}</Badge>
         </div>
       }
     >
       <div className="search-fusion">
         <div className="search-fusion__labels" aria-hidden="true">
-          <span>Text lane · BM25</span>
-          <span>Vector lane · dense</span>
+          <span>{t("insights.search.stats.textLane")}</span>
+          <span>{t("insights.search.stats.vectorLane")}</span>
         </div>
         <div className="search-fusion__track" aria-hidden="true">
           {totalCandidates > 0 ? (
@@ -50,59 +51,57 @@ export function SearchStats({ stats, elapsedMs }: SearchStatsProps) {
         </div>
         <p className="search-fusion__note">
           {totalCandidates > 0
-            ? "Bar widths show each lane's share of the candidate pool before fusion."
-            : "Neither lane returned a candidate for this query."}
+            ? t("insights.search.stats.barNote")
+            : t("insights.search.stats.noCandidates")}
         </p>
       </div>
 
       <div className="search-metrics">
         <StatCard
-          label="Text candidates"
+          label={t("insights.search.stats.textCandidates")}
           value={formatNumber(stats.text_candidates)}
-          note="BM25 · top N per kind"
+          note={t("insights.search.stats.textCandidatesNote")}
           accent="moss"
         />
         <StatCard
-          label="Vector candidates"
+          label={t("insights.search.stats.vectorCandidates")}
           value={formatNumber(stats.vector_candidates)}
-          note="Cosine · top N per kind"
+          note={t("insights.search.stats.vectorCandidatesNote")}
           accent="ochre"
         />
         <StatCard
-          label="Merged"
+          label={t("insights.search.stats.merged")}
           value={formatNumber(stats.merged)}
-          note="Union of both lanes"
+          note={t("insights.search.stats.mergedNote")}
           accent="ink"
         />
         <StatCard
-          label="Deduplicated"
+          label={t("insights.search.stats.deduplicated")}
           value={formatNumber(stats.deduplicated)}
-          note="Duplicate hits collapsed"
+          note={t("insights.search.stats.deduplicatedNote")}
           accent="ink"
         />
         <StatCard
-          label="Chunks scanned"
+          label={t("insights.search.stats.chunksScanned")}
           value={formatNumber(stats.chunks_scanned)}
-          note="Current corpus"
+          note={t("insights.search.stats.chunksScannedNote")}
           accent="ink"
         />
         <StatCard
-          label="Elapsed"
+          label={t("insights.search.stats.elapsed")}
           value={`${formatNumber(elapsedMs)} ms`}
-          note="Server reported"
+          note={t("insights.search.stats.elapsedNote")}
           accent="ink"
         />
       </div>
 
       <p className="search-diagnostics__note">
-        Files, memories, and summaries each contribute up to N candidates per lane.
-        Both lanes merge into one pool, duplicate chunks collapse, and reciprocal-rank
-        fusion orders the survivors. These are candidate counts, not delivered results.
+        {t("insights.search.stats.note")}
       </p>
 
       {stats.terms.length > 0 ? (
         <div className="search-diagnostics__terms">
-          <span className="mono-label">Text terms</span>
+          <span className="mono-label">{t("insights.search.stats.textTerms")}</span>
           {stats.terms.map((term, index) => (
             <span key={`${term}-${index}`} className="badge badge--neutral">
               {term}

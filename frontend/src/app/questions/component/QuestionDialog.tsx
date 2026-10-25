@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import { useScrollLock } from "../../hook/useScrollLock";
-import { formatNumber } from "../../../lib/format";
+import { useI18n } from "../../i18n";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 
@@ -35,6 +35,7 @@ export function QuestionDialog({
   onClose,
   onSubmit,
 }: QuestionDialogProps) {
+  const { t, formatNumber } = useI18n();
   const titleId = useId();
   const helpId = useId();
   const errorId = useId();
@@ -104,12 +105,15 @@ export function QuestionDialog({
   const trimmed = draft.trim();
   const description =
     mode === "create"
-      ? "Saving stores the question only; no answer is generated until you run it in Chat."
-      : "Saving changed text clears the stored answer and conversation link.";
+      ? t("memory.questions.dialog.createDescription")
+      : t("memory.questions.dialog.editDescription");
   const describedBy = error ? `${helpId} ${errorId}` : helpId;
-  let submitLabel = mode === "create" ? "Save question" : "Save changes";
+  let submitLabel =
+    mode === "create"
+      ? t("memory.questions.dialog.save")
+      : t("memory.questions.dialog.saveChanges");
   if (saving) {
-    submitLabel = "Saving…";
+    submitLabel = t("memory.questions.dialog.saving");
   }
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -149,10 +153,14 @@ export function QuestionDialog({
         <header className="modal-head question-dialog__head">
           <div className="question-dialog__heading">
             <p className="eyebrow">
-              {mode === "create" ? "Save question" : "Edit question"}
+              {mode === "create"
+                ? t("memory.questions.dialog.createEyebrow")
+                : t("memory.questions.dialog.editEyebrow")}
             </p>
             <h2 className="modal-title" id={titleId}>
-              {mode === "create" ? "Keep a question for later." : "Revise this question."}
+              {mode === "create"
+                ? t("memory.questions.dialog.createTitle")
+                : t("memory.questions.dialog.editTitle")}
             </h2>
           </div>
           <button
@@ -160,7 +168,7 @@ export function QuestionDialog({
             className="modal-btn-close"
             onClick={onClose}
             disabled={saving}
-            aria-label="Close dialog"
+            aria-label={t("memory.questions.dialog.closeAria")}
           >
             <Icon name="close" size={18} />
           </button>
@@ -170,7 +178,7 @@ export function QuestionDialog({
           <div className="modal-body question-dialog__body">
             <div className="field">
               <label className="field-label" htmlFor={`${titleId}-question`}>
-                Question
+                {t("memory.questions.dialog.questionLabel")}
               </label>
               <textarea
                 id={`${titleId}-question`}
@@ -180,7 +188,7 @@ export function QuestionDialog({
                 onKeyDown={handleKeyDown}
                 rows={5}
                 maxLength={QUESTION_MAX_CHARS}
-                placeholder="What should the archive answer later?"
+                placeholder={t("memory.questions.dialog.placeholder")}
                 autoComplete="off"
                 disabled={saving}
                 data-autofocus
@@ -212,7 +220,7 @@ export function QuestionDialog({
               onClick={onClose}
               disabled={saving}
             >
-              Cancel
+              {t("memory.questions.dialog.cancel")}
             </Button>
             <Button
               type="submit"

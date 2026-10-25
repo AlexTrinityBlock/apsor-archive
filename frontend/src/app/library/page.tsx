@@ -28,6 +28,7 @@ import { Button } from "../component/Button";
 import { Panel } from "../component/Panel";
 import { QueryState } from "../component/QueryState";
 import { useToast } from "../component/Toast";
+import { useI18n } from "../i18n";
 import { useDebouncedValue } from "../hook/useDebouncedValue";
 import { BatchMoveDialog, type BatchMoveResult } from "./component/BatchMoveDialog";
 import { DeleteFileDialog } from "./component/DeleteFileDialog";
@@ -100,6 +101,7 @@ export function LibraryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { t, formatNumber } = useI18n();
   const isDesktop = useMediaQuery("(min-width: 761px)");
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const {
@@ -151,7 +153,7 @@ export function LibraryPage() {
   const seedMutation = useSeedDemo({
     mutation: {
       onSuccess: () => {
-        toast.success("Demo archive seeded. The shelf is ready.");
+        toast.success(t("library.page.seedSuccess"));
         void queryClient.invalidateQueries();
         setSelecting(false);
         setSelectedFileIds(new Set<number>());
@@ -244,7 +246,12 @@ export function LibraryPage() {
       setUploadOpen(false);
       resetSelection();
       setMediaFilter("");
-      toast.success(`“${file.file_name}” archived as version ${file.version}.`);
+      toast.success(
+        t("library.page.archivedToast", {
+          name: file.file_name,
+          version: file.version,
+        }),
+      );
       invalidateLibraryQueries(queryClient, {
         paths: true,
         stats: true,
@@ -274,7 +281,7 @@ export function LibraryPage() {
         });
       }
     },
-    [queryClient, resetSelection, tab, toast, updateParams],
+    [queryClient, resetSelection, t, tab, toast, updateParams],
   );
 
   const handleQueryChange = useCallback(
@@ -346,7 +353,7 @@ export function LibraryPage() {
     const images = files.filter((file) => isImageFileName(file.name));
     if (images.length === 0) {
       if (files.length > 0) {
-        toast.error("Choose a JPEG, PNG, or WebP image.");
+        toast.error(t("library.page.imagePickerError"));
       }
       return;
     }
@@ -366,7 +373,12 @@ export function LibraryPage() {
         fileIds: [result.id],
       });
       if (mode === "move") {
-        toast.success(`“${result.file_name}” moved to ${targetFolder}.`);
+        toast.success(
+          t("library.page.movedToast", {
+            name: result.file_name,
+            folder: targetFolder,
+          }),
+        );
         if (previewFileId === result.id) {
           const nextPath = pathParamValue(parentPath(result.raw_file_path));
           const chunk = requestedChunk > 1 ? requestedChunk : null;
@@ -383,17 +395,28 @@ export function LibraryPage() {
           }
         }
       } else {
-        toast.success(`“${result.file_name}” copied to ${targetFolder} as #${result.id}.`);
+        toast.success(
+          t("library.page.copiedToast", {
+            name: result.file_name,
+            folder: targetFolder,
+            id: result.id,
+          }),
+        );
       }
       setMoveCopyRequest(null);
     },
-    [previewFileId, queryClient, requestedChunk, tab, toast, updateParams],
+    [previewFileId, queryClient, requestedChunk, t, tab, toast, updateParams],
   );
 
   const handleDropMoveCopy = useCallback(
     async (file: FileOperationTarget, targetFolder: string, mode: FileOperationMode) => {
       if (mode === "move" && sameArchivePath(parentPath(file.raw_file_path), targetFolder)) {
-        toast.info(`“${file.file_name}” already lives in ${targetFolder}.`);
+        toast.info(
+          t("library.page.alreadyThereToast", {
+            name: file.file_name,
+            folder: targetFolder,
+          }),
+        );
         return;
       }
       const targetPath = joinArchivePath(targetFolder, file.file_name);
@@ -407,7 +430,7 @@ export function LibraryPage() {
         toast.error(describeError(error));
       }
     },
-    [handleOperationDone, toast],
+    [handleOperationDone, t, toast],
   );
 
   const handleRequestMoveCopy = useCallback(
@@ -540,29 +563,41 @@ export function LibraryPage() {
       }
       if (result.movedIds.length > 0) {
         toast.success(
-          `Moved ${result.movedIds.length} ${
-            result.movedIds.length === 1 ? "file" : "files"
-          } to ${result.targetFolder}.`,
+          t(
+            result.movedIds.length === 1
+              ? "library.batch.movedToastOne"
+              : "library.batch.movedToastOther",
+            {
+              count: formatNumber(result.movedIds.length),
+              folder: result.targetFolder,
+            },
+          ),
         );
       }
       if (result.skipped > 0) {
         toast.info(
-          `${result.skipped} ${
-            result.skipped === 1 ? "file was" : "files were"
-          } already in ${result.targetFolder}.`,
+          t(
+            result.skipped === 1
+              ? "library.batch.skippedToastOne"
+              : "library.batch.skippedToastOther",
+            { count: formatNumber(result.skipped), folder: result.targetFolder },
+          ),
         );
       }
       if (result.failures.length > 0) {
         toast.error(
-          `${result.failures.length} ${
-            result.failures.length === 1 ? "file could" : "files could"
-          } not be moved. See the move dialog for details.`,
+          t(
+            result.failures.length === 1
+              ? "library.batch.failuresToastOne"
+              : "library.batch.failuresToastOther",
+            { count: formatNumber(result.failures.length) },
+          ),
         );
       } else {
         setBatchMoveFiles(null);
       }
     },
-    [previewFileId, queryClient, requestedChunk, tab, toast, updateParams],
+    [formatNumber, previewFileId, queryClient, requestedChunk, t, tab, toast, updateParams],
   );
 
   const folderSuggestions = useMemo(() => {
@@ -637,7 +672,7 @@ export function LibraryPage() {
 
   return (
     <div className="library-page">
-      <h1 className="visually-hidden">File library</h1>
+      <h1 className="visually-hidden">{t("library.page.title")}</h1>
 
       <LibraryToolbar
         path={path}
@@ -689,15 +724,16 @@ export function LibraryPage() {
 
         {browseQuery.error && isNotFoundError(browseQuery.error) ? (
           <Panel tone="plain" className="library-not-found">
-            <p className="eyebrow">Path not found</p>
-            <h2>This folder is not on the shelf.</h2>
+            <p className="eyebrow">{t("library.page.pathNotFoundEyebrow")}</p>
+            <h2>{t("library.page.pathNotFoundTitle")}</h2>
             <p>
-              The archive has no current folder at <code>{path}</code>. It may have been removed
-              with its last file, or the link may be out of date.
+              {t("library.page.pathNotFoundBefore")}
+              <code>{path}</code>
+              {t("library.page.pathNotFoundAfter")}
             </p>
             <div className="library-not-found__actions">
               <Button variant="secondary" size="sm" onClick={() => openFolder("/")}>
-                Back to archive root
+                {t("library.common.backToRoot")}
               </Button>
             </div>
           </Panel>
@@ -705,7 +741,7 @@ export function LibraryPage() {
           <QueryState
             loading={browseQuery.isLoading}
             error={browseQuery.error}
-            loadingLabel="Reading the shelf"
+            loadingLabel={t("library.page.loadingShelf")}
           >
             {panelContent}
           </QueryState>

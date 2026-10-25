@@ -25,7 +25,7 @@ import {
   useUpdateAgentConversation,
 } from "../generated-apis-types/agent/agent";
 import type { AgentEntrySchema } from "../generated-apis-types/schemas";
-import { formatRelative } from "../../lib/format";
+import { getActiveLocale, translate, translateApiErrorWithActiveLocale, useI18n } from "../i18n";
 import {
   buildPersistedWorkTrace,
   mergeWorkTrace,
@@ -78,12 +78,12 @@ function parseConversationId(value: string | undefined): number | null {
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
-    return error.detail;
+    return translateApiErrorWithActiveLocale(error, "chat.page.errorFallback");
   }
   if (error instanceof Error && error.message.length > 0) {
     return error.message;
   }
-  return "The archive could not answer.";
+  return translate(getActiveLocale(), "chat.page.errorFallback");
 }
 
 function readRouteDraft(state: unknown): string | null {
@@ -130,6 +130,7 @@ export function ChatPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const narrow = useMediaQuery(NARROW_QUERY);
+  const { t, locale, formatNumber, formatRelative } = useI18n();
   const {
     containerRef,
     inspectorRef,
@@ -332,10 +333,18 @@ export function ChatPage() {
       ),
     [entries, stream?.toolCalls],
   );
-  const transcript = useMemo(() => transcriptText(entries), [entries]);
+  const transcript = useMemo(
+    () => transcriptText(entries, locale),
+    [entries, locale],
+  );
   const retryState = useMemo(
-    () => readRetryState(entries, lastError ? { detail: lastError } : null),
-    [entries, lastError],
+    () =>
+      readRetryState(
+        entries,
+        lastError ? { detail: lastError } : null,
+        locale,
+      ),
+    [entries, lastError, locale],
   );
   const pendingApprovals = useMemo(
     () =>
@@ -385,7 +394,9 @@ export function ChatPage() {
           data: { at_entry_id: entryId },
         });
         await invalidateConversationList(queryClient);
-        toast.success(`Forked from entry ${entryId}.`);
+        toast.success(
+          t("chat.page.forkToast", { entryId: formatNumber(entryId) }),
+        );
         navigate(`/chat/${forked.id}`);
       } catch (error) {
         toast.error(describeError(error));
@@ -398,9 +409,11 @@ export function ChatPage() {
       conversationId,
       forkConversation,
       forkingEntryId,
+      formatNumber,
       isStreaming,
       navigate,
       queryClient,
+      t,
       toast,
     ],
   );
@@ -480,7 +493,11 @@ export function ChatPage() {
       setCreating(true);
       try {
         const created = await createConversation.mutateAsync({
-          data: { title: titleFromMessage(trimmed) },
+          data: {
+            title:
+              titleFromMessage(trimmed) ||
+              t("chat.page.newConversationTitle"),
+          },
         });
         await invalidateConversationList(queryClient);
         setDraft("");
@@ -653,9 +670,9 @@ export function ChatPage() {
     if (invalidId) {
       return (
         <ThreadState
-          eyebrow="Address not found"
-          title="That conversation address is not valid."
-          detail="Conversation addresses are positive integers. The desk is still open."
+          eyebrow={t("chat.page.invalidEyebrow")}
+          title={t("chat.page.invalidTitle")}
+          detail={t("chat.page.invalidDetail")}
           action={
             <ButtonLink
               to="/chat"
@@ -663,7 +680,7 @@ export function ChatPage() {
               size="sm"
               onClick={() => clearLastChatConversation()}
             >
-              Back to chat
+              {t("chat.page.backToChat")}
             </ButtonLink>
           }
         />
@@ -680,17 +697,17 @@ export function ChatPage() {
     if (conversationQuery.isLoading) {
       return (
         <ThreadState
-          eyebrow="Opening the conversation"
-          title="Reading the transcript…"
-          detail="The entries and their method are being fetched from the archive."
+          eyebrow={t("chat.page.loadingEyebrow")}
+          title={t("chat.page.loadingTitle")}
+          detail={t("chat.page.loadingDetail")}
         />
       );
     }
     if (conversationQuery.isError) {
       return (
         <ThreadState
-          eyebrow="Read interrupted"
-          title="This conversation could not be opened."
+          eyebrow={t("chat.page.errorEyebrow")}
+          title={t("chat.page.errorTitle")}
           detail={describeError(conversationQuery.error)}
           action={
             <div className="chat-thread-state__actions">
@@ -699,7 +716,7 @@ export function ChatPage() {
                 size="sm"
                 onClick={() => void conversationQuery.refetch()}
               >
-                Try again
+                {t("chat.page.tryAgain")}
               </Button>
               <ButtonLink
                 to="/chat"
@@ -707,7 +724,7 @@ export function ChatPage() {
                 size="sm"
                 onClick={() => clearLastChatConversation()}
               >
-                Back to chat
+                {t("chat.page.backToChat")}
               </ButtonLink>
             </div>
           }
@@ -763,12 +780,12 @@ export function ChatPage() {
             >
               {loadingMore ? (
                 <>
-                  <Loader size={14} label="Loading more entries" />
-                  Loading…
+                  <Loader size={14} label={t("chat.page.loadingMoreLabel")} />
+                  {t("chat.page.loadingMore")}
                 </>
               ) : (
                 <>
-                  Load more entries
+                  {t("chat.page.loadMore")}
                   <Icon name="arrow-down" size={14} />
                 </>
               )}
@@ -777,9 +794,9 @@ export function ChatPage() {
         ) : null}
         {extraLoadError ? (
           <p className="chat-thread__more-error" role="alert">
-            More entries could not be read.{" "}
+            {t("chat.page.moreError")}{" "}
             <button type="button" onClick={() => void loadMore()}>
-              Try again
+              {t("chat.page.moreErrorRetry")}
             </button>
           </p>
         ) : null}
@@ -798,8 +815,8 @@ export function ChatPage() {
             <Icon name="archive" size={16} />
           </span>
           <div className="chat-archived__copy">
-            <strong>This conversation is archived.</strong>
-            <p>Restore it to write another note. Every entry stays readable.</p>
+            <strong>{t("chat.page.archivedTitle")}</strong>
+            <p>{t("chat.page.archivedDetail")}</p>
           </div>
           <Button
             variant="secondary"
@@ -807,7 +824,7 @@ export function ChatPage() {
             onClick={() => void restoreThread()}
             disabled={restoring}
           >
-            {restoring ? "Restoring…" : "Restore"}
+            {restoring ? t("chat.page.restoring") : t("chat.page.restore")}
           </Button>
         </div>
       );
@@ -845,23 +862,35 @@ export function ChatPage() {
 
   const totalEntries = conversation?.entries_total ?? entries.length;
   const contextMeta = [
-    `${totalEntries} ${totalEntries === 1 ? "entry" : "entries"}`,
+    t(
+      totalEntries === 1 ? "chat.common.entryOne" : "chat.common.entryOther",
+      { count: formatNumber(totalEntries) },
+    ),
     waitingForApproval
-      ? `${pendingApprovals.length} awaiting approval`
+      ? t("chat.page.awaitingApproval", {
+          count: formatNumber(pendingApprovals.length),
+        })
       : null,
     conversation?.last_entry_at
-      ? `updated ${formatRelative(conversation.last_entry_at)}`
+      ? t("chat.common.updatedAt", {
+          time: formatRelative(conversation.last_entry_at),
+        })
       : null,
   ].filter((item): item is string => item !== null);
 
   const streamPanel = (
-    <section className="panel chat-stream-panel" aria-label="Chat stream">
+    <section
+      className="panel chat-stream-panel"
+      aria-label={t("chat.page.streamAria")}
+    >
       <div className="chat-stream__context">
         <span className="chat-stream__session">
-          {conversationId === null ? "New session" : `Session #${conversationId}`}
+          {conversationId === null
+            ? t("chat.page.newSession")
+            : t("chat.page.session", { id: conversationId })}
         </span>
         <span className="chat-stream__context-title">
-          {conversation?.title ?? "Ask the archive"}
+          {conversation?.title ?? t("chat.page.defaultTitle")}
         </span>
         <span className="chat-stream__context-meta">
           {contextMeta.join(" · ")}
@@ -884,14 +913,14 @@ export function ChatPage() {
             <div className="chat-stream-error" role="alert">
               <Icon name="info" size={16} />
               <div>
-                <strong>That note could not be completed.</strong>
+                <strong>{t("chat.page.failureTitle")}</strong>
                 <p>{lastError}</p>
               </div>
               <button
                 type="button"
                 className="chat-stream-error__close"
                 onClick={() => setLastError(null)}
-                aria-label="Dismiss error"
+                aria-label={t("chat.page.dismissError")}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -978,14 +1007,16 @@ export function ChatPage() {
                 .join(" ")}
               role="separator"
               aria-orientation="vertical"
-              aria-label="Resize the inspector"
+              aria-label={t("chat.page.resizerAria")}
               aria-valuemin={0}
               aria-valuemax={Math.round(maxWidth)}
               aria-valuenow={Math.round(currentWidth)}
               aria-valuetext={
                 collapsed
-                  ? "Collapsed"
-                  : `${Math.round(currentWidth)} pixels wide`
+                  ? t("chat.page.resizerCollapsed")
+                  : t("chat.page.resizerWidth", {
+                      width: formatNumber(Math.round(currentWidth)),
+                    })
               }
               aria-controls="chat-inspector"
               tabIndex={0}
@@ -996,8 +1027,8 @@ export function ChatPage() {
               onKeyDown={handleKeyDown}
               title={
                 collapsed
-                  ? "Click to open the inspector"
-                  : "Drag to resize · Click to collapse"
+                  ? t("chat.page.resizerOpen")
+                  : t("chat.page.resizerResize")
               }
             >
               <span className="chat-resizer__line" aria-hidden="true" />

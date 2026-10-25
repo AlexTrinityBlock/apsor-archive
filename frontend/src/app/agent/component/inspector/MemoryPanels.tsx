@@ -4,7 +4,8 @@ import { CopyButton } from "../../../component/CopyButton";
 import { Icon } from "../../../component/Icon";
 import { useReadMemory } from "../../../generated-apis-types/memories/memories";
 import type { MemorySchema } from "../../../generated-apis-types/schemas";
-import { formatDateTime, truncate } from "../../../../lib/format";
+import { useI18n } from "../../../i18n";
+import { truncate } from "../../../../lib/format";
 import { numberField, recordId, textField } from "../../trace";
 import {
   InspectorMemoryStage,
@@ -90,6 +91,7 @@ function LineageSection({
 
 /** `read_memory`: a pressed-leaf lineage around one central record. */
 export function ReadMemoryPanel({ item }: PanelProps) {
+  const { t, formatDateTime, formatNumber } = useI18n();
   const memoryId =
     memoryIdOf(item.data, item.arguments) ??
     (item.resource?.resourceType === "memory" ? item.resource.resourceId : null);
@@ -100,14 +102,16 @@ export function ReadMemoryPanel({ item }: PanelProps) {
   );
 
   if (item.live || item.status.toLowerCase() === "running") {
-    return <LivePanel item={item} detail="Reading the memory and its neighbours." />;
+    return (
+      <LivePanel item={item} detail={t("chat.panels.memory.readingMemory")} />
+    );
   }
   if (item.status.toLowerCase() === "error") {
     return (
       <PanelEmpty
         icon="leaf"
-        title="The pressed leaf could not be read"
-        detail={item.detail ?? "No structured result was recorded."}
+        title={t("chat.panels.memory.readError")}
+        detail={item.detail ?? t("chat.panels.common.noStructured")}
       />
     );
   }
@@ -115,8 +119,8 @@ export function ReadMemoryPanel({ item }: PanelProps) {
     return (
       <PanelEmpty
         icon="leaf"
-        title="No memory id in this result"
-        detail="The inspector received no target memory to open."
+        title={t("chat.panels.memory.noMemoryIdTitle")}
+        detail={t("chat.panels.memory.noMemoryIdDetail")}
       />
     );
   }
@@ -136,18 +140,25 @@ export function ReadMemoryPanel({ item }: PanelProps) {
     <div className="pi-leaf-chain">
       <header className="pi-leaf-chain__head">
         <div>
-          <p className="eyebrow">Pressed-leaf lineage</p>
+          <p className="eyebrow">{t("chat.panels.memory.lineage")}</p>
           <strong>memory:{target.memory_id}</strong>
-          <span>{target.status} · updated {formatDateTime(target.update_time)}</span>
+          <span>
+            {target.status} ·{" "}
+            {t("chat.panels.common.updated", {
+              time: formatDateTime(target.update_time),
+            })}
+          </span>
         </div>
         <div className="pi-leaf-chain__head-actions">
           <CopyButton
             value={target.content}
-            label="Copy memory"
+            label={t("chat.panels.memory.copyMemory")}
             iconOnly
-            title="Copy the memory text"
+            title={t("chat.panels.memory.copyMemoryTitle")}
           />
-          <PanelLink to={`/memory/${target.memory_id}`}>Full trace</PanelLink>
+          <PanelLink to={`/memory/${target.memory_id}`}>
+            {t("chat.panels.common.fullTrace")}
+          </PanelLink>
         </div>
       </header>
 
@@ -160,23 +171,41 @@ export function ReadMemoryPanel({ item }: PanelProps) {
 
       <ul className="pi-leaf-chain__leaves">
         {read.neighbors_before.map((memory) => (
-          <LeafRef key={`before-${memory.memory_id}`} memory={memory} role="earlier" />
+          <LeafRef
+            key={`before-${memory.memory_id}`}
+            memory={memory}
+            role={t("chat.panels.memory.roleEarlier")}
+          />
         ))}
-        <LeafRef memory={target} role="current leaf" />
+        <LeafRef
+          memory={target}
+          role={t("chat.panels.memory.roleCurrent")}
+        />
         {read.neighbors_after.map((memory) => (
-          <LeafRef key={`after-${memory.memory_id}`} memory={memory} role="later" />
+          <LeafRef
+            key={`after-${memory.memory_id}`}
+            memory={memory}
+            role={t("chat.panels.memory.roleLater")}
+          />
         ))}
       </ul>
 
-      <LineageSection label="This memory supersedes" memories={read.supersedes} />
+      <LineageSection
+        label={t("chat.panels.memory.supersedes")}
+        memories={read.supersedes}
+      />
       {read.superseded_by ? (
-        <LineageSection label="Superseded by" memories={[read.superseded_by]} />
+        <LineageSection
+          label={t("chat.panels.memory.supersededBy")}
+          memories={[read.superseded_by]}
+        />
       ) : null}
 
       {neighborIds.length > 0 ? (
         <p className="pi-leaf-chain__note">
-          Neighbour range recorded: {neighborIds.length} adjacent memories. The
-          full trace keeps the complete chain.
+          {t("chat.panels.memory.neighbours", {
+            count: formatNumber(neighborIds.length),
+          })}
         </p>
       ) : null}
     </div>
@@ -185,6 +214,7 @@ export function ReadMemoryPanel({ item }: PanelProps) {
 
 /** `save_memory`: a wax-seal receipt for an appended memory. */
 export function SaveMemoryPanel({ item }: PanelProps) {
+  const { t, formatDateTime, formatNumber } = useI18n();
   const data = item.data;
   const deprecating = data?.mode === "deprecate";
   const receipt = (data?.memory ?? null) as Record<string, unknown> | null;
@@ -199,14 +229,20 @@ export function SaveMemoryPanel({ item }: PanelProps) {
   );
 
   if (item.live || item.status.toLowerCase() === "running") {
-    return <LivePanel item={item} detail="Pressing the confirmed memory leaf." />;
+    return (
+      <LivePanel item={item} detail={t("chat.panels.memory.savingMemory")} />
+    );
   }
   if (item.status.toLowerCase() === "error") {
     return (
       <PanelEmpty
         icon="leaf"
-        title={deprecating ? "The memories were not deprecated" : "The memory was not saved"}
-        detail={item.detail ?? "No structured result was recorded."}
+        title={
+          deprecating
+            ? t("chat.panels.memory.deprecateError")
+            : t("chat.panels.memory.saveError")
+        }
+        detail={item.detail ?? t("chat.panels.common.noStructured")}
       />
     );
   }
@@ -224,16 +260,16 @@ export function SaveMemoryPanel({ item }: PanelProps) {
           </span>
         </div>
         <div className="pi-seal-receipt__body">
-          <p className="eyebrow">Ledger update · memory retired</p>
+          <p className="eyebrow">{t("chat.panels.memory.ledgerEyebrow")}</p>
           <h3>
-            {deprecated.length === 1
-              ? "1 memory deprecated"
-              : `${deprecated.length} memories deprecated`}
+            {t(
+              deprecated.length === 1
+                ? "chat.panels.memory.deprecatedOne"
+                : "chat.panels.memory.deprecatedOther",
+              { count: formatNumber(deprecated.length) },
+            )}
           </h3>
-          <blockquote>
-            No replacement memory was written. The records stay readable in the
-            vault.
-          </blockquote>
+          <blockquote>{t("chat.panels.memory.noReplacement")}</blockquote>
           <ul className="pi-seal-receipt__list">
             {deprecated.map((memory) => {
               const id = numberField(memory, "memory_id");
@@ -241,27 +277,33 @@ export function SaveMemoryPanel({ item }: PanelProps) {
               return (
                 <li key={id ?? title ?? "deprecated"}>
                   {id !== null ? (
-                    <Link to={`/memory/${id}`}>CRYSTAL #{id}</Link>
+                    <Link to={`/memory/${id}`}>
+                      {t("chat.panels.memory.crystalId", { id })}
+                    </Link>
                   ) : (
-                    <span>CRYSTAL</span>
+                    <span>{t("chat.panels.memory.crystal")}</span>
                   )}
-                  <span>{title ?? "Untitled memory"}</span>
+                  <span>{title ?? t("chat.panels.memory.untitled")}</span>
                 </li>
               );
             })}
           </ul>
           <dl className="pi-seal-receipt__meta">
             <div>
-              <dt>Status</dt>
+              <dt>{t("chat.panels.memory.status")}</dt>
               <dd>deprecated</dd>
             </div>
             <div>
-              <dt>Reason</dt>
-              <dd>{reason ?? "not supplied"}</dd>
+              <dt>{t("chat.panels.memory.reason")}</dt>
+              <dd>{reason ?? t("chat.panels.memory.notSupplied")}</dd>
             </div>
             <div>
-              <dt>Recorded</dt>
-              <dd>{item.createdAt ? formatDateTime(item.createdAt) : "this turn"}</dd>
+              <dt>{t("chat.panels.memory.recorded")}</dt>
+              <dd>
+                {item.createdAt
+                  ? formatDateTime(item.createdAt)
+                  : t("chat.panels.memory.thisTurn")}
+              </dd>
             </div>
           </dl>
         </div>
@@ -275,7 +317,7 @@ export function SaveMemoryPanel({ item }: PanelProps) {
     textField(receipt, "content") ??
     saved?.content ??
     textField(item.arguments, "content") ??
-    "No memory text was recorded in the receipt.";
+    t("chat.panels.memory.noContent");
   const status = saved?.status ?? textField(receipt, "status") ?? "saved";
 
   return (
@@ -286,25 +328,39 @@ export function SaveMemoryPanel({ item }: PanelProps) {
         </span>
       </div>
       <div className="pi-seal-receipt__body">
-        <p className="eyebrow">Wax-seal receipt · memory appended</p>
-        <h3>{memoryId === null ? "New memory leaf" : `memory:${memoryId}`}</h3>
+        <p className="eyebrow">{t("chat.panels.memory.receiptEyebrow")}</p>
+        <h3>
+          {memoryId === null
+            ? t("chat.panels.memory.newLeaf")
+            : `memory:${memoryId}`}
+        </h3>
         <blockquote>{content}</blockquote>
         <dl className="pi-seal-receipt__meta">
           <div>
-            <dt>Status</dt>
+            <dt>{t("chat.panels.memory.status")}</dt>
             <dd>{status}</dd>
           </div>
           <div>
-            <dt>Supersedes</dt>
-            <dd>{supersedes.length > 0 ? supersedes.join(", ") : "nothing"}</dd>
+            <dt>{t("chat.panels.memory.supersedesLabel")}</dt>
+            <dd>
+              {supersedes.length > 0
+                ? supersedes.join(", ")
+                : t("chat.panels.memory.nothing")}
+            </dd>
           </div>
           <div>
-            <dt>Recorded</dt>
-            <dd>{saved ? formatDateTime(saved.update_time) : "this turn"}</dd>
+            <dt>{t("chat.panels.memory.recorded")}</dt>
+            <dd>
+              {saved
+                ? formatDateTime(saved.update_time)
+                : t("chat.panels.memory.thisTurn")}
+            </dd>
           </div>
         </dl>
         {memoryId !== null ? (
-          <PanelLink to={`/memory/${memoryId}`}>Open the pressed leaf</PanelLink>
+          <PanelLink to={`/memory/${memoryId}`}>
+            {t("chat.panels.memory.openLeaf")}
+          </PanelLink>
         ) : null}
       </div>
     </div>

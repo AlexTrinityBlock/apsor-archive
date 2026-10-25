@@ -27,7 +27,7 @@ import {
   getReadTimelineQueryOptions,
   useReadTimeline,
 } from "../generated-apis-types/timeline/timeline";
-import { formatNumber } from "../../lib/format";
+import { useI18n, type Translate } from "../i18n";
 
 import { TimelineControls } from "./component/TimelineControls";
 import { TimelineDensity } from "./component/TimelineDensity";
@@ -149,6 +149,7 @@ interface SentinelInput {
   readonly lastWindowEmpty: boolean;
   readonly lastEarlierLabel: string | null;
   readonly nextEarlierLabel: string;
+  readonly t: Translate;
 }
 
 function buildSentinelState({
@@ -160,6 +161,7 @@ function buildSentinelState({
   lastWindowEmpty,
   lastEarlierLabel,
   nextEarlierLabel,
+  t,
 }: SentinelInput): SentinelState {
   if (isLoadingEarlier) {
     return { kind: "loading", nextLabel: loadingEarlierLabel ?? nextEarlierLabel };
@@ -170,18 +172,18 @@ function buildSentinelState({
   if (!canLoadEarlier) {
     return {
       kind: "exhausted",
-      title: "Reached the earliest supported anchor.",
-      detail:
-        "The next earlier window would end before 1900-01-01, the earliest anchor the API accepts. The current window can still include earlier events because its range extends backward from the anchor.",
+      title: t("insights.timeline.page.exhaustedEarliestTitle"),
+      detail: t("insights.timeline.page.exhaustedEarliestDetail"),
       canContinue: false,
     };
   }
   if (lastWindowEmpty) {
     return {
       kind: "exhausted",
-      title: `No events in the earlier window (${lastEarlierLabel ?? nextEarlierLabel}).`,
-      detail:
-        "The archive is quiet this far back. Continue further if you want to search an older window.",
+      title: t("insights.timeline.page.exhaustedEmptyTitle", {
+        label: lastEarlierLabel ?? nextEarlierLabel,
+      }),
+      detail: t("insights.timeline.page.exhaustedEmptyDetail"),
       canContinue: true,
     };
   }
@@ -192,14 +194,17 @@ function buildEmptyDescription(
   data: TimelineResponseSchema,
   caption: string,
   includeHistory: boolean,
+  t: Translate,
+  formatNumber: (value: number) => string,
 ): string {
   if (data.total > 0) {
-    return `The archive counted ${formatNumber(data.total)} events in this window but sampled none. Move the window slightly to resample it.`;
+    return t("insights.timeline.page.emptySampled", {
+      count: formatNumber(data.total),
+    });
   }
-  let description = `The archive returned no memories, summaries, or file updates ending in this window (${caption}). Move the window, widen the range, or search the earlier window below.`;
+  let description = t("insights.timeline.page.emptyBase", { caption });
   if (!includeHistory) {
-    description +=
-      " Deprecated memories are excluded; turn on Include history to widen the read.";
+    description += t("insights.timeline.page.emptyHistoryNote");
   }
   return description;
 }
@@ -279,6 +284,7 @@ function renderTimelineBody({
  * and history switch. "Load earlier" requests the previous API window and appends it.
  */
 export function TimelinePage() {
+  const { t, formatDate, formatNumber } = useI18n();
   const [searchParams, setSearchParams] = useSearchParams();
   const [editTarget, setEditTarget] = useState<MemoryActionTarget | null>(null);
   const [deprecateTarget, setDeprecateTarget] =
@@ -409,8 +415,8 @@ export function TimelinePage() {
   const data = timeline.data;
 
   const caption = data
-    ? formatRangeCaption(data.range_start, data.range_end)
-    : formatRangeCaption(fallbackRangeStart, toDateInput(anchor));
+    ? formatRangeCaption(data.range_start, data.range_end, formatDate)
+    : formatRangeCaption(fallbackRangeStart, toDateInput(anchor), formatDate);
   const rangeLabel = data
     ? formatDotRange(data.range_start, data.range_end)
     : formatDotRange(fallbackRangeStart, toDateInput(anchor));
@@ -422,7 +428,12 @@ export function TimelinePage() {
   const earlierAnchors = earlierState.key === windowKey ? earlierState.anchors : [];
   const nextEarlierAnchor = addDays(anchor, -range * (earlierAnchors.length + 1));
   const canLoadEarlier = isWithinApiRange(nextEarlierAnchor);
-  const nextEarlierLabel = earlierWindowLabel(anchor, range, earlierAnchors.length);
+  const nextEarlierLabel = earlierWindowLabel(
+    anchor,
+    range,
+    earlierAnchors.length,
+    formatDate,
+  );
 
   const earlierQueryOptions = earlierAnchors.map((date) =>
     getReadTimelineQueryOptions({
@@ -443,12 +454,14 @@ export function TimelinePage() {
   );
   const loadingEarlierLabel =
     loadingEarlierIndex >= 0
-      ? earlierWindowLabel(anchor, range, loadingEarlierIndex)
+      ? earlierWindowLabel(anchor, range, loadingEarlierIndex, formatDate)
       : null;
   const earlierErrorIndex = earlierQueries.findIndex((query) => query.isError);
   const earlierError = earlierErrorIndex >= 0 ? earlierQueries[earlierErrorIndex].error : null;
   const earlierErrorLabel =
-    earlierErrorIndex >= 0 ? earlierWindowLabel(anchor, range, earlierErrorIndex) : nextEarlierLabel;
+    earlierErrorIndex >= 0
+      ? earlierWindowLabel(anchor, range, earlierErrorIndex, formatDate)
+      : nextEarlierLabel;
   const latestEarlierQuery =
     earlierQueries.length > 0 ? earlierQueries[earlierQueries.length - 1] : null;
   const lastWindowEmpty = Boolean(
@@ -456,7 +469,7 @@ export function TimelinePage() {
   );
   const lastEarlierLabel =
     earlierAnchors.length > 0
-      ? earlierWindowLabel(anchor, range, earlierAnchors.length - 1)
+      ? earlierWindowLabel(anchor, range, earlierAnchors.length - 1, formatDate)
       : null;
 
   const handleLoadEarlier = () => {
@@ -486,6 +499,7 @@ export function TimelinePage() {
     lastWindowEmpty,
     lastEarlierLabel,
     nextEarlierLabel,
+    t,
   });
 
   const earlierWindows: TimelineWindowView[] = earlierAnchors.flatMap((date, index) => {
@@ -494,17 +508,25 @@ export function TimelinePage() {
       return [];
     }
     return [
-      buildWindowView({
-        key: `earlier-${toDateInput(date)}`,
-        data: queryData,
-        isCurrent: false,
-      }),
+      buildWindowView(
+        {
+          key: `earlier-${toDateInput(date)}`,
+          data: queryData,
+          isCurrent: false,
+        },
+        t,
+        formatDate,
+      ),
     ];
   });
 
   const currentWindow =
     data && data.events.length > 0
-      ? buildWindowView({ key: `current-${windowKey}`, data, isCurrent: true })
+      ? buildWindowView(
+          { key: `current-${windowKey}`, data, isCurrent: true },
+          t,
+          formatDate,
+        )
       : null;
   const windows = currentWindow ? [currentWindow, ...earlierWindows] : earlierWindows;
 
@@ -512,18 +534,24 @@ export function TimelinePage() {
     data && data.events.length === 0 ? (
       <EmptyState
         icon="timeline"
-        eyebrow="Window is quiet"
-        title="No rings in this window."
-        description={buildEmptyDescription(data, caption, includeHistory)}
+        eyebrow={t("insights.timeline.page.emptyEyebrow")}
+        title={t("insights.timeline.page.emptyTitle")}
+        description={buildEmptyDescription(
+          data,
+          caption,
+          includeHistory,
+          t,
+          formatNumber,
+        )}
         className="timeline-empty-state"
         action={
           <div className="timeline-empty-actions">
             <Button variant="ink" size="sm" onClick={handleDemoSeason}>
               <Icon name="ring" size={14} />
-              Try demo season
+              {t("insights.timeline.page.demoSeason")}
             </Button>
             <Button variant="secondary" size="sm" onClick={handleJumpToday}>
-              Jump to today
+              {t("insights.timeline.page.jumpToday")}
             </Button>
           </div>
         }

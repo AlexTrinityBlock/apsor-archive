@@ -3,6 +3,12 @@ import type { QueryClient } from "@tanstack/react-query";
 import { ApiError } from "../../../apis/fetch-client";
 import { basename } from "../../../lib/format";
 import {
+  getActiveLocale,
+  translate,
+  translateApiErrorWithActiveLocale,
+  type TranslationKey,
+} from "../../i18n";
+import {
   getFile,
   getIngestJob,
 } from "../../generated-apis-types/files/files";
@@ -32,16 +38,11 @@ export type LibraryView = "board" | "list";
 /** Client-side ordering for the path listing (the API exposes no sort param). */
 export type LibrarySort = "modified" | "name" | "size" | "type";
 
-export interface LibrarySortOption {
-  readonly value: LibrarySort;
-  readonly label: string;
-}
-
-export const LIBRARY_SORT_OPTIONS: readonly LibrarySortOption[] = [
-  { value: "modified", label: "Date modified" },
-  { value: "name", label: "Name A–Z" },
-  { value: "size", label: "Size" },
-  { value: "type", label: "Type" },
+export const LIBRARY_SORT_OPTIONS: readonly LibrarySort[] = [
+  "modified",
+  "name",
+  "size",
+  "type",
 ];
 
 /** The image extensions the merged media gallery recognises. */
@@ -74,24 +75,16 @@ export type IngestStage =
   | "ready"
   | "failed";
 
-/** Short editorial labels for the durable job stages. */
-export const INGEST_STAGE_LABELS: Record<IngestStage, string> = {
-  queued: "Queued",
-  parsing: "Parsing",
-  chunking: "Chunking",
-  embedding: "Embedding",
-  summarizing: "Summarizing",
-  ready: "Ready",
-  failed: "Failed",
-};
-
-/** Resolves a stage label, with a useful fallback for pre-job work. */
-export function ingestStageLabel(
-  stage: IngestStage | null | undefined,
-  fallback = "Preparing",
-): string {
-  return stage ? INGEST_STAGE_LABELS[stage] : fallback;
-}
+/** Translation keys for the durable job stages, resolved by the components. */
+export const INGEST_STAGE_KEYS = {
+  queued: "library.ingest.stage.queued",
+  parsing: "library.ingest.stage.parsing",
+  chunking: "library.ingest.stage.chunking",
+  embedding: "library.ingest.stage.embedding",
+  summarizing: "library.ingest.stage.summarizing",
+  ready: "library.ingest.stage.ready",
+  failed: "library.ingest.stage.failed",
+} as const satisfies Record<IngestStage, TranslationKey>;
 
 /** The lifecycle of one file in the drag-and-drop intake tray. */
 export type LibraryUploadStatus = "queued" | "uploading" | "processing" | "done" | "error";
@@ -142,7 +135,7 @@ export function ingestJobFailureMessage(job: IngestJobSchema): string {
   return (
     job.error_detail?.trim() ||
     job.error_code ||
-    "The archive could not finish ingesting this file."
+    translate(getActiveLocale(), "library.ingest.failureFallback")
   );
 }
 
@@ -165,7 +158,7 @@ export class IngestPollTimeoutError extends Error {
   readonly job: IngestJobSchema;
 
   constructor(job: IngestJobSchema) {
-    super("This file is still processing. You can close the dialog and check the library later.");
+    super(translate(getActiveLocale(), "library.ingest.pollTimeout"));
     this.name = "IngestPollTimeoutError";
     this.job = job;
   }
@@ -262,7 +255,7 @@ export async function waitForIngestedFile(
 ): Promise<FileSchema> {
   const job = await waitForIngestJob(jobId, options);
   if (job.file_id === null) {
-    throw new Error("The ingest job finished without a file.");
+    throw new Error(translate(getActiveLocale(), "library.ingest.missingFile"));
   }
   return getFile(job.file_id, { signal: options.signal });
 }
@@ -607,15 +600,15 @@ export function invalidateLibraryQueries(
 /** Extracts a calm, human message from an API or network failure. */
 export function describeError(error: unknown): string {
   if (error instanceof ApiError) {
-    return error.detail || error.message;
+    return translateApiErrorWithActiveLocale(error, "library.errors.generic");
   }
-  if (error instanceof Error) {
+  if (error instanceof Error && error.message.length > 0) {
     return error.message;
   }
   if (typeof error === "string" && error.trim().length > 0) {
     return error;
   }
-  return "The archive could not complete that request.";
+  return translate(getActiveLocale(), "library.errors.generic");
 }
 
 /** Detects a 404 so the page can show a calm not-found panel instead. */

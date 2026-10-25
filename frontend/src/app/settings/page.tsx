@@ -1,6 +1,8 @@
 import { PageHeader } from "../component/PageHeader";
+import { useI18n } from "../i18n";
 import { DiagnosticsPanel } from "./component/DiagnosticsPanel";
 import { FrequentlyUsedPromptsPanel } from "./component/FrequentlyUsedPromptsPanel";
+import { LanguagePanel } from "./component/LanguagePanel";
 import { MaintenancePanel } from "./component/MaintenancePanel";
 import { ProviderVaultPanel } from "./component/ProviderVaultPanel";
 import {
@@ -17,6 +19,7 @@ import "./settings.css";
  * theme control is exposed here.
  */
 export function SettingsPage() {
+  const { t } = useI18n();
   return (
     <div className="content-container settings-page">
       <div className="settings-layout">
@@ -24,10 +27,10 @@ export function SettingsPage() {
 
         <div className="settings-content">
           <PageHeader
-            eyebrow="Settings · system configuration"
-            title="System settings & provider registry."
-            description="Order the custom sections that open every new conversation, curate the prompts shown on the empty chat page, and configure the four capability slots: chat, embedding, web search, and web fetch. Stored keys stay on the server and are never returned to this page."
-            meta={<span>Settings 07 · local-first archive</span>}
+            eyebrow={t("settings.page.eyebrow")}
+            title={t("settings.page.title")}
+            description={t("settings.page.description")}
+            meta={<span>{t("settings.page.meta")}</span>}
           />
 
           <SystemPromptPanel />
@@ -48,6 +51,9 @@ export function SettingsPage() {
           </div>
           <div id="settings-maintenance" className="settings-anchor">
             <MaintenancePanel />
+          </div>
+          <div id="settings-language" className="settings-anchor">
+            <LanguagePanel />
           </div>
         </div>
       </div>

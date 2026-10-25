@@ -25,6 +25,7 @@ import type {
   ChatStreamTool,
   ChatStreamView,
 } from "../chat/hook/useChatStream";
+import { getActiveLocale, translate } from "../i18n";
 
 export type WorkPhase =
   | "orienting"
@@ -85,19 +86,19 @@ const TOOL_PHASES: Readonly<Record<string, WorkPhase>> = {
   present_resource: "composing",
 };
 
-const PHASE_LABELS: Readonly<Record<WorkPhase, string>> = {
-  orienting: "Orienting",
-  searching: "Searching",
-  reading: "Reading",
-  comparing: "Comparing",
-  composing: "Composing",
-  saving: "Saving",
-  sealed: "Sealed",
-  error: "Needs repair",
-};
+const PHASE_LABEL_KEYS = {
+  orienting: "chat.workbench.phase.orienting",
+  searching: "chat.workbench.phase.searching",
+  reading: "chat.workbench.phase.reading",
+  comparing: "chat.workbench.phase.comparing",
+  composing: "chat.workbench.phase.composing",
+  saving: "chat.workbench.phase.saving",
+  sealed: "chat.workbench.phase.sealed",
+  error: "chat.workbench.phase.error",
+} as const;
 
 export function phaseLabel(phase: WorkPhase): string {
-  return PHASE_LABELS[phase];
+  return translate(getActiveLocale(), PHASE_LABEL_KEYS[phase]);
 }
 
 export function phaseForItem(item: TraceItem): WorkPhase {
@@ -134,10 +135,15 @@ export function currentTraceIndex(items: readonly TraceItem[]): number {
 
 export function traceLabel(item: TraceItem): string {
   if (item.kind === "error") {
-    return "Tool error";
+    return translate(getActiveLocale(), "chat.workbench.labelToolError");
   }
   if (item.kind === "assistant") {
-    return item.name === "orienting" ? "Orienting" : "Composing";
+    return item.name === "orienting"
+      ? translate(getActiveLocale(), "chat.workbench.labelOrienting")
+      : translate(getActiveLocale(), "chat.workbench.labelComposing");
+  }
+  if (item.tool === null && item.name === "tool result") {
+    return translate(getActiveLocale(), "chat.tool.resultFallback");
   }
   return item.tool ?? item.name;
 }

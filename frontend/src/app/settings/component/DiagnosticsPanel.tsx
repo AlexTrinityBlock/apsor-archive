@@ -19,7 +19,8 @@ import type {
   HealthSchema,
   StatsSchema,
 } from "../../generated-apis-types/schemas";
-import { formatBytes, formatDate, formatNumber } from "../../../lib/format";
+import { formatBytes } from "../../../lib/format";
+import { localizeStatus, useI18n, type Translate } from "../../i18n";
 import { invalidateReindexQueries } from "./settings-invalidation";
 import {
   apiErrorMessage,
@@ -30,42 +31,52 @@ import {
 } from "./settings-utils";
 import { StatusPill } from "./StatusPill";
 
-function healthLabel(value: string | undefined): string {
+function healthLabel(value: string | undefined, t: Translate): string {
   if (value === "ok") {
-    return "Online";
+    return t("settings.diagnostics.statusOnline");
   }
   if (value === "degraded") {
-    return "Degraded";
+    return t("settings.diagnostics.statusDegraded");
   }
   if (value === "error") {
-    return "Error";
+    return t("settings.diagnostics.statusError");
   }
-  return "Unknown";
+  return t("settings.diagnostics.statusUnknown");
 }
 
-function aiLabel(configured: boolean | null, isError: boolean): string {
+function aiLabel(
+  configured: boolean | null,
+  isError: boolean,
+  t: Translate,
+): string {
   if (isError) {
-    return "Unavailable";
+    return t("settings.diagnostics.statusUnavailable");
   }
   if (configured === null) {
-    return "Reading";
+    return t("settings.diagnostics.statusReading");
   }
-  return configured ? "Configured" : "No provider";
+  return configured
+    ? t("settings.diagnostics.statusConfigured")
+    : t("settings.diagnostics.statusNoProvider");
 }
 
-function overallLabel(tone: SettingsTone, pending: boolean): string {
+function overallLabel(
+  tone: SettingsTone,
+  pending: boolean,
+  t: Translate,
+): string {
   if (pending) {
-    return "Reading";
+    return t("settings.diagnostics.overallReading");
   }
   switch (tone) {
     case "ok":
-      return "All systems online";
+      return t("settings.diagnostics.overallOnline");
     case "degraded":
-      return "Degraded";
+      return t("settings.diagnostics.overallDegraded");
     case "error":
-      return "Offline";
+      return t("settings.diagnostics.overallOffline");
     default:
-      return "Unknown";
+      return t("settings.diagnostics.overallUnknown");
   }
 }
 
@@ -102,56 +113,80 @@ function vectorToneFor(enabled: boolean | undefined): SettingsTone {
 function vectorStatusLabel(
   enabled: boolean | undefined,
   isError: boolean,
+  t: Translate,
 ): string {
   if (enabled === undefined) {
-    return isError ? "Unavailable" : "Reading";
+    return isError
+      ? t("settings.diagnostics.statusUnavailable")
+      : t("settings.diagnostics.statusReading");
   }
-  return enabled ? "Enabled" : "Disabled";
+  return enabled
+    ? t("settings.diagnostics.statusEnabled")
+    : t("settings.diagnostics.statusDisabled");
 }
 
 function webStatusLabel(
   configured: boolean | undefined,
   isError: boolean,
+  t: Translate,
 ): string {
   if (isError) {
-    return "Unavailable";
+    return t("settings.diagnostics.statusUnavailable");
   }
   if (configured === undefined) {
-    return "Unknown";
+    return t("settings.diagnostics.statusUnknown");
   }
-  return configured ? "Configured" : "Needs key";
+  return configured
+    ? t("settings.diagnostics.statusConfigured")
+    : t("settings.diagnostics.statusNeedsKey");
 }
 
-function configuredValueLabel(configured: boolean | undefined): string {
+function configuredValueLabel(
+  configured: boolean | undefined,
+  t: Translate,
+): string {
   if (configured === undefined) {
     return "—";
   }
-  return configured ? "Yes" : "No";
+  return configured
+    ? t("settings.diagnostics.statusYes")
+    : t("settings.diagnostics.statusNo");
 }
 
-function dimensionLabel(dimension: number | null | undefined): string {
+function dimensionLabel(
+  dimension: number | null | undefined,
+  t: Translate,
+): string {
   if (dimension === null || dimension === undefined) {
-    return "Provider default";
+    return t("settings.diagnostics.statusProviderDefault");
   }
-  return `${formatNumber(dimension)}-D`;
+  return t("settings.diagnostics.statusDimension", {
+    dimension: String(dimension),
+  });
 }
 
-function reindexStateLabel(required: boolean | undefined): string {
+function reindexStateLabel(
+  required: boolean | undefined,
+  t: Translate,
+): string {
   if (required === undefined) {
     return "—";
   }
-  return required ? "Required" : "Current";
+  return required
+    ? t("settings.diagnostics.statusRequired")
+    : t("settings.diagnostics.statusCurrent");
 }
 
 function statsNote(
   isPending: boolean,
   isError: boolean,
+  t: Translate,
 ): string | undefined {
   if (isPending) {
-    return "reading";
+    return t("settings.diagnostics.statsNoteReading");
   }
   if (isError) {
-    return "unavailable";
+    return t("settings.diagnostics.statsNoteUnavailable");
   }
   return undefined;
 }
@@ -212,45 +247,48 @@ function StatsGrid({
   readonly isPending: boolean;
   readonly isError: boolean;
 }) {
-  const note = statsNote(isPending, isError);
+  const { t, formatNumber, formatDate } = useI18n();
+  const note = statsNote(isPending, isError, t);
 
   return (
     <div
       className="diagnostics-stats"
-      aria-label="Archive counts"
+      aria-label={t("settings.diagnostics.statsAria")}
       aria-busy={isPending}
     >
       <div className="diagnostics-stat">
-        <span>Files archived</span>
+        <span>{t("settings.diagnostics.statFiles")}</span>
         <strong>{stats ? formatNumber(stats.file_count) : "—"}</strong>
         {note ? <small>{note}</small> : null}
       </div>
       <div className="diagnostics-stat">
-        <span>Indexed chunks</span>
+        <span>{t("settings.diagnostics.statChunks")}</span>
         <strong>{stats ? formatNumber(stats.chunk_count) : "—"}</strong>
         {note ? <small>{note}</small> : null}
       </div>
       <div className="diagnostics-stat">
-        <span>Memory crystals</span>
+        <span>{t("settings.diagnostics.statMemories")}</span>
         <strong>{stats ? formatNumber(stats.memory_count) : "—"}</strong>
         <small>
           {stats
-            ? `${formatNumber(stats.active_memory_count)} active`
+            ? t("settings.diagnostics.statActive", {
+                count: formatNumber(stats.active_memory_count),
+              })
             : (note ?? "")}
         </small>
       </div>
       <div className="diagnostics-stat">
-        <span>AI summaries</span>
+        <span>{t("settings.diagnostics.statSummaries")}</span>
         <strong>{stats ? formatNumber(stats.summary_count) : "—"}</strong>
         {note ? <small>{note}</small> : null}
       </div>
       <dl className="diagnostics-facts">
         <div>
-          <dt>Storage</dt>
+          <dt>{t("settings.diagnostics.factStorage")}</dt>
           <dd>{stats ? formatBytes(stats.storage_bytes) : "—"}</dd>
         </div>
         <div>
-          <dt>Oldest memory</dt>
+          <dt>{t("settings.diagnostics.factOldestMemory")}</dt>
           <dd>
             {stats?.oldest_memory_time
               ? formatDate(stats.oldest_memory_time)
@@ -258,7 +296,7 @@ function StatsGrid({
           </dd>
         </div>
         <div>
-          <dt>Newest memory</dt>
+          <dt>{t("settings.diagnostics.factNewestMemory")}</dt>
           <dd>
             {stats?.newest_memory_time
               ? formatDate(stats.newest_memory_time)
@@ -266,7 +304,7 @@ function StatsGrid({
           </dd>
         </div>
         <div>
-          <dt>Source</dt>
+          <dt>{t("settings.diagnostics.factSource")}</dt>
           <dd>GET /api/v1/stats</dd>
         </div>
       </dl>
@@ -289,25 +327,42 @@ function DiagnosticsError({
   readonly refreshing: boolean;
   readonly onRetry: () => void;
 }) {
+  const { t } = useI18n();
   const parts: string[] = [];
   if (healthError) {
-    parts.push(`Health: ${apiErrorMessage(healthError)}`);
+    parts.push(
+      t("settings.diagnostics.errorHealth", {
+        message: apiErrorMessage(healthError),
+      }),
+    );
   }
   if (aiError) {
-    parts.push(`AI status: ${apiErrorMessage(aiError)}`);
+    parts.push(
+      t("settings.diagnostics.errorAi", {
+        message: apiErrorMessage(aiError),
+      }),
+    );
   }
   if (statsError) {
-    parts.push(`Stats: ${apiErrorMessage(statsError)}`);
+    parts.push(
+      t("settings.diagnostics.errorStats", {
+        message: apiErrorMessage(statsError),
+      }),
+    );
   }
   if (registryError) {
-    parts.push(`Provider registry: ${apiErrorMessage(registryError)}`);
+    parts.push(
+      t("settings.diagnostics.errorRegistry", {
+        message: apiErrorMessage(registryError),
+      }),
+    );
   }
 
   return (
     <div className="settings-inline-error" role="alert">
       <Icon name="info" size={16} />
       <div>
-        <strong>Part of the diagnostic surface did not answer.</strong>
+        <strong>{t("settings.diagnostics.errorTitle")}</strong>
         <p>{parts.join(" · ")}</p>
         <Button
           type="button"
@@ -317,7 +372,7 @@ function DiagnosticsError({
           disabled={refreshing}
         >
           <Icon name="ring" size={14} />
-          {refreshing ? "Retrying…" : "Retry"}
+          {refreshing ? t("core.common.retrying") : t("core.common.retry")}
         </Button>
       </div>
     </div>
@@ -337,6 +392,7 @@ function ReindexSection({
   readonly statsError: boolean;
   readonly embeddingModel: string;
 }) {
+  const { t, formatNumber } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
   const [confirming, setConfirming] = useState(false);
@@ -350,7 +406,10 @@ function ReindexSection({
         setError(null);
         setConfirming(false);
         toast.success(
-          `Re-embedded ${formatNumber(data.reindexed)} chunks with ${data.model}.`,
+          t("settings.reindex.toast", {
+            count: formatNumber(data.reindexed),
+            model: data.model,
+          }),
         );
         await invalidateReindexQueries(queryClient);
       },
@@ -369,28 +428,27 @@ function ReindexSection({
     chunkCount > 0 &&
     !reindex.isPending;
 
-  let hint = "Enable an embedding provider in the vault first.";
+  let hint = t("settings.diagnostics.reindexHints.enable");
   if (vectorEnabled === true && statsPending) {
-    hint = "Reading the current chunk count…";
+    hint = t("settings.diagnostics.reindexHints.reading");
   } else if (vectorEnabled === true && statsError) {
-    hint = "The chunk count could not be read.";
+    hint = t("settings.diagnostics.reindexHints.error");
   } else if (vectorEnabled === true && chunkCount === 0) {
-    hint = "There are no current chunks to re-embed.";
+    hint = t("settings.diagnostics.reindexHints.noChunks");
   } else if (vectorEnabled === true) {
-    hint =
-      "Re-embedding runs synchronously against every current chunk and may take a while.";
+    hint = t("settings.diagnostics.reindexHints.running");
   }
 
   return (
     <>
       <div className="reindex">
         <div className="reindex__copy">
-          <p className="mono-label">Vector maintenance</p>
-          <h3 className="reindex__title">Re-embed the library</h3>
+          <p className="mono-label">{t("settings.reindex.eyebrow")}</p>
+          <h3 className="reindex__title">{t("settings.reindex.title")}</h3>
           <p className="reindex__text">
-            Recompute every current chunk with <code>{embeddingModel}</code> and
-            replace the stored vectors. Use this after changing the embedding
-            model or dimension.
+            {t("settings.reindex.textBefore")}
+            <code>{embeddingModel}</code>
+            {t("settings.reindex.textAfter")}
           </p>
           <p className="reindex__hint">{hint}</p>
         </div>
@@ -398,8 +456,10 @@ function ReindexSection({
           {confirming ? (
             <div className="reindex__confirm" role="status">
               <span>
-                Re-embed {formatNumber(chunkCount ?? 0)} current chunks with{" "}
-                {embeddingModel}? This may take a while.
+                {t("settings.diagnostics.reindexConfirm", {
+                  count: formatNumber(chunkCount ?? 0),
+                  model: embeddingModel,
+                })}
               </span>
               <Button
                 type="button"
@@ -408,7 +468,9 @@ function ReindexSection({
                 onClick={() => reindex.mutate()}
                 disabled={reindex.isPending}
               >
-                {reindex.isPending ? "Re-embedding…" : "Start re-index"}
+                {reindex.isPending
+                  ? t("settings.reindex.reembedding")
+                  : t("settings.reindex.start")}
               </Button>
               <Button
                 type="button"
@@ -417,7 +479,7 @@ function ReindexSection({
                 onClick={() => setConfirming(false)}
                 disabled={reindex.isPending}
               >
-                Cancel
+                {t("settings.common.cancel")}
               </Button>
             </div>
           ) : (
@@ -432,7 +494,9 @@ function ReindexSection({
               disabled={!canReindex}
             >
               <Icon name="history" size={14} />
-              {reindex.isPending ? "Re-embedding…" : "Re-index embeddings"}
+              {reindex.isPending
+                ? t("settings.reindex.reembedding")
+                : t("settings.reindex.action")}
             </Button>
           )}
         </div>
@@ -441,9 +505,12 @@ function ReindexSection({
       {result ? (
         <p className="reindex__result" role="status">
           <Icon name="check" size={14} />
-          Re-embedded {formatNumber(result.reindexed)} chunks with{" "}
-          <code>{result.model}</code> · {formatNumber(result.dimension)}-D ·{" "}
-          {formatNumber(result.elapsed_ms)} ms.
+          {t("settings.reindex.result", {
+            count: formatNumber(result.reindexed),
+            model: result.model,
+            dimension: String(result.dimension),
+            ms: formatNumber(result.elapsed_ms),
+          })}
         </p>
       ) : null}
 
@@ -459,6 +526,7 @@ function ReindexSection({
 
 /** Live health, AI configuration, archive counts, and vector maintenance. */
 export function DiagnosticsPanel() {
+  const { t } = useI18n();
   const healthQuery = useGetHealth({ query: { staleTime: 30_000 } });
   const aiQuery = useGetAiStatus({ query: { staleTime: 60_000 } });
   const statsQuery = useGetStats({ query: { staleTime: 30_000 } });
@@ -529,13 +597,13 @@ export function DiagnosticsPanel() {
       title={
         <span className="settings-panel__title">
           <Icon name="overview" size={16} />
-          System diagnostics
+          {t("settings.diagnostics.title")}
         </span>
       }
       action={
         <div className="settings-panel__badges">
           <Badge tone={toneToBadge(overallTone)} dot>
-            {overallLabel(overallTone, anyPending)}
+            {overallLabel(overallTone, anyPending, t)}
           </Badge>
           <Button
             type="button"
@@ -545,16 +613,15 @@ export function DiagnosticsPanel() {
             disabled={refreshing}
           >
             <Icon name="ring" size={13} />
-            {refreshing ? "Refreshing…" : "Refresh"}
+            {refreshing
+              ? t("settings.diagnostics.refreshing")
+              : t("settings.diagnostics.refresh")}
           </Button>
         </div>
       }
       className="settings-panel"
     >
-      <p className="settings-lede">
-        The API answers these checks from the live process. Only reported fields
-        are shown: no synthetic latency, pool, or hit-ratio numbers.
-      </p>
+      <p className="settings-lede">{t("settings.diagnostics.lede")}</p>
 
       {anyError ? (
         <DiagnosticsError
@@ -571,92 +638,153 @@ export function DiagnosticsPanel() {
 
       <div className="diagnostics-grid" aria-busy={anyPending}>
         <DiagnosticItem
-          title="PostgreSQL database"
+          title={t("settings.diagnostics.itemDatabase")}
           tone={serviceTone(health?.database)}
           status={
-            healthQuery.isError ? "Unavailable" : healthLabel(health?.database)
+            healthQuery.isError
+              ? t("settings.diagnostics.statusUnavailable")
+              : healthLabel(health?.database, t)
           }
           rows={[
-            { key: "API status", value: health?.status ?? "—" },
-            { key: "Version", value: health?.version ?? "—" },
-            { key: "Database", value: health?.database ?? "—" },
-          ]}
-          loading={healthQuery.isPending}
-        />
-        <DiagnosticItem
-          title="Cache"
-          tone={serviceTone(health?.cache)}
-          status={
-            healthQuery.isError ? "Unavailable" : healthLabel(health?.cache)
-          }
-          rows={[
-            { key: "Reported status", value: health?.cache ?? "—" },
-            { key: "Fallback", value: "In-process cache" },
             {
-              key: "Effect",
-              value:
-                health?.cache === "ok"
-                  ? "Cache reachable"
-                  : "Reads still work",
+              key: t("settings.diagnostics.rowApiStatus"),
+              value: health?.status
+                ? localizeStatus(t, health.status)
+                : "—",
+            },
+            {
+              key: t("settings.diagnostics.rowVersion"),
+              value: health?.version ?? "—",
+            },
+            {
+              key: t("settings.diagnostics.rowDatabase"),
+              value: health?.database
+                ? localizeStatus(t, health.database)
+                : "—",
             },
           ]}
           loading={healthQuery.isPending}
-          note="The health endpoint reports reachability; it does not expose ports or hit ratios."
         />
         <DiagnosticItem
-          title="AI inference"
-          tone={aiTone}
-          status={aiLabel(aiConfigured, aiQuery.isError)}
+          title={t("settings.diagnostics.itemCache")}
+          tone={serviceTone(health?.cache)}
+          status={
+            healthQuery.isError
+              ? t("settings.diagnostics.statusUnavailable")
+              : healthLabel(health?.cache, t)
+          }
           rows={[
-            { key: "Provider", value: ai?.provider ?? "—" },
-            { key: "Model", value: ai?.model ?? "—" },
-            { key: "Health", value: health?.ai ?? "—" },
+            {
+              key: t("settings.diagnostics.rowReportedStatus"),
+              value: health?.cache ? localizeStatus(t, health.cache) : "—",
+            },
+            {
+              key: t("settings.diagnostics.rowFallback"),
+              value: t("settings.diagnostics.valueInProcessCache"),
+            },
+            {
+              key: t("settings.diagnostics.rowEffect"),
+              value:
+                health?.cache === "ok"
+                  ? t("settings.diagnostics.valueCacheReachable")
+                  : t("settings.diagnostics.valueReadsStillWork"),
+            },
+          ]}
+          loading={healthQuery.isPending}
+          note={t("settings.diagnostics.cacheNote")}
+        />
+        <DiagnosticItem
+          title={t("settings.diagnostics.itemAi")}
+          tone={aiTone}
+          status={aiLabel(aiConfigured, aiQuery.isError, t)}
+          rows={[
+            {
+              key: t("settings.diagnostics.rowProvider"),
+              value: ai?.provider ?? "—",
+            },
+            {
+              key: t("settings.diagnostics.rowModel"),
+              value: ai?.model ?? "—",
+            },
+            {
+              key: t("settings.diagnostics.rowHealth"),
+              value: health?.ai ? localizeStatus(t, health.ai) : "—",
+            },
           ]}
           loading={aiQuery.isPending}
         />
         <DiagnosticItem
-          title="Vector retrieval"
+          title={t("settings.diagnostics.itemVector")}
           tone={vectorTone}
           status={vectorStatusLabel(
             vectorEnabled,
             aiQuery.isError || registryQuery.isError,
+            t,
           )}
           rows={[
-            { key: "Embedding provider", value: embeddingProvider },
-            { key: "Embedding model", value: embeddingModel },
             {
-              key: "Dimension",
-              value: dimensionLabel(embeddingActive?.dimension),
+              key: t("settings.diagnostics.rowEmbeddingProvider"),
+              value: embeddingProvider,
             },
-            { key: "Re-index", value: reindexStateLabel(reindexRequired) },
+            {
+              key: t("settings.diagnostics.rowEmbeddingModel"),
+              value: embeddingModel,
+            },
+            {
+              key: t("settings.diagnostics.rowDimension"),
+              value: dimensionLabel(
+                embeddingActive?.dimension,
+                t,
+              ),
+            },
+            {
+              key: t("settings.diagnostics.rowReindex"),
+              value: reindexStateLabel(reindexRequired, t),
+            },
           ]}
           loading={registryQuery.isPending}
         />
         <DiagnosticItem
-          title="Web search"
+          title={t("settings.diagnostics.itemWebSearch")}
           tone={aiToneFor(ai?.web_search_configured ?? null, aiQuery.isError)}
-          status={webStatusLabel(ai?.web_search_configured, aiQuery.isError)}
+          status={webStatusLabel(
+            ai?.web_search_configured,
+            aiQuery.isError,
+            t,
+          )}
           rows={[
-            { key: "Provider", value: ai?.web_search_provider ?? "—" },
             {
-              key: "Configured",
-              value: configuredValueLabel(ai?.web_search_configured),
+              key: t("settings.diagnostics.rowProvider"),
+              value: ai?.web_search_provider ?? "—",
             },
-            { key: "Credential", value: "Separate web_search slot" },
+            {
+              key: t("settings.diagnostics.rowConfigured"),
+              value: configuredValueLabel(ai?.web_search_configured, t),
+            },
+            {
+              key: t("settings.diagnostics.rowCredential"),
+              value: t("settings.diagnostics.valueSeparateWebSearch"),
+            },
           ]}
           loading={aiQuery.isPending}
         />
         <DiagnosticItem
-          title="Web fetch"
+          title={t("settings.diagnostics.itemWebFetch")}
           tone={aiToneFor(ai?.web_fetch_configured ?? null, aiQuery.isError)}
-          status={webStatusLabel(ai?.web_fetch_configured, aiQuery.isError)}
+          status={webStatusLabel(ai?.web_fetch_configured, aiQuery.isError, t)}
           rows={[
-            { key: "Provider", value: ai?.web_fetch_provider ?? "—" },
             {
-              key: "Configured",
-              value: configuredValueLabel(ai?.web_fetch_configured),
+              key: t("settings.diagnostics.rowProvider"),
+              value: ai?.web_fetch_provider ?? "—",
             },
-            { key: "Credential", value: "Separate web_fetch slot" },
+            {
+              key: t("settings.diagnostics.rowConfigured"),
+              value: configuredValueLabel(ai?.web_fetch_configured, t),
+            },
+            {
+              key: t("settings.diagnostics.rowCredential"),
+              value: t("settings.diagnostics.valueSeparateWebFetch"),
+            },
           ]}
           loading={aiQuery.isPending}
         />
@@ -664,7 +792,9 @@ export function DiagnosticsPanel() {
 
       <div className="diagnostics-section">
         <div className="diagnostics-section__head">
-          <p className="mono-label">Archive volume</p>
+          <p className="mono-label">
+            {t("settings.diagnostics.statsSectionLabel")}
+          </p>
           <span className="diagnostics-section__source">
             GET /api/v1/stats
           </span>

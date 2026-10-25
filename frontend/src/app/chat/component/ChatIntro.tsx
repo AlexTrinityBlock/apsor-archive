@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import { Icon } from "../../component/Icon";
 import { useListFrequentlyUsedPrompts } from "../../generated-apis-types";
+import { useI18n } from "../../i18n";
 
 interface ChatIntroProps {
   readonly onSuggestion: (text: string) => void;
@@ -12,6 +13,7 @@ const SETTINGS_PROMPTS_HREF = "/settings#settings-frequent-prompts";
 
 /** The empty `/chat` room before a transcript exists. */
 export function ChatIntro({ onSuggestion, disabled = false }: ChatIntroProps) {
+  const { t } = useI18n();
   const promptsQuery = useListFrequentlyUsedPrompts({
     query: { staleTime: 60_000 },
   });
@@ -22,27 +24,25 @@ export function ChatIntro({ onSuggestion, disabled = false }: ChatIntroProps) {
       <span className="chat-intro__mark" aria-hidden="true">
         <Icon name="chat" size={22} />
       </span>
-      <p className="eyebrow">Chat · archive desk</p>
-      <h2>Ask the archive a question.</h2>
-      <p className="chat-intro__description">
-        Every answer keeps its tool steps, citations, and presented files in a
-        persistent transcript. Start with a question, or ask the agent to open
-        something from the shelves.
-      </p>
+      <p className="eyebrow">{t("chat.intro.eyebrow")}</p>
+      <h2>{t("chat.intro.title")}</h2>
+      <p className="chat-intro__description">{t("chat.intro.description")}</p>
 
       <div className="chat-intro__suggestions">
-        <p className="mono-label">Frequently used prompts</p>
+        <p className="mono-label">{t("chat.intro.promptsLabel")}</p>
 
         {promptsQuery.isPending ? (
           <p className="chat-intro__prompts-state" role="status">
-            Reading saved prompts…
+            {t("chat.intro.promptsReading")}
           </p>
         ) : null}
 
         {promptsQuery.isError ? (
           <p className="chat-intro__prompts-state" role="status">
-            Saved prompts are unavailable.{" "}
-            <Link to={SETTINGS_PROMPTS_HREF}>Open prompt settings</Link>
+            {t("chat.intro.promptsUnavailable")}{" "}
+            <Link to={SETTINGS_PROMPTS_HREF}>
+              {t("chat.intro.openPromptSettings")}
+            </Link>
           </p>
         ) : null}
 
@@ -50,8 +50,10 @@ export function ChatIntro({ onSuggestion, disabled = false }: ChatIntroProps) {
         !promptsQuery.isError &&
         prompts.length === 0 ? (
           <p className="chat-intro__prompts-state">
-            No frequent prompts yet.{" "}
-            <Link to={SETTINGS_PROMPTS_HREF}>Add them in Settings</Link>.
+            {t("chat.intro.promptsEmpty")}{" "}
+            <Link to={SETTINGS_PROMPTS_HREF}>
+              {t("chat.intro.addPrompts")}
+            </Link>
           </p>
         ) : null}
 
@@ -76,10 +78,7 @@ export function ChatIntro({ onSuggestion, disabled = false }: ChatIntroProps) {
         ))}
       </div>
 
-      <p className="chat-intro__note">
-        Enter sends · Shift+Enter adds a newline. The first send opens a new
-        thread.
-      </p>
+      <p className="chat-intro__note">{t("chat.intro.note")}</p>
     </section>
   );
 }

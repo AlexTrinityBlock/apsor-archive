@@ -5,6 +5,7 @@ import { moveFile } from "../../generated-apis-types/files/files";
 import { basename, parentPath } from "../../../lib/format";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { LibraryDialog } from "./LibraryDialog";
 import {
   describeError,
@@ -47,26 +48,40 @@ function BatchMoveSummary({
   readonly result: BatchMoveResult;
   readonly onClose: () => void;
 }) {
-  const movedLabel = result.movedIds.length === 1 ? "file" : "files";
-  const skippedLabel = result.skipped === 1 ? "file was" : "files were";
-  const failedLabel = result.failures.length === 1 ? "file could" : "files could";
-
+  const { t, formatNumber } = useI18n();
   return (
     <>
       <div className="library-batch__summary" role="status">
         <p>
-          <strong>{result.movedIds.length}</strong> {movedLabel} moved to{" "}
-          <code>{result.targetFolder}</code>.
+          {t(
+            result.movedIds.length === 1
+              ? "library.batch.movedSummaryOne"
+              : "library.batch.movedSummaryOther",
+            {
+              count: formatNumber(result.movedIds.length),
+              folder: result.targetFolder,
+            },
+          )}
         </p>
         {result.skipped > 0 ? (
           <p className="library-batch__note">
-            {result.skipped} {skippedLabel} already in that folder and left untouched.
+            {t(
+              result.skipped === 1
+                ? "library.batch.skippedSummaryOne"
+                : "library.batch.skippedSummaryOther",
+              { count: formatNumber(result.skipped) },
+            )}
           </p>
         ) : null}
         {result.failures.length > 0 ? (
           <>
             <p className="library-batch__failures-title">
-              {result.failures.length} {failedLabel} not be moved:
+              {t(
+                result.failures.length === 1
+                  ? "library.batch.failuresSummaryOne"
+                  : "library.batch.failuresSummaryOther",
+                { count: formatNumber(result.failures.length) },
+              )}
             </p>
             <ul className="library-batch__failures">
               {result.failures.map((failure) => (
@@ -81,7 +96,7 @@ function BatchMoveSummary({
       </div>
       <div className="library-form__actions">
         <Button variant="primary" size="sm" onClick={onClose}>
-          Done
+          {t("library.common.done")}
           <Icon name="check" size={15} />
         </Button>
       </div>
@@ -103,6 +118,7 @@ export function BatchMoveDialog({
   onClose,
   onFinished,
 }: BatchMoveDialogProps) {
+  const { t, formatNumber } = useI18n();
   const baseId = useId();
   const folderId = `${baseId}-destination-folder`;
   const [targetFolder, setTargetFolder] = useState(() =>
@@ -115,13 +131,16 @@ export function BatchMoveDialog({
 
   const normalizedFolder = normalizeArchivePath(targetFolder);
   const fileCount = files.length;
-  const fileLabel = fileCount === 1 ? "file" : "files";
+  const submitLabel = t(
+    fileCount === 1 ? "library.batch.submitOne" : "library.batch.submitOther",
+    { count: formatNumber(fileCount) },
+  );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLocalError(null);
     if (normalizedFolder.length === 0) {
-      setLocalError("Choose a destination folder.");
+      setLocalError(t("library.moveCopy.errorFolder"));
       return;
     }
 
@@ -164,9 +183,12 @@ export function BatchMoveDialog({
 
   return (
     <LibraryDialog
-      eyebrow="Move leaves"
-      title={`Move ${fileCount} selected ${fileLabel}`}
-      description="All selected files move into one destination folder. Each file keeps its id, version, and chunks; failures are reported per file."
+      eyebrow={t("library.batch.eyebrow")}
+      title={t(
+        fileCount === 1 ? "library.batch.titleOne" : "library.batch.titleOther",
+        { count: formatNumber(fileCount) },
+      )}
+      description={t("library.batch.description")}
       onClose={onClose}
       dismissible={!pending}
       className="library-move-copy library-batch-move"
@@ -176,7 +198,7 @@ export function BatchMoveDialog({
       ) : (
         <form className="library-form" onSubmit={handleSubmit}>
           <div className="library-confirm__path">
-            <span className="eyebrow">Selected files</span>
+            <span className="eyebrow">{t("library.batch.selectedFiles")}</span>
             <ul className="library-batch__files">
               {files.slice(0, 6).map((file) => (
                 <li key={file.file_id}>
@@ -184,12 +206,16 @@ export function BatchMoveDialog({
                   <code>{file.raw_file_path}</code>
                 </li>
               ))}
-              {fileCount > 6 ? <li>+{fileCount - 6} more</li> : null}
+              {fileCount > 6 ? (
+                <li>{t("library.batch.more", { count: formatNumber(fileCount - 6) })}</li>
+              ) : null}
             </ul>
           </div>
 
           <label className="library-field" htmlFor={folderId}>
-            <span className="library-field__label">Destination folder</span>
+            <span className="library-field__label">
+              {t("library.moveCopy.destinationFolder")}
+            </span>
             <input
               id={folderId}
               className="library-input"
@@ -203,12 +229,15 @@ export function BatchMoveDialog({
               disabled={pending}
             />
             <span className="library-field__hint">
-              Full folder path. Missing folders are created by the archive.
+              {t("library.moveCopy.folderHint")}
             </span>
           </label>
 
           {suggestions.length > 0 ? (
-            <div className="library-move__suggestions" aria-label="Suggested destination folders">
+            <div
+              className="library-move__suggestions"
+              aria-label={t("library.moveCopy.suggestionsAria")}
+            >
               {suggestions.map((suggestion) => (
                 <button
                   key={suggestion}
@@ -223,14 +252,16 @@ export function BatchMoveDialog({
                   disabled={pending}
                 >
                   <Icon name="folder" size={12} />
-                  {suggestion === "/" ? "Archive root" : basename(suggestion)}
+                  {suggestion === "/"
+                    ? t("library.common.archiveRoot")
+                    : basename(suggestion)}
                 </button>
               ))}
             </div>
           ) : null}
 
           <div className="library-move__preview">
-            <span className="eyebrow">Destination folder</span>
+            <span className="eyebrow">{t("library.moveCopy.destinationFolder")}</span>
             <code>{normalizedFolder || "—"}</code>
           </div>
 
@@ -243,12 +274,15 @@ export function BatchMoveDialog({
 
           <div className="library-form__actions">
             <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
-              Cancel
+              {t("library.common.cancel")}
             </Button>
             <Button type="submit" variant="primary" size="sm" disabled={pending}>
               {pending && progress
-                ? `Moving ${progress.done} of ${progress.total}…`
-                : `Move ${fileCount} ${fileLabel}`}
+                ? t("library.batch.movingProgress", {
+                    done: formatNumber(progress.done),
+                    total: formatNumber(progress.total),
+                  })
+                : submitLabel}
               <Icon name="branch" size={15} />
             </Button>
           </div>

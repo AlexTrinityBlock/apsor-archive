@@ -13,11 +13,13 @@ import type {
   HTTPValidationError,
 } from "../../generated-apis-types/schemas";
 import { useGetFile, useReadFile } from "../../generated-apis-types/files/files";
-import { formatBytes, formatDateTime, formatNumber } from "../../../lib/format";
+import { formatBytes } from "../../../lib/format";
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { CopyButton } from "../../component/CopyButton";
 import { Icon } from "../../component/Icon";
+import { translateApiError } from "../../i18n/errors";
+import { useI18n } from "../../i18n";
 import { useScrollLock } from "../../hook/useScrollLock";
 import { FileRenderer } from "../../viewer/component/FileViewer";
 import { ViewerErrorState, ViewerLoading } from "../../viewer/component/ViewerStates";
@@ -28,7 +30,6 @@ import {
 } from "../../viewer/component/viewer-utils";
 import {
   clampChunk,
-  describeError,
   isNotFoundError,
   type FileOperationTarget,
 } from "./library-utils";
@@ -60,23 +61,32 @@ interface PreviewBodyProps {
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-const PREVIEW_TABS: readonly { readonly id: PreviewTab; readonly label: string }[] = [
-  { id: "page", label: "Page Preview" },
-  { id: "chunk", label: "Chunk Inspection" },
-  { id: "meta", label: "Metadata" },
+const PREVIEW_TABS: readonly {
+  readonly id: PreviewTab;
+  readonly labelKey:
+    | "library.preview.pageTab"
+    | "library.preview.chunkTab"
+    | "library.preview.metaTab";
+}[] = [
+  { id: "page", labelKey: "library.preview.pageTab" },
+  { id: "chunk", labelKey: "library.preview.chunkTab" },
+  { id: "meta", labelKey: "library.preview.metaTab" },
 ];
 
 function fileState(file: FileSchema): {
-  readonly label: string;
+  readonly labelKey:
+    | "library.preview.stateDeleted"
+    | "library.preview.stateHistory"
+    | "library.preview.stateCurrent";
   readonly tone: "moss" | "ochre" | "vermilion";
 } {
   if (file.deleted_at) {
-    return { label: "Deleted", tone: "vermilion" };
+    return { labelKey: "library.preview.stateDeleted", tone: "vermilion" };
   }
   if (!file.is_current) {
-    return { label: "History", tone: "ochre" };
+    return { labelKey: "library.preview.stateHistory", tone: "ochre" };
   }
-  return { label: "Current", tone: "moss" };
+  return { labelKey: "library.preview.stateCurrent", tone: "moss" };
 }
 
 function operationTarget(file: FileSchema): FileOperationTarget {
@@ -111,25 +121,26 @@ function MissingPreview({
   readonly fileId: number;
   readonly onClose: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="library-preview__status">
       <span className="library-preview__status-mark" aria-hidden="true">
         <Icon name="info" size={22} />
       </span>
-      <p className="eyebrow">File not found</p>
-      <h3>This file is not on the shelf.</h3>
+      <p className="eyebrow">{t("library.preview.missingEyebrow")}</p>
+      <h3>{t("library.preview.missingTitle")}</h3>
       <p>
-        File #{fileId} may have been deleted, superseded, or never existed. The archive keeps
-        history, but this preview link does not resolve.
+        {t("library.preview.missingDescription", { id: fileId })}
       </p>
       <Button variant="secondary" size="sm" onClick={onClose}>
-        Close preview
+        {t("library.common.closePreview")}
       </Button>
     </div>
   );
 }
 
 function FileStateNotice({ file }: { readonly file: FileSchema }) {
+  const { t } = useI18n();
   if (!file.deleted_at && file.is_current) {
     return null;
   }
@@ -138,8 +149,8 @@ function FileStateNotice({ file }: { readonly file: FileSchema }) {
       <Icon name="history" size={16} />
       <p>
         {file.deleted_at
-          ? "This file is soft-deleted. It stays readable here and in history, but is absent from current paths and search."
-          : "This edition is superseded. It remains addressable for history and citations, but is absent from current listings."}
+          ? t("library.preview.softDeletedNotice")
+          : t("library.preview.supersededNotice")}
       </p>
     </div>
   );
@@ -150,20 +161,23 @@ function ChunkResults({
 }: {
   readonly chunkQuery: UseQueryResult<FileChunksSchema, HTTPValidationError>;
 }) {
+  const { t, formatNumber } = useI18n();
   if (chunkQuery.isLoading) {
-    return <ViewerLoading label="Reading the chunk window" />;
+    return <ViewerLoading label={t("library.preview.chunkLoading")} />;
   }
   if (chunkQuery.error) {
     return (
       <ViewerErrorState
         error={chunkQuery.error}
-        title="The chunk window could not be read"
+        title={t("library.preview.chunkErrorTitle")}
         onRetry={() => void chunkQuery.refetch()}
       />
     );
   }
   if (!chunkQuery.data || chunkQuery.data.chunks.length === 0) {
-    return <p className="library-preview__chunk-empty-text">This chunk is empty.</p>;
+    return (
+      <p className="library-preview__chunk-empty-text">{t("library.preview.chunkEmpty")}</p>
+    );
   }
   return (
     <div className="library-preview__chunk-list">
@@ -172,15 +186,19 @@ function ChunkResults({
           <header className="library-preview__chunk-head">
             <span className="library-preview__chunk-index">#{chunk.chunk}</span>
             <span className="library-preview__chunk-meta">
-              {formatNumber(chunk.char_count)} chars · {formatNumber(chunk.token_count)}{" "}
-              tokens
+              {t("library.preview.chunkMeta", {
+                chars: formatNumber(chunk.char_count),
+                tokens: formatNumber(chunk.token_count),
+              })}
             </span>
-            {chunk.is_current ? null : <Badge tone="ochre">History</Badge>}
+            {chunk.is_current ? null : (
+              <Badge tone="ochre">{t("library.preview.stateHistory")}</Badge>
+            )}
             <CopyButton
               value={chunk.content}
-              label="Copy chunk"
+              label={t("library.preview.copyChunk")}
               iconOnly
-              title={`Copy chunk #${chunk.chunk}`}
+              title={t("library.preview.copyChunkTitle", { chunk: chunk.chunk })}
             />
           </header>
           <pre className="library-preview__chunk-body">{chunk.content}</pre>
@@ -203,12 +221,13 @@ function ChunkInspection({
   readonly onChunkChange: (chunk: number) => void;
   readonly chunkQuery: UseQueryResult<FileChunksSchema, HTTPValidationError>;
 }) {
+  const { t, formatNumber } = useI18n();
   if (file.total_chunks === 0) {
     return (
       <div className="library-preview__chunk-empty">
         <Icon name="layers" size={22} />
-        <h3>This file has no indexed chunks.</h3>
-        <p>Only the original file is available. Open the Metadata tab for its stored fields.</p>
+        <h3>{t("library.preview.noChunksTitle")}</h3>
+        <p>{t("library.preview.noChunksDescription")}</p>
       </div>
     );
   }
@@ -224,7 +243,7 @@ function ChunkInspection({
             disabled={effectiveChunk <= 1 || chunkQuery.isFetching}
           >
             <Icon name="arrow-right" size={14} className="library-preview__back-icon" />
-            Previous
+            {t("library.common.previous")}
           </Button>
           <span className="library-preview__chunk-position">
             #{effectiveChunk} / {formatNumber(file.total_chunks)}
@@ -235,17 +254,22 @@ function ChunkInspection({
             onClick={() => onChunkChange(effectiveChunk + 1)}
             disabled={effectiveChunk >= file.total_chunks || chunkQuery.isFetching}
           >
-            Next
+            {t("library.common.next")}
             <Icon name="arrow-right" size={14} />
           </Button>
         </div>
-        <span className="library-preview__chunk-hint">1-based chunk index</span>
+        <span className="library-preview__chunk-hint">
+          {t("library.preview.chunkIndexHint")}
+        </span>
       </div>
 
       {requestedChunk !== effectiveChunk ? (
         <p className="library-preview__clamp" role="status">
-          Requested chunk {requestedChunk} is outside 1–{formatNumber(file.total_chunks)}.
-          Showing chunk {effectiveChunk} instead.
+          {t("library.preview.clampNotice", {
+            requested: requestedChunk,
+            total: formatNumber(file.total_chunks),
+            effective: effectiveChunk,
+          })}
         </p>
       ) : null}
 
@@ -261,6 +285,7 @@ function PagePreview({
   readonly file: FileSchema;
   readonly isImage: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <div className="library-preview__stage">
       <FileStateNotice file={file} />
@@ -269,7 +294,7 @@ function PagePreview({
         <div className="library-preview__caption">
           {file.ai_summary ? (
             <div>
-              <p className="eyebrow">Summary</p>
+              <p className="eyebrow">{t("library.preview.summary")}</p>
               <p className="prose-text">{file.ai_summary}</p>
             </div>
           ) : null}
@@ -287,42 +312,71 @@ function PagePreview({
 }
 
 function MetadataPanel({ file }: { readonly file: FileSchema }) {
+  const { t, formatDateTime, formatNumber } = useI18n();
   return (
     <div className="library-preview__metadata">
       <dl className="meta-grid library-preview__meta">
-        <MetaItem label="File name" value={file.file_name} />
-        <MetaItem label="File ID" value={`#${file.id}`} />
-        <MetaItem label="Path" value={file.raw_file_path} wide />
-        <MetaItem label="MIME type" value={file.mime_type || "—"} />
+        <MetaItem label={t("library.preview.meta.fileName")} value={file.file_name} />
+        <MetaItem label={t("library.preview.meta.fileId")} value={`#${file.id}`} />
+        <MetaItem label={t("library.preview.meta.path")} value={file.raw_file_path} wide />
         <MetaItem
-          label="Extension"
+          label={t("library.preview.meta.mimeType")}
+          value={file.mime_type || "—"}
+        />
+        <MetaItem
+          label={t("library.preview.meta.extension")}
           value={file.extension ? file.extension.toUpperCase() : "—"}
         />
-        <MetaItem label="Document type" value={file.document_type || "—"} />
-        <MetaItem label="Version" value={`v${file.version}`} />
-        <MetaItem label="Current" value={file.is_current ? "Yes" : "No"} />
-        <MetaItem label="Size" value={formatBytes(file.size_bytes)} />
-        <MetaItem label="Indexed chunks" value={formatNumber(file.total_chunks)} />
-        <MetaItem label="Original stored" value={file.has_original ? "Yes" : "No"} />
         <MetaItem
-          label="Supersedes"
-          value={file.supersedes_file_id !== null ? `File #${file.supersedes_file_id}` : "—"}
+          label={t("library.preview.meta.documentType")}
+          value={file.document_type || "—"}
         />
-        <MetaItem label="Created" value={formatDateTime(file.created_at)} />
-        <MetaItem label="Updated" value={formatDateTime(file.updated_at)} />
+        <MetaItem label={t("library.preview.meta.version")} value={`v${file.version}`} />
+        <MetaItem
+          label={t("library.preview.meta.current")}
+          value={file.is_current ? t("library.preview.yes") : t("library.preview.no")}
+        />
+        <MetaItem label={t("library.preview.meta.size")} value={formatBytes(file.size_bytes)} />
+        <MetaItem
+          label={t("library.preview.meta.indexedChunks")}
+          value={formatNumber(file.total_chunks)}
+        />
+        <MetaItem
+          label={t("library.preview.meta.originalStored")}
+          value={file.has_original ? t("library.preview.yes") : t("library.preview.no")}
+        />
+        <MetaItem
+          label={t("library.preview.meta.supersedes")}
+          value={
+            file.supersedes_file_id !== null
+              ? t("library.preview.fileIdFallback", { id: file.supersedes_file_id })
+              : "—"
+          }
+        />
+        <MetaItem
+          label={t("library.preview.meta.created")}
+          value={formatDateTime(file.created_at)}
+        />
+        <MetaItem
+          label={t("library.preview.meta.updated")}
+          value={formatDateTime(file.updated_at)}
+        />
         {file.deleted_at ? (
-          <MetaItem label="Deleted" value={formatDateTime(file.deleted_at)} />
+          <MetaItem
+            label={t("library.preview.meta.deleted")}
+            value={formatDateTime(file.deleted_at)}
+          />
         ) : null}
         {file.ai_summary ? (
           <MetaItem
-            label="Summary"
+            label={t("library.preview.meta.summary")}
             value={<span className="library-preview__meta-text">{file.ai_summary}</span>}
             wide
           />
         ) : null}
         {file.ai_tags.length > 0 ? (
           <MetaItem
-            label="Tags"
+            label={t("library.preview.meta.tags")}
             value={
               <ul className="library-preview__tags">
                 {file.ai_tags.map((tag, index) => (
@@ -335,8 +389,7 @@ function MetadataPanel({ file }: { readonly file: FileSchema }) {
         ) : null}
       </dl>
       <p className="library-preview__meta-note">
-        Metadata comes from the file record. No checksum, job identifier, or page number is
-        stored on `FileSchema`.
+        {t("library.preview.metaNote")}
       </p>
     </div>
   );
@@ -353,8 +406,9 @@ function PreviewBody({
   onChunkChange,
   onClose,
 }: PreviewBodyProps) {
+  const { t } = useI18n();
   if (fileQuery.isLoading) {
-    return <ViewerLoading label="Reading the file metadata" />;
+    return <ViewerLoading label={t("library.preview.metaLoading")} />;
   }
   if (fileQuery.error) {
     if (isNotFoundError(fileQuery.error)) {
@@ -363,7 +417,7 @@ function PreviewBody({
     return (
       <ViewerErrorState
         error={fileQuery.error}
-        title="The file metadata could not be read"
+        title={t("library.preview.metaErrorTitle")}
         onRetry={() => void fileQuery.refetch()}
       />
     );
@@ -371,7 +425,7 @@ function PreviewBody({
   if (!file) {
     return (
       <p className="library-preview__chunk-empty-text">
-        {describeError(fileQuery.error)}
+        {translateApiError(fileQuery.error, t, "library.errors.generic")}
       </p>
     );
   }
@@ -403,16 +457,24 @@ function PreviewActions({
   readonly onCopy: (target: FileOperationTarget) => void;
   readonly onDelete: (target: FileOperationTarget) => void;
 }) {
+  const { t, formatNumber } = useI18n();
   const state = fileState(file);
   return (
     <div className="library-preview__actions">
       <div className="library-preview__badges">
         <Badge tone={state.tone} dot>
-          {state.label}
+          {t(state.labelKey)}
         </Badge>
         <Badge tone="neutral">v{file.version}</Badge>
         <Badge tone="neutral">{formatBytes(file.size_bytes)}</Badge>
-        <Badge tone="neutral">{formatNumber(file.total_chunks)} chunks</Badge>
+        <Badge tone="neutral">
+          {t(
+            file.total_chunks === 1
+              ? "library.units.chunkOne"
+              : "library.units.chunkOther",
+            { count: formatNumber(file.total_chunks) },
+          )}
+        </Badge>
       </div>
       <div className="library-preview__action-buttons">
         {file.has_original ? (
@@ -422,20 +484,22 @@ function PreviewActions({
             download={file.file_name}
           >
             <Icon name="arrow-down" size={14} />
-            Download
+            {t("library.common.download")}
           </a>
         ) : (
-          <span className="library-preview__text-only">Indexed text only</span>
+          <span className="library-preview__text-only">
+            {t("library.preview.indexedTextOnly")}
+          </span>
         )}
         {file.deleted_at ? null : (
           <>
             <Button variant="ghost" size="sm" onClick={() => onMove(operationTarget(file))}>
               <Icon name="branch" size={14} />
-              Move
+              {t("library.common.move")}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => onCopy(operationTarget(file))}>
               <Icon name="copy" size={14} />
-              Copy
+              {t("library.common.copy")}
             </Button>
             <Button
               variant="ghost"
@@ -444,7 +508,7 @@ function PreviewActions({
               onClick={() => onDelete(operationTarget(file))}
             >
               <Icon name="trash" size={14} />
-              Delete
+              {t("library.common.delete")}
             </Button>
           </>
         )}
@@ -467,6 +531,7 @@ export function FilePreviewModal({
   onCopy,
   onDelete,
 }: FilePreviewModalProps) {
+  const { t } = useI18n();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -566,9 +631,13 @@ export function FilePreviewModal({
       >
         <header className="modal-head library-preview__head">
           <div className="library-preview__identity">
-            <p className="eyebrow">File preview{kind ? ` · ${kindLabel(kind)}` : ""}</p>
+            <p className="eyebrow">
+              {kind
+                ? t("library.preview.eyebrowKind", { kind: kindLabel(kind, t) })
+                : t("library.preview.eyebrow")}
+            </p>
             <h2 id={titleId} className="library-preview__title">
-              {file?.file_name ?? `File #${fileId}`}
+              {file?.file_name ?? t("library.preview.fileIdFallback", { id: fileId })}
             </h2>
             {file ? <code className="library-preview__path">{file.raw_file_path}</code> : null}
           </div>
@@ -576,7 +645,7 @@ export function FilePreviewModal({
           <div
             className="tabs library-preview__tabs"
             role="tablist"
-            aria-label="Preview sections"
+            aria-label={t("library.preview.sectionsAria")}
           >
             {PREVIEW_TABS.map((tab) => (
               <button
@@ -588,7 +657,7 @@ export function FilePreviewModal({
                 onClick={() => setActiveTab(tab.id)}
                 disabled={!file}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </button>
             ))}
           </div>
@@ -597,8 +666,8 @@ export function FilePreviewModal({
             type="button"
             className="modal-btn-close"
             onClick={onClose}
-            aria-label="Close preview"
-            title="Close preview"
+            aria-label={t("library.common.closePreview")}
+            title={t("library.common.closePreview")}
           >
             <Icon name="close" size={18} />
           </button>

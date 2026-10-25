@@ -55,7 +55,7 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v11"
+PROMPT_VERSION = "archive-agent-v12"
 TOOLS_VERSION = "archive-tools-v4"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
@@ -293,10 +293,10 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert system_data["prompt_version"] == PROMPT_VERSION
     assert system_data["tools_version"] == TOOLS_VERSION
     assert [section["name"] for section in system_data["sections"]] == [
-        "identity",
-        "instructions",
-        "examples",
-        "context_protocol",
+        "system_prompt:1",
+        "system_prompt:2",
+        "system_prompt:3",
+        "system_prompt:4",
     ]
     assert [tool["function"]["name"] for tool in system_data["tools"]] == TOOL_NAMES
 
@@ -2036,8 +2036,8 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert final_settings_body["config"]["save_memory_requires_approval"] is True
 
     # ------------------------------------------------------------------
-    # The user profile is frozen into new conversations before the built-in
-    # prompt, so the agent knows the chosen name and profile cards.
+    # The user profile is frozen into new conversations after the ordered
+    # prompt sections, so the agent knows the chosen name and profile cards.
     # ------------------------------------------------------------------
     profile = client.put(
         "/api/v1/auth/profile",
@@ -2062,15 +2062,17 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     )
     profile_sections = profile_system["data"]["sections"]
     assert [section["name"] for section in profile_sections] == [
+        "system_prompt:1",
+        "system_prompt:2",
+        "system_prompt:3",
+        "system_prompt:4",
         "user_profile",
-        "identity",
-        "instructions",
-        "examples",
-        "context_protocol",
     ]
-    assert "Name: Alex" in profile_sections[0]["content"]
-    assert "Work: I build local-first archives" in profile_sections[0]["content"]
-    assert "teach AI courses" in profile_sections[0]["content"]
+    profile_section = profile_sections[-1]
+    assert profile_section["name"] == "user_profile"
+    assert "Name: Alex" in profile_section["content"]
+    assert "Work: I build local-first archives" in profile_section["content"]
+    assert "teach AI courses" in profile_section["content"]
     assert "Name: Alex" in profile_system["model"][0]["content"]
 
     # ------------------------------------------------------------------

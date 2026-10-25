@@ -6,6 +6,7 @@ import { basename } from "../../../lib/format";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useToast } from "../../component/Toast";
+import { useI18n } from "../../i18n";
 import { LibraryDialog } from "./LibraryDialog";
 import {
   describeError,
@@ -30,6 +31,7 @@ function pathPrefix(path: string): string {
  * missing ancestors and returns the existing directory for an idempotent call.
  */
 export function NewFolderDialog({ currentPath, onClose, onCreated }: NewFolderDialogProps) {
+  const { t } = useI18n();
   const baseId = useId();
   const pathId = `${baseId}-folder-path`;
   const queryClient = useQueryClient();
@@ -45,18 +47,20 @@ export function NewFolderDialog({ currentPath, onClose, onCreated }: NewFolderDi
     setServerError(null);
     const normalized = normalizeArchivePath(folderPath);
     if (normalized === "/" || normalized.length === 0) {
-      setLocalError("Name the new folder inside the current branch.");
+      setLocalError(t("library.newFolder.errorName"));
       return;
     }
     if (sameArchivePath(normalized, currentPath)) {
-      setLocalError("That is the current folder. Add a new name inside it.");
+      setLocalError(t("library.newFolder.errorCurrent"));
       return;
     }
 
     setPending(true);
     try {
       const directory = await createFolder({ path: normalized });
-      toast.success(`Folder “${basename(directory.path)}” is ready.`);
+      toast.success(
+        t("library.newFolder.createdToast", { name: basename(directory.path) }),
+      );
       invalidateLibraryQueries(queryClient, { paths: true });
       onCreated(directory.path);
     } catch (error) {
@@ -68,16 +72,16 @@ export function NewFolderDialog({ currentPath, onClose, onCreated }: NewFolderDi
 
   return (
     <LibraryDialog
-      eyebrow="New branch"
-      title="Create a folder"
-      description="Folders create the branch that file leaves sit on. Missing parents are created automatically, and an existing folder is returned as ready. A path already occupied by a file is rejected by the archive."
+      eyebrow={t("library.newFolder.eyebrow")}
+      title={t("library.newFolder.title")}
+      description={t("library.newFolder.description")}
       onClose={onClose}
       dismissible={!pending}
       className="library-new-folder"
     >
       <form className="library-form" onSubmit={handleSubmit}>
         <label className="library-field" htmlFor={pathId}>
-          <span className="library-field__label">Folder path</span>
+          <span className="library-field__label">{t("library.newFolder.pathLabel")}</span>
           <input
             id={pathId}
             className="library-input"
@@ -90,7 +94,7 @@ export function NewFolderDialog({ currentPath, onClose, onCreated }: NewFolderDi
             data-autofocus
           />
           <span className="library-field__hint">
-            Full archive path. Current branch: <code>{currentPath}</code>
+            {t("library.newFolder.pathHint")} <code>{currentPath}</code>
           </span>
         </label>
 
@@ -109,10 +113,10 @@ export function NewFolderDialog({ currentPath, onClose, onCreated }: NewFolderDi
 
         <div className="library-form__actions">
           <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
-            Cancel
+            {t("library.common.cancel")}
           </Button>
           <Button type="submit" variant="primary" size="sm" disabled={pending}>
-            {pending ? "Creating…" : "Create folder"}
+            {pending ? t("library.newFolder.creating") : t("library.newFolder.submit")}
             <Icon name="folder" size={15} />
           </Button>
         </div>

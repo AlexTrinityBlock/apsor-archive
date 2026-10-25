@@ -8,6 +8,7 @@
  * changes, so repeated questions from one page reuse the same context entry.
  */
 import type { AgentEntrySchema } from "../generated-apis-types/schemas";
+import { getActiveLocale, translate } from "../i18n";
 import { isRecord, type JsonRecord } from "../chat/types";
 
 export const MAX_PAGE_CONTEXT_CHARS = 6_000;
@@ -245,7 +246,11 @@ function readableTitle(root: HTMLElement, pathname: string): string | null {
     .filter(Boolean)
     .join(" ")
     .replace(/[-_]+/g, " ");
-  return (label.length > 0 ? label : "Archive").slice(0, MAX_TITLE_CHARS);
+  return (
+    label.length > 0
+      ? label
+      : translate(getActiveLocale(), "chat.pageContext.archiveTitle")
+  ).slice(0, MAX_TITLE_CHARS);
 }
 
 /**

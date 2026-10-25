@@ -13,10 +13,11 @@ import type {
   PathFileSchema,
   PathListingSchema,
 } from "../../generated-apis-types/schemas";
-import { formatBytes, formatDateTime, formatNumber, parentPath } from "../../../lib/format";
+import { formatBytes, parentPath } from "../../../lib/format";
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n, type Translate } from "../../i18n";
 import {
   fileKindLabel,
   sameArchivePath,
@@ -75,17 +76,18 @@ function dropHintFor(
   allowed: boolean,
   external: boolean,
   copy: boolean,
+  t: Translate,
 ): string | null {
   if (activeTarget !== targetPath) {
     return null;
   }
   if (!allowed) {
-    return "Current folder";
+    return t("library.board.dropCurrentFolder");
   }
   if (external) {
-    return "Drop to upload here";
+    return t("library.board.dropUpload");
   }
-  return copy ? "Drop to copy here" : "Drop to move here";
+  return copy ? t("library.board.dropCopy") : t("library.board.dropMove");
 }
 
 interface DropHandlers {
@@ -123,6 +125,7 @@ function FileCard({
   onDragStart,
   onDragEnd,
 }: FileCardProps) {
+  const { t, formatNumber, formatDateTime } = useI18n();
   const menuId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -182,7 +185,7 @@ function FileCard({
       data-library-file-id={file.file_id}
       onDragStart={(event) => onDragStart(event, file)}
       onDragEnd={onDragEnd}
-      title="Drag onto a folder to move · hold Alt to copy"
+      title={t("library.board.dragTitle")}
     >
       {selecting ? (
         <label className="library-checkbox library-file-card__check">
@@ -190,7 +193,7 @@ function FileCard({
             type="checkbox"
             checked={selected}
             onChange={() => onToggleSelected(file.file_id)}
-            aria-label={`Select ${file.file_name}`}
+            aria-label={t("library.a11y.selectFile", { name: file.file_name })}
           />
           <span className="library-checkbox__box" aria-hidden="true">
             <Icon name="check" size={12} />
@@ -202,7 +205,7 @@ function FileCard({
         type="button"
         className="library-file-card__open"
         onClick={() => onOpen(file.file_id)}
-        aria-label={`Open preview of ${file.file_name}`}
+        aria-label={t("library.a11y.openPreviewOf", { name: file.file_name })}
       >
         <span className="library-file-card__top">
           <span className="file-type-pill">{fileKindLabel(file.raw_file_path)}</span>
@@ -212,7 +215,13 @@ function FileCard({
         <code className="library-file-card__path">{file.raw_file_path}</code>
         <span className="library-file-card__meta">
           <span>
-            {formatBytes(file.size_bytes)} · {formatNumber(file.total_chunks)} chunks
+            {formatBytes(file.size_bytes)} ·{" "}
+            {t(
+              file.total_chunks === 1
+                ? "library.units.chunkOne"
+                : "library.units.chunkOther",
+              { count: formatNumber(file.total_chunks) },
+            )}
           </span>
           <time dateTime={file.update_time}>{formatDateTime(file.update_time)}</time>
         </span>
@@ -223,7 +232,7 @@ function FileCard({
         type="button"
         className="library-file-card__menu-trigger"
         data-library-menu-trigger={file.file_id}
-        aria-label={`Actions for ${file.file_name}`}
+        aria-label={t("library.a11y.actionsFor", { name: file.file_name })}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         aria-controls={menuOpen ? menuId : undefined}
@@ -238,7 +247,7 @@ function FileCard({
           id={menuId}
           className="library-file-menu"
           role="menu"
-          aria-label={`Actions for ${file.file_name}`}
+          aria-label={t("library.a11y.actionsFor", { name: file.file_name })}
           data-library-file-menu
         >
           <button
@@ -251,7 +260,7 @@ function FileCard({
             }}
           >
             <Icon name="file" size={15} />
-            <span>Open preview</span>
+            <span>{t("library.board.openPreview")}</span>
           </button>
           <button
             type="button"
@@ -263,7 +272,7 @@ function FileCard({
             }}
           >
             <Icon name="branch" size={15} />
-            <span>Move to…</span>
+            <span>{t("library.board.moveTo")}</span>
           </button>
           <button
             type="button"
@@ -275,7 +284,7 @@ function FileCard({
             }}
           >
             <Icon name="copy" size={15} />
-            <span>Copy to…</span>
+            <span>{t("library.board.copyTo")}</span>
           </button>
           <button
             type="button"
@@ -287,7 +296,7 @@ function FileCard({
             }}
           >
             <Icon name="trash" size={15} />
-            <span>Delete file</span>
+            <span>{t("library.board.deleteFile")}</span>
           </button>
         </div>
       ) : null}
@@ -313,6 +322,7 @@ function FolderCard({
   onOpenFolder,
   onUploadHere,
 }: FolderCardProps) {
+  const { t } = useI18n();
   const classes = [
     "library-folder-card",
     dropLabel ? "is-drop-target" : null,
@@ -343,10 +353,12 @@ function FolderCard({
         <Icon name="chevron-right" size={15} className="library-folder-card__chevron" />
       </button>
       <div className="library-folder-card__foot">
-        <span className="library-folder-card__depth">Branch · depth {folder.depth}</span>
+        <span className="library-folder-card__depth">
+          {t("library.board.branchDepth", { depth: folder.depth })}
+        </span>
         <Button variant="ghost" size="sm" onClick={() => onUploadHere(folder.path)}>
           <Icon name="plus" size={13} />
-          Upload here
+          {t("library.board.uploadHere")}
         </Button>
       </div>
       {dropLabel ? <span className="library-folder-card__drop">{dropLabel}</span> : null}
@@ -396,6 +408,7 @@ export function LibraryBoard({
   onFilesDropped,
   emptyState = null,
 }: LibraryBoardProps) {
+  const { t, formatNumber } = useI18n();
   const [dragFile, setDragFile] = useState<PathFileSchema | null>(null);
   const [externalDrag, setExternalDrag] = useState(false);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -518,7 +531,7 @@ export function LibraryBoard({
   };
 
   const dropLabelFor = (targetPath: string): string | null =>
-    dropHintFor(targetPath, dropTarget, dropAllowed, externalDrag, copyIntent);
+    dropHintFor(targetPath, dropTarget, dropAllowed, externalDrag, copyIntent, t);
 
   const boardClasses = [
     "library-board",
@@ -528,18 +541,18 @@ export function LibraryBoard({
     .filter(Boolean)
     .join(" ");
 
-  let filesHint = "Click a card to preview · drag to a folder to move";
+  let filesHint = t("library.board.filesHintDefault");
   if (query) {
-    filesHint = "Paths matching the current search";
+    filesHint = t("library.board.filesHintQuery");
   } else if (selecting) {
-    filesHint = "Check files to move them together";
+    filesHint = t("library.board.filesHintSelecting");
   }
 
   return (
     <div className="library-board-wrap">
       <div
         className={boardClasses}
-        aria-label={`File workspace at ${path}`}
+        aria-label={t("library.board.workspaceAria", { path })}
         onDragOver={(event) => handleDragOver(event, path)}
         onDragLeave={(event) => handleDragLeave(event, path)}
         onDrop={(event) => handleDrop(event, path)}
@@ -557,12 +570,17 @@ export function LibraryBoard({
             {folders.length > 0 ? (
               <section className="library-section" aria-labelledby="library-folders-heading">
                 <div className="library-section__head">
-                  <h2 id="library-folders-heading">Folders</h2>
+                  <h2 id="library-folders-heading">{t("library.board.foldersHeading")}</h2>
                   <Badge tone="neutral">
-                    {folders.length} {folders.length === 1 ? "folder" : "folders"}
+                    {t(
+                      folders.length === 1
+                        ? "library.units.folderOne"
+                        : "library.units.folderOther",
+                      { count: formatNumber(folders.length) },
+                    )}
                   </Badge>
                   <span className="library-section__hint">
-                    Drop files or drag a file onto a folder
+                    {t("library.board.foldersHint")}
                   </span>
                 </div>
                 <div className="library-folder-grid">
@@ -584,9 +602,18 @@ export function LibraryBoard({
             {listing.files.length > 0 ? (
               <section className="library-section" aria-labelledby="library-files-heading">
                 <div className="library-section__head">
-                  <h2 id="library-files-heading">{query ? "Matching files" : "Files"}</h2>
+                  <h2 id="library-files-heading">
+                    {query
+                      ? t("library.board.matchingFilesHeading")
+                      : t("library.board.filesHeading")}
+                  </h2>
                   <Badge tone={query ? "ochre" : "moss"}>
-                    {listing.files.length} {listing.files.length === 1 ? "file" : "files"}
+                    {t(
+                      listing.files.length === 1
+                        ? "library.units.fileOne"
+                        : "library.units.fileOther",
+                      { count: formatNumber(listing.files.length) },
+                    )}
                   </Badge>
                   <span className="library-section__hint">{filesHint}</span>
                 </div>
@@ -619,10 +646,12 @@ export function LibraryBoard({
         <footer className="library-board__footer">
           <span>
             <Icon name="arrow-down" size={13} />
-            Drop files here to upload · 10 MB each
+            {t("library.board.footerUpload")}
           </span>
           <span className="library-board__footer-note">
-            Drop to move · <kbd>Alt</kbd>-drop to copy · card menus for touch
+            {t("library.board.footerBeforeAlt")}
+            <kbd>Alt</kbd>
+            {t("library.board.footerAfterAlt")}
           </span>
         </footer>
       </div>
@@ -645,11 +674,12 @@ function BoardDragBar({
   dropAllowed,
   dropLabelFor,
 }: BoardDragBarProps) {
+  const { t } = useI18n();
   if (!dragFile && !externalDrag) {
     return null;
   }
   const hint =
-    dropTarget !== null ? dropLabelFor(dropTarget) : "Drop to move · Alt-drop to copy";
+    dropTarget !== null ? dropLabelFor(dropTarget) : t("library.board.dragBarHint");
   return (
     <div
       className={["library-dragbar", dropTarget !== null && !dropAllowed ? "is-blocked" : null]
@@ -660,7 +690,9 @@ function BoardDragBar({
     >
       <Icon name={dragFile ? "leaf" : "arrow-down"} size={15} />
       <span className="library-dragbar__label">
-        {dragFile ? `“${dragFile.file_name}”` : "Incoming files"}
+        {dragFile
+          ? t("library.board.dragBarFile", { name: dragFile.file_name })
+          : t("library.board.incomingFiles")}
       </span>
       <span className="library-dragbar__hint">{hint}</span>
     </div>

@@ -1,9 +1,9 @@
 import { useId, type ReactNode } from "react";
 
-import { formatDateTime, formatNumber } from "../../../lib/format";
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 
 export interface RuntimeNumberSpec {
   readonly label: string;
@@ -33,6 +33,7 @@ export function RuntimeNumberField({
   error,
   onValueChange,
 }: RuntimeNumberFieldProps) {
+  const { t, formatNumber } = useI18n();
   const fieldId = useId();
   const hintId = `${fieldId}-hint`;
   const errorId = `${fieldId}-error`;
@@ -64,8 +65,13 @@ export function RuntimeNumberField({
         onChange={(event) => onValueChange(event.currentTarget.value)}
       />
       <span className="runtime-field__hint" id={hintId}>
-        {spec.hint} Default {formatNumber(defaultValue)} ·{" "}
-        {formatNumber(spec.min)}–{formatNumber(spec.max)} {spec.unit}.
+        {t("settings.runtime.defaultRange", {
+          hint: spec.hint,
+          default: formatNumber(defaultValue),
+          min: formatNumber(spec.min),
+          max: formatNumber(spec.max),
+          unit: spec.unit,
+        })}
       </span>
       {error ? (
         <span className="runtime-field__error" id={errorId}>
@@ -92,6 +98,7 @@ export function RuntimeGroup({
   advanced = false,
   children,
 }: RuntimeGroupProps) {
+  const { t } = useI18n();
   const headingId = useId();
 
   return (
@@ -101,7 +108,9 @@ export function RuntimeGroup({
         <h3 className="runtime-group__title" id={headingId}>
           {title}
           {advanced ? (
-            <span className="runtime-group__tag">Advanced</span>
+            <span className="runtime-group__tag">
+              {t("settings.runtime.advanced")}
+            </span>
           ) : null}
         </h3>
         <p className="runtime-group__intro">{description}</p>
@@ -125,24 +134,32 @@ export function RuntimeStatus({
   summary,
   dirty,
 }: RuntimeStatusProps) {
+  const { t, formatDateTime } = useI18n();
   return (
-    <div className="runtime-status" aria-label="Runtime settings status">
+    <div
+      className="runtime-status"
+      aria-label={t("settings.runtime.statusAria")}
+    >
       <Badge tone={source === "database" ? "moss" : "neutral"} dot>
-        {source === "database" ? "Database" : "Defaults"}
+        {source === "database"
+          ? t("settings.runtime.database")
+          : t("settings.runtime.defaults")}
       </Badge>
       <span className="runtime-status__updated">
         {updatedAt ? (
           <>
-            Last updated{" "}
+            {t("settings.runtime.lastUpdated")}{" "}
             <time dateTime={updatedAt}>{formatDateTime(updatedAt)}</time>
           </>
         ) : (
-          "No saved update yet"
+          t("settings.runtime.noUpdate")
         )}
       </span>
       <span className="runtime-status__summary">{summary}</span>
       {dirty ? (
-        <span className="runtime-status__draft">Unsaved draft</span>
+        <span className="runtime-status__draft">
+          {t("settings.runtime.unsavedDraft")}
+        </span>
       ) : null}
     </div>
   );
@@ -170,13 +187,14 @@ export function RuntimeActions({
   onCancelReset,
   onConfirmReset,
 }: RuntimeActionsProps) {
+  const { t } = useI18n();
   return (
     <div className="runtime-actions">
       <div className="runtime-actions__reset">
         {confirmingReset ? (
           <>
             <span className="runtime-reset__question" role="status">
-              Reset every runtime value to the default?
+              {t("settings.runtime.resetQuestion")}
             </span>
             <Button
               type="button"
@@ -185,7 +203,7 @@ export function RuntimeActions({
               onClick={onConfirmReset}
               disabled={saving}
             >
-              Reset values
+              {t("settings.runtime.resetValues")}
             </Button>
             <Button
               type="button"
@@ -194,7 +212,7 @@ export function RuntimeActions({
               onClick={onCancelReset}
               disabled={saving}
             >
-              Keep current
+              {t("settings.runtime.keepCurrent")}
             </Button>
           </>
         ) : (
@@ -206,18 +224,20 @@ export function RuntimeActions({
             disabled={saving}
           >
             <Icon name="history" size={14} />
-            Reset defaults
+            {t("settings.runtime.resetDefaults")}
           </Button>
         )}
       </div>
 
       <div className="runtime-actions__save">
         {dirty && !invalid && !saving ? (
-          <span className="runtime-actions__note">Unsaved changes</span>
+          <span className="runtime-actions__note">
+            {t("settings.runtime.unsavedChanges")}
+          </span>
         ) : null}
         <Button type="submit" variant="ink" size="sm" disabled={!canSave}>
           <Icon name="check" size={14} />
-          {saving ? "Saving…" : "Save runtime"}
+          {saving ? t("settings.runtime.saving") : t("settings.runtime.save")}
         </Button>
       </div>
     </div>

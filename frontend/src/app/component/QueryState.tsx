@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { Icon } from "./Icon";
 import { Loader } from "./Loader";
 import { Panel } from "./Panel";
+import { translateApiError } from "../i18n/errors";
+import { useI18n } from "../i18n/I18nProvider";
 import "./shared.css";
 
 interface QueryStateProps {
@@ -14,30 +16,24 @@ interface QueryStateProps {
   readonly children: ReactNode;
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  if (typeof error === "string") {
-    return error;
-  }
-  return "The archive could not be read.";
-}
-
 /** A consistent loading / failure / empty frame for data-backed panels. */
 export function QueryState({
   loading,
   error,
   empty = false,
   emptyState,
-  loadingLabel = "Reading the archive",
+  loadingLabel,
   children,
 }: QueryStateProps) {
+  const { t } = useI18n();
+  const resolvedLoadingLabel =
+    loadingLabel ?? t("core.queryState.defaultLoadingLabel");
+
   if (loading) {
     return (
       <Panel tone="plain" className="query-state">
         <div className="query-state__loading">
-          <Loader label={loadingLabel} />
+          <Loader label={resolvedLoadingLabel} />
         </div>
       </Panel>
     );
@@ -50,9 +46,11 @@ export function QueryState({
             <Icon name="info" size={18} />
           </span>
           <div className="query-state__error-copy">
-            <p className="eyebrow">Read interrupted</p>
-            <h2>The archive did not answer.</h2>
-            <p className="query-state__detail">{errorMessage(error)}</p>
+            <p className="eyebrow">{t("core.queryState.readInterrupted")}</p>
+            <h2>{t("core.queryState.didNotAnswer")}</h2>
+            <p className="query-state__detail">
+              {translateApiError(error, t, "core.queryState.genericError")}
+            </p>
           </div>
         </div>
       </Panel>

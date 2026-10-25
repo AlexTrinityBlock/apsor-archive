@@ -27,5 +27,5 @@ export function formatArgumentValue(value: unknown): string {
 
 /** A concise conversation title from the first user message. */
 export function titleFromMessage(content: string): string {
-  return truncate(content, 64) || "New conversation";
+  return truncate(content, 64);
 }
