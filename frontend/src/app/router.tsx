@@ -33,8 +33,8 @@ const ChatPage = lazy(() =>
 const QuestionsPage = lazy(() =>
   import("./questions/page").then((module) => ({ default: module.QuestionsPage })),
 );
-const MethodPage = lazy(() =>
-  import("./method/page").then((module) => ({ default: module.MethodPage })),
+const AboutPage = lazy(() =>
+  import("./about/page").then((module) => ({ default: module.AboutPage })),
 );
 const SettingsPage = lazy(() =>
   import("./settings/page").then((module) => ({ default: module.SettingsPage })),
@@ -146,8 +146,9 @@ export const router = createBrowserRouter([
           { path: "chat/:conversationId", element: <ChatPage /> },
           { path: "questions", element: <QuestionsPage /> },
           { path: "ask", element: <AskRedirect /> },
-          { path: "method", element: <MethodPage /> },
-          { path: "docs", element: <Navigate to="/method" replace /> },
+          { path: "about", element: <AboutPage /> },
+          { path: "method", element: <Navigate to="/about" replace /> },
+          { path: "docs", element: <Navigate to="/about" replace /> },
           { path: "settings", element: <SettingsPage /> },
           { path: "profile", element: <ProfilePage /> },
           { path: "viewer/file/:fileId", element: <ViewerFileRedirect /> },
