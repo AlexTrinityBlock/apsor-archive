@@ -81,6 +81,7 @@ export const library = {
     list: "清單",
     select: "選取",
     selecting: "選取中",
+    deleteFolder: "刪除資料夾",
     readingShelf: "正在讀取檔案架…",
     readingPaths: "正在讀取路徑…",
     mediaStatusOne: "此資料夾有 {count} 張圖片",
