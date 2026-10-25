@@ -1,11 +1,5 @@
 """ORM model exports used by Alembic and the repositories."""
 
-from app.module.knowledge.model.ai_config_model import (
-    PURPOSE_CHAT,
-    PURPOSE_EMBEDDING,
-    PURPOSES,
-    AiProviderConfigModel,
-)
 from app.module.knowledge.model.base import Base
 from app.module.knowledge.model.chunk_model import (
     SOURCE_FILE,
@@ -44,6 +38,13 @@ from app.module.knowledge.model.memory_model import (
     MemoryModel,
 )
 from app.module.knowledge.model.ngram_model import ChunkNgramModel
+from app.module.knowledge.model.provider_config_model import (
+    ChatProviderConfigModel,
+    EmbeddingProviderConfigModel,
+    ProviderConfigMixin,
+    WebFetchProviderConfigModel,
+    WebSearchProviderConfigModel,
+)
 from app.module.knowledge.model.summary_model import MemorySummaryModel
 
 __all__ = [
@@ -67,21 +68,22 @@ __all__ = [
     "MEMORY_SOURCE_IMPORT",
     "MEMORY_SOURCE_MANUAL",
     "MEMORY_STATUSES",
-    "PURPOSES",
-    "PURPOSE_CHAT",
-    "PURPOSE_EMBEDDING",
     "SOURCE_FILE",
     "SOURCE_KINDS",
     "SOURCE_MEMORY",
     "SOURCE_SUMMARY",
-    "AiProviderConfigModel",
     "Base",
+    "ChatProviderConfigModel",
     "ChunkModel",
     "ChunkNgramModel",
+    "EmbeddingProviderConfigModel",
     "FileIngestJobModel",
     "FileModel",
     "FolderModel",
     "IngestConfigModel",
     "MemoryModel",
     "MemorySummaryModel",
+    "ProviderConfigMixin",
+    "WebFetchProviderConfigModel",
+    "WebSearchProviderConfigModel",
 ]

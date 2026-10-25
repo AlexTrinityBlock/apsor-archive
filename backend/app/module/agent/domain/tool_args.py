@@ -75,3 +75,25 @@ class PresentResourceArgs(_ToolArgs):
     resource_type: Literal["file", "memory"]
     resource_id: int = Field(gt=0)
     chunk: int | None = Field(default=None, ge=1)
+
+
+class WebSearchArgs(_ToolArgs):
+    """Arguments for one public web search."""
+
+    # max_results 上限 10、domain 清單各 10 筆：單次搜尋不可淹沒 context window，
+    # 也不可讓 provider 收到過大的 filter 清單。query 上限 400 字元足以表達查詢，
+    # 同時避免模型把整段私有內容塞進 URL/查詢字串。
+    query: str = Field(min_length=1, max_length=400)
+    max_results: int = Field(default=5, ge=1, le=10)
+    search_depth: Literal["basic", "advanced"] = "basic"
+    include_domains: list[str] = Field(default_factory=list, max_length=10)
+    exclude_domains: list[str] = Field(default_factory=list, max_length=10)
+
+
+class WebFetchArgs(_ToolArgs):
+    """Arguments for fetching one public http(s) URL."""
+
+    # max_chars 限制 1,000–20,000：至少足以讀一段文章，又不會讓單一 tool result
+    # 超過 agent 的結果預算。URL 長度上限與 WebUrlSafety 的 1–2048 保持一致。
+    url: str = Field(min_length=1, max_length=2048)
+    max_chars: int = Field(default=12_000, ge=1_000, le=20_000)

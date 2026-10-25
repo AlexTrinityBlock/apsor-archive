@@ -57,25 +57,25 @@ def test_save_memory_supersede_and_trace(client: TestClient) -> None:
     assert first_id not in memory_ids
     assert second_id not in memory_ids
 
+    neighbor_first = create_memory(client, "First memory.", "2026-09-10T10:00:00Z")
+    neighbor_middle = create_memory(client, "Middle memory.", "2026-09-11T10:00:00Z")
+    neighbor_last = create_memory(client, "Last memory.", "2026-09-12T10:00:00Z")
 
-def test_read_memory_neighbors(client: TestClient) -> None:
-    first = create_memory(client, "First memory.", "2026-09-10T10:00:00Z")
-    middle = create_memory(client, "Middle memory.", "2026-09-11T10:00:00Z")
-    last = create_memory(client, "Last memory.", "2026-09-12T10:00:00Z")
-
-    response = client.get(
-        f"/api/v1/memories/{middle['memory']['memory_id']}",
+    neighbors = client.get(
+        f"/api/v1/memories/{neighbor_middle['memory']['memory_id']}",
         params={"memory_range": 1},
     )
-    assert response.status_code == 200
-    body = response.json()
-    assert [item["memory_id"] for item in body["neighbors_before"]] == [
-        first["memory"]["memory_id"]
+    assert neighbors.status_code == 200
+    neighbors_body = neighbors.json()
+    assert [item["memory_id"] for item in neighbors_body["neighbors_before"]] == [
+        neighbor_first["memory"]["memory_id"]
     ]
-    assert [item["memory_id"] for item in body["neighbors_after"]] == [last["memory"]["memory_id"]]
+    assert [item["memory_id"] for item in neighbors_body["neighbors_after"]] == [
+        neighbor_last["memory"]["memory_id"]
+    ]
 
     exact = client.get(
-        f"/api/v1/memories/{middle['memory']['memory_id']}",
+        f"/api/v1/memories/{neighbor_middle['memory']['memory_id']}",
         params={"memory_range": 0},
     )
     assert exact.json()["neighbors_before"] == []

@@ -31,6 +31,11 @@ class HealthSchema(BaseModel):
     cache: str
     ai: str
     embedding_provider: str
+    # Explicit web capability state: provider name plus a configured flag.
+    web_search_provider: str
+    web_search_configured: bool
+    web_fetch_provider: str
+    web_fetch_configured: bool
 
 
 class DemoSeedSchema(BaseModel):

@@ -15,8 +15,11 @@ export interface TimelineEventSchema {
   content: string;
   file_id?: number | null;
   kind: TimelineEventSchemaKind;
+  memory_count?: number | null;
   memory_id?: number | null;
   memory_summary_id?: number | null;
+  period_end?: string | null;
+  period_start?: string | null;
   raw_file_path?: string | null;
   status?: string | null;
   time: string;

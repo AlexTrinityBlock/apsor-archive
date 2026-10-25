@@ -37,6 +37,7 @@ from app.module.knowledge.dependencies import (
     get_search_service,
     get_timeline_service,
 )
+from app.module.web_research.dependencies import get_web_research_service
 
 
 def get_agent_chat_generator(request: Request) -> ChatGeneratorProtocol:
@@ -74,6 +75,10 @@ class _ToolServiceScope:
                     file_service=get_file_service(self.request, session),
                     memory_service=get_memory_service(self.request, session),
                     timeline_service=get_timeline_service(self.request, session),
+                    # 跨模組依賴只允許出現在這個組裝根：agent 工具層只看
+                    # WebResearchServiceProtocol，實際實作由 web_research slice
+                    # 從 app.state.ai_runtime 組裝（它不開資料庫 session）。
+                    web_research_service=get_web_research_service(self.request),
                 )
                 yield services
                 await session.commit()
