@@ -40,7 +40,6 @@ import { ChatIntro } from "./component/ChatIntro";
 import { ChatThread } from "./component/ChatThread";
 import { ContextActions } from "./component/ContextActions";
 import { ConversationRail } from "./component/ConversationRail";
-import { MethodDisclosure } from "./component/MethodDisclosure";
 import { RetryBar } from "./component/RetryBar";
 import { StreamingTurn } from "./component/StreamingTurn";
 import { useChatSplit } from "./hook/useChatSplit";
@@ -55,7 +54,6 @@ import {
   isRecord,
   mergeEntries,
   readRetryState,
-  systemVersions,
   transcriptText,
   type CitationToken,
   type ResourceMeta,
@@ -455,10 +453,6 @@ export function ChatPage() {
   const streamToolCount = stream?.toolCalls.length ?? 0;
   const streamTextLength = stream?.assistantText.length ?? 0;
   const streamingActive = stream !== null;
-  const hiddenEntryCount = entries.reduce(
-    (count, entry) => (entry.kind === "pi.system" ? count + 1 : count),
-    0,
-  );
 
   useEffect(() => {
     if (conversationId === null || !stickToBottomRef.current) {
@@ -764,12 +758,6 @@ export function ChatPage() {
             onOpenResource={handleOpenResource}
           />
         ) : null}
-        <MethodDisclosure
-          conversation={conversation}
-          hiddenCount={hiddenEntryCount}
-          entryCount={conversation.entries_total}
-          versions={systemVersions(entries)}
-        />
         {hasMore ? (
           <div className="chat-thread__more">
             <Button

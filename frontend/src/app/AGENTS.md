@@ -15,7 +15,7 @@ The application layer does not define backend behavior. API shapes come from `ge
 
 - **Provider order:** `providers.tsx` places `I18nProvider` outermost, then `QueryClientProvider`, `ToastProvider`, and `AuthProvider`. Auth screens, route errors, and toasts can therefore translate.
 - **Routing:** `router.tsx` builds the browser router. `AuthGate` wraps all protected routes, `AppShell` supplies the rail/drawer shell, and page components are lazy imports with `Suspense` fallbacks. `/` redirects to `/chat`.
-- **Navigation:** the shell renders seven workspaces in order: Chat, Library, Timeline, Memory, Search, Dashboard, Settings. The rail collapses on desktop and becomes a drawer below 980 px.
+- **Navigation:** the shell renders seven workspaces in order: Chat, Library, Timeline, Memory, Search, Dashboard, Settings, followed by the About meta page. The rail collapses on desktop and becomes a drawer below 980 px.
 - **Data:** pages call generated React Query hooks, which call `apiFetch`. The shared client uses 30-second staleness, one retry, and no refetch on window focus. Mutations use scoped invalidation; do not use a global cache reset for routine refreshes.
 - **Workspaces:** each page lives in `<workspace>/page.tsx` with page-specific `component/`, `hook/`, and `<workspace>.css`. `agent/` and `viewer/` are supporting domains rather than navigation entries: the first feeds chat inspection, the second renders files in the Library and chat.
 - **Shared layer:** `component/` contains only cross-page primitives such as `AppShell`, `PageHeader`, `Panel`, `Button`, `QueryState`, `Toast`, `ContextMenu`, `SearchField`, and icon/ring primitives. `hook/` contains general hooks such as scroll lock and debounced values. `type/` holds local UI types.

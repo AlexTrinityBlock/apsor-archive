@@ -1,1 +1,0 @@
-import{c as e}from"./i18n-3vpbAc3v.js";var t=e();function n({children:e,tone:n=`neutral`,dot:r=!1,className:i}){return(0,t.jsxs)(`span`,{className:[`badge`,`badge--${n}`,i].filter(Boolean).join(` `),children:[r?(0,t.jsx)(`span`,{className:`badge__dot`,"aria-hidden":`true`}):null,e]})}export{n as t};
