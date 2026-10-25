@@ -8,10 +8,7 @@ import {
   IngestRuntimeSettingsPanel,
 } from "./component/RuntimeSettingsPanels";
 import { SettingsNav } from "./component/SettingsNav";
-import {
-  CustomSystemPromptPanel,
-  SystemDefaultPanel,
-} from "./component/SystemPromptPanel";
+import { SystemPromptPanel } from "./component/SystemPromptPanel";
 import "./settings.css";
 
 /**
@@ -29,12 +26,11 @@ export function SettingsPage() {
           <PageHeader
             eyebrow="Settings · system configuration"
             title="System settings & provider registry."
-            description="Edit the system default and the ordered custom sections that open every new conversation, curate the prompts shown on the empty chat page, and configure the four capability slots: chat, embedding, web search, and web fetch. Stored keys stay on the server and are never returned to this page."
+            description="Order the custom sections that open every new conversation, curate the prompts shown on the empty chat page, and configure the four capability slots: chat, embedding, web search, and web fetch. Stored keys stay on the server and are never returned to this page."
             meta={<span>Settings 07 · local-first archive</span>}
           />
 
-          <SystemDefaultPanel />
-          <CustomSystemPromptPanel />
+          <SystemPromptPanel />
 
           <FrequentlyUsedPromptsPanel />
 
