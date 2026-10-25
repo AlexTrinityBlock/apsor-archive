@@ -2198,25 +2198,76 @@
   min-width: 0;
   flex-direction: column;
   gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .prompt-row {
-  display: flex;
+  display: grid;
   min-width: 0;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px 14px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px 12px;
   padding: 11px 12px;
   background: var(--mono-card-bg);
   border: 0.7px solid var(--mono-grid);
   border-radius: 4px;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.prompt-row.is-dragging {
+  position: relative;
+  z-index: 3;
+  border-color: var(--mono-ink);
+  box-shadow: 0 10px 24px rgb(28 28 26 / 12%);
+}
+
+.prompt-row__drag {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--mono-muted);
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 3px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.prompt-row__drag:hover {
+  color: var(--mono-ink);
+  border-color: var(--mono-faint);
+}
+
+.prompt-row__drag:focus-visible {
+  color: var(--mono-ink);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.prompt-row__drag:active,
+.prompt-row.is-dragging .prompt-row__drag {
+  color: var(--accent-seal);
+  border-color: var(--accent-seal);
+  cursor: grabbing;
+}
+
+.prompt-row__grip {
+  display: block;
+  pointer-events: none;
 }
 
 .prompt-row__main {
   display: flex;
   min-width: 0;
-  flex: 1 1 260px;
   flex-direction: column;
   gap: 3px;
 }
@@ -2235,14 +2286,6 @@
   font-weight: 700;
   line-height: 1.4;
   overflow-wrap: anywhere;
-}
-
-.prompt-row__order {
-  color: var(--mono-muted);
-  font-family: var(--mono-font-mono);
-  font-size: 8.5px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 
 .prompt-row__preview {
@@ -2302,11 +2345,6 @@
   gap: 12px;
 }
 
-.prompt-form__order {
-  max-width: 140px;
-  font-family: var(--mono-font-mono);
-}
-
 .prompt-form__text {
   min-height: 160px;
   font-family: var(--mono-font-mono);
@@ -2325,6 +2363,14 @@
   .registry-reindex__actions,
   .prompt-row__actions {
     justify-content: flex-start;
+  }
+
+  .prompt-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .prompt-row__actions {
+    grid-column: 1 / -1;
   }
 
   .registry-form__grid {
@@ -2359,10 +2405,6 @@
   .prompt-row__actions .btn {
     flex: 1 1 auto;
     justify-content: center;
-  }
-
-  .prompt-form__order {
-    max-width: none;
   }
 }
 

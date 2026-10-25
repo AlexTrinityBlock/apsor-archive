@@ -110,6 +110,25 @@ class FrequentlyUsedPromptService:
         await self.cache.bump_version("prompts")
         return FrequentlyUsedPromptReadSchema.model_validate(row)
 
+    async def reorder_prompts(
+        self,
+        prompt_ids: list[int],
+    ) -> ListResponseSchema[FrequentlyUsedPromptReadSchema]:
+        """Replace the complete shortcut order atomically.
+
+        缺少、重複或未知的 id 都代表整份順序不一致；repository 只回報集合
+        不符，這裡轉成穩定的 ``invalid_frequent_prompt``，避免變成 500。
+        回傳的是剛 flush 的資料庫順序，不讀舊快取；bump 版本讓下一次 GET
+        重新建立快照。
+        """
+        try:
+            rows = await self.repository.reorder(prompt_ids, now=utcnow())
+        except ValueError as exc:
+            raise InvalidFrequentPromptError(str(exc)) from exc
+
+        await self.cache.bump_version("prompts")
+        return _list_schema(rows)
+
     async def delete_prompt(self, prompt_id: int) -> None:
         """Hard-delete one prompt; the identity sequence is never rewound."""
         deleted = await self.repository.delete(prompt_id)

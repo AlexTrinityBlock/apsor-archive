@@ -265,6 +265,8 @@ export const chat = {
     entry: "條目 #{id}",
   },
   citation: {
+    fileTitle: "檔案：{title}",
+    fileId: "檔案：#{id}",
     memoryTitle: "記憶：{title}",
     memoryId: "記憶：#{id}",
     archiveCitation: "檔案館引用 {label}",

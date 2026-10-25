@@ -59,6 +59,7 @@ export * from './fileTextUpdateSchema';
 export * from './folderCreateSchema';
 export * from './frequentlyUsedPromptCreateSchema';
 export * from './frequentlyUsedPromptReadSchema';
+export * from './frequentlyUsedPromptReorderSchema';
 export * from './frequentlyUsedPromptUpdateSchema';
 export * from './getAgentConversationParams';
 export * from './healthSchema';
