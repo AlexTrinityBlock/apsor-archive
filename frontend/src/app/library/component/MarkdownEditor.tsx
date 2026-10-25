@@ -249,6 +249,33 @@ function MarkdownEditorBody({
   );
 }
 
+interface ChunkReconstructionNoteProps {
+  readonly mode: MarkdownEditorProps["mode"];
+  readonly usingChunks: boolean;
+}
+
+/**
+ * chunk-only 檔案的編輯警告：內容由索引分段重建，儲存可能正規化空白。
+ * 僅在編輯既有檔案且使用分段時顯示，不阻擋儲存。
+ */
+function ChunkReconstructionNote({
+  mode,
+  usingChunks,
+}: ChunkReconstructionNoteProps) {
+  const { t } = useI18n();
+
+  if (mode !== "edit" || !usingChunks) {
+    return null;
+  }
+
+  return (
+    <div className="markdown-editor__reconstruction" role="note">
+      <Icon name="info" size={16} />
+      <p>{t("library.editor.chunkWarning")}</p>
+    </div>
+  );
+}
+
 /**
  * Markdown 編輯器本體：header、格式工具列、左右分割的撰寫／預覽，以及
  * 字數統計與儲存操作。既有檔案走版本化更新，新筆記走同步建立端點。
@@ -569,6 +596,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             </button>
           </div>
         </header>
+
+        <ChunkReconstructionNote
+          mode={mode}
+          usingChunks={markdownDocument.usingChunks}
+        />
 
         {mode === "new" ? (
           <div className="markdown-editor__path">

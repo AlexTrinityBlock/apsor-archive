@@ -771,9 +771,7 @@ class FileService:
         expected_version: int,
     ) -> FileSchema:
         """以新版本更新既有 Markdown 檔案，保留舊版本與原始 bytes。"""
-        file = await self.file_repository.get_current_for_update(file_id)
-        if file is None or file.deleted_at is not None or not file.is_current:
-            raise FileRecordNotFoundError(file_id)
+        file = await self._require_current_file_for_update(file_id)
         if file.extension not in MARKDOWN_EXTENSIONS:
             raise UnsupportedFileTypeError(file.extension)
         if file.version != expected_version:
@@ -858,8 +856,9 @@ class FileService:
         await self.cache.bump_version()
         return self._directory_schema(folder)
 
-    async def _require_current_file(self, file_id: int) -> FileModel:
-        file = await self.file_repository.get_by_id(file_id)
+    async def _require_current_file_for_update(self, file_id: int) -> FileModel:
+        """以資料列鎖定 current file；供更新、移動、複製、刪除共用。"""
+        file = await self.file_repository.get_current_for_update(file_id)
         if file is None or file.deleted_at is not None or not file.is_current:
             raise FileRecordNotFoundError(file_id)
         return file
@@ -902,7 +901,7 @@ class FileService:
 
     async def move_file(self, file_id: int, *, path: str) -> FileSchema:
         """Move one current file in place, preserving its identity and chunks."""
-        file = await self._require_current_file(file_id)
+        file = await self._require_current_file_for_update(file_id)
         target = self._target_file_path(file, path)
         if target == file.raw_file_path:
             return self._to_schema(file)
@@ -920,7 +919,7 @@ class FileService:
 
     async def copy_file(self, file_id: int, *, path: str) -> FileSchema:
         """Copy one current file into a new file record with fresh chunks."""
-        source = await self._require_current_file(file_id)
+        source = await self._require_current_file_for_update(file_id)
         target = self._target_file_path(source, path)
         if await self._target_is_occupied(target):
             raise TreePathConflictError(target)
@@ -1062,9 +1061,8 @@ class FileService:
         )
 
     async def delete_file(self, file_id: int) -> None:
-        file = await self.file_repository.get_by_id(file_id)
-        if file is None or file.deleted_at is not None:
-            raise FileRecordNotFoundError(file_id)
+        # DELETE 只允許 current file；歷史版本 id 一律回 404，避免誤刪已取代的版本。
+        file = await self._require_current_file_for_update(file_id)
         now = utcnow()
         file.is_current = False
         file.deleted_at = now
