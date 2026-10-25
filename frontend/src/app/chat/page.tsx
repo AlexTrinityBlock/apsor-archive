@@ -601,6 +601,15 @@ export function ChatPage() {
     [revealInspector],
   );
 
+  const openMemoryPreview = useCallback(
+    (memoryId: number, title: string | null) => {
+      setPreviewTarget({ type: "memory", id: memoryId, chunk: null, title });
+      setInspectorTab("preview");
+      revealInspector();
+    },
+    [revealInspector],
+  );
+
   const handleOpenCitation = useCallback(
     (token: CitationToken) => {
       if (token.kind === "file") {
@@ -608,10 +617,10 @@ export function ChatPage() {
         return;
       }
       if (token.kind === "memory") {
-        navigate(`/memory/${token.id}`);
+        openMemoryPreview(token.id, memoryTitles.get(token.id) ?? null);
       }
     },
-    [navigate, openFilePreview],
+    [memoryTitles, openFilePreview, openMemoryPreview],
   );
 
   const handleOpenResource = useCallback(
@@ -623,9 +632,9 @@ export function ChatPage() {
         openFilePreview(resource.resourceId, resource.chunk);
         return;
       }
-      navigate(`/memory/${resource.resourceId}`);
+      openMemoryPreview(resource.resourceId, resource.title);
     },
-    [navigate, openFilePreview],
+    [openFilePreview, openMemoryPreview],
   );
 
   const handleSelectTrace = useCallback(

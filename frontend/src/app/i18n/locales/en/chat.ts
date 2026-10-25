@@ -148,6 +148,8 @@ export const chat = {
     forkAria: "Fork conversation from entry {entryId}",
     forking: "Forking…",
     fork: "Fork",
+    copyMessage: "Copy message",
+    copyMessageTitle: "Copy this message's text",
   },
   user: {
     sending: "{name} · sending",
@@ -313,18 +315,20 @@ export const chat = {
   },
   inspector: {
     aria: "Inspector",
-    previewTitle: "No document selected",
+    previewTitle: "No resource selected",
     previewDetail:
-      "Open a file citation, or a file resource from a tool result, to preview it in place.",
+      "Open a file or memory citation, or a resource from a tool result, to preview it in place.",
     openInLibrary: "Open in library",
     openMemory: "Open memory",
     documentPreview: "Document preview",
+    memoryPreview: "Memory preview",
     fileFallback: "File #{id}",
+    memoryFallback: "Memory #{id}",
     telemetryTab: "Tool Telemetry",
-    previewTab: "Document Preview",
+    previewTab: "Resource Preview",
     viewsAria: "Inspector views",
     telemetryPanel: "Tool telemetry",
-    previewPanel: "Document preview",
+    previewPanel: "Resource preview",
     collapse: "Collapse inspector",
   },
   workbench: {

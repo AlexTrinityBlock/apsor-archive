@@ -3,7 +3,10 @@ import { Link } from "react-router-dom";
 
 import { Icon } from "../../component/Icon";
 import { AgentInspector } from "../../agent/component/AgentInspector";
-import { InspectorFileStage } from "../../agent/component/inspector/common";
+import {
+  InspectorFileStage,
+  InspectorMemoryStage,
+} from "../../agent/component/inspector/common";
 import { useI18n } from "../../i18n";
 import {
   viewerHref,
@@ -46,26 +49,37 @@ function ChatPreview({ target }: { readonly target: ResourceTarget | null }) {
     return <PreviewEmpty />;
   }
 
-  const openLabel =
-    target.type === "file"
-      ? t("chat.inspector.openInLibrary")
-      : t("chat.inspector.openMemory");
+  const isMemory = target.type === "memory";
+  const openLabel = isMemory
+    ? t("chat.inspector.openMemory")
+    : t("chat.inspector.openInLibrary");
+  let code = `memory:${target.id}`;
+  if (!isMemory) {
+    code = `file:${target.id}`;
+    if (target.chunk !== null) {
+      code += ` · ${t("chat.common.chunk", { chunk: target.chunk })}`;
+    }
+  }
 
   return (
     <div className="chat-preview">
       <header className="chat-preview__head">
         <div>
-          <p className="mono-label">{t("chat.inspector.documentPreview")}</p>
+          <p className="mono-label">
+            {isMemory
+              ? t("chat.inspector.memoryPreview")
+              : t("chat.inspector.documentPreview")}
+          </p>
           <strong>
             {target.title ??
-              t("chat.inspector.fileFallback", { id: target.id })}
+              t(
+                isMemory
+                  ? "chat.inspector.memoryFallback"
+                  : "chat.inspector.fileFallback",
+                { id: target.id },
+              )}
           </strong>
-          <code>
-            file:{target.id}
-            {target.chunk === null
-              ? ""
-              : ` · ${t("chat.common.chunk", { chunk: target.chunk })}`}
-          </code>
+          <code>{code}</code>
         </div>
         <Link className="text-link" to={viewerHref(target)}>
           {openLabel}
@@ -73,7 +87,11 @@ function ChatPreview({ target }: { readonly target: ResourceTarget | null }) {
         </Link>
       </header>
       <div className="chat-preview__scroll">
-        <InspectorFileStage fileId={target.id} chunk={target.chunk} />
+        {isMemory ? (
+          <InspectorMemoryStage memoryId={target.id} />
+        ) : (
+          <InspectorFileStage fileId={target.id} chunk={target.chunk} />
+        )}
       </div>
     </div>
   );
