@@ -109,10 +109,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleUnauthorized = () => {
-      queryClient.setQueryData<AuthStatusSchema>(
-        getGetAuthStatusQueryKey(),
-        unauthenticatedStatus(),
-      );
+      // Re-read the server state instead of assuming an owner exists. After a
+      // first-run reset there is no owner, so the gate must show Setup again.
+      void queryClient.invalidateQueries({
+        queryKey: getGetAuthStatusQueryKey(),
+      });
     };
     window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
