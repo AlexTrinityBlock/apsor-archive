@@ -21,7 +21,7 @@ class SecretCipher:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "SecretCipher":
-        """Use DENDRO_SECRET_KEY, or create a 0600 key file in the data dir."""
+        """Use APSOR_SECRET_KEY, or create a 0600 key file in the data dir."""
         if settings.secret_key is not None:
             raw = settings.secret_key.get_secret_value().strip()
             if raw:

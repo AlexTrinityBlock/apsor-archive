@@ -26,7 +26,7 @@ const SECTIONS: readonly SettingsSection[] = [
   { id: "settings-maintenance", label: "Maintenance", index: "07" },
 ];
 
-const COLLAPSE_KEY = "dendromatrix.settings.navCollapsed";
+const COLLAPSE_KEY = "apsor-archive.settings.navCollapsed";
 
 function readCollapsed(): boolean {
   try {

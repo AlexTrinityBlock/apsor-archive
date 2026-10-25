@@ -190,7 +190,7 @@ class ProviderClientTester(ProviderTesterProtocol):
                 embedder = self.factory.build_embedder(enabled_config)
                 if embedder.dimension <= 0:
                     return ProviderTestOutcome(ok=False, detail="Embeddings are disabled.")
-                await embedder.embed(["DendroMatrix connection test"])
+                await embedder.embed(["Apsor Archive connection test"])
             elif capability == CAPABILITY_WEB_SEARCH:
                 client = self.factory.build_web_client(enabled_config)
                 if not client.configured:
@@ -199,7 +199,7 @@ class ProviderClientTester(ProviderTesterProtocol):
                         detail="No web search API key is configured.",
                     )
                 await client.search(
-                    "DendroMatrix connection test",
+                    "Apsor Archive connection test",
                     max_results=1,
                     search_depth="basic",
                     include_domains=[],

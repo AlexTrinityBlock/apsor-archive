@@ -6,7 +6,7 @@ import uvicorn
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run DendroMatrix.")
+    parser = argparse.ArgumentParser(description="Run Apsor Archive.")
     parser.add_argument(
         "command",
         nargs="?",

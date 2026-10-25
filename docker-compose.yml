@@ -1,12 +1,12 @@
-name: dendromatrix
+name: apsor-archive
 
 services:
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: dendro
-      POSTGRES_PASSWORD: dendro
-      POSTGRES_DB: dendromatrix
+      POSTGRES_USER: apsor
+      POSTGRES_PASSWORD: apsor
+      POSTGRES_DB: apsor_archive
     ports:
       - "127.0.0.1:55432:5432"
     command:
@@ -16,9 +16,9 @@ services:
       - -c
       - max_connections=50
     volumes:
-      - dendro-postgres:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dendro -d dendromatrix"]
+      test: ["CMD-SHELL", "pg_isready -U apsor -d apsor_archive"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -45,14 +45,14 @@ services:
     build:
       context: .
     environment:
-      DENDRO_DATABASE_URL: postgresql+psycopg://dendro:dendro@db:5432/dendromatrix
-      DENDRO_CACHE_URL: redis://cache:6379/0
-      DENDRO_DATA_DIR: /data
-      DENDRO_STATIC_DIR: /app/frontend/dist
-      DENDRO_TIMEZONE: Asia/Taipei
+      APSOR_DATABASE_URL: postgresql+psycopg://apsor:apsor@db:5432/apsor_archive
+      APSOR_CACHE_URL: redis://cache:6379/0
+      APSOR_DATA_DIR: /data
+      APSOR_STATIC_DIR: /app/frontend/dist
+      APSOR_TIMEZONE: Asia/Taipei
       # The dedicated worker service owns ingestion; keep the API lifespan
       # fallback off so only one process drains the queue.
-      DENDRO_INGEST_WORKER_ENABLED: "false"
+      APSOR_INGEST_WORKER_ENABLED: "false"
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -80,12 +80,12 @@ services:
   worker:
     build:
       context: .
-    command: ["/app/backend/.venv/bin/dendromatrix", "worker"]
+    command: ["/app/backend/.venv/bin/apsor-archive", "worker"]
     environment:
-      DENDRO_DATABASE_URL: postgresql+psycopg://dendro:dendro@db:5432/dendromatrix
-      DENDRO_CACHE_URL: redis://cache:6379/0
-      DENDRO_DATA_DIR: /data
-      DENDRO_TIMEZONE: Asia/Taipei
+      APSOR_DATABASE_URL: postgresql+psycopg://apsor:apsor@db:5432/apsor_archive
+      APSOR_CACHE_URL: redis://cache:6379/0
+      APSOR_DATA_DIR: /data
+      APSOR_TIMEZONE: Asia/Taipei
     volumes:
       - ./data:/data
       - ./.secrets:/app/backend/.secrets:ro
@@ -97,4 +97,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  dendro-postgres:
+  postgres-data:
+    # Legacy physical name, kept so the rebrand reuses the existing database
+    # instead of initialising an empty volume. It is an internal identifier.
+    name: dendromatrix_dendro-postgres

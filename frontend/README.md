@@ -1,4 +1,4 @@
-# DendroMatrix Frontend
+# Apsor Archive Frontend
 
 React 19 + TypeScript + Vite single-page archive. The production build is
 committed under `dist/` and served by FastAPI.
@@ -75,7 +75,7 @@ directly: `src/apis/agent-stream.ts` for `text/event-stream`, and the viewer
 text/binary loaders in `src/app/viewer/component/viewer-utils.ts`. Viewer URLs
 still come from the generated `getGetFileContentUrl` / `getDownloadFileUrl`
 helpers. Both fetch paths preserve `ApiError` and dispatch the shared
-`dendromatrix:unauthorized` event on `401`. Do not add other hand-written API
+`apsor-archive:unauthorized` event on `401`. Do not add other hand-written API
 clients.
 
 After a mutation, invalidate the related React Query keys (the pages use scoped

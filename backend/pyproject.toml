@@ -1,7 +1,7 @@
 [project]
-name = "dendromatrix-backend"
+name = "apsor-archive-backend"
 version = "0.1.0"
-description = "DendroMatrix: a tree-indexed knowledge and memory system with hybrid retrieval and AI."
+description = "Apsor Archive: a tree-indexed knowledge and memory system with hybrid retrieval and AI."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dendromatrix = "app.cli:main"
+apsor-archive = "app.cli:main"
 
 [build-system]
 requires = ["hatchling"]

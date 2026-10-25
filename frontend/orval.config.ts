@@ -14,7 +14,7 @@ const spec = process.env.VITE_OPENAPI_SPEC ?? "./openapi.json";
  * build without a backend available. `make api-check` catches contract drift.
  */
 export default defineConfig({
-  dendromatrix: {
+  "apsor-archive": {
     input: {
       target: spec,
     },

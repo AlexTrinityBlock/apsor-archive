@@ -1,18 +1,18 @@
 <div align="center">
-  <img src="frontend/public/favicon.svg" alt="DendroMatrix" width="112" height="112">
+  <img src="frontend/public/favicon.svg" alt="Apsor Archive" width="112" height="112">
 </div>
 
-<h1 align="center">DendroMatrix</h1>
+<h1 align="center">Apsor Archive</h1>
 
 <p align="center">
   A local-first knowledge and memory archive for files, memories, and the links between them.
 </p>
 
 <p align="center">
-  <a href="https://github.com/AlexTrinityBlock/dendromatrix"><img src="https://img.shields.io/badge/version-0.1.0-171717" alt="Version 0.1.0"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/AlexTrinityBlock/dendromatrix?label=license&amp;color=171717" alt="License: MIT"></a>
+  <a href="https://github.com/AlexTrinityBlock/apsor-archive"><img src="https://img.shields.io/badge/version-0.1.0-171717" alt="Version 0.1.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/AlexTrinityBlock/apsor-archive?label=license&amp;color=171717" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/self--hosted-yes-171717" alt="Self-hosted">
-  <a href="https://github.com/AlexTrinityBlock/dendromatrix/pulls"><img src="https://img.shields.io/badge/PRs-welcome-171717" alt="Pull requests welcome"></a>
+  <a href="https://github.com/AlexTrinityBlock/apsor-archive/pulls"><img src="https://img.shields.io/badge/PRs-welcome-171717" alt="Pull requests welcome"></a>
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
 A local-first knowledge and memory archive with a branching file library, a
 linear memory timeline, hybrid retrieval, and grounded AI answers.
 
-DendroMatrix is not a note list. It is a retrieval surface designed for a small
+Apsor Archive is not a note list. It is a retrieval surface designed for a small
 number of deliberate tool calls: search a passage, read its neighbours, walk the
 path, sample a season, press a new memory, or trace a superseded one. Every
 result carries its source, chunk number, and time.
@@ -124,7 +124,7 @@ To enable AI answers and AI summaries:
 
 ```bash
 mkdir -p .secrets
-printf 'DENDRO_DEEPSEEK_API_KEY=sk-your-key\n' > .secrets/deepseek.env
+printf 'APSOR_DEEPSEEK_API_KEY=sk-your-key\n' > .secrets/deepseek.env
 chmod 755 .secrets
 chmod 644 .secrets/deepseek.env
 docker compose up -d --build
@@ -157,9 +157,9 @@ independent capability tables, so one capability can never overwrite another:
 Every table has a partial unique index on `is_active`; PostgreSQL enforces at
 most one active row per capability. Deleting a row does not reuse its identity
 id. The API never returns a plaintext key: the browser receives only a hint such
-as `...14f8`. `DENDRO_SECRET_KEY` supplies the Fernet master key. If it is unset,
+as `...14f8`. `APSOR_SECRET_KEY` supplies the Fernet master key. If it is unset,
 a `0600` key file is created at `data/.secret_key` (or `/data/.secret_key` in
-Docker), so encrypted values survive restarts. `DENDRO_TAVILY_API_KEY` is an
+Docker), so encrypted values survive restarts. `APSOR_TAVILY_API_KEY` is an
 optional environment fallback for both web capabilities.
 
 Precedence is: **active database row → environment → built-in default**. The
@@ -307,7 +307,7 @@ run a dedicated process in production:
 
 ```bash
 cd backend
-uv run dendromatrix worker
+uv run apsor-archive worker
 # or
 uv run python -m app.worker
 # process at most one job, then exit
@@ -315,7 +315,7 @@ uv run python -m app.worker --once
 ```
 
 The standard and Cloudflare Compose stacks run this as a dedicated `worker`
-service and set `DENDRO_INGEST_WORKER_ENABLED=false` on the API, so exactly one
+service and set `APSOR_INGEST_WORKER_ENABLED=false` on the API, so exactly one
 process owns the queue.
 
 The **Ingestion runtime** panel on `/settings` edits the singleton
@@ -353,7 +353,7 @@ docker compose -f docker-compose.dev.yml up -d --wait
 cd backend
 uv sync
 uv run alembic upgrade head
-uv run dendromatrix --reload
+uv run apsor-archive --reload
 
 # 3. Frontend (second terminal)
 cd frontend
@@ -361,8 +361,11 @@ bun install
 bun run dev
 ```
 
-Vite runs on <http://127.0.0.1:5173> and proxies `/api` to the API. To build the
-client that the container serves:
+The dev database is PostgreSQL on `127.0.0.1:55432` with role `apsor` and
+database `apsor_archive`
+(`postgresql+psycopg://apsor:apsor@127.0.0.1:55432/apsor_archive`). Vite runs on
+<http://127.0.0.1:5173> and proxies `/api` to the API. To build the client that
+the container serves:
 
 ```bash
 cd frontend && bun run build
@@ -396,14 +399,16 @@ mkdir -p secrets
 # Write the tunnel token; no trailing newline.
 printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
 chmod 644 secrets/cf_token.txt
-export DENDRO_PUBLIC_HOST=archive.example.com
+export APSOR_PUBLIC_HOST=archive.example.com
 docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 ```
 
 Point the tunnel ingress for `archive.example.com` at `http://caddy:80`. The
-token file is gitignored. See `secrets/README.md` for permissions and
-[`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md) for the complete
-English deployment, backup, security, and troubleshooting guide.
+token file is gitignored. The live deployment keeps the existing public hostname
+`dendromatrix.alextrinitywolf.com`; that is the **legacy hostname** and stays
+unchanged until a separate DNS and tunnel migration. See `secrets/README.md` for
+permissions and [`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md) for the
+complete English deployment, backup, security, and troubleshooting guide.
 
 ## Tool surface
 
@@ -914,7 +919,7 @@ On the first visit the app asks you to create the single owner account. There is
 no default password, no email recovery, and no second account. Passwords are
 hashed with Argon2; the database stores only a SHA-256 hash of each session
 token. The cookie is HttpOnly, SameSite=Lax, and Secure when
-`DENDRO_COOKIE_SECURE=true` (the Cloudflare compose sets it).
+`APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it).
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -1020,7 +1025,7 @@ corpus.
 3. **BM25** scores candidates (`k1=1.2`, `b=0.75`). A union query such as
    `automobile ford` naturally favours chunks that contain both terms.
 4. **Vector recall** uses a 384-dimensional signed feature-hashing embedder by
-   default, so it works offline. Set `DENDRO_EMBEDDING_PROVIDER=openai` and the
+   default, so it works offline. Set `APSOR_EMBEDDING_PROVIDER=openai` and the
    matching base URL/model to use a hosted embedding model instead.
 5. **Fuse** with reciprocal rank fusion. Each source kind keeps its own top
    `result_number`, so a summary cannot be crowded out by file chunks.
@@ -1041,11 +1046,11 @@ OpenAI-compatible embedding endpoint:
 ```bash
 mkdir -p .secrets
 cat > .secrets/openai.env <<'EOF'
-DENDRO_EMBEDDING_PROVIDER=openai
-DENDRO_EMBEDDING_BASE_URL=https://api.openai.com/v1
-DENDRO_EMBEDDING_MODEL=text-embedding-3-small
-DENDRO_EMBEDDING_DIMENSION=1536
-DENDRO_EMBEDDING_API_KEY=sk-...
+APSOR_EMBEDDING_PROVIDER=openai
+APSOR_EMBEDDING_BASE_URL=https://api.openai.com/v1
+APSOR_EMBEDDING_MODEL=text-embedding-3-small
+APSOR_EMBEDDING_DIMENSION=1536
+APSOR_EMBEDDING_API_KEY=sk-...
 EOF
 chmod 755 .secrets
 chmod 644 .secrets/openai.env
@@ -1146,7 +1151,7 @@ uv run ruff check .
 uv run mypy app
 PYTHONUTF8=1 uv run bandit -r app -c pyproject.toml
 uv run pip-audit
-PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/dendromatrix-pytest.log
+PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 
 # Frontend
 cd frontend
@@ -1157,7 +1162,7 @@ bun audit
 ```
 
 The integration suite uses one real PostgreSQL test database
-(`dendromatrix_test`) on the same instance, runs sequentially, and resets every
+(`apsor_archive_test`) on the same instance, runs sequentially, and resets every
 table between tests. There are exactly ten tests; each one exercises the real
 HTTP surface and database. The agent test covers runtime settings defaults,
 full PUT/reset, validation, the runtime snapshot used by later runs, auto and
@@ -1218,6 +1223,9 @@ database.
 
 ## Project layout
 
+The Python package is `apsor-archive-backend` (CLI `apsor-archive`) and the
+client package is `apsor-archive-frontend`.
+
 ```text
 backend/
   app/
@@ -1266,7 +1274,7 @@ docker/caddy/                   non-root reverse proxy for the tunnel
 
 - One owner account protects the archive. Passwords are hashed with Argon2;
   session tokens are stored only as SHA-256 hashes in `user_session`. The cookie
-  is HttpOnly, SameSite=Lax, and Secure when `DENDRO_COOKIE_SECURE=true`.
+  is HttpOnly, SameSite=Lax, and Secure when `APSOR_COOKIE_SECURE=true`.
 - The normal Compose file binds the API to `127.0.0.1`; the Cloudflare file
   publishes no host port. Login throttling is in-memory and therefore
   single-process.

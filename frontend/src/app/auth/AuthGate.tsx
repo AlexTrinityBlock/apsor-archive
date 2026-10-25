@@ -18,7 +18,7 @@ function AuthLoading() {
       <span className="auth-loading__mark">
         <TreeMark size={34} />
       </span>
-      <p className="eyebrow">DendroMatrix · local archive</p>
+      <p className="eyebrow">Apsor Archive · local archive</p>
       <Loader size={38} label="Checking the keeper session" />
       <p>Opening the archive…</p>
     </main>

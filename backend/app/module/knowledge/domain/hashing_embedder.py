@@ -2,7 +2,7 @@
 
 This is an offline, deterministic vectorizer. It is not a semantic model, but it
 provides real vector recall for lexical neighbors and keeps the vector path
-usable without downloading a model. Configure ``DENDRO_EMBEDDING_PROVIDER=openai``
+usable without downloading a model. Configure ``APSOR_EMBEDDING_PROVIDER=openai``
 to use a hosted embedding model instead.
 """
 
@@ -15,7 +15,7 @@ from app.shared.text.ngram import iter_embedding_terms
 class HashingEmbedder:
     """Map tokens into a fixed-dimensional signed vector."""
 
-    def __init__(self, *, dimension: int = 384, model_name: str = "dendro-hash-384") -> None:
+    def __init__(self, *, dimension: int = 384, model_name: str = "apsor-hash-384") -> None:
         if dimension < 16:
             raise ValueError("dimension must be at least 16")
         self.dimension = dimension

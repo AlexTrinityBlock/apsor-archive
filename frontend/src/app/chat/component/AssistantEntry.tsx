@@ -84,7 +84,7 @@ export function AssistantEntry({
         <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
           <Icon name="spark" size={11} />
         </span>
-        <span>DendroMatrix Agent</span>
+        <span>Apsor Archive Agent</span>
         <span className="chat-turn__meta">
           {[meta.provider, meta.model, meta.step === null ? null : `step ${meta.step}`]
             .filter((item): item is string => Boolean(item))

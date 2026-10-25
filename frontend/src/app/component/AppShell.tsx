@@ -51,7 +51,7 @@ const STATUS_DOT_STYLES: Record<StatusTone, CSSProperties | undefined> = {
   },
 };
 
-const RAIL_STORAGE_KEY = "dendromatrix.rail.collapsed";
+const RAIL_STORAGE_KEY = "apsor-archive.rail.collapsed";
 
 function readRailPreference(): boolean {
   try {
@@ -165,7 +165,7 @@ export function AppShell() {
         </button>
         <NavLink to="/" className="mobile-bar__brand" end>
           <TreeMark size={26} />
-          <span>DendroMatrix</span>
+          <span>Apsor Archive</span>
         </NavLink>
         <span
           className={statusDotClassName}
@@ -190,12 +190,12 @@ export function AppShell() {
         aria-label="Archive navigation"
       >
         <div className="rail-header">
-          <NavLink to="/" className="brand-cluster" onClick={closeDrawer} title="DendroMatrix">
+          <NavLink to="/" className="brand-cluster" onClick={closeDrawer} title="Apsor Archive">
             <span className="brand-seal" aria-hidden="true">
               <TreeMark size={24} />
             </span>
             <span className="brand-meta">
-              <span className="brand-title">DendroMatrix</span>
+              <span className="brand-title">Apsor Archive</span>
               <span className="brand-sub">Archive Studio</span>
             </span>
           </NavLink>

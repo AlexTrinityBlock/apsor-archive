@@ -1,14 +1,14 @@
-name: dendromatrix-cloudflare
+name: apsor-archive-cloudflare
 
 # Cloudflare Tunnel deployment. No service publishes a host port. The tunnel
-# ingress should point at `http://caddy:80` for DENDRO_PUBLIC_HOST.
+# ingress should point at `http://caddy:80` for APSOR_PUBLIC_HOST.
 services:
   db:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: dendro
-      POSTGRES_PASSWORD: dendro
-      POSTGRES_DB: dendromatrix
+      POSTGRES_USER: apsor
+      POSTGRES_PASSWORD: apsor
+      POSTGRES_DB: apsor_archive
     command:
       - postgres
       - -c
@@ -16,9 +16,9 @@ services:
       - -c
       - max_connections=50
     volumes:
-      - dendro-cloudflare-postgres:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dendro -d dendromatrix"]
+      test: ["CMD-SHELL", "pg_isready -U apsor -d apsor_archive"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -43,15 +43,15 @@ services:
     build:
       context: .
     environment:
-      DENDRO_DATABASE_URL: postgresql+psycopg://dendro:dendro@db:5432/dendromatrix
-      DENDRO_CACHE_URL: redis://cache:6379/0
-      DENDRO_DATA_DIR: /data
-      DENDRO_STATIC_DIR: /app/frontend/dist
-      DENDRO_TIMEZONE: Asia/Taipei
-      DENDRO_COOKIE_SECURE: "true"
+      APSOR_DATABASE_URL: postgresql+psycopg://apsor:apsor@db:5432/apsor_archive
+      APSOR_CACHE_URL: redis://cache:6379/0
+      APSOR_DATA_DIR: /data
+      APSOR_STATIC_DIR: /app/frontend/dist
+      APSOR_TIMEZONE: Asia/Taipei
+      APSOR_COOKIE_SECURE: "true"
       # The dedicated worker service owns ingestion; keep the API lifespan
       # fallback off so only one process drains the queue.
-      DENDRO_INGEST_WORKER_ENABLED: "false"
+      APSOR_INGEST_WORKER_ENABLED: "false"
     volumes:
       - ./data-cloudflare:/data
       - ./.secrets:/app/backend/.secrets:ro
@@ -67,13 +67,13 @@ services:
   worker:
     build:
       context: .
-    command: ["/app/backend/.venv/bin/dendromatrix", "worker"]
+    command: ["/app/backend/.venv/bin/apsor-archive", "worker"]
     environment:
-      DENDRO_DATABASE_URL: postgresql+psycopg://dendro:dendro@db:5432/dendromatrix
-      DENDRO_CACHE_URL: redis://cache:6379/0
-      DENDRO_DATA_DIR: /data
-      DENDRO_TIMEZONE: Asia/Taipei
-      DENDRO_COOKIE_SECURE: "true"
+      APSOR_DATABASE_URL: postgresql+psycopg://apsor:apsor@db:5432/apsor_archive
+      APSOR_CACHE_URL: redis://cache:6379/0
+      APSOR_DATA_DIR: /data
+      APSOR_TIMEZONE: Asia/Taipei
+      APSOR_COOKIE_SECURE: "true"
     volumes:
       - ./data-cloudflare:/data
       - ./.secrets:/app/backend/.secrets:ro
@@ -88,7 +88,7 @@ services:
     build:
       context: ./docker/caddy
     environment:
-      DENDRO_PUBLIC_HOST: ${DENDRO_PUBLIC_HOST:-api.example.com}
+      APSOR_PUBLIC_HOST: ${APSOR_PUBLIC_HOST:-api.example.com}
     expose:
       - "80"
     volumes:
@@ -111,5 +111,5 @@ secrets:
     file: ./secrets/cf_token.txt
 
 volumes:
-  dendro-cloudflare-postgres:
+  postgres-data:
   caddy-logs:
