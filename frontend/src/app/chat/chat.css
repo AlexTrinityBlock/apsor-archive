@@ -2146,19 +2146,6 @@
   gap: 6px;
 }
 
-.chat-thread__empty {
-  padding: 22px;
-  background: var(--mono-card-warm);
-  border: 0.7px solid var(--mono-grid);
-  border-radius: 5px;
-}
-
-.chat-thread__empty .empty-state__icon {
-  width: 34px;
-  height: 34px;
-  margin-bottom: 8px;
-}
-
 .chat-thread__more {
   display: flex;
   justify-content: center;

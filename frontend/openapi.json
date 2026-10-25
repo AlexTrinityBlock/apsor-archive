@@ -4579,21 +4579,92 @@
         "title": "TimelineSkipSchema",
         "type": "object"
       },
+      "UserProfileCardInputSchema": {
+        "additionalProperties": false,
+        "description": "One card in a full profile replacement.",
+        "properties": {
+          "content": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "content"
+        ],
+        "title": "UserProfileCardInputSchema",
+        "type": "object"
+      },
+      "UserProfileCardSchema": {
+        "description": "One ordered profile card returned to the browser.",
+        "properties": {
+          "card_id": {
+            "title": "Card Id",
+            "type": "integer"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "title",
+          "content",
+          "sort_order"
+        ],
+        "title": "UserProfileCardSchema",
+        "type": "object"
+      },
+      "UserProfileSchema": {
+        "description": "The effective display name plus every user-authored profile card.",
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/UserProfileCardSchema"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "cards"
+        ],
+        "title": "UserProfileSchema",
+        "type": "object"
+      },
       "UserProfileUpdateSchema": {
         "additionalProperties": false,
-        "description": "The owner's editable display identity and self-introduction.",
+        "description": "Replace the display name and every profile card in one transaction.",
         "properties": {
-          "bio": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bio"
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/UserProfileCardInputSchema"
+            },
+            "maxItems": 20,
+            "title": "Cards",
+            "type": "array"
           },
           "display_name": {
             "maxLength": 80,
@@ -4610,17 +4681,6 @@
       },
       "UserSchema": {
         "properties": {
-          "bio": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bio"
-          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -4662,7 +4722,6 @@
           "user_id",
           "username",
           "display_name",
-          "bio",
           "created_at",
           "last_login_at"
         ],
@@ -6275,10 +6334,32 @@
         "tags": [
           "auth"
         ]
+      }
+    },
+    "/api/v1/auth/profile": {
+      "get": {
+        "description": "Return the display name and every ordered user profile card.",
+        "operationId": "getUserProfile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Profile",
+        "tags": [
+          "auth"
+        ]
       },
-      "patch": {
-        "description": "Update the owner's display name and self-introduction.",
-        "operationId": "updateCurrentUser",
+      "put": {
+        "description": "Replace the display name and every profile card atomically.",
+        "operationId": "updateUserProfile",
         "requestBody": {
           "content": {
             "application/json": {
@@ -6294,7 +6375,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserSchema"
+                  "$ref": "#/components/schemas/UserProfileSchema"
                 }
               }
             },
@@ -6311,7 +6392,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Me",
+        "summary": "Update Profile",
         "tags": [
           "auth"
         ]

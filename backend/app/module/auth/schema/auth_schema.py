@@ -11,7 +11,6 @@ class UserSchema(BaseModel):
     user_id: int
     username: str
     display_name: str | None
-    bio: str | None
     created_at: datetime
     last_login_at: datetime | None
 
@@ -45,10 +44,39 @@ class AuthResponseSchema(BaseModel):
     user: UserSchema
 
 
+class UserProfileCardSchema(BaseModel):
+    """One ordered profile card returned to the browser."""
+
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    card_id: int
+    title: str
+    content: str
+    sort_order: int
+
+
+class UserProfileSchema(BaseModel):
+    """The effective display name plus every user-authored profile card."""
+
+    model_config = ConfigDict(frozen=True)
+
+    display_name: str
+    cards: list[UserProfileCardSchema]
+
+
+class UserProfileCardInputSchema(BaseModel):
+    """One card in a full profile replacement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=120)
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class UserProfileUpdateSchema(BaseModel):
-    """The owner's editable display identity and self-introduction."""
+    """Replace the display name and every profile card in one transaction."""
 
     model_config = ConfigDict(extra="forbid")
 
     display_name: str = Field(min_length=1, max_length=80)
-    bio: str | None = Field(default=None, max_length=2000)
+    cards: list[UserProfileCardInputSchema] = Field(default_factory=list, max_length=20)

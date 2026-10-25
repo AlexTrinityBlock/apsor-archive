@@ -52,6 +52,7 @@ ERROR_DETAIL_LIMIT = 500
 SOURCE_EXCERPT_LIMIT = 1_200
 FILE_CHUNK_LIMIT = 4_000
 MEMORY_CONTENT_LIMIT = 4_000
+WEB_FETCH_PREVIEW_LIMIT = 6_000
 MAX_LISTED_ENTRIES = 100
 MAX_TIMELINE_EVENTS = 50
 PREVIEW_EXCERPT_LIMIT = 600
@@ -402,6 +403,7 @@ async def _read_file(
                 "char_count": item.char_count,
                 "token_count": item.token_count,
                 "excerpt": _excerpt(item.content),
+                "content": clip(item.content, FILE_CHUNK_LIMIT),
             }
             for item in result.chunks
         ],
@@ -815,6 +817,7 @@ async def _web_fetch(
         "url": result.url,
         "provider": result.provider,
         "content_chars": content_chars,
+        "content": clip(result.content, WEB_FETCH_PREVIEW_LIMIT),
         "truncated": result.truncated,
         "cached": result.cached,
         "retrieved_at": retrieved_at,

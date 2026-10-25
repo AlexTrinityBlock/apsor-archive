@@ -4,12 +4,14 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
+import type { UserProfileCardInputSchema } from './userProfileCardInputSchema';
 
 /**
- * The owner's editable display identity and self-introduction.
+ * Replace the display name and every profile card in one transaction.
  */
 export interface UserProfileUpdateSchema {
-  bio?: string | null;
+  /** @maxItems 20 */
+  cards?: UserProfileCardInputSchema[];
   /**
      * @minLength 1
      * @maxLength 80

@@ -81,23 +81,40 @@ def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> Non
     assert login.status_code == 200
     assert client.get("/api/v1/stats").status_code == 200
 
-    profile = client.patch(
-        "/api/v1/auth/me",
+    profile = client.put(
+        "/api/v1/auth/profile",
         json={
             "display_name": "Alex",
-            "bio": "I keep notes, memories, and the occasional argument with a wrench.",
+            "cards": [
+                {
+                    "title": "Work",
+                    "content": "I keep notes and memories, and occasionally argue with a wrench.",
+                },
+                {
+                    "title": "Answer style",
+                    "content": "Prefer concise answers with exact archive citations.",
+                },
+            ],
         },
     )
     assert profile.status_code == 200, profile.text
-    assert profile.json()["username"] == "owner"
     assert profile.json()["display_name"] == "Alex"
-    assert "wrench" in profile.json()["bio"]
+    assert [card["title"] for card in profile.json()["cards"]] == [
+        "Work",
+        "Answer style",
+    ]
+    assert "wrench" in profile.json()["cards"][0]["content"]
     auth_status = client.get("/api/v1/auth/status").json()
     assert auth_status["user"]["display_name"] == "Alex"
-    assert auth_status["user"]["bio"] == profile.json()["bio"]
-    invalid_profile = client.patch(
-        "/api/v1/auth/me",
-        json={"display_name": "   ", "bio": "Still here."},
+    fetched_profile = client.get("/api/v1/auth/profile")
+    assert fetched_profile.status_code == 200
+    assert fetched_profile.json()["cards"][1]["content"].startswith("Prefer concise")
+    invalid_profile = client.put(
+        "/api/v1/auth/profile",
+        json={
+            "display_name": "   ",
+            "cards": [{"title": "Work", "content": "Still here."}],
+        },
     )
     assert invalid_profile.status_code == 422
     assert invalid_profile.json()["error"] == "invalid_profile"

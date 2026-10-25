@@ -26,7 +26,7 @@ from app.module.agent.domain.tool_args import (
 # ``system_prompt:<id>`` 插在 built-in identity 之前。composition 改變會影響
 # 新對話的 provider 前綴，因此必須 bump PROMPT_VERSION；舊對話仍保存自己的
 # pi.system 與舊版本字串，KV cache 不會被這次變更破壞。
-PROMPT_VERSION = "archive-agent-v10"
+PROMPT_VERSION = "archive-agent-v11"
 TOOLS_VERSION = "archive-tools-v4"
 
 

@@ -36,8 +36,8 @@ from app.module.agent.domain.compaction_domain import (
     estimate_context_tokens,
 )
 from app.module.agent.domain.context_domain import build_context, render_tool_result
-from app.module.agent.domain.owner_profile_domain import OwnerProfile
 from app.module.agent.domain.tool_catalog import PROMPT_VERSION, TOOLS_VERSION
+from app.module.agent.domain.user_profile_domain import UserProfile
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
 from app.module.agent.exception.domain_error import (
     AgentApprovalNotFoundError,
@@ -162,7 +162,7 @@ class AgentService:
         self,
         payload: AgentConversationCreateSchema,
         *,
-        owner_profile: OwnerProfile | None = None,
+        user_profile: UserProfile | None = None,
     ) -> AgentConversationSchema:
         provider = payload.provider or self.default_provider
         if provider not in {"deepseek", "openai-compatible"}:
@@ -175,7 +175,7 @@ class AgentService:
             model=model,
             custom_sections=custom_sections,
             builtin_sections=builtin_sections,
-            owner_profile=owner_profile,
+            user_profile=user_profile,
         )
         system_model = build_system_model(system_data)
         conversation, _entry = await self.repository.create_conversation(

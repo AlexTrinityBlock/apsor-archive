@@ -5,13 +5,12 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useGetHealth } from "../generated-apis-types";
 import { useAuth } from "../auth/AuthProvider";
 import { useScrollLock } from "../hook/useScrollLock";
 import { Icon, type IconName } from "./Icon";
-import { OwnerProfileDialog } from "./OwnerProfileDialog";
 import { RouteFallback } from "./RouteFallback";
 import { TreeMark } from "./TreeMark";
 
@@ -69,7 +68,6 @@ function readRailPreference(): boolean {
  */
 export function AppShell() {
   const [railCollapsed, setRailCollapsed] = useState(readRailPreference);
-  const [profileOpen, setProfileOpen] = useState(false);
   const location = useLocation();
   const [drawer, setDrawer] = useState({
     open: false,
@@ -249,20 +247,20 @@ export function AppShell() {
         <div className="rail-footer">
           {user ? (
             <div className="rail-account">
-              <button
-                type="button"
+              <Link
                 className="rail-account__identity"
-                onClick={() => setProfileOpen(true)}
-                title="Edit owner profile"
+                to="/profile"
+                onClick={closeDrawer}
+                title="Open User Profile"
               >
                 <span className="rail-account__mark" aria-hidden="true">
                   {displayName.slice(0, 2).toUpperCase()}
                 </span>
                 <span className="rail-account__copy">
-                  <span>Signed in</span>
+                  <span>User profile</span>
                   <strong>{displayName}</strong>
                 </span>
-              </button>
+              </Link>
               <button
                 type="button"
                 className="rail-account__action"
@@ -321,9 +319,6 @@ export function AppShell() {
         </div>
       </main>
 
-      {profileOpen ? (
-        <OwnerProfileDialog onClose={() => setProfileOpen(false)} />
-      ) : null}
     </div>
   );
 }

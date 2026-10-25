@@ -9,6 +9,7 @@ import type {
 import { ApiError } from "../../../apis/fetch-client";
 import { Badge } from "../../component/Badge";
 import { Button, ButtonLink } from "../../component/Button";
+import { CopyButton } from "../../component/CopyButton";
 import { Icon } from "../../component/Icon";
 import { PageHeader } from "../../component/PageHeader";
 import { Panel } from "../../component/Panel";
@@ -387,6 +388,13 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
         }
         actions={
           <div className="memory-actions">
+            {target ? (
+              <CopyButton
+                value={target.content}
+                label="Copy memory"
+                title="Copy the memory text"
+              />
+            ) : null}
             {target ? (
               <Button
                 variant="secondary"
