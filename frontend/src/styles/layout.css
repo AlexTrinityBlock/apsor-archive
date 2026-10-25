@@ -137,10 +137,6 @@
   border-color: var(--mono-ink);
 }
 
-.app-shell.rail-collapsed .rail-toggle-btn {
-  display: none;
-}
-
 .rail-close-btn {
   display: none;
   align-items: center;
@@ -416,42 +412,6 @@
   white-space: nowrap;
 }
 
-.rail-footer-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  width: 100%;
-  padding: 7px 10px;
-  color: var(--mono-ink);
-  font-size: 11px;
-  font-weight: 600;
-  background: transparent;
-  border: 0.7px solid var(--mono-grid);
-  border-radius: 4px;
-  transition: all var(--transition-fast);
-}
-
-.rail-footer-btn:hover {
-  background: #ffffff;
-  border-color: var(--mono-ink);
-}
-
-.app-shell.rail-collapsed .rail-footer-btn {
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  margin: 0 auto;
-}
-
-.app-shell.rail-collapsed .rail-footer-btn span {
-  display: none;
-}
-
-.app-shell.rail-collapsed .rail-footer-btn svg {
-  transform: rotate(180deg);
-}
-
 .rail-colophon {
   display: flex;
   align-items: center;
@@ -553,9 +513,9 @@
     position: fixed;
     inset: 0 0 auto;
     z-index: var(--z-mobile-bar);
-    display: flex;
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
     align-items: center;
-    justify-content: space-between;
     height: var(--mobile-bar-height);
     padding: 0 13px;
     background: var(--mono-paper);
@@ -578,6 +538,9 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    justify-self: center;
+    min-width: 0;
+    white-space: nowrap;
     color: var(--mono-ink);
     font-size: 14px;
     font-weight: 700;
@@ -615,8 +578,7 @@
   .app-shell.rail-collapsed .rail-item-badge,
   .app-shell.rail-collapsed .rail-account__copy,
   .app-shell.rail-collapsed .rail-account__action,
-  .app-shell.rail-collapsed .rail-status__copy,
-  .app-shell.rail-collapsed .rail-footer-btn span {
+  .app-shell.rail-collapsed .rail-status__copy {
     display: flex !important;
   }
 
@@ -651,13 +613,6 @@
     height: auto;
     justify-content: flex-start;
     padding: 7px 8px;
-  }
-
-  .app-shell.rail-collapsed .rail-footer-btn {
-    width: 100%;
-    height: auto;
-    padding: 7px 10px;
-    margin: 0;
   }
 
   .app-shell.rail-collapsed .rail-colophon {
