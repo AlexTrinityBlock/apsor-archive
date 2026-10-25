@@ -7,6 +7,10 @@
  * leaves persistence and query refresh to the caller.
  */
 import { ApiError } from "./fetch-client";
+import {
+  getActiveLocale,
+  translate,
+} from "../app/i18n/translate";
 
 export interface AgentPageContextPayload {
   readonly key: string;
@@ -190,7 +194,10 @@ async function readFailure(response: Response): Promise<ApiError> {
   const detail =
     (isRecord(payload) ? stringValue(payload.detail) : null) ??
     (isRecord(payload) ? stringValue(payload.error) : null) ??
-    (response.statusText || `Request failed with status ${response.status}`);
+    (response.statusText ||
+      translate(getActiveLocale(), "chat.errors.requestFailed", {
+        status: response.status,
+      }));
   const code = (isRecord(payload) ? stringValue(payload.error) : null) ?? "http_error";
   return new ApiError(response.status, code, detail, payload);
 }
@@ -392,7 +399,9 @@ function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
       type: "error",
       data: {
         code: stringValue(parsed.code) ?? "agent_error",
-        detail: stringValue(parsed.detail) ?? "The agent run failed.",
+        detail:
+          stringValue(parsed.detail) ??
+          translate(getActiveLocale(), "chat.errors.runFailed"),
       },
     };
   }
@@ -415,7 +424,7 @@ async function readTurnStream(
     throw new ApiError(
       502,
       "stream_unavailable",
-      "The agent stream could not be opened.",
+      translate(getActiveLocale(), "chat.errors.streamUnavailable"),
       null,
     );
   }
@@ -490,7 +499,7 @@ async function openAgentStream({
     throw new ApiError(
       0,
       "network_error",
-      "The archive could not be reached.",
+      translate(getActiveLocale(), "chat.errors.network"),
       null,
     );
   }

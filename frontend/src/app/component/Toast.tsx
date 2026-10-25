@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 
+import { useI18n } from "../i18n";
 import { Icon, type IconName } from "./Icon";
 
 type ToastTone = "success" | "error" | "info";
@@ -35,7 +36,7 @@ const ToastContext = createContext<ToastValue | null>(null);
 const LIFETIME_MS = 4500;
 
 /** Non-modal confirmations for actions that should not interrupt reading. */
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider({ children }: { readonly children: ReactNode }) {
   const [toasts, setToasts] = useState<readonly ToastItem[]>([]);
   const nextId = useRef(1);
 
@@ -77,6 +78,8 @@ function ToastNote({
   readonly toast: ToastItem;
   readonly onDismiss: (id: number) => void;
 }) {
+  const { t } = useI18n();
+
   useEffect(() => {
     const timer = window.setTimeout(() => onDismiss(toast.id), LIFETIME_MS);
     return () => window.clearTimeout(timer);
@@ -97,7 +100,7 @@ function ToastNote({
         type="button"
         className="toast__close"
         onClick={() => onDismiss(toast.id)}
-        aria-label="Dismiss notification"
+        aria-label={t("core.toast.dismiss")}
       >
         <Icon name="close" size={14} />
       </button>

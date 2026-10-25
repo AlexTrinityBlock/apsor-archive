@@ -1,12 +1,12 @@
+import { useMemo } from "react";
+
 import type { TimelineResponseSchema } from "../../generated-apis-types/schemas";
 
-import { formatNumber } from "../../../lib/format";
+import { useI18n, type Translate, type TranslationKey } from "../../i18n";
 
 import {
   addDays,
   differenceInCalendarDays,
-  formatCalendarDay,
-  formatShortDay,
   isWithinApiRange,
   parseIsoDay,
   toDateInput,
@@ -40,16 +40,55 @@ function densityTier(ratio: number): "quiet" | "mid" | "peak" {
   return "quiet";
 }
 
-function densityBarLabel(bar: DensityBar): string {
+function densityBarLabel(
+  bar: DensityBar,
+  t: Translate,
+  formatNumber: (value: number) => string,
+): string {
   return [
-    `${bar.memoryCount} ${bar.memoryCount === 1 ? "memory" : "memories"}`,
-    `${bar.summaryCount} ${bar.summaryCount === 1 ? "summary" : "summaries"}`,
-    `${bar.fileCount} ${bar.fileCount === 1 ? "file update" : "file updates"}`,
-  ].join(", ");
+    countLabel(
+      t,
+      formatNumber,
+      bar.memoryCount,
+      "insights.timeline.counts.memoryOne",
+      "insights.timeline.counts.memoryOther",
+    ),
+    countLabel(
+      t,
+      formatNumber,
+      bar.summaryCount,
+      "insights.timeline.counts.summaryOne",
+      "insights.timeline.counts.summaryOther",
+    ),
+    countLabel(
+      t,
+      formatNumber,
+      bar.fileCount,
+      "insights.timeline.counts.fileUpdateOne",
+      "insights.timeline.counts.fileUpdateOther",
+    ),
+  ].join(t("insights.timeline.density.listSeparator"));
+}
+
+function countLabel(
+  t: Translate,
+  formatNumber: (value: number) => string,
+  count: number,
+  oneKey: TranslationKey,
+  otherKey: TranslationKey,
+): string {
+  return t(count === 1 ? oneKey : otherKey, {
+    count: formatNumber(count),
+  });
 }
 
 /** The 68px hairline density strip; each stem is one active day in the API window. */
 export function TimelineDensity({ data, anchor, onAnchorChange }: TimelineDensityProps) {
+  const { t, locale, formatNumber, formatDate } = useI18n();
+  const shortDate = useMemo(
+    () => new Intl.DateTimeFormat(locale, { day: "2-digit", month: "short" }),
+    [locale],
+  );
   const startDay = parseIsoDay(data.range_start);
   const dayRange = Math.max(1, data.day_range);
   const maxTotal = Math.max(
@@ -104,16 +143,26 @@ export function TimelineDensity({ data, anchor, onAnchorChange }: TimelineDensit
   const hasUnanchorableBars = bars.some((bar) => !bar.canAnchor);
 
   return (
-    <section className="timeline-density" aria-label="Timeline density strip">
+    <section
+      className="timeline-density"
+      aria-label={t("insights.timeline.density.aria")}
+    >
       <div className="timeline-density__head">
         <div className="timeline-density__title-group">
-          <h2 className="timeline-density__title">Growth-ring density across the window</h2>
-          <span className="timeline-density__protocol">0.7px hairline protocol</span>
+          <h2 className="timeline-density__title">
+            {t("insights.timeline.density.title")}
+          </h2>
+          <span className="timeline-density__protocol">
+            {t("insights.timeline.density.protocol")}
+          </span>
         </div>
         <span className="timeline-density__telemetry">
-          {formatNumber(dayRange)}-day window {"\u00b7"} {formatNumber(data.density.length)} active{" "}
-          {data.density.length === 1 ? "day" : "days"} {"\u00b7"}{" "}
-          {formatNumber(data.sampled)} sampled of {formatNumber(data.total)}
+          {t("insights.timeline.density.telemetry", {
+            days: formatNumber(dayRange),
+            active: formatNumber(data.density.length),
+            sampled: formatNumber(data.sampled),
+            total: formatNumber(data.total),
+          })}
         </span>
       </div>
 
@@ -187,13 +236,24 @@ export function TimelineDensity({ data, anchor, onAnchorChange }: TimelineDensit
             style={{ left: `${bar.xPercent}%`, width: `${hitWidthPercent}%` }}
             title={
               bar.canAnchor
-                ? `${formatCalendarDay(bar.day)} \u00b7 ${densityBarLabel(bar)}`
-                : `${formatCalendarDay(bar.day)} is outside the supported 1900–2200 window ends`
+                ? t("insights.timeline.density.tooltip", {
+                    date: formatDate(bar.day),
+                    composition: densityBarLabel(bar, t, formatNumber),
+                  })
+                : t("insights.timeline.density.tooltipOutside", {
+                    date: formatDate(bar.day),
+                  })
             }
             aria-label={
               bar.canAnchor
-                ? `Set window end to ${formatCalendarDay(bar.day)}. ${densityBarLabel(bar)}.`
-                : `${formatCalendarDay(bar.day)} is outside the supported 1900–2200 window ends. ${densityBarLabel(bar)}.`
+                ? t("insights.timeline.density.setAnchor", {
+                    date: formatDate(bar.day),
+                    composition: densityBarLabel(bar, t, formatNumber),
+                  })
+                : t("insights.timeline.density.setAnchorOutside", {
+                    date: formatDate(bar.day),
+                    composition: densityBarLabel(bar, t, formatNumber),
+                  })
             }
             aria-current={bar.date === anchorKey ? "date" : undefined}
             disabled={!bar.canAnchor}
@@ -203,8 +263,7 @@ export function TimelineDensity({ data, anchor, onAnchorChange }: TimelineDensit
 
         {bars.length === 0 ? (
           <p className="timeline-density__empty-note">
-            No dated events in this window. The strip stays flat until the archive has something to
-            plot.
+            {t("insights.timeline.density.emptyNote")}
           </p>
         ) : null}
       </div>
@@ -213,43 +272,67 @@ export function TimelineDensity({ data, anchor, onAnchorChange }: TimelineDensit
         <div className="timeline-density__axis" aria-hidden="true">
           {axisTicks.map((tick, index) => (
             <span key={`axis-${index}-${toDateInput(tick)}`} className="timeline-density__axis-tick">
-              {formatShortDay(tick)}
-              {index === axisTicks.length - 1 ? " \u00b7 end" : ""}
+              {shortDate.format(tick)}
+              {index === axisTicks.length - 1
+                ? t("insights.timeline.density.axisEnd")
+                : ""}
             </span>
           ))}
         </div>
       ) : null}
 
       <div className="timeline-density__legend">
-        <span className="timeline-density__legend-label">Window composition</span>
+        <span className="timeline-density__legend-label">
+          {t("insights.timeline.density.legend")}
+        </span>
         <span className="timeline-density__legend-item">
           <i
             className="timeline-density__swatch timeline-density__swatch--memory"
             aria-hidden="true"
           />
-          {formatNumber(totals.memories)} {totals.memories === 1 ? "memory" : "memories"}
+          {countLabel(
+            t,
+            formatNumber,
+            totals.memories,
+            "insights.timeline.counts.memoryOne",
+            "insights.timeline.counts.memoryOther",
+          )}
         </span>
         <span className="timeline-density__legend-item">
           <i
             className="timeline-density__swatch timeline-density__swatch--summary"
             aria-hidden="true"
           />
-          {formatNumber(totals.summaries)} {totals.summaries === 1 ? "summary" : "summaries"}
+          {countLabel(
+            t,
+            formatNumber,
+            totals.summaries,
+            "insights.timeline.counts.summaryOne",
+            "insights.timeline.counts.summaryOther",
+          )}
         </span>
         <span className="timeline-density__legend-item">
           <i className="timeline-density__swatch timeline-density__swatch--file" aria-hidden="true" />
-          {formatNumber(totals.files)} {totals.files === 1 ? "file update" : "file updates"}
+          {countLabel(
+            t,
+            formatNumber,
+            totals.files,
+            "insights.timeline.counts.fileUpdateOne",
+            "insights.timeline.counts.fileUpdateOther",
+          )}
         </span>
         {hasUnanchorableBars ? (
           <span className="timeline-density__anchor-note">
-            Window end must be within 1900–2200
+            {t("insights.timeline.density.anchorNote")}
           </span>
         ) : null}
         {data.truncated ? (
-          <span className="timeline-density__truncated">Truncated at the per-kind event cap</span>
+          <span className="timeline-density__truncated">
+            {t("insights.timeline.density.truncated")}
+          </span>
         ) : null}
         <span className="timeline-density__legend-hint">
-          Click a stem to move the window end to that day.
+          {t("insights.timeline.density.legendHint")}
         </span>
       </div>
     </section>

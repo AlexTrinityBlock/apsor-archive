@@ -10,11 +10,10 @@ import type {
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
-import { formatDateTime, formatNumber } from "../../../lib/format";
+import { useI18n, type Translate, type TranslationKey } from "../../i18n";
 
 import {
   errorText,
-  formatDotDay,
   formatRangeCaption,
   timelineNewestFirst,
   toDateInput,
@@ -54,14 +53,25 @@ interface TimelineSentinelProps {
   readonly onRetry: () => void;
 }
 
-const KIND_PILL: Record<TimelineEventSchema["kind"], string> = {
-  memory: "MEMORY",
-  summary: "SUMMARY",
-  file_update: "FILE UPDATE",
+const KIND_PILL_KEYS: Record<
+  TimelineEventSchema["kind"],
+  TranslationKey
+> = {
+  memory: "insights.timeline.spine.kindMemory",
+  summary: "insights.timeline.spine.kindSummary",
+  file_update: "insights.timeline.spine.kindFileUpdate",
 };
 
-function countLabel(count: number, singular: string, plural: string): string {
-  return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
+function countLabel(
+  t: Translate,
+  formatNumber: (value: number) => string,
+  count: number,
+  oneKey: TranslationKey,
+  otherKey: TranslationKey,
+): string {
+  return t(count === 1 ? oneKey : otherKey, {
+    count: formatNumber(count),
+  });
 }
 
 function eventKey(event: TimelineEventSchema): string {
@@ -87,32 +97,42 @@ function eventSourceLabel(event: TimelineEventSchema): string | null {
 }
 
 function EventStatusBadge({ event }: { readonly event: TimelineEventSchema }) {
+  const { t } = useI18n();
   if (event.kind === "memory") {
     if (event.status === "deprecated") {
-      return <Badge tone="vermilion">Deprecated</Badge>;
+      return (
+        <Badge tone="vermilion">
+          {t("insights.timeline.spine.statusDeprecated")}
+        </Badge>
+      );
     }
     if (event.status === "active") {
       return (
         <Badge tone="moss" dot>
-          Active
+          {t("insights.timeline.spine.statusActive")}
         </Badge>
       );
     }
-    return <Badge tone="neutral">Memory</Badge>;
+    return <Badge tone="neutral">{t("insights.timeline.spine.statusMemory")}</Badge>;
   }
   if (event.kind === "summary") {
-    return <Badge tone="ochre">Summary</Badge>;
+    return <Badge tone="ochre">{t("insights.timeline.spine.statusSummary")}</Badge>;
   }
   if (event.action === "created") {
-    return <Badge tone="moss">Created</Badge>;
+    return <Badge tone="moss">{t("insights.timeline.spine.statusCreated")}</Badge>;
   }
   if (event.action === "updated") {
-    return <Badge tone="ochre">Updated</Badge>;
+    return <Badge tone="ochre">{t("insights.timeline.spine.statusUpdated")}</Badge>;
   }
-  return <Badge tone="neutral">File update</Badge>;
+  return (
+    <Badge tone="neutral">
+      {t("insights.timeline.spine.statusFileUpdate")}
+    </Badge>
+  );
 }
 
 function SummaryBody({ content }: { readonly content: string }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const contentId = useId();
   return (
@@ -134,7 +154,9 @@ function SummaryBody({ content }: { readonly content: string }) {
         aria-controls={contentId}
         onClick={() => setExpanded((current) => !current)}
       >
-        {expanded ? "Collapse summary" : "Expand summary"}
+        {expanded
+          ? t("insights.timeline.spine.collapseSummary")
+          : t("insights.timeline.spine.expandSummary")}
         <Icon name={expanded ? "chevron-down" : "chevron-right"} size={13} />
       </button>
     </div>
@@ -150,6 +172,7 @@ function EventFooter({
   readonly onEditMemory?: (event: TimelineEventSchema) => void;
   readonly onDeprecateMemory?: (event: TimelineEventSchema) => void;
 }) {
+  const { t, formatDateTime } = useI18n();
   const sourceLabel = eventSourceLabel(event);
   return (
     <footer className="timeline-node__foot">
@@ -166,7 +189,7 @@ function EventFooter({
               className="timeline-node__action"
               onClick={() => onEditMemory(event)}
             >
-              Edit
+              {t("insights.timeline.spine.edit")}
             </button>
           ) : null}
           {event.status === "active" && onDeprecateMemory ? (
@@ -175,11 +198,11 @@ function EventFooter({
               className="timeline-node__action is-danger"
               onClick={() => onDeprecateMemory(event)}
             >
-              Deprecate
+              {t("insights.timeline.spine.deprecate")}
             </button>
           ) : null}
           <Link className="timeline-node__link" to={`/memory/${event.memory_id}`}>
-            Read memory crystal
+            {t("insights.timeline.spine.readMemory")}
             <Icon name="arrow-up-right" size={12} />
           </Link>
         </>
@@ -189,7 +212,7 @@ function EventFooter({
           className="timeline-node__link"
           to={`/library?tab=files&file=${event.file_id}`}
         >
-          Open in library
+          {t("insights.timeline.spine.openLibrary")}
           <Icon name="arrow-up-right" size={12} />
         </Link>
       ) : null}
@@ -206,6 +229,7 @@ function EventCard({
   readonly onEditMemory?: (event: TimelineEventSchema) => void;
   readonly onDeprecateMemory?: (event: TimelineEventSchema) => void;
 }) {
+  const { t, formatDate } = useI18n();
   const isDeprecated = event.kind === "memory" && event.status === "deprecated";
   const className = ["timeline-node", isDeprecated ? "is-deprecated" : null]
     .filter(Boolean)
@@ -216,7 +240,7 @@ function EventCard({
       <div className="timeline-node__head">
         <div className="timeline-node__head-copy">
           <span className="file-type-pill timeline-node__pill">
-            {KIND_PILL[event.kind]} {"\u00b7"} {formatDotDay(event.time)}
+            {t(KIND_PILL_KEYS[event.kind])} {"\u00b7"} {formatDate(event.time)}
           </span>
           {event.kind === "memory" ? (
             <>
@@ -249,44 +273,97 @@ function EventCard({
 }
 
 function SkipRow({ skip }: { readonly skip: TimelineSkipSchema }) {
+  const { t, formatNumber, formatDateTime } = useI18n();
   const total = skip.memory_number + skip.summary_number + skip.file_number;
   const composition = [
     skip.memory_number > 0
-      ? countLabel(skip.memory_number, "memory", "memories")
+      ? countLabel(
+          t,
+          formatNumber,
+          skip.memory_number,
+          "insights.timeline.counts.memoryOne",
+          "insights.timeline.counts.memoryOther",
+        )
       : null,
     skip.summary_number > 0
-      ? countLabel(skip.summary_number, "summary", "summaries")
+      ? countLabel(
+          t,
+          formatNumber,
+          skip.summary_number,
+          "insights.timeline.counts.summaryOne",
+          "insights.timeline.counts.summaryOther",
+        )
       : null,
-    skip.file_number > 0 ? countLabel(skip.file_number, "file", "files") : null,
+    skip.file_number > 0
+      ? countLabel(
+          t,
+          formatNumber,
+          skip.file_number,
+          "insights.timeline.counts.fileOne",
+          "insights.timeline.counts.fileOther",
+        )
+      : null,
   ]
     .filter(Boolean)
-    .join(", ");
+    .join(t("insights.timeline.density.listSeparator"));
   return (
     <div
       className="timeline-skip"
       role="note"
-      aria-label={`${countLabel(total, "event", "events")} omitted between two samples (${composition}), ${formatDateTime(
-        skip.from_time,
-      )} to ${formatDateTime(skip.to_time)}`}
+      aria-label={t("insights.timeline.spine.skipAria", {
+        events: countLabel(
+          t,
+          formatNumber,
+          total,
+          "insights.timeline.counts.eventOne",
+          "insights.timeline.counts.eventOther",
+        ),
+        composition,
+        from: formatDateTime(skip.from_time),
+        to: formatDateTime(skip.to_time),
+      })}
     >
       <span className="timeline-skip__rule" aria-hidden="true" />
       <div className="timeline-skip__body">
         <span className="timeline-skip__count">
-          <strong>{formatNumber(total)}</strong> {total === 1 ? "event" : "events"} omitted
+          {t(
+            total === 1
+              ? "insights.timeline.spine.skipOmittedOne"
+              : "insights.timeline.spine.skipOmittedOther",
+            { count: formatNumber(total) },
+          )}
         </span>
         {skip.memory_number > 0 ? (
           <span className="timeline-skip__kind timeline-skip__kind--memory">
-            {countLabel(skip.memory_number, "memory", "memories")}
+            {countLabel(
+              t,
+              formatNumber,
+              skip.memory_number,
+              "insights.timeline.counts.memoryOne",
+              "insights.timeline.counts.memoryOther",
+            )}
           </span>
         ) : null}
         {skip.summary_number > 0 ? (
           <span className="timeline-skip__kind timeline-skip__kind--summary">
-            {countLabel(skip.summary_number, "summary", "summaries")}
+            {countLabel(
+              t,
+              formatNumber,
+              skip.summary_number,
+              "insights.timeline.counts.summaryOne",
+              "insights.timeline.counts.summaryOther",
+            )}
           </span>
         ) : null}
         {skip.file_number > 0 ? (
           <span className="timeline-skip__kind timeline-skip__kind--file">
-            {countLabel(skip.file_number, "file", "files")}
+            {countLabel(
+              t,
+              formatNumber,
+              skip.file_number,
+              "insights.timeline.counts.fileOne",
+              "insights.timeline.counts.fileOther",
+            )}
           </span>
         ) : null}
         <span className="timeline-skip__range">
@@ -307,6 +384,7 @@ function WindowBody({
   readonly onEditMemory?: (event: TimelineEventSchema) => void;
   readonly onDeprecateMemory?: (event: TimelineEventSchema) => void;
 }) {
+  const { t, formatNumber } = useI18n();
   const ordered = timelineNewestFirst(data.events);
   const skipByGap = new Map<string, TimelineSkipSchema>();
   for (const skip of data.skips) {
@@ -317,8 +395,10 @@ function WindowBody({
     return (
       <p className="timeline-window-empty">
         {data.total === 0
-          ? "No events were returned for this window."
-          : `${formatNumber(data.total)} events were counted in this window but none were sampled.`}
+          ? t("insights.timeline.spine.emptyNoEvents")
+          : t("insights.timeline.spine.emptySampled", {
+              count: formatNumber(data.total),
+            })}
       </p>
     );
   }
@@ -344,6 +424,7 @@ function WindowBody({
 }
 
 function WindowBreak({ window }: { readonly window: TimelineWindowView }) {
+  const { t, formatNumber } = useI18n();
   return (
     <div
       className="timeline-window-break"
@@ -354,7 +435,13 @@ function WindowBreak({ window }: { readonly window: TimelineWindowView }) {
       <span className="timeline-window-break__label">{window.label}</span>
       <span className="timeline-window-break__range">{window.rangeLabel}</span>
       <span className="timeline-window-break__count">
-        {countLabel(window.data.total, "event", "events")}
+        {countLabel(
+          t,
+          formatNumber,
+          window.data.total,
+          "insights.timeline.counts.eventOne",
+          "insights.timeline.counts.eventOther",
+        )}
       </span>
       <span className="timeline-window-break__rule" aria-hidden="true" />
     </div>
@@ -363,11 +450,16 @@ function WindowBreak({ window }: { readonly window: TimelineWindowView }) {
 
 /** The load-earlier control at the bottom of the continuous spine. */
 export function TimelineSentinel({ state, onLoadEarlier, onRetry }: TimelineSentinelProps) {
+  const { t } = useI18n();
   if (state.kind === "loading") {
     return (
       <div className="timeline-sentinel timeline-sentinel--loading" role="status">
         <span className="timeline-sentinel__spinner" aria-hidden="true" />
-        <span>Reading earlier window {"\u00b7"} {state.nextLabel}…</span>
+        <span>
+          {t("insights.timeline.spine.sentinelReading", {
+            label: state.nextLabel,
+          })}
+        </span>
       </div>
     );
   }
@@ -376,13 +468,15 @@ export function TimelineSentinel({ state, onLoadEarlier, onRetry }: TimelineSent
     return (
       <div className="timeline-sentinel timeline-sentinel--error" role="alert">
         <div className="timeline-sentinel__panel">
-          <p className="timeline-sentinel__title">The earlier window did not answer.</p>
+          <p className="timeline-sentinel__title">
+            {t("insights.timeline.spine.sentinelErrorTitle")}
+          </p>
           <p className="timeline-sentinel__detail">
-            {state.nextLabel} {"\u00b7"} {errorText(state.error)}
+            {state.nextLabel} {"\u00b7"} {errorText(state.error, t)}
           </p>
           <Button variant="secondary" size="sm" onClick={onRetry}>
             <Icon name="history" size={13} />
-            Retry earlier window
+            {t("insights.timeline.spine.retryEarlier")}
           </Button>
         </div>
       </div>
@@ -397,7 +491,7 @@ export function TimelineSentinel({ state, onLoadEarlier, onRetry }: TimelineSent
           <p className="timeline-sentinel__detail">{state.detail}</p>
           {state.canContinue ? (
             <Button variant="ghost" size="sm" onClick={onLoadEarlier}>
-              Search further back
+              {t("insights.timeline.spine.searchFurther")}
               <Icon name="arrow-down" size={13} />
             </Button>
           ) : null}
@@ -412,10 +506,12 @@ export function TimelineSentinel({ state, onLoadEarlier, onRetry }: TimelineSent
         type="button"
         className="timeline-sentinel__button"
         onClick={onLoadEarlier}
-        title={`Load the window ${state.nextLabel}`}
+        title={t("insights.timeline.spine.loadEarlierTitle", {
+          label: state.nextLabel,
+        })}
       >
         <span className="timeline-sentinel__dot" aria-hidden="true" />
-        Load earlier {"\u00b7"} {state.nextLabel}
+        {t("insights.timeline.spine.loadEarlier", { label: state.nextLabel })}
         <Icon name="arrow-down" size={13} />
       </button>
     </div>
@@ -431,10 +527,11 @@ export function TimelineSpine({
   onEditMemory,
   onDeprecateMemory,
 }: TimelineSpineProps) {
+  const { t } = useI18n();
   return (
     <section
       className="timeline-spine"
-      aria-label="Sampled timeline events"
+      aria-label={t("insights.timeline.spine.aria")}
       aria-busy={loadingEarlier}
     >
       {currentEmptyContent ? (
@@ -466,27 +563,42 @@ export function TimelineSpine({
 }
 
 /** Builds the view model for one loaded window; shared by the page and sentinel. */
-export function buildWindowView(input: {
-  readonly key: string;
-  readonly data: TimelineResponseSchema;
-  readonly isCurrent: boolean;
-}): TimelineWindowView {
+export function buildWindowView(
+  input: {
+    readonly key: string;
+    readonly data: TimelineResponseSchema;
+    readonly isCurrent: boolean;
+  },
+  t: Translate,
+  formatDate: (value: string | Date) => string,
+): TimelineWindowView {
   const start = input.data.range_start.slice(0, 10);
   const end = input.data.range_end.slice(0, 10);
   return {
     key: input.key,
-    label: input.isCurrent ? "Current window" : "Earlier window",
-    rangeLabel: formatRangeCaption(start, end),
+    label: input.isCurrent
+      ? t("insights.timeline.spine.currentWindow")
+      : t("insights.timeline.spine.earlierWindow"),
+    rangeLabel: formatRangeCaption(start, end, formatDate),
     data: input.data,
     isCurrent: input.isCurrent,
   };
 }
 
 /** A short date label for the upcoming earlier window. */
-export function earlierWindowLabel(anchor: Date, range: number, index: number): string {
+export function earlierWindowLabel(
+  anchor: Date,
+  range: number,
+  index: number,
+  formatDate: (value: string | Date) => string,
+): string {
   const windowEnd = new Date(anchor);
   windowEnd.setDate(windowEnd.getDate() - range * (index + 1));
   const windowStart = new Date(windowEnd);
   windowStart.setDate(windowStart.getDate() - (range - 1));
-  return formatRangeCaption(toDateInput(windowStart), toDateInput(windowEnd));
+  return formatRangeCaption(
+    toDateInput(windowStart),
+    toDateInput(windowEnd),
+    formatDate,
+  );
 }

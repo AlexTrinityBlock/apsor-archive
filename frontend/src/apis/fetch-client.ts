@@ -6,6 +6,8 @@
  * that are not 2xx become an ApiError carrying FastAPI's stable error code and
  * human-readable detail.
  */
+import { getActiveLocale, translate } from "../app/i18n/translate";
+
 const JSON_TYPE = "application/json";
 
 interface ErrorRecord {
@@ -119,7 +121,10 @@ export async function apiFetch<T>(url: string, options: RequestInit = {}): Promi
       credentials: options.credentials ?? "same-origin",
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The archive could not be reached.";
+    const message =
+      error instanceof Error && error.message.trim().length > 0
+        ? error.message
+        : translate(getActiveLocale(), "core.errors.network_error");
     throw new ApiError(0, "network_error", message, null);
   }
 
@@ -131,7 +136,11 @@ export async function apiFetch<T>(url: string, options: RequestInit = {}): Promi
     throw new ApiError(
       response.status,
       codeFromPayload(payload),
-      messageFromPayload(payload, response.statusText || `Request failed with status ${response.status}`),
+      messageFromPayload(
+        payload,
+        response.statusText ||
+          translate(getActiveLocale(), "core.errors.generic"),
+      ),
       payload,
     );
   }

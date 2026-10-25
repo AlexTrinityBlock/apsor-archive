@@ -22,14 +22,17 @@ import { Icon } from "../component/Icon";
 import { Panel } from "../component/Panel";
 import { StatCard } from "../component/StatCard";
 import { useToast } from "../component/Toast";
+import {
+  localizeStatus,
+  translateApiError,
+  useI18n,
+  type Translate,
+  type TranslationKey,
+} from "../i18n";
 import type { BadgeTone } from "../type/ui";
 import {
   basename,
   formatBytes,
-  formatDate,
-  formatDateTime,
-  formatNumber,
-  formatRelative,
   truncate,
 } from "../../lib/format";
 import "./home.css";
@@ -79,10 +82,12 @@ function fileHref(fileId: number): string {
   return `/library?tab=files&file=${fileId}&chunk=1`;
 }
 
-function errorText(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.length > 0
-    ? error.message
-    : fallback;
+function errorText(
+  error: unknown,
+  t: Translate,
+  fallbackKey: TranslationKey,
+): string {
+  return translateApiError(error, t, fallbackKey);
 }
 
 function fileTypeLabel(name: string): string {
@@ -131,35 +136,58 @@ function fallbackTimelineParams(): ReadTimelineParams {
   };
 }
 
-function buildStatCards(stats: StatsSchema | undefined): readonly StatCardData[] {
+function buildStatCards(
+  stats: StatsSchema | undefined,
+  t: Translate,
+  formatNumber: (value: number) => string,
+): readonly StatCardData[] {
   const deprecated = stats
     ? Math.max(0, stats.memory_count - stats.active_memory_count)
     : 0;
   return [
     {
-      label: "Files archived",
-      value: stats ? formatNumber(stats.file_count) : "—",
-      note: stats ? `${formatBytes(stats.storage_bytes)} stored locally` : "Counts unavailable",
+      label: t("core.home.statFiles"),
+      value: stats
+        ? formatNumber(stats.file_count)
+        : t("core.common.notAvailable"),
+      note: stats
+        ? t("core.home.statFilesNote", {
+            size: formatBytes(stats.storage_bytes),
+          })
+        : t("core.home.countsUnavailable"),
       accent: "moss",
     },
     {
-      label: "Indexed chunks",
-      value: stats ? formatNumber(stats.chunk_count) : "—",
-      note: stats ? "Current indexed knowledge units" : "Counts unavailable",
+      label: t("core.home.statChunks"),
+      value: stats
+        ? formatNumber(stats.chunk_count)
+        : t("core.common.notAvailable"),
+      note: stats
+        ? t("core.home.statChunksNote")
+        : t("core.home.countsUnavailable"),
       accent: "ink",
     },
     {
-      label: "Memory crystals",
-      value: stats ? formatNumber(stats.memory_count) : "—",
+      label: t("core.home.statMemories"),
+      value: stats
+        ? formatNumber(stats.memory_count)
+        : t("core.common.notAvailable"),
       note: stats
-        ? `${formatNumber(stats.active_memory_count)} active · ${formatNumber(deprecated)} deprecated`
-        : "Counts unavailable",
+        ? t("core.home.statMemoriesNote", {
+            active: formatNumber(stats.active_memory_count),
+            deprecated: formatNumber(deprecated),
+          })
+        : t("core.home.countsUnavailable"),
       accent: "ochre",
     },
     {
-      label: "AI summaries",
-      value: stats ? formatNumber(stats.summary_count) : "—",
-      note: stats ? "Recorded document summaries" : "Counts unavailable",
+      label: t("core.home.statSummaries"),
+      value: stats
+        ? formatNumber(stats.summary_count)
+        : t("core.common.notAvailable"),
+      note: stats
+        ? t("core.home.statSummariesNote")
+        : t("core.home.countsUnavailable"),
       accent: "vermilion",
     },
   ];
@@ -167,6 +195,7 @@ function buildStatCards(stats: StatsSchema | undefined): readonly StatCardData[]
 
 function dedupeTimelineFiles(
   events: readonly TimelineEventSchema[],
+  t: Translate,
 ): RecentFile[] {
   const byId = new Map<number, RecentFile>();
   for (const event of events) {
@@ -174,7 +203,11 @@ function dedupeTimelineFiles(
       continue;
     }
     const path = event.raw_file_path?.trim() || null;
-    const name = event.content.trim() || (path ? basename(path) : `File #${event.file_id}`);
+    const name =
+      event.content.trim() ||
+      (path
+        ? basename(path)
+        : t("core.home.eventFileFallback", { id: event.file_id }));
     const next: RecentFile = {
       key: `timeline-file-${event.file_id}`,
       fileId: event.file_id,
@@ -217,14 +250,18 @@ function eventKey(event: TimelineEventSchema, index: number): string {
   return `${event.kind}-${String(source)}-${event.time}-${index}`;
 }
 
-function eventLabel(event: TimelineEventSchema): string {
+function eventLabel(event: TimelineEventSchema, t: Translate): string {
   if (event.kind === "memory") {
-    return event.status === "deprecated" ? "Memory superseded" : "Memory crystallized";
+    return event.status === "deprecated"
+      ? t("core.home.eventMemorySuperseded")
+      : t("core.home.eventMemoryCrystallized");
   }
   if (event.kind === "summary") {
-    return "Summary synthesized";
+    return t("core.home.eventSummarySynthesized");
   }
-  return event.action === "created" ? "File created" : "File updated";
+  return event.action === "created"
+    ? t("core.home.eventFileCreated")
+    : t("core.home.eventFileUpdated");
 }
 
 function eventTone(event: TimelineEventSchema): BadgeTone {
@@ -234,25 +271,36 @@ function eventTone(event: TimelineEventSchema): BadgeTone {
   return TIMELINE_KIND_TONES[event.kind];
 }
 
-function eventFallbackContent(event: TimelineEventSchema): string {
+function eventFallbackContent(event: TimelineEventSchema, t: Translate): string {
   if (event.kind === "memory" && event.memory_id != null) {
-    return `Memory #${event.memory_id}`;
+    return t("core.home.eventMemoryFallback", { id: event.memory_id });
   }
   if (event.kind === "summary" && event.memory_summary_id != null) {
-    return `Summary #${event.memory_summary_id}`;
+    return t("core.home.eventSummaryFallback", { id: event.memory_summary_id });
   }
   if (event.kind === "file_update") {
-    return event.raw_file_path?.trim() || `File #${event.file_id ?? "—"}`;
+    return (
+      event.raw_file_path?.trim() ||
+      t("core.home.eventFileFallback", {
+        id: event.file_id ?? t("core.common.notAvailable"),
+      })
+    );
   }
-  return "No excerpt recorded.";
+  return t("core.home.noExcerpt");
 }
 
-function eventLink(event: TimelineEventSchema): { to: string; label: string } | null {
+function eventLink(
+  event: TimelineEventSchema,
+  t: Translate,
+): { to: string; label: string } | null {
   if (event.kind === "memory" && event.memory_id != null) {
-    return { to: `/memory/${event.memory_id}`, label: "Read memory" };
+    return { to: `/memory/${event.memory_id}`, label: t("core.home.readMemory") };
   }
   if (event.kind === "file_update" && event.file_id != null) {
-    return { to: fileHref(event.file_id), label: "Open in File Library" };
+    return {
+      to: fileHref(event.file_id),
+      label: t("core.home.openInLibrary"),
+    };
   }
   return null;
 }
@@ -266,28 +314,39 @@ function StatusChip({
   readonly pending: boolean;
   readonly error: boolean;
 }) {
+  const { t } = useI18n();
   let tone = "loading";
-  let label = "Checking archive";
-  let detail = "Reading local service health";
+  let label = t("core.home.statusChecking");
+  let detail = t("core.home.statusReadingHealth");
 
   if (error) {
     tone = "error";
-    label = "Archive offline";
-    detail = "The health endpoint did not answer.";
+    label = t("core.home.statusOffline");
+    detail = t("core.home.statusHealthNoAnswer");
   } else if (health) {
-    detail = `DB ${health.database} · cache ${health.cache} · AI ${health.ai}`;
+    detail = t("core.status.detail", {
+      database: localizeStatus(t, health.database),
+      cache: localizeStatus(t, health.cache),
+      ai: localizeStatus(t, health.ai),
+    });
     if (health.database !== "ok") {
       tone = "error";
-      label = `Degraded · database ${health.database}`;
+      label = t("core.home.statusDegradedDatabase", {
+        status: localizeStatus(t, health.database),
+      });
     } else if (health.status !== "ok") {
       tone = "degraded";
-      label = `Degraded · ${health.status}`;
+      label = t("core.home.statusDegraded", {
+        status: localizeStatus(t, health.status),
+      });
     } else if (health.cache !== "ok") {
       tone = "degraded";
-      label = `Degraded · cache ${health.cache}`;
+      label = t("core.home.statusDegradedCache", {
+        status: localizeStatus(t, health.cache),
+      });
     } else {
       tone = "ok";
-      label = `Live Archive · v${health.version}`;
+      label = t("core.home.statusLive", { version: health.version });
     }
   }
 
@@ -317,6 +376,8 @@ function InlineError({
   readonly onRetry: () => void;
   readonly retrying: boolean;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="overview-inline-state overview-inline-state--error" role="alert">
       <span className="overview-inline-state__icon" aria-hidden="true">
@@ -333,7 +394,7 @@ function InlineError({
         onClick={onRetry}
         disabled={retrying}
       >
-        {retrying ? "Retrying…" : "Retry"}
+        {retrying ? t("core.common.retrying") : t("core.common.retry")}
       </Button>
     </div>
   );
@@ -365,8 +426,10 @@ function InlineEmpty({
 }
 
 function StatSkeleton() {
+  const { t } = useI18n();
+
   return (
-    <section aria-label="Archive statistics" aria-busy="true">
+    <section aria-label={t("core.home.statsAria")} aria-busy="true">
       <div className="stats-cards-grid">
         {[0, 1, 2, 3].map((index) => (
           <div className="stat-card overview-stat-skeleton" key={index} aria-hidden="true">
@@ -381,8 +444,14 @@ function StatSkeleton() {
 }
 
 function FileRowsSkeleton() {
+  const { t } = useI18n();
+
   return (
-    <div className="overview-file-list" aria-busy="true" aria-label="Reading recent files">
+    <div
+      className="overview-file-list"
+      aria-busy="true"
+      aria-label={t("core.home.recentFilesAria")}
+    >
       {[0, 1, 2, 3].map((index) => (
         <div className="overview-file overview-file--skeleton" key={index} aria-hidden="true">
           <span className="overview-skeleton overview-skeleton--type" />
@@ -398,8 +467,14 @@ function FileRowsSkeleton() {
 }
 
 function TimelineSkeleton() {
+  const { t } = useI18n();
+
   return (
-    <div className="overview-timeline" aria-busy="true" aria-label="Reading recent timeline events">
+    <div
+      className="overview-timeline"
+      aria-busy="true"
+      aria-label={t("core.home.timelineAria")}
+    >
       {[0, 1, 2, 3].map((index) => (
         <div className="overview-event" key={index} aria-hidden="true">
           <div className="overview-event__head">
@@ -431,14 +506,19 @@ function RecentFilesPanel({
   readonly onRetry: () => void;
   readonly retrying: boolean;
 }) {
+  const { t, formatDateTime, formatNumber, formatRelative } = useI18n();
   let body: ReactNode;
   if (loading) {
     body = <FileRowsSkeleton />;
   } else if (error) {
     body = (
       <InlineError
-        title="Recent files could not be read."
-        detail={errorText(error, "Neither the timeline nor the root shelf answered.")}
+        title={t("core.home.recentFilesErrorTitle")}
+        detail={errorText(
+          error,
+          t,
+          "core.home.recentFilesErrorFallback",
+        )}
         onRetry={onRetry}
         retrying={retrying}
       />
@@ -446,11 +526,11 @@ function RecentFilesPanel({
   } else if (files.length === 0) {
     body = (
       <InlineEmpty
-        title="No files on the shelf yet."
-        description="Upload a text file, PDF, or image to begin the archive."
+        title={t("core.home.recentFilesEmptyTitle")}
+        description={t("core.home.recentFilesEmptyDescription")}
         action={
           <ButtonLink to="/library" variant="ink" size="sm">
-            Upload a file
+            {t("core.home.uploadFile")}
             <Icon name="arrow-right" size={14} />
           </ButtonLink>
         }
@@ -461,10 +541,7 @@ function RecentFilesPanel({
       <>
         {usingFallback && timelineError ? (
           <div className="overview-fallback-note" role="status">
-            <span>
-              The timeline did not answer, so this shelf lists the newest files at the
-              archive root.
-            </span>
+            <span>{t("core.home.fallbackNote")}</span>
             <Button
               type="button"
               variant="ghost"
@@ -472,7 +549,9 @@ function RecentFilesPanel({
               onClick={onRetry}
               disabled={retrying}
             >
-              {retrying ? "Retrying…" : "Retry timeline"}
+              {retrying
+                ? t("core.common.retrying")
+                : t("core.home.retryTimeline")}
             </Button>
           </div>
         ) : null}
@@ -486,10 +565,15 @@ function RecentFilesPanel({
                 </span>
                 <span className="overview-file__meta">
                   <span title={file.path ?? undefined}>
-                    {file.path ?? "Path unavailable"}
+                    {file.path ?? t("core.home.pathUnavailable")}
                   </span>
                   {file.totalChunks !== null ? (
-                    <span>· {formatNumber(file.totalChunks)} chunks</span>
+                    <span>
+                      ·{" "}
+                      {t("core.home.fileChunks", {
+                        count: formatNumber(file.totalChunks),
+                      })}
+                    </span>
                   ) : null}
                   {file.action ? <span>· {file.action}</span> : null}
                 </span>
@@ -513,12 +597,12 @@ function RecentFilesPanel({
       title={
         <span className="overview-panel__title">
           <Icon name="file" size={15} />
-          Recent Files
+          {t("core.home.recentFilesTitle")}
         </span>
       }
       action={
         <Link className="box-view-all" to="/library">
-          <span>View all files</span>
+          <span>{t("core.home.viewAllFiles")}</span>
           <Icon name="chevron-right" size={12} />
         </Link>
       }
@@ -547,14 +631,21 @@ function RecentTimelinePanel({
   readonly onRetry: () => void;
   readonly retrying: boolean;
 }) {
+  const {
+    t,
+    formatDate,
+    formatDateTime,
+    formatNumber,
+    formatRelative,
+  } = useI18n();
   let body: ReactNode;
   if (loading) {
     body = <TimelineSkeleton />;
   } else if (error) {
     body = (
       <InlineError
-        title="The timeline did not answer."
-        detail={errorText(error, "The 30-day window could not be read.")}
+        title={t("core.home.timelineErrorTitle")}
+        detail={errorText(error, t, "core.home.timelineErrorFallback")}
         onRetry={onRetry}
         retrying={retrying}
       />
@@ -563,11 +654,11 @@ function RecentTimelinePanel({
     body = (
       <InlineEmpty
         icon="timeline"
-        title="No events in this window."
-        description="Files, memories, and summaries appear here as the archive grows."
+        title={t("core.home.timelineEmptyTitle")}
+        description={t("core.home.timelineEmptyDescription")}
         action={
           <ButtonLink to="/timeline" variant="secondary" size="sm">
-            Open timeline
+            {t("core.home.openTimeline")}
             <Icon name="arrow-right" size={14} />
           </ButtonLink>
         }
@@ -577,12 +668,12 @@ function RecentTimelinePanel({
     body = (
       <div className="overview-timeline">
         {events.map((event, index) => {
-          const link = eventLink(event);
+          const link = eventLink(event, t);
           return (
             <article className="overview-event" key={eventKey(event, index)}>
               <div className="overview-event__head">
                 <Badge tone={eventTone(event)} dot>
-                  {eventLabel(event)}
+                  {eventLabel(event, t)}
                 </Badge>
                 <time
                   className="overview-event__time"
@@ -593,7 +684,10 @@ function RecentTimelinePanel({
                 </time>
               </div>
               <p className="overview-event__text">
-                {truncate(event.content.trim() || eventFallbackContent(event), 190)}
+                {truncate(
+                  event.content.trim() || eventFallbackContent(event, t),
+                  190,
+                )}
               </p>
               {link ? (
                 <Link className="overview-event__link" to={link.to}>
@@ -611,11 +705,14 @@ function RecentTimelinePanel({
   const rangeLabel =
     rangeStart && rangeEnd
       ? `${formatDate(rangeStart)} – ${formatDate(rangeEnd)}`
-      : `Last ${TIMELINE_WINDOW_DAYS} days`;
+      : t("core.home.timelineLastDays", { days: TIMELINE_WINDOW_DAYS });
   const countLabel =
     total === undefined
-      ? "30-day window"
-      : `${formatNumber(events.length)} of ${formatNumber(total)} events`;
+      ? t("core.home.timelineWindow")
+      : t("core.home.timelineCount", {
+          shown: formatNumber(events.length),
+          total: formatNumber(total),
+        });
 
   return (
     <Panel
@@ -623,7 +720,7 @@ function RecentTimelinePanel({
       title={
         <span className="overview-panel__title">
           <Icon name="timeline" size={15} />
-          Recent Timeline Events
+          {t("core.home.timelineTitle")}
         </span>
       }
       action={
@@ -632,7 +729,7 @@ function RecentTimelinePanel({
             {countLabel}
           </span>
           <Link className="box-view-all" to="/timeline">
-            <span>View timeline</span>
+            <span>{t("core.home.viewTimeline")}</span>
             <Icon name="chevron-right" size={12} />
           </Link>
         </div>
@@ -652,30 +749,28 @@ function SeedBanner({
   readonly error: unknown;
   readonly onSeed: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <section className="overview-seed" aria-labelledby="overview-seed-title">
       <div className="overview-seed__copy">
-        <p className="eyebrow">Empty archive</p>
-        <h2 id="overview-seed-title">Seed the demo archive.</h2>
-        <p>
-          The shelves are ready but empty. Seed a small, coherent archive of text files,
-          memories, and one summary, then watch the counts and timeline fill in. The seed
-          only writes to an empty archive.
-        </p>
+        <p className="eyebrow">{t("core.home.seedEyebrow")}</p>
+        <h2 id="overview-seed-title">{t("core.home.seedTitle")}</h2>
+        <p>{t("core.home.seedDescription")}</p>
       </div>
       <div className="overview-seed__actions">
         <Button type="button" variant="primary" size="md" onClick={onSeed} disabled={isPending}>
           <Icon name="leaf" size={16} />
-          {isPending ? "Seeding the archive…" : "Seed demo archive"}
+          {isPending ? t("core.home.seedPending") : t("core.home.seedAction")}
         </Button>
         <ButtonLink to="/library" variant="secondary" size="md">
-          Upload first file
+          {t("core.home.uploadFirstFile")}
           <Icon name="arrow-right" size={15} />
         </ButtonLink>
       </div>
       {error ? (
         <p className="overview-seed__error" role="alert">
-          {errorText(error, "The demo archive could not be seeded.")}
+          {errorText(error, t, "core.home.seedErrorFallback")}
         </p>
       ) : null}
     </section>
@@ -690,6 +785,7 @@ function SeedBanner({
 export function DashboardPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { t, formatNumber } = useI18n();
 
   const statsQuery = useGetStats({ query: { staleTime: 30_000 } });
   const healthQuery = useGetHealth({
@@ -706,8 +802,8 @@ export function DashboardPage() {
   });
 
   const timelineFiles = useMemo(
-    () => dedupeTimelineFiles(timelineQuery.data?.events ?? []),
-    [timelineQuery.data],
+    () => dedupeTimelineFiles(timelineQuery.data?.events ?? [], t),
+    [t, timelineQuery.data],
   );
   const needsPathFallback = !timelineQuery.isPending && timelineFiles.length === 0;
   const pathQuery = useReadPath(
@@ -735,13 +831,20 @@ export function DashboardPage() {
         for (const key of SEED_INVALIDATION_KEYS) {
           void queryClient.invalidateQueries({ queryKey: [key] });
         }
-        const summaryWord = result.summaries_created === 1 ? "summary" : "summaries";
+        const summaryKey =
+          result.summaries_created === 1
+            ? "core.home.seedSuccessOne"
+            : "core.home.seedSuccessOther";
         toast.success(
-          `Seeded ${formatNumber(result.files_created)} files, ${formatNumber(result.memories_created)} memories, and ${formatNumber(result.summaries_created)} ${summaryWord}.`,
+          t(summaryKey, {
+            files: formatNumber(result.files_created),
+            memories: formatNumber(result.memories_created),
+            summaries: formatNumber(result.summaries_created),
+          }),
         );
       },
       onError: (error) => {
-        toast.error(errorText(error, "The demo archive could not be seeded."));
+        toast.error(errorText(error, t, "core.home.seedErrorFallback"));
       },
     },
   });
@@ -786,8 +889,8 @@ export function DashboardPage() {
       <header className="overview-masthead">
         <div className="overview-masthead__top">
           <div className="overview-title-group">
-            <p className="eyebrow eyebrow--plain">Archive dashboard</p>
-            <h1 className="overview-title">Archive Dashboard</h1>
+            <p className="eyebrow eyebrow--plain">{t("core.home.eyebrow")}</p>
+            <h1 className="overview-title">{t("core.home.title")}</h1>
           </div>
           <div className="overview-masthead__actions">
             <StatusChip
@@ -797,7 +900,7 @@ export function DashboardPage() {
             />
             <ButtonLink to="/search" variant="secondary" size="sm">
               <Icon name="search" size={14} />
-              Search
+              {t("core.home.search")}
             </ButtonLink>
           </div>
         </div>
@@ -816,20 +919,24 @@ export function DashboardPage() {
       ) : (
         <section aria-labelledby="overview-stats-title">
           <h2 className="visually-hidden" id="overview-stats-title">
-            Archive statistics
+            {t("core.home.statsAria")}
           </h2>
           {statsQuery.isError ? (
             <div className="overview-stats-error">
               <InlineError
-                title="Live counts are unavailable."
-                detail={errorText(statsQuery.error, "The stats endpoint did not answer.")}
+                title={t("core.home.statsErrorTitle")}
+                detail={errorText(
+                  statsQuery.error,
+                  t,
+                  "core.home.statsErrorFallback",
+                )}
                 onRetry={retryStats}
                 retrying={statsQuery.isFetching}
               />
             </div>
           ) : null}
           <div className="stats-cards-grid">
-            {buildStatCards(stats).map((stat, index) => (
+            {buildStatCards(stats, t, formatNumber).map((stat, index) => (
               <StatCard
                 key={stat.label}
                 label={stat.label}

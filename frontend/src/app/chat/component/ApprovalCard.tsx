@@ -4,7 +4,7 @@ import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
-import { formatRelative } from "../../../lib/format";
+import { useI18n, type Translate } from "../../i18n";
 import type { AgentApprovalSchema } from "../../generated-apis-types/schemas";
 import { isRecord, numberValue, stringValue } from "../types";
 
@@ -57,51 +57,66 @@ function ApprovalBody({
   readonly preview: ApprovalPreview;
   readonly deprecating: boolean;
 }) {
+  const { t, formatDateTime, formatRelative, formatNumber } = useI18n();
   const targets =
     preview.supersedes.length > 0
       ? preview.supersedes.map((id) => `#${id}`).join(", ")
-      : "No existing memory";
+      : t("chat.approval.noExistingMemory");
   return (
     <div className="chat-approval__body">
       {deprecating ? (
         <>
-          <p className="chat-approval__label">Memories to deprecate</p>
+          <p className="chat-approval__label">
+            {t("chat.approval.deprecateLabel")}
+          </p>
           <p className="chat-approval__deprecate-ids">
             {preview.supersedes.length > 0
-              ? preview.supersedes.map((id) => `CRYSTAL #${id}`).join(", ")
-              : "No memory id supplied"}
+              ? preview.supersedes
+                  .map((id) => t("chat.approval.crystalId", { id }))
+                  .join(", ")
+              : t("chat.approval.noMemoryId")}
           </p>
           {preview.reason ? (
             <p className="chat-approval__reason">
-              <span>Reason</span>
+              <span>{t("chat.approval.reason")}</span>
               {preview.reason}
             </p>
           ) : null}
         </>
       ) : (
         <>
-          <p className="chat-approval__label">Proposed memory</p>
+          <p className="chat-approval__label">
+            {t("chat.approval.proposedMemory")}
+          </p>
           <pre className="chat-approval__content">{preview.content}</pre>
         </>
       )}
 
       <dl className="chat-approval__meta">
         <div>
-          <dt>Tool</dt>
+          <dt>{t("chat.approval.tool")}</dt>
           <dd>{approval.tool_name}</dd>
         </div>
         <div>
-          <dt>{deprecating ? "Targets" : "Supersedes"}</dt>
+          <dt>
+            {deprecating
+              ? t("chat.approval.targets")
+              : t("chat.approval.supersedes")}
+          </dt>
           <dd>{targets}</dd>
         </div>
         {deprecating ? null : (
           <div>
-            <dt>Occurred</dt>
-            <dd>{preview.occurredAt ?? "Now"}</dd>
+            <dt>{t("chat.approval.occurred")}</dt>
+            <dd>
+              {preview.occurredAt
+                ? formatDateTime(preview.occurredAt)
+                : t("chat.approval.now")}
+            </dd>
           </div>
         )}
         <div>
-          <dt>Requested</dt>
+          <dt>{t("chat.approval.requested")}</dt>
           <dd>{formatRelative(approval.requested_at)}</dd>
         </div>
       </dl>
@@ -110,30 +125,47 @@ function ApprovalBody({
         <Icon name="info" size={14} />
         {preview.risk ??
           (deprecating
-            ? "Approving retires the records without writing a replacement."
-            : "Approving appends a durable memory. Rejecting writes nothing.")}
+            ? t("chat.approval.riskDeprecate")
+            : t("chat.approval.riskSave"))}
       </p>
 
       {!deprecating && preview.contentChars !== null && preview.contentChars > 0 ? (
         <p className="chat-approval__count">
-          {preview.contentChars.toLocaleString()} characters will be stored.
+          {t(
+            preview.contentChars === 1
+              ? "chat.approval.charactersStoredOne"
+              : "chat.approval.charactersStoredOther",
+            { count: formatNumber(preview.contentChars) },
+          )}
         </p>
       ) : null}
     </div>
   );
 }
 
-function approveText(resolving: "approve" | "reject" | null, deprecating: boolean): string {
+function approveText(
+  resolving: "approve" | "reject" | null,
+  deprecating: boolean,
+  t: Translate,
+): string {
   if (resolving === "approve") {
-    return deprecating ? "Deprecating…" : "Saving…";
+    return deprecating
+      ? t("chat.approval.deprecating")
+      : t("chat.approval.saving");
   }
-  return deprecating ? "Approve deprecation" : "Approve write";
+  return deprecating
+    ? t("chat.approval.approveDeprecation")
+    : t("chat.approval.approveWrite");
 }
 
-function approveAria(approvalId: number, deprecating: boolean): string {
+function approveAria(
+  approvalId: number,
+  deprecating: boolean,
+  t: Translate,
+): string {
   return deprecating
-    ? `Approve deprecating memories for approval ${approvalId}`
-    : `Approve saving memory for approval ${approvalId}`;
+    ? t("chat.approval.approveDeprecationAria", { id: approvalId })
+    : t("chat.approval.approveWriteAria", { id: approvalId });
 }
 
 function ApprovalCard({
@@ -149,6 +181,7 @@ function ApprovalCard({
   readonly resolving: "approve" | "reject" | null;
   readonly onResolve: (decision: "approve" | "reject") => void;
 }) {
+  const { t } = useI18n();
   const preview = readPreview(approval);
   const deprecating = preview.mode === "deprecate";
   const busy = resolving !== null;
@@ -159,7 +192,9 @@ function ApprovalCard({
       className="chat-approval"
       role="group"
       aria-label={
-        deprecating ? "Memory deprecation approval" : "Memory write approval"
+        deprecating
+          ? t("chat.approval.deprecationAria")
+          : t("chat.approval.writeAria")
       }
     >
       <header className="chat-approval__head">
@@ -167,14 +202,14 @@ function ApprovalCard({
           <Icon name={deprecating ? "history" : "memory"} size={18} />
         </span>
         <div className="chat-approval__heading">
-          <p className="eyebrow">Human approval required</p>
+          <p className="eyebrow">{t("chat.approval.eyebrow")}</p>
           <h3>
             {deprecating
-              ? "The agent wants to deprecate memories."
-              : "The agent wants to write a memory."}
+              ? t("chat.approval.deprecateTitle")
+              : t("chat.approval.writeTitle")}
           </h3>
         </div>
-        <Badge tone="ochre">Pending</Badge>
+        <Badge tone="ochre">{t("chat.approval.pending")}</Badge>
       </header>
 
       <ApprovalBody
@@ -185,7 +220,7 @@ function ApprovalCard({
 
       {archived ? (
         <p className="chat-approval__notice" role="status">
-          This thread is archived. Restore it before resolving the write.
+          {t("chat.approval.archived")}
         </p>
       ) : null}
 
@@ -195,31 +230,37 @@ function ApprovalCard({
           size="sm"
           onClick={() => onResolve("reject")}
           disabled={blocked}
-          aria-label={`Reject the memory action for approval ${approval.id}`}
+          aria-label={t("chat.approval.rejectAria", { id: approval.id })}
         >
           {resolving === "reject" ? (
-            <Loader size={14} label="Rejecting the memory action" />
+            <Loader size={14} label={t("chat.approval.rejectingLabel")} />
           ) : (
             <Icon name="close" size={14} />
           )}
-          {resolving === "reject" ? "Rejecting…" : "Reject"}
+          {resolving === "reject"
+            ? t("chat.approval.rejecting")
+            : t("chat.approval.reject")}
         </Button>
         <Button
           variant="primary"
           size="sm"
           onClick={() => onResolve("approve")}
           disabled={blocked}
-          aria-label={approveAria(approval.id, deprecating)}
+          aria-label={approveAria(approval.id, deprecating, t)}
         >
           {resolving === "approve" ? (
             <Loader
               size={14}
-              label={deprecating ? "Deprecating the memories" : "Saving the memory"}
+              label={
+                deprecating
+                  ? t("chat.approval.deprecatingLabel")
+                  : t("chat.approval.savingLabel")
+              }
             />
           ) : (
             <Icon name={deprecating ? "history" : "check"} size={14} />
           )}
-          {approveText(resolving, deprecating)}
+          {approveText(resolving, deprecating, t)}
         </Button>
       </footer>
     </section>
@@ -244,6 +285,7 @@ export function ApprovalStack({
     readonly decision: "approve" | "reject";
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useI18n();
 
   if (approvals.length === 0) {
     return null;
@@ -260,9 +302,7 @@ export function ApprovalStack({
     setResolving({ id: approval.id, decision });
     const ok = await onResolve(approval.id, decision);
     if (!ok) {
-      setError(
-        "The approval could not be resolved. Refresh the thread and try again.",
-      );
+      setError(t("chat.approval.resolveFailed"));
     }
     setResolving(null);
   };

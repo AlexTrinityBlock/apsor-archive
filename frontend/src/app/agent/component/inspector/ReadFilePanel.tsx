@@ -1,5 +1,6 @@
-import { formatNumber, truncate } from "../../../../lib/format";
+import { truncate } from "../../../../lib/format";
 import { CopyButton } from "../../../component/CopyButton";
+import { useI18n } from "../../../i18n";
 import {
   numberField,
   recordId,
@@ -37,11 +38,11 @@ function chunksOf(data: Record<string, unknown> | null): ChunkRecord[] {
 }
 
 function ChunkWindow({ chunks }: { readonly chunks: readonly ChunkRecord[] }) {
+  const { t, formatNumber } = useI18n();
   if (chunks.length === 0) {
     return (
       <p className="pi-manuscript__quiet">
-        This result recorded chunk metadata only. The embedded file below is
-        the authoritative text.
+        {t("chat.panels.file.metadataOnly")}
       </p>
     );
   }
@@ -57,18 +58,34 @@ function ChunkWindow({ chunks }: { readonly chunks: readonly ChunkRecord[] }) {
               <p className="pi-manuscript__excerpt">{chunk.excerpt}</p>
             ) : (
               <p className="pi-manuscript__excerpt is-muted">
-                No inline excerpt for this chunk.
+                {t("chat.panels.file.noExcerpt")}
               </p>
             )}
             <div className="pi-manuscript__meta">
-              <span>chunk {chunk.index ?? index + 1}</span>
-              {chunk.chars !== null ? <span>{formatNumber(chunk.chars)} chars</span> : null}
-              {chunk.tokens !== null ? <span>{formatNumber(chunk.tokens)} tokens</span> : null}
+              <span>
+                {t("chat.common.chunk", { chunk: chunk.index ?? index + 1 })}
+              </span>
+              {chunk.chars !== null ? (
+                <span>
+                  {t("chat.panels.file.chars", {
+                    count: formatNumber(chunk.chars),
+                  })}
+                </span>
+              ) : null}
+              {chunk.tokens !== null ? (
+                <span>
+                  {t("chat.panels.file.tokens", {
+                    count: formatNumber(chunk.tokens),
+                  })}
+                </span>
+              ) : null}
               <CopyButton
                 value={chunk.content || chunk.excerpt}
-                label="Copy chunk"
+                label={t("chat.panels.file.copyChunk")}
                 iconOnly
-                title={`Copy chunk ${chunk.index ?? index + 1}`}
+                title={t("chat.panels.file.copyChunkTitle", {
+                  index: chunk.index ?? index + 1,
+                })}
               />
             </div>
           </div>
@@ -90,15 +107,18 @@ function viewerPathFor(fileId: number | null, chunk: number | null): string | nu
 
 /** `read_file`: a manuscript window with the real file renderer underneath. */
 export function ReadFilePanel({ item }: PanelProps) {
+  const { t, formatNumber } = useI18n();
   if (item.live || item.status.toLowerCase() === "running") {
-    return <LivePanel item={item} detail="Opening the requested chunk window." />;
+    return (
+      <LivePanel item={item} detail={t("chat.panels.file.liveDetail")} />
+    );
   }
   if (item.status.toLowerCase() === "error") {
     return (
       <PanelEmpty
         icon="layers"
-        title="The chunk window could not be read"
-        detail={item.detail ?? "No structured result was recorded."}
+        title={t("chat.panels.file.errorTitle")}
+        detail={item.detail ?? t("chat.panels.common.noStructured")}
       />
     );
   }
@@ -122,14 +142,20 @@ export function ReadFilePanel({ item }: PanelProps) {
     <div className="pi-readfile">
       <header className="pi-readfile__head">
         <div>
-          <p className="eyebrow">Manuscript window</p>
-          <strong>{textField(data, "file_name") ?? path ?? "File leaf"}</strong>
+          <p className="eyebrow">{t("chat.panels.file.manuscript")}</p>
+          <strong>
+            {textField(data, "file_name") ??
+              path ??
+              t("chat.panels.file.fileLeaf")}
+          </strong>
           {path ? <code>{path}</code> : null}
         </div>
         {start !== null ? (
           <span className="pi-readfile__range">
-            chunk {formatNumber(start)}
-            {end !== null && end !== start ? `–${formatNumber(end)}` : ""}
+            {t("chat.common.chunk", { chunk: formatNumber(start) })}
+            {end !== null && end !== start
+              ? `–${formatNumber(end)}`
+              : ""}
             {numberField(data, "total_chunks") !== null
               ? ` / ${formatNumber(numberField(data, "total_chunks") ?? 0)}`
               : ""}
@@ -144,13 +170,13 @@ export function ReadFilePanel({ item }: PanelProps) {
       ) : (
         <PanelEmpty
           icon="layers"
-          title="No file id in this result"
-          detail="The chunk excerpts above are all the inspector received."
+          title={t("chat.panels.file.noFileIdTitle")}
+          detail={t("chat.panels.file.noFileIdDetail")}
         />
       )}
 
       {viewerPath ? (
-        <PanelLink to={viewerPath}>Open the full file leaf</PanelLink>
+        <PanelLink to={viewerPath}>{t("chat.panels.file.openFull")}</PanelLink>
       ) : null}
     </div>
   );

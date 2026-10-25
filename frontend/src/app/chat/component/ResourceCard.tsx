@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Button, ButtonLink } from "../../component/Button";
 import { Icon, type IconName } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { basename } from "../../../lib/format";
 import { resourceHref, type ResourceMeta } from "../types";
 
@@ -10,10 +11,15 @@ const RESOURCE_ICONS: Record<ResourceMeta["resourceType"], IconName> = {
   memory: "memory",
 };
 
-const RESOURCE_LABELS: Record<ResourceMeta["resourceType"], string> = {
-  file: "File",
-  memory: "Memory",
-};
+const RESOURCE_LABEL_KEYS = {
+  file: "chat.resource.file",
+  memory: "chat.resource.memory",
+} as const;
+
+const PRESENTED_LABEL_KEYS = {
+  file: "chat.resource.presentedFile",
+  memory: "chat.resource.presentedMemory",
+} as const;
 
 interface ResourceCardProps {
   readonly resource: ResourceMeta;
@@ -23,21 +29,29 @@ interface ResourceCardProps {
 
 /** A structured `present_resource` card with a real file or memory target. */
 export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
+  const { t } = useI18n();
+  const resourceLabel = t(RESOURCE_LABEL_KEYS[resource.resourceType]);
   const title =
     resource.title ??
-    `${RESOURCE_LABELS[resource.resourceType]} ${
+    `${resourceLabel} ${
       resource.resourceId === null ? "" : `#${resource.resourceId}`
     }`.trim();
   const details = [
-    RESOURCE_LABELS[resource.resourceType],
+    resourceLabel,
     resource.mimeType,
-    resource.chunk === null ? null : `chunk ${resource.chunk}`,
+    resource.chunk === null
+      ? null
+      : t("chat.common.chunk", { chunk: resource.chunk }),
     resource.rawFilePath ? basename(resource.rawFilePath) : null,
   ].filter((item): item is string => item !== null && item.length > 0);
   const href = resourceHref(resource);
-  const fileAction = onOpen ? "Preview" : "Open file";
+  const fileAction = onOpen
+    ? t("chat.resource.preview")
+    : t("chat.resource.openFile");
   const actionLabel =
-    resource.resourceType === "file" ? fileAction : "Open memory";
+    resource.resourceType === "file"
+      ? fileAction
+      : t("chat.resource.openMemory");
 
   let action: ReactNode;
   if (onOpen) {
@@ -65,7 +79,11 @@ export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
       </ButtonLink>
     );
   } else {
-    action = <span className="chat-resource__unavailable">No target recorded</span>;
+    action = (
+      <span className="chat-resource__unavailable">
+        {t("chat.resource.noTarget")}
+      </span>
+    );
   }
 
   return (
@@ -74,7 +92,9 @@ export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
         <Icon name={RESOURCE_ICONS[resource.resourceType]} size={18} />
       </span>
       <div className="chat-resource__body">
-        <p className="mono-label">Presented {RESOURCE_LABELS[resource.resourceType]}</p>
+        <p className="mono-label">
+          {t(PRESENTED_LABEL_KEYS[resource.resourceType])}
+        </p>
         <h3>{title}</h3>
         <p className="chat-resource__meta">{details.join(" · ")}</p>
       </div>

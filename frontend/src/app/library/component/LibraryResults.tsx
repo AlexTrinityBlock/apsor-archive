@@ -1,8 +1,9 @@
 import type { PathFileSchema, PathListingSchema } from "../../generated-apis-types/schemas";
-import { formatBytes, formatDateTime } from "../../../lib/format";
+import { formatBytes } from "../../../lib/format";
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useI18n } from "../../i18n";
 import { fileKindLabel, type FileOperationMode } from "./library-utils";
 
 interface LibraryResultsProps {
@@ -29,6 +30,7 @@ export function LibraryResults({
   onRequestMove,
   onRequestDelete,
 }: LibraryResultsProps) {
+  const { t, formatDateTime, formatNumber } = useI18n();
   const folders = query ? [] : listing.directories;
 
   return (
@@ -38,15 +40,21 @@ export function LibraryResults({
           <tr>
             {selecting ? (
               <th scope="col" className="library-table__select-head">
-                <span className="visually-hidden">Select</span>
+                <span className="visually-hidden">{t("library.list.select")}</span>
               </th>
             ) : null}
-            <th scope="col">Name</th>
-            <th scope="col" className="library-table__optional">Type</th>
-            <th scope="col" className="library-table__optional">Chunks</th>
-            <th scope="col">Size</th>
-            <th scope="col" className="library-table__optional">Modified</th>
-            <th scope="col">Actions</th>
+            <th scope="col">{t("library.list.name")}</th>
+            <th scope="col" className="library-table__optional">
+              {t("library.list.type")}
+            </th>
+            <th scope="col" className="library-table__optional">
+              {t("library.list.chunks")}
+            </th>
+            <th scope="col">{t("library.list.size")}</th>
+            <th scope="col" className="library-table__optional">
+              {t("library.list.modified")}
+            </th>
+            <th scope="col">{t("library.list.actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -57,7 +65,7 @@ export function LibraryResults({
               onClick={() => onOpenFolder(folder.path)}
             >
               {selecting ? <td className="library-table__select" aria-hidden="true" /> : null}
-              <td data-label="Name">
+              <td data-label={t("library.list.name")}>
                 <button
                   type="button"
                   className="library-row__open"
@@ -76,19 +84,19 @@ export function LibraryResults({
                   <Icon name="chevron-right" size={14} className="library-row__chevron" />
                 </button>
               </td>
-              <td data-label="Type" className="library-table__optional">
-                <Badge tone="neutral">Folder</Badge>
+              <td data-label={t("library.list.type")} className="library-table__optional">
+                <Badge tone="neutral">{t("library.list.folder")}</Badge>
               </td>
-              <td data-label="Chunks" className="library-table__optional">
+              <td data-label={t("library.list.chunks")} className="library-table__optional">
                 <span className="library-row__empty">—</span>
               </td>
-              <td data-label="Size">
+              <td data-label={t("library.list.size")}>
                 <span className="library-row__empty">—</span>
               </td>
-              <td data-label="Modified" className="library-table__optional">
+              <td data-label={t("library.list.modified")} className="library-table__optional">
                 <span className="library-row__empty">—</span>
               </td>
-              <td data-label="Actions">
+              <td data-label={t("library.list.actions")}>
                 <span className="library-row__empty">—</span>
               </td>
             </tr>
@@ -105,7 +113,7 @@ export function LibraryResults({
               onClick={() => onOpenFile(file.file_id)}
             >
               {selecting ? (
-                <td className="library-table__select" data-label="Select">
+                <td className="library-table__select" data-label={t("library.list.select")}>
                   <label
                     className="library-checkbox"
                     onClick={(event) => event.stopPropagation()}
@@ -114,7 +122,7 @@ export function LibraryResults({
                       type="checkbox"
                       checked={selectedFileIds.has(file.file_id)}
                       onChange={() => onToggleSelected(file.file_id)}
-                      aria-label={`Select ${file.file_name}`}
+                      aria-label={t("library.a11y.selectFile", { name: file.file_name })}
                     />
                     <span className="library-checkbox__box" aria-hidden="true">
                       <Icon name="check" size={12} />
@@ -122,7 +130,7 @@ export function LibraryResults({
                   </label>
                 </td>
               ) : null}
-              <td data-label="Name">
+              <td data-label={t("library.list.name")}>
                 <button
                   type="button"
                   className="library-row__open"
@@ -140,21 +148,21 @@ export function LibraryResults({
                   </span>
                 </button>
               </td>
-              <td data-label="Type" className="library-table__optional">
+              <td data-label={t("library.list.type")} className="library-table__optional">
                 <span className="file-type-pill">{fileKindLabel(file.raw_file_path)}</span>
               </td>
-              <td data-label="Chunks" className="library-table__optional">
-                <span className="library-row__mono">{file.total_chunks}</span>
+              <td data-label={t("library.list.chunks")} className="library-table__optional">
+                <span className="library-row__mono">{formatNumber(file.total_chunks)}</span>
               </td>
-              <td data-label="Size">
+              <td data-label={t("library.list.size")}>
                 <span className="library-row__mono">{formatBytes(file.size_bytes)}</span>
               </td>
-              <td data-label="Modified" className="library-table__optional">
+              <td data-label={t("library.list.modified")} className="library-table__optional">
                 <time className="library-row__time" dateTime={file.update_time}>
                   {formatDateTime(file.update_time)}
                 </time>
               </td>
-              <td data-label="Actions">
+              <td data-label={t("library.list.actions")}>
                 <div
                   className="library-row__actions"
                   onClick={(event) => event.stopPropagation()}
@@ -163,8 +171,8 @@ export function LibraryResults({
                     variant="ghost"
                     size="sm"
                     iconOnly
-                    aria-label={`Move ${file.file_name}`}
-                    title="Move to…"
+                    aria-label={t("library.a11y.moveFile", { name: file.file_name })}
+                    title={t("library.board.moveTo")}
                     onClick={() => onRequestMove(file, "move")}
                   >
                     <Icon name="branch" size={15} />
@@ -173,8 +181,8 @@ export function LibraryResults({
                     variant="ghost"
                     size="sm"
                     iconOnly
-                    aria-label={`Copy ${file.file_name}`}
-                    title="Copy to…"
+                    aria-label={t("library.a11y.copyFile", { name: file.file_name })}
+                    title={t("library.board.copyTo")}
                     onClick={() => onRequestMove(file, "copy")}
                   >
                     <Icon name="copy" size={15} />
@@ -184,8 +192,8 @@ export function LibraryResults({
                     size="sm"
                     iconOnly
                     className="library-row__delete"
-                    aria-label={`Delete ${file.file_name}`}
-                    title="Delete file"
+                    aria-label={t("library.a11y.deleteFile", { name: file.file_name })}
+                    title={t("library.board.deleteFile")}
                     onClick={() => onRequestDelete(file)}
                   >
                     <Icon name="trash" size={15} />

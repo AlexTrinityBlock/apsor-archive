@@ -9,6 +9,7 @@ import {
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
+import { useI18n } from "../../i18n";
 
 interface ChatComposerProps {
   readonly value: string;
@@ -35,6 +36,7 @@ export function ChatComposer({
   const inputId = useId();
   const hintId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { t } = useI18n();
   const canSubmit = value.trim().length > 0 && !pending && !disabled;
 
   useEffect(() => {
@@ -69,18 +71,22 @@ export function ChatComposer({
     submit();
   };
 
-  let note = "The transcript is persistent; citations open in the inspector.";
+  let note = t("chat.composer.note");
   if (streaming) {
-    note = "A run is open. Stop it to keep the completed entries.";
+    note = t("chat.composer.noteStreaming");
   } else if (disabled) {
-    note = "This thread cannot accept new notes right now.";
+    note = t("chat.composer.noteDisabled");
   }
 
   return (
-    <form className="chat-composer" onSubmit={handleSubmit} aria-label="Write to the archive">
+    <form
+      className="chat-composer"
+      onSubmit={handleSubmit}
+      aria-label={t("chat.composer.formAria")}
+    >
       <div className="chat-composer__box">
         <label className="visually-hidden" htmlFor={inputId}>
-          Message
+          {t("chat.composer.message")}
         </label>
         <textarea
           ref={textareaRef}
@@ -90,7 +96,7 @@ export function ChatComposer({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask about the archive, or ask it to open a resource…"
+          placeholder={t("chat.composer.placeholder")}
           rows={2}
           maxLength={32000}
           autoComplete="off"
@@ -101,7 +107,7 @@ export function ChatComposer({
 
         <div className="chat-composer__foot">
           <span className="chat-composer__note" id={hintId}>
-            <span>Enter to send · Shift+Enter for newline</span>
+            <span>{t("chat.composer.enterHint")}</span>
             <span className="chat-composer__state">{note}</span>
           </span>
 
@@ -115,7 +121,7 @@ export function ChatComposer({
                 onClick={onStop}
               >
                 <Icon name="stop" size={13} />
-                Stop
+                {t("chat.composer.stop")}
               </Button>
             ) : null}
             <Button
@@ -127,12 +133,12 @@ export function ChatComposer({
             >
               {pending && !streaming ? (
                 <>
-                  <Loader size={14} label="Opening a thread" />
-                  Opening…
+                  <Loader size={14} label={t("chat.composer.openingLabel")} />
+                  {t("chat.composer.opening")}
                 </>
               ) : (
                 <>
-                  <span>Send</span>
+                  <span>{t("chat.composer.send")}</span>
                   <Icon name="send" size={14} />
                 </>
               )}

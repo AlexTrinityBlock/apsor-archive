@@ -6,6 +6,7 @@ import {
   parseCitationLabel,
   type CitationToken,
 } from "../../chat/types";
+import { useI18n } from "../../i18n";
 
 interface QuestionCitationsProps {
   readonly citations: readonly string[];
@@ -29,13 +30,14 @@ function fileHref(token: CitationToken): string {
 }
 
 function CitationTokenChip({ label }: { readonly label: string }) {
+  const { t } = useI18n();
   const token = parseSavedCitation(label);
 
   if (!token) {
     return (
       <span
         className="citation-chip question-citation question-citation--raw"
-        title="Unrecognised citation token"
+        title={t("memory.questions.citations.unrecognised")}
       >
         {label}
       </span>
@@ -48,7 +50,7 @@ function CitationTokenChip({ label }: { readonly label: string }) {
       <Link
         className="citation-chip file question-citation"
         to={fileHref(token)}
-        title={`Open ${text} in the file library`}
+        title={t("memory.questions.citations.openFile", { label: text })}
       >
         <Icon name="file" size={11} />
         <span>{text}</span>
@@ -62,7 +64,7 @@ function CitationTokenChip({ label }: { readonly label: string }) {
       <Link
         className="citation-chip memory question-citation"
         to={`/memory/${token.id}`}
-        title={`Open ${text} in the memory vault`}
+        title={t("memory.questions.citations.openMemory", { label: text })}
       >
         <Icon name="memory" size={11} />
         <span>{text}</span>
@@ -76,13 +78,13 @@ function CitationTokenChip({ label }: { readonly label: string }) {
       <details className="question-citation-more">
         <summary
           className="citation-chip question-citation question-citation--summary"
-          title="Expand this summary citation"
+          title={t("memory.questions.citations.expandSummary")}
         >
           <Icon name="layers" size={11} />
           <span>{text}</span>
         </summary>
         <p className="question-citation-more__body">
-          Summaries are cited inline in this build and have no standalone page.
+          {t("memory.questions.citations.summaryBody")}
         </p>
       </details>
     );
@@ -91,7 +93,7 @@ function CitationTokenChip({ label }: { readonly label: string }) {
   return (
     <span
       className="citation-chip question-citation question-citation--media"
-      title="Media is part of the file library and has no separate citation route."
+      title={t("memory.questions.citations.mediaTitle")}
     >
       <Icon name="ring" size={11} />
       <span>{citationLabel(token)}</span>
@@ -104,12 +106,14 @@ export function QuestionCitations({
   citations,
   className,
 }: QuestionCitationsProps) {
+  const { t } = useI18n();
+
   if (citations.length === 0) {
     return null;
   }
   return (
     <div className={["question-card__citations", className].filter(Boolean).join(" ")}>
-      <p className="mono-label">Citations</p>
+      <p className="mono-label">{t("memory.questions.citations.label")}</p>
       <div className="question-card__chips">
         {citations.map((label, index) => (
           <CitationTokenChip key={`${label}:${index}`} label={label} />

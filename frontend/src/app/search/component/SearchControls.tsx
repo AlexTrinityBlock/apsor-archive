@@ -1,16 +1,16 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import { Link } from "react-router-dom";
 
-import { formatNumber } from "../../../lib/format";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
+import { useI18n } from "../../i18n";
 
-const SUGGESTED_QUERIES = [
-  "Ford Model T",
-  "automatic transmission",
-  "brake line",
-  "history of the automobile",
+const SUGGESTED_QUERY_KEYS = [
+  "insights.search.controls.suggestions.fordModelT",
+  "insights.search.controls.suggestions.automaticTransmission",
+  "insights.search.controls.suggestions.brakeLine",
+  "insights.search.controls.suggestions.automobileHistory",
 ] as const;
 
 const SLIDER_COMMIT_MS = 250;
@@ -33,14 +33,20 @@ interface SearchControlsProps {
   readonly onSaveQuestion: () => void;
 }
 
-function latencyText(isFetching: boolean, elapsedMs: number | null): string {
+function latencyText(
+  isFetching: boolean,
+  elapsedMs: number | null,
+  searching: string,
+  awaiting: string,
+  server: string,
+): string {
   if (isFetching) {
-    return "Searching…";
+    return searching;
   }
   if (elapsedMs === null) {
-    return "Awaiting query";
+    return awaiting;
   }
-  return `Server: ${formatNumber(elapsedMs)} ms`;
+  return server;
 }
 
 /**
@@ -64,6 +70,7 @@ export function SearchControls({
   isSavingQuestion,
   onSaveQuestion,
 }: SearchControlsProps) {
+  const { t, formatNumber } = useI18n();
   const inputId = useId();
   const sliderId = useId();
   const historyTitleId = useId();
@@ -119,16 +126,30 @@ export function SearchControls({
   };
 
   const latencyTone = elapsedMs !== null && !isFetching ? "badge--moss" : "badge--neutral";
+  const latencyLabel = latencyText(
+    isFetching,
+    elapsedMs,
+    t("insights.search.controls.latency.searching"),
+    t("insights.search.controls.latency.awaiting"),
+    elapsedMs === null
+      ? ""
+      : t("insights.search.controls.latency.server", {
+          ms: formatNumber(elapsedMs),
+        }),
+  );
 
   return (
-    <section className="panel search-card" aria-label="Search controls">
+    <section
+      className="panel search-card"
+      aria-label={t("insights.search.controls.aria")}
+    >
       <div className="panel__body">
         <form className="search-input-wrap search-bar" role="search" onSubmit={handleSubmit}>
           <span className="search-input-wrap__icon" aria-hidden="true">
             <Icon name="search" size={20} />
           </span>
           <label className="visually-hidden" htmlFor={inputId}>
-            Search files, memories, and summaries
+            {t("insights.search.controls.inputLabel")}
           </label>
           <input
             id={inputId}
@@ -137,7 +158,7 @@ export function SearchControls({
             type="search"
             value={draft}
             onChange={(event) => onDraftChange(event.target.value)}
-            placeholder="Search a phrase, a path, or a half-remembered detail…"
+            placeholder={t("insights.search.controls.placeholder")}
             autoComplete="off"
             spellCheck={false}
             enterKeyHint="search"
@@ -148,21 +169,21 @@ export function SearchControls({
               type="button"
               className="search-bar__clear"
               onClick={handleClear}
-              aria-label="Clear query"
-              title="Clear query"
+              aria-label={t("insights.search.controls.clear")}
+              title={t("insights.search.controls.clear")}
             >
               <Icon name="close" size={16} />
             </button>
           ) : null}
           <Button type="submit" variant="ink" size="md" disabled={draft.trim().length === 0}>
-            Search
+            {t("insights.search.controls.submit")}
           </Button>
         </form>
 
         <div className="search-card__controls">
           <div className="search-knob">
             <label className="search-knob__label" htmlFor={sliderId}>
-              Results per kind
+              {t("insights.search.controls.resultsPerKind")}
             </label>
             <input
               id={sliderId}
@@ -177,7 +198,9 @@ export function SearchControls({
               onBlur={commitSliderNow}
             />
             <output className="search-knob__value" htmlFor={sliderId}>
-              N = {sliderValue}
+              {t("insights.search.controls.perKindValue", {
+                count: formatNumber(sliderValue),
+              })}
             </output>
           </div>
 
@@ -195,33 +218,33 @@ export function SearchControls({
             </span>
             <span className="search-switch__copy">
               <span className="search-switch__title" id={historyTitleId}>
-                Include history
+                {t("insights.search.controls.includeHistory")}
               </span>
               <span className="search-switch__sub" id={historySubId}>
-                Superseded files and deprecated memories
+                {t("insights.search.controls.includeHistoryHint")}
               </span>
             </span>
           </button>
 
           <span className={`badge search-latency ${latencyTone}`}>
             <span className="badge__dot" aria-hidden="true" />
-            {latencyText(isFetching, elapsedMs)}
+            {latencyLabel}
           </span>
         </div>
 
         <div className="search-suggestions">
-          <span className="mono-label">Suggested queries</span>
-          {SUGGESTED_QUERIES.map((suggestion) => (
+          <span className="mono-label">{t("insights.search.controls.suggested")}</span>
+          {SUGGESTED_QUERY_KEYS.map((suggestionKey) => (
             <button
-              key={suggestion}
+              key={suggestionKey}
               type="button"
               className="suggestion-chip"
               onClick={() => {
-                onSubmit(suggestion);
+                onSubmit(t(suggestionKey));
                 inputRef.current?.focus();
               }}
             >
-              {suggestion}
+              {t(suggestionKey)}
             </button>
           ))}
           <span className="search-suggestions__spacer" aria-hidden="true" />
@@ -235,18 +258,21 @@ export function SearchControls({
           >
             {isSavingQuestion ? (
               <>
-                <Loader size={13} label="Saving question" />
-                Saving…
+                <Loader
+                  size={13}
+                  label={t("insights.search.controls.savingQuestion")}
+                />
+                {t("insights.search.controls.saving")}
               </>
             ) : (
               <>
                 <Icon name="plus" size={14} />
-                Save question
+                {t("insights.search.controls.saveQuestion")}
               </>
             )}
           </Button>
           <Link className="text-link search-suggestions__link" to="/questions">
-            Saved questions
+            {t("insights.search.controls.savedQuestions")}
           </Link>
         </div>
       </div>

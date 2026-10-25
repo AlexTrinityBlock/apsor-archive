@@ -6,18 +6,17 @@ import { ReadPathPanel } from "./ReadPathPanel";
 import { ReadTimelinePanel } from "./ReadTimelinePanel";
 import { SearchKnowledgePanel } from "./SearchKnowledgePanel";
 import { WebFetchPanel, WebSearchPanel } from "./WebPanels";
+import { useI18n } from "../../../i18n";
 import type { PanelProps } from "./common";
 
 /** Generic fallback for an unrecognized but recorded tool. */
 function UnknownToolPanel({ item }: PanelProps) {
+  const { t } = useI18n();
   return (
     <div className="pi-unknown">
-      <p className="eyebrow">Recorded tool</p>
+      <p className="eyebrow">{t("chat.panels.common.unknownEyebrow")}</p>
       <strong>{item.tool ?? item.name}</strong>
-      <p>
-        This tool has no dedicated inspector panel. Its arguments, status, and
-        structured preview remain visible below.
-      </p>
+      <p>{t("chat.panels.common.unknownDetail")}</p>
     </div>
   );
 }

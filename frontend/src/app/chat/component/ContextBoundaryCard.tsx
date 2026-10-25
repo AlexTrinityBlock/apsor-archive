@@ -1,10 +1,8 @@
 import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
-import { formatNumber } from "../../../lib/format";
+import { useI18n, type Translate } from "../../i18n";
 import { isRecord, numberValue, stringValue, userText } from "../types";
-
-const SUMMARY_FALLBACK = "Summary stored in the context boundary.";
 
 function unescapeXmlText(value: string): string {
   return value
@@ -40,26 +38,27 @@ function compactionContent(entry: AgentEntrySchema): {
   };
 }
 
-function reasonLabel(reason: string | null): string | null {
+function reasonLabel(reason: string | null, t: Translate): string | null {
   if (!reason) {
     return null;
   }
   if (reason === "manual") {
-    return "Manual compaction";
+    return t("chat.boundary.manualCompaction");
   }
   if (reason === "auto_context_threshold") {
-    return "Context threshold reached";
+    return t("chat.boundary.threshold");
   }
   if (reason === "manual_clear") {
-    return "Manual clear";
+    return t("chat.boundary.manualClear");
   }
   return reason.replaceAll("_", " ");
 }
 
 function CompactionCard({ entry }: { readonly entry: AgentEntrySchema }) {
+  const { t, formatNumber } = useI18n();
   const data = isRecord(entry.data) ? entry.data : {};
   const auto = data.auto === true;
-  const reason = reasonLabel(stringValue(data.reason));
+  const reason = reasonLabel(stringValue(data.reason), t);
   const summaryChars = numberValue(data.summary_chars);
   const sourceCount = Array.isArray(data.source_entry_ids)
     ? data.source_entry_ids.length
@@ -74,36 +73,47 @@ function CompactionCard({ entry }: { readonly entry: AgentEntrySchema }) {
         </span>
         <div className="context-card__copy">
           <p className="context-card__eyebrow">
-            Context boundary · entry {entry.id}
+            {t("chat.boundary.eyebrow", { id: entry.id })}
           </p>
-          <h3>{auto ? "Auto-compacted" : "Context compacted"}</h3>
+          <h3>
+            {auto
+              ? t("chat.boundary.autoCompacted")
+              : t("chat.boundary.compacted")}
+          </h3>
         </div>
-        {auto ? <Badge tone="ochre">Auto</Badge> : null}
+        {auto ? <Badge tone="ochre">{t("chat.boundary.auto")}</Badge> : null}
       </header>
 
-      <p className="context-card__lead">
-        Earlier turns were folded into this boundary. The full transcript is
-        still preserved here; the model sees the summary instead.
-      </p>
+      <p className="context-card__lead">{t("chat.boundary.compactLead")}</p>
 
       {reason || sourceCount !== null || summaryChars !== null ? (
         <p className="context-card__meta">
           {reason ? <span>{reason}</span> : null}
           {sourceCount !== null ? (
             <span>
-              {formatNumber(sourceCount)}{" "}
-              {sourceCount === 1 ? "entry" : "entries"} folded
+              {t(
+                sourceCount === 1
+                  ? "chat.boundary.foldedOne"
+                  : "chat.boundary.foldedOther",
+                { count: formatNumber(sourceCount) },
+              )}
             </span>
           ) : null}
           {summaryChars !== null ? (
-            <span>{formatNumber(summaryChars)} summary chars</span>
+            <span>
+              {t("chat.boundary.summaryChars", {
+                count: formatNumber(summaryChars),
+              })}
+            </span>
           ) : null}
         </p>
       ) : null}
 
       {lastUserInput ? (
         <div className="context-card__block">
-          <p className="context-card__label">Last user input</p>
+          <p className="context-card__label">
+            {t("chat.boundary.lastUserInput")}
+          </p>
           <p className="context-card__last">{lastUserInput}</p>
         </div>
       ) : null}
@@ -111,21 +121,24 @@ function CompactionCard({ entry }: { readonly entry: AgentEntrySchema }) {
       {summary ? (
         <details className="context-card__details">
           <summary>
-            <span>Summary</span>
+            <span>{t("chat.boundary.summary")}</span>
             <Icon name="chevron-down" size={13} />
           </summary>
           <p className="context-card__summary">{summary}</p>
         </details>
       ) : (
-        <p className="context-card__fallback">{SUMMARY_FALLBACK}</p>
+        <p className="context-card__fallback">
+          {t("chat.boundary.summaryFallback")}
+        </p>
       )}
     </article>
   );
 }
 
 function ResetCard({ entry }: { readonly entry: AgentEntrySchema }) {
+  const { t } = useI18n();
   const data = isRecord(entry.data) ? entry.data : {};
-  const reason = reasonLabel(stringValue(data.reason));
+  const reason = reasonLabel(stringValue(data.reason), t);
 
   return (
     <article className="context-card context-card--reset">
@@ -135,21 +148,15 @@ function ResetCard({ entry }: { readonly entry: AgentEntrySchema }) {
         </span>
         <div className="context-card__copy">
           <p className="context-card__eyebrow">
-            Context boundary · entry {entry.id}
+            {t("chat.boundary.eyebrow", { id: entry.id })}
           </p>
-          <h3>Context cleared</h3>
+          <h3>{t("chat.boundary.cleared")}</h3>
         </div>
         {reason ? <Badge tone="ochre">{reason}</Badge> : null}
       </header>
 
-      <p className="context-card__lead">
-        Older transcript entries are preserved here, but they are no longer
-        sent to the model.
-      </p>
-      <p className="context-card__note">
-        The next message starts from an empty active context. Nothing in the
-        reading view was deleted.
-      </p>
+      <p className="context-card__lead">{t("chat.boundary.resetLead")}</p>
+      <p className="context-card__note">{t("chat.boundary.resetNote")}</p>
     </article>
   );
 }

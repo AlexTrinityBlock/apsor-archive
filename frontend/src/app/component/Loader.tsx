@@ -1,3 +1,5 @@
+import { useI18n } from "../i18n";
+
 interface LoaderProps {
   readonly size?: number;
   readonly label?: string;
@@ -5,7 +7,10 @@ interface LoaderProps {
 }
 
 /** A small tree-ring spinner for pending queries and route transitions. */
-export function Loader({ size = 36, label = "Loading the archive", className }: LoaderProps) {
+export function Loader({ size = 36, label, className }: LoaderProps) {
+  const { t } = useI18n();
+  const accessibleLabel = label ?? t("core.loader.defaultLabel");
+
   return (
     <span
       className={["loader", className].filter(Boolean).join(" ")}
@@ -34,7 +39,7 @@ export function Loader({ size = 36, label = "Loading the archive", className }: 
         />
         <circle cx="24" cy="24" r="2.2" fill="currentColor" />
       </svg>
-      <span className="visually-hidden">{label}</span>
+      <span className="visually-hidden">{accessibleLabel}</span>
     </span>
   );
 }

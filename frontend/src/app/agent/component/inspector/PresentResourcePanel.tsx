@@ -1,4 +1,5 @@
 import { Icon } from "../../../component/Icon";
+import { useI18n } from "../../../i18n";
 import {
   itemResourceTarget,
   safeResourceUrl,
@@ -14,9 +15,9 @@ import {
   type PanelProps,
 } from "./common";
 
-const RESOURCE_LABELS = {
-  file: "File leaf",
-  memory: "Memory leaf",
+const RESOURCE_LABEL_KEYS = {
+  file: "chat.panels.present.fileLeaf",
+  memory: "chat.panels.present.memoryLeaf",
 } as const;
 
 const RESOURCE_ICONS = {
@@ -26,15 +27,18 @@ const RESOURCE_ICONS = {
 
 /** `present_resource`: a presentation stage with the real viewer body. */
 export function PresentResourcePanel({ item }: PanelProps) {
+  const { t } = useI18n();
   if (item.live || item.status.toLowerCase() === "running") {
-    return <LivePanel item={item} detail="Carrying the resource to the presentation stage." />;
+    return (
+      <LivePanel item={item} detail={t("chat.panels.present.liveDetail")} />
+    );
   }
   if (item.status.toLowerCase() === "error") {
     return (
       <PanelEmpty
         icon="layers"
-        title="The resource could not be presented"
-        detail={item.detail ?? "No structured result was recorded."}
+        title={t("chat.panels.present.errorTitle")}
+        detail={item.detail ?? t("chat.panels.common.noStructured")}
       />
     );
   }
@@ -44,8 +48,8 @@ export function PresentResourcePanel({ item }: PanelProps) {
     return (
       <PanelEmpty
         icon="layers"
-        title="No resource on the stage"
-        detail="This presentation result did not include a file or memory id."
+        title={t("chat.panels.present.emptyTitle")}
+        detail={t("chat.panels.present.emptyDetail")}
       />
     );
   }
@@ -53,10 +57,11 @@ export function PresentResourcePanel({ item }: PanelProps) {
     item.data?.resource && typeof item.data.resource === "object"
       ? (item.data.resource as Record<string, unknown>)
       : null;
+  const resourceLabel = t(RESOURCE_LABEL_KEYS[target.type]);
   const title =
     target.title ??
     textField(dataResource, "title") ??
-    `${RESOURCE_LABELS[target.type]} #${target.id}`;
+    `${resourceLabel} #${target.id}`;
   const href = safeResourceUrl(dataResource?.viewer_url, target) ?? viewerHref(target);
 
   return (
@@ -66,15 +71,19 @@ export function PresentResourcePanel({ item }: PanelProps) {
           <Icon name={RESOURCE_ICONS[target.type]} size={18} />
         </span>
         <div>
-          <p className="eyebrow">Presentation stage</p>
+          <p className="eyebrow">{t("chat.panels.present.stage")}</p>
           <strong>{title}</strong>
           <code>
-            {RESOURCE_LABELS[target.type]} · #{target.id}
-            {target.chunk !== null ? ` · chunk ${target.chunk}` : ""}
+            {resourceLabel} · #{target.id}
+            {target.chunk !== null
+              ? ` · ${t("chat.common.chunk", { chunk: target.chunk })}`
+              : ""}
           </code>
         </div>
         <PanelLink to={href}>
-          {target.type === "file" ? "Open in library" : "Open memory"}
+          {target.type === "file"
+            ? t("chat.panels.common.openInLibrary")
+            : t("chat.panels.memory.openLeaf")}
         </PanelLink>
       </header>
 

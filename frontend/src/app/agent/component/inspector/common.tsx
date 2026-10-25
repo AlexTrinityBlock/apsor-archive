@@ -5,7 +5,7 @@ import { Icon, type IconName } from "../../../component/Icon";
 import { Loader } from "../../../component/Loader";
 import { useGetFile } from "../../../generated-apis-types/files/files";
 import { useReadMemory } from "../../../generated-apis-types/memories/memories";
-import { formatDateTime } from "../../../../lib/format";
+import { useI18n } from "../../../i18n";
 import { FileRenderer } from "../../../viewer/component/FileViewer";
 import { viewerErrorMessage } from "../../../viewer/component/viewer-utils";
 import type { TraceItem } from "../../trace";
@@ -50,17 +50,22 @@ export function PanelEmpty({
 /** A live tool call has no settled data yet; show the honest state instead. */
 export function LivePanel({
   item,
-  detail = "The result preview will settle when the tool returns.",
+  detail,
 }: {
   readonly item: TraceItem;
   readonly detail?: string;
 }) {
+  const { t } = useI18n();
   return (
     <div className="pi-panel-live" aria-live="polite">
       <span className="pi-panel-live__pulse" aria-hidden="true" />
       <div>
-        <strong>{item.tool ?? "Tool"} · reading</strong>
-        <p>{detail}</p>
+        <strong>
+          {t("chat.panels.common.liveReading", {
+            tool: item.tool ?? t("chat.panels.common.toolFallback"),
+          })}
+        </strong>
+        <p>{detail ?? t("chat.panels.common.liveDetail")}</p>
       </div>
     </div>
   );
@@ -68,14 +73,15 @@ export function LivePanel({
 
 export function PanelLink({
   to,
-  children = "Open in viewer",
+  children,
 }: {
   readonly to: string;
   readonly children?: ReactNode;
 }) {
+  const { t } = useI18n();
   return (
     <Link className="pi-panel-link" to={to}>
-      <span>{children}</span>
+      <span>{children ?? t("chat.panels.common.openInViewer")}</span>
       <Icon name="arrow-up-right" size={13} />
     </Link>
   );
@@ -104,17 +110,18 @@ export function InspectorFileStage({
   readonly fileId: number;
   readonly chunk?: number | null;
 }) {
+  const { t } = useI18n();
   const query = useGetFile(fileId, { query: { retry: false } });
 
   if (query.isLoading) {
-    return <PanelLoading label="Reading the file leaf" />;
+    return <PanelLoading label={t("chat.panels.common.fileReading")} />;
   }
   if (query.error || !query.data) {
     return (
       <PanelEmpty
         icon="layers"
-        title="The file could not be opened"
-        detail={viewerErrorMessage(query.error)}
+        title={t("chat.panels.common.fileOpenError")}
+        detail={viewerErrorMessage(query.error, t)}
       />
     );
   }
@@ -128,12 +135,16 @@ export function InspectorFileStage({
       <div className="pi-file-stage__head">
         <div>
           <p className="eyebrow">
-            {chunk ? "File leaf · embedded at chunk" : "File leaf · embedded"}
+            {chunk
+              ? t("chat.panels.common.fileEmbeddedChunk")
+              : t("chat.panels.common.fileEmbedded")}
           </p>
           <strong>{query.data.file_name}</strong>
           <code>{query.data.raw_file_path}</code>
         </div>
-        <PanelLink to={viewerPath}>Open in library</PanelLink>
+        <PanelLink to={viewerPath}>
+          {t("chat.panels.common.openInLibrary")}
+        </PanelLink>
       </div>
       <div className="pi-file-stage__body">
         <FileRenderer file={query.data} chunk={chunk ?? null} />
@@ -144,6 +155,7 @@ export function InspectorFileStage({
 
 /** A compact pressed-leaf stage for memory panels and preserved resources. */
 export function InspectorMemoryStage({ memoryId }: { readonly memoryId: number }) {
+  const { t, formatDateTime } = useI18n();
   const query = useReadMemory(
     memoryId,
     { memory_range: 1, trace_history: true },
@@ -151,14 +163,14 @@ export function InspectorMemoryStage({ memoryId }: { readonly memoryId: number }
   );
 
   if (query.isLoading) {
-    return <PanelLoading label="Reading the pressed leaf" />;
+    return <PanelLoading label={t("chat.panels.common.memoryReading")} />;
   }
   if (query.error || !query.data) {
     return (
       <PanelEmpty
         icon="leaf"
-        title="The memory could not be opened"
-        detail={viewerErrorMessage(query.error)}
+        title={t("chat.panels.common.memoryOpenError")}
+        detail={viewerErrorMessage(query.error, t)}
       />
     );
   }
@@ -172,8 +184,14 @@ export function InspectorMemoryStage({ memoryId }: { readonly memoryId: number }
       </div>
       <blockquote>{memory.content}</blockquote>
       <div className="pi-memory-stage__foot">
-        <span>updated {formatDateTime(memory.update_time)}</span>
-        <PanelLink to={`/memory/${memory.memory_id}`}>Full trace</PanelLink>
+        <span>
+          {t("chat.panels.common.updated", {
+            time: formatDateTime(memory.update_time),
+          })}
+        </span>
+        <PanelLink to={`/memory/${memory.memory_id}`}>
+          {t("chat.panels.common.fullTrace")}
+        </PanelLink>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@
 import type { Parent, PhrasingContent, Root, RootContent, Text } from "mdast";
 
 import { citationHref, citationLabel, parseCitationLabel } from "../types";
+import { getActiveLocale, translate } from "../../i18n";
 
 // Literal alternatives plus one digit run: linear, but flagged heuristically.
 // eslint-disable-next-line security/detect-unsafe-regex
@@ -40,7 +41,11 @@ function splitText(node: Text): PhrasingContent[] {
     pieces.push({
       type: "link",
       url: citationHref(token) ?? `#citation-summary-${token.id}`,
-      title: `Archive citation ${citationLabel(token)}`,
+      title: translate(
+        getActiveLocale(),
+        "chat.citation.archiveCitation",
+        { label: citationLabel(token) },
+      ),
       children: [{ type: "text", value: label }],
     });
     cursor = start + label.length;

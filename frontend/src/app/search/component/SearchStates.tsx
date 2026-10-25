@@ -3,25 +3,34 @@ import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
+import { useI18n } from "../../i18n";
 
 /** The pre-query room: what the archive can retrieve and how to begin. */
 export function SearchWelcome() {
+  const { t } = useI18n();
   return (
     <section className="empty-state search-welcome">
       <div className="empty-state__icon">
         <Icon name="search" size={26} />
       </div>
-      <p className="eyebrow">The archive is ready</p>
-      <h2>Nothing is retrieved until you ask.</h2>
+      <p className="eyebrow">{t("insights.search.welcome.eyebrow")}</p>
+      <h2>{t("insights.search.welcome.title")}</h2>
       <p className="empty-state__description">
-        One query runs through a text lane and a vector lane. The fused candidates
-        return as file chunks, memory crystals, and summaries, each with a real score
-        and the lanes that matched it.
+        {t("insights.search.welcome.description")}
       </p>
-      <div className="search-welcome__kinds" aria-label="Searchable source kinds">
-        <span className="badge badge--moss">File chunks</span>
-        <span className="badge badge--vermilion">Memory crystals</span>
-        <span className="badge badge--ochre">Summaries</span>
+      <div
+        className="search-welcome__kinds"
+        aria-label={t("insights.search.welcome.kindsAria")}
+      >
+        <span className="badge badge--moss">
+          {t("insights.search.welcome.fileChunks")}
+        </span>
+        <span className="badge badge--vermilion">
+          {t("insights.search.welcome.memoryCrystals")}
+        </span>
+        <span className="badge badge--ochre">
+          {t("insights.search.welcome.summaries")}
+        </span>
       </div>
     </section>
   );
@@ -29,13 +38,14 @@ export function SearchWelcome() {
 
 /** A quiet in-progress state while both retrieval lanes report back. */
 export function SearchLoading() {
+  const { t } = useI18n();
   return (
     <section className="search-loading" role="status" aria-live="polite">
-      <Loader size={34} label="Searching the archive" />
+      <Loader size={34} label={t("insights.search.loading.aria")} />
       <div>
-        <p className="eyebrow">Both lanes are running</p>
+        <p className="eyebrow">{t("insights.search.loading.eyebrow")}</p>
         <p className="search-loading__copy">
-          BM25 and vector candidates are being merged, deduplicated, and fused.
+          {t("insights.search.loading.copy")}
         </p>
       </div>
     </section>
@@ -58,34 +68,38 @@ export function SearchNoResults({
   onIncludeHistory,
   onClear,
 }: SearchNoResultsProps) {
+  const { t } = useI18n();
   return (
     <section className="empty-state search-noresults">
       <div className="empty-state__icon">
         <Icon name="search" size={26} />
       </div>
-      <p className="eyebrow">No matching grain</p>
-      <h2>Nothing matched “{query}”.</h2>
+      <p className="eyebrow">{t("insights.search.noResults.eyebrow")}</p>
+      <h2>{t("insights.search.noResults.title", { query })}</h2>
       <p className="empty-state__description">
-        Try a shorter phrase or split the query into two concrete words.{" "}
+        {t("insights.search.noResults.descriptionBase")}{" "}
         {includeHistory
-          ? "History is already included, so superseded files and deprecated memories were searched too."
-          : "Include history to search superseded files and deprecated memories."}
+          ? t("insights.search.noResults.historyIncluded")
+          : t("insights.search.noResults.historyExcluded")}
       </p>
       {isFetching ? (
         <p className="search-results__busy">
-          <Loader size={12} label="Updating results" />
-          Updating…
+          <Loader
+            size={12}
+            label={t("insights.search.results.updatingAria")}
+          />
+          {t("insights.search.results.updating")}
         </p>
       ) : null}
       <div className="empty-state__actions">
         {!includeHistory ? (
           <Button variant="secondary" size="sm" onClick={onIncludeHistory}>
             <Icon name="history" size={15} />
-            Include history
+            {t("insights.search.noResults.includeHistory")}
           </Button>
         ) : null}
         <Button variant="ghost" size="sm" onClick={onClear}>
-          Clear query
+          {t("insights.search.noResults.clearQuery")}
         </Button>
       </div>
     </section>
@@ -98,44 +112,59 @@ interface SearchErrorProps {
   readonly onRetry: () => void;
 }
 
-function errorParts(error: unknown): {
+function errorParts(
+  error: unknown,
+  fallback: string,
+): {
   readonly detail: string;
   readonly code: string;
   readonly status: number | null;
 } {
   if (error instanceof ApiError) {
     return {
-      detail: error.detail || "The archive did not answer.",
+      detail: error.detail || fallback,
       code: error.code,
       status: error.status > 0 ? error.status : null,
     };
   }
   if (error instanceof Error) {
     return {
-      detail: error.message || "The archive did not answer.",
+      detail: error.message || fallback,
       code: "unknown_error",
       status: null,
     };
   }
-  return { detail: "The archive did not answer.", code: "unknown_error", status: null };
+  return { detail: fallback, code: "unknown_error", status: null };
 }
 
 /** The failure state names the API error instead of hiding it behind a spinner. */
 export function SearchError({ error, endpoint, onRetry }: SearchErrorProps) {
-  const { detail, code, status } = errorParts(error);
+  const { t } = useI18n();
+  const { detail, code, status } = errorParts(
+    error,
+    t("insights.search.error.didNotAnswer"),
+  );
 
   return (
     <section className="empty-state search-error" role="alert">
       <div className="empty-state__icon">
         <Icon name="info" size={26} />
       </div>
-      <p className="eyebrow">Search interrupted</p>
-      <h2>The archive did not answer.</h2>
+      <p className="eyebrow">{t("insights.search.error.eyebrow")}</p>
+      <h2>{t("insights.search.error.title")}</h2>
       <p className="empty-state__description">{detail}</p>
 
       <div className="search-error__meta">
         <Badge tone="vermilion">{code}</Badge>
-        {status !== null ? <span>HTTP {status}</span> : <span>Network request</span>}
+        {status !== null ? (
+          <span>
+            {t("insights.search.error.httpStatus", {
+              status: String(status),
+            })}
+          </span>
+        ) : (
+          <span>{t("insights.search.error.networkRequest")}</span>
+        )}
       </div>
 
       <div className="endpoint-label">
@@ -146,7 +175,7 @@ export function SearchError({ error, endpoint, onRetry }: SearchErrorProps) {
       <div className="empty-state__actions">
         <Button variant="secondary" size="sm" onClick={onRetry}>
           <Icon name="search" size={15} />
-          Try again
+          {t("insights.search.error.retry")}
         </Button>
       </div>
     </section>

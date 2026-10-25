@@ -35,7 +35,7 @@ test:
 
 lint:
 	cd backend && uv run ruff check . && uv run mypy app
-	cd frontend && bun run lint && bun run typecheck
+	cd frontend && bun run lint && bun run typecheck && bun run i18n:check
 
 up:
 	docker compose up -d --build

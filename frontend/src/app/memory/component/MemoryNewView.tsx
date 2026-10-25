@@ -8,10 +8,9 @@ import { PageHeader } from "../../component/PageHeader";
 import { Panel } from "../../component/Panel";
 import { useToast } from "../../component/Toast";
 import { useSaveMemory } from "../../generated-apis-types/memories/memories";
-import { formatNumber } from "../../../lib/format";
+import { useApiErrorMessage, useI18n } from "../../i18n";
 
 import {
-  errorText,
   invalidateMemoryQueries,
   nowLocalInput,
   parseSupersedes,
@@ -21,6 +20,8 @@ import {
 
 /** Full-page pressing room for a new memory. */
 export function MemoryNewView() {
+  const { t, formatNumber } = useI18n();
+  const apiErrorMessage = useApiErrorMessage();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -42,13 +43,20 @@ export function MemoryNewView() {
   const [occurredError, setOccurredError] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
-  const parsedSupersedes = parseSupersedes(supersedes);
+  const parsedSupersedes = parseSupersedes(supersedes, t);
   const supersedesIssue =
     supersedes.trim().length > 0 ? parsedSupersedes.error : null;
   const supersedeCount = parsedSupersedes.ids.length;
-  const supersedeNoun = supersedeCount === 1 ? "record" : "records";
-  const supersedeMeta =
-    supersedeCount > 0 ? `supersedes ${supersedeCount} ${supersedeNoun}` : "new record";
+  let supersedeMeta = t("memory.newView.metaNewRecord");
+  if (supersedeCount === 1) {
+    supersedeMeta = t("memory.newView.metaSupersedesOne", {
+      count: formatNumber(supersedeCount),
+    });
+  } else if (supersedeCount > 1) {
+    supersedeMeta = t("memory.newView.metaSupersedesOther", {
+      count: formatNumber(supersedeCount),
+    });
+  }
   const nearContentLimit = content.length >= 7600;
   const contentDescribedBy = [
     `${contentId}-help`,
@@ -64,10 +72,10 @@ export function MemoryNewView() {
     let valid = true;
 
     if (cleaned.length === 0) {
-      setContentError("Write the memory before pressing it into the archive.");
+      setContentError(t("memory.newView.contentRequired"));
       valid = false;
     } else if (cleaned.length > 8000) {
-      setContentError("A memory is limited to 8,000 characters.");
+      setContentError(t("memory.newView.contentTooLong"));
       valid = false;
     } else {
       setContentError(null);
@@ -75,7 +83,7 @@ export function MemoryNewView() {
 
     const occurred = occurredAt.length > 0 ? new Date(occurredAt) : null;
     if (occurred && Number.isNaN(occurred.getTime())) {
-      setOccurredError("The occurred-at time is not a valid date.");
+      setOccurredError(t("memory.newView.occurredInvalid"));
       valid = false;
     } else {
       setOccurredError(null);
@@ -100,7 +108,13 @@ export function MemoryNewView() {
       },
       {
         onSuccess: (result) => {
-          toast.success(savedMemoryMessage(result.memory.memory_id, result.deprecated.length));
+          toast.success(
+            savedMemoryMessage(
+              t,
+              result.memory.memory_id,
+              result.deprecated.length,
+            ),
+          );
           invalidateMemoryQueries(queryClient);
           const receipt: MemorySaveReceipt = {
             deprecated: result.deprecated,
@@ -109,9 +123,9 @@ export function MemoryNewView() {
           navigate(`/memory/${result.memory.memory_id}`, { state: receipt });
         },
         onError: (error) => {
-          const message = errorText(error);
+          const message = apiErrorMessage(error, "memory.common.genericError");
           setFailure(message);
-          toast.error(`Could not save the memory. ${message}`);
+          toast.error(t("memory.newView.saveFailed", { detail: message }));
         },
       },
     );
@@ -119,18 +133,18 @@ export function MemoryNewView() {
 
   return (
     <div className="content-container memory-page memory-new-page">
-      <nav className="memory-breadcrumb" aria-label="Breadcrumb">
-        <Link to="/memory">Memory Vault</Link>
+      <nav className="memory-breadcrumb" aria-label={t("memory.common.breadcrumbAria")}>
+        <Link to="/memory">{t("memory.vault.title")}</Link>
         <span aria-hidden="true">/</span>
         <span className="memory-breadcrumb__current" aria-current="page">
-          Pressing room
+          {t("memory.newView.breadcrumbCurrent")}
         </span>
       </nav>
 
       <PageHeader
-        eyebrow="Memory · pressing room"
-        title="Press a new memory."
-        description="A new memory records an occurrence and may supersede earlier beliefs. The older entries become deprecated, not deleted: they leave default search and the timeline, yet the lineage remains readable."
+        eyebrow={t("memory.newView.eyebrow")}
+        title={t("memory.newView.title")}
+        description={t("memory.newView.description")}
         meta={
           <span className="memory-page-header__meta">
             {supersedeMeta}
@@ -139,21 +153,22 @@ export function MemoryNewView() {
         actions={
           <ButtonLink to="/memory" variant="ghost" size="sm">
             <Icon name="arrow-right" size={15} className="memory-back-icon" />
-            Back to vault
+            {t("memory.newView.backToVault")}
           </ButtonLink>
         }
       />
 
       <div className="memory-new">
         <Panel
-          eyebrow="New record"
-          title="What should be remembered?"
+          eyebrow={t("memory.newView.formEyebrow")}
+          title={t("memory.newView.formTitle")}
           className="memory-new__form"
         >
           <form className="memory-form" onSubmit={handleSubmit}>
             <div className="memory-field">
               <label className="memory-field__label" htmlFor={contentId}>
-                Content <small>required · 8,000 characters max</small>
+                {t("memory.newView.contentLabel")}{" "}
+                <small>{t("memory.newView.contentHint")}</small>
               </label>
               <textarea
                 id={contentId}
@@ -170,13 +185,13 @@ export function MemoryNewView() {
                 maxLength={8000}
                 aria-required="true"
                 autoFocus
-                placeholder="A decision, a change of mind, an observation, a moment that should survive."
+                placeholder={t("memory.newView.contentPlaceholder")}
                 aria-invalid={contentError !== null}
                 aria-describedby={contentDescribedBy}
               />
               <div className="memory-field__footer">
                 <span className="field-help" id={`${contentId}-help`}>
-                  Plain text; stored and indexed exactly as written.
+                  {t("memory.newView.contentHelp")}
                 </span>
                 <span
                   className={[
@@ -187,7 +202,9 @@ export function MemoryNewView() {
                     .join(" ")}
                   id={`${contentId}-count`}
                 >
-                  {formatNumber(content.length)} / 8,000
+                  {t("memory.newView.contentCount", {
+                    count: formatNumber(content.length),
+                  })}
                 </span>
               </div>
               {contentError ? (
@@ -200,7 +217,8 @@ export function MemoryNewView() {
             <div className="memory-form__grid">
               <div className="memory-field">
                 <label className="memory-field__label" htmlFor={occurredId}>
-                  Occurred at <small>optional · defaults to now</small>
+                  {t("memory.newView.occurredLabel")}{" "}
+                  <small>{t("memory.newView.occurredHint")}</small>
                 </label>
                 <input
                   id={occurredId}
@@ -225,7 +243,8 @@ export function MemoryNewView() {
 
               <div className="memory-field">
                 <label className="memory-field__label" htmlFor={supersedesId}>
-                  Supersedes <small>optional · comma-separated ids</small>
+                  {t("memory.newView.supersedesLabel")}{" "}
+                  <small>{t("memory.newView.supersedesHint")}</small>
                 </label>
                 <input
                   id={supersedesId}
@@ -234,7 +253,7 @@ export function MemoryNewView() {
                   inputMode="numeric"
                   value={supersedes}
                   onChange={(event) => setSupersedes(event.target.value)}
-                  placeholder="12, 14"
+                  placeholder={t("memory.newView.supersedesPlaceholder")}
                   aria-invalid={supersedesIssue !== null}
                   aria-describedby={
                     supersedesIssue
@@ -243,7 +262,7 @@ export function MemoryNewView() {
                   }
                 />
                 <span className="field-help" id={`${supersedesId}-help`}>
-                  Numeric memory ids only. Up to 50 records can be replaced.
+                  {t("memory.newView.supersedesHelp")}
                 </span>
                 {supersedesIssue ? (
                   <p className="field-error" id={`${supersedesId}-error`} role="alert">
@@ -267,12 +286,14 @@ export function MemoryNewView() {
                 disabled={saveMemory.isPending}
               >
                 <Icon name="leaf" size={17} />
-                {saveMemory.isPending ? "Pressing the memory…" : "Save memory"}
+                {saveMemory.isPending
+                  ? t("memory.newView.saving")
+                  : t("memory.newView.save")}
               </Button>
               <p>
-                The record is saved with source <span className="code-inline">manual</span>. If the
-                API returns an auto-created summary, it appears in the receipt on the saved
-                record.
+                {t("memory.newView.sourceNoteBefore")}
+                <span className="code-inline">manual</span>
+                {t("memory.newView.sourceNoteAfter")}
               </p>
             </div>
           </form>
@@ -280,63 +301,60 @@ export function MemoryNewView() {
 
         <aside className="memory-new__aside">
           <Panel
-            eyebrow="Consequences"
-            title="What saving does"
+            eyebrow={t("memory.newView.consequencesEyebrow")}
+            title={t("memory.newView.consequencesTitle")}
           >
             <ol className="memory-steps">
               <li>
                 <span>01</span>
                 <p>
-                  The new memory becomes <strong>active</strong> with a fresh id and its occurred-at
-                  time.
+                  {t("memory.newView.step1Before")}
+                  <strong>{t("memory.newView.step1Strong")}</strong>
+                  {t("memory.newView.step1After")}
                 </p>
               </li>
               <li>
                 <span>02</span>
                 <p>
-                  Every listed memory becomes <strong>deprecated</strong> and points to the new
-                  record as its successor.
+                  {t("memory.newView.step2Before")}
+                  <strong>{t("memory.newView.step2Strong")}</strong>
+                  {t("memory.newView.step2After")}
                 </p>
               </li>
               <li>
                 <span>03</span>
-                <p>
-                  Deprecated memories leave default search and the default timeline. Their chunks
-                  stop being retrieved; their text remains readable with the full chain.
-                </p>
+                <p>{t("memory.newView.step3")}</p>
               </li>
               <li>
                 <span>04</span>
-                <p>
-                  If enough unsummarized memories have accumulated, the response may include an
-                  auto-created summary.
-                </p>
+                <p>{t("memory.newView.step4")}</p>
               </li>
             </ol>
           </Panel>
 
           <Panel
-            eyebrow="Will be deprecated"
-            title="Listed earlier memories"
+            eyebrow={t("memory.newView.deprecationsEyebrow")}
+            title={t("memory.newView.deprecationsTitle")}
             className="memory-new__deprecations"
           >
             {parsedSupersedes.ids.length > 0 ? (
               <>
                 <p className="memory-note">
-                  These ids will be deprecated if they exist and are still active. The backend
-                  rejects an id that is already deprecated.
+                  {t("memory.newView.deprecationsNote")}
                 </p>
                 <ul className="memory-deprecation-list">
                   {parsedSupersedes.ids.map((id) => (
                     <li key={id}>
-                      <Link to={`/memory/${id}`}>CRYSTAL #{id}</Link>
+                      <Link to={`/memory/${id}`}>
+                        {t("memory.common.crystal", { id })}
+                      </Link>
                     </li>
                   ))}
                 </ul>
               </>
             ) : (
               <p className="memory-note">
-                No earlier memories are listed. This save will not deprecate anything.
+                {t("memory.newView.deprecationsEmpty")}
               </p>
             )}
           </Panel>

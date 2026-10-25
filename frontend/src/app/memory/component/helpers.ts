@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import type { Translate } from "../../i18n";
 import type { MemorySchema, SummarySchema } from "../../generated-apis-types/schemas";
 
 export interface MemorySaveReceipt {
@@ -80,7 +81,7 @@ export interface ParsedSupersedes {
 }
 
 /** Parses the comma-separated supersede field while preserving first-seen order. */
-export function parseSupersedes(raw: string): ParsedSupersedes {
+export function parseSupersedes(raw: string, t: Translate): ParsedSupersedes {
   const trimmed = raw.trim();
   if (trimmed.length === 0) {
     return { ids: [], error: null };
@@ -88,33 +89,38 @@ export function parseSupersedes(raw: string): ParsedSupersedes {
   const seen = new Set<number>();
   for (const token of trimmed.split(/[\s,]+/).filter(Boolean)) {
     if (!/^\d+$/.test(token)) {
-      return { ids: [], error: "Use comma-separated numeric memory ids, for example 12, 14." };
+      return {
+        ids: [],
+        error: t("memory.newView.supersedesInvalidFormat"),
+      };
     }
     const id = Number(token);
     if (!Number.isSafeInteger(id) || id < 1) {
-      return { ids: [], error: "Memory ids must be positive integers." };
+      return { ids: [], error: t("memory.newView.supersedesPositive") };
     }
     seen.add(id);
   }
   if (seen.size > 50) {
-    return { ids: [], error: "A memory can supersede at most 50 earlier memories." };
+    return { ids: [], error: t("memory.newView.supersedesLimit") };
   }
   return { ids: [...seen], error: null };
 }
 
-export function errorText(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return "The archive did not answer.";
-}
-
-export function savedMemoryMessage(memoryId: number, deprecatedCount: number): string {
+export function savedMemoryMessage(
+  t: Translate,
+  memoryId: number,
+  deprecatedCount: number,
+): string {
   if (deprecatedCount === 0) {
-    return `Memory ${memoryId} saved.`;
+    return t("memory.newView.savedToast", { id: memoryId });
   }
-  const noun = deprecatedCount === 1 ? "earlier memory is" : "earlier memories are";
-  return `Memory ${memoryId} saved; ${deprecatedCount} ${noun} now deprecated.`;
+  if (deprecatedCount === 1) {
+    return t("memory.newView.savedToastWithDeprecatedOne", { id: memoryId });
+  }
+  return t("memory.newView.savedToastWithDeprecatedOther", {
+    id: memoryId,
+    count: deprecatedCount,
+  });
 }
 
 export interface MemoryPreview {
@@ -137,10 +143,13 @@ function clipAtWord(value: string, maxLength: number): string {
  * character cut. Memory content has no separate title field, so this is a
  * presentation-only split of real text rather than invented metadata.
  */
-export function splitMemoryPreview(content: string): MemoryPreview {
+export function splitMemoryPreview(
+  content: string,
+  untitledLabel: string,
+): MemoryPreview {
   const compact = content.replace(/\s+/g, " ").trim();
   if (compact.length === 0) {
-    return { thesis: "Untitled memory", body: "" };
+    return { thesis: untitledLabel, body: "" };
   }
   const firstSentence = compact
     .match(/^.{16,320}?[.!?](?=(?:\s+[A-Z0-9"“(]|$))/)?.[0]

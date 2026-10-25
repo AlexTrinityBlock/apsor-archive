@@ -1,7 +1,7 @@
 import { Badge } from "../../../component/Badge";
 import { Icon } from "../../../component/Icon";
 import { CopyButton } from "../../../component/CopyButton";
-import { formatDateTime } from "../../../../lib/format";
+import { useI18n } from "../../../i18n";
 import {
   numberField,
   recordList,
@@ -27,22 +27,24 @@ function webResults(data: Record<string, unknown> | null): WebSearchResult[] {
 
 /** `web_search`: the public results the model actually received. */
 export function WebSearchPanel({ item }: PanelProps) {
+  const { t, formatDateTime, formatNumber } = useI18n();
   if (item.live || item.status.toLowerCase() === "running") {
-    return <LivePanel item={item} detail="Waiting for the public search results." />;
+    return <LivePanel item={item} detail={t("chat.panels.web.searchLive")} />;
   }
   if (item.status.toLowerCase() === "error") {
     return (
       <PanelEmpty
         icon="search"
-        title="The public search did not answer"
-        detail={item.detail ?? "No structured result was recorded."}
+        title={t("chat.panels.web.searchErrorTitle")}
+        detail={item.detail ?? t("chat.panels.common.noStructured")}
       />
     );
   }
 
   const data = item.data;
   const query = textField(data, "query") ?? textField(item.arguments, "query") ?? "";
-  const provider = textField(data, "provider") ?? "web search";
+  const provider =
+    textField(data, "provider") ?? t("chat.panels.web.searchFallback");
   const retrievedAt = textField(data, "retrieved_at");
   const results = webResults(data);
   const cached = data?.cached === true;
@@ -52,18 +54,31 @@ export function WebSearchPanel({ item }: PanelProps) {
     <div className="pi-web">
       <header className="pi-web__head">
         <div className="pi-web__heading">
-          <p className="eyebrow">Public web search</p>
-          <strong>{query || "Untitled query"}</strong>
+          <p className="eyebrow">{t("chat.panels.web.searchHeading")}</p>
+          <strong>{query || t("chat.panels.web.untitledQuery")}</strong>
           <code>
             {provider}
-            {retrievedAt ? ` · retrieved ${formatDateTime(retrievedAt)}` : ""}
+            {retrievedAt
+              ? ` · ${t("chat.panels.web.retrieved", {
+                  time: formatDateTime(retrievedAt),
+                })}`
+              : ""}
           </code>
         </div>
         <div className="pi-web__badges">
-          {cached ? <Badge tone="ochre">Cached</Badge> : null}
-          {truncated ? <Badge tone="neutral">Truncated</Badge> : null}
+          {cached ? (
+            <Badge tone="ochre">{t("chat.panels.web.cached")}</Badge>
+          ) : null}
+          {truncated ? (
+            <Badge tone="neutral">{t("chat.panels.web.truncated")}</Badge>
+          ) : null}
           <Badge tone={results.length > 0 ? "moss" : "neutral"}>
-            {results.length} {results.length === 1 ? "result" : "results"}
+            {t(
+              results.length === 1
+                ? "chat.panels.web.resultsOne"
+                : "chat.panels.web.resultsOther",
+              { count: formatNumber(results.length) },
+            )}
           </Badge>
         </div>
       </header>
@@ -71,8 +86,8 @@ export function WebSearchPanel({ item }: PanelProps) {
       {results.length === 0 ? (
         <PanelEmpty
           icon="search"
-          title="No public results were recorded"
-          detail="The provider returned an empty result set for this query."
+          title={t("chat.panels.web.noResultsTitle")}
+          detail={t("chat.panels.web.noResultsDetail")}
         />
       ) : (
         <ol className="pi-web-results">
@@ -88,13 +103,15 @@ export function WebSearchPanel({ item }: PanelProps) {
                   rel="noreferrer noopener"
                   title={result.url}
                 >
-                  {result.title || result.url || "Untitled result"}
+                  {result.title ||
+                    result.url ||
+                    t("chat.panels.web.untitledResult")}
                   <Icon name="external" size={12} />
                 </a>
                 {result.url ? (
                   <CopyButton
                     value={result.url}
-                    label="Copy URL"
+                    label={t("chat.panels.web.copyUrl")}
                     iconOnly
                   />
                 ) : null}
@@ -105,7 +122,9 @@ export function WebSearchPanel({ item }: PanelProps) {
               ) : null}
               {result.score !== null ? (
                 <span className="pi-web-result__score">
-                  score {result.score.toFixed(3)}
+                  {t("chat.panels.web.score", {
+                    score: result.score.toFixed(3),
+                  })}
                 </span>
               ) : null}
             </li>
@@ -118,15 +137,16 @@ export function WebSearchPanel({ item }: PanelProps) {
 
 /** `web_fetch`: the fetched page body and its source metadata. */
 export function WebFetchPanel({ item }: PanelProps) {
+  const { t, formatDateTime, formatNumber } = useI18n();
   if (item.live || item.status.toLowerCase() === "running") {
-    return <LivePanel item={item} detail="Waiting for the fetched page body." />;
+    return <LivePanel item={item} detail={t("chat.panels.web.fetchLive")} />;
   }
   if (item.status.toLowerCase() === "error") {
     return (
       <PanelEmpty
         icon="external"
-        title="The page could not be fetched"
-        detail={item.detail ?? "No structured result was recorded."}
+        title={t("chat.panels.web.fetchErrorTitle")}
+        detail={item.detail ?? t("chat.panels.common.noStructured")}
       />
     );
   }
@@ -134,7 +154,8 @@ export function WebFetchPanel({ item }: PanelProps) {
   const data = item.data;
   const url =
     textField(data, "url") ?? textField(item.arguments, "url") ?? "";
-  const provider = textField(data, "provider") ?? "web fetch";
+  const provider =
+    textField(data, "provider") ?? t("chat.panels.web.fetchFallback");
   const retrievedAt = textField(data, "retrieved_at");
   const content = textField(data, "content") ?? "";
   const chars = numberField(data, "content_chars");
@@ -145,7 +166,7 @@ export function WebFetchPanel({ item }: PanelProps) {
     <div className="pi-web">
       <header className="pi-web__head">
         <div className="pi-web__heading">
-          <p className="eyebrow">Public web fetch</p>
+          <p className="eyebrow">{t("chat.panels.web.fetchHeading")}</p>
           <a
             className="pi-web__url"
             href={url}
@@ -153,18 +174,30 @@ export function WebFetchPanel({ item }: PanelProps) {
             rel="noreferrer noopener"
             title={url}
           >
-            {url || "Untitled URL"}
+            {url || t("chat.panels.web.untitledUrl")}
             <Icon name="external" size={12} />
           </a>
           <code>
             {provider}
-            {retrievedAt ? ` · retrieved ${formatDateTime(retrievedAt)}` : ""}
-            {chars !== null ? ` · ${chars.toLocaleString()} chars` : ""}
+            {retrievedAt
+              ? ` · ${t("chat.panels.web.retrieved", {
+                  time: formatDateTime(retrievedAt),
+                })}`
+              : ""}
+            {chars !== null
+              ? ` · ${t("chat.panels.web.chars", {
+                  count: formatNumber(chars),
+                })}`
+              : ""}
           </code>
         </div>
         <div className="pi-web__badges">
-          {cached ? <Badge tone="ochre">Cached</Badge> : null}
-          {truncated ? <Badge tone="neutral">Truncated</Badge> : null}
+          {cached ? (
+            <Badge tone="ochre">{t("chat.panels.web.cached")}</Badge>
+          ) : null}
+          {truncated ? (
+            <Badge tone="neutral">{t("chat.panels.web.truncated")}</Badge>
+          ) : null}
         </div>
       </header>
 
@@ -173,14 +206,21 @@ export function WebFetchPanel({ item }: PanelProps) {
       ) : (
         <PanelEmpty
           icon="external"
-          title="No page body was stored in this result"
-          detail="This record predates the inline fetch preview, or the provider returned an empty body. Open the source URL to read it."
+          title={t("chat.panels.web.noBodyTitle")}
+          detail={t("chat.panels.web.noBodyDetail")}
         />
       )}
 
       <footer className="pi-web__foot">
-        {content ? <CopyButton value={content} label="Copy content" /> : null}
-        {url ? <CopyButton value={url} label="Copy URL" /> : null}
+        {content ? (
+          <CopyButton
+            value={content}
+            label={t("chat.panels.web.copyContent")}
+          />
+        ) : null}
+        {url ? (
+          <CopyButton value={url} label={t("chat.panels.web.copyUrl")} />
+        ) : null}
         {url ? (
           <a
             className="pi-web__open"
@@ -188,7 +228,7 @@ export function WebFetchPanel({ item }: PanelProps) {
             target="_blank"
             rel="noreferrer noopener"
           >
-            Open source
+            {t("chat.panels.web.openSource")}
             <Icon name="external" size={12} />
           </a>
         ) : null}

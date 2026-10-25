@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 
 import { Icon } from "../../../component/Icon";
-import { basename, formatBytes, formatNumber } from "../../../../lib/format";
+import { useI18n } from "../../../i18n";
+import { basename, formatBytes } from "../../../../lib/format";
 import {
   excerptOf,
   numberField,
@@ -33,6 +34,7 @@ function FolderBranch({
 }
 
 function FileCard({ record }: { readonly record: Record<string, unknown> }) {
+  const { t, formatNumber } = useI18n();
   const id = recordId(record, "file_id");
   const path = textField(record, "raw_file_path") ?? textField(record, "path") ?? "";
   const chunks = numberField(record, "total_chunks");
@@ -51,16 +53,32 @@ function FileCard({ record }: { readonly record: Record<string, unknown> }) {
         <Icon name="file" size={14} />
       </span>
       <div className="pi-branch__file-body">
-        <strong>{textField(record, "file_name") ?? (basename(path) || `File ${id ?? "?"}`)}</strong>
-        <code>{path || "path unrecorded"}</code>
+        <strong>
+          {textField(record, "file_name") ??
+            (basename(path) ||
+              t("chat.panels.path.fileFallback", { id: id ?? "?" }))}
+        </strong>
+        <code>{path || t("chat.panels.path.pathUnrecorded")}</code>
         {excerpt ? <p>{excerpt}</p> : null}
         <div className="pi-branch__file-meta">
-          {chunks !== null ? <span>{formatNumber(chunks)} chunks</span> : null}
+          {chunks !== null ? (
+            <span>
+              {t("chat.panels.path.chunks", {
+                count: formatNumber(chunks),
+              })}
+            </span>
+          ) : null}
           {size !== null ? <span>{formatBytes(size)}</span> : null}
         </div>
       </div>
       {href ? (
-        <Link className="pi-branch__file-link" to={href} aria-label={`Open ${basename(path) || "file"}`}>
+        <Link
+          className="pi-branch__file-link"
+          to={href}
+          aria-label={t("chat.panels.path.openFile", {
+            name: basename(path) || t("chat.resource.file"),
+          })}
+        >
           <Icon name="arrow-up-right" size={13} />
         </Link>
       ) : null}
@@ -70,15 +88,18 @@ function FileCard({ record }: { readonly record: Record<string, unknown> }) {
 
 /** `read_path`: a folder branch map with file cards. */
 export function ReadPathPanel({ item }: PanelProps) {
+  const { t, formatNumber } = useI18n();
   if (item.live || item.status.toLowerCase() === "running") {
-    return <LivePanel item={item} detail="Walking the requested folder branch." />;
+    return (
+      <LivePanel item={item} detail={t("chat.panels.path.liveDetail")} />
+    );
   }
   if (item.status.toLowerCase() === "error") {
     return (
       <PanelEmpty
         icon="branch"
-        title="The folder branch could not be read"
-        detail={item.detail ?? "No structured result was recorded."}
+        title={t("chat.panels.path.errorTitle")}
+        detail={item.detail ?? t("chat.panels.common.noStructured")}
       />
     );
   }
@@ -92,17 +113,22 @@ export function ReadPathPanel({ item }: PanelProps) {
     <div className="pi-branch">
       <header className="pi-branch__head">
         <div>
-          <p className="eyebrow">Folder branch map</p>
+          <p className="eyebrow">{t("chat.panels.path.heading")}</p>
           <code>{path}</code>
         </div>
         <span className="pi-branch__counts">
-          {directories.length} folders · {files.length} files
+          {t("chat.panels.path.counts", {
+            folders: formatNumber(directories.length),
+            files: formatNumber(files.length),
+          })}
         </span>
       </header>
 
       {textField(data, "fuzzy_search") ? (
         <p className="pi-branch__fuzzy">
-          Fuzzy filter: “{textField(data, "fuzzy_search")}”
+          {t("chat.panels.path.fuzzy", {
+            query: textField(data, "fuzzy_search") ?? "",
+          })}
         </p>
       ) : null}
 
@@ -118,7 +144,10 @@ export function ReadPathPanel({ item }: PanelProps) {
           {directories.map((directory) => (
             <FolderBranch
               key={textField(directory, "path") ?? textField(directory, "name") ?? "folder"}
-              name={textField(directory, "name") ?? "folder"}
+              name={
+                textField(directory, "name") ??
+                t("chat.panels.path.folderFallback")
+              }
               path={textField(directory, "path") ?? ""}
               depth={numberField(directory, "depth")}
             />
@@ -129,8 +158,8 @@ export function ReadPathPanel({ item }: PanelProps) {
       {files.length === 0 && directories.length === 0 ? (
         <PanelEmpty
           icon="branch"
-          title="This branch is empty"
-          detail="No folders or files were returned for the requested path."
+          title={t("chat.panels.path.emptyTitle")}
+          detail={t("chat.panels.path.emptyDetail")}
         />
       ) : (
         <ul className="pi-branch__files">

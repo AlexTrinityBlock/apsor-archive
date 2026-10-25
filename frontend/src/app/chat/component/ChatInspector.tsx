@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Icon } from "../../component/Icon";
 import { AgentInspector } from "../../agent/component/AgentInspector";
 import { InspectorFileStage } from "../../agent/component/inspector/common";
+import { useI18n } from "../../i18n";
 import {
   viewerHref,
   type ResourceTarget,
@@ -25,37 +26,45 @@ interface ChatInspectorProps {
 }
 
 function PreviewEmpty() {
+  const { t } = useI18n();
   return (
     <div className="empty-state chat-preview__empty">
       <span className="empty-state__icon" aria-hidden="true">
         <Icon name="file" size={20} />
       </span>
-      <h2 className="empty-state__title">No document selected</h2>
+      <h2 className="empty-state__title">{t("chat.inspector.previewTitle")}</h2>
       <p className="empty-state__description">
-        Open a file citation, or a file resource from a tool result, to preview
-        it in place.
+        {t("chat.inspector.previewDetail")}
       </p>
     </div>
   );
 }
 
 function ChatPreview({ target }: { readonly target: ResourceTarget | null }) {
+  const { t } = useI18n();
   if (!target) {
     return <PreviewEmpty />;
   }
 
   const openLabel =
-    target.type === "file" ? "Open in library" : "Open memory";
+    target.type === "file"
+      ? t("chat.inspector.openInLibrary")
+      : t("chat.inspector.openMemory");
 
   return (
     <div className="chat-preview">
       <header className="chat-preview__head">
         <div>
-          <p className="mono-label">Document preview</p>
-          <strong>{target.title ?? `File #${target.id}`}</strong>
+          <p className="mono-label">{t("chat.inspector.documentPreview")}</p>
+          <strong>
+            {target.title ??
+              t("chat.inspector.fileFallback", { id: target.id })}
+          </strong>
           <code>
             file:{target.id}
-            {target.chunk === null ? "" : ` · chunk ${target.chunk}`}
+            {target.chunk === null
+              ? ""
+              : ` · ${t("chat.common.chunk", { chunk: target.chunk })}`}
           </code>
         </div>
         <Link className="text-link" to={viewerHref(target)}>
@@ -82,14 +91,19 @@ export function ChatInspector({
   onCollapse,
   narrow,
 }: ChatInspectorProps) {
+  const { t } = useI18n();
   return (
     <aside
       ref={inspectorRef}
       className="panel chat-inspector"
-      aria-label="Inspector"
+      aria-label={t("chat.inspector.aria")}
     >
       <div className="chat-inspector__bar">
-        <div className="tabs tabs--light chat-inspector__tabs" role="tablist" aria-label="Inspector views">
+        <div
+          className="tabs tabs--light chat-inspector__tabs"
+          role="tablist"
+          aria-label={t("chat.inspector.viewsAria")}
+        >
           <button
             type="button"
             role="tab"
@@ -98,7 +112,7 @@ export function ChatInspector({
             onClick={() => onTab("telemetry")}
           >
             <Icon name="command" size={12} />
-            Tool Telemetry
+            {t("chat.inspector.telemetryTab")}
           </button>
           <button
             type="button"
@@ -108,7 +122,7 @@ export function ChatInspector({
             onClick={() => onTab("preview")}
           >
             <Icon name="file" size={12} />
-            Document Preview
+            {t("chat.inspector.previewTab")}
           </button>
         </div>
         {!narrow ? (
@@ -116,8 +130,8 @@ export function ChatInspector({
             type="button"
             className="chat-icon-btn chat-inspector__collapse"
             onClick={onCollapse}
-            aria-label="Collapse inspector"
-            title="Collapse inspector"
+            aria-label={t("chat.inspector.collapse")}
+            title={t("chat.inspector.collapse")}
           >
             <Icon name="chevron-right" size={14} />
           </button>
@@ -127,7 +141,11 @@ export function ChatInspector({
       <div
         className="chat-inspector__body"
         role="tabpanel"
-        aria-label={tab === "telemetry" ? "Tool telemetry" : "Document preview"}
+        aria-label={
+          tab === "telemetry"
+            ? t("chat.inspector.telemetryPanel")
+            : t("chat.inspector.previewPanel")
+        }
       >
         {tab === "telemetry" ? (
           <AgentInspector
