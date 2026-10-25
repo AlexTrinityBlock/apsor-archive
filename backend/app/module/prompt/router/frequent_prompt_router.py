@@ -6,6 +6,7 @@ from app.module.prompt.dependencies import get_frequent_prompt_service
 from app.module.prompt.schema.frequent_prompt_schema import (
     FrequentlyUsedPromptCreateSchema,
     FrequentlyUsedPromptReadSchema,
+    FrequentlyUsedPromptReorderSchema,
     FrequentlyUsedPromptUpdateSchema,
 )
 from app.module.prompt.service.frequent_prompt_service import FrequentlyUsedPromptService
@@ -38,6 +39,19 @@ async def create_frequently_used_prompt(
 ) -> FrequentlyUsedPromptReadSchema:
     """Create a prompt shortcut."""
     return await service.create_prompt(payload)
+
+
+@router.post(
+    "/reorder",
+    response_model=ListResponseSchema[FrequentlyUsedPromptReadSchema],
+    operation_id="reorderFrequentlyUsedPrompts",
+)
+async def reorder_frequently_used_prompts(
+    payload: FrequentlyUsedPromptReorderSchema,
+    service: FrequentlyUsedPromptService = Depends(get_frequent_prompt_service),  # noqa: B008
+) -> ListResponseSchema[FrequentlyUsedPromptReadSchema]:
+    """Replace the complete shortcut order atomically."""
+    return await service.reorder_prompts(payload.prompt_ids)
 
 
 @router.put(

@@ -32,6 +32,13 @@ class FrequentlyUsedPromptRepositoryProtocol(Protocol):
         now: datetime,
     ) -> FrequentlyUsedPromptModel | None: ...
 
+    async def reorder(
+        self,
+        prompt_ids: list[int],
+        *,
+        now: datetime,
+    ) -> list[FrequentlyUsedPromptModel]: ...
+
     async def delete(self, prompt_id: int) -> bool: ...
 
 
