@@ -251,7 +251,7 @@ export const settings = {
     statsSectionLabel: "档案馆规模",
     statFiles: "已归档文件",
     statChunks: "已索引分段",
-    statMemories: "记忆结晶",
+    statMemories: "记忆",
     statActive: "{count} 条有效",
     statSummaries: "AI 摘要",
     factStorage: "存储空间",
