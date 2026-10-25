@@ -6,7 +6,7 @@ import { TreeMark } from "./TreeMark";
 import { TreeRings } from "./TreeRings";
 import "./route-error.css";
 
-const RELOAD_GUARD_KEY = "dendromatrix.route-error.reload-at";
+const RELOAD_GUARD_KEY = "apsor-archive.route-error.reload-at";
 const CHUNK_ERROR_PATTERN =
   /failed to fetch dynamically imported module|importing a module script failed|chunkloaderror|loading chunk/i;
 

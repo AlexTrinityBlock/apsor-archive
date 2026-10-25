@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DendroMatrix — Chat Studio</title>
+  <title>Apsor Archive — Chat Studio</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -1805,7 +1805,7 @@
   <aside id="main-nav-rail" class="nav-rail">
     <!-- Header with TreeMark centered -->
     <div class="rail-header">
-      <a href="chat.html" class="brand-cluster" title="DendroMatrix">
+      <a href="chat.html" class="brand-cluster" title="Apsor Archive">
         <div class="brand-seal" title="TreeMark Logo">
           <svg viewBox="0 0 48 48" width="24" height="24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="24" cy="24" r="21" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.3" />
@@ -1817,7 +1817,7 @@
           </svg>
         </div>
         <div class="brand-meta">
-          <span class="brand-title">DendroMatrix</span>
+          <span class="brand-title">Apsor Archive</span>
           <span class="brand-sub">Archive Studio</span>
         </div>
       </a>
@@ -2002,13 +2002,13 @@
         <div class="chat-stream-scroll" id="chat-stream">
           <div class="stream-context">
             <span id="shell-session-badge">SESSION #85FD-982E</span>
-            <span class="stream-context-title" id="chat-conversation-title">Dendrochronological Analysis Session</span>
+            <span class="stream-context-title" id="chat-conversation-title">Archive Analysis Session</span>
             <span class="stream-context-meta" id="chat-turns-meta">3 turns · 2 citations</span>
           </div>
           
           <!-- Turn 1: User -->
           <div class="chat-turn user">
-            <div class="turn-author">Lead Dendrologist · 10:14 AM</div>
+            <div class="turn-author">Lead Archivist · 10:14 AM</div>
             <div class="bubble">
               Retrieve the latewood density transition ratio from page 14 of <code class="doc-link-inline" onclick="openRightDocPreview('1982_taipingshan_density_survey.pdf', 14, 'Chunk 14-C2')" style="cursor: pointer; text-decoration: underline;">1982_taipingshan_density_survey.pdf</code> and verify if the 1976 latewood growth exhibits a microscopic frost ring anomaly.
             </div>
@@ -2016,7 +2016,7 @@
 
           <!-- Turn 2: Agent Response with Tool Executions -->
           <div class="chat-turn agent">
-            <div class="turn-author">DendroMatrix Agent · 10:14 AM</div>
+            <div class="turn-author">Apsor Archive Agent · 10:14 AM</div>
             
             <!-- Tool Execution Steps -->
             <div class="tool-step-flow">
@@ -2308,19 +2308,19 @@
     const SESSIONS_DATA = {
       '85FD-982E': {
         id: '85FD-982E',
-        title: 'Dendrochronological Analysis Session',
+        title: 'Archive Analysis Session',
         turnsMeta: '3 turns · 2 citations',
         defaultTool: 'search_knowledge',
         streamHtml: `
           <div class="chat-turn user">
-            <div class="turn-author">Lead Dendrologist · 10:14 AM</div>
+            <div class="turn-author">Lead Archivist · 10:14 AM</div>
             <div class="bubble">
               Retrieve the latewood density transition ratio from page 14 of <code class="doc-link-inline" onclick="openRightDocPreview('1982_taipingshan_density_survey.pdf', 14, 'Chunk 14-C2')" style="cursor: pointer; text-decoration: underline;">1982_taipingshan_density_survey.pdf</code> and verify if the 1976 latewood growth exhibits a microscopic frost ring anomaly.
             </div>
           </div>
 
           <div class="chat-turn agent">
-            <div class="turn-author">DendroMatrix Agent · 10:14 AM</div>
+            <div class="turn-author">Apsor Archive Agent · 10:14 AM</div>
             
             <div class="tool-step-flow">
               <div class="tool-step-chip" onclick="selectTool('read_path')" id="step-chip-read">
@@ -2457,14 +2457,14 @@
         defaultTool: 'query_trigram_fts',
         streamHtml: `
           <div class="chat-turn user">
-            <div class="turn-author">Lead Dendrologist · 08:32 AM</div>
+            <div class="turn-author">Lead Archivist · 08:32 AM</div>
             <div class="bubble">
               Perform a dual-channel recall on the 1982 Taipingshan latewood density collapse. Re-rank BM25 against the 768-D dense vector index and compare with the master chronology.
             </div>
           </div>
 
           <div class="chat-turn agent">
-            <div class="turn-author">DendroMatrix Agent · 08:32 AM</div>
+            <div class="turn-author">Apsor Archive Agent · 08:32 AM</div>
             
             <div class="tool-step-flow">
               <div class="tool-step-chip active" onclick="selectTool('query_trigram_fts')" id="step-chip-fts">
@@ -2519,14 +2519,14 @@
         defaultTool: 'load_floating_series',
         streamHtml: `
           <div class="chat-turn user">
-            <div class="turn-author">Lead Dendrologist · Yesterday</div>
+            <div class="turn-author">Lead Archivist · Yesterday</div>
             <div class="bubble">
               Align the 1,200-year floating tree-ring chronology of Chilan sunken cedar (specimen <code class="doc-link-inline" onclick="openRightDocPreview('chilan_sunken_wood_radiocarbon_calibration.pdf', 4, 'Chunk 04-A1')" style="cursor: pointer; text-decoration: underline;">CL-SW-88</code>) against IntCal20 radiocarbon wiggle-matching.
             </div>
           </div>
 
           <div class="chat-turn agent">
-            <div class="turn-author">DendroMatrix Agent · Yesterday</div>
+            <div class="turn-author">Apsor Archive Agent · Yesterday</div>
             <div class="bubble">
               <p>Wiggle-matching Bayesian statistics against the <strong>IntCal20 Atmospheric Curve</strong> completed with Chi-sq = 1.08 (df=12, P=0.41):</p>
               
@@ -2568,14 +2568,14 @@
         defaultTool: 'fetch_dendrometer',
         streamHtml: `
           <div class="chat-turn user">
-            <div class="turn-author">Lead Dendrologist · Oct 20</div>
+            <div class="turn-author">Lead Archivist · Oct 20</div>
             <div class="bubble">
               Compare cambial cell division resumption dates for Abies kawakamii between 3,100 m and 3,600 m elevation sites during 2024.
             </div>
           </div>
 
           <div class="chat-turn agent">
-            <div class="turn-author">DendroMatrix Agent · Oct 20</div>
+            <div class="turn-author">Apsor Archive Agent · Oct 20</div>
             <div class="bubble">
               <p>Analysis of high-frequency automatic point-dendrometer telemetry across the <strong>Yushan Transect</strong> shows:</p>
               
@@ -2609,14 +2609,14 @@
         defaultTool: 'query_frost_rings_1816',
         streamHtml: `
           <div class="chat-turn user">
-            <div class="turn-author">Lead Dendrologist · Oct 14</div>
+            <div class="turn-author">Lead Archivist · Oct 14</div>
             <div class="bubble">
               Check the 1816 annual ring in subfossil Taiwan conifer specimens for light rings or frost ring cell collapse following the 1815 Tambora eruption.
             </div>
           </div>
 
           <div class="chat-turn agent">
-            <div class="turn-author">DendroMatrix Agent · Oct 14</div>
+            <div class="turn-author">Apsor Archive Agent · Oct 14</div>
             <div class="bubble">
               <p>Multi-specimen microdensitometry across subfossil hemlock and cypress cores reveals:</p>
               
@@ -2738,7 +2738,7 @@
 }`,
           obsSource: "SYSTEM: Ready for prompt input",
           obsScore: "STATUS: STANDBY",
-          obsBody: "DendroMatrix Orchestrator is standing by. Enter a research hypothesis or prompt to trigger automatic retrieval and reasoning tools."
+          obsBody: "Apsor Archive Orchestrator is standing by. Enter a research hypothesis or prompt to trigger automatic retrieval and reasoning tools."
         }
       };
 
@@ -2749,7 +2749,7 @@
             <div style="width: 44px; height: 44px; border-radius: 50%; background: var(--mono-subtle); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px; border: 0.7px solid var(--mono-grid);">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4.5h10v11H8.2L4 19z"/><path d="M8 8.5h4M8 11.5h2.6"/><path d="M16.5 7.5H20v8.5h-1.8L17 18.5V16"/></svg>
             </div>
-            <h3 style="font-size: 16px; font-weight: 700; color: var(--mono-ink); margin-bottom: 6px;">How can DendroMatrix assist your dendro research?</h3>
+            <h3 style="font-size: 16px; font-weight: 700; color: var(--mono-ink); margin-bottom: 6px;">How can Apsor Archive assist your dendro research?</h3>
             <p style="font-size: 12.5px; color: var(--mono-muted); line-height: 1.5; margin-bottom: 22px;">Ask about specimen microdensitometry, run crossdating scripts, verify floating radiocarbon curves, or synthesize tree-ring lineage memories.</p>
             
             <div style="display: flex; flex-direction: column; gap: 8px; text-align: left;">
@@ -2967,7 +2967,7 @@
       const userDiv = document.createElement('div');
       userDiv.className = 'chat-turn user';
       userDiv.innerHTML = `
-        <div class="turn-author">Lead Dendrologist · Just now</div>
+        <div class="turn-author">Lead Archivist · Just now</div>
         <div class="bubble">${escapeHtml(text)}</div>
       `;
       stream.appendChild(userDiv);
@@ -2978,7 +2978,7 @@
         const agentDiv = document.createElement('div');
         agentDiv.className = 'chat-turn agent';
         agentDiv.innerHTML = `
-          <div class="turn-author">DendroMatrix Agent · Just now</div>
+          <div class="turn-author">Apsor Archive Agent · Just now</div>
           <div class="tool-step-flow">
             <div class="tool-step-chip active" onclick="selectTool('live_retrieval')">
               <div class="tool-chip-left">

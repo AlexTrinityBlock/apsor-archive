@@ -22,7 +22,7 @@ dev-deps:
 	docker compose -f docker-compose.dev.yml up -d --wait
 
 api:
-	cd backend && uv run dendromatrix --reload
+	cd backend && uv run apsor-archive --reload
 
 web:
 	cd frontend && bun run dev
@@ -31,7 +31,7 @@ build:
 	cd frontend && bun run build
 
 test:
-	cd backend && PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/dendromatrix-pytest.log
+	cd backend && PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 
 lint:
 	cd backend && uv run ruff check . && uv run mypy app

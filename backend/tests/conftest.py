@@ -14,9 +14,9 @@ from app.module.auth import model as auth_model  # noqa: F401
 from app.module.knowledge.model import Base
 from app.module.prompt import model as prompt_model  # noqa: F401
 
-ADMIN_DATABASE_URL = "postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendromatrix"
-TEST_DATABASE_URL = "postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendromatrix_test"
-TEST_DATABASE_NAME = "dendromatrix_test"
+ADMIN_DATABASE_URL = "postgresql+psycopg://apsor:apsor@127.0.0.1:55432/apsor_archive"
+TEST_DATABASE_URL = "postgresql+psycopg://apsor:apsor@127.0.0.1:55432/apsor_archive_test"
+TEST_DATABASE_NAME = "apsor_archive_test"
 
 TRUNCATE_STATEMENT = (
     "TRUNCATE TABLE agent_approval, saved_question, file_ingest_job, ingest_config, "

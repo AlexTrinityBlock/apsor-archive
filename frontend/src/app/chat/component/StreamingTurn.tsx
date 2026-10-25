@@ -108,7 +108,7 @@ export const StreamingTurn = memo(function StreamingTurn({
           <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
             <span className="chat-pulse" />
           </span>
-          <span>DendroMatrix Agent</span>
+          <span>Apsor Archive Agent</span>
           <span className="chat-turn__meta">
             {stream.runId === null ? "opening a run" : `run #${stream.runId}`}
           </span>

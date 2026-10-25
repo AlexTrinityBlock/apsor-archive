@@ -1,18 +1,18 @@
 """Dedicated durable-ingestion worker process.
 
-Run ``python -m app.worker`` (or ``dendromatrix worker``) as its own service
+Run ``python -m app.worker`` (or ``apsor-archive worker``) as its own service
 when the API should stay responsive under long uploads. The worker uses the
 same PostgreSQL job queue and lease as the lifespan fallback, so either mode
 can drain a queue left by the other.
 
 The loop polls immediately, processes every claimable job without sleeping,
-and waits ``DENDRO_INGEST_POLL_SECONDS`` (one second by default) only when the
+and waits ``APSOR_INGEST_POLL_SECONDS`` (one second by default) only when the
 queue is empty. SIGINT/SIGTERM stop the loop gracefully.
 
-At most ``DENDRO_INGEST_MAX_IN_FLIGHT_JOBS`` jobs run concurrently, and their
+At most ``APSOR_INGEST_MAX_IN_FLIGHT_JOBS`` jobs run concurrently, and their
 parsing/chunking work is capped by a shared ``ThreadPoolExecutor`` sized by
-``DENDRO_INGEST_EXTRACT_WORKERS`` (two by default). Embedding has a separate
-shared async semaphore ``DENDRO_INGEST_EMBEDDING_CONCURRENCY`` (six by
+``APSOR_INGEST_EXTRACT_WORKERS`` (two by default). Embedding has a separate
+shared async semaphore ``APSOR_INGEST_EMBEDDING_CONCURRENCY`` (six by
 default). Pure-Python CPU-bound work can later move to a process pool; the job,
 lease, and progress contracts do not depend on the executor type.
 """
@@ -122,7 +122,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
 
 def main(argv: Sequence[str] | None = None) -> None:
     """Parse CLI flags and run the worker until it is stopped."""
-    parser = argparse.ArgumentParser(description="Run the DendroMatrix ingestion worker.")
+    parser = argparse.ArgumentParser(description="Run the Apsor Archive ingestion worker.")
     parser.add_argument(
         "--once",
         action="store_true",

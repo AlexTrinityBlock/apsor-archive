@@ -55,7 +55,7 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v6"
+PROMPT_VERSION = "archive-agent-v7"
 TOOLS_VERSION = "archive-tools-v3"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
@@ -282,7 +282,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     system_entry = system_entries[0]
     assert system_entry["model"][0]["role"] == "system"
     prompt = system_entry["model"][0]["content"]
-    assert "You are DendroMatrix" in prompt
+    assert "You are Apsor Archive" in prompt
     assert "# Identity" in prompt
     assert "# Instructions" in prompt
     assert "# Context protocol" in prompt
@@ -780,7 +780,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert len(fork_fake.requests) == 1
     fork_request = fork_fake.requests[0]
     assert fork_request.messages[0]["role"] == "system"
-    assert "You are DendroMatrix" in fork_request.messages[0]["content"]
+    assert "You are Apsor Archive" in fork_request.messages[0]["content"]
     assert any(
         message.get("role") == "user"
         and isinstance(message.get("content"), str)

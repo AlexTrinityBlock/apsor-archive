@@ -1,4 +1,4 @@
-"""Alembic environment for the DendroMatrix database."""
+"""Alembic environment for the Apsor Archive database."""
 
 from logging.config import fileConfig
 

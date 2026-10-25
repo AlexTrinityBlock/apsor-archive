@@ -60,7 +60,7 @@ export function TreeRings({ variant = "hero", className }: TreeRingsProps) {
       {variant === "hero" ? (
         <text className="tree-rings__lettering" fill="currentColor">
           <textPath href={`#${labelId}`} startOffset="2%">
-            DENDROMATRIX · ANNUAL RING ARCHIVE · LOCAL-FIRST · SIX RETRIEVAL TOOLS ·
+            APSOR ARCHIVE · ANNUAL RING ARCHIVE · LOCAL-FIRST · SIX RETRIEVAL TOOLS ·
           </textPath>
         </text>
       ) : null}
