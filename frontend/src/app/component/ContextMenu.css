@@ -1,0 +1,99 @@
+/* ==========================================================================
+   通用右鍵選單。
+   以 portal 掛在 document.body，使用 fixed 定位；層級需高於 modal (300)
+   與 toast (1000)，避免被 Library 的預覽層或浮層蓋住。
+   ========================================================================== */
+
+.context-menu {
+  position: fixed;
+  z-index: 1400;
+  display: flex;
+  width: max-content;
+  min-width: min(190px, calc(100vw - 16px));
+  max-width: min(300px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 5px;
+  box-shadow: var(--shadow-modal);
+}
+
+.context-menu__item {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  color: var(--mono-ink);
+  font-family: var(--mono-font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-align: left;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.context-menu__item:hover,
+.context-menu__item:focus-visible {
+  background: var(--mono-subtle);
+  outline: none;
+}
+
+.context-menu__item:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--mono-ink);
+}
+
+.context-menu__icon {
+  flex: none;
+  color: var(--mono-muted);
+}
+
+.context-menu__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-menu__shortcut {
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--mono-faint);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+}
+
+.context-menu__item--danger {
+  color: var(--accent-seal);
+}
+
+.context-menu__item--danger .context-menu__icon {
+  color: var(--accent-seal);
+}
+
+.context-menu__item--danger:hover,
+.context-menu__item--danger:focus-visible {
+  background: rgba(200, 75, 49, 0.08);
+}
+
+.context-menu__item:disabled {
+  color: var(--mono-faint);
+  background: transparent;
+  cursor: default;
+  opacity: 0.55;
+}
+
+.context-menu__item:disabled .context-menu__icon {
+  color: var(--mono-faint);
+}

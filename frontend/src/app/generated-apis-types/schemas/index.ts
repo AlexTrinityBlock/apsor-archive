@@ -54,6 +54,7 @@ export * from './fileSchema';
 export * from './fileSearchResultSchema';
 export * from './fileSearchResultSchemaMatchedByItem';
 export * from './fileTextCreateSchema';
+export * from './fileTextUpdateSchema';
 export * from './folderCreateSchema';
 export * from './frequentlyUsedPromptCreateSchema';
 export * from './frequentlyUsedPromptReadSchema';

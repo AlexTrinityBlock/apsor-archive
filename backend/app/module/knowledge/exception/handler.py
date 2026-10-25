@@ -9,6 +9,7 @@ from app.module.knowledge.exception.domain_error import (
     FileContentUnavailableError,
     FileRecordNotFoundError,
     FileTooLargeError,
+    FileVersionConflictError,
     IngestJobConflictError,
     IngestJobNotFoundError,
     IngestJobNotRetryableError,
@@ -45,6 +46,7 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(FileContentUnavailableError, 404, "file_content_unavailable")
     ExceptionRegistry.register(UnsupportedFileTypeError, 422, "unsupported_file_type")
     ExceptionRegistry.register(FileTooLargeError, 413, "file_too_large")
+    ExceptionRegistry.register(FileVersionConflictError, 409, "file_version_conflict")
     ExceptionRegistry.register(EmptyContentError, 422, "empty_content")
     ExceptionRegistry.register(VisionExtractionError, 502, "vision_extraction_failed")
     ExceptionRegistry.register(TooManyChunksError, 422, "too_many_chunks")

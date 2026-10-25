@@ -14,6 +14,7 @@ import "./library.css";
 import "../viewer/viewer.css";
 
 import type {
+  DirectorySchema,
   FileSchema,
   PathFileSchema,
 } from "../generated-apis-types/schemas";
@@ -25,11 +26,16 @@ import { useSeedDemo } from "../generated-apis-types/system/system";
 import { useReadPath } from "../generated-apis-types/tree/tree";
 import { parentPath, pathSegments } from "../../lib/format";
 import { Button } from "../component/Button";
+import {
+  ContextMenu,
+  type ContextMenuItem,
+} from "../component/ContextMenu";
 import { Panel } from "../component/Panel";
 import { QueryState } from "../component/QueryState";
 import { useToast } from "../component/Toast";
 import { useI18n } from "../i18n";
 import { useDebouncedValue } from "../hook/useDebouncedValue";
+import { fileDownloadUrl } from "../viewer/component/viewer-utils";
 import { BatchMoveDialog, type BatchMoveResult } from "./component/BatchMoveDialog";
 import { DeleteFileDialog } from "./component/DeleteFileDialog";
 import { FilePreviewModal } from "./component/FilePreviewModal";
@@ -38,6 +44,7 @@ import { LibraryMediaGallery } from "./component/LibraryMediaGallery";
 import { LibrarySelectionBar } from "./component/LibrarySelectionBar";
 import { LibraryToolbar } from "./component/LibraryToolbar";
 import { LibraryUploadTray } from "./component/LibraryUploadTray";
+import { MarkdownEditorDialog } from "./component/MarkdownEditorDialog";
 import { MoveCopyDialog } from "./component/MoveCopyDialog";
 import { NewFolderDialog } from "./component/NewFolderDialog";
 import { UploadDialog } from "./component/UploadDialog";
@@ -50,6 +57,7 @@ import {
   invalidateLibraryQueries,
   isEditablePasteTarget,
   isImageFileName,
+  isMarkdownFile,
   isNotFoundError,
   joinArchivePath,
   nameClipboardFile,
@@ -60,6 +68,7 @@ import {
   sortListing,
   type FileOperationMode,
   type FileOperationTarget,
+  type LibraryContextMenuTrigger,
   type LibrarySort,
   type LibraryTab,
   type LibraryView,
@@ -80,6 +89,17 @@ interface DeleteRequest {
   readonly file_id: number;
   readonly file_name: string;
   readonly raw_file_path: string;
+}
+
+type LibraryContextTarget =
+  | { readonly kind: "file"; readonly file: PathFileSchema }
+  | { readonly kind: "folder"; readonly folder: DirectorySchema };
+
+interface LibraryContextMenuState {
+  readonly x: number;
+  readonly y: number;
+  readonly target: LibraryContextTarget;
+  readonly returnFocus: HTMLElement | null;
 }
 
 const EMPTY_SELECTED_FILE_IDS: ReadonlySet<number> = new Set<number>();
@@ -114,6 +134,11 @@ export function LibraryPage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadTarget, setUploadTarget] = useState("/");
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newMarkdownDirectory, setNewMarkdownDirectory] = useState("/");
+  const [newMarkdownOpen, setNewMarkdownOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<LibraryContextMenuState | null>(
+    null,
+  );
   const [moveCopyRequest, setMoveCopyRequest] = useState<MoveCopyRequest | null>(null);
   const [deleteRequest, setDeleteRequest] = useState<DeleteRequest | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -137,6 +162,7 @@ export function LibraryPage() {
   const debouncedQuery = useDebouncedValue(query, 300);
   const activeQuery = query.length > 0 ? debouncedQuery.trim() : "";
   const view = resolveView(searchParams.get("view"), isDesktop);
+  const startInEdit = searchParams.get("mode") === "edit";
 
   const browseQuery = useReadPath({
     path,
@@ -197,6 +223,7 @@ export function LibraryPage() {
         media: null,
         chunk: null,
         q: null,
+        mode: null,
       });
     },
     [resetSelection, updateParams],
@@ -206,17 +233,48 @@ export function LibraryPage() {
     (nextFileId: number) => {
       resetSelection();
       if (tab === "media") {
-        updateParams({ media: nextFileId, file: null, chunk: null });
+        updateParams({ media: nextFileId, file: null, chunk: null, mode: null });
       } else {
-        updateParams({ file: nextFileId, media: null, chunk: null });
+        updateParams({ file: nextFileId, media: null, chunk: null, mode: null });
       }
     },
     [resetSelection, tab, updateParams],
   );
 
   const closePreview = useCallback(() => {
-    updateParams({ file: null, media: null, chunk: null }, { replace: true });
+    updateParams(
+      { file: null, media: null, chunk: null, mode: null },
+      { replace: true },
+    );
   }, [updateParams]);
+
+  const handleEditModeChange = useCallback(
+    (editing: boolean) => {
+      updateParams({ mode: editing ? "edit" : null }, { replace: true });
+    },
+    [updateParams],
+  );
+
+  const openMarkdownEditor = useCallback(
+    (nextFileId: number) => {
+      resetSelection();
+      setMediaFilter("");
+      updateParams({
+        tab: null,
+        file: nextFileId,
+        mode: "edit",
+        media: null,
+        chunk: null,
+        q: null,
+      });
+    },
+    [resetSelection, updateParams],
+  );
+
+  const openNewMarkdown = useCallback((directory: string) => {
+    setNewMarkdownDirectory(normalizeLibraryPath(directory));
+    setNewMarkdownOpen(true);
+  }, []);
 
   const handleChunkChange = useCallback(
     (nextChunk: number) => {
@@ -269,6 +327,7 @@ export function LibraryPage() {
           file: null,
           chunk: null,
           q: null,
+          mode: null,
         });
       } else {
         updateParams({
@@ -278,6 +337,7 @@ export function LibraryPage() {
           media: null,
           chunk: null,
           q: null,
+          mode: null,
         });
       }
     },
@@ -315,6 +375,7 @@ export function LibraryPage() {
         media: null,
         chunk: null,
         q: null,
+        mode: null,
       });
     },
     [resetSelection, tab, updateParams],
@@ -384,12 +445,24 @@ export function LibraryPage() {
           const chunk = requestedChunk > 1 ? requestedChunk : null;
           if (tab === "media") {
             updateParams(
-              { path: nextPath, media: result.id, file: null, chunk },
+              {
+                path: nextPath,
+                media: result.id,
+                file: null,
+                chunk,
+                mode: null,
+              },
               { replace: true },
             );
           } else {
             updateParams(
-              { path: nextPath, file: result.id, media: null, chunk },
+              {
+                path: nextPath,
+                file: result.id,
+                media: null,
+                chunk,
+                mode: null,
+              },
               { replace: true },
             );
           }
@@ -460,7 +533,10 @@ export function LibraryPage() {
         return next;
       });
       if (previewFileId === deletedFileId) {
-        updateParams({ file: null, media: null, chunk: null }, { replace: true });
+        updateParams(
+          { file: null, media: null, chunk: null, mode: null },
+          { replace: true },
+        );
       }
     },
     [previewFileId, updateParams],
@@ -551,12 +627,24 @@ export function LibraryPage() {
         const chunk = requestedChunk > 1 ? requestedChunk : null;
         if (tab === "media") {
           updateParams(
-            { path: nextPath, media: previewFileId, file: null, chunk },
+            {
+              path: nextPath,
+              media: previewFileId,
+              file: null,
+              chunk,
+              mode: null,
+            },
             { replace: true },
           );
         } else {
           updateParams(
-            { path: nextPath, file: previewFileId, media: null, chunk },
+            {
+              path: nextPath,
+              file: previewFileId,
+              media: null,
+              chunk,
+              mode: null,
+            },
             { replace: true },
           );
         }
@@ -600,6 +688,193 @@ export function LibraryPage() {
     [formatNumber, previewFileId, queryClient, requestedChunk, t, tab, toast, updateParams],
   );
 
+  const handleNewMarkdownSaved = useCallback(
+    (createdFile: FileSchema) => {
+      setNewMarkdownOpen(false);
+      resetSelection();
+      setMediaFilter("");
+      const nextPath = pathParamValue(parentPath(createdFile.raw_file_path));
+      updateParams({
+        tab: null,
+        path: nextPath,
+        file: createdFile.id,
+        media: null,
+        chunk: null,
+        q: null,
+        mode: null,
+      });
+    },
+    [resetSelection, updateParams],
+  );
+
+  const downloadArchiveFile = useCallback((file: PathFileSchema) => {
+    // 暫時 anchor 比 window.location 安全：不會離開 SPA，也能沿用下載端點。
+    const anchor = document.createElement("a");
+    anchor.href = fileDownloadUrl(file.file_id);
+    anchor.download = file.file_name;
+    anchor.rel = "noopener";
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+  }, []);
+
+  const copyArchivePath = useCallback(
+    async (archivePath: string) => {
+      try {
+        await navigator.clipboard.writeText(archivePath);
+        toast.success(t("library.contextMenu.pathCopied"));
+      } catch {
+        toast.error(t("library.errors.generic"));
+      }
+    },
+    [t, toast],
+  );
+
+  const openFileContextMenu = useCallback(
+    (event: LibraryContextMenuTrigger, file: PathFileSchema) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const returnFocus =
+        event.currentTarget instanceof HTMLElement
+          ? event.currentTarget
+          : null;
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        target: { kind: "file", file },
+        returnFocus,
+      });
+    },
+    [],
+  );
+
+  const openFolderContextMenu = useCallback(
+    (event: LibraryContextMenuTrigger, folder: DirectorySchema) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const returnFocus =
+        event.currentTarget instanceof HTMLElement
+          ? event.currentTarget
+          : null;
+      setContextMenu({
+        x: event.clientX,
+        y: event.clientY,
+        target: { kind: "folder", folder },
+        returnFocus,
+      });
+    },
+    [],
+  );
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const contextMenuItems = useMemo<readonly ContextMenuItem[]>(() => {
+    if (!contextMenu) {
+      return [];
+    }
+
+    if (contextMenu.target.kind === "file") {
+      const file = contextMenu.target.file;
+      const items: ContextMenuItem[] = [
+        {
+          id: "open",
+          label: t("library.contextMenu.open"),
+          icon: "file",
+          onSelect: () => openPreview(file.file_id),
+        },
+      ];
+
+      if (isMarkdownFile(file.raw_file_path)) {
+        items.push({
+          id: "edit",
+          label: t("library.contextMenu.editMarkdown"),
+          icon: "pencil",
+          onSelect: () => openMarkdownEditor(file.file_id),
+        });
+      }
+
+      if (file.has_original) {
+        items.push({
+          id: "download",
+          label: t("library.contextMenu.download"),
+          icon: "arrow-down",
+          onSelect: () => downloadArchiveFile(file),
+        });
+      }
+
+      items.push(
+        {
+          id: "move",
+          label: t("library.contextMenu.move"),
+          icon: "branch",
+          onSelect: () => handleRequestMoveCopy(file, "move"),
+        },
+        {
+          id: "copy",
+          label: t("library.contextMenu.copy"),
+          icon: "copy",
+          onSelect: () => handleRequestMoveCopy(file, "copy"),
+        },
+        {
+          id: "delete",
+          label: t("library.contextMenu.delete"),
+          icon: "trash",
+          danger: true,
+          onSelect: () => handleRequestDelete(file),
+        },
+        {
+          id: "copyPath",
+          label: t("library.contextMenu.copyPath"),
+          icon: "copy",
+          onSelect: () => void copyArchivePath(file.raw_file_path),
+        },
+      );
+      return items;
+    }
+
+    const folder = contextMenu.target.folder;
+    return [
+      {
+        id: "open",
+        label: t("library.contextMenu.openFolder"),
+        icon: "folder",
+        onSelect: () => openFolder(folder.path),
+      },
+      {
+        id: "uploadHere",
+        label: t("library.contextMenu.uploadHere"),
+        icon: "plus",
+        onSelect: () => openUpload(folder.path),
+      },
+      {
+        id: "newMarkdownHere",
+        label: t("library.contextMenu.newMarkdownHere"),
+        icon: "file",
+        onSelect: () => openNewMarkdown(folder.path),
+      },
+      {
+        id: "copyPath",
+        label: t("library.contextMenu.copyPath"),
+        icon: "copy",
+        onSelect: () => void copyArchivePath(folder.path),
+      },
+    ];
+  }, [
+    contextMenu,
+    copyArchivePath,
+    downloadArchiveFile,
+    handleRequestDelete,
+    handleRequestMoveCopy,
+    openFolder,
+    openMarkdownEditor,
+    openNewMarkdown,
+    openPreview,
+    openUpload,
+    t,
+  ]);
+
   const folderSuggestions = useMemo(() => {
     const suggestions: string[] = [];
     const seen = new Set<string>();
@@ -638,6 +913,9 @@ export function LibraryPage() {
         onToggleSelected={toggleSelected}
         onOpenFolder={openFolder}
         onOpenFile={openPreview}
+        onEditFile={openMarkdownEditor}
+        onFileContextMenu={openFileContextMenu}
+        onFolderContextMenu={openFolderContextMenu}
         onUpload={() => openUpload()}
         onUploadHere={(folderPath) => openUpload(folderPath)}
         onNewFolder={() => setNewFolderOpen(true)}
@@ -697,6 +975,7 @@ export function LibraryPage() {
         onToggleSelecting={toggleSelecting}
         onUpload={() => openUpload()}
         onNewFolder={() => setNewFolderOpen(true)}
+        onNewMarkdown={() => openNewMarkdown(path)}
       />
 
       <div
@@ -778,6 +1057,14 @@ export function LibraryPage() {
         />
       ) : null}
 
+      {newMarkdownOpen ? (
+        <MarkdownEditorDialog
+          defaultDirectory={newMarkdownDirectory}
+          onClose={() => setNewMarkdownOpen(false)}
+          onSaved={handleNewMarkdownSaved}
+        />
+      ) : null}
+
       {moveCopyRequest ? (
         <MoveCopyDialog
           file={moveCopyRequest.file}
@@ -813,11 +1100,30 @@ export function LibraryPage() {
         <FilePreviewModal
           fileId={previewFileId}
           requestedChunk={requestedChunk}
+          startInEdit={startInEdit}
           onClose={closePreview}
           onChunkChange={handleChunkChange}
+          onFileVersionChange={(nextFileId) => {
+            updateParams(
+              { file: nextFileId, mode: null, chunk: null },
+              { replace: true },
+            );
+          }}
+          onEditModeChange={handleEditModeChange}
           onMove={(target) => handleRequestMoveCopy(target, "move")}
           onCopy={(target) => handleRequestMoveCopy(target, "copy")}
           onDelete={handleRequestDelete}
+        />
+      ) : null}
+
+      {contextMenu ? (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenuItems}
+          label={t("library.contextMenu.label")}
+          onClose={closeContextMenu}
+          returnFocus={contextMenu.returnFocus}
         />
       ) : null}
     </div>

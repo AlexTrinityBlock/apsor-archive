@@ -1869,6 +1869,28 @@
         "title": "FileTextCreateSchema",
         "type": "object"
       },
+      "FileTextUpdateSchema": {
+        "additionalProperties": false,
+        "description": "\u66f4\u65b0\u65e2\u6709 Markdown \u6a94\u6848\u5167\u5bb9\uff1bexpected_version \u7528\u65bc\u6a02\u89c0\u9396\u3002",
+        "properties": {
+          "content": {
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "content",
+          "expected_version"
+        ],
+        "title": "FileTextUpdateSchema",
+        "type": "object"
+      },
       "FolderCreateSchema": {
         "additionalProperties": false,
         "description": "Create one folder and any missing ancestors.\n\nEmpty values reach the service so they become the stable ``invalid_path``\ndomain error instead of a generic schema-validation error.",
@@ -2969,6 +2991,10 @@
             "title": "File Name",
             "type": "string"
           },
+          "has_original": {
+            "title": "Has Original",
+            "type": "boolean"
+          },
           "raw_file_path": {
             "title": "Raw File Path",
             "type": "string"
@@ -2993,6 +3019,7 @@
           "file_name",
           "total_chunks",
           "size_bytes",
+          "has_original",
           "update_time"
         ],
         "title": "PathFileSchema",
@@ -6816,6 +6843,57 @@
           }
         },
         "summary": "Get File Content",
+        "tags": [
+          "files"
+        ]
+      },
+      "put": {
+        "description": "\u66f4\u65b0\u65e2\u6709 Markdown \u6a94\u6848\u5167\u5bb9\uff0c\u5efa\u7acb\u65b0\u7248\u672c\u4e26\u91cd\u5efa\u7d22\u5f15\u3002",
+        "operationId": "updateFileContent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileTextUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update File Content",
         "tags": [
           "files"
         ]

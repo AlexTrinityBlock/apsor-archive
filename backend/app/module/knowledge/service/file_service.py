@@ -34,6 +34,7 @@ from app.module.knowledge.exception.domain_error import (
     FileContentUnavailableError,
     FileRecordNotFoundError,
     FileTooLargeError,
+    FileVersionConflictError,
     InvalidChunkWindowError,
     InvalidPathError,
     PathNotFoundError,
@@ -75,6 +76,7 @@ T = TypeVar("T")
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 DOCUMENT_EXTENSIONS = {".pdf", ".docx"}
+MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".csv", ".json", ".log"}
 ALLOWED_EXTENSIONS = TEXT_EXTENSIONS | DOCUMENT_EXTENSIONS | IMAGE_EXTENSIONS
 
@@ -192,6 +194,7 @@ class FileService:
             file_name=file.file_name,
             total_chunks=file.total_chunks,
             size_bytes=file.size_bytes,
+            has_original=file.storage_key is not None,
             update_time=file.updated_at,
         )
 
@@ -759,6 +762,46 @@ class FileService:
             document_type=extension(normalized).lstrip(".") or "text",
             extraction_method="text",
         )
+
+    async def update_markdown_content(
+        self,
+        file_id: int,
+        *,
+        content: str,
+        expected_version: int,
+    ) -> FileSchema:
+        """以新版本更新既有 Markdown 檔案，保留舊版本與原始 bytes。"""
+        file = await self.file_repository.get_current_for_update(file_id)
+        if file is None or file.deleted_at is not None or not file.is_current:
+            raise FileRecordNotFoundError(file_id)
+        if file.extension not in MARKDOWN_EXTENSIONS:
+            raise UnsupportedFileTypeError(file.extension)
+        if file.version != expected_version:
+            raise FileVersionConflictError(file_id, expected_version, file.version)
+
+        encoded_content = content.encode("utf-8")
+        if len(encoded_content) > self.max_text_bytes:
+            raise FileTooLargeError(len(encoded_content), self.max_text_bytes)
+
+        storage_key = self._new_storage_key(file.extension)
+        await self.storage.save(storage_key, encoded_content)
+        mime_type = file.mime_type if file.mime_type.startswith("text/") else "text/markdown"
+        try:
+            return await self._ingest(
+                path=file.raw_file_path,
+                data=encoded_content,
+                text=content,
+                mime_type=mime_type,
+                storage_key=storage_key,
+                occurred_at=None,
+                ai_summary=file.ai_summary,
+                ai_tags=list(file.ai_tags),
+                document_type=file.document_type,
+                extraction_method="text",
+            )
+        except Exception:
+            await self.storage.delete(storage_key)
+            raise
 
     async def ingest_upload(
         self,
