@@ -324,15 +324,16 @@ export const settings = {
     lede:
       "空白聊天室的快捷方式。列表存储在 PostgreSQL 中，并按下列顺序显示；编辑列表不会改变现有对话。",
     hint:
-      "最多 20 个提示词。标题与提示词文本会去除首尾空白；空值会被拒绝。排序数字较小者会先显示。",
+      "最多 20 个提示词。标题与提示词文本会去除首尾空白；空值会被拒绝。拖拽提示词可调整顺序；这里的顺序就是空白聊天页的显示顺序。",
     add: "添加提示词",
     emptyTitle: "还没有常用提示词。",
     emptyCopy:
       "最多可添加 20 个快捷方式。每个快捷方式都会出现在空白聊天页，点击后会填入编辑器。",
     addFirst: "添加第一个提示词",
-    order: "排序 {order}",
     edit: "编辑",
     delete: "删除",
+    reorderAria: "重新排序“{title}”",
+    reorderTitle: "拖拽调整顺序",
     loadErrorTitle: "常用提示词没有响应。",
     dialogEyebrow: "设置 · 常用提示词",
     editTitle: "编辑常用提示词",
@@ -345,8 +346,6 @@ export const settings = {
     fieldTitle: "标题",
     titlePlaceholder: "追踪一条记忆",
     titleHelp: "最多 80 个字符。",
-    fieldSortOrder: "排序",
-    sortHelp: "数字较小者会先显示。空白会视为零。",
     fieldPromptText: "提示词文本",
     promptPlaceholder:
       "追踪最近一条记忆的来源脉络，并说明改变了什么。",
@@ -356,7 +355,6 @@ export const settings = {
       titleMax: "标题必须为 80 个字符以内。",
       textRequired: "提示词文本为必填。",
       textMax: "提示词文本必须为 4,000 个字符以内。",
-      sortOrder: "排序必须是零或以上的整数。",
     },
     addedToast: "已添加常用提示词。",
     updatedToast: "已更新常用提示词。",

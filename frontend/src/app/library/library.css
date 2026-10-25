@@ -3038,6 +3038,43 @@ button.library-crumb:hover {
   white-space: nowrap;
 }
 
+.markdown-editor__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.markdown-editor__title-row .markdown-editor__title {
+  min-width: 0;
+}
+
+/* 編輯模式的檔名重新命名：沿用 header 的小型 icon button 尺寸。 */
+.markdown-editor__rename {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  flex: none;
+  place-items: center;
+  color: var(--mono-muted);
+  border-radius: 4px;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.markdown-editor__rename:hover,
+.markdown-editor__rename:focus-visible {
+  color: var(--mono-ink);
+  background: var(--mono-paper);
+  outline: none;
+}
+
+.markdown-editor__rename:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .markdown-editor__file-path {
   display: block;
   overflow: hidden;

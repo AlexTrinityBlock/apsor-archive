@@ -73,6 +73,47 @@ class FrequentlyUsedPromptRepository:
         await self.session.flush()
         return prompt
 
+    async def reorder(
+        self,
+        prompt_ids: list[int],
+        *,
+        now: datetime,
+    ) -> list[FrequentlyUsedPromptModel]:
+        """Rewrite ``sort_order`` for the complete collection.
+
+        ``FOR UPDATE`` serializes concurrent reorders, and validation runs after
+        the lock: reading ids first would let another request insert or delete a
+        row in between, so a payload could pass validation while leaving a row
+        out. New orders use ``(index + 1) * 10`` so manual inserts and
+        interrupted drags keep integer gaps.
+        """
+        statement = (
+            select(FrequentlyUsedPromptModel)
+            .order_by(
+                FrequentlyUsedPromptModel.sort_order,
+                FrequentlyUsedPromptModel.id,
+            )
+            .with_for_update()
+        )
+        rows = list((await self.session.execute(statement)).scalars().all())
+        existing_ids = {row.id for row in rows}
+        requested_ids = set(prompt_ids)
+        # The payload must cover every existing prompt exactly once: no
+        # duplicates, no omissions, and no deleted or unknown ids.
+        if len(prompt_ids) != len(requested_ids) or requested_ids != existing_ids:
+            raise ValueError(
+                "The reorder payload must list every existing frequently used "
+                "prompt exactly once."
+            )
+
+        rows_by_id = {row.id: row for row in rows}
+        for index, prompt_id in enumerate(prompt_ids):
+            row = rows_by_id[prompt_id]
+            row.sort_order = (index + 1) * 10
+            row.updated_at = now
+        await self.session.flush()
+        return [rows_by_id[prompt_id] for prompt_id in prompt_ids]
+
     async def delete(self, prompt_id: int) -> bool:
         prompt = await self.session.get(FrequentlyUsedPromptModel, prompt_id)
         if prompt is None:
