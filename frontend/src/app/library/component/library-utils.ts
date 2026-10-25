@@ -336,6 +336,46 @@ export function isImageFileName(name: string): boolean {
   return IMAGE_EXTENSIONS.some((extension) => lower.endsWith(extension));
 }
 
+/** 判斷儲存路徑是否為編輯器可開啟的 Markdown 文件。 */
+export function isMarkdownFile(rawPath: string): boolean {
+  const lower = rawPath.toLowerCase();
+  return lower.endsWith(".md") || lower.endsWith(".markdown");
+}
+
+/**
+ * 右鍵選單的觸發事件。滑鼠事件本身即符合這個介面；鍵盤操作則用
+ * `contextMenuTriggerFromKeyboard` 以按鈕位置建立一個等價物件。
+ */
+export interface LibraryContextMenuTrigger {
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly currentTarget: EventTarget | null;
+  readonly preventDefault: () => void;
+  readonly stopPropagation: () => void;
+}
+
+/** ContextMenu 鍵或 Shift+F10 都能開啟與滑鼠右鍵相同的選單。 */
+export function isContextMenuKey(event: {
+  readonly key: string;
+  readonly shiftKey: boolean;
+}): boolean {
+  return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
+}
+
+/** 以觸發按鈕的可見區域中心建立選單座標。 */
+export function contextMenuTriggerFromKeyboard(
+  target: HTMLElement,
+): LibraryContextMenuTrigger {
+  const rect = target.getBoundingClientRect();
+  return {
+    clientX: rect.left + rect.width / 2,
+    clientY: rect.top + rect.height / 2,
+    currentTarget: target,
+    preventDefault: () => undefined,
+    stopPropagation: () => undefined,
+  };
+}
+
 /** Rejects a browser file name that could escape the chosen folder. */
 export function isSafeUploadName(name: string): boolean {
   const trimmed = name.trim();

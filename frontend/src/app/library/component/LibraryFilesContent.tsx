@@ -1,8 +1,16 @@
-import type { PathFileSchema, PathListingSchema } from "../../generated-apis-types/schemas";
+import type {
+  DirectorySchema,
+  PathFileSchema,
+  PathListingSchema,
+} from "../../generated-apis-types/schemas";
 import { LibraryBoard } from "./LibraryBoard";
 import { LibraryEmptyState } from "./LibraryEmptyState";
 import { LibraryResults } from "./LibraryResults";
-import type { FileOperationMode, LibraryView } from "./library-utils";
+import type {
+  FileOperationMode,
+  LibraryContextMenuTrigger,
+  LibraryView,
+} from "./library-utils";
 
 interface LibraryFilesContentProps {
   readonly listing: PathListingSchema;
@@ -15,6 +23,15 @@ interface LibraryFilesContentProps {
   readonly onToggleSelected: (fileId: number) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onOpenFile: (fileId: number) => void;
+  readonly onEditFile: (fileId: number) => void;
+  readonly onFileContextMenu: (
+    event: LibraryContextMenuTrigger,
+    file: PathFileSchema,
+  ) => void;
+  readonly onFolderContextMenu: (
+    event: LibraryContextMenuTrigger,
+    folder: DirectorySchema,
+  ) => void;
   readonly onUpload: () => void;
   readonly onUploadHere: (path: string) => void;
   readonly onNewFolder: () => void;
@@ -43,6 +60,9 @@ export function LibraryFilesContent({
   onToggleSelected,
   onOpenFolder,
   onOpenFile,
+  onEditFile,
+  onFileContextMenu,
+  onFolderContextMenu,
   onUpload,
   onUploadHere,
   onNewFolder,
@@ -67,6 +87,9 @@ export function LibraryFilesContent({
         onToggleSelected={onToggleSelected}
         onOpenFolder={onOpenFolder}
         onOpenFile={onOpenFile}
+        onEditFile={onEditFile}
+        onFileContextMenu={onFileContextMenu}
+        onFolderContextMenu={onFolderContextMenu}
         onUploadHere={onUploadHere}
         onRequestMove={onRequestMove}
         onRequestDelete={onRequestDelete}
@@ -98,6 +121,8 @@ export function LibraryFilesContent({
         onToggleSelected={onToggleSelected}
         onOpenFolder={onOpenFolder}
         onOpenFile={onOpenFile}
+        onFileContextMenu={onFileContextMenu}
+        onFolderContextMenu={onFolderContextMenu}
         onRequestMove={onRequestMove}
         onRequestDelete={onRequestDelete}
       />
@@ -114,6 +139,9 @@ export function LibraryFilesContent({
       onToggleSelected={onToggleSelected}
       onOpenFolder={onOpenFolder}
       onOpenFile={onOpenFile}
+      onEditFile={onEditFile}
+      onFileContextMenu={onFileContextMenu}
+      onFolderContextMenu={onFolderContextMenu}
       onUploadHere={onUploadHere}
       onRequestMove={onRequestMove}
       onRequestDelete={onRequestDelete}

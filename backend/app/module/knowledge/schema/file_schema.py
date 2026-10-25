@@ -52,6 +52,15 @@ class FileTextCreateSchema(BaseModel):
     occurred_at: datetime | None = None
 
 
+class FileTextUpdateSchema(BaseModel):
+    """更新既有 Markdown 檔案內容；expected_version 用於樂觀鎖。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1)
+    expected_version: int = Field(ge=1)
+
+
 class IngestJobSchema(BaseModel):
     """Durable ingestion job state and progress for one file path."""
 
@@ -163,6 +172,7 @@ class PathFileSchema(BaseModel):
     file_name: str
     total_chunks: int
     size_bytes: int
+    has_original: bool
     update_time: datetime
 
 

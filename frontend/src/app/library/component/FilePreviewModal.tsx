@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useId,
   useRef,
@@ -29,6 +30,10 @@ import {
   kindLabel,
 } from "../../viewer/component/viewer-utils";
 import {
+  MarkdownEditor,
+  type MarkdownEditorHandle,
+} from "./MarkdownEditor";
+import {
   clampChunk,
   isNotFoundError,
   type FileOperationTarget,
@@ -39,8 +44,11 @@ type PreviewTab = "page" | "chunk" | "meta";
 interface FilePreviewModalProps {
   readonly fileId: number;
   readonly requestedChunk: number;
+  readonly startInEdit?: boolean;
   readonly onClose: () => void;
   readonly onChunkChange: (chunk: number) => void;
+  readonly onFileVersionChange: (nextFileId: number) => void;
+  readonly onEditModeChange?: (editing: boolean) => void;
   readonly onMove: (target: FileOperationTarget) => void;
   readonly onCopy: (target: FileOperationTarget) => void;
   readonly onDelete: (target: FileOperationTarget) => void;
@@ -448,17 +456,20 @@ function PreviewBody({
 
 function PreviewActions({
   file,
+  onEdit,
   onMove,
   onCopy,
   onDelete,
 }: {
   readonly file: FileSchema;
+  readonly onEdit: () => void;
   readonly onMove: (target: FileOperationTarget) => void;
   readonly onCopy: (target: FileOperationTarget) => void;
   readonly onDelete: (target: FileOperationTarget) => void;
 }) {
   const { t, formatNumber } = useI18n();
   const state = fileState(file);
+  const markdown = classifyFile(file) === "markdown";
   return (
     <div className="library-preview__actions">
       <div className="library-preview__badges">
@@ -477,6 +488,12 @@ function PreviewActions({
         </Badge>
       </div>
       <div className="library-preview__action-buttons">
+        {markdown && file.is_current && !file.deleted_at ? (
+          <Button variant="ghost" size="sm" onClick={onEdit}>
+            <Icon name="pencil" size={14} />
+            {t("library.editor.editFile")}
+          </Button>
+        ) : null}
         {file.has_original ? (
           <a
             className="btn btn--secondary btn--sm"
@@ -525,8 +542,11 @@ function PreviewActions({
 export function FilePreviewModal({
   fileId,
   requestedChunk,
+  startInEdit = false,
   onClose,
   onChunkChange,
+  onFileVersionChange,
+  onEditModeChange,
   onMove,
   onCopy,
   onDelete,
@@ -534,16 +554,51 @@ export function FilePreviewModal({
   const { t } = useI18n();
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<MarkdownEditorHandle>(null);
   const onCloseRef = useRef(onClose);
+  const startInEditAppliedRef = useRef(false);
   const [activeTab, setActiveTab] = useState<PreviewTab>(
     requestedChunk > 1 ? "chunk" : "page",
   );
+  const [editing, setEditing] = useState(false);
+  const [editorDirty, setEditorDirty] = useState(false);
 
   useScrollLock(true);
+
+  const fileQuery = useGetFile(fileId, { query: { retry: false } });
+  const file = fileQuery.data;
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  // 切換檔案 id 會展開新的預覽工作階段；新的 `mode=edit` 連結由下方
+  // effect 在中繼資料載入後套用。
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    startInEditAppliedRef.current = false;
+    setEditing(false);
+    setEditorDirty(false);
+  }, [fileId]);
+
+  // 深層連結可能在檔案查詢完成前就要求進入編輯模式。
+  useEffect(() => {
+    if (!startInEdit || startInEditAppliedRef.current || !file) {
+      return;
+    }
+    startInEditAppliedRef.current = true;
+    if (
+      classifyFile(file) === "markdown" &&
+      file.is_current &&
+      !file.deleted_at
+    ) {
+      setEditing(true);
+    } else {
+      // URL 指向不能編輯的檔案時，清掉無效的 `mode=edit`。
+      onEditModeChange?.(false);
+    }
+  }, [file, onEditModeChange, startInEdit]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -555,6 +610,10 @@ export function FilePreviewModal({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Markdown 編輯器開啟時，Escape、Tab 與 Ctrl/Cmd+S 都由它接管。
+      if (editing) {
+        return;
+      }
       // A move/delete dialog can sit above the preview. It owns Escape and Tab
       // while open, so the preview must not close underneath it.
       if (document.querySelector(".library-dialog-layer")) {
@@ -592,10 +651,8 @@ export function FilePreviewModal({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [editing]);
 
-  const fileQuery = useGetFile(fileId, { query: { retry: false } });
-  const file = fileQuery.data;
   const effectiveChunk = file
     ? clampChunk(requestedChunk, file.total_chunks || requestedChunk)
     : Math.max(1, requestedChunk);
@@ -612,11 +669,40 @@ export function FilePreviewModal({
   );
   const kind = file ? classifyFile(file) : null;
 
+  const handleCancelEdit = useCallback(() => {
+    setEditorDirty(false);
+    setEditing(false);
+    onEditModeChange?.(false);
+  }, [onEditModeChange]);
+
+  const handleSaved = useCallback(
+    (updatedFile: FileSchema) => {
+      setEditorDirty(false);
+      // 兩個 callback 可能在同一輪事件中各自更新 query string。先清掉
+      // `mode`，再讓 `onFileVersionChange` 同時帶入新 file id 與 mode=null，
+      // 確保最後一次導覽不會退回舊版本。
+      onEditModeChange?.(false);
+      onFileVersionChange(updatedFile.id);
+      setEditing(false);
+      setActiveTab("page");
+    },
+    [onEditModeChange, onFileVersionChange],
+  );
+
+  const handleStartEdit = useCallback(() => {
+    setEditing(true);
+    onEditModeChange?.(true);
+  }, [onEditModeChange]);
+
   return (
     <div
-      className="modal library-preview"
+      className={
+        editing
+          ? "modal library-preview library-preview--editing"
+          : "modal library-preview"
+      }
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (!editing && event.target === event.currentTarget) {
           onClose();
         }
       }}
@@ -642,58 +728,96 @@ export function FilePreviewModal({
             {file ? <code className="library-preview__path">{file.raw_file_path}</code> : null}
           </div>
 
-          <div
-            className="tabs library-preview__tabs"
-            role="tablist"
-            aria-label={t("library.preview.sectionsAria")}
-          >
-            {PREVIEW_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                className={activeTab === tab.id ? "tab is-active" : "tab"}
-                onClick={() => setActiveTab(tab.id)}
-                disabled={!file}
-              >
-                {t(tab.labelKey)}
-              </button>
-            ))}
-          </div>
+          {editing ? null : (
+            <div
+              className="tabs library-preview__tabs"
+              role="tablist"
+              aria-label={t("library.preview.sectionsAria")}
+            >
+              {PREVIEW_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  className={activeTab === tab.id ? "tab is-active" : "tab"}
+                  onClick={() => setActiveTab(tab.id)}
+                  disabled={!file}
+                >
+                  {t(tab.labelKey)}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {editing && editorDirty ? (
+            <span className="visually-hidden" role="status">
+              {t("library.editor.unsaved")}
+            </span>
+          ) : null}
 
           <button
             type="button"
             className="modal-btn-close"
-            onClick={onClose}
-            aria-label={t("library.common.closePreview")}
-            title={t("library.common.closePreview")}
+            onClick={
+              editing
+                ? () => editorRef.current?.requestClose()
+                : onClose
+            }
+            aria-label={
+              editing
+                ? t("library.editor.closeEditor")
+                : t("library.common.closePreview")
+            }
+            title={
+              editing
+                ? t("library.editor.closeEditor")
+                : t("library.common.closePreview")
+            }
           >
             <Icon name="close" size={18} />
           </button>
         </header>
 
-        {file ? (
+        {file && !editing ? (
           <PreviewActions
             file={file}
+            onEdit={handleStartEdit}
             onMove={onMove}
             onCopy={onCopy}
             onDelete={onDelete}
           />
         ) : null}
 
-        <div className="modal-body library-preview__body">
-          <PreviewBody
-            fileId={fileId}
-            fileQuery={fileQuery}
-            file={file}
-            activeTab={activeTab}
-            requestedChunk={requestedChunk}
-            effectiveChunk={effectiveChunk}
-            chunkQuery={chunkQuery}
-            onChunkChange={onChunkChange}
-            onClose={onClose}
-          />
+        <div
+          className={
+            editing
+              ? "modal-body library-preview__body library-preview__body--editing"
+              : "modal-body library-preview__body"
+          }
+        >
+          {editing && file ? (
+            <MarkdownEditor
+              ref={editorRef}
+              mode="edit"
+              file={file}
+              onCancel={handleCancelEdit}
+              onSaved={handleSaved}
+              onDirtyChange={setEditorDirty}
+            />
+          ) : (
+            <PreviewBody
+              fileId={fileId}
+              fileQuery={fileQuery}
+              file={file}
+              activeTab={activeTab}
+              requestedChunk={requestedChunk}
+              effectiveChunk={effectiveChunk}
+              chunkQuery={chunkQuery}
+              onChunkChange={onChunkChange}
+              onClose={onClose}
+            />
+          )}
         </div>
       </div>
     </div>
