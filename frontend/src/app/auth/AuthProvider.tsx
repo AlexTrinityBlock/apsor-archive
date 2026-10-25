@@ -16,11 +16,13 @@ import {
   useLogin,
   useLogout,
   useSetupAccount,
+  useUpdateCurrentUser,
 } from "../generated-apis-types";
 import type {
   AuthStatusSchema,
   LoginSchema,
   SetupSchema,
+  UserProfileUpdateSchema,
   UserSchema,
 } from "../generated-apis-types/schemas";
 
@@ -37,6 +39,8 @@ interface AuthContextValue {
   readonly login: (payload: LoginSchema) => Promise<void>;
   readonly setup: (payload: SetupSchema) => Promise<void>;
   readonly logout: () => Promise<void>;
+  readonly updateProfile: (payload: UserProfileUpdateSchema) => Promise<boolean>;
+  readonly isProfileSubmitting: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -106,6 +110,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     },
   });
+  const profileMutation = useUpdateCurrentUser({
+    mutation: {
+      onSuccess: (user) => {
+        const current = queryClient.getQueryData<AuthStatusSchema>(
+          getGetAuthStatusQueryKey(),
+        );
+        if (current) {
+          queryClient.setQueryData<AuthStatusSchema>(
+            getGetAuthStatusQueryKey(),
+            { ...current, user },
+          );
+        }
+      },
+    },
+  });
 
   useEffect(() => {
     const handleUnauthorized = () => {
@@ -152,6 +171,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [logoutMutation]);
 
+  const updateProfile = useCallback(
+    async (payload: UserProfileUpdateSchema) => {
+      setError(null);
+      try {
+        await profileMutation.mutateAsync({ data: payload });
+        return true;
+      } catch (caught) {
+        setError(errorMessage(caught));
+        return false;
+      }
+    },
+    [profileMutation],
+  );
+
   const value = useMemo<AuthContextValue>(() => {
     const status = statusQuery.data;
     return {
@@ -161,7 +194,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: status?.authenticated ?? false,
       requiresSetup: status?.requires_setup ?? false,
       isSubmitting:
-        setupMutation.isPending || loginMutation.isPending || logoutMutation.isPending,
+        setupMutation.isPending ||
+        loginMutation.isPending ||
+        logoutMutation.isPending ||
+        profileMutation.isPending,
       error,
       loadError: statusQuery.error ? errorMessage(statusQuery.error) : null,
       retry: () => {
@@ -170,6 +206,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       setup,
       logout,
+      updateProfile,
+      isProfileSubmitting: profileMutation.isPending,
     };
   }, [
     error,
@@ -177,9 +215,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loginMutation.isPending,
     logout,
     logoutMutation.isPending,
+    profileMutation.isPending,
     setup,
     setupMutation.isPending,
     statusQuery,
+    updateProfile,
   ]);
 
   return <AuthContext value={value}>{children}</AuthContext>;

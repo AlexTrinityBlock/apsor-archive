@@ -255,6 +255,7 @@ class SearchService:
             memory_results.append(
                 MemorySearchResultSchema(
                     memory_id=memory.id,
+                    title=memory.title,
                     update_time=memory.memory_time,
                     content=memory.content,
                     status=memory.status,

@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.module.agent.dependencies import get_system_prompt_service
 from app.module.agent.schema.system_prompt_schema import (
+    SystemPromptBuiltinSectionSchema,
+    SystemPromptBuiltinUpdateSchema,
     SystemPromptReorderSchema,
     SystemPromptSectionCreateSchema,
     SystemPromptSectionReadSchema,
@@ -44,6 +46,44 @@ async def create_system_prompt_section(
 ) -> ListResponseSchema[SystemPromptSectionReadSchema]:
     """Create one section and return the updated list."""
     return await service.create_section(payload)
+
+
+@router.get(
+    "/builtin",
+    response_model=ListResponseSchema[SystemPromptBuiltinSectionSchema],
+    operation_id="listBuiltinSystemPromptSections",
+)
+async def list_builtin_system_prompt_sections(
+    service: SystemPromptService = Depends(get_system_prompt_service),
+) -> ListResponseSchema[SystemPromptBuiltinSectionSchema]:
+    """List the four built-in prompt sections with any owner overrides."""
+    return await service.list_builtin_sections()
+
+
+@router.put(
+    "/builtin/{key}",
+    response_model=ListResponseSchema[SystemPromptBuiltinSectionSchema],
+    operation_id="updateBuiltinSystemPromptSection",
+)
+async def update_builtin_system_prompt_section(
+    key: str,
+    payload: SystemPromptBuiltinUpdateSchema,
+    service: SystemPromptService = Depends(get_system_prompt_service),
+) -> ListResponseSchema[SystemPromptBuiltinSectionSchema]:
+    """Replace one built-in body; its title and position stay canonical."""
+    return await service.update_builtin_section(key, payload)
+
+
+@router.post(
+    "/builtin/reset",
+    response_model=ListResponseSchema[SystemPromptBuiltinSectionSchema],
+    operation_id="resetBuiltinSystemPromptSections",
+)
+async def reset_builtin_system_prompt_sections(
+    service: SystemPromptService = Depends(get_system_prompt_service),
+) -> ListResponseSchema[SystemPromptBuiltinSectionSchema]:
+    """Remove every built-in override."""
+    return await service.reset_builtin_sections()
 
 
 @router.put(

@@ -9,11 +9,19 @@ import {
 import { useQueries } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
-import type { TimelineResponseSchema } from "../generated-apis-types/schemas";
+import type {
+  TimelineEventSchema,
+  TimelineResponseSchema,
+} from "../generated-apis-types/schemas";
 
 import { Button } from "../component/Button";
 import { EmptyState } from "../component/EmptyState";
 import { Icon } from "../component/Icon";
+import {
+  MemoryDeprecateDialog,
+  MemoryEditDialog,
+  type MemoryActionTarget,
+} from "../memory/component/MemoryActionDialogs";
 import { useListMemories } from "../generated-apis-types/memories/memories";
 import {
   getReadTimelineQueryOptions,
@@ -212,6 +220,8 @@ interface BodyInput {
   readonly sentinelState: SentinelState;
   readonly onLoadEarlier: () => void;
   readonly onRetryEarlier: () => void;
+  readonly onEditMemory: (event: TimelineEventSchema) => void;
+  readonly onDeprecateMemory: (event: TimelineEventSchema) => void;
 }
 
 function renderTimelineBody({
@@ -230,6 +240,8 @@ function renderTimelineBody({
   sentinelState,
   onLoadEarlier,
   onRetryEarlier,
+  onEditMemory,
+  onDeprecateMemory,
 }: BodyInput): ReactNode {
   if (awaitingAnchor || (isPending && !data)) {
     return <TimelineSkeleton />;
@@ -247,6 +259,8 @@ function renderTimelineBody({
         windows={windows}
         currentEmptyContent={currentEmptyContent}
         loadingEarlier={isLoadingEarlier}
+        onEditMemory={onEditMemory}
+        onDeprecateMemory={onDeprecateMemory}
         sentinel={
           <TimelineSentinel
             state={sentinelState}
@@ -266,6 +280,9 @@ function renderTimelineBody({
  */
 export function TimelinePage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [editTarget, setEditTarget] = useState<MemoryActionTarget | null>(null);
+  const [deprecateTarget, setDeprecateTarget] =
+    useState<MemoryActionTarget | null>(null);
   const fallbackDay = useMemo(() => startOfDay(new Date()), []);
   const urlDate = useMemo(() => parseDateParams(searchParams), [searchParams]);
 
@@ -328,6 +345,34 @@ export function TimelinePage() {
       return;
     }
     updateParams((next) => writeWindowParams(next, target, range, includeHistory));
+  };
+
+  const memoryTarget = (
+    event: TimelineEventSchema,
+  ): MemoryActionTarget | null => {
+    if (event.kind !== "memory" || typeof event.memory_id !== "number") {
+      return null;
+    }
+    return {
+      memory_id: event.memory_id,
+      title: event.title ?? "",
+      content: event.content,
+      status: event.status ?? undefined,
+    };
+  };
+
+  const openEditMemory = (event: TimelineEventSchema) => {
+    const target = memoryTarget(event);
+    if (target) {
+      setEditTarget(target);
+    }
+  };
+
+  const openDeprecateMemory = (event: TimelineEventSchema) => {
+    const target = memoryTarget(event);
+    if (target) {
+      setDeprecateTarget(target);
+    }
   };
 
   const handleRangeChange = (nextRange: number) => {
@@ -522,8 +567,23 @@ export function TimelinePage() {
           sentinelState,
           onLoadEarlier: handleLoadEarlier,
           onRetryEarlier: handleRetryEarlier,
+          onEditMemory: openEditMemory,
+          onDeprecateMemory: openDeprecateMemory,
         })}
       </div>
+
+      {editTarget ? (
+        <MemoryEditDialog
+          memory={editTarget}
+          onClose={() => setEditTarget(null)}
+        />
+      ) : null}
+      {deprecateTarget ? (
+        <MemoryDeprecateDialog
+          memory={deprecateTarget}
+          onClose={() => setDeprecateTarget(null)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -8,6 +8,7 @@ from app.module.auth.domain.auth_domain import AuthDomain
 from app.module.auth.exception.domain_error import (
     AuthenticationRequiredError,
     InvalidCredentialsError,
+    InvalidProfileError,
     InvalidUsernameError,
     LoginThrottledError,
     PasswordMismatchError,
@@ -59,6 +60,8 @@ class AuthService:
         return UserSchema(
             user_id=user.id,
             username=user.username,
+            display_name=user.display_name,
+            bio=user.bio,
             created_at=user.created_at,
             last_login_at=user.last_login_at,
         )
@@ -138,6 +141,33 @@ class AuthService:
         await self.session_repository.delete_expired(now)
         token = await self._new_session(user)
         return self._to_schema(user), token
+
+    async def update_profile(
+        self,
+        user_id: int,
+        *,
+        display_name: str,
+        bio: str | None,
+    ) -> UserSchema:
+        """Update the owner's name and self-introduction in one transaction."""
+        cleaned_name = " ".join(display_name.split())
+        if not cleaned_name or len(cleaned_name) > 80:
+            raise InvalidProfileError("Display name must contain between 1 and 80 characters.")
+        cleaned_bio = bio.strip() if isinstance(bio, str) else None
+        if cleaned_bio == "":
+            cleaned_bio = None
+        if cleaned_bio is not None and len(cleaned_bio) > 2000:
+            raise InvalidProfileError("Self-introduction cannot exceed 2,000 characters.")
+        user = await self.user_repository.get_by_id(user_id)
+        if user is None:
+            raise AuthenticationRequiredError()
+        updated = await self.user_repository.update_profile(
+            user,
+            display_name=cleaned_name,
+            bio=cleaned_bio,
+            now=utcnow(),
+        )
+        return self._to_schema(updated)
 
     async def resolve_session(self, token: str | None) -> UserSchema:
         """Return the signed-in user or raise a 401 domain error."""

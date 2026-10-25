@@ -45,7 +45,7 @@ export function MemoryMissing({ memoryId, invalid = false }: MemoryMissingProps)
         icon="memory"
         eyebrow="No crystal at this address"
         title="This memory is not in the archive."
-        description="Deprecated memories remain readable, so a missing record means it is genuinely absent rather than merely superseded. Return to the vault to browse the surviving lineage."
+        description="Deprecated memories remain readable, so a missing record means it is genuinely absent rather than merely retired. Return to the vault to browse the surviving lineage."
         action={
           <>
             <ButtonLink to="/memory" variant="ink" size="sm">

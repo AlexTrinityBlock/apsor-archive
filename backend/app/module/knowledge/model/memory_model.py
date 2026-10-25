@@ -32,8 +32,10 @@ MEMORY_SOURCES = (MEMORY_SOURCE_MANUAL, MEMORY_SOURCE_AI, MEMORY_SOURCE_IMPORT)
 class MemoryModel(Base):
     """One memory on the timeline.
 
-    A deprecated memory keeps its row and its content. Only its search chunk is
-    marked non-current; ``read_memory`` can still walk the whole chain.
+    A deprecated memory keeps its row and its content. It is deprecated either
+    because a successor replaced it (``superseded_by_id``) or because the keeper
+    retired it directly (``deprecated_at`` with no successor). Only its search
+    chunk is marked non-current; ``read_memory`` can still walk the whole chain.
     """
 
     __tablename__ = "memory"
@@ -48,17 +50,25 @@ class MemoryModel(Base):
         CheckConstraint("status IN ('active', 'deprecated')", name="status_valid"),
         CheckConstraint("source IN ('manual', 'ai', 'import')", name="source_valid"),
         CheckConstraint(
-            "status = 'active' OR superseded_by_id IS NOT NULL",
-            name="deprecated_has_successor",
+            "status = 'active' OR superseded_by_id IS NOT NULL OR deprecated_at IS NOT NULL",
+            name="deprecated_has_provenance",
         ),
+        CheckConstraint(
+            "deprecated_reason IS NULL OR char_length(deprecated_reason) <= 500",
+            name="deprecated_reason_length",
+        ),
+        CheckConstraint("char_length(title) BETWEEN 1 AND 120", name="title_length"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default=MEMORY_ACTIVE)
     superseded_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("memory.id", ondelete="SET NULL"), nullable=True
     )
+    deprecated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deprecated_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     supersedes_ids: Mapped[list[int]] = mapped_column(
         ARRAY(BigInteger), nullable=False, default=list, server_default=text("'{}'::bigint[]")
     )

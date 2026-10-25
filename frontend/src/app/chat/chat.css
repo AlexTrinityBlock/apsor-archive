@@ -2603,3 +2603,30 @@
     animation: none;
   }
 }
+
+.chat-approval__deprecate-ids {
+  margin: 0;
+  color: var(--mono-ink);
+  font-family: var(--mono-font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.chat-approval__reason {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 8px 0 0;
+  color: var(--mono-muted);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.chat-approval__reason span {
+  color: var(--mono-faint);
+  font-family: var(--mono-font-mono);
+  font-size: 8px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}

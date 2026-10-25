@@ -1959,3 +1959,35 @@
 .chat-inspector .pi-panel-link {
   font-size: 8.5px;
 }
+
+.pi-seal-receipt__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pi-seal-receipt__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 10.5px;
+}
+
+.pi-seal-receipt__list a {
+  color: var(--accent-seal);
+  font-family: var(--mono-font-mono);
+  font-size: 9px;
+  text-decoration: none;
+}
+
+.pi-seal-receipt__list a:hover {
+  text-decoration: underline;
+}
+
+.pi-seal-receipt__list li > span:last-child {
+  color: var(--mono-muted);
+}

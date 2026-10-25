@@ -55,8 +55,8 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v8"
-TOOLS_VERSION = "archive-tools-v3"
+PROMPT_VERSION = "archive-agent-v10"
+TOOLS_VERSION = "archive-tools-v4"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -1697,6 +1697,66 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert duplicate_approve.json()["error"] == "agent_approval_not_pending"
     assert memory_count() == approved_memories
 
+    # Deprecation-only reuses save_memory: no content, one supersedes id, and
+    # no replacement row. The same human approval gate still applies.
+    approved_memory_id = int(approved_results[0]["data"]["memory_id"])
+    deprecate_fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "save_memory",
+                {
+                    "supersedes": [approved_memory_id],
+                    "reason": "Already handled.",
+                    "user_confirmed": True,
+                },
+                call_id="call_deprecate_memory",
+            ),
+            text_result("The memory was retired without a replacement."),
+        ]
+    )
+    client.app.state.agent_chat_generator = deprecate_fake
+    deprecate_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Memory deprecation"},
+    ).json()
+    deprecate_waiting = client.post(
+        f"/api/v1/agent/conversations/{deprecate_conversation['id']}/messages",
+        json={"content": "That note is done; retire it."},
+        headers={"Accept": "application/json"},
+    )
+    assert deprecate_waiting.status_code == 200, deprecate_waiting.text
+    deprecate_body = deprecate_waiting.json()
+    assert deprecate_body["run"]["status"] == "waiting"
+    deprecate_approval = deprecate_body["pending_approvals"][0]
+    assert deprecate_approval["preview"]["mode"] == "deprecate"
+    assert deprecate_approval["preview"]["content"] == ""
+    assert deprecate_approval["preview"]["supersedes"] == [approved_memory_id]
+    assert deprecate_approval["preview"]["reason"] == "Already handled."
+    assert memory_count() == approved_memories
+
+    deprecate_approved = client.post(
+        f"/api/v1/agent/approvals/{deprecate_approval['id']}/approve",
+        headers={"Accept": "application/json"},
+    )
+    assert deprecate_approved.status_code == 200, deprecate_approved.text
+    deprecate_completed = deprecate_approved.json()
+    assert deprecate_completed["run"]["status"] == "completed"
+    assert deprecate_completed["answer"] == ("The memory was retired without a replacement.")
+    deprecate_results = [
+        entry
+        for entry in deprecate_completed["tool_results"]
+        if entry["data"]["tool"] == "save_memory"
+    ]
+    assert len(deprecate_results) == 1
+    assert deprecate_results[0]["data"]["mode"] == "deprecate"
+    assert deprecate_results[0]["data"]["memory_ids"] == [approved_memory_id]
+    assert memory_count() == approved_memories
+    retired = client.get(f"/api/v1/memories/{approved_memory_id}").json()
+    assert retired["target"]["status"] == "deprecated"
+    assert retired["target"]["superseded_by_id"] is None
+    assert retired["target"]["deprecated_reason"] == "Already handled."
+    assert retired["target"]["deprecated_at"] is not None
+
     # Rejecting appends a clear tool result and resumes without a write.
     reject_fake = FakeChatGenerator(
         [
@@ -1974,6 +2034,38 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     final_settings_body = final_settings_reset.json()
     assert final_settings_body["config"] == defaults
     assert final_settings_body["config"]["save_memory_requires_approval"] is True
+
+    # ------------------------------------------------------------------
+    # The owner profile is frozen into new conversations before the built-in
+    # prompt, so the agent knows the chosen name and self-introduction.
+    # ------------------------------------------------------------------
+    profile = client.patch(
+        "/api/v1/auth/me",
+        json={
+            "display_name": "Alex",
+            "bio": "I build local-first archives and teach AI courses.",
+        },
+    )
+    assert profile.status_code == 200, profile.text
+    profile_conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Profile prompt"},
+    ).json()
+    profile_detail = client.get(f"/api/v1/agent/conversations/{profile_conversation['id']}").json()
+    profile_system = next(
+        entry for entry in profile_detail["entries"] if entry["kind"] == "pi.system"
+    )
+    profile_sections = profile_system["data"]["sections"]
+    assert [section["name"] for section in profile_sections] == [
+        "owner_profile",
+        "identity",
+        "instructions",
+        "examples",
+        "context_protocol",
+    ]
+    assert "Name: Alex" in profile_sections[0]["content"]
+    assert "teach AI courses" in profile_sections[0]["content"]
+    assert "Name: Alex" in profile_system["model"][0]["content"]
 
     # ------------------------------------------------------------------
     # Read-only web research tools use the injected service, never Tavily.

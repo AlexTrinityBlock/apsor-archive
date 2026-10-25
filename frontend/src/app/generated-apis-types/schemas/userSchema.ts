@@ -6,7 +6,9 @@
  */
 
 export interface UserSchema {
+  bio: string | null;
   created_at: string;
+  display_name: string | null;
   last_login_at: string | null;
   user_id: number;
   username: string;

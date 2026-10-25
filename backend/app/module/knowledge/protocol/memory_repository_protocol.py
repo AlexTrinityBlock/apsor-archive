@@ -12,9 +12,17 @@ class MemoryRepositoryProtocol(Protocol):
 
     async def get_by_id(self, memory_id: int) -> MemoryModel | None: ...
 
+    async def save(self, memory: MemoryModel) -> MemoryModel: ...
+
     async def list_by_ids(self, memory_ids: Sequence[int]) -> list[MemoryModel]: ...
 
-    async def deprecate(self, memory: MemoryModel, successor_id: int) -> None: ...
+    async def deprecate(
+        self,
+        memory: MemoryModel,
+        successor_id: int | None = None,
+        *,
+        reason: str | None = None,
+    ) -> None: ...
 
     async def list_neighbors(
         self,

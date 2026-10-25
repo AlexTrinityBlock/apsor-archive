@@ -14,6 +14,7 @@ from app.module.auth.schema.auth_schema import (
     AuthStatusSchema,
     LoginSchema,
     SetupSchema,
+    UserProfileUpdateSchema,
     UserSchema,
 )
 from app.module.auth.service.auth_service import AuthService
@@ -109,3 +110,17 @@ async def get_me(
 ) -> UserSchema:
     """Return the signed-in owner."""
     return user
+
+
+@router.patch("/me", response_model=UserSchema, operation_id="updateCurrentUser")
+async def update_me(
+    payload: UserProfileUpdateSchema,
+    user: UserSchema = Depends(get_current_user),
+    service: AuthService = Depends(get_auth_service),
+) -> UserSchema:
+    """Update the owner's display name and self-introduction."""
+    return await service.update_profile(
+        user.user_id,
+        display_name=payload.display_name,
+        bio=payload.bio,
+    )

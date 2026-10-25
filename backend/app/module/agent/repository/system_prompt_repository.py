@@ -23,6 +23,7 @@ def _record(row: SystemPromptSectionModel) -> SystemPromptSection:
         sort_order=row.sort_order,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        builtin_key=row.builtin_key,
     )
 
 
@@ -40,22 +41,32 @@ class SystemPromptRepository:
         ``sort_order, id``，快取內容與對話組裝都依賴這個穩定順序。
         """
         async with self.session_factory() as session:
-            statement = select(SystemPromptSectionModel).order_by(
-                SystemPromptSectionModel.sort_order,
-                SystemPromptSectionModel.id,
+            statement = (
+                select(SystemPromptSectionModel)
+                .where(SystemPromptSectionModel.builtin_key.is_(None))
+                .order_by(
+                    SystemPromptSectionModel.sort_order,
+                    SystemPromptSectionModel.id,
+                )
             )
             rows = (await session.execute(statement)).scalars().all()
             return [_record(row) for row in rows]
 
     async def get_section(self, section_id: int) -> SystemPromptSection | None:
         async with self.session_factory() as session:
-            row = await session.get(SystemPromptSectionModel, section_id)
+            statement = select(SystemPromptSectionModel).where(
+                SystemPromptSectionModel.id == section_id,
+                SystemPromptSectionModel.builtin_key.is_(None),
+            )
+            row = (await session.execute(statement)).scalar_one_or_none()
             return _record(row) if row is not None else None
 
     async def next_sort_order(self) -> int:
         """Return the append position, leaving gaps of 10 between sections."""
         async with self.session_factory() as session:
-            statement = select(func.coalesce(func.max(SystemPromptSectionModel.sort_order), 0))
+            statement = select(
+                func.coalesce(func.max(SystemPromptSectionModel.sort_order), 0)
+            ).where(SystemPromptSectionModel.builtin_key.is_(None))
             maximum = (await session.execute(statement)).scalar_one()
             return int(maximum) + 10
 
@@ -91,7 +102,11 @@ class SystemPromptRepository:
     ) -> SystemPromptSection | None:
         async with self.session_factory() as session:
             async with session.begin():
-                row = await session.get(SystemPromptSectionModel, section_id)
+                statement = select(SystemPromptSectionModel).where(
+                    SystemPromptSectionModel.id == section_id,
+                    SystemPromptSectionModel.builtin_key.is_(None),
+                )
+                row = (await session.execute(statement)).scalar_one_or_none()
                 if row is None:
                     return None
                 row.title = title
@@ -102,10 +117,14 @@ class SystemPromptRepository:
                 return _record(row)
 
     async def delete_section(self, section_id: int) -> bool:
-        """Hard-delete one section; the identity sequence is never rewound."""
+        """Hard-delete one custom section; the identity sequence is never rewound."""
         async with self.session_factory() as session:
             async with session.begin():
-                row = await session.get(SystemPromptSectionModel, section_id)
+                statement = select(SystemPromptSectionModel).where(
+                    SystemPromptSectionModel.id == section_id,
+                    SystemPromptSectionModel.builtin_key.is_(None),
+                )
+                row = (await session.execute(statement)).scalar_one_or_none()
                 if row is None:
                     return False
                 await session.delete(row)
@@ -129,6 +148,7 @@ class SystemPromptRepository:
             async with session.begin():
                 statement = (
                     select(SystemPromptSectionModel)
+                    .where(SystemPromptSectionModel.builtin_key.is_(None))
                     .order_by(
                         SystemPromptSectionModel.sort_order,
                         SystemPromptSectionModel.id,
@@ -155,9 +175,65 @@ class SystemPromptRepository:
                 return [_record(rows_by_id[section_id]) for section_id in section_ids]
 
     async def clear_sections(self) -> None:
+        """Delete every custom section, leaving built-in overrides intact."""
         async with self.session_factory() as session:
             async with session.begin():
-                await session.execute(delete(SystemPromptSectionModel))
+                await session.execute(
+                    delete(SystemPromptSectionModel).where(
+                        SystemPromptSectionModel.builtin_key.is_(None)
+                    )
+                )
+
+    async def list_builtin_overrides(self) -> dict[str, SystemPromptSection]:
+        """Return only the built-in rows the owner has actually edited."""
+        async with self.session_factory() as session:
+            statement = select(SystemPromptSectionModel).where(
+                SystemPromptSectionModel.builtin_key.is_not(None)
+            )
+            rows = (await session.execute(statement)).scalars().all()
+            return {row.builtin_key: _record(row) for row in rows if row.builtin_key is not None}
+
+    async def upsert_builtin_override(
+        self,
+        *,
+        key: str,
+        title: str,
+        body: str,
+        now: datetime,
+    ) -> SystemPromptSection:
+        """Create or replace one built-in override row."""
+        async with self.session_factory() as session:
+            async with session.begin():
+                statement = select(SystemPromptSectionModel).where(
+                    SystemPromptSectionModel.builtin_key == key
+                )
+                row = (await session.execute(statement)).scalar_one_or_none()
+                if row is None:
+                    row = SystemPromptSectionModel(
+                        title=title,
+                        body=body,
+                        builtin_key=key,
+                        sort_order=0,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(row)
+                else:
+                    row.title = title
+                    row.body = body
+                    row.updated_at = now
+                await session.flush()
+                return _record(row)
+
+    async def clear_builtin_overrides(self) -> None:
+        """Restore every built-in section to its Python default."""
+        async with self.session_factory() as session:
+            async with session.begin():
+                await session.execute(
+                    delete(SystemPromptSectionModel).where(
+                        SystemPromptSectionModel.builtin_key.is_not(None)
+                    )
+                )
 
 
 __all__ = ["SystemPromptRepository"]

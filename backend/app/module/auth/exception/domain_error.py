@@ -28,6 +28,11 @@ class InvalidUsernameError(AuthError):
         )
 
 
+class InvalidProfileError(AuthError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+
+
 class WeakPasswordError(AuthError):
     def __init__(self) -> None:
         super().__init__("Password must be between 10 and 256 characters.")

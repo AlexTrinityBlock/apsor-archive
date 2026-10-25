@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class SystemPromptSectionReadSchema(BaseModel):
-    """One persisted section returned to the browser."""
+    """One persisted custom section returned to the browser."""
 
     model_config = ConfigDict(frozen=True, from_attributes=True)
 
@@ -16,6 +16,26 @@ class SystemPromptSectionReadSchema(BaseModel):
     sort_order: int
     created_at: datetime
     updated_at: datetime
+
+
+class SystemPromptBuiltinSectionSchema(BaseModel):
+    """One built-in prompt section, with its effective body and edit state."""
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str
+    title: str
+    body: str
+    customized: bool
+    updated_at: datetime | None
+
+
+class SystemPromptBuiltinUpdateSchema(BaseModel):
+    """Replace one built-in section body; titles and order stay canonical."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=32000)
 
 
 class SystemPromptSectionCreateSchema(BaseModel):
@@ -54,6 +74,8 @@ class SystemPromptReorderSchema(BaseModel):
 
 
 __all__ = [
+    "SystemPromptBuiltinSectionSchema",
+    "SystemPromptBuiltinUpdateSchema",
     "SystemPromptReorderSchema",
     "SystemPromptSectionCreateSchema",
     "SystemPromptSectionReadSchema",

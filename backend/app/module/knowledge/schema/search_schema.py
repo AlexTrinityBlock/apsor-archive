@@ -40,6 +40,7 @@ class MemorySearchResultSchema(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     memory_id: int
+    title: str
     update_time: datetime
     content: str
     status: str

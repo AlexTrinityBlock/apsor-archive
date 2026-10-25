@@ -1274,3 +1274,25 @@
     animation: none;
   }
 }
+
+/* Inline memory actions ------------------------------------------------- */
+
+.timeline-node__action {
+  padding: 0;
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.timeline-node__action:hover {
+  color: var(--mono-ink);
+}
+
+.timeline-node__action.is-danger:hover {
+  color: var(--accent-vermilion);
+}
