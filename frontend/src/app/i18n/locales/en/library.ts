@@ -12,7 +12,6 @@ export const library = {
     pathNotFoundBefore: "The archive has no current folder at ",
     pathNotFoundAfter:
       ". It may have been removed with its last file, or the link may be out of date.",
-    seedSuccess: "Demo archive seeded. The shelf is ready.",
     imagePickerError: "Choose a JPEG, PNG, or WebP image.",
     archivedToast: "“{name}” archived as version {version}.",
     movedToast: "“{name}” moved to {folder}.",
@@ -159,8 +158,6 @@ export const library = {
     folderDescription:
       "Drop files anywhere in this workspace to archive them in {path}, or create a folder branch. Parent folders are created automatically.",
     dropZone: "Drop zone · 10 MB per file · allowed archive types",
-    seeding: "Seeding demo archive…",
-    seed: "Seed demo archive",
   },
   media: {
     aria: "Media gallery",

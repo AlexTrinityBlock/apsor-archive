@@ -44,7 +44,6 @@ export * from './authStatusSchema';
 export * from './bodyUploadFile';
 export * from './bodyUploadFileAsync';
 export * from './chunkSchema';
-export * from './demoSeedSchema';
 export * from './directorySchema';
 export * from './embeddingReindexSchema';
 export * from './fileChunksSchema';

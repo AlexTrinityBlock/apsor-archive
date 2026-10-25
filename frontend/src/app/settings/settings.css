@@ -1137,7 +1137,7 @@
 
 .maintenance-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -1170,14 +1170,6 @@
   color: var(--mono-ink);
   font-family: var(--mono-font-mono);
   font-size: 11px;
-}
-
-.maintenance-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
 }
 
 .maintenance-colophon {

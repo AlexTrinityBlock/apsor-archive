@@ -5,26 +5,21 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
-  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
-  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
-  UseMutationOptions,
-  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
-  DemoSeedSchema,
   HealthSchema,
   StatsSchema
 } from '../schemas';
@@ -51,81 +46,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getSeedDemoUrl = () => {
-
-
-
-
-  return `/api/v1/demo/seed`
-}
-
-/**
- * Populate an empty library with a small demo archive.
- * @summary Seed Demo
- */
-export const seedDemo = async ( options?: Parameters<typeof apiFetch>[1]): Promise<DemoSeedSchema> => {
-
-  return apiFetch<DemoSeedSchema>(getSeedDemoUrl(),
-  {
-    ...options,
-    method: 'POST'
-
-
-  }
-);}
-
-
-
-
-
-export const getSeedDemoMutationKey = () => ['seedDemo'] as const;
-
-export const getSeedDemoMutationOptions = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof seedDemo>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof seedDemo>>, TError,void, TContext> => {
-
-const mutationKey = getSeedDemoMutationKey();
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof seedDemo>>, void> = () => {
-
-
-          return  seedDemo(requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type SeedDemoMutationResult = NonNullable<Awaited<ReturnType<typeof seedDemo>>>
-
-    export type SeedDemoMutationError = unknown
-
-
-    /**
- * @summary Seed Demo
- */
-export const useSeedDemo = <TError = unknown,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof seedDemo>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
- , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof seedDemo>>,
-        TError,
-        void,
-        TContext
-      > => {
-      return useMutation(getSeedDemoMutationOptions(options), queryClient);
-    }
-    export const getGetHealthUrl = () => {
+export const getGetHealthUrl = () => {
 
 
 

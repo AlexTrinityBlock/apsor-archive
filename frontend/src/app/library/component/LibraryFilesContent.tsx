@@ -17,7 +17,6 @@ interface LibraryFilesContentProps {
   readonly path: string;
   readonly query: string;
   readonly view: LibraryView;
-  readonly seeding: boolean;
   readonly selecting: boolean;
   readonly selectedFileIds: ReadonlySet<number>;
   readonly selectedFolderPaths: ReadonlySet<string>;
@@ -39,7 +38,6 @@ interface LibraryFilesContentProps {
   readonly onNewFolder: () => void;
   readonly onClearSearch: () => void;
   readonly onOpenRoot: () => void;
-  readonly onSeed: () => void;
   readonly onRequestMove: (file: PathFileSchema, mode: FileOperationMode) => void;
   readonly onRequestDelete: (file: PathFileSchema) => void;
   readonly onMoveFile: (
@@ -56,7 +54,6 @@ export function LibraryFilesContent({
   path,
   query,
   view,
-  seeding,
   selecting,
   selectedFileIds,
   selectedFolderPaths,
@@ -72,7 +69,6 @@ export function LibraryFilesContent({
   onNewFolder,
   onClearSearch,
   onOpenRoot,
-  onSeed,
   onRequestMove,
   onRequestDelete,
   onMoveFile,
@@ -105,12 +101,10 @@ export function LibraryFilesContent({
           <LibraryEmptyState
             path={path}
             query={query}
-            seeding={seeding}
             onUpload={onUpload}
             onNewFolder={onNewFolder}
             onClearSearch={onClearSearch}
             onOpenRoot={onOpenRoot}
-            onSeed={onSeed}
           />
         }
       />

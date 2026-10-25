@@ -116,9 +116,9 @@ docker compose up --build
 > 若主機使用者已是 uid `10001`，可省略 `sudo chown`。
 
 Open <http://127.0.0.1:8000>. The first visit asks you to create the single
-owner account. Once signed in, an empty archive offers a demo seed. PostgreSQL
-uses a named volume; uploaded originals and the generated secret key live under
-the host's `./data` directory.
+owner account. Once signed in, the archive is ready for uploads, notes, and
+memories. PostgreSQL uses a named volume; uploaded originals and the generated
+secret key live under the host's `./data` directory.
 
 The API image copies the committed `frontend/dist`; it does not run a frontend
 build. After changing frontend code, run `cd frontend && bun run build` before
@@ -496,7 +496,7 @@ Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 `PATCH /api/v1/memories/{memory_id}` (edit text; the title is regenerated),
 `POST /api/v1/memories/{memory_id}/deprecate` (retire directly with an optional
 `reason`), `POST /api/v1/summaries`, `GET /api/v1/stats`,
-`POST /api/v1/demo/seed`, `GET /api/v1/health`, and `GET /api/v1/ai/status`.
+`GET /api/v1/health`, and `GET /api/v1/ai/status`.
 
 ### Folder workspace
 

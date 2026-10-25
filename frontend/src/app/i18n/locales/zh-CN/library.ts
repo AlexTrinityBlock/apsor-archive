@@ -11,7 +11,6 @@ export const library = {
     pathNotFoundBefore: "档案馆目前没有位于 ",
     pathNotFoundAfter:
       " 的文件夹。它可能已随最后一个文件移除，或这个链接已失效。",
-    seedSuccess: "已创建演示档案馆。档案架已准备就绪。",
     imagePickerError: "请选择 JPEG、PNG 或 WebP 图片。",
     archivedToast: "“{name}”已归档为版本 {version}。",
     movedToast: "“{name}”已移至 {folder}。",
@@ -158,8 +157,6 @@ export const library = {
     folderDescription:
       "将文件拖放到这个工作区的任意位置，即可归档到 {path}，或创建文件夹分支。上级文件夹会自动创建。",
     dropZone: "拖放区 · 每个文件 10 MB · 可接受的文件类型",
-    seeding: "正在创建演示档案馆…",
-    seed: "创建演示档案馆",
   },
   media: {
     aria: "媒体库",

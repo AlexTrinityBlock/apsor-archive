@@ -11,7 +11,7 @@ Prove HTTP contracts, persistence behavior, transaction boundaries, and error en
 - `test_database` is a session fixture. It creates `apsor_archive_test` on the local development PostgreSQL instance if needed, drops and recreates the public schema, installs `pg_trgm`, creates `agent_commit_seq`, and builds all tables from SQLAlchemy metadata.
 - The suite does not run Alembic. A migration regression is not caught here; validate migrations separately against development PostgreSQL.
 - `clean_database` is autouse and runs before every test. It `TRUNCATE`s every tracked table with `RESTART IDENTITY CASCADE` and reseeds the four default system-prompt sections. Tests share one database and must be serial.
-- `settings` points at the test database, a per-test temporary data directory, a memory cache, no SPA directory, no external AI, and no lifespan ingestion worker. Migrations and demo seeding are disabled.
+- `settings` points at the test database, a per-test temporary data directory, a memory cache, no SPA directory, no external AI, and no lifespan ingestion worker. Migrations are disabled.
 - `anonymous_client` starts a clean app. `client` additionally creates the single owner account and keeps its session cookie. Most tests use `client`; auth-boundary tests use `anonymous_client`.
 - The app factory is still the production `create_app`; only dependencies/resources are substituted. Fake seams are installed on `client.app.state`, not by patching transport internals.
 - Provider seams are installed on `client.app.state` when a test needs them: `agent_chat_generator` uses `FakeChatGenerator`, `provider_tester` uses a deterministic probe, and `web_research_service` uses a local fake. No DeepSeek/OpenAI/Tavily request is made.

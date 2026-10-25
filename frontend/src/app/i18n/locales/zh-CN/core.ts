@@ -210,17 +210,6 @@ export const core = {
     openInLibrary: "在文件库中打开",
     statsErrorTitle: "无法获取实时计数。",
     statsErrorFallback: "统计端点没有响应。",
-    seedEyebrow: "空档案馆",
-    seedTitle: "建立演示档案馆。",
-    seedDescription:
-      "文件架已准备好，但还是空的。建立一个小而连贯的演示档案馆，包含文本文件、记忆与一则摘要，然后看着计数和时间线逐渐填满。种子数据只会写入空的档案馆。",
-    seedPending: "正在建立档案馆…",
-    seedAction: "建立演示档案馆",
-    uploadFirstFile: "上传第一个文件",
-    seedErrorFallback: "无法建立演示档案馆。",
-    seedSuccessOne: "已创建 {files} 个文件、{memories} 条记忆与 {summaries} 则摘要。",
-    seedSuccessOther:
-      "已创建 {files} 个文件、{memories} 条记忆与 {summaries} 则摘要。",
   },
   languagePanel: {
     eyebrow: "界面",
