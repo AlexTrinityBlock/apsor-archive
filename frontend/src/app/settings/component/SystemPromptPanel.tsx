@@ -1131,7 +1131,6 @@ export function SystemPromptPanel() {
   return (
     <>
       <Panel
-        id="settings-system-prompt"
         className="settings-panel system-prompt-panel"
         title={
           <span className="settings-panel__title">

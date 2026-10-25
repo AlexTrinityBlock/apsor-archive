@@ -256,7 +256,7 @@ export const settings = {
     statsSectionLabel: "Archive volume",
     statFiles: "Files archived",
     statChunks: "Indexed chunks",
-    statMemories: "Memory crystals",
+    statMemories: "Memories",
     statActive: "{count} active",
     statSummaries: "AI summaries",
     factStorage: "Storage",

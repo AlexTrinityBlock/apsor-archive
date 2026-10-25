@@ -52,10 +52,10 @@ export const insights = {
       updating: "更新中…",
       updatingAria: "正在更新結果",
       fileChunks: "檔案分段",
-      memoryCrystals: "記憶結晶",
+      memoryCrystals: "記憶",
       summaries: "摘要",
       emptyFiles: "沒有檔案分段符合這個查詢。",
-      emptyMemories: "沒有記憶結晶符合這個查詢。",
+      emptyMemories: "沒有記憶符合這個查詢。",
       emptySummaries: "沒有摘要符合這個查詢。",
     },
     card: {
@@ -85,10 +85,10 @@ export const insights = {
       eyebrow: "檔案館已就緒",
       title: "在你提問之前，什麼都不會被檢索。",
       description:
-        "一次查詢會同時經過文字路徑與向量路徑。融合後的候選會以檔案分段、記憶結晶與摘要的形式回傳，每一項都附上真實分數，以及命中它的路徑。",
+        "一次查詢會同時經過文字路徑與向量路徑。融合後的候選會以檔案分段、記憶與摘要的形式回傳，每一項都附上真實分數，以及命中它的路徑。",
       kindsAria: "可搜尋的來源類型",
       fileChunks: "檔案分段",
-      memoryCrystals: "記憶結晶",
+      memoryCrystals: "記憶",
       summaries: "摘要",
     },
     loading: {
@@ -148,7 +148,7 @@ export const insights = {
         "在選定的範圍內，按比例取樣記憶、摘要與檔案更新。每一道空隙都會如實記錄取樣器略過了多少事件，而每個範圍都直接讀取運作中的檔案館。",
       readingWindow: "正在讀取範圍",
       windowSpan: "範圍跨度",
-      recordMemory: "記錄記憶結晶",
+      recordMemory: "記錄記憶",
     },
     controls: {
       aria: "時間軸範圍控制項",
@@ -223,7 +223,7 @@ export const insights = {
       collapseSummary: "收合摘要",
       edit: "編輯",
       deprecate: "淘汰",
-      readMemory: "閱讀記憶結晶",
+      readMemory: "閱讀記憶",
       openLibrary: "在檔案庫中開啟",
       skipAria:
         "兩次取樣之間略過了 {events}（{composition}），時間從 {from} 到 {to}",
