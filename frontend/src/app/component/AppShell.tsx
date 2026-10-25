@@ -11,6 +11,7 @@ import { useGetHealth } from "../generated-apis-types";
 import { useAuth } from "../auth/AuthProvider";
 import { useScrollLock } from "../hook/useScrollLock";
 import { Icon, type IconName } from "./Icon";
+import { OwnerProfileDialog } from "./OwnerProfileDialog";
 import { RouteFallback } from "./RouteFallback";
 import { TreeMark } from "./TreeMark";
 
@@ -32,7 +33,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { to: "/timeline", label: "Timeline", index: "03", icon: "timeline" },
   { to: "/memory", label: "Memory", index: "04", icon: "memory" },
   { to: "/search", label: "Search", index: "05", icon: "search" },
-  { to: "/", label: "Overview", index: "06", icon: "overview", end: true },
+  { to: "/dashboard", label: "Dashboard", index: "06", icon: "database", end: true },
   { to: "/settings", label: "Settings", index: "07", icon: "settings" },
 ];
 
@@ -68,6 +69,7 @@ function readRailPreference(): boolean {
  */
 export function AppShell() {
   const [railCollapsed, setRailCollapsed] = useState(readRailPreference);
+  const [profileOpen, setProfileOpen] = useState(false);
   const location = useLocation();
   const [drawer, setDrawer] = useState({
     open: false,
@@ -82,6 +84,7 @@ export function AppShell() {
     },
   });
   const { user, logout, isSubmitting } = useAuth();
+  const displayName = user?.display_name || user?.username || "Owner";
 
   useScrollLock(drawerOpen);
 
@@ -246,13 +249,20 @@ export function AppShell() {
         <div className="rail-footer">
           {user ? (
             <div className="rail-account">
-              <span className="rail-account__mark" aria-hidden="true">
-                {user.username.slice(0, 2).toUpperCase()}
-              </span>
-              <span className="rail-account__copy">
-                <span>Signed in</span>
-                <strong>{user.username}</strong>
-              </span>
+              <button
+                type="button"
+                className="rail-account__identity"
+                onClick={() => setProfileOpen(true)}
+                title="Edit owner profile"
+              >
+                <span className="rail-account__mark" aria-hidden="true">
+                  {displayName.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="rail-account__copy">
+                  <span>Signed in</span>
+                  <strong>{displayName}</strong>
+                </span>
+              </button>
               <button
                 type="button"
                 className="rail-account__action"
@@ -310,6 +320,10 @@ export function AppShell() {
           </Suspense>
         </div>
       </main>
+
+      {profileOpen ? (
+        <OwnerProfileDialog onClose={() => setProfileOpen(false)} />
+      ) : null}
     </div>
   );
 }

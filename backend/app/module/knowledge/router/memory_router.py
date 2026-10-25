@@ -5,9 +5,11 @@ from fastapi import APIRouter, Depends, Query, status
 from app.module.knowledge.dependencies import get_memory_service, get_summary_service
 from app.module.knowledge.schema.memory_schema import (
     MemoryCreateSchema,
+    MemoryDeprecateSchema,
     MemoryReadSchema,
     MemorySaveSchema,
     MemorySchema,
+    MemoryUpdateSchema,
     SummaryCreateSchema,
     SummarySchema,
 )
@@ -34,6 +36,37 @@ async def save_memory(
         supersedes=payload.supersedes,
         occurred_at=payload.occurred_at,
         source=payload.source,
+    )
+
+
+@router.patch(
+    "/memories/{memory_id}",
+    response_model=MemorySchema,
+    operation_id="updateMemory",
+)
+async def update_memory(
+    memory_id: int,
+    payload: MemoryUpdateSchema,
+    memory_service: MemoryService = Depends(get_memory_service),
+) -> MemorySchema:
+    """Edit one memory's text and republish its search chunk."""
+    return await memory_service.update_memory(memory_id, content=payload.content)
+
+
+@router.post(
+    "/memories/{memory_id}/deprecate",
+    response_model=MemorySchema,
+    operation_id="deprecateMemory",
+)
+async def deprecate_memory(
+    memory_id: int,
+    payload: MemoryDeprecateSchema | None = None,
+    memory_service: MemoryService = Depends(get_memory_service),
+) -> MemorySchema:
+    """Retire one memory without recording a replacement."""
+    return await memory_service.deprecate_memory(
+        memory_id,
+        reason=payload.reason if payload is not None else None,
     )
 
 

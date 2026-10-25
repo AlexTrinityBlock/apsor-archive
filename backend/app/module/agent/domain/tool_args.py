@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _ToolArgs(BaseModel):
@@ -55,10 +55,26 @@ class ReadMemoryArgs(_ToolArgs):
 
 
 class SaveMemoryArgs(_ToolArgs):
-    """Arguments for an explicitly confirmed memory write."""
+    """Arguments for a memory write or a direct, replacement-free deprecation."""
 
-    content: str = Field(min_length=1, max_length=8000)
+    content: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=8000,
+        description=(
+            "The memory text to save. Omit it when the call only retires the "
+            "memories listed in supersedes."
+        ),
+    )
     supersedes: list[int] = Field(default_factory=list, max_length=50)
+    reason: str | None = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "Why the memories are being retired. Only valid when content is "
+            "omitted; it is stored on each deprecated row."
+        ),
+    )
     occurred_at: datetime | None = None
     user_confirmed: bool = Field(
         default=False,
@@ -67,6 +83,26 @@ class SaveMemoryArgs(_ToolArgs):
             "records an explicit human approval before executing save_memory."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> "SaveMemoryArgs":
+        """Require either new content or an explicit deprecation target."""
+        has_content = self.content is not None and bool(self.content.strip())
+        if has_content:
+            if self.reason is not None:
+                raise ValueError(
+                    "reason is only allowed when content is omitted (deprecation-only)."
+                )
+            return self
+        if self.content is not None:
+            raise ValueError("content must not be blank.")
+        if not self.supersedes:
+            raise ValueError("Provide content to save a memory, or supersedes ids to deprecate.")
+        if self.occurred_at is not None:
+            raise ValueError("occurred_at is only allowed when saving content.")
+        if self.reason is not None and not self.reason.strip():
+            raise ValueError("reason must not be blank when provided.")
+        return self
 
 
 class PresentResourceArgs(_ToolArgs):

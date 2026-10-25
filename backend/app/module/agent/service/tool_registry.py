@@ -165,7 +165,7 @@ class AgentToolRegistry:
             return _error(
                 name,
                 "memory_confirmation_required",
-                "The user must approve this memory in the interface before it is saved.",
+                "The user must approve this memory action in the interface before it runs.",
                 _elapsed_ms(started),
             )
 
@@ -278,6 +278,7 @@ async def _search_knowledge(
                 {
                     "kind": "memory",
                     "id": memory_result.memory_id,
+                    "title": memory_result.title,
                     "updated": memory_result.update_time.isoformat(),
                 },
             )
@@ -326,6 +327,7 @@ async def _search_knowledge(
         "memory_results": [
             {
                 "memory_id": item.memory_id,
+                "title": item.title,
                 "score": item.score,
                 "excerpt": _excerpt(item.content),
                 "viewer_url": _memory_viewer_url(item.memory_id),
@@ -427,6 +429,8 @@ async def _read_timeline(
         }
         if event.memory_id is not None:
             event_attributes["memory_id"] = event.memory_id
+            if event.title:
+                event_attributes["title"] = event.title
         if event.memory_summary_id is not None:
             event_attributes["summary_id"] = event.memory_summary_id
         if event.file_id is not None:
@@ -602,6 +606,35 @@ async def _save_memory(
     args: SaveMemoryArgs,
     services: AgentToolServices,
 ) -> tuple[str, dict[str, Any], None]:
+    if args.content is None or not args.content.strip():
+        # Deprecation-only: no replacement row is written. The model sees one
+        # element per retired memory so it can confirm the exact ids and titles.
+        deprecated = await services.memory_service.deprecate_memories(
+            args.supersedes,
+            reason=args.reason,
+        )
+        content = "".join(
+            _open(
+                "deprecated",
+                {
+                    "id": item.memory_id,
+                    "title": item.title,
+                    "status": item.status,
+                    "reason": item.deprecated_reason,
+                },
+            )
+            + xml_text(clip(item.content, MEMORY_CONTENT_LIMIT))
+            + _close("deprecated")
+            for item in deprecated
+        )
+        data: dict[str, Any] = {
+            "mode": "deprecate",
+            "memory_ids": [item.memory_id for item in deprecated],
+            "deprecated": [_memory_preview(item) for item in deprecated],
+            "reason": args.reason,
+        }
+        return content, data, None
+
     result = await services.memory_service.save_memory(
         content=args.content,
         supersedes=args.supersedes,
@@ -616,6 +649,7 @@ async def _save_memory(
             {"ids": ",".join(str(item.memory_id) for item in result.deprecated)},
         )
     data = {
+        "mode": "save",
         "memory_id": result.memory.memory_id,
         "status": result.memory.status,
         "memory": _memory_preview(result.memory),
@@ -655,12 +689,11 @@ async def _present_resource(
             trace_history=False,
         )
         memory = result.target
-        title = " ".join(memory.content.split())[:120]
         resource = {
             "resource_type": "memory",
             "resource_id": memory.memory_id,
             "viewer_url": f"/viewer/memory/{memory.memory_id}",
-            "title": title,
+            "title": memory.title,
             "mime_type": None,
         }
 
@@ -840,6 +873,7 @@ def _memory_preview(memory: MemorySchema) -> dict[str, Any]:
     """Return the bounded memory fields used by the inspector."""
     return {
         "memory_id": memory.memory_id,
+        "title": memory.title,
         "status": memory.status,
         "content": _excerpt(memory.content),
         "update_time": memory.update_time.isoformat(),
@@ -860,6 +894,7 @@ def _memory_element(name: str, memory: MemorySchema) -> str:
             name,
             {
                 "id": memory.memory_id,
+                "title": memory.title,
                 "status": memory.status,
                 "time": memory.update_time.isoformat(),
             },

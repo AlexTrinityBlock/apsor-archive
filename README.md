@@ -422,11 +422,11 @@ for an LLM to use in sequence.
 | `read_file` | `GET /api/v1/files/{file_id}/chunks/{chunk}?chunk_range=1` | A 1-based chunk window |
 | `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | Up to five sampled events per kind, density, and skip counts |
 | `read_path` | `GET /api/v1/paths?path=/history&path_depth=1&fuzzy_search=` | Directories and files, or fuzzy path matches |
-| `save_memory` | `POST /api/v1/memories` | A new memory, the deprecated memories it replaced, and any new summary |
+| `save_memory` | `POST /api/v1/memories` | A new memory with an auto-generated title, the deprecated memories it replaced, and any new summary; omit `content` to deprecate `supersedes` ids without a replacement |
 | `read_memory` | `GET /api/v1/memories/{memory_id}?memory_range=1&trace_history=true` | Target, neighbours, supersedes, successor, and chain |
 
-The persistent archive agent exposes seven model tools: the six above plus
-`present_resource`. The HTTP examples use
+The persistent archive agent exposes nine model tools: the six above plus
+`present_resource`, `web_search`, and `web_fetch`. The HTTP examples use
 explicit parameters; the HTTP server defaults are `result_number=2`,
 `chunk_range=1`, `day_range=1`, `path_depth=1`, and `memory_range=0`. Text is chunked at about 4,000 characters with a 500-character overlap; existing files keep their original chunk boundaries until re-ingested. The agent's
 tool schemas choose their own defaults, such as `result_number=8` and
@@ -439,6 +439,19 @@ or `/viewer/memory/{id}` and never fetches the resource. The client redirects
 file links into the File Library preview modal and memory links into the memory
 reader.
 
+Every memory row stores a short auto-generated `title`. On save and edit the
+backend asks the configured chat provider for a name before the single insert or
+update, so the body and title are stored atomically. If the provider is
+unavailable, the first 80 characters of the body become the fallback title. The
+chat renders each memory citation as the numeric label plus that name; older
+transcripts resolve the missing name on demand through `read_memory`.
+
+`save_memory` has a replacement-free deprecation form: omit `content`, pass the
+existing ids in `supersedes`, and optionally include `reason`. The backend marks
+those rows deprecated, stamps `deprecated_at`, marks their search chunks
+non-current, and writes no new memory. The same call with `content` keeps the
+original supersession behavior.
+
 Persisted `pi.tool-result` entries also carry UI-only `data`: bounded excerpts,
 dimensions, tags, and viewer URLs for the expanded inspector. This payload never
 enters the provider message; the model still sees only the XML tool result.
@@ -449,7 +462,8 @@ execution**) controls how it is authorized:
 
 - **On (default):** the loop does not execute the write. It persists a durable
   `agent_approval` row, appends no tool result yet, moves the run to `waiting`,
-  and emits `approval_required` with a bounded preview. `POST
+  and emits `approval_required` with a bounded preview. A deprecation-only call
+  previews the target ids and reason instead of a proposed body. `POST
   /api/v1/agent/approvals/{approval_id}/approve` is the only path that executes
   the write; `.../reject` appends a `memory_rejected` tool result and resumes
   without writing. The model's `user_confirmed` argument is ignored for
@@ -468,8 +482,10 @@ resulting receipt after a write.
 Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 /api/v1/files/text`, `DELETE /api/v1/files/{file_id}`, `GET /api/v1/paths`,
 `GET /api/v1/memories`, `POST /api/v1/memories`,
-`POST /api/v1/summaries`, `GET /api/v1/stats`, `POST /api/v1/demo/seed`,
-`GET /api/v1/health`, and `GET /api/v1/ai/status`.
+`PATCH /api/v1/memories/{memory_id}` (edit text; the title is regenerated),
+`POST /api/v1/memories/{memory_id}/deprecate` (retire directly with an optional
+`reason`), `POST /api/v1/summaries`, `GET /api/v1/stats`,
+`POST /api/v1/demo/seed`, `GET /api/v1/health`, and `GET /api/v1/ai/status`.
 
 ### Folder workspace
 
@@ -558,14 +574,18 @@ failure never becomes an HTTP 500.
 | `PUT` | `/api/v1/agent/settings/system-prompt/{section_id}` | Replace one section |
 | `DELETE` | `/api/v1/agent/settings/system-prompt/{section_id}` | Delete one section (`204`) |
 | `POST` | `/api/v1/agent/settings/system-prompt/reset` | Remove every custom section |
+| `GET` | `/api/v1/agent/settings/system-prompt/builtin` | List the four built-in sections and whether each is customized |
+| `PUT` | `/api/v1/agent/settings/system-prompt/builtin/{key}` | Replace one built-in body (`identity`, `instructions`, `examples`, `context_protocol`) |
+| `POST` | `/api/v1/agent/settings/system-prompt/builtin/reset` | Remove every built-in override |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` accepts
 `{content, request_id?, page_context?, client_timezone?,
 client_utc_offset_minutes?}` and `.../retry` accepts `{request_id?}`. Both stream
 `text/event-stream` by default. The client timezone is stored with a
 server-rendered `<current_time>` block on each user entry; the block is appended
-after the message text exactly once. The ordered custom system sections are
-written at conversation creation and frozen into that thread. The event names are
+after the message text exactly once. The ordered custom system sections and the
+four built-in sections are written at conversation creation and frozen into that
+thread; Settings lets the owner edit either kind. The event names are
 `run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
 `tool_end`, `approval_required`, `run_end`, and `error`. `run_start` reports
 `page_context_entry_id` (or `null`), `page_context_attached`, and `resumed` so
@@ -843,7 +863,8 @@ citations resolve to File Library previews or memory readers. Saved questions
 remain available at `/questions` for later agent turns.
 
 Chat is the first item in the seven-item archive rail (Chat, File library,
-Timeline, Memory, Search, Overview, Settings). Below 980 px the rail becomes a
+Timeline, Memory, Search, Dashboard, Settings). The root `/` opens Chat; the
+archive summary now lives at `/dashboard` with the `database` rail icon. Below 980 px the rail becomes a
 navigation drawer opened from the mobile bar.
 
 ### Chat workspace
@@ -922,7 +943,11 @@ On the first visit the app asks you to create the single owner account. There is
 no default password, no email recovery, and no second account. Passwords are
 hashed with Argon2; the database stores only a SHA-256 hash of each session
 token. The cookie is HttpOnly, SameSite=Lax, and Secure when
-`APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it).
+`APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it). The owner can edit
+a display name (`display_name`) and self-introduction (`bio`) from the sidebar
+account row; the name labels chat turns and the bio is frozen into new
+conversations as the `owner_profile` system section. The sign-in username stays
+immutable.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -931,6 +956,7 @@ token. The cookie is HttpOnly, SameSite=Lax, and Secure when
 | `POST` | `/api/v1/auth/login` | Verify a password and set the session cookie |
 | `POST` | `/api/v1/auth/logout` | Delete the session and clear the cookie |
 | `GET` | `/api/v1/auth/me` | Current owner (requires a session) |
+| `PATCH` | `/api/v1/auth/me` | Update the owner display name and self-introduction |
 
 Every knowledge, settings, and agent endpoint requires the session; only
 `/api/v1/health`, `/health`, `/api/v1/auth/*`, `/api/docs`, `/api/redoc`,
@@ -1110,8 +1136,10 @@ memory_summary ───┘
   Empty folders and folder identity survive independently of files.
 - `chunk`: `(source_kind, source_id, chunk_index)` with an optional JSONB vector.
 - `chunk_ngram`: the inverted index used by BM25.
-- `memory`: linear timeline with `supersedes_ids`, `superseded_by_id`, and
-  `status=active|deprecated`.
+- `memory`: linear timeline with an auto-generated `title`, `supersedes_ids`,
+  `superseded_by_id`, `status=active|deprecated`, and the direct-retirement
+  provenance `deprecated_at` / `deprecated_reason`. A deprecated row must have a
+  successor or a `deprecated_at` timestamp.
 - `memory_summary`: period, source memory ids, themes, generator, and model.
 - `chat_provider_config` / `embedding_provider_config` /
   `web_search_provider_config` / `web_fetch_provider_config`: one row per saved
@@ -1183,7 +1211,7 @@ orders by `sort_order`, caps at 20 rows, and deletes frequently used prompts. Th
 file-library test also uploads an image without a vision provider and verifies
 the filename caption, stored original, path listing, and search result.
 
-The latest migration is `c9e1f3a5b7d2`, after `b8d2e4f6a1c3`. The migrations
+The latest migration is `f4a1c7d9e2b3`, after `c9e1f3a5b7d2`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1220,9 +1248,15 @@ after `agent_config` on this branch are:
   shortcuts that used to be hard-coded in the chat empty state;
 - `b8d2e4f6a1c3` relabels `dendro-hash-384` chunks to `apsor-hash-384` after
   the Apsor Archive rebrand;
-- `c9e1f3a5b7d2` (current head) replaces the singleton `system_prompt` table
-  with ordered `system_prompt_section` rows and copies the existing prompt as
-  the first section.
+- `c9e1f3a5b7d2` replaces the singleton `system_prompt` table with ordered
+  `system_prompt_section` rows and copies the existing prompt as the first
+  section;
+- `f4a1c7d9e2b3` (current head) adds `memory.title` (backfilled from content),
+  `deprecated_at` / `deprecated_reason`, and `builtin_key` on
+  `system_prompt_section` for editable built-in overrides. The old
+  “deprecated must have a successor” check becomes “successor or direct
+  deprecation timestamp”. The downgrade re-adds the old check as `NOT VALID` so
+  direct deprecations keep their rows.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so

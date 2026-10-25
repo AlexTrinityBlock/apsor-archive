@@ -7,6 +7,7 @@ mutated; a future prompt change creates a new conversation (or a system delta).
 
 from typing import Any
 
+from app.module.agent.domain.owner_profile_domain import OwnerProfile
 from app.module.agent.domain.system_prompt_domain import SystemPromptSection
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
@@ -26,7 +27,7 @@ _SECTIONS: tuple[dict[str, str], ...] = (
         "name": "identity",
         "title": "Identity",
         "content": (
-            "You are Apsor Archive, the keeper's archive research agent. "
+            "You are Apsor Archive, the owner's archive research agent. "
             "You answer from the Apsor Archive: the File Library "
             "(including images), the memory timeline, and periodic summaries. "
             "When the archive cannot answer a question about the public world, "
@@ -78,6 +79,10 @@ _SECTIONS: tuple[dict[str, str], ...] = (
             "- Call save_memory only when the user explicitly asks you to save or "
             "remember something and confirms the wording. Never auto-save "
             "inferred, speculative, or unconfirmed content.\n"
+            "- When something is finished, cancelled, or no longer true and the "
+            "user wants it retired, call save_memory with only the existing ids "
+            "in supersedes (omit content). That deprecates the records directly, "
+            "without writing a replacement memory.\n"
             "- Call present_resource when the user should open a file "
             "(including an image) or a memory. It returns a viewer card; it does "
             "not open anything by itself.\n"
@@ -136,8 +141,11 @@ _SECTIONS: tuple[dict[str, str], ...] = (
 )
 
 
+BUILTIN_PROMPT_KEYS: tuple[str, ...] = tuple(section["name"] for section in _SECTIONS)
+
+
 def prompt_sections() -> list[dict[str, Any]]:
-    """Return a fresh copy of the ordered section list."""
+    """Return a fresh copy of the ordered built-in section list."""
     return [
         {
             "name": section["name"],
@@ -164,6 +172,8 @@ def build_system_data(
     provider: str,
     model: str,
     custom_sections: list[SystemPromptSection] | None = None,
+    builtin_sections: list[dict[str, Any]] | None = None,
+    owner_profile: OwnerProfile | None = None,
 ) -> dict[str, Any]:
     """Build the immutable data payload for the initial system entry.
 
@@ -188,7 +198,18 @@ def build_system_data(
         # 這裡是最後一道防線。
         if section.body.strip()
     ]
-    sections.extend(prompt_sections())
+    if owner_profile is not None and owner_profile.has_content:
+        sections.append(
+            {
+                "name": "owner_profile",
+                "title": "Owner profile",
+                "content": "\n".join(owner_profile.prompt_lines()),
+            }
+        )
+    # ``builtin_sections`` carries the owner-edited defaults in canonical order.
+    # Callers that build a prompt directly (for example a unit test) may omit
+    # it and still receive the pristine built-in prompt.
+    sections.extend(builtin_sections if builtin_sections is not None else prompt_sections())
     return {
         "prompt_version": PROMPT_VERSION,
         "tools_version": TOOLS_VERSION,

@@ -21,6 +21,7 @@ import { finishReasonTone } from "./status";
 
 interface StreamingTurnProps {
   readonly stream: ChatStreamView;
+  readonly memoryTitles?: ReadonlyMap<number, string>;
   readonly selectedTraceId?: string | null;
   readonly onSelectTrace?: (traceId: string) => void;
   readonly onOpenCitation?: (token: CitationToken) => void;
@@ -62,6 +63,7 @@ function asResult(tool: ChatStreamTool): ToolResultMeta {
 /** The optimistic turn shown while the SSE stream is open. */
 export const StreamingTurn = memo(function StreamingTurn({
   stream,
+  memoryTitles,
   selectedTraceId = null,
   onSelectTrace,
   onOpenCitation,
@@ -82,6 +84,7 @@ export const StreamingTurn = memo(function StreamingTurn({
       <div className="chat-turn__bubble">
         <MarkdownBody
           markdown={stream.assistantText}
+          memoryTitles={memoryTitles}
           onOpenCitation={onOpenCitation}
         />
       </div>

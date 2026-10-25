@@ -20,9 +20,15 @@ from app.module.agent.protocol.system_prompt_repository_protocol import (
     SystemPromptRepositoryProtocol,
 )
 from app.module.agent.schema.system_prompt_schema import (
+    SystemPromptBuiltinSectionSchema,
+    SystemPromptBuiltinUpdateSchema,
     SystemPromptSectionCreateSchema,
     SystemPromptSectionReadSchema,
     SystemPromptSectionUpdateSchema,
+)
+from app.module.agent.service.system_prompt import (
+    BUILTIN_PROMPT_KEYS,
+    prompt_sections,
 )
 from app.shared.time import utcnow
 from app.shared.types.list_response import ListResponseSchema
@@ -76,19 +82,22 @@ class SystemPromptService:
         )
         return response
 
-    async def get_active_sections(self) -> list[SystemPromptSection]:
-        """Return non-empty sections for a new conversation.
+    async def get_active_sections(
+        self,
+    ) -> tuple[list[SystemPromptSection], list[dict[str, str]]]:
+        """Return custom sections plus the effective ordered built-ins.
 
-        使用與 ``list_sections`` 相同的快取快照，因此建立對話與 Settings 頁
-        看到的是同一份順序。空 body 的列（例如遷移後被直接改壞的資料）會被
-        跳過，避免 provider 收到只有標題、沒有內容的 section。
+        Custom sections keep their drag order and render first. Built-in
+        sections follow in canonical order, using the owner's override when one
+        exists and the Python default otherwise. Empty bodies are skipped so a
+        directly-edited row can never inject an empty provider heading.
         """
         response = await self.list_sections()
         resources = sorted(
             response.resources,
             key=lambda item: (item.sort_order, item.id),
         )
-        return [
+        custom = [
             SystemPromptSection(
                 id=item.id,
                 title=item.title,
@@ -100,6 +109,67 @@ class SystemPromptService:
             for item in resources
             if item.body.strip()
         ]
+        built_in = [
+            {"name": item.key, "title": item.title, "content": item.body}
+            for item in (await self.list_builtin_sections()).resources
+            if item.body.strip()
+        ]
+        return custom, built_in
+
+    async def list_builtin_sections(
+        self,
+    ) -> ListResponseSchema[SystemPromptBuiltinSectionSchema]:
+        """Return all four built-ins, whether or not each has an override."""
+        overrides = await self.repository.list_builtin_overrides()
+        defaults = {section["name"]: section for section in prompt_sections()}
+        resources: list[SystemPromptBuiltinSectionSchema] = []
+        for key in BUILTIN_PROMPT_KEYS:
+            default = defaults[key]
+            override = overrides.get(key)
+            resources.append(
+                SystemPromptBuiltinSectionSchema(
+                    key=key,
+                    title=default["title"],
+                    body=override.body if override is not None else default["content"],
+                    customized=override is not None,
+                    updated_at=override.updated_at if override is not None else None,
+                )
+            )
+        return ListResponseSchema[SystemPromptBuiltinSectionSchema](
+            total_results=len(resources),
+            start_index=1,
+            items_per_page=len(resources),
+            resources=resources,
+        )
+
+    async def update_builtin_section(
+        self,
+        key: str,
+        payload: SystemPromptBuiltinUpdateSchema,
+    ) -> ListResponseSchema[SystemPromptBuiltinSectionSchema]:
+        """Store one built-in override; titles and order remain canonical."""
+        if key not in BUILTIN_PROMPT_KEYS:
+            raise AgentSystemPromptNotFoundError(key)
+        body = payload.body.strip()
+        if not body:
+            raise AgentInvalidSystemPromptError("A system prompt body is required.")
+        defaults = {section["name"]: section for section in prompt_sections()}
+        await self.repository.upsert_builtin_override(
+            key=key,
+            title=defaults[key]["title"],
+            body=body,
+            now=utcnow(),
+        )
+        await self.cache.bump_version(SYSTEM_PROMPT_CACHE_SCOPE)
+        return await self.list_builtin_sections()
+
+    async def reset_builtin_sections(
+        self,
+    ) -> ListResponseSchema[SystemPromptBuiltinSectionSchema]:
+        """Remove every override, restoring the pristine built-in prompt."""
+        await self.repository.clear_builtin_overrides()
+        await self.cache.bump_version(SYSTEM_PROMPT_CACHE_SCOPE)
+        return await self.list_builtin_sections()
 
     async def create_section(
         self,

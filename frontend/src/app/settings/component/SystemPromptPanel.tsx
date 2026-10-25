@@ -30,22 +30,29 @@ import { Icon } from "../../component/Icon";
 import { Panel } from "../../component/Panel";
 import { useToast } from "../../component/Toast";
 import {
+  getListBuiltinSystemPromptSectionsQueryKey,
   getListSystemPromptSectionsQueryKey,
   useCreateSystemPromptSection,
   useDeleteSystemPromptSection,
+  useListBuiltinSystemPromptSections,
   useListSystemPromptSections,
   useReorderSystemPromptSections,
+  useResetBuiltinSystemPromptSections,
   useResetSystemPromptSections,
+  useUpdateBuiltinSystemPromptSection,
   useUpdateSystemPromptSection,
 } from "../../generated-apis-types";
 import type {
+  ListResponseSchemaSystemPromptBuiltinSectionSchema,
   ListResponseSchemaSystemPromptSectionReadSchema,
+  SystemPromptBuiltinSectionSchema,
   SystemPromptSectionReadSchema,
 } from "../../generated-apis-types/schemas";
 import { apiErrorMessage } from "./settings-utils";
 import { SettingsDialog } from "./SettingsDialog";
 
 type SectionList = ListResponseSchemaSystemPromptSectionReadSchema;
+type BuiltinList = ListResponseSchemaSystemPromptBuiltinSectionSchema;
 
 type PanelActionError =
   | { readonly scope: "create"; readonly message: string }
@@ -93,6 +100,28 @@ function readSectionOpen(id: number): boolean {
 function writeSectionOpen(id: number, value: boolean): void {
   try {
     window.localStorage.setItem(sectionOpenKey(id), String(value));
+  } catch {
+    // Storage can be blocked; the in-memory state still works.
+  }
+}
+
+const BUILTIN_OPEN_PREFIX = "apsor-archive.systemPrompt.builtinOpen.";
+
+function builtinOpenKey(key: string): string {
+  return `${BUILTIN_OPEN_PREFIX}${key}`;
+}
+
+function readBuiltinOpen(key: string): boolean {
+  try {
+    return window.localStorage.getItem(builtinOpenKey(key)) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writeBuiltinOpen(key: string, value: boolean): void {
+  try {
+    window.localStorage.setItem(builtinOpenKey(key), String(value));
   } catch {
     // Storage can be blocked; the in-memory state still works.
   }
@@ -951,7 +980,7 @@ function useSystemPromptMutations({
         queryClient.setQueryData<SectionList>(listKey, data);
         await invalidateList();
         onReset();
-        toast.success("Custom sections removed. Built-in prompt only.");
+        toast.success("Custom sections removed. Built-in prompt remains.");
       },
       onError: (caught) => {
         const message = apiErrorMessage(caught);
@@ -962,6 +991,300 @@ function useSystemPromptMutations({
   });
 
   return { createMutation, updateMutation, deleteMutation, resetMutation };
+}
+
+function BuiltinPromptCard({
+  section,
+  saving,
+  disabled,
+  error,
+  onSave,
+}: {
+  readonly section: SystemPromptBuiltinSectionSchema;
+  readonly saving: boolean;
+  readonly disabled: boolean;
+  readonly error: string | null;
+  readonly onSave: (key: string, body: string) => void;
+}) {
+  const [open, setOpen] = useState(() => readBuiltinOpen(section.key));
+  const [body, setBody] = useState(section.body);
+  const titleId = useId();
+  const bodyId = useId();
+
+  const dirty = body.trim() !== section.body.trim();
+  const setOpenState = (next: boolean) => {
+    setOpen(next);
+    writeBuiltinOpen(section.key, next);
+  };
+
+  return (
+    <article
+      className={[
+        "builtin-prompt-card",
+        open ? "is-open" : "is-collapsed",
+        section.customized ? "is-customized" : null,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      aria-labelledby={titleId}
+    >
+      <header className="builtin-prompt-card__head">
+        <div className="builtin-prompt-card__title">
+          <p className="eyebrow">Built-in</p>
+          <h4 id={titleId}>{section.title}</h4>
+        </div>
+        {section.customized ? (
+          <Badge tone="ochre">Customized</Badge>
+        ) : (
+          <Badge tone="neutral">Default</Badge>
+        )}
+        <button
+          type="button"
+          className="builtin-prompt-card__toggle"
+          aria-expanded={open}
+          aria-controls={`${bodyId}-panel`}
+          onClick={() => setOpenState(!open)}
+        >
+          {open ? "Collapse" : "Expand"}
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={13} />
+        </button>
+      </header>
+
+      {open ? (
+        <div className="builtin-prompt-card__body" id={`${bodyId}-panel`}>
+          <label className="field" htmlFor={bodyId}>
+            <span className="field-label">Body</span>
+            <textarea
+              id={bodyId}
+              className="textarea builtin-prompt-card__textarea"
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              maxLength={32_000}
+              rows={10}
+              disabled={saving || disabled}
+            />
+            <span className="field-help">
+              {body.length.toLocaleString()} / 32,000 characters
+            </span>
+          </label>
+          <div className="builtin-prompt-card__foot">
+            <span className="field-help">
+              Applies to conversations created after saving.
+            </span>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => onSave(section.key, body.trim())}
+              disabled={
+                saving ||
+                disabled ||
+                !dirty ||
+                body.trim().length === 0
+              }
+            >
+              <Icon name="check" size={13} />
+              {saving ? "Saving…" : "Save section"}
+            </Button>
+          </div>
+          {error ? (
+            <p className="builtin-prompt-card__error" role="alert">
+              <Icon name="info" size={14} />
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+/** Edit the four provider-facing default sections without changing their order. */
+function BuiltinPromptBlock() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const query = useListBuiltinSystemPromptSections({
+    query: { retry: false, staleTime: 15_000 },
+  });
+  const [error, setError] = useState<{
+    readonly key: string;
+    readonly message: string;
+  } | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const listKey = getListBuiltinSystemPromptSectionsQueryKey();
+
+  const updateMutation = useUpdateBuiltinSystemPromptSection({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.setQueryData<BuiltinList>(listKey, data);
+        setError(null);
+        toast.success("Built-in prompt section saved.");
+      },
+      onError: (caught, variables) => {
+        const message = apiErrorMessage(caught);
+        setError({ key: variables.key, message });
+        toast.error(message);
+      },
+    },
+  });
+
+  const resetMutation = useResetBuiltinSystemPromptSections({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.setQueryData<BuiltinList>(listKey, data);
+        setError(null);
+        setResetOpen(false);
+        toast.success("Built-in prompt restored to its defaults.");
+      },
+      onError: (caught) => {
+        const message = apiErrorMessage(caught);
+        toast.error(message);
+      },
+    },
+  });
+
+  const headingId = useId();
+  const sections = query.data?.resources ?? [];
+  const customized = sections.filter((section) => section.customized).length;
+
+  let listBody = null;
+  if (query.isPending) {
+    listBody = (
+      <div className="builtin-prompt__list" aria-busy="true">
+        <span className="settings-skeleton settings-skeleton--line" />
+        <span className="settings-skeleton settings-skeleton--field" />
+        <span className="settings-skeleton settings-skeleton--field" />
+      </div>
+    );
+  } else if (query.isError) {
+    listBody = (
+      <div className="settings-inline-error" role="alert">
+        <Icon name="info" size={16} />
+        <div>
+          <strong>The built-in prompt did not answer.</strong>
+          <p>{apiErrorMessage(query.error)}</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => void query.refetch()}
+            disabled={query.isFetching}
+          >
+            <Icon name="ring" size={14} />
+            {query.isFetching ? "Retrying…" : "Retry"}
+          </Button>
+        </div>
+      </div>
+    );
+  } else {
+    listBody = (
+      <div className="builtin-prompt__list">
+        {sections.map((section) => (
+          <BuiltinPromptCard
+            key={`${section.key}:${section.updated_at ?? "default"}`}
+            section={section}
+            saving={
+              updateMutation.isPending &&
+              updateMutation.variables?.key === section.key
+            }
+            disabled={resetMutation.isPending}
+            error={error?.key === section.key ? error.message : null}
+            onSave={(key, body) =>
+              updateMutation.mutate({ key, data: { body } })
+            }
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <section className="builtin-prompt" aria-labelledby={headingId}>
+        <div className="builtin-prompt__head">
+          <div>
+            <p className="eyebrow">Built-in prompt</p>
+            <h3 id={headingId}>Default sections</h3>
+          </div>
+          <Badge tone={customized > 0 ? "ochre" : "moss"}>
+            {customized > 0 ? `${customized} customized` : "Pristine"}
+          </Badge>
+        </div>
+        <p className="builtin-prompt__lede">
+          These four sections are always present after the custom sections.
+          Editing one stores an override; reset removes every override and
+          restores the pristine wording. The tool catalog and conversation
+          messages remain built by the server.
+        </p>
+        {listBody}
+        <div className="builtin-prompt__foot">
+          <span className="field-help">
+            Changes apply only to conversations created after saving.
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setError(null);
+              setResetOpen(true);
+            }}
+            disabled={
+              query.isPending ||
+              query.isError ||
+              customized === 0 ||
+              resetMutation.isPending
+            }
+          >
+            <Icon name="history" size={13} />
+            Reset built-in prompt
+          </Button>
+        </div>
+      </section>
+
+      {resetOpen ? (
+        <SettingsDialog
+          eyebrow="Settings · built-in prompt"
+          title="Reset the built-in prompt?"
+          description="Every built-in override is removed. Custom sections are untouched, and existing conversations keep their frozen prompt."
+          onClose={() => {
+            if (!resetMutation.isPending) {
+              setResetOpen(false);
+            }
+          }}
+          actions={
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setResetOpen(false)}
+                disabled={resetMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={() => resetMutation.mutate()}
+                disabled={resetMutation.isPending}
+              >
+                <Icon name="history" size={14} />
+                {resetMutation.isPending ? "Resetting…" : "Reset built-in"}
+              </Button>
+            </>
+          }
+        >
+          <p className="settings-dialog__copy">
+            {customized === 1
+              ? "One built-in section will return to its default text."
+              : `${customized} built-in sections will return to their default text.`}
+          </p>
+        </SettingsDialog>
+      ) : null}
+    </>
+  );
 }
 
 /** Ordered owner-authored system prompt sections, frozen per conversation. */
@@ -1133,6 +1456,19 @@ export function SystemPromptPanel() {
 
             <ProviderOrderBlock sections={sections} />
 
+            <BuiltinPromptBlock />
+
+            <div className="system-prompt__group-head">
+              <div>
+                <p className="eyebrow">Custom sections</p>
+                <h3>Owner-authored prompt</h3>
+              </div>
+              <p className="system-prompt__group-lede">
+                Custom sections render before the built-in prompt, in this
+                drag order.
+              </p>
+            </div>
+
             <div className="system-prompt__toolbar">
               <Button
                 type="button"
@@ -1157,7 +1493,7 @@ export function SystemPromptPanel() {
                 }
               >
                 <Icon name="history" size={13} />
-                Reset all
+                Reset custom
               </Button>
               <span className="system-prompt__toolbar-hint">
                 Drag the grip, or focus it and press Space, then use the arrow

@@ -6,7 +6,11 @@ from datetime import datetime
 from typing import Literal, Protocol
 
 from app.module.knowledge.schema.file_schema import FileChunksSchema, FileSchema, PathListingSchema
-from app.module.knowledge.schema.memory_schema import MemoryReadSchema, MemorySaveSchema
+from app.module.knowledge.schema.memory_schema import (
+    MemoryReadSchema,
+    MemorySaveSchema,
+    MemorySchema,
+)
 from app.module.knowledge.schema.search_schema import SearchResponseSchema
 from app.module.knowledge.schema.timeline_schema import TimelineResponseSchema
 from app.module.web_research.schema.web_research_schema import (
@@ -63,6 +67,13 @@ class MemoryToolServiceProtocol(Protocol):
         source: str,
         auto_summary: bool = True,
     ) -> MemorySaveSchema: ...
+
+    async def deprecate_memories(
+        self,
+        memory_ids: list[int],
+        *,
+        reason: str | None = None,
+    ) -> list[MemorySchema]: ...
 
 
 class TimelineToolServiceProtocol(Protocol):

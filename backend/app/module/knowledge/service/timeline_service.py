@@ -104,6 +104,7 @@ class TimelineService:
                     time=memory.memory_time,
                     date_label=memory.memory_time.astimezone(self.timezone).date().isoformat(),
                     content=memory.content,
+                    title=memory.title,
                     status=memory.status,
                 )
             )
@@ -172,6 +173,7 @@ class TimelineService:
                     anchor=selection.anchor,
                     time=event.time,
                     content=event.content,
+                    title=event.title,
                     memory_id=event.source_id if event.kind == "memory" else None,
                     memory_summary_id=event.source_id if event.kind == "summary" else None,
                     file_id=event.source_id if event.kind == "file_update" else None,

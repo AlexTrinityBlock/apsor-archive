@@ -150,7 +150,7 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
         "examples",
         "context_protocol",
     ]
-    assert system_entry["data"]["prompt_version"] == "archive-agent-v8"
+    assert system_entry["data"]["prompt_version"] == "archive-agent-v10"
     sections = system_entry["data"]["sections"]
     assert sections[0] == {
         "name": f"system_prompt:{first_id}",
@@ -240,7 +240,68 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     assert "# Title 2" not in reset_prompt
 
     # ------------------------------------------------------------------
-    # 8. Whitespace-only titles and bodies are rejected on create and update
+    # 8. The four built-in sections are readable and editable. An override is
+    # frozen into new conversations; reset restores the Python default.
+    # ------------------------------------------------------------------
+    builtin_url = f"{SYSTEM_PROMPT_URL}/builtin"
+    builtins = client.get(builtin_url)
+    assert builtins.status_code == 200, builtins.text
+    builtin_body = builtins.json()
+    assert [item["key"] for item in builtin_body["resources"]] == BUILTIN_SECTION_NAMES
+    assert all(item["customized"] is False for item in builtin_body["resources"])
+    default_instructions = next(
+        item["body"] for item in builtin_body["resources"] if item["key"] == "instructions"
+    )
+
+    custom_instructions = "Edited built-in instructions for this test."
+    edited_builtin = client.put(
+        f"{builtin_url}/instructions",
+        json={"body": custom_instructions},
+    )
+    assert edited_builtin.status_code == 200, edited_builtin.text
+    edited_instructions = next(
+        item for item in edited_builtin.json()["resources"] if item["key"] == "instructions"
+    )
+    assert edited_instructions["customized"] is True
+    assert edited_instructions["body"] == custom_instructions
+
+    builtin_conversation_id = _create_conversation(client, "Edited built-in")
+    builtin_entry = _system_entry(client, builtin_conversation_id)
+    assert _section_names(builtin_entry) == BUILTIN_SECTION_NAMES
+    rendered_instructions = next(
+        section
+        for section in builtin_entry["data"]["sections"]
+        if section["name"] == "instructions"
+    )
+    assert rendered_instructions["content"] == custom_instructions
+    assert custom_instructions in _prompt(builtin_entry)
+
+    unknown_builtin = client.put(f"{builtin_url}/not_a_section", json={"body": "Body."})
+    assert unknown_builtin.status_code == 404
+    blank_builtin = client.put(f"{builtin_url}/instructions", json={"body": "   "})
+    assert blank_builtin.status_code == 422
+    assert blank_builtin.json()["error"] == "agent_invalid_system_prompt"
+
+    reset_builtin = client.post(f"{builtin_url}/reset")
+    assert reset_builtin.status_code == 200, reset_builtin.text
+    assert all(item["customized"] is False for item in reset_builtin.json()["resources"])
+    reset_instructions = next(
+        item["body"] for item in reset_builtin.json()["resources"] if item["key"] == "instructions"
+    )
+    assert reset_instructions == default_instructions
+
+    restored_conversation_id = _create_conversation(client, "Restored built-in")
+    restored_entry = _system_entry(client, restored_conversation_id)
+    restored_instructions = next(
+        section
+        for section in restored_entry["data"]["sections"]
+        if section["name"] == "instructions"
+    )
+    assert restored_instructions["content"] == default_instructions
+    assert custom_instructions not in _prompt(restored_entry)
+
+    # ------------------------------------------------------------------
+    # 9. Whitespace-only titles and bodies are rejected on create and update
     # with the stable agent_invalid_system_prompt error.
     # ------------------------------------------------------------------
     blank_title = client.post(SYSTEM_PROMPT_URL, json={"title": "   ", "body": "A body."})

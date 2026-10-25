@@ -27,6 +27,7 @@ const HIDDEN_KINDS = new Set(["pi.system"]);
 interface ChatThreadProps {
   readonly entries: readonly AgentEntrySchema[];
   readonly conversation: AgentConversationDetailSchema;
+  readonly memoryTitles?: ReadonlyMap<number, string>;
   readonly onForkEntry?: (entryId: number) => void;
   readonly forkingEntryId?: number | null;
   readonly forkDisabled?: boolean;
@@ -70,6 +71,7 @@ function ForkEntryAction({
 function ThreadEntry({
   entry,
   toolResults,
+  memoryTitles,
   onForkEntry,
   forkingEntryId,
   forkDisabled,
@@ -80,6 +82,7 @@ function ThreadEntry({
 }: {
   readonly entry: AgentEntrySchema;
   readonly toolResults: ReadonlyMap<string, ToolResultInfo>;
+  readonly memoryTitles?: ReadonlyMap<number, string>;
   readonly onForkEntry?: (entryId: number) => void;
   readonly forkingEntryId?: number | null;
   readonly forkDisabled?: boolean;
@@ -114,6 +117,7 @@ function ThreadEntry({
         <AssistantEntry
           entry={entry}
           toolResults={toolResults}
+          memoryTitles={memoryTitles}
           action={forkAction}
           selectedTraceId={selectedTraceId}
           onSelectTrace={onSelectTrace}
@@ -138,6 +142,7 @@ function ThreadEntry({
 export const ChatThread = memo(function ChatThread({
   entries,
   conversation,
+  memoryTitles,
   onForkEntry,
   forkingEntryId = null,
   forkDisabled = false,
@@ -209,6 +214,7 @@ export const ChatThread = memo(function ChatThread({
               <ThreadEntry
                 entry={entry}
                 toolResults={toolResults}
+                memoryTitles={memoryTitles}
                 onForkEntry={onForkEntry}
                 forkingEntryId={forkingEntryId}
                 forkDisabled={forkDisabled}

@@ -20,6 +20,7 @@ class SystemPromptSection:
     sort_order: int
     created_at: datetime
     updated_at: datetime
+    builtin_key: str | None = None
 
 
 __all__ = ["SystemPromptSection"]

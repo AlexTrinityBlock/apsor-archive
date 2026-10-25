@@ -528,7 +528,7 @@ export function AgentRuntimePanel({
             <div className="runtime-field runtime-field--wide">
               <SwitchField
                 label="Require manual approval for memory writes"
-                hint="When on, the agent's save_memory request waits for your Approve/Reject decision. When off, the agent may save only after its existing prompt-level confirmation. Manual approval is on by default."
+                hint="When on, the agent's save_memory request (including a direct deprecation) waits for your Approve/Reject decision. When off, the agent may write only after its existing prompt-level confirmation. Manual approval is on by default."
                 checked={draft.save_memory_requires_approval}
                 disabled={saving}
                 onChange={(next) =>
