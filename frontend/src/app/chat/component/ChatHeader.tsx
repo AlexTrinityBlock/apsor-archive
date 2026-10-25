@@ -6,6 +6,7 @@ import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import type { AgentConversationDetailSchema } from "../../generated-apis-types/schemas";
 import { formatRelative } from "../../../lib/format";
+import { clearLastChatConversation } from "../session-storage";
 
 export type ChatPane = "thread" | "inspector";
 
@@ -177,6 +178,7 @@ export function ChatHeader({
           aria-label="New chat"
           onClick={() => {
             setMenuOpen(false);
+            clearLastChatConversation();
             onNew();
           }}
         >
