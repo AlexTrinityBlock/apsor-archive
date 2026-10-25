@@ -160,7 +160,7 @@ export function MaintenancePanel() {
             Apsor Archive <code>{versionLabel}</code>
           </span>
           <span>React 19 + Vite · PostgreSQL · local-first</span>
-          <ButtonLink to="/method" variant="ghost" size="sm">
+          <ButtonLink to="/about" variant="ghost" size="sm">
             {t("settings.maintenance.readMethod")}
             <Icon name="arrow-right" size={14} />
           </ButtonLink>

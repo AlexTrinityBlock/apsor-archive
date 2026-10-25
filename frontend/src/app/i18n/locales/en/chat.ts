@@ -298,21 +298,6 @@ export const chat = {
     imageOmitted: "Image omitted from the transcript",
     imageOmittedAlt: "Image omitted from the transcript: {alt}",
   },
-  method: {
-    currentToolCatalog: "Current tool catalog",
-    toolCatalogUnavailable: "The tool catalog is unavailable.",
-    label: "Method",
-    hiddenOne: "{count} hidden entry",
-    hiddenOther: "{count} hidden entries",
-    provider: "Provider",
-    model: "Model",
-    prompt: "Prompt",
-    tools: "Tools",
-    transcript: "Transcript",
-    note:
-      "System entries are hidden from this reading view. Compaction and reset boundaries appear as cards in the transcript. The frozen prompt and tool snapshot remain in the transcript.",
-    readMethod: "Read the method",
-  },
   retry: {
     aria: "Retry the last run",
     eyebrow: "Unfinished run",

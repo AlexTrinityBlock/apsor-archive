@@ -285,21 +285,6 @@ export const chat = {
     imageOmitted: "對話紀錄中省略了圖片",
     imageOmittedAlt: "對話紀錄中省略了圖片：{alt}",
   },
-  method: {
-    currentToolCatalog: "目前工具目錄",
-    toolCatalogUnavailable: "無法取得工具目錄。",
-    label: "方法",
-    hiddenOne: "隱藏 {count} 個條目",
-    hiddenOther: "隱藏 {count} 個條目",
-    provider: "供應商",
-    model: "模型",
-    prompt: "提示詞",
-    tools: "工具",
-    transcript: "對話紀錄",
-    note:
-      "系統條目會從這個閱讀檢視中隱藏。壓縮與重設邊界會以卡片出現在對話紀錄中。凍結的提示詞與工具快照仍保留在對話紀錄中。",
-    readMethod: "閱讀方法",
-  },
   retry: {
     aria: "重試上一次執行",
     eyebrow: "未完成的執行",
