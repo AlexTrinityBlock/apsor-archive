@@ -1,0 +1,90 @@
+/* Root route error page. Shares the mono paper/card/hairline language. */
+
+.route-error {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  overflow: hidden;
+  padding: 40px 24px;
+  background: var(--mono-paper);
+}
+
+.route-error__rings {
+  position: absolute;
+  top: 50%;
+  right: -10%;
+  width: min(760px, 65vw);
+  pointer-events: none;
+  opacity: 0.55;
+  transform: translateY(-50%);
+}
+
+.route-error__card {
+  position: relative;
+  z-index: 1;
+  width: min(620px, 100%);
+  padding: clamp(28px, 5vw, 46px);
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 4px;
+}
+
+.route-error__mark {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 20px;
+  place-items: center;
+  color: var(--accent-moss);
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 3px;
+}
+
+.route-error h1 {
+  max-width: 20ch;
+  margin-top: 10px;
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+}
+
+.route-error__description {
+  max-width: 54ch;
+  margin-top: 16px;
+  color: var(--mono-l2);
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+.route-error__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.route-error__detail {
+  margin-top: 24px;
+  padding-top: 14px;
+  color: var(--mono-muted);
+  border-top: 0.7px solid var(--mono-grid);
+  font-family: var(--mono-font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .route-error {
+    padding: 20px 16px;
+  }
+
+  .route-error__rings {
+    width: 130vw;
+    right: -55%;
+    opacity: 0.35;
+  }
+}

@@ -10,6 +10,8 @@ import type { AgentPageContextSchema } from './agentPageContextSchema';
  * Append one user entry and start a run.
  */
 export interface AgentMessageCreateSchema {
+  client_timezone?: string | null;
+  client_utc_offset_minutes?: number | null;
   /**
      * @minLength 1
      * @maxLength 32000

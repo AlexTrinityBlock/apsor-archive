@@ -4,6 +4,7 @@ import { createBrowserRouter } from "react-router-dom";
 
 import { AuthGate } from "./auth/AuthGate";
 import { AppShell } from "./component/AppShell";
+import { RouteError } from "./component/RouteError";
 import { RouteFallback } from "./component/RouteFallback";
 import { NotFoundPage } from "./not-found/page";
 
@@ -85,6 +86,7 @@ export const router = createBrowserRouter([
   {
     path: "/",
     element: <AuthGate />,
+    errorElement: <RouteError />,
     children: [
       {
         element: <AppShell />,

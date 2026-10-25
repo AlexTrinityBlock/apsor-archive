@@ -658,6 +658,33 @@
         "additionalProperties": false,
         "description": "Append one user entry and start a run.",
         "properties": {
+          "client_timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9_+\\-/]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Timezone"
+          },
+          "client_utc_offset_minutes": {
+            "anyOf": [
+              {
+                "maximum": 840.0,
+                "minimum": -840.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Utc Offset Minutes"
+          },
           "content": {
             "maxLength": 32000,
             "minLength": 1,
@@ -3550,6 +3577,67 @@
         "title": "SummarySearchResultSchema",
         "type": "object"
       },
+      "SystemPromptReadSchema": {
+        "description": "The persisted prompt and whether it adds a custom first section.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "is_custom": {
+            "title": "Is Custom",
+            "type": "boolean"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "is_custom",
+          "updated_at"
+        ],
+        "title": "SystemPromptReadSchema",
+        "type": "object"
+      },
+      "SystemPromptUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace the custom prompt; both fields are required after trimming.",
+        "properties": {
+          "body": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ],
+        "title": "SystemPromptUpdateSchema",
+        "type": "object"
+      },
       "TimelineDensitySchema": {
         "description": "Per-day counts used by the density strip.",
         "properties": {
@@ -4994,6 +5082,90 @@
           }
         },
         "summary": "Reset Agent Settings",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/settings/system-prompt": {
+      "get": {
+        "description": "Return the owner-authored prompt and whether it is active.",
+        "operationId": "getSystemPrompt",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemPromptReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get System Prompt",
+        "tags": [
+          "agent"
+        ]
+      },
+      "put": {
+        "description": "Replace the prompt used by future conversations.",
+        "operationId": "updateSystemPrompt",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemPromptUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemPromptReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update System Prompt",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/settings/system-prompt/reset": {
+      "post": {
+        "description": "Remove the custom section and return to the built-in prompt.",
+        "operationId": "resetSystemPrompt",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemPromptReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reset System Prompt",
         "tags": [
           "agent"
         ]
