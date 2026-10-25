@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 
 import { Icon } from "../../component/Icon";
 import { useI18n, type TranslationKey } from "../../i18n";
@@ -29,6 +29,7 @@ const SECTIONS: readonly SettingsSection[] = [
 ];
 
 const COLLAPSE_KEY = "apsor-archive.settings.navCollapsed";
+const SCROLL_OFFSET = 18;
 
 function readCollapsed(): boolean {
   try {
@@ -36,6 +37,36 @@ function readCollapsed(): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Scroll the settings canvas, not the window.
+ *
+ * The archive shell is a fixed 100dvh layout with `.app-page` as its scroll
+ * container. A native hash jump scrolls every scrollable ancestor, including
+ * the document, which shifts the fixed rail upward and leaves a large blank
+ * area below the last section. Reset the document first, then move only the
+ * inner canvas.
+ */
+function scrollToSection(id: string, behavior: ScrollBehavior = "smooth"): void {
+  window.scrollTo(0, 0);
+  const target = document.getElementById(id);
+  const canvas = document.querySelector<HTMLElement>(".app-page");
+  if (!target || !canvas) {
+    return;
+  }
+  const stacked = window.matchMedia("(max-width: 980px)").matches;
+  const nav = document.querySelector<HTMLElement>(".settings-nav");
+  const offset =
+    stacked && nav ? Math.round(nav.getBoundingClientRect().height) + 10 : SCROLL_OFFSET;
+  const targetRect = target.getBoundingClientRect();
+  const canvasRect = canvas.getBoundingClientRect();
+  const top = canvas.scrollTop + targetRect.top - canvasRect.top - offset;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  canvas.scrollTo({
+    top: Math.max(0, top),
+    behavior: reducedMotion ? "auto" : behavior,
+  });
 }
 
 /** Sticky settings sub-navigation; a drawer strip on mobile. */
@@ -54,6 +85,51 @@ export function SettingsNav() {
       // Storage can be blocked; the local state still works.
     }
   }, [collapsed]);
+
+  useEffect(() => {
+    const hash = window.location.hash.replace("#", "");
+    if (!SECTIONS.some((section) => section.id === hash)) {
+      return;
+    }
+
+    // The panels load asynchronously and grow the document after the first
+    // paint. Keep the requested section aligned while that layout settles,
+    // then stop so manual scrolling is never fought.
+    let settleTimer = 0;
+    const align = () => scrollToSection(hash, "auto");
+    const content = document.querySelector<HTMLElement>(".settings-content");
+    const observer = new ResizeObserver(() => {
+      window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(align, 80);
+    });
+    if (content) {
+      observer.observe(content);
+    }
+    const initial = window.setTimeout(align, 120);
+    const stop = window.setTimeout(() => observer.disconnect(), 5000);
+    const stopOnInput = () => observer.disconnect();
+    window.addEventListener("wheel", stopOnInput, { once: true, passive: true });
+    window.addEventListener("touchstart", stopOnInput, {
+      once: true,
+      passive: true,
+    });
+
+    return () => {
+      window.clearTimeout(settleTimer);
+      window.clearTimeout(initial);
+      window.clearTimeout(stop);
+      window.removeEventListener("wheel", stopOnInput);
+      window.removeEventListener("touchstart", stopOnInput);
+      observer.disconnect();
+    };
+  }, []);
+
+  const handleNavigate = (event: MouseEvent<HTMLAnchorElement>, id: string) => {
+    event.preventDefault();
+    setActive(id);
+    window.history.pushState(null, "", `#${id}`);
+    scrollToSection(id);
+  };
 
   return (
     <aside
@@ -100,7 +176,7 @@ export function SettingsNav() {
                   : "settings-nav__link"
               }
               title={label}
-              onClick={() => setActive(section.id)}
+              onClick={(event) => handleNavigate(event, section.id)}
             >
               <span className="settings-nav__index">{section.index}</span>
               <span className="settings-nav__label">{label}</span>
