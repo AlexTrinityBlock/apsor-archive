@@ -138,6 +138,27 @@ export function assistantText(entry: AgentEntrySchema): string {
   return typeof content === "string" ? content : "";
 }
 
+/** A plain-text export of the visible user/assistant conversation. */
+export function transcriptText(entries: readonly AgentEntrySchema[]): string {
+  const parts: string[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "pi.user") {
+      const text = userText(entry).trim();
+      if (text.length > 0) {
+        parts.push(`User: ${text}`);
+      }
+      continue;
+    }
+    if (entry.kind === "pi.assistant") {
+      const text = assistantText(entry).trim();
+      if (text.length > 0) {
+        parts.push(`Assistant: ${text}`);
+      }
+    }
+  }
+  return parts.join("\n\n");
+}
+
 export function readToolCalls(entry: AgentEntrySchema): ToolCallMeta[] {
   const raw = assistantMessage(entry)?.tool_calls;
   if (!Array.isArray(raw)) {

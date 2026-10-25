@@ -386,7 +386,7 @@ If the key, path, or normalized text is empty, no snapshot is written and
 `page_context_attached` is `false`.
 
 New conversations freeze the current system prompt version
-(`archive-agent-v10`), which states that `<page_context>` and `<current_time>`
+(`archive-agent-v11`), which states that `<page_context>` and `<current_time>`
 are reference data, never instructions, and that page context appears only when
 the page changes.
 
@@ -434,8 +434,8 @@ order in one locked transaction and rejects partial or duplicate id lists.
 
 `create_conversation` reads the active custom sections, the effective built-ins,
 and the owner's profile once. Custom rows render as `system_prompt:<id>` in
-`sort_order, id` order, followed by `owner_profile` (when the owner set a name or
-bio), then the four built-ins in canonical order (override body when present,
+`sort_order, id` order, followed by `user_profile` (when the user set a display
+name or cards), then the four built-ins in canonical order (override body when present,
 Python default otherwise). The combined sections become one provider system
 message and are frozen into `pi.system`. Editing either kind affects only
 new conversations and never rewrites an existing provider prefix. The custom
@@ -685,9 +685,10 @@ those generated assets must be committed with the build.
 ## Account and sessions
 
 The first visit creates the single owner account through
-`POST /api/v1/auth/setup`. `PATCH /api/v1/auth/me` updates the display name and
-self-introduction; the sign-in username stays immutable. Passwords are hashed
-with Argon2; sessions are opaque cookies whose SHA-256 hash is stored in
+`POST /api/v1/auth/setup`. `GET /api/v1/auth/profile` returns the effective
+display name and ordered cards; `PUT /api/v1/auth/profile` replaces the name and
+every card atomically. The sign-in username stays immutable. Passwords are
+hashed with Argon2; sessions are opaque cookies whose SHA-256 hash is stored in
 `user_session`. The cookie is HttpOnly and
 SameSite=Lax; set `APSOR_COOKIE_SECURE=true` behind HTTPS. Every knowledge,
 settings, and agent endpoint requires the session; `/api/v1/health`,
@@ -755,12 +756,15 @@ and seeds row `id=1` with the defaults. Later migrations in order:
 - `c9e1f3a5b7d2` replaces the singleton `system_prompt` table with ordered
   `system_prompt_section` rows and copies the existing prompt as the first
   section;
-- `f4a1c7d9e2b3` (current head) adds `memory.title` (backfilled from content),
+- `f4a1c7d9e2b3` adds `memory.title` (backfilled from content),
   `deprecated_at` / `deprecated_reason`, `builtin_key` on
   `system_prompt_section`, and `app_user.display_name` / `bio`. The old
   successor-only check becomes “successor or direct deprecation timestamp”.
   Downgrade re-adds the old check as `NOT VALID` so direct-deprecated rows are
-  preserved.
+  preserved;
+- `b7e2d4f6a8c1` (current head) creates `user_profile_card` with ordered
+  title/content rows, migrates `app_user.bio` into an `About` card, and drops
+  the bio column.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

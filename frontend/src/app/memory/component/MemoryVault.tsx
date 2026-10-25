@@ -3,6 +3,7 @@ import { useQueries } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import { Button, ButtonLink } from "../../component/Button";
+import { CopyButton } from "../../component/CopyButton";
 import { Icon } from "../../component/Icon";
 import { PageHeader } from "../../component/PageHeader";
 import {
@@ -223,6 +224,12 @@ function MemoryCard({
         </div>
         <div className="memory-card__meta">
           {memory.created_at ? <span>pressed {formatDate(memory.created_at)}</span> : null}
+          <CopyButton
+            value={memory.content}
+            label="Copy memory"
+            iconOnly
+            title="Copy the memory text"
+          />
           <button
             type="button"
             className="memory-card__action"

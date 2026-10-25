@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
+import { CopyButton } from "../../component/CopyButton";
 import { Icon } from "../../component/Icon";
 import type { AgentConversationDetailSchema } from "../../generated-apis-types/schemas";
 import { formatRelative } from "../../../lib/format";
@@ -13,6 +14,7 @@ export type ChatPane = "thread" | "inspector";
 interface ChatHeaderProps {
   readonly conversation: AgentConversationDetailSchema | null;
   readonly conversationId: number | null;
+  readonly transcript: string;
   readonly archived: boolean;
   readonly drawerOpen: boolean;
   readonly narrow: boolean;
@@ -29,6 +31,7 @@ interface ChatHeaderProps {
 export function ChatHeader({
   conversation,
   conversationId,
+  transcript,
   archived,
   drawerOpen,
   narrow,
@@ -185,6 +188,14 @@ export function ChatHeader({
           <Icon name="plus" size={13} />
           <span>New chat</span>
         </Button>
+
+        <CopyButton
+          value={transcript}
+          label="Copy conversation"
+          iconOnly
+          disabled={transcript.length === 0}
+          className="chat-header__copy-icon"
+        />
 
         <div className="chat-header__menu" ref={menuRef}>
           <button

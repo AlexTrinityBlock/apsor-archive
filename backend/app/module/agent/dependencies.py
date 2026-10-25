@@ -12,10 +12,12 @@ from typing import cast
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.dependency.auth import get_current_user
 from app.infrastructure.ai.runtime import AiRuntime
 from app.infrastructure.config.settings import Settings
 from app.infrastructure.database.session import Database, get_db_session
 from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
+from app.module.agent.domain.user_profile_domain import UserProfile, UserProfileCard
 from app.module.agent.exception.domain_error import AgentNotConfiguredError
 from app.module.agent.protocol.chat_generator_protocol import ChatGeneratorProtocol
 from app.module.agent.protocol.system_prompt_cache_protocol import (
@@ -34,6 +36,9 @@ from app.module.agent.service.agent_settings_service import AgentSettingsService
 from app.module.agent.service.saved_question_service import SavedQuestionService
 from app.module.agent.service.system_prompt_service import SystemPromptService
 from app.module.agent.service.tool_registry import AgentToolRegistry
+from app.module.auth.dependencies import get_auth_service
+from app.module.auth.schema.auth_schema import UserSchema
+from app.module.auth.service.auth_service import AuthService
 from app.module.knowledge.dependencies import (
     get_file_service,
     get_memory_service,
@@ -41,6 +46,23 @@ from app.module.knowledge.dependencies import (
     get_timeline_service,
 )
 from app.module.web_research.dependencies import get_web_research_service
+
+
+async def get_current_user_profile(
+    user: UserSchema = Depends(get_current_user),
+    auth_service: AuthService = Depends(get_auth_service),
+) -> UserProfile:
+    """Load the full display name + card list for a new frozen conversation."""
+    profile = await auth_service.get_profile(user.user_id)
+    return UserProfile(
+        # Only an explicitly chosen display name enters the prompt. The login
+        # username remains a UI fallback and does not leak into every system
+        # prompt before the user has filled in the profile.
+        display_name=user.display_name,
+        cards=tuple(
+            UserProfileCard(title=card.title, content=card.content) for card in profile.cards
+        ),
+    )
 
 
 def get_agent_chat_generator(request: Request) -> ChatGeneratorProtocol:
@@ -187,6 +209,7 @@ __all__ = [
     "get_agent_runtime_config",
     "get_agent_service",
     "get_agent_settings_service",
+    "get_current_user_profile",
     "get_saved_question_ask_service",
     "get_saved_question_service",
 ]

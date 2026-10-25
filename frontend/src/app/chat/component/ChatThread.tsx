@@ -1,10 +1,7 @@
 import { memo, useMemo } from "react";
 
 import { Icon } from "../../component/Icon";
-import type {
-  AgentConversationDetailSchema,
-  AgentEntrySchema,
-} from "../../generated-apis-types/schemas";
+import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
 import {
   readToolCalls,
   readToolResultCallId,
@@ -26,7 +23,6 @@ const HIDDEN_KINDS = new Set(["pi.system"]);
 
 interface ChatThreadProps {
   readonly entries: readonly AgentEntrySchema[];
-  readonly conversation: AgentConversationDetailSchema;
   readonly memoryTitles?: ReadonlyMap<number, string>;
   readonly onForkEntry?: (entryId: number) => void;
   readonly forkingEntryId?: number | null;
@@ -141,7 +137,6 @@ function ThreadEntry({
 /** The reading view for one transcript: turns, tool steps, and the method drawer. */
 export const ChatThread = memo(function ChatThread({
   entries,
-  conversation,
   memoryTitles,
   onForkEntry,
   forkingEntryId = null,
@@ -195,38 +190,24 @@ export const ChatThread = memo(function ChatThread({
 
   return (
     <div className="chat-thread">
-      {visible.length === 0 ? (
-        <div className="empty-state chat-thread__empty">
-          <span className="empty-state__icon" aria-hidden="true">
-            <Icon name="file" size={20} />
-          </span>
-          <h2 className="empty-state__title">A fresh sheet</h2>
-          <p className="empty-state__description">
-            {conversation.status === "archived"
-              ? "This thread is archived. Restore it to add the first note."
-              : "Write the first note below. The agent will answer from the archive's files, memories, and summaries, with every tool step recorded."}
-          </p>
-        </div>
-      ) : (
-        <div className="chat-thread__list">
-          {visible.map((entry) => (
-            <div className="chat-entry" key={entry.id}>
-              <ThreadEntry
-                entry={entry}
-                toolResults={toolResults}
-                memoryTitles={memoryTitles}
-                onForkEntry={onForkEntry}
-                forkingEntryId={forkingEntryId}
-                forkDisabled={forkDisabled}
-                selectedTraceId={selectedTraceId}
-                onSelectTrace={onSelectTrace}
-                onOpenCitation={onOpenCitation}
-                onOpenResource={onOpenResource}
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="chat-thread__list">
+        {visible.map((entry) => (
+          <div className="chat-entry" key={entry.id}>
+            <ThreadEntry
+              entry={entry}
+              toolResults={toolResults}
+              memoryTitles={memoryTitles}
+              onForkEntry={onForkEntry}
+              forkingEntryId={forkingEntryId}
+              forkDisabled={forkDisabled}
+              selectedTraceId={selectedTraceId}
+              onSelectTrace={onSelectTrace}
+              onOpenCitation={onOpenCitation}
+              onOpenResource={onOpenResource}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 });

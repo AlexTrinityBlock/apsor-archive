@@ -56,6 +56,7 @@ import {
   mergeEntries,
   readRetryState,
   systemVersions,
+  transcriptText,
   type CitationToken,
   type ResourceMeta,
 } from "./types";
@@ -331,6 +332,7 @@ export function ChatPage() {
       ),
     [entries, stream?.toolCalls],
   );
+  const transcript = useMemo(() => transcriptText(entries), [entries]);
   const retryState = useMemo(
     () => readRetryState(entries, lastError ? { detail: lastError } : null),
     [entries, lastError],
@@ -720,7 +722,6 @@ export function ChatPage() {
       <>
         <ChatThread
           entries={entries}
-          conversation={conversation}
           memoryTitles={memoryTitles}
           onForkEntry={handleForkEntry}
           forkingEntryId={forkingEntryId}
@@ -922,6 +923,7 @@ export function ChatPage() {
       <ChatHeader
         conversation={conversation}
         conversationId={conversationId}
+        transcript={transcript}
         archived={archived}
         drawerOpen={drawerOpen}
         narrow={narrow}

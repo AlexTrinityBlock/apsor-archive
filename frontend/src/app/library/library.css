@@ -2734,3 +2734,7 @@ button.library-crumb:hover {
     animation: none;
   }
 }
+
+.library-preview__chunk-head .copy-button {
+  margin-left: auto;
+}
