@@ -128,6 +128,14 @@ class FileCopySchema(BaseModel):
     path: str = Field(max_length=1024)
 
 
+class FileRenameSchema(BaseModel):
+    """Rename one current file without changing its parent folder."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    file_name: str = Field(min_length=1, max_length=255)
+
+
 class ChunkSchema(BaseModel):
     """One chunk in a read window."""
 

@@ -917,6 +917,31 @@ class FileService:
         await self.cache.bump_version()
         return self._to_schema(file)
 
+    async def rename_file(self, file_id: int, *, file_name_value: str) -> FileSchema:
+        """Rename one current file without changing its parent folder or extension."""
+        file = await self._require_current_file_for_update(file_id)
+        name = file_name_value.strip()
+        # 先擋掉 slash，否則 target 會被 normalize 成合法的多段路徑；其餘
+        # 空名稱、"."、".." 與 control characters 由 normalize_file_path 擋下。
+        if not name or "/" in name or "\\" in name:
+            raise InvalidPathError("A renamed file must use a single non-empty file name.")
+
+        parent = parent_directory(file.raw_file_path)
+        target = f"/{name}" if parent == "/" else f"{parent}/{name}"
+        target = self._target_file_path(file, target)
+        if target == file.raw_file_path:
+            return self._to_schema(file)
+        if await self._target_is_occupied(target):
+            raise TreePathConflictError(target)
+
+        await self.file_repository.update_location(
+            file,
+            path=target,
+            file_name=name,
+        )
+        await self.cache.bump_version()
+        return self._to_schema(file)
+
     async def copy_file(self, file_id: int, *, path: str) -> FileSchema:
         """Copy one current file into a new file record with fresh chunks."""
         source = await self._require_current_file_for_update(file_id)

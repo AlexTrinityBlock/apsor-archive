@@ -509,3 +509,68 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     )
     assert image_search.status_code == 200
     assert any(item["file_id"] == image_id for item in image_search.json()["file_results"])
+
+
+def test_rename_file_keeps_identity_and_rejects_path_changes(client: TestClient) -> None:
+    """重新命名只改最後段檔名，保留檔案身分、版本、chunks 與原始資料。"""
+    created = create_text(
+        client,
+        "/journal/day-one.md",
+        "Day one journal entry. " * 40,
+        "2026-09-10T09:00:00Z",
+    )
+    file_id = int(created["id"])
+    renamed_path = "/journal/day-one-renamed.md"
+
+    # 成功改名後，檔名與路徑更新，但身分、版本、chunks、大小與原始檔狀態不變。
+    renamed = client.post(
+        f"/api/v1/files/{file_id}/rename",
+        json={"file_name": "day-one-renamed.md"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    body = renamed.json()
+    assert body["id"] == file_id
+    assert body["version"] == created["version"]
+    assert body["total_chunks"] == created["total_chunks"]
+    assert body["size_bytes"] == created["size_bytes"]
+    assert body["has_original"] == created["has_original"]
+    assert body["file_name"] == "day-one-renamed.md"
+    assert body["raw_file_path"] == renamed_path
+
+    # 父資料夾不變，listing 只看得到新名稱，舊名稱已消失。
+    listing = client.get(
+        "/api/v1/paths",
+        params={"path": "/journal", "path_depth": 1},
+    )
+    assert listing.status_code == 200
+    listed_paths = {item["raw_file_path"] for item in listing.json()["files"]}
+    assert listed_paths == {renamed_path}
+    assert "/journal/day-one.md" not in listed_paths
+
+    # 只接受單一最後段檔名，且副檔名必須與原檔相同。
+    for invalid_name in ("nested/name.md", "../escape.md", "wrong.txt"):
+        invalid = client.post(
+            f"/api/v1/files/{file_id}/rename",
+            json={"file_name": invalid_name},
+        )
+        assert invalid.status_code == 422
+        assert invalid.json()["error"] == "invalid_path"
+
+    # 同資料夾已有同名檔案時，不可覆蓋。
+    create_text(client, "/journal/occupied.md", "Already occupied.")
+    conflict = client.post(
+        f"/api/v1/files/{file_id}/rename",
+        json={"file_name": "occupied.md"},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["error"] == "tree_path_conflict"
+
+    # 軟刪除後，同一個 id 不再是 current file，重新命名應回 404。
+    deleted = client.delete(f"/api/v1/files/{file_id}")
+    assert deleted.status_code == 204
+    deleted_rename = client.post(
+        f"/api/v1/files/{file_id}/rename",
+        json={"file_name": "after-delete.md"},
+    )
+    assert deleted_rename.status_code == 404
+    assert deleted_rename.json()["error"] == "file_not_found"
