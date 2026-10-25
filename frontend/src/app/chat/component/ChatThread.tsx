@@ -1,9 +1,11 @@
 import { memo, useMemo } from "react";
 
+import { CopyButton } from "../../component/CopyButton";
 import { Icon } from "../../component/Icon";
 import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
 import { useI18n } from "../../i18n";
 import {
+  assistantText,
   readToolCalls,
   readToolResultCallId,
   readToolResultInfo,
@@ -66,6 +68,22 @@ function ForkEntryAction({
   );
 }
 
+function CopyEntryAction({ value }: { readonly value: string }) {
+  const { t } = useI18n();
+  if (value.trim().length === 0) {
+    return null;
+  }
+  return (
+    <CopyButton
+      value={value}
+      iconOnly
+      label={t("chat.thread.copyMessage")}
+      title={t("chat.thread.copyMessageTitle")}
+      className="chat-entry__copy"
+    />
+  );
+}
+
 function ThreadEntry({
   entry,
   toolResults,
@@ -101,13 +119,26 @@ function ThreadEntry({
         onFork={onForkEntry}
       />
     ) : null;
+  let copyValue = "";
+  if (entry.kind === "pi.user") {
+    copyValue = userText(entry);
+  } else if (entry.kind === "pi.assistant") {
+    copyValue = assistantText(entry);
+  }
+  const entryActions =
+    forkAction || copyValue.trim().length > 0 ? (
+      <span className="chat-entry__actions">
+        <CopyEntryAction value={copyValue} />
+        {forkAction}
+      </span>
+    ) : null;
   switch (entry.kind) {
     case "pi.user":
       return (
         <UserMarginalia
           text={userText(entry)}
           createdAt={entry.created_at}
-          action={forkAction}
+          action={entryActions}
         />
       );
     case "pi.assistant":
@@ -116,7 +147,7 @@ function ThreadEntry({
           entry={entry}
           toolResults={toolResults}
           memoryTitles={memoryTitles}
-          action={forkAction}
+          action={entryActions}
           selectedTraceId={selectedTraceId}
           onSelectTrace={onSelectTrace}
           onOpenCitation={onOpenCitation}
