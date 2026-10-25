@@ -12,6 +12,7 @@ import {
   type RefObject,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { PencilLine } from "lucide-react";
 
 import { ApiError } from "../../../apis/fetch-client";
 import type { FileSchema } from "../../generated-apis-types/schemas";
@@ -51,6 +52,7 @@ export interface MarkdownEditorProps {
   readonly onCancel: () => void;
   readonly onSaved: (file: FileSchema) => void;
   readonly onDirtyChange?: (dirty: boolean) => void;
+  readonly onRename?: () => void;
 }
 
 type MobilePane = "write" | "preview";
@@ -357,6 +359,42 @@ function MarkdownEditorBody({
   );
 }
 
+interface EditorTitleProps {
+  readonly mode: MarkdownEditorProps["mode"];
+  readonly file: FileSchema | undefined;
+  readonly isSaving: boolean;
+  readonly onRename: (() => void) | undefined;
+}
+
+/**
+ * header 的檔名：編輯既有檔案時附帶重新命名按鈕，其餘情況只顯示標題。
+ */
+function EditorTitle({ mode, file, isSaving, onRename }: EditorTitleProps) {
+  const { t } = useI18n();
+  if (mode !== "edit" || !file || !onRename) {
+    return (
+      <h2 className="markdown-editor__title">
+        {file ? file.file_name : t("library.editor.newNoteTitle")}
+      </h2>
+    );
+  }
+  return (
+    <div className="markdown-editor__title-row">
+      <h2 className="markdown-editor__title">{file.file_name}</h2>
+      <button
+        type="button"
+        className="markdown-editor__rename"
+        onClick={onRename}
+        disabled={isSaving}
+        aria-label={t("library.common.rename")}
+        title={t("library.common.rename")}
+      >
+        <PencilLine size={13} strokeWidth={1.7} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 interface ChunkReconstructionNoteProps {
   readonly mode: MarkdownEditorProps["mode"];
   readonly usingChunks: boolean;
@@ -397,6 +435,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       onCancel,
       onSaved,
       onDirtyChange,
+      onRename,
     },
     ref,
   ) {
@@ -404,6 +443,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const queryClient = useQueryClient();
     const toast = useToast();
     const discardBodyId = useId();
+    const rootRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const initializedRef = useRef(mode === "new");
     const focusedRef = useRef(false);
@@ -603,6 +643,13 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         if (event.defaultPrevented) {
           return;
         }
+        // 上層 library 對話框（例如從 header 開啟的重新命名）持有焦點時，
+        // 快捷鍵與 Escape 歸它處理，避免同時關閉編輯器。
+        const editorRoot = rootRef.current;
+        const dialogLayer = document.querySelector(".library-dialog-layer");
+        if (dialogLayer && editorRoot && !dialogLayer.contains(editorRoot)) {
+          return;
+        }
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
           event.preventDefault();
           void handleSave();
@@ -635,7 +682,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const lineCount = countLines(content);
 
     return (
-      <div className="markdown-editor">
+      <div className="markdown-editor" ref={rootRef}>
         <header className="markdown-editor__head">
           <div className="markdown-editor__identity">
             <p className="eyebrow">
@@ -643,11 +690,12 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
                 ? t("library.editor.newNoteTitle")
                 : t("library.editor.editing")}
             </p>
-            <h2 className="markdown-editor__title">
-              {mode === "edit" && file
-                ? file.file_name
-                : t("library.editor.newNoteTitle")}
-            </h2>
+            <EditorTitle
+              mode={mode}
+              file={file}
+              isSaving={isSaving}
+              onRename={onRename}
+            />
             {mode === "edit" && file ? (
               <code className="markdown-editor__file-path">
                 {file.raw_file_path}
