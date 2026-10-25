@@ -9,6 +9,7 @@ from app.module.agent.model.agent_model import (
     AgentRunModel,
 )
 from app.module.agent.model.saved_question_model import SavedQuestionModel
+from app.module.agent.model.system_prompt_model import SystemPromptModel
 
 __all__ = [
     "AGENT_COMMIT_SEQUENCE",
@@ -18,4 +19,5 @@ __all__ = [
     "AgentEntryModel",
     "AgentRunModel",
     "SavedQuestionModel",
+    "SystemPromptModel",
 ]

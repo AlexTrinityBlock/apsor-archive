@@ -183,10 +183,27 @@ def _mount_spa(app: FastAPI, directory: Path) -> None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
         candidate = (resolved / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(resolved):
-            return FileResponse(candidate)
+            cache = (
+                "public, max-age=31536000, immutable"
+                if path.startswith("assets/")
+                else "public, max-age=86400"
+            )
+            return FileResponse(
+                candidate,
+                headers={
+                    "Cache-Control": cache,
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
         if not index.is_file():
             return HTMLResponse(_NOT_BUILT, status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
-        return FileResponse(index)
+        return FileResponse(
+            index,
+            headers={
+                "Cache-Control": "no-cache, must-revalidate",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
 
 app = create_app()

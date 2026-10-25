@@ -1,5 +1,7 @@
 /** Date, URL, and formatting helpers for the timeline workspace. */
 
+import type { TimelineEventSchema } from "../../generated-apis-types/schemas";
+
 const DATE_INPUT = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})/;
 
@@ -212,4 +214,16 @@ export function errorText(error: unknown): string {
     return error.message;
   }
   return "The archive did not answer.";
+}
+
+/**
+ * Newest event first. The API returns chronological data; the spine always
+ * renders descending so the top of the page is the most recent memory/event.
+ */
+export function timelineNewestFirst(
+  events: readonly TimelineEventSchema[],
+): TimelineEventSchema[] {
+  return [...events].sort(
+    (left, right) => Date.parse(right.time) - Date.parse(left.time),
+  );
 }
