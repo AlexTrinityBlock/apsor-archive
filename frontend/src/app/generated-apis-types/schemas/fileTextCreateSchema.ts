@@ -9,7 +9,10 @@
  * Create a text file directly; used by the UI and tests.
  */
 export interface FileTextCreateSchema {
-  /** @minLength 1 */
+  /**
+     * @minLength 1
+     * @maxLength 2000000
+     */
   content: string;
   occurred_at?: string | null;
   /**

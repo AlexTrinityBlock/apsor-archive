@@ -533,6 +533,8 @@ export const library = {
     unsaved: "Unsaved",
     statusError: "Error",
     readMode: "Rendered preview",
+    chunkWarning:
+      "This file has no stored original. The editor reconstructed it from indexed chunks, so saving may normalize whitespace and paragraph breaks.",
     closeEditor: "Close editor",
     discardTitle: "Discard unsaved changes?",
     discardBody:

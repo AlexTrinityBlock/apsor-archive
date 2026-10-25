@@ -119,6 +119,11 @@ def test_update_markdown_rejects_deleted_or_history_file(client: TestClient) -> 
     assert history_update.status_code == 404
     assert history_update.json()["error"] == "file_not_found"
 
+    # DELETE 只允許 current file；對歷史版本 id 發送 DELETE 也必須回 404。
+    history_delete = client.delete(f"/api/v1/files/{original_file_id}")
+    assert history_delete.status_code == 404
+    assert history_delete.json()["error"] == "file_not_found"
+
     deleted = client.delete(f"/api/v1/files/{updated_file_id}")
     assert deleted.status_code == 204
 
@@ -142,3 +147,29 @@ def test_update_markdown_rejects_empty_content(client: TestClient) -> None:
     body = response.json()
     assert body["error"] == "invalid_request"
     assert "content" in body["detail"]
+
+
+def test_update_markdown_rejects_oversized_schema_content(client: TestClient) -> None:
+    """Schema 的 max_length 必須在進入 service 前擋掉超長 content。"""
+    created = create_text(client, "/notes/oversized.md", "# Oversized\n\nSmall source.")
+    file_id = int(created["id"])
+
+    response = client.put(
+        f"/api/v1/files/{file_id}/content",
+        json={"content": "x" * 2_000_001, "expected_version": 1},
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"] == "invalid_request"
+    detail = body["detail"]
+    # 這是 Pydantic 的長度驗證錯誤，不是 service 的 byte 上限錯誤。
+    assert "content" in detail
+    assert "2000000" in detail
+    assert "file_too_large" not in response.text
+
+    # 請求在 schema 階段被拒，檔案版本與內容都不得變動。
+    unchanged = client.get(f"/api/v1/files/{file_id}")
+    assert unchanged.status_code == 200
+    assert unchanged.json()["version"] == 1
+    assert unchanged.json()["is_current"] is True
