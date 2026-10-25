@@ -284,21 +284,6 @@ export const chat = {
     imageOmitted: "对话记录中省略了图片",
     imageOmittedAlt: "对话记录中省略了图片：{alt}",
   },
-  method: {
-    currentToolCatalog: "当前工具目录",
-    toolCatalogUnavailable: "无法获取工具目录。",
-    label: "方法",
-    hiddenOne: "隐藏 {count} 个条目",
-    hiddenOther: "隐藏 {count} 个条目",
-    provider: "供应商",
-    model: "模型",
-    prompt: "提示词",
-    tools: "工具",
-    transcript: "对话记录",
-    note:
-      "系统条目会从这个阅读视图中隐藏。压缩与重置边界会以卡片出现在对话记录中。冻结的提示词与工具快照仍保留在对话记录中。",
-    readMethod: "阅读方法",
-  },
   retry: {
     aria: "重试上一次运行",
     eyebrow: "未完成的运行",

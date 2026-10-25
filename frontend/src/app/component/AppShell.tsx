@@ -24,8 +24,9 @@ interface NavItem {
 }
 
 /**
- * The flat seven-workspace rail defined by the template audit matrix.
- * Order is part of the interface: Chat is the entry point, Settings the exit.
+ * The flat rail: seven archive workspaces, then About as the meta page beyond
+ * Settings. Order is part of the interface: Chat is the entry point, Settings
+ * the exit, and About the colophon.
  */
 const NAV_ITEMS: readonly NavItem[] = [
   { to: "/chat", labelKey: "core.nav.chat", index: "01", icon: "chat" },
@@ -41,6 +42,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     end: true,
   },
   { to: "/settings", labelKey: "core.nav.settings", index: "07", icon: "settings" },
+  { to: "/about", labelKey: "core.nav.about", index: "08", icon: "method" },
 ];
 
 type StatusTone = "ok" | "degraded" | "error" | "loading";
@@ -183,12 +185,6 @@ export function AppShell() {
           <TreeMark size={26} />
           <span>{t("core.app.name")}</span>
         </NavLink>
-        <span
-          className={statusDotClassName}
-          style={statusDotStyle}
-          aria-label={statusDetail}
-          title={statusDetail}
-        />
       </header>
 
       {drawerOpen ? (
@@ -316,20 +312,6 @@ export function AppShell() {
               <span className="rail-status__detail">{statusDetail}</span>
             </span>
           </div>
-
-          <button
-            type="button"
-            className="rail-footer-btn"
-            onClick={toggleRail}
-            title={t("core.nav.expandOrCollapseSidebar")}
-          >
-            <Icon name="chevron-right" size={14} />
-            <span>
-              {railCollapsed
-                ? t("core.nav.expandSidebar")
-                : t("core.nav.collapseSidebar")}
-            </span>
-          </button>
 
           <div className="rail-colophon">
             <span>
