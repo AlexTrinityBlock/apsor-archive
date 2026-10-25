@@ -7,13 +7,13 @@ mutated; a future prompt change creates a new conversation (or a system delta).
 
 from typing import Any
 
-from app.module.agent.domain.owner_profile_domain import OwnerProfile
 from app.module.agent.domain.system_prompt_domain import SystemPromptSection
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
     TOOLS_VERSION,
     tool_definitions,
 )
+from app.module.agent.domain.user_profile_domain import UserProfile
 
 # 提示詞協定（維護者說明）：
 # - 每個 section 的 content 都是 provider-facing 英文，順序固定；任何改動都會改變
@@ -173,11 +173,11 @@ def build_system_data(
     model: str,
     custom_sections: list[SystemPromptSection] | None = None,
     builtin_sections: list[dict[str, Any]] | None = None,
-    owner_profile: OwnerProfile | None = None,
+    user_profile: UserProfile | None = None,
 ) -> dict[str, Any]:
     """Build the immutable data payload for the initial system entry.
 
-    Every owner-authored section is inserted before the built-in sections, so
+    Every user-authored section is inserted before the built-in sections, so
     the provider request order is stable: ``system_prompt:<id>`` (in
     ``sort_order, id`` order), built-in identity/instructions/examples/context
     protocol, tools, then messages. The payload is created once per
@@ -198,12 +198,12 @@ def build_system_data(
         # 這裡是最後一道防線。
         if section.body.strip()
     ]
-    if owner_profile is not None and owner_profile.has_content:
+    if user_profile is not None and user_profile.has_content:
         sections.append(
             {
-                "name": "owner_profile",
-                "title": "Owner profile",
-                "content": "\n".join(owner_profile.prompt_lines()),
+                "name": "user_profile",
+                "title": "User profile",
+                "content": "\n".join(user_profile.prompt_lines()),
             }
         )
     # ``builtin_sections`` carries the owner-edited defaults in canonical order.

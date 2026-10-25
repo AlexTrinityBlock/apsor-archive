@@ -5,6 +5,7 @@ import { ReadFilePanel } from "./ReadFilePanel";
 import { ReadPathPanel } from "./ReadPathPanel";
 import { ReadTimelinePanel } from "./ReadTimelinePanel";
 import { SearchKnowledgePanel } from "./SearchKnowledgePanel";
+import { WebFetchPanel, WebSearchPanel } from "./WebPanels";
 import type { PanelProps } from "./common";
 
 /** Generic fallback for an unrecognized but recorded tool. */
@@ -46,6 +47,10 @@ export function InspectorPanel({ item }: PanelProps) {
       return <SaveMemoryPanel item={item} />;
     case "present_resource":
       return <PresentResourcePanel item={item} />;
+    case "web_search":
+      return <WebSearchPanel item={item} />;
+    case "web_fetch":
+      return <WebFetchPanel item={item} />;
     default:
       return <UnknownToolPanel item={item} />;
   }

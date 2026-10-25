@@ -46,20 +46,23 @@ export function CitationChip({
   const resolvedTitle =
     memoryTitle ??
     (token.kind === "memory" ? memoryQuery.data?.target.title : undefined);
-  const text = label ?? citationLabel(token);
-  const className = `citation-chip ${token.kind}`;
   const accessibleLabel = resolvedTitle
     ? `${citationLabel(token)} · ${resolvedTitle}`
     : citationLabel(token);
+  // Memory citations are for people: show the generated summary, while the
+  // agent keeps the stable [memory:id] token in its prose and every link still
+  // resolves to /memory/{id}.
+  let text = label ?? citationLabel(token);
+  if (token.kind === "memory") {
+    text = resolvedTitle ? `Memory: ${resolvedTitle}` : `Memory: #${token.id}`;
+  }
+  const className = `citation-chip ${token.kind}`;
   const content = (
     <>
       <Icon name={CITATION_ICONS[token.kind]} size={11} />
-      <span>{text}</span>
-      {resolvedTitle ? (
-        <span className="citation-chip__name" title={resolvedTitle}>
-          {resolvedTitle}
-        </span>
-      ) : null}
+      <span className="citation-chip__label" title={resolvedTitle}>
+        {text}
+      </span>
     </>
   );
 

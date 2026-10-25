@@ -3,7 +3,11 @@
 from datetime import datetime
 from typing import Protocol
 
-from app.module.auth.model.auth_model import AppUserModel, UserSessionModel
+from app.module.auth.model.auth_model import (
+    AppUserModel,
+    UserProfileCardModel,
+    UserSessionModel,
+)
 
 
 class UserRepositoryProtocol(Protocol):
@@ -17,14 +21,23 @@ class UserRepositoryProtocol(Protocol):
 
     async def touch_login(self, user: AppUserModel, now: datetime) -> None: ...
 
-    async def update_profile(
+    async def update_display_name(
         self,
         user: AppUserModel,
         *,
         display_name: str,
-        bio: str | None,
         now: datetime,
     ) -> AppUserModel: ...
+
+    async def list_profile_cards(self, user_id: int) -> list[UserProfileCardModel]: ...
+
+    async def replace_profile_cards(
+        self,
+        user_id: int,
+        *,
+        cards: list[tuple[str, str]],
+        now: datetime,
+    ) -> list[UserProfileCardModel]: ...
 
 
 class SessionRepositoryProtocol(Protocol):

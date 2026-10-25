@@ -943,11 +943,11 @@ On the first visit the app asks you to create the single owner account. There is
 no default password, no email recovery, and no second account. Passwords are
 hashed with Argon2; the database stores only a SHA-256 hash of each session
 token. The cookie is HttpOnly, SameSite=Lax, and Secure when
-`APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it). The owner can edit
-a display name (`display_name`) and self-introduction (`bio`) from the sidebar
-account row; the name labels chat turns and the bio is frozen into new
-conversations as the `owner_profile` system section. The sign-in username stays
-immutable.
+`APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it). The user can edit
+a display name and any number of ordered title/content profile cards from the
+sidebar account row at `/profile`; the name labels chat turns and the cards are
+frozen into new conversations as the `user_profile` system section. The sign-in
+username stays immutable.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -956,7 +956,8 @@ immutable.
 | `POST` | `/api/v1/auth/login` | Verify a password and set the session cookie |
 | `POST` | `/api/v1/auth/logout` | Delete the session and clear the cookie |
 | `GET` | `/api/v1/auth/me` | Current owner (requires a session) |
-| `PATCH` | `/api/v1/auth/me` | Update the owner display name and self-introduction |
+| `GET` | `/api/v1/auth/profile` | Display name plus every ordered profile card |
+| `PUT` | `/api/v1/auth/profile` | Replace the display name and all cards atomically |
 
 Every knowledge, settings, and agent endpoint requires the session; only
 `/api/v1/health`, `/health`, `/api/v1/auth/*`, `/api/docs`, `/api/redoc`,
@@ -1146,7 +1147,10 @@ memory_summary ───┘
   provider, with an encrypted API key, a safe hint, and the model/base
   URL/dimension. A partial unique index on `is_active` enforces one active row
   per capability. `web_search` and `web_fetch` are independent credentials.
-- `frequently_used_prompt`: owner-editable shortcuts for the empty chat page,
+- `app_user`: the single sign-in account, with an optional display name.
+- `user_profile_card`: ordered title/content cards that describe the user; the
+  full set is frozen into a new conversation as the `user_profile` section.
+- `frequently_used_prompt`: user-editable shortcuts for the empty chat page,
   ordered by `sort_order` and capped at 20 rows.
 - `agent_conversation` / `agent_entry` / `agent_run`: the persistent agent's
   transcript scope, immutable entry log, and per-submission run state.
@@ -1211,7 +1215,7 @@ orders by `sort_order`, caps at 20 rows, and deletes frequently used prompts. Th
 file-library test also uploads an image without a vision provider and verifies
 the filename caption, stored original, path listing, and search result.
 
-The latest migration is `f4a1c7d9e2b3`, after `c9e1f3a5b7d2`. The migrations
+The latest migration is `b7e2d4f6a8c1`, after `f4a1c7d9e2b3`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1251,12 +1255,15 @@ after `agent_config` on this branch are:
 - `c9e1f3a5b7d2` replaces the singleton `system_prompt` table with ordered
   `system_prompt_section` rows and copies the existing prompt as the first
   section;
-- `f4a1c7d9e2b3` (current head) adds `memory.title` (backfilled from content),
-  `deprecated_at` / `deprecated_reason`, and `builtin_key` on
-  `system_prompt_section` for editable built-in overrides. The old
-  “deprecated must have a successor” check becomes “successor or direct
-  deprecation timestamp”. The downgrade re-adds the old check as `NOT VALID` so
-  direct deprecations keep their rows.
+- `f4a1c7d9e2b3` adds `memory.title` (backfilled from content),
+  `deprecated_at` / `deprecated_reason`, `builtin_key` on
+  `system_prompt_section` for editable built-in overrides, and
+  `app_user.display_name` / `bio`. The old “deprecated must have a successor”
+  check becomes “successor or direct deprecation timestamp”. The downgrade
+  re-adds the old check as `NOT VALID` so direct deprecations keep their rows;
+- `b7e2d4f6a8c1` (current head) creates `user_profile_card` with ordered
+  title/content rows, migrates the existing `app_user.bio` into an `About` card,
+  and drops the single bio column.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite builds tables from SQLAlchemy metadata, so

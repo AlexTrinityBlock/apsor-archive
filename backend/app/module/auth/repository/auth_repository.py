@@ -5,7 +5,11 @@ from datetime import datetime
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.module.auth.model.auth_model import AppUserModel, UserSessionModel
+from app.module.auth.model.auth_model import (
+    AppUserModel,
+    UserProfileCardModel,
+    UserSessionModel,
+)
 from app.shared.time import utcnow
 
 
@@ -37,20 +41,52 @@ class UserRepository:
         self.session.add(user)
         await self.session.flush()
 
-    async def update_profile(
+    async def update_display_name(
         self,
         user: AppUserModel,
         *,
         display_name: str,
-        bio: str | None,
         now: datetime,
     ) -> AppUserModel:
         user.display_name = display_name
-        user.bio = bio
         user.updated_at = now
         self.session.add(user)
         await self.session.flush()
         return user
+
+    async def list_profile_cards(self, user_id: int) -> list[UserProfileCardModel]:
+        statement = (
+            select(UserProfileCardModel)
+            .where(UserProfileCardModel.user_id == user_id)
+            .order_by(UserProfileCardModel.sort_order, UserProfileCardModel.id)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def replace_profile_cards(
+        self,
+        user_id: int,
+        *,
+        cards: list[tuple[str, str]],
+        now: datetime,
+    ) -> list[UserProfileCardModel]:
+        """Replace every card in one transaction; new ids are stable for the request."""
+        await self.session.execute(
+            delete(UserProfileCardModel).where(UserProfileCardModel.user_id == user_id)
+        )
+        rows = [
+            UserProfileCardModel(
+                user_id=user_id,
+                title=title,
+                content=content,
+                sort_order=(index + 1) * 10,
+                created_at=now,
+                updated_at=now,
+            )
+            for index, (title, content) in enumerate(cards)
+        ]
+        self.session.add_all(rows)
+        await self.session.flush()
+        return rows
 
 
 class SessionRepository:
