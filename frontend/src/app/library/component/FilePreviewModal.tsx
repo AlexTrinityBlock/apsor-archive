@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
+import { FilePenLine, PencilLine } from "lucide-react";
 
 import type {
   FileChunksSchema,
@@ -493,7 +494,7 @@ function PreviewActions({
       <div className="library-preview__action-buttons">
         {markdown && file.is_current && !file.deleted_at ? (
           <Button variant="ghost" size="sm" onClick={onEdit}>
-            <Icon name="pencil" size={14} />
+            <FilePenLine size={14} strokeWidth={1.7} aria-hidden="true" />
             {t("library.editor.editFile")}
           </Button>
         ) : null}
@@ -514,7 +515,7 @@ function PreviewActions({
         {file.deleted_at ? null : (
           <>
             <Button variant="ghost" size="sm" onClick={() => onRename(operationTarget(file))}>
-              <Icon name="pencil" size={14} />
+              <PencilLine size={14} strokeWidth={1.7} aria-hidden="true" />
               {t("library.common.rename")}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => onMove(operationTarget(file))}>
@@ -791,6 +792,7 @@ export function FilePreviewModal({
               ref={editorRef}
               mode="edit"
               file={file}
+              onRename={() => onRename(operationTarget(file))}
               onCancel={handleCancelEdit}
               onSaved={handleSaved}
             />
