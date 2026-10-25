@@ -28,6 +28,7 @@ from app.module.knowledge.schema.file_schema import (
     FileChunksSchema,
     FileCopySchema,
     FileMoveSchema,
+    FileRenameSchema,
     FileSchema,
     FileTextCreateSchema,
     FileTextUpdateSchema,
@@ -268,6 +269,21 @@ async def copy_file(
 ) -> FileSchema:
     """Copy a current file into a new record and index fresh chunks."""
     return await file_service.copy_file(file_id, path=payload.path)
+
+
+@router.post(
+    "/{file_id}/rename",
+    response_model=FileSchema,
+    status_code=status.HTTP_200_OK,
+    operation_id="renameFile",
+)
+async def rename_file(
+    file_id: int,
+    payload: FileRenameSchema,
+    file_service: FileService = Depends(get_file_service),
+) -> FileSchema:
+    """Rename a current file without changing its parent folder."""
+    return await file_service.rename_file(file_id, file_name_value=payload.file_name)
 
 
 @router.get("/{file_id}", response_model=FileSchema, operation_id="getFile")

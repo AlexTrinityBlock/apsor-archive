@@ -4,7 +4,7 @@
  */
 export const memory = {
   common: {
-    crystal: "CRYSTAL #{id}",
+    crystal: "MEMORY #{id}",
     untitledMemory: "Untitled memory",
     breadcrumbAria: "Breadcrumb",
     copyMemory: "Copy memory",
@@ -34,7 +34,7 @@ export const memory = {
     eyebrow: "Memory · vault",
     title: "Memory Vault",
     description:
-      "Every pressed memory, newest occurrence first. Active crystals stay in search and the timeline; deprecated crystals remain readable with their lineage.",
+      "Every pressed memory, newest occurrence first. Active memories stay in search and the timeline; deprecated memories remain readable with their lineage.",
     activeLabel: "active",
     deprecatedLabel: "deprecated",
     pressMemory: "Press memory",
@@ -69,14 +69,14 @@ export const memory = {
     searchErrorDescription:
       "The memory search request failed before any results were returned.",
     noMatchEyebrow: "No match",
-    noMatchTitle: "No crystal answers this phrase.",
+    noMatchTitle: "No memory answers this phrase.",
     noMatchDescription:
       "Search returned no memory matches for “{query}”. Try a broader phrase, or search the whole archive for related files and summaries.",
     clearSearch: "Clear search",
     searchWholeArchive: "Search the whole archive",
     filteredEyebrow: "Filtered out",
-    filteredSearchTitle: "No {status} crystals in these matches.",
-    filteredBrowseTitle: "No {status} crystals in the loaded records.",
+    filteredSearchTitle: "No {status} memories in these matches.",
+    filteredBrowseTitle: "No {status} memories in the loaded records.",
     filteredSearchDescription:
       "The search returned matches, but none have the selected status. Clear the status filter to see every match.",
     filteredBrowseMoreDescription:
@@ -91,7 +91,7 @@ export const memory = {
     emptyEyebrow: "Empty vault",
     emptyTitle: "No memories have been pressed yet.",
     emptyDescription:
-      "A memory records a decision, an observation, or a change of mind. Press the first crystal to open the vault.",
+      "A memory records a decision, an observation, or a change of mind. Press the first memory to open the vault.",
     pressFirstMemory: "Press the first memory",
     loadMoreError: "The next page of memories did not load.",
     retryOlderRecords: "Retry older records",
@@ -188,7 +188,7 @@ export const memory = {
   reader: {
     eyebrow: "Memory · reader",
     description:
-      "One pressed memory with its direct lineage, its temporal neighbours, and the full supersession chain. Deprecated crystals remain readable after they leave search and the timeline.",
+      "One pressed memory with its direct lineage, its temporal neighbours, and the full supersession chain. Deprecated memories remain readable after they leave search and the timeline.",
     readingRecord: "Reading record",
     editText: "Edit text",
     deprecate: "Deprecate",
@@ -196,7 +196,7 @@ export const memory = {
     skeleton: "Reading the memory trace",
     errorTitle: "The memory trace did not answer.",
     errorDescription:
-      "The record could not be read. Retry, or return to the vault and choose another crystal.",
+      "The record could not be read. Retry, or return to the vault and choose another memory.",
     saveReceipt: {
       eyebrow: "Just pressed",
       title: "Memory saved",
@@ -214,7 +214,7 @@ export const memory = {
     record: {
       deprecatedNote:
         "This memory is deprecated. It left default search and the timeline, but remains readable here.",
-      readSuccessor: "Read successor CRYSTAL #{id}",
+      readSuccessor: "Read successor MEMORY #{id}",
       retiredDirectly:
         "It was retired directly; no successor replaced it.",
     },
@@ -256,7 +256,7 @@ export const memory = {
     eyebrow: "Memory · edit",
     title: "Edit memory text",
     description:
-      "CRYSTAL #{id}. The title is regenerated from the new text; the record keeps its id and occurrence time.",
+      "MEMORY #{id}. The title is regenerated from the new text; the record keeps its id and occurrence time.",
     label: "Memory text",
     count: "{count} / 8,000 characters",
     emptyError: "Memory text cannot be empty.",
@@ -268,7 +268,7 @@ export const memory = {
     eyebrow: "Memory · deprecate",
     title: "Retire this memory?",
     description:
-      "CRYSTAL #{id} keeps its text and stays readable, but leaves default search and the timeline. No replacement memory is written.",
+      "MEMORY #{id} keeps its text and stays readable, but leaves default search and the timeline. No replacement memory is written.",
     reasonLabel: "Reason (optional)",
     reasonPlaceholder:
       "For example: already bought, cancelled, or no longer true.",
@@ -288,7 +288,7 @@ export const memory = {
     missingDescriptionFallback:
       "The memory on this route is not in the archive. It may have been removed, or the id may never have existed.",
     backToVault: "Back to vault",
-    emptyEyebrow: "No crystal at this address",
+    emptyEyebrow: "No memory at this address",
     emptyTitle: "This memory is not in the archive.",
     emptyDescription:
       "Deprecated memories remain readable, so a missing record means it is genuinely absent rather than merely retired. Return to the vault to browse the surviving lineage.",

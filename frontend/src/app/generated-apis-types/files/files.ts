@@ -29,6 +29,7 @@ import type {
   FileChunksSchema,
   FileCopySchema,
   FileMoveSchema,
+  FileRenameSchema,
   FileSchema,
   FileTextCreateSchema,
   FileTextUpdateSchema,
@@ -1448,4 +1449,93 @@ export const useMoveFile = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getMoveFileMutationOptions(options), queryClient);
+    }
+    export const getRenameFileUrl = (fileId: number,) => {
+
+
+
+
+  return `/api/v1/files/${fileId}/rename`
+}
+
+/**
+ * Rename a current file without changing its parent folder.
+ * @summary Rename File
+ */
+export const renameFile = async (fileId: number,
+    fileRenameSchema: FileRenameSchema, options?: Parameters<typeof apiFetch>[1]): Promise<FileSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<FileSchema>(getRenameFileUrl(fileId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(fileRenameSchema)
+  }
+);}
+
+
+
+
+
+export const getRenameFileMutationKey = () => ['renameFile'] as const;
+
+export const getRenameFileMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameFile>>, TError,RenameFileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof renameFile>>, TError,RenameFileMutationVariables, TContext> => {
+
+const mutationKey = getRenameFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof renameFile>>, RenameFileMutationVariables> = (props) => {
+          const {fileId,data} = props ?? {};
+
+          return  renameFile(fileId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RenameFileMutationResult = NonNullable<Awaited<ReturnType<typeof renameFile>>>
+    export type RenameFileMutationBody = FileRenameSchema
+    export type RenameFileMutationError = HTTPValidationError
+    export type RenameFileMutationVariables = {fileId: number;data: FileRenameSchema}
+
+    /**
+ * @summary Rename File
+ */
+export const useRenameFile = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameFile>>, TError,RenameFileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof renameFile>>,
+        TError,
+        RenameFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRenameFileMutationOptions(options), queryClient);
     }
