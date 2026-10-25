@@ -34,6 +34,7 @@ interface LibraryToolbarProps {
   readonly onToggleSelecting: () => void;
   readonly onUpload: () => void;
   readonly onNewFolder: () => void;
+  readonly onDeleteFolder: () => void;
   readonly onNewMarkdown: () => void;
 }
 
@@ -144,6 +145,7 @@ export function LibraryToolbar({
   onToggleSelecting,
   onUpload,
   onNewFolder,
+  onDeleteFolder,
   onNewMarkdown,
 }: LibraryToolbarProps) {
   const { t, formatNumber } = useI18n();
@@ -224,6 +226,12 @@ export function LibraryToolbar({
             <Icon name="folder" size={14} />
             {t("library.common.newFolder")}
           </Button>
+          {tab === "files" && path !== "/" ? (
+            <Button variant="danger" size="sm" onClick={onDeleteFolder}>
+              <Icon name="trash" size={14} />
+              {t("library.toolbar.deleteFolder")}
+            </Button>
+          ) : null}
         </div>
       </div>
 
