@@ -40,7 +40,6 @@ from app.module.knowledge.repository.provider_config_repository import (
 from app.module.knowledge.repository.stats_repository import StatsRepository
 from app.module.knowledge.repository.summary_repository import SummaryRepository
 from app.module.knowledge.service.ai_service import AiService
-from app.module.knowledge.service.demo_service import DemoService
 from app.module.knowledge.service.file_service import CpuRunner, FileService
 from app.module.knowledge.service.indexer_service import IndexerService
 from app.module.knowledge.service.ingest_job_service import IngestJobService, IngestWorker
@@ -380,22 +379,6 @@ def get_stats_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> StatsService:
     return _services(request, session)[6]
-
-
-def get_demo_service(
-    request: Request,
-    session: AsyncSession = Depends(get_db_session),
-    file_service: FileService = Depends(get_file_service),
-    memory_service: MemoryService = Depends(get_memory_service),
-    summary_service: SummaryService = Depends(get_summary_service),
-) -> DemoService:
-    return DemoService(
-        file_service=file_service,
-        memory_service=memory_service,
-        summary_service=summary_service,
-        file_repository=FileRepository(session),
-        memory_repository=MemoryRepository(session),
-    )
 
 
 def get_provider_config_service(

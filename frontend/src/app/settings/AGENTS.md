@@ -28,7 +28,7 @@ Settings does not own backend validation, generated API definitions, or global i
 - **Sticky:** the tab strip stays sticky at the top of `.app-page` so a long panel does not force a scroll back to the top before switching sections.
 - **Active-only mount:** switching tabs unmounts the previous panel. Panel-local drafts, open dialogs, and in-flight UI state are intentionally not preserved across tabs. Do not store cross-tab workflows in a panel.
 - **Panel data:** panels own their generated queries and mutations. Runtime wrappers in `RuntimeSettingsPanels.tsx` load the singleton settings row, cache the update/reset response, and refetch active queries. Provider changes refresh registry, AI status, health, and stats through `settings-invalidation.ts`.
-- **Panels:** System prompt (ordered sections), Frequent prompts, Provider registry (chat, embedding, web search, web fetch), Diagnostics (health/stats/status/reindex), Agent runtime, Ingestion runtime, Maintenance (demo seeding), and Language.
+- **Panels:** System prompt (ordered sections), Frequent prompts, Provider registry (chat, embedding, web search, web fetch), Diagnostics (health/stats/status/reindex), Agent runtime, Ingestion runtime, Maintenance (access notes and version), and Language.
 - **Forms:** validate ranges and cross-field rules before save, disable save for unchanged or invalid drafts, send full update payloads, and persist reset through the reset endpoint rather than only clearing local state.
 - **Secrets:** provider read models expose only `key_hint`/`key_source`. Never render or request full keys.
 
@@ -44,7 +44,7 @@ Settings does not own backend validation, generated API definitions, or global i
 - `component/SystemPromptPanel.tsx` — sortable prompt sections and their dialogs.
 - `component/FrequentlyUsedPromptsPanel.tsx` — saved prompt CRUD.
 - `component/DiagnosticsPanel.tsx` — live health, stats, AI, vector, and reindex surfaces.
-- `component/MaintenancePanel.tsx` — health summary and demo-seed confirmation.
+- `component/MaintenancePanel.tsx` — access notes, version badge, and colophon.
 - `component/LanguagePanel.tsx` — immediate locale switching.
 - `component/settings-utils.ts` — status tones, labels, and localized API errors.
 - `component/settings-invalidation.ts` — scoped provider and reindex invalidation.

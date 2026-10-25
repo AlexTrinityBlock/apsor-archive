@@ -104,7 +104,6 @@ def settings(tmp_path: Path) -> Settings:
         cache_url="memory://",
         cache_ttl_seconds=5,
         run_migrations=False,
-        seed_demo=False,
         deepseek_api_key=None,
         ai_summary_enabled=False,
         auto_summary_threshold=999,

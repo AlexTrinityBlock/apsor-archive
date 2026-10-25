@@ -1003,7 +1003,7 @@
         <div class="panel-head">
           <div class="panel-title">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-            <span>Runtime Hyperparameters & Seed Controls</span>
+            <span>Runtime Hyperparameters</span>
           </div>
           <span class="panel-badge">INGEST PROTOCOL</span>
         </div>
@@ -1024,11 +1024,7 @@
         </div>
 
         <div class="button-row" style="border-top: 0.7px solid var(--mono-grid); margin-top: 10px; padding-top: 16px;">
-          <span style="margin-right: auto; font-size: 11px; color: var(--mono-muted);">Seed demo dataset with Taiwan cypress samples, Report #43, and 12 baseline memories.</span>
-          <button class="btn-secondary" onclick="seedDemoDataset()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-            <span>Seed Test Dataset</span>
-          </button>
+          <span style="margin-right: auto; font-size: 11px; color: var(--mono-muted);">Runtime values are read-only; ingestion and model settings are managed from the API.</span>
         </div>
       </section>
 
@@ -1074,18 +1070,6 @@
       toast.style.display = 'flex';
       setTimeout(() => {
         toast.style.display = 'none';
-      }, 4000);
-    }
-
-    // 5. Seed Demo Data
-    function seedDemoDataset() {
-      const toast = document.getElementById('toast-banner');
-      const msg = document.getElementById('toast-message');
-      msg.textContent = 'Demo dataset seeded: 4 PDF monographs, 18 increment samples, 12 memory crystals created.';
-      toast.style.display = 'flex';
-      setTimeout(() => {
-        toast.style.display = 'none';
-        msg.textContent = 'Credentials successfully encrypted and written to PostgreSQL vault.';
       }, 4000);
     }
   </script>

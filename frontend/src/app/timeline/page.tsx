@@ -16,7 +16,6 @@ import type {
 
 import { Button } from "../component/Button";
 import { EmptyState } from "../component/EmptyState";
-import { Icon } from "../component/Icon";
 import {
   MemoryDeprecateDialog,
   MemoryEditDialog,
@@ -42,8 +41,6 @@ import {
 } from "./component/TimelineSpine";
 import { TimelineErrorState, TimelineSkeleton } from "./component/TimelineStates";
 import {
-  DEMO_SEASON_ANCHOR,
-  DEMO_SEASON_RANGE,
   addDays,
   formatDotRange,
   formatRangeCaption,
@@ -389,12 +386,6 @@ export function TimelinePage() {
     updateParams((next) => writeWindowParams(next, anchor, range, enabled));
   };
 
-  const handleDemoSeason = () => {
-    updateParams((next) =>
-      writeWindowParams(next, DEMO_SEASON_ANCHOR, DEMO_SEASON_RANGE, false),
-    );
-  };
-
   const handleJumpToday = () => {
     updateParams((next) =>
       writeWindowParams(next, startOfDay(new Date()), range, includeHistory),
@@ -546,10 +537,6 @@ export function TimelinePage() {
         className="timeline-empty-state"
         action={
           <div className="timeline-empty-actions">
-            <Button variant="ink" size="sm" onClick={handleDemoSeason}>
-              <Icon name="ring" size={14} />
-              {t("insights.timeline.page.demoSeason")}
-            </Button>
             <Button variant="secondary" size="sm" onClick={handleJumpToday}>
               {t("insights.timeline.page.jumpToday")}
             </Button>
@@ -574,7 +561,6 @@ export function TimelinePage() {
         onShift={handleShift}
         onRangeChange={handleRangeChange}
         onHistoryChange={handleHistoryChange}
-        onDemoSeason={handleDemoSeason}
       />
       <div className="timeline-body">
         {renderTimelineBody({

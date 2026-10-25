@@ -210,16 +210,6 @@ export const core = {
     openInLibrary: "在檔案庫中開啟",
     statsErrorTitle: "無法取得即時計數。",
     statsErrorFallback: "統計端點沒有回應。",
-    seedEyebrow: "空檔案館",
-    seedTitle: "建立示範檔案館。",
-    seedDescription:
-      "檔案架已準備好，但還是空的。建立一個小型而連貫的示範檔案館，包含文字檔、記憶與一則摘要，然後看著計數與時間軸逐漸填滿。種子資料只會寫入空的檔案館。",
-    seedPending: "正在建立檔案館…",
-    seedAction: "建立示範檔案館",
-    uploadFirstFile: "上傳第一個檔案",
-    seedErrorFallback: "無法建立示範檔案館。",
-    seedSuccessOne: "已建立 {files} 個檔案、{memories} 筆記憶與 {summaries} 則摘要。",
-    seedSuccessOther: "已建立 {files} 個檔案、{memories} 筆記憶與 {summaries} 則摘要。",
   },
   languagePanel: {
     eyebrow: "介面",

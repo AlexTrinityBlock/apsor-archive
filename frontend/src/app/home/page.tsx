@@ -1,5 +1,4 @@
 import { useMemo, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import {
@@ -7,7 +6,6 @@ import {
   useGetStats,
   useReadPath,
   useReadTimeline,
-  useSeedDemo,
 } from "../generated-apis-types";
 import type {
   HealthSchema,
@@ -21,7 +19,6 @@ import { Button, ButtonLink } from "../component/Button";
 import { Icon } from "../component/Icon";
 import { Panel } from "../component/Panel";
 import { StatCard } from "../component/StatCard";
-import { useToast } from "../component/Toast";
 import {
   localizeStatus,
   translateApiError,
@@ -41,17 +38,6 @@ import "./home.css";
 const TIMELINE_WINDOW_DAYS = 30;
 const RECENT_FILE_LIMIT = 4;
 const RECENT_EVENT_LIMIT = 4;
-
-/** Seed changes every read surface that can expose the new records. */
-const SEED_INVALIDATION_KEYS = [
-  "/api/v1/stats",
-  "/api/v1/health",
-  "/api/v1/timeline",
-  "/api/v1/paths",
-  "/api/v1/memories",
-  "/api/v1/files",
-  "/api/v1/search",
-] as const;
 
 const TIMELINE_KIND_TONES: Record<TimelineEventSchema["kind"], BadgeTone> = {
   memory: "moss",
@@ -740,51 +726,12 @@ function RecentTimelinePanel({
   );
 }
 
-function SeedBanner({
-  isPending,
-  error,
-  onSeed,
-}: {
-  readonly isPending: boolean;
-  readonly error: unknown;
-  readonly onSeed: () => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <section className="overview-seed" aria-labelledby="overview-seed-title">
-      <div className="overview-seed__copy">
-        <p className="eyebrow">{t("core.home.seedEyebrow")}</p>
-        <h2 id="overview-seed-title">{t("core.home.seedTitle")}</h2>
-        <p>{t("core.home.seedDescription")}</p>
-      </div>
-      <div className="overview-seed__actions">
-        <Button type="button" variant="primary" size="md" onClick={onSeed} disabled={isPending}>
-          <Icon name="leaf" size={16} />
-          {isPending ? t("core.home.seedPending") : t("core.home.seedAction")}
-        </Button>
-        <ButtonLink to="/library" variant="secondary" size="md">
-          {t("core.home.uploadFirstFile")}
-          <Icon name="arrow-right" size={15} />
-        </ButtonLink>
-      </div>
-      {error ? (
-        <p className="overview-seed__error" role="alert">
-          {errorText(error, t, "core.home.seedErrorFallback")}
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
 /**
  * The archive dashboard: health, live counts, recent files, and the latest
  * timeline events. All data comes from the existing stats, health, timeline,
  * and path-listing endpoints.
  */
 export function DashboardPage() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const { t, formatNumber } = useI18n();
 
   const statsQuery = useGetStats({ query: { staleTime: 30_000 } });
@@ -825,42 +772,7 @@ export function DashboardPage() {
     [timelineQuery.data],
   );
 
-  const seedDemo = useSeedDemo({
-    mutation: {
-      onSuccess: (result) => {
-        for (const key of SEED_INVALIDATION_KEYS) {
-          void queryClient.invalidateQueries({ queryKey: [key] });
-        }
-        const summaryKey =
-          result.summaries_created === 1
-            ? "core.home.seedSuccessOne"
-            : "core.home.seedSuccessOther";
-        toast.success(
-          t(summaryKey, {
-            files: formatNumber(result.files_created),
-            memories: formatNumber(result.memories_created),
-            summaries: formatNumber(result.summaries_created),
-          }),
-        );
-      },
-      onError: (error) => {
-        toast.error(errorText(error, t, "core.home.seedErrorFallback"));
-      },
-    },
-  });
-
   const stats = statsQuery.data;
-  const allCountsZero =
-    stats !== undefined &&
-    stats.file_count === 0 &&
-    stats.chunk_count === 0 &&
-    stats.memory_count === 0 &&
-    stats.summary_count === 0;
-  // Hide the banner as soon as the seed succeeds; the invalidated stats query
-  // catches up on the next render. Cached zero counts are not enough after a
-  // stats failure.
-  const showSeedBanner =
-    allCountsZero && !statsQuery.isError && !seedDemo.isSuccess;
 
   const retryStats = () => void statsQuery.refetch();
   const retryTimeline = () => void timelineQuery.refetch();
@@ -905,14 +817,6 @@ export function DashboardPage() {
           </div>
         </div>
       </header>
-
-      {showSeedBanner ? (
-        <SeedBanner
-          isPending={seedDemo.isPending}
-          error={seedDemo.error}
-          onSeed={() => seedDemo.mutate()}
-        />
-      ) : null}
 
       {statsQuery.isPending ? (
         <StatSkeleton />

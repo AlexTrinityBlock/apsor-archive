@@ -1,4 +1,4 @@
-"""Schemas for health, statistics, and demo seeding."""
+"""Schemas for health and statistics."""
 
 from datetime import datetime
 
@@ -36,13 +36,3 @@ class HealthSchema(BaseModel):
     web_search_configured: bool
     web_fetch_provider: str
     web_fetch_configured: bool
-
-
-class DemoSeedSchema(BaseModel):
-    """What the demo seed created."""
-
-    model_config = ConfigDict(frozen=True)
-
-    files_created: int
-    memories_created: int
-    summaries_created: int
