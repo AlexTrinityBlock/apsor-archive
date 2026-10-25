@@ -260,7 +260,7 @@ fields are rejected.
 | `compaction_threshold_tokens` | 75,000 (~75%) | 1,000–200,000 |
 | `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model metadata, not a turn budget |
 | `max_steps` | 24 | 1–32 |
-| `max_tool_calls_per_turn` | 6 | 1–24 |
+| `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
 | `max_tool_result_chars` | 100,000 | 1,000–200,000 |
 | `max_page_context_chars` | 6,000 | 500–50,000 |
@@ -610,7 +610,7 @@ is persisted only at `message_end`; deltas are transport-only. Send
 Starlette's GZip middleware excludes `text/event-stream`.
 
 Each conversation allows one active run at a time. The defaults allow 24 model
-steps, 6 tool calls per user turn, 6 parallel tools, 100,000 total tokens per turn
+steps, 20 tool calls per user turn, 6 parallel tools, 100,000 total tokens per turn
 (cumulative across model steps), 75,000 tokens before auto compaction, and
 100,000 result characters per tool. A separate 1,000,000-token model context
 window records provider capacity; it is metadata and does not raise the turn
