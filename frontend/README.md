@@ -79,7 +79,7 @@ helpers. Both fetch paths preserve `ApiError` and dispatch the shared
 clients.
 
 After a mutation, invalidate the related React Query keys (the pages use scoped
-keys), so the overview, search, timeline, library, questions, chat, and memory
+keys), so the dashboard, search, timeline, library, questions, chat, and memory
 stay consistent.
 
 ## Chat

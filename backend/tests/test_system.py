@@ -81,6 +81,27 @@ def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> Non
     assert login.status_code == 200
     assert client.get("/api/v1/stats").status_code == 200
 
+    profile = client.patch(
+        "/api/v1/auth/me",
+        json={
+            "display_name": "Alex",
+            "bio": "I keep notes, memories, and the occasional argument with a wrench.",
+        },
+    )
+    assert profile.status_code == 200, profile.text
+    assert profile.json()["username"] == "owner"
+    assert profile.json()["display_name"] == "Alex"
+    assert "wrench" in profile.json()["bio"]
+    auth_status = client.get("/api/v1/auth/status").json()
+    assert auth_status["user"]["display_name"] == "Alex"
+    assert auth_status["user"]["bio"] == profile.json()["bio"]
+    invalid_profile = client.patch(
+        "/api/v1/auth/me",
+        json={"display_name": "   ", "bio": "Still here."},
+    )
+    assert invalid_profile.status_code == 422
+    assert invalid_profile.json()["error"] == "invalid_profile"
+
     health = client.get("/api/v1/health")
     assert health.status_code == 200
     assert health.json()["database"] == "ok"

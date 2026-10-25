@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import type {
@@ -14,6 +15,10 @@ import { Panel } from "../../component/Panel";
 import { useReadMemory } from "../../generated-apis-types/memories/memories";
 import { formatDate, formatDateTime, formatNumber, truncate } from "../../../lib/format";
 
+import {
+  MemoryDeprecateDialog,
+  MemoryEditDialog,
+} from "./MemoryActionDialogs";
 import { MemoryMissing } from "./MemoryMissing";
 import { MemoryErrorState, MemorySkeleton } from "./MemoryStates";
 import { MemoryStatus } from "./MemoryStatus";
@@ -42,7 +47,7 @@ function MemoryMiniCard({ memory }: { readonly memory: MemorySchema }) {
       <time className="memory-mini__time" dateTime={memory.update_time}>
         {formatDateTime(memory.update_time)}
       </time>
-      <span className="memory-mini__copy">{truncate(memory.content, 124)}</span>
+      <span className="memory-mini__copy">{truncate(memory.title, 124)}</span>
     </Link>
   );
 }
@@ -123,6 +128,8 @@ function MemoryRecord({ target }: { readonly target: MemorySchema }) {
         <MemoryStatus status={target.status} />
       </header>
 
+      <h2 className="memory-record__title">{target.title}</h2>
+
       {target.status === "deprecated" ? (
         <div className="memory-record__deprecated" role="note">
           <Icon name="history" size={17} />
@@ -133,8 +140,15 @@ function MemoryRecord({ target }: { readonly target: MemorySchema }) {
               <Link to={`/memory/${target.superseded_by_id}`}>
                 Read successor CRYSTAL #{target.superseded_by_id}
               </Link>
-            ) : null}
+            ) : (
+              "It was retired directly; no successor replaced it."
+            )}
           </p>
+          {target.deprecated_reason ? (
+            <p className="memory-record__reason">
+              Reason: {target.deprecated_reason}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -189,7 +203,9 @@ function Lineage({ data }: { readonly data: MemoryReadSchema }) {
             <MiniList memories={[data.superseded_by]} />
           ) : (
             <p className="memory-note">
-              Nothing has replaced this memory. It remains the current leaf in its chain.
+              {data.target.status === "deprecated"
+                ? "This memory was retired directly. No later record replaced it."
+                : "Nothing has replaced this memory. It remains the current leaf in its chain."}
             </p>
           )}
         </section>
@@ -289,7 +305,7 @@ function SupersedeAction({ target }: { readonly target: MemorySchema }) {
         variant="secondary"
         size="sm"
         disabled
-        title="This memory has already been superseded."
+        title="This memory is already deprecated."
       >
         <Icon name="branch" size={15} />
         Supersede this memory
@@ -339,6 +355,8 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
     { memory_range: 1, trace_history: true },
     { query: { retry: false } },
   );
+  const [editOpen, setEditOpen] = useState(false);
+  const [deprecateOpen, setDeprecateOpen] = useState(false);
 
   if (query.error instanceof ApiError && query.error.status === 404) {
     return <MemoryMissing memoryId={String(memoryId)} />;
@@ -369,6 +387,26 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
         }
         actions={
           <div className="memory-actions">
+            {target ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setEditOpen(true)}
+              >
+                <Icon name="pencil" size={14} />
+                Edit text
+              </Button>
+            ) : null}
+            {target?.status === "active" ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setDeprecateOpen(true)}
+              >
+                <Icon name="history" size={14} />
+                Deprecate
+              </Button>
+            ) : null}
             {target ? <SupersedeAction target={target} /> : null}
             <ButtonLink to="/memory" variant="ghost" size="sm">
               <Icon name="arrow-right" size={15} className="memory-back-icon" />
@@ -390,6 +428,19 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
         />
       ) : null}
       {query.data ? <ReadBody data={query.data} receipt={receipt} /> : null}
+
+      {target && editOpen ? (
+        <MemoryEditDialog
+          memory={target}
+          onClose={() => setEditOpen(false)}
+        />
+      ) : null}
+      {target && deprecateOpen ? (
+        <MemoryDeprecateDialog
+          memory={target}
+          onClose={() => setDeprecateOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

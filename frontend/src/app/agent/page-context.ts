@@ -245,7 +245,7 @@ function readableTitle(root: HTMLElement, pathname: string): string | null {
     .filter(Boolean)
     .join(" ")
     .replace(/[-_]+/g, " ");
-  return (label.length > 0 ? label : "Overview").slice(0, MAX_TITLE_CHARS);
+  return (label.length > 0 ? label : "Archive").slice(0, MAX_TITLE_CHARS);
 }
 
 /**

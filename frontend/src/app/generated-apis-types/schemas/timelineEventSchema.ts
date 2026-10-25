@@ -23,4 +23,5 @@ export interface TimelineEventSchema {
   raw_file_path?: string | null;
   status?: string | null;
   time: string;
+  title?: string | null;
 }

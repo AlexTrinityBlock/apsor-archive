@@ -29,16 +29,37 @@ class MemoryRepository:
     async def get_by_id(self, memory_id: int) -> MemoryModel | None:
         return await self.session.get(MemoryModel, memory_id)
 
+    async def save(self, memory: MemoryModel) -> MemoryModel:
+        """Flush an edited memory and stamp its update time."""
+        memory.updated_at = utcnow()
+        await self.session.flush()
+        return memory
+
     async def list_by_ids(self, memory_ids: Sequence[int]) -> list[MemoryModel]:
         if not memory_ids:
             return []
         statement = select(MemoryModel).where(MemoryModel.id.in_(memory_ids))
         return list((await self.session.execute(statement)).scalars().all())
 
-    async def deprecate(self, memory: MemoryModel, successor_id: int) -> None:
+    async def deprecate(
+        self,
+        memory: MemoryModel,
+        successor_id: int | None = None,
+        *,
+        reason: str | None = None,
+    ) -> None:
+        """Retire a memory, with or without a successor.
+
+        Both paths stamp ``deprecated_at`` so the ledger records when the record
+        left the active tip; only a replacement sets ``superseded_by_id``.
+        """
+        now = utcnow()
         memory.status = MEMORY_DEPRECATED
-        memory.superseded_by_id = successor_id
-        memory.updated_at = utcnow()
+        if successor_id is not None:
+            memory.superseded_by_id = successor_id
+        memory.deprecated_at = now
+        memory.deprecated_reason = reason
+        memory.updated_at = now
         await self.session.flush()
 
     async def list_neighbors(

@@ -122,10 +122,10 @@ docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 tunnel DNS target; the target is the `caddy:80` service configured in the
 Cloudflare dashboard.
 
-The live deployment keeps the existing public hostname
-`dendromatrix.alextrinitywolf.com` as a **legacy hostname**. The examples here
-use `archive.example.com`; do not change DNS or the tunnel ingress as part of
-an application rebrand.
+The live deployment serves `apsor-archive.alextrinitywolf.com`. The previous
+`dendromatrix.alextrinitywolf.com` is the **legacy hostname** and is no longer in
+the current tunnel ingress. The examples here use `archive.example.com`; do not
+change DNS or the tunnel ingress as part of an application rebrand.
 
 The stack intentionally has no `ports:` mapping. Do not add one unless you are
 debugging on a trusted host.

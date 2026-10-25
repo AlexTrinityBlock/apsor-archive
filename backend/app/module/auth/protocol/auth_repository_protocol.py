@@ -17,6 +17,15 @@ class UserRepositoryProtocol(Protocol):
 
     async def touch_login(self, user: AppUserModel, now: datetime) -> None: ...
 
+    async def update_profile(
+        self,
+        user: AppUserModel,
+        *,
+        display_name: str,
+        bio: str | None,
+        now: datetime,
+    ) -> AppUserModel: ...
+
 
 class SessionRepositoryProtocol(Protocol):
     async def add(

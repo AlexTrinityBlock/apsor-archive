@@ -177,6 +177,7 @@ export function ReadMemoryPanel({ item }: PanelProps) {
 /** `save_memory`: a wax-seal receipt for an appended memory. */
 export function SaveMemoryPanel({ item }: PanelProps) {
   const data = item.data;
+  const deprecating = data?.mode === "deprecate";
   const receipt = (data?.memory ?? null) as Record<string, unknown> | null;
   const memoryId =
     numberField(receipt, "memory_id") ??
@@ -195,9 +196,67 @@ export function SaveMemoryPanel({ item }: PanelProps) {
     return (
       <PanelEmpty
         icon="leaf"
-        title="The memory was not saved"
+        title={deprecating ? "The memories were not deprecated" : "The memory was not saved"}
         detail={item.detail ?? "No structured result was recorded."}
       />
+    );
+  }
+
+  if (deprecating) {
+    const deprecated = Array.isArray(data?.deprecated)
+      ? (data.deprecated as Record<string, unknown>[])
+      : [];
+    const reason = textField(data, "reason");
+    return (
+      <div className="pi-seal-receipt">
+        <div className="pi-seal-receipt__seal" aria-hidden="true">
+          <span className="pi-seal-receipt__wax">
+            <Icon name="history" size={20} />
+          </span>
+        </div>
+        <div className="pi-seal-receipt__body">
+          <p className="eyebrow">Ledger update · memory retired</p>
+          <h3>
+            {deprecated.length === 1
+              ? "1 memory deprecated"
+              : `${deprecated.length} memories deprecated`}
+          </h3>
+          <blockquote>
+            No replacement memory was written. The records stay readable in the
+            vault.
+          </blockquote>
+          <ul className="pi-seal-receipt__list">
+            {deprecated.map((memory) => {
+              const id = numberField(memory, "memory_id");
+              const title = textField(memory, "title");
+              return (
+                <li key={id ?? title ?? "deprecated"}>
+                  {id !== null ? (
+                    <Link to={`/memory/${id}`}>CRYSTAL #{id}</Link>
+                  ) : (
+                    <span>CRYSTAL</span>
+                  )}
+                  <span>{title ?? "Untitled memory"}</span>
+                </li>
+              );
+            })}
+          </ul>
+          <dl className="pi-seal-receipt__meta">
+            <div>
+              <dt>Status</dt>
+              <dd>deprecated</dd>
+            </div>
+            <div>
+              <dt>Reason</dt>
+              <dd>{reason ?? "not supplied"}</dd>
+            </div>
+            <div>
+              <dt>Recorded</dt>
+              <dd>{item.createdAt ? formatDateTime(item.createdAt) : "this turn"}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
     );
   }
 

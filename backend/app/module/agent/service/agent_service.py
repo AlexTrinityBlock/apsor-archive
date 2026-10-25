@@ -36,6 +36,7 @@ from app.module.agent.domain.compaction_domain import (
     estimate_context_tokens,
 )
 from app.module.agent.domain.context_domain import build_context, render_tool_result
+from app.module.agent.domain.owner_profile_domain import OwnerProfile
 from app.module.agent.domain.tool_catalog import PROMPT_VERSION, TOOLS_VERSION
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
 from app.module.agent.exception.domain_error import (
@@ -160,17 +161,21 @@ class AgentService:
     async def create_conversation(
         self,
         payload: AgentConversationCreateSchema,
+        *,
+        owner_profile: OwnerProfile | None = None,
     ) -> AgentConversationSchema:
         provider = payload.provider or self.default_provider
         if provider not in {"deepseek", "openai-compatible"}:
             provider = "deepseek"
         model = payload.model or self.default_model or "deepseek-flash"
         now = utcnow()
-        custom_sections = await self.system_prompt_service.get_active_sections()
+        custom_sections, builtin_sections = await self.system_prompt_service.get_active_sections()
         system_data = build_system_data(
             provider=provider,
             model=model,
             custom_sections=custom_sections,
+            builtin_sections=builtin_sections,
+            owner_profile=owner_profile,
         )
         system_model = build_system_model(system_data)
         conversation, _entry = await self.repository.create_conversation(
@@ -1696,14 +1701,23 @@ def _approval_preview(
         else []
     )
     raw_occurred_at = arguments.get("occurred_at")
+    raw_reason = arguments.get("reason")
+    reason = raw_reason if isinstance(raw_reason, str) else None
+    mode = "deprecate" if not content.strip() and supersedes else "save"
     return {
         "tool": tool_name,
+        "mode": mode,
         "content": content,
         "content_chars": len(content),
         "supersedes": supersedes,
+        "reason": reason,
         "occurred_at": (raw_occurred_at if isinstance(raw_occurred_at, str) else None),
         "risk": (
-            "Approving appends a durable memory to the archive. Rejecting "
+            "Approving marks the listed memories deprecated and removes them "
+            "from default retrieval. Their rows and text remain readable. "
+            "Rejecting changes nothing."
+            if mode == "deprecate"
+            else "Approving appends a durable memory to the archive. Rejecting "
             "writes nothing and tells the agent the write was declined."
         ),
     }
@@ -1730,7 +1744,7 @@ def _approval_required_event(approval: AgentApprovalSchema) -> AgentStreamEvent:
 
 
 def _rejection_outcome(tool_name: str, approval_id: int) -> ToolOutcome:
-    detail = "The user rejected the proposed memory write. No memory was saved."
+    detail = "The user rejected the proposed memory action. No memory was saved or deprecated."
     return ToolOutcome(
         content=f"<error{attributes({'code': 'memory_rejected'})}>{xml_text(detail)}</error>",
         data={

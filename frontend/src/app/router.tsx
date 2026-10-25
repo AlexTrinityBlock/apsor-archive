@@ -12,8 +12,8 @@ import { RouteError } from "./component/RouteError";
 import { RouteFallback } from "./component/RouteFallback";
 import { NotFoundPage } from "./not-found/page";
 
-const HomePage = lazy(() =>
-  import("./home/page").then((module) => ({ default: module.HomePage })),
+const DashboardPage = lazy(() =>
+  import("./home/page").then((module) => ({ default: module.DashboardPage })),
 );
 const SearchPage = lazy(() =>
   import("./search/page").then((module) => ({ default: module.SearchPage })),
@@ -128,8 +128,9 @@ export const router = createBrowserRouter([
       {
         element: <AppShell />,
         children: [
-          { index: true, element: <HomePage /> },
-          { path: "overview", element: <Navigate to="/" replace /> },
+          { index: true, element: <Navigate to="/chat" replace /> },
+          { path: "dashboard", element: <DashboardPage /> },
+          { path: "overview", element: <Navigate to="/dashboard" replace /> },
           { path: "search", element: <SearchPage /> },
           { path: "timeline", element: <TimelinePage /> },
           { path: "library", element: <LibraryPage /> },

@@ -3,6 +3,7 @@
 from app.module.auth.exception.domain_error import (
     AuthenticationRequiredError,
     InvalidCredentialsError,
+    InvalidProfileError,
     InvalidUsernameError,
     LoginThrottledError,
     PasswordMismatchError,
@@ -17,6 +18,7 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(InvalidCredentialsError, 401, "invalid_credentials")
     ExceptionRegistry.register(SetupAlreadyCompleteError, 409, "setup_already_complete")
     ExceptionRegistry.register(InvalidUsernameError, 422, "invalid_username")
+    ExceptionRegistry.register(InvalidProfileError, 422, "invalid_profile")
     ExceptionRegistry.register(WeakPasswordError, 422, "weak_password")
     ExceptionRegistry.register(PasswordMismatchError, 422, "password_mismatch")
     ExceptionRegistry.register(LoginThrottledError, 429, "login_throttled")

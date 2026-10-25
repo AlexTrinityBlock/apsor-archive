@@ -14,10 +14,13 @@ export interface MemorySchema {
   content: string;
   created_at: string;
   deleted_at: string | null;
+  deprecated_at: string | null;
+  deprecated_reason: string | null;
   memory_id: number;
   source: MemorySchemaSource;
   status: MemorySchemaStatus;
   superseded_by_id: number | null;
   supersedes_ids: number[];
+  title: string;
   update_time: string;
 }

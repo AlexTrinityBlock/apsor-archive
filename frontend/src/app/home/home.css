@@ -416,86 +416,6 @@
   margin-top: 2px;
 }
 
-/* Archive composition ----------------------------------------------------- */
-
-.overview-composition {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  padding: 22px 24px;
-  background: #ffffff;
-  border: 0.7px solid var(--mono-grid);
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
-}
-
-.overview-composition__copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.overview-composition__copy h2 {
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.overview-composition__text {
-  max-width: 60ch;
-  color: var(--mono-muted);
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-
-.overview-composition__note {
-  color: var(--mono-muted);
-  font-family: var(--mono-font-mono);
-  font-size: 10.5px;
-}
-
-.overview-composition__error {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  color: var(--mono-muted);
-  font-size: 11.5px;
-}
-
-.overview-composition__legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  margin-top: 2px;
-  color: var(--mono-muted);
-  font-family: var(--mono-font-mono);
-  font-size: 10.5px;
-}
-
-.overview-composition__legend strong {
-  color: var(--mono-ink);
-  font-weight: 700;
-}
-
-.overview-composition__link {
-  align-self: flex-start;
-  margin-top: 6px;
-}
-
-.overview-composition__rings {
-  width: 140px;
-  height: 140px;
-  flex-shrink: 0;
-}
-
-.overview-composition__rings svg {
-  width: 100%;
-  height: 100%;
-}
-
 /* First-run seed ---------------------------------------------------------- */
 
 .overview-seed {
@@ -559,17 +479,6 @@
     gap: 10px;
   }
 
-  .overview-composition {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 18px;
-  }
-
-  .overview-composition__rings {
-    width: 118px;
-    height: 118px;
-  }
-
   .overview-seed {
     grid-template-columns: 1fr;
     gap: 16px;
@@ -609,8 +518,20 @@
     padding: 22px 16px;
   }
 
-  .overview-composition,
   .overview-seed {
     padding: 18px;
+  }
+}
+
+.overview-masthead__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .overview-masthead__actions {
+    align-items: flex-start;
   }
 }

@@ -10,6 +10,8 @@ class UserSchema(BaseModel):
 
     user_id: int
     username: str
+    display_name: str | None
+    bio: str | None
     created_at: datetime
     last_login_at: datetime | None
 
@@ -41,3 +43,12 @@ class AuthResponseSchema(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     user: UserSchema
+
+
+class UserProfileUpdateSchema(BaseModel):
+    """The owner's editable display identity and self-introduction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=80)
+    bio: str | None = Field(default=None, max_length=2000)

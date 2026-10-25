@@ -19,8 +19,10 @@ interface ApprovalStackProps {
 }
 
 interface ApprovalPreview {
+  readonly mode: "save" | "deprecate";
   readonly content: string;
   readonly supersedes: readonly number[];
+  readonly reason: string | null;
   readonly occurredAt: string | null;
   readonly risk: string | null;
   readonly contentChars: number | null;
@@ -36,12 +38,102 @@ function readPreview(approval: AgentApprovalSchema): ApprovalPreview {
       })
     : [];
   return {
+    mode: stringValue(preview.mode) === "deprecate" ? "deprecate" : "save",
     content: stringValue(preview.content) ?? "",
     supersedes,
+    reason: stringValue(preview.reason),
     occurredAt: stringValue(preview.occurred_at),
     risk: stringValue(preview.risk),
     contentChars: numberValue(preview.content_chars),
   };
+}
+
+function ApprovalBody({
+  approval,
+  preview,
+  deprecating,
+}: {
+  readonly approval: AgentApprovalSchema;
+  readonly preview: ApprovalPreview;
+  readonly deprecating: boolean;
+}) {
+  const targets =
+    preview.supersedes.length > 0
+      ? preview.supersedes.map((id) => `#${id}`).join(", ")
+      : "No existing memory";
+  return (
+    <div className="chat-approval__body">
+      {deprecating ? (
+        <>
+          <p className="chat-approval__label">Memories to deprecate</p>
+          <p className="chat-approval__deprecate-ids">
+            {preview.supersedes.length > 0
+              ? preview.supersedes.map((id) => `CRYSTAL #${id}`).join(", ")
+              : "No memory id supplied"}
+          </p>
+          {preview.reason ? (
+            <p className="chat-approval__reason">
+              <span>Reason</span>
+              {preview.reason}
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <p className="chat-approval__label">Proposed memory</p>
+          <pre className="chat-approval__content">{preview.content}</pre>
+        </>
+      )}
+
+      <dl className="chat-approval__meta">
+        <div>
+          <dt>Tool</dt>
+          <dd>{approval.tool_name}</dd>
+        </div>
+        <div>
+          <dt>{deprecating ? "Targets" : "Supersedes"}</dt>
+          <dd>{targets}</dd>
+        </div>
+        {deprecating ? null : (
+          <div>
+            <dt>Occurred</dt>
+            <dd>{preview.occurredAt ?? "Now"}</dd>
+          </div>
+        )}
+        <div>
+          <dt>Requested</dt>
+          <dd>{formatRelative(approval.requested_at)}</dd>
+        </div>
+      </dl>
+
+      <p className="chat-approval__risk">
+        <Icon name="info" size={14} />
+        {preview.risk ??
+          (deprecating
+            ? "Approving retires the records without writing a replacement."
+            : "Approving appends a durable memory. Rejecting writes nothing.")}
+      </p>
+
+      {!deprecating && preview.contentChars !== null && preview.contentChars > 0 ? (
+        <p className="chat-approval__count">
+          {preview.contentChars.toLocaleString()} characters will be stored.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function approveText(resolving: "approve" | "reject" | null, deprecating: boolean): string {
+  if (resolving === "approve") {
+    return deprecating ? "Deprecating…" : "Saving…";
+  }
+  return deprecating ? "Approve deprecation" : "Approve write";
+}
+
+function approveAria(approvalId: number, deprecating: boolean): string {
+  return deprecating
+    ? `Approve deprecating memories for approval ${approvalId}`
+    : `Approve saving memory for approval ${approvalId}`;
 }
 
 function ApprovalCard({
@@ -58,6 +150,7 @@ function ApprovalCard({
   readonly onResolve: (decision: "approve" | "reject") => void;
 }) {
   const preview = readPreview(approval);
+  const deprecating = preview.mode === "deprecate";
   const busy = resolving !== null;
   const blocked = disabled || archived || busy;
 
@@ -65,58 +158,30 @@ function ApprovalCard({
     <section
       className="chat-approval"
       role="group"
-      aria-label="Memory write approval"
+      aria-label={
+        deprecating ? "Memory deprecation approval" : "Memory write approval"
+      }
     >
       <header className="chat-approval__head">
         <span className="chat-approval__mark" aria-hidden="true">
-          <Icon name="memory" size={18} />
+          <Icon name={deprecating ? "history" : "memory"} size={18} />
         </span>
         <div className="chat-approval__heading">
           <p className="eyebrow">Human approval required</p>
-          <h3>The agent wants to write a memory.</h3>
+          <h3>
+            {deprecating
+              ? "The agent wants to deprecate memories."
+              : "The agent wants to write a memory."}
+          </h3>
         </div>
         <Badge tone="ochre">Pending</Badge>
       </header>
 
-      <div className="chat-approval__body">
-        <p className="chat-approval__label">Proposed memory</p>
-        <pre className="chat-approval__content">{preview.content}</pre>
-
-        <dl className="chat-approval__meta">
-          <div>
-            <dt>Tool</dt>
-            <dd>{approval.tool_name}</dd>
-          </div>
-          <div>
-            <dt>Supersedes</dt>
-            <dd>
-              {preview.supersedes.length > 0
-                ? preview.supersedes.map((id) => `#${id}`).join(", ")
-                : "No existing memory"}
-            </dd>
-          </div>
-          <div>
-            <dt>Occurred</dt>
-            <dd>{preview.occurredAt ?? "Now"}</dd>
-          </div>
-          <div>
-            <dt>Requested</dt>
-            <dd>{formatRelative(approval.requested_at)}</dd>
-          </div>
-        </dl>
-
-        <p className="chat-approval__risk">
-          <Icon name="info" size={14} />
-          {preview.risk ??
-            "Approving appends a durable memory. Rejecting writes nothing."}
-        </p>
-
-        {preview.contentChars !== null && preview.contentChars > 0 ? (
-          <p className="chat-approval__count">
-            {preview.contentChars.toLocaleString()} characters will be stored.
-          </p>
-        ) : null}
-      </div>
+      <ApprovalBody
+        approval={approval}
+        preview={preview}
+        deprecating={deprecating}
+      />
 
       {archived ? (
         <p className="chat-approval__notice" role="status">
@@ -130,10 +195,10 @@ function ApprovalCard({
           size="sm"
           onClick={() => onResolve("reject")}
           disabled={blocked}
-          aria-label={`Reject saving memory for approval ${approval.id}`}
+          aria-label={`Reject the memory action for approval ${approval.id}`}
         >
           {resolving === "reject" ? (
-            <Loader size={14} label="Rejecting the memory write" />
+            <Loader size={14} label="Rejecting the memory action" />
           ) : (
             <Icon name="close" size={14} />
           )}
@@ -144,14 +209,17 @@ function ApprovalCard({
           size="sm"
           onClick={() => onResolve("approve")}
           disabled={blocked}
-          aria-label={`Approve saving memory for approval ${approval.id}`}
+          aria-label={approveAria(approval.id, deprecating)}
         >
           {resolving === "approve" ? (
-            <Loader size={14} label="Saving the memory" />
+            <Loader
+              size={14}
+              label={deprecating ? "Deprecating the memories" : "Saving the memory"}
+            />
           ) : (
-            <Icon name="check" size={14} />
+            <Icon name={deprecating ? "history" : "check"} size={14} />
           )}
-          {resolving === "approve" ? "Saving…" : "Approve write"}
+          {approveText(resolving, deprecating)}
         </Button>
       </footer>
     </section>

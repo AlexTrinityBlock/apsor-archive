@@ -30,8 +30,11 @@ import type {
   ListResponseSchemaSummarySchema,
   ListSummariesParams,
   MemoryCreateSchema,
+  MemoryDeprecateSchema,
   MemoryReadSchema,
   MemorySaveSchema,
+  MemorySchema,
+  MemoryUpdateSchema,
   ReadMemoryParams,
   SummaryCreateSchema,
   SummarySchema
@@ -370,7 +373,185 @@ export function useReadMemory<TData = Awaited<ReturnType<typeof readMemory>>, TE
 
 
 
-export const getListSummariesUrl = (params?: ListSummariesParams,) => {
+export const getUpdateMemoryUrl = (memoryId: number,) => {
+
+
+
+
+  return `/api/v1/memories/${memoryId}`
+}
+
+/**
+ * Edit one memory's text and republish its search chunk.
+ * @summary Update Memory
+ */
+export const updateMemory = async (memoryId: number,
+    memoryUpdateSchema: MemoryUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<MemorySchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<MemorySchema>(getUpdateMemoryUrl(memoryId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(memoryUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateMemoryMutationKey = () => ['updateMemory'] as const;
+
+export const getUpdateMemoryMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMemory>>, TError,UpdateMemoryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMemory>>, TError,UpdateMemoryMutationVariables, TContext> => {
+
+const mutationKey = getUpdateMemoryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMemory>>, UpdateMemoryMutationVariables> = (props) => {
+          const {memoryId,data} = props ?? {};
+
+          return  updateMemory(memoryId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof updateMemory>>>
+    export type UpdateMemoryMutationBody = MemoryUpdateSchema
+    export type UpdateMemoryMutationError = HTTPValidationError
+    export type UpdateMemoryMutationVariables = {memoryId: number;data: MemoryUpdateSchema}
+
+    /**
+ * @summary Update Memory
+ */
+export const useUpdateMemory = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMemory>>, TError,UpdateMemoryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateMemory>>,
+        TError,
+        UpdateMemoryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateMemoryMutationOptions(options), queryClient);
+    }
+    export const getDeprecateMemoryUrl = (memoryId: number,) => {
+
+
+
+
+  return `/api/v1/memories/${memoryId}/deprecate`
+}
+
+/**
+ * Retire one memory without recording a replacement.
+ * @summary Deprecate Memory
+ */
+export const deprecateMemory = async (memoryId: number,
+    memoryDeprecateSchemaNull?: MemoryDeprecateSchema | null, options?: Parameters<typeof apiFetch>[1]): Promise<MemorySchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<MemorySchema>(getDeprecateMemoryUrl(memoryId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(memoryDeprecateSchemaNull)
+  }
+);}
+
+
+
+
+
+export const getDeprecateMemoryMutationKey = () => ['deprecateMemory'] as const;
+
+export const getDeprecateMemoryMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deprecateMemory>>, TError,DeprecateMemoryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deprecateMemory>>, TError,DeprecateMemoryMutationVariables, TContext> => {
+
+const mutationKey = getDeprecateMemoryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deprecateMemory>>, DeprecateMemoryMutationVariables> = (props) => {
+          const {memoryId,data} = props ?? {};
+
+          return  deprecateMemory(memoryId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeprecateMemoryMutationResult = NonNullable<Awaited<ReturnType<typeof deprecateMemory>>>
+    export type DeprecateMemoryMutationBody = MemoryDeprecateSchema | null | undefined
+    export type DeprecateMemoryMutationError = HTTPValidationError
+    export type DeprecateMemoryMutationVariables = {memoryId: number;data?: MemoryDeprecateSchema | null}
+
+    /**
+ * @summary Deprecate Memory
+ */
+export const useDeprecateMemory = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deprecateMemory>>, TError,DeprecateMemoryMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deprecateMemory>>,
+        TError,
+        DeprecateMemoryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeprecateMemoryMutationOptions(options), queryClient);
+    }
+    export const getListSummariesUrl = (params?: ListSummariesParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {

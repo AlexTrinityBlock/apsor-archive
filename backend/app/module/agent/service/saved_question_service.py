@@ -6,6 +6,7 @@ question row. A failed turn keeps the row (and its question) and records the
 failure metadata instead of deleting it.
 """
 
+from app.module.agent.domain.owner_profile_domain import OwnerProfile
 from app.module.agent.exception.domain_error import (
     AgentNotConfiguredError,
     SavedQuestionNotFoundError,
@@ -94,7 +95,12 @@ class SavedQuestionService:
         if not deleted:
             raise SavedQuestionNotFoundError(question_id)
 
-    async def ask_question(self, question_id: int) -> SavedQuestionReadSchema:
+    async def ask_question(
+        self,
+        question_id: int,
+        *,
+        owner_profile: OwnerProfile | None = None,
+    ) -> SavedQuestionReadSchema:
         """Run one agent turn for an existing saved question.
 
         The saved row is created before this endpoint is called, so the
@@ -108,7 +114,8 @@ class SavedQuestionService:
             raise AgentNotConfiguredError()
 
         conversation = await self.agent_service.create_conversation(
-            AgentConversationCreateSchema(title=_conversation_title(saved_question.question))
+            AgentConversationCreateSchema(title=_conversation_title(saved_question.question)),
+            owner_profile=owner_profile,
         )
         turn = await self.agent_service.begin_message(
             conversation.id,

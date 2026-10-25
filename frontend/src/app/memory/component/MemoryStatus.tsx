@@ -18,7 +18,7 @@ export function MemoryStatus({ status, small = false }: MemoryStatusProps) {
         .join(" ")}
     >
       <span aria-hidden="true">●</span>
-      {status === "active" ? "Active tip" : "Superseded"}
+      {status === "active" ? "Active tip" : "Deprecated"}
     </span>
   );
 }
