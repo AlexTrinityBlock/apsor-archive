@@ -52,10 +52,10 @@ export const insights = {
       updating: "Updating…",
       updatingAria: "Updating results",
       fileChunks: "File chunks",
-      memoryCrystals: "Memory crystals",
+      memoryCrystals: "Memories",
       summaries: "Summaries",
       emptyFiles: "No file chunks matched this query.",
-      emptyMemories: "No memory crystals matched this query.",
+      emptyMemories: "No memories matched this query.",
       emptySummaries: "No summaries matched this query.",
     },
     card: {
@@ -85,10 +85,10 @@ export const insights = {
       eyebrow: "The archive is ready",
       title: "Nothing is retrieved until you ask.",
       description:
-        "One query runs through a text lane and a vector lane. The fused candidates return as file chunks, memory crystals, and summaries, each with a real score and the lanes that matched it.",
+        "One query runs through a text lane and a vector lane. The fused candidates return as file chunks, memories, and summaries, each with a real score and the lanes that matched it.",
       kindsAria: "Searchable source kinds",
       fileChunks: "File chunks",
-      memoryCrystals: "Memory crystals",
+      memoryCrystals: "Memories",
       summaries: "Summaries",
     },
     loading: {
@@ -151,7 +151,7 @@ export const insights = {
         "A proportional sample of memories, summaries, and file updates across the selected window. Each gap records exactly how many events the sampler omitted, and every window is read from the live archive.",
       readingWindow: "Reading window",
       windowSpan: "Window span",
-      recordMemory: "Record Memory Crystal",
+      recordMemory: "Record Memory",
     },
     controls: {
       aria: "Timeline window controls",
@@ -227,7 +227,7 @@ export const insights = {
       collapseSummary: "Collapse summary",
       edit: "Edit",
       deprecate: "Deprecate",
-      readMemory: "Read memory crystal",
+      readMemory: "Read memory",
       openLibrary: "Open in library",
       skipAria:
         "{events} omitted between two samples ({composition}), {from} to {to}",
