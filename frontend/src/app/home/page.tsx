@@ -1,6 +1,6 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import {
   useGetHealth,
@@ -20,7 +20,6 @@ import { Badge } from "../component/Badge";
 import { Button, ButtonLink } from "../component/Button";
 import { Icon } from "../component/Icon";
 import { Panel } from "../component/Panel";
-import { SearchField } from "../component/SearchField";
 import { StatCard } from "../component/StatCard";
 import { useToast } from "../component/Toast";
 import type { BadgeTone } from "../type/ui";
@@ -35,13 +34,6 @@ import {
 } from "../../lib/format";
 import "./home.css";
 
-const SEARCH_SUGGESTIONS = [
-  "hybrid retrieval",
-  "superseded memories",
-  "/history/industry",
-  "Ford in the 1970s",
-  "frost ring anomalies",
-] as const;
 
 const TIMELINE_WINDOW_DAYS = 30;
 const RECENT_FILE_LIMIT = 4;
@@ -82,9 +74,6 @@ interface RecentFile {
   readonly time: string;
 }
 
-function searchHref(query: string): string {
-  return `/search?query=${encodeURIComponent(query)}`;
-}
 
 function fileHref(fileId: number): string {
   return `/library?tab=files&file=${fileId}&chunk=1`;
@@ -163,7 +152,7 @@ function buildStatCards(stats: StatsSchema | undefined): readonly StatCardData[]
       label: "Memory crystals",
       value: stats ? formatNumber(stats.memory_count) : "—",
       note: stats
-        ? `${formatNumber(stats.active_memory_count)} active · ${formatNumber(deprecated)} superseded`
+        ? `${formatNumber(stats.active_memory_count)} active · ${formatNumber(deprecated)} deprecated`
         : "Counts unavailable",
       accent: "ochre",
     },
@@ -654,90 +643,6 @@ function RecentTimelinePanel({
   );
 }
 
-function CompositionCard({
-  stats,
-  pending,
-  error,
-  onRetry,
-  retrying,
-}: {
-  readonly stats: StatsSchema | undefined;
-  readonly pending: boolean;
-  readonly error: boolean;
-  readonly onRetry: () => void;
-  readonly retrying: boolean;
-}) {
-  let counts: ReactNode;
-  if (pending) {
-    counts = (
-      <p className="overview-composition__note" aria-busy="true">
-        Reading live counts…
-      </p>
-    );
-  } else if (error || !stats) {
-    counts = (
-      <div className="overview-composition__error">
-        <span>Live counts are unavailable.</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={onRetry}
-          disabled={retrying}
-        >
-          {retrying ? "Retrying…" : "Retry"}
-        </Button>
-      </div>
-    );
-  } else {
-    counts = (
-      <div className="overview-composition__legend" aria-label="Live archive counts">
-        <span>
-          <strong>{formatNumber(stats.file_count)}</strong> files
-        </span>
-        <span>
-          <strong>{formatNumber(stats.chunk_count)}</strong> chunks
-        </span>
-        <span>
-          <strong>{formatNumber(stats.memory_count)}</strong> memories
-        </span>
-        <span>
-          <strong>{formatNumber(stats.summary_count)}</strong> summaries
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <section className="overview-composition" aria-labelledby="overview-composition-title">
-      <div className="overview-composition__copy">
-        <p className="eyebrow">Archive composition</p>
-        <h2 id="overview-composition-title">Ring by ring, the archive holds together.</h2>
-        <p className="overview-composition__text">
-          Files branch by path, memories gather by time, and summaries record what the
-          archive has read. The rings are a decorative cross-section of those layers —
-          not a second navigation surface.
-        </p>
-        {counts}
-        <ButtonLink to="/library" variant="ink" size="sm" className="overview-composition__link">
-          Open File Library
-          <Icon name="arrow-up-right" size={14} />
-        </ButtonLink>
-      </div>
-      <div className="overview-composition__rings" aria-hidden="true">
-        <svg viewBox="0 0 160 160" fill="none">
-          <circle cx="80" cy="80" r="76" stroke="var(--mono-grid)" strokeWidth="1.2" strokeDasharray="3 3" />
-          <circle cx="80" cy="80" r="58" stroke="var(--mono-ink)" strokeWidth="1.4" opacity="0.3" />
-          <circle cx="80" cy="80" r="40" stroke="var(--mono-ink)" strokeWidth="1.4" opacity="0.55" />
-          <circle cx="80" cy="80" r="22" stroke="var(--accent-seal)" strokeWidth="1.6" />
-          <circle cx="80" cy="80" r="4.5" fill="var(--accent-seal)" />
-          <path d="M80 4V156M4 80H156" stroke="var(--mono-grid)" strokeWidth="0.7" />
-        </svg>
-      </div>
-    </section>
-  );
-}
-
 function SeedBanner({
   isPending,
   error,
@@ -778,13 +683,11 @@ function SeedBanner({
 }
 
 /**
- * The archive dashboard: health, live counts, recent files, the latest timeline
- * events, and a decorative composition card. All data comes from the existing
- * stats, health, timeline, and path-listing endpoints.
+ * The archive dashboard: health, live counts, recent files, and the latest
+ * timeline events. All data comes from the existing stats, health, timeline,
+ * and path-listing endpoints.
  */
-export function HomePage() {
-  const [query, setQuery] = useState("");
-  const navigate = useNavigate();
+export function DashboardPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -843,10 +746,6 @@ export function HomePage() {
     },
   });
 
-  const handleSearch = (value: string) => {
-    navigate(value.length > 0 ? searchHref(value) : "/search");
-  };
-
   const stats = statsQuery.data;
   const allCountsZero =
     stats !== undefined &&
@@ -887,37 +786,19 @@ export function HomePage() {
       <header className="overview-masthead">
         <div className="overview-masthead__top">
           <div className="overview-title-group">
-            <p className="eyebrow eyebrow--plain">Archive Intelligence Hub</p>
-            <h1 className="overview-title">Archive Overview</h1>
+            <p className="eyebrow eyebrow--plain">Archive dashboard</p>
+            <h1 className="overview-title">Archive Dashboard</h1>
           </div>
-          <StatusChip
-            health={healthQuery.data}
-            pending={healthQuery.isPending}
-            error={healthQuery.isError}
-          />
-        </div>
-
-        <div className="search-hero-box">
-          <SearchField
-            value={query}
-            onChange={setQuery}
-            onSubmit={handleSearch}
-            size="lg"
-            label="Search the Apsor Archive"
-            placeholder="Search files, memories, summaries, or a path…"
-            submitLabel="Search"
-          />
-          <div className="search-suggestions-row">
-            <span className="suggestion-label">Suggested searches:</span>
-            {SEARCH_SUGGESTIONS.map((suggestion) => (
-              <Link
-                className="suggestion-chip"
-                key={suggestion}
-                to={searchHref(suggestion)}
-              >
-                {suggestion}
-              </Link>
-            ))}
+          <div className="overview-masthead__actions">
+            <StatusChip
+              health={healthQuery.data}
+              pending={healthQuery.isPending}
+              error={healthQuery.isError}
+            />
+            <ButtonLink to="/search" variant="secondary" size="sm">
+              <Icon name="search" size={14} />
+              Search
+            </ButtonLink>
           </div>
         </div>
       </header>
@@ -984,13 +865,6 @@ export function HomePage() {
         />
       </div>
 
-      <CompositionCard
-        stats={stats}
-        pending={statsQuery.isPending}
-        error={statsQuery.isError}
-        onRetry={retryStats}
-        retrying={statsQuery.isFetching}
-      />
     </div>
   );
 }

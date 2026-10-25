@@ -275,6 +275,7 @@ def _services(
         indexer=indexer,
         cache=cache,
         summary_service=summary_service,
+        text_generator=text_generator,
     )
     search_service = SearchService(
         chunk_repository=chunk_repository,

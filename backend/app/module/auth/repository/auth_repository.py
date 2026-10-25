@@ -37,6 +37,21 @@ class UserRepository:
         self.session.add(user)
         await self.session.flush()
 
+    async def update_profile(
+        self,
+        user: AppUserModel,
+        *,
+        display_name: str,
+        bio: str | None,
+        now: datetime,
+    ) -> AppUserModel:
+        user.display_name = display_name
+        user.bio = bio
+        user.updated_at = now
+        self.session.add(user)
+        await self.session.flush()
+        return user
+
 
 class SessionRepository:
     """Queries over browser sessions."""

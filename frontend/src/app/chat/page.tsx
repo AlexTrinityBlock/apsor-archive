@@ -45,6 +45,7 @@ import { RetryBar } from "./component/RetryBar";
 import { StreamingTurn } from "./component/StreamingTurn";
 import { useChatSplit } from "./hook/useChatSplit";
 import { useChatStream } from "./hook/useChatStream";
+import { buildMemoryTitles } from "./memory-titles";
 import { invalidateConversation, invalidateConversationList } from "./query";
 import {
   clearLastChatConversation,
@@ -321,6 +322,14 @@ export function ChatPage() {
   const entries = useMemo(
     () => mergeEntries(baseEntries, currentExtraEntries),
     [baseEntries, currentExtraEntries],
+  );
+  const memoryTitles = useMemo(
+    () =>
+      buildMemoryTitles(
+        entries,
+        (stream?.toolCalls ?? []).map((tool) => tool.data),
+      ),
+    [entries, stream?.toolCalls],
   );
   const retryState = useMemo(
     () => readRetryState(entries, lastError ? { detail: lastError } : null),
@@ -712,6 +721,7 @@ export function ChatPage() {
         <ChatThread
           entries={entries}
           conversation={conversation}
+          memoryTitles={memoryTitles}
           onForkEntry={handleForkEntry}
           forkingEntryId={forkingEntryId}
           forkDisabled={archived || isStreaming || forkingEntryId !== null}
@@ -729,6 +739,7 @@ export function ChatPage() {
         {stream ? (
           <StreamingTurn
             stream={stream}
+            memoryTitles={memoryTitles}
             selectedTraceId={pinnedId}
             onSelectTrace={handleSelectTrace}
             onOpenCitation={handleOpenCitation}

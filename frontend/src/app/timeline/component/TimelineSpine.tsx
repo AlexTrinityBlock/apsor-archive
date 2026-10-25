@@ -33,6 +33,8 @@ interface TimelineSpineProps {
   readonly currentEmptyContent?: ReactNode;
   readonly loadingEarlier: boolean;
   readonly sentinel: ReactNode;
+  readonly onEditMemory?: (event: TimelineEventSchema) => void;
+  readonly onDeprecateMemory?: (event: TimelineEventSchema) => void;
 }
 
 export type SentinelState =
@@ -139,7 +141,15 @@ function SummaryBody({ content }: { readonly content: string }) {
   );
 }
 
-function EventFooter({ event }: { readonly event: TimelineEventSchema }) {
+function EventFooter({
+  event,
+  onEditMemory,
+  onDeprecateMemory,
+}: {
+  readonly event: TimelineEventSchema;
+  readonly onEditMemory?: (event: TimelineEventSchema) => void;
+  readonly onDeprecateMemory?: (event: TimelineEventSchema) => void;
+}) {
   const sourceLabel = eventSourceLabel(event);
   return (
     <footer className="timeline-node__foot">
@@ -149,10 +159,30 @@ function EventFooter({ event }: { readonly event: TimelineEventSchema }) {
       </time>
       {sourceLabel ? <span className="timeline-node__id">{sourceLabel}</span> : null}
       {event.kind === "memory" && typeof event.memory_id === "number" ? (
-        <Link className="timeline-node__link" to={`/memory/${event.memory_id}`}>
-          Read memory crystal
-          <Icon name="arrow-up-right" size={12} />
-        </Link>
+        <>
+          {onEditMemory ? (
+            <button
+              type="button"
+              className="timeline-node__action"
+              onClick={() => onEditMemory(event)}
+            >
+              Edit
+            </button>
+          ) : null}
+          {event.status === "active" && onDeprecateMemory ? (
+            <button
+              type="button"
+              className="timeline-node__action is-danger"
+              onClick={() => onDeprecateMemory(event)}
+            >
+              Deprecate
+            </button>
+          ) : null}
+          <Link className="timeline-node__link" to={`/memory/${event.memory_id}`}>
+            Read memory crystal
+            <Icon name="arrow-up-right" size={12} />
+          </Link>
+        </>
       ) : null}
       {event.kind === "file_update" && typeof event.file_id === "number" ? (
         <Link
@@ -167,7 +197,15 @@ function EventFooter({ event }: { readonly event: TimelineEventSchema }) {
   );
 }
 
-function EventCard({ event }: { readonly event: TimelineEventSchema }) {
+function EventCard({
+  event,
+  onEditMemory,
+  onDeprecateMemory,
+}: {
+  readonly event: TimelineEventSchema;
+  readonly onEditMemory?: (event: TimelineEventSchema) => void;
+  readonly onDeprecateMemory?: (event: TimelineEventSchema) => void;
+}) {
   const isDeprecated = event.kind === "memory" && event.status === "deprecated";
   const className = ["timeline-node", isDeprecated ? "is-deprecated" : null]
     .filter(Boolean)
@@ -181,7 +219,12 @@ function EventCard({ event }: { readonly event: TimelineEventSchema }) {
             {KIND_PILL[event.kind]} {"\u00b7"} {formatDotDay(event.time)}
           </span>
           {event.kind === "memory" ? (
-            <p className="timeline-node__lead">{event.content}</p>
+            <>
+              {event.title ? (
+                <h3 className="timeline-node__title">{event.title}</h3>
+              ) : null}
+              <p className="timeline-node__lead">{event.content}</p>
+            </>
           ) : null}
           {event.kind === "file_update" ? (
             <h3 className="timeline-node__title">{event.content}</h3>
@@ -196,7 +239,11 @@ function EventCard({ event }: { readonly event: TimelineEventSchema }) {
         <code className="timeline-node__path">{event.raw_file_path}</code>
       ) : null}
 
-      <EventFooter event={event} />
+      <EventFooter
+        event={event}
+        onEditMemory={onEditMemory}
+        onDeprecateMemory={onDeprecateMemory}
+      />
     </article>
   );
 }
@@ -251,7 +298,15 @@ function SkipRow({ skip }: { readonly skip: TimelineSkipSchema }) {
   );
 }
 
-function WindowBody({ data }: { readonly data: TimelineResponseSchema }) {
+function WindowBody({
+  data,
+  onEditMemory,
+  onDeprecateMemory,
+}: {
+  readonly data: TimelineResponseSchema;
+  readonly onEditMemory?: (event: TimelineEventSchema) => void;
+  readonly onDeprecateMemory?: (event: TimelineEventSchema) => void;
+}) {
   const ordered = timelineNewestFirst(data.events);
   const skipByGap = new Map<string, TimelineSkipSchema>();
   for (const skip of data.skips) {
@@ -276,7 +331,11 @@ function WindowBody({ data }: { readonly data: TimelineResponseSchema }) {
         return (
           <Fragment key={eventKey(event)}>
             {skip ? <SkipRow skip={skip} /> : null}
-            <EventCard event={event} />
+            <EventCard
+              event={event}
+              onEditMemory={onEditMemory}
+              onDeprecateMemory={onDeprecateMemory}
+            />
           </Fragment>
         );
       })}
@@ -369,6 +428,8 @@ export function TimelineSpine({
   currentEmptyContent,
   loadingEarlier,
   sentinel,
+  onEditMemory,
+  onDeprecateMemory,
 }: TimelineSpineProps) {
   return (
     <section
@@ -383,7 +444,11 @@ export function TimelineSpine({
       {windows.map((window) => (
         <Fragment key={window.key}>
           {window.isCurrent ? null : <WindowBreak window={window} />}
-          <WindowBody data={window.data} />
+          <WindowBody
+            data={window.data}
+            onEditMemory={onEditMemory}
+            onDeprecateMemory={onDeprecateMemory}
+          />
         </Fragment>
       ))}
 

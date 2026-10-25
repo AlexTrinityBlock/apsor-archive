@@ -12,5 +12,6 @@ export interface MemorySearchResultSchema {
   memory_id: number;
   score: number;
   status: string;
+  title: string;
   update_time: string;
 }

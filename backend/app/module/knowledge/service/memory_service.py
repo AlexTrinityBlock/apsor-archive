@@ -1,10 +1,14 @@
 """Memory timeline orchestration, supersession, and trace reads."""
 
+import json
+import logging
 from collections import deque
 from datetime import UTC, datetime
 from typing import cast
 
 from app.module.knowledge.exception.domain_error import (
+    AiNotConfiguredError,
+    AiProviderError,
     InvalidQueryError,
     MemoryAlreadyDeprecatedError,
     MemoryNotFoundError,
@@ -20,6 +24,7 @@ from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.chunk_repository_protocol import ChunkRepositoryProtocol
 from app.module.knowledge.protocol.memory_repository_protocol import MemoryRepositoryProtocol
 from app.module.knowledge.protocol.summary_service_protocol import SummaryServiceProtocol
+from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 from app.module.knowledge.schema.memory_schema import (
     MemoryReadSchema,
     MemorySaveSchema,
@@ -30,6 +35,24 @@ from app.module.knowledge.schema.memory_schema import (
 )
 from app.module.knowledge.service.indexer_service import IndexerService
 from app.shared.time import utcnow
+
+logger = logging.getLogger(__name__)
+
+MEMORY_TITLE_SYSTEM_PROMPT = (
+    "You name entries in a personal archive. Return a JSON object with exactly "
+    'one key, "title": a concise noun phrase in the dominant language of the '
+    "memory, 2 to 10 words and at most 80 characters. Do not use quotation "
+    "marks, a trailing period, or invented facts."
+)
+MEMORY_TITLE_LIMIT = 120
+
+
+def _fallback_title(content: str) -> str:
+    """Derive a stable title when no AI provider is configured or reachable."""
+    compact = " ".join(content.split())
+    if not compact:
+        return "Untitled memory"
+    return compact[:80].rstrip(" ,.;:!?。，；：！？") or "Untitled memory"
 
 
 class MemoryService:
@@ -43,26 +66,57 @@ class MemoryService:
         indexer: IndexerService,
         cache: CacheProtocol,
         summary_service: SummaryServiceProtocol,
+        text_generator: TextGeneratorProtocol,
     ) -> None:
         self.memory_repository = memory_repository
         self.chunk_repository = chunk_repository
         self.indexer = indexer
         self.cache = cache
         self.summary_service = summary_service
+        self.text_generator = text_generator
 
     @staticmethod
     def _to_schema(memory: MemoryModel) -> MemorySchema:
         return MemorySchema(
             memory_id=memory.id,
+            title=memory.title,
             content=memory.content,
             status=cast(MemoryStatus, memory.status),
             update_time=memory.memory_time,
             supersedes_ids=list(memory.supersedes_ids),
             superseded_by_id=memory.superseded_by_id,
+            deprecated_at=memory.deprecated_at,
+            deprecated_reason=memory.deprecated_reason,
             source=cast(MemorySource, memory.source),
             created_at=memory.created_at,
             deleted_at=memory.deleted_at,
         )
+
+    async def _generate_title(self, content: str) -> str:
+        """Name a memory before its single atomic insert.
+
+        The provider call happens before the row is written, so a memory is
+        never stored without a title. A missing provider or malformed response
+        falls back to deterministic text instead of failing the save.
+        """
+        if self.text_generator.configured:
+            try:
+                completion = await self.text_generator.complete_json(
+                    MEMORY_TITLE_SYSTEM_PROMPT,
+                    content[:8000],
+                )
+                text = completion.text.strip()
+                start = text.find("{")
+                end = text.rfind("}")
+                body = json.loads(text[start : end + 1] if start >= 0 and end > start else text)
+                raw_title = body["title"]
+                title = " ".join(str(raw_title).split()).strip(" \t\"'“”‘’")
+                title = title.rstrip("。.!?！？;；,，")
+                if title:
+                    return title[:MEMORY_TITLE_LIMIT]
+            except (AiNotConfiguredError, AiProviderError, KeyError, TypeError, ValueError):
+                logger.debug("Falling back to a derived memory title.", exc_info=True)
+        return _fallback_title(content)[:MEMORY_TITLE_LIMIT]
 
     async def save_memory(
         self,
@@ -97,8 +151,10 @@ class MemoryService:
         if memory_time.tzinfo is None:
             memory_time = memory_time.replace(tzinfo=UTC)
 
+        title = await self._generate_title(cleaned)
         memory = await self.memory_repository.add(
             MemoryModel(
+                title=title,
                 content=cleaned,
                 status=MEMORY_ACTIVE,
                 supersedes_ids=unique_ids,
@@ -126,6 +182,87 @@ class MemoryService:
             deprecated=[self._to_schema(target) for target in targets],
             summary=summary,
         )
+
+    async def update_memory(self, memory_id: int, *, content: str) -> MemorySchema:
+        """Edit one memory in place and republish its search chunk.
+
+        The old chunk stays in the ledger as history but is marked non-current.
+        Editing a deprecated memory keeps it deprecated and keeps its new chunk
+        out of retrieval; the row remains readable with its replacement content.
+        """
+        cleaned = content.strip()
+        if not cleaned:
+            raise InvalidQueryError("Memory content must not be empty.")
+        memory = await self.memory_repository.get_by_id(memory_id)
+        if memory is None or memory.deleted_at is not None:
+            raise MemoryNotFoundError(memory_id)
+        if memory.content == cleaned:
+            return self._to_schema(memory)
+
+        # Generate the new name before the single flush so body and title always
+        # change together. The fallback tracks the new body when the provider is
+        # unavailable, so a stale title never outlives an edit.
+        memory.title = await self._generate_title(cleaned)
+        memory.content = cleaned
+        await self.memory_repository.save(memory)
+        await self.chunk_repository.mark_source_not_current(SOURCE_MEMORY, memory.id)
+        await self.indexer.index_single(
+            source_kind=SOURCE_MEMORY,
+            source_id=memory.id,
+            content=memory.content,
+        )
+        if memory.status == MEMORY_DEPRECATED:
+            await self.chunk_repository.mark_source_not_current(SOURCE_MEMORY, memory.id)
+        await self.cache.bump_version()
+        return self._to_schema(memory)
+
+    async def deprecate_memory(
+        self,
+        memory_id: int,
+        *,
+        reason: str | None = None,
+    ) -> MemorySchema:
+        """Retire exactly one memory without creating a successor."""
+        deprecated = await self.deprecate_memories([memory_id], reason=reason)
+        return deprecated[0]
+
+    async def deprecate_memories(
+        self,
+        memory_ids: list[int],
+        *,
+        reason: str | None = None,
+    ) -> list[MemorySchema]:
+        """Retire several memories in one transaction, without replacements.
+
+        Every id is validated before any row changes, so a batch with one stale
+        id leaves the whole set active. The search chunks become non-current and
+        the archive cache is bumped once.
+        """
+        unique_ids = list(dict.fromkeys(memory_ids))
+        if not unique_ids:
+            raise InvalidQueryError("At least one memory id is required.")
+        if len(unique_ids) != len(memory_ids):
+            raise InvalidQueryError("deprecate contains duplicate ids.")
+        cleaned_reason = reason.strip() if isinstance(reason, str) else None
+        if not cleaned_reason:
+            cleaned_reason = None
+
+        found = await self.memory_repository.list_by_ids(unique_ids)
+        by_id = {memory.id: memory for memory in found}
+        targets: list[MemoryModel] = []
+        for memory_id in unique_ids:
+            memory = by_id.get(memory_id)
+            if memory is None or memory.deleted_at is not None:
+                raise MemoryNotFoundError(memory_id)
+            if memory.status == MEMORY_DEPRECATED:
+                raise MemoryAlreadyDeprecatedError(memory_id)
+            targets.append(memory)
+
+        for target in targets:
+            await self.memory_repository.deprecate(target, reason=cleaned_reason)
+            await self.chunk_repository.mark_source_not_current(SOURCE_MEMORY, target.id)
+        await self.cache.bump_version()
+        return [self._to_schema(target) for target in targets]
 
     async def read_memory(
         self,

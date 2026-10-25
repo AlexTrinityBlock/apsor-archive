@@ -2568,6 +2568,37 @@
         "title": "ListResponseSchema[SummarySchema]",
         "type": "object"
       },
+      "ListResponseSchema_SystemPromptBuiltinSectionSchema_": {
+        "properties": {
+          "items_per_page": {
+            "title": "Items Per Page",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/SystemPromptBuiltinSectionSchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "start_index": {
+            "title": "Start Index",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "start_index",
+          "items_per_page",
+          "resources"
+        ],
+        "title": "ListResponseSchema[SystemPromptBuiltinSectionSchema]",
+        "type": "object"
+      },
       "ListResponseSchema_SystemPromptSectionReadSchema_": {
         "properties": {
           "items_per_page": {
@@ -2667,6 +2698,26 @@
           "content"
         ],
         "title": "MemoryCreateSchema",
+        "type": "object"
+      },
+      "MemoryDeprecateSchema": {
+        "additionalProperties": false,
+        "description": "Retire one memory without recording a replacement.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "MemoryDeprecateSchema",
         "type": "object"
       },
       "MemoryReadSchema": {
@@ -2781,6 +2832,29 @@
             ],
             "title": "Deleted At"
           },
+          "deprecated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecated At"
+          },
+          "deprecated_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecated Reason"
+          },
           "memory_id": {
             "title": "Memory Id",
             "type": "integer"
@@ -2820,6 +2894,10 @@
             "title": "Supersedes Ids",
             "type": "array"
           },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
           "update_time": {
             "format": "date-time",
             "title": "Update Time",
@@ -2828,11 +2906,14 @@
         },
         "required": [
           "memory_id",
+          "title",
           "content",
           "status",
           "update_time",
           "supersedes_ids",
           "superseded_by_id",
+          "deprecated_at",
+          "deprecated_reason",
           "source",
           "created_at",
           "deleted_at"
@@ -2869,6 +2950,10 @@
             "title": "Status",
             "type": "string"
           },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
           "update_time": {
             "format": "date-time",
             "title": "Update Time",
@@ -2877,6 +2962,7 @@
         },
         "required": [
           "memory_id",
+          "title",
           "update_time",
           "content",
           "status",
@@ -2884,6 +2970,23 @@
           "matched_by"
         ],
         "title": "MemorySearchResultSchema",
+        "type": "object"
+      },
+      "MemoryUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace the content of one existing memory.",
+        "properties": {
+          "content": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "MemoryUpdateSchema",
         "type": "object"
       },
       "PathFileSchema": {
@@ -4002,6 +4105,65 @@
         "title": "SummarySearchResultSchema",
         "type": "object"
       },
+      "SystemPromptBuiltinSectionSchema": {
+        "description": "One built-in prompt section, with its effective body and edit state.",
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "customized": {
+            "title": "Customized",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "body",
+          "customized",
+          "updated_at"
+        ],
+        "title": "SystemPromptBuiltinSectionSchema",
+        "type": "object"
+      },
+      "SystemPromptBuiltinUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace one built-in section body; titles and order stay canonical.",
+        "properties": {
+          "body": {
+            "maxLength": 32000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "SystemPromptBuiltinUpdateSchema",
+        "type": "object"
+      },
       "SystemPromptReorderSchema": {
         "additionalProperties": false,
         "description": "The complete new order; every existing section id must appear once.",
@@ -4059,7 +4221,7 @@
         "type": "object"
       },
       "SystemPromptSectionReadSchema": {
-        "description": "One persisted section returned to the browser.",
+        "description": "One persisted custom section returned to the browser.",
         "properties": {
           "body": {
             "title": "Body",
@@ -4289,6 +4451,17 @@
             "format": "date-time",
             "title": "Time",
             "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
           }
         },
         "required": [
@@ -4406,12 +4579,63 @@
         "title": "TimelineSkipSchema",
         "type": "object"
       },
+      "UserProfileUpdateSchema": {
+        "additionalProperties": false,
+        "description": "The owner's editable display identity and self-introduction.",
+        "properties": {
+          "bio": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bio"
+          },
+          "display_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "title": "UserProfileUpdateSchema",
+        "type": "object"
+      },
       "UserSchema": {
         "properties": {
+          "bio": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bio"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
           },
           "last_login_at": {
             "anyOf": [
@@ -4437,6 +4661,8 @@
         "required": [
           "user_id",
           "username",
+          "display_name",
+          "bio",
           "created_at",
           "last_login_at"
         ],
@@ -5681,6 +5907,103 @@
         ]
       }
     },
+    "/api/v1/agent/settings/system-prompt/builtin": {
+      "get": {
+        "description": "List the four built-in prompt sections with any owner overrides.",
+        "operationId": "listBuiltinSystemPromptSections",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptBuiltinSectionSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Builtin System Prompt Sections",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/settings/system-prompt/builtin/reset": {
+      "post": {
+        "description": "Remove every built-in override.",
+        "operationId": "resetBuiltinSystemPromptSections",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptBuiltinSectionSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reset Builtin System Prompt Sections",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/settings/system-prompt/builtin/{key}": {
+      "put": {
+        "description": "Replace one built-in body; its title and position stay canonical.",
+        "operationId": "updateBuiltinSystemPromptSection",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemPromptBuiltinUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_SystemPromptBuiltinSectionSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Builtin System Prompt Section",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
     "/api/v1/agent/settings/system-prompt/order": {
       "put": {
         "description": "Replace the complete section order.",
@@ -5949,6 +6272,46 @@
           }
         },
         "summary": "Get Me",
+        "tags": [
+          "auth"
+        ]
+      },
+      "patch": {
+        "description": "Update the owner's display name and self-introduction.",
+        "operationId": "updateCurrentUser",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserProfileUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Me",
         "tags": [
           "auth"
         ]
@@ -6930,6 +7293,117 @@
           }
         },
         "summary": "Read Memory",
+        "tags": [
+          "memories"
+        ]
+      },
+      "patch": {
+        "description": "Edit one memory's text and republish its search chunk.",
+        "operationId": "updateMemory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/api/v1/memories/{memory_id}/deprecate": {
+      "post": {
+        "description": "Retire one memory without recording a replacement.",
+        "operationId": "deprecateMemory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MemoryDeprecateSchema"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deprecate Memory",
         "tags": [
           "memories"
         ]

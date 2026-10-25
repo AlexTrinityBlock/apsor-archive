@@ -70,6 +70,7 @@ function citationFromHref(href: string): CitationToken | null {
 
 function buildComponents(
   onOpenCitation: ((token: CitationToken) => void) | undefined,
+  memoryTitles: ReadonlyMap<number, string>,
 ): Components {
   return {
     a: ({ href, children }) => {
@@ -83,6 +84,11 @@ function buildComponents(
           <CitationChip
             token={citation}
             label={children}
+            memoryTitle={
+              citation.kind === "memory"
+                ? memoryTitles.get(citation.id)
+                : undefined
+            }
             onOpen={onOpenCitation}
           />
         );
@@ -134,8 +140,11 @@ function buildComponents(
 
 interface MarkdownBodyProps {
   readonly markdown: string;
+  readonly memoryTitles?: ReadonlyMap<number, string>;
   readonly onOpenCitation?: (token: CitationToken) => void;
 }
+
+const NO_MEMORY_TITLES: ReadonlyMap<number, string> = new Map();
 
 /**
  * Renders model prose with GFM and safe citation links. Raw HTML is skipped,
@@ -143,11 +152,12 @@ interface MarkdownBodyProps {
  */
 export const MarkdownBody = memo(function MarkdownBody({
   markdown,
+  memoryTitles = NO_MEMORY_TITLES,
   onOpenCitation,
 }: MarkdownBodyProps) {
   const components = useMemo(
-    () => buildComponents(onOpenCitation),
-    [onOpenCitation],
+    () => buildComponents(onOpenCitation, memoryTitles),
+    [memoryTitles, onOpenCitation],
   );
 
   return (

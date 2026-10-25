@@ -16,6 +16,11 @@ import { useDebouncedValue } from "../../hook/useDebouncedValue";
 import { formatDate, formatDateTime, formatNumber } from "../../../lib/format";
 
 import {
+  MemoryDeprecateDialog,
+  MemoryEditDialog,
+  type MemoryActionTarget,
+} from "./MemoryActionDialogs";
+import {
   MemoryEmptyState,
   MemoryErrorState,
   MemorySkeleton,
@@ -33,11 +38,12 @@ type StatusFilter = "all" | "active" | "deprecated";
 const STATUS_FILTERS: ReadonlyArray<{ readonly value: StatusFilter; readonly label: string }> = [
   { value: "all", label: "All" },
   { value: "active", label: "Active" },
-  { value: "deprecated", label: "Superseded" },
+  { value: "deprecated", label: "Deprecated" },
 ];
 
 interface MemoryCardModel {
   readonly memory_id: number;
+  readonly title?: string;
   readonly content: string;
   readonly status: "active" | "deprecated";
   readonly update_time: string;
@@ -45,6 +51,7 @@ interface MemoryCardModel {
   readonly created_at?: string;
   readonly supersedes_ids?: readonly number[];
   readonly superseded_by_id?: number | null;
+  readonly deprecated_reason?: string | null;
   readonly score?: number;
   readonly matched_by?: readonly string[];
 }
@@ -58,7 +65,7 @@ function filterNoun(filter: StatusFilter): string {
     return "active";
   }
   if (filter === "deprecated") {
-    return "superseded";
+    return "deprecated";
   }
   return "matching";
 }
@@ -127,9 +134,14 @@ function SupersedeBanner({ memory }: { readonly memory: MemoryCardModel }) {
               . Kept in the ledger; no longer retrieved.
             </>
           ) : (
-            "Superseded and kept in the ledger for provenance."
+            "Deprecated directly and kept in the ledger for provenance."
           )}
         </span>
+        {memory.deprecated_reason ? (
+          <span className="memory-card__banner-reason">
+            Reason: {memory.deprecated_reason}
+          </span>
+        ) : null}
       </div>
     );
   }
@@ -155,9 +167,13 @@ function SupersedeBanner({ memory }: { readonly memory: MemoryCardModel }) {
 function MemoryCard({
   memory,
   searchMode = false,
+  onEdit,
+  onDeprecate,
 }: {
   readonly memory: MemoryCardModel;
   readonly searchMode?: boolean;
+  readonly onEdit: (memory: MemoryCardModel) => void;
+  readonly onDeprecate: (memory: MemoryCardModel) => void;
 }) {
   const preview = splitMemoryPreview(memory.content);
   const href = `/memory/${memory.memory_id}`;
@@ -180,7 +196,7 @@ function MemoryCard({
       </header>
 
       <h2 className="memory-card__thesis">
-        <Link to={href}>{preview.thesis}</Link>
+        <Link to={href}>{memory.title || preview.thesis}</Link>
       </h2>
       {preview.body ? <p className="memory-card__body">{preview.body}</p> : null}
 
@@ -207,6 +223,22 @@ function MemoryCard({
         </div>
         <div className="memory-card__meta">
           {memory.created_at ? <span>pressed {formatDate(memory.created_at)}</span> : null}
+          <button
+            type="button"
+            className="memory-card__action"
+            onClick={() => onEdit(memory)}
+          >
+            Edit
+          </button>
+          {memory.status === "active" ? (
+            <button
+              type="button"
+              className="memory-card__action is-danger"
+              onClick={() => onDeprecate(memory)}
+            >
+              Deprecate
+            </button>
+          ) : null}
           <Link className="memory-card__read" to={href}>
             Read record
             <Icon name="arrow-right" size={13} />
@@ -300,6 +332,8 @@ interface SearchResultsProps {
   readonly onRetry: () => void;
   readonly onClearSearch: () => void;
   readonly onShowAll: () => void;
+  readonly onEdit: (memory: MemoryCardModel) => void;
+  readonly onDeprecate: (memory: MemoryCardModel) => void;
 }
 
 function SearchResults({
@@ -314,6 +348,8 @@ function SearchResults({
   onRetry,
   onClearSearch,
   onShowAll,
+  onEdit,
+  onDeprecate,
 }: SearchResultsProps) {
   if (loading) {
     return <MemorySkeleton label="Searching the vault" count={3} />;
@@ -335,7 +371,13 @@ function SearchResults({
     return (
       <div className="memory-list">
         {filtered.map((memory) => (
-          <MemoryCard key={memory.memory_id} memory={memory} searchMode />
+          <MemoryCard
+            key={memory.memory_id}
+            memory={memory}
+            searchMode
+            onEdit={onEdit}
+            onDeprecate={onDeprecate}
+          />
         ))}
       </div>
     );
@@ -394,6 +436,8 @@ interface BrowseResultsProps {
   readonly onLoadMore: () => void;
   readonly onRetryLoadMore: () => void;
   readonly onShowAll: () => void;
+  readonly onEdit: (memory: MemoryCardModel) => void;
+  readonly onDeprecate: (memory: MemoryCardModel) => void;
 }
 
 function BrowseResults({
@@ -411,6 +455,8 @@ function BrowseResults({
   onLoadMore,
   onRetryLoadMore,
   onShowAll,
+  onEdit,
+  onDeprecate,
 }: BrowseResultsProps) {
   if (loading) {
     return <MemorySkeleton label="Reading the memory vault" count={3} />;
@@ -495,7 +541,12 @@ function BrowseResults({
       ) : (
         <div className="memory-list">
           {filtered.map((memory) => (
-            <MemoryCard key={memory.memory_id} memory={memory} />
+            <MemoryCard
+              key={memory.memory_id}
+              memory={memory}
+              onEdit={onEdit}
+              onDeprecate={onDeprecate}
+            />
           ))}
         </div>
       )}
@@ -506,12 +557,50 @@ function BrowseResults({
   );
 }
 
+function VaultActionDialogs({
+  editTarget,
+  deprecateTarget,
+  onCloseEdit,
+  onCloseDeprecate,
+}: {
+  readonly editTarget: MemoryActionTarget | null;
+  readonly deprecateTarget: MemoryActionTarget | null;
+  readonly onCloseEdit: () => void;
+  readonly onCloseDeprecate: () => void;
+}) {
+  return (
+    <>
+      {editTarget ? (
+        <MemoryEditDialog memory={editTarget} onClose={onCloseEdit} />
+      ) : null}
+      {deprecateTarget ? (
+        <MemoryDeprecateDialog
+          memory={deprecateTarget}
+          onClose={onCloseDeprecate}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function toActionTarget(memory: MemoryCardModel): MemoryActionTarget {
+  return {
+    memory_id: memory.memory_id,
+    title: memory.title ?? "",
+    content: memory.content,
+    status: memory.status,
+  };
+}
+
 /** The vault index at `/memory`: browse, search, filter, and load older pages. */
 export function MemoryVault() {
   const searchInputId = useId();
   const [searchDraft, setSearchDraft] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [requestedPages, setRequestedPages] = useState(1);
+  const [editTarget, setEditTarget] = useState<MemoryActionTarget | null>(null);
+  const [deprecateTarget, setDeprecateTarget] =
+    useState<MemoryActionTarget | null>(null);
 
   const debouncedDraft = useDebouncedValue(searchDraft, SEARCH_DEBOUNCE_MS);
   const isSearchMode = searchDraft.trim().length > 0;
@@ -581,6 +670,7 @@ export function MemoryVault() {
     for (const result of search.data?.memory_results ?? []) {
       const card: MemoryCardModel = {
         memory_id: result.memory_id,
+        title: result.title,
         content: result.content,
         status: result.status === "deprecated" ? "deprecated" : "active",
         update_time: result.update_time,
@@ -632,12 +722,20 @@ export function MemoryVault() {
     setSearchDraft("");
   };
 
+  const openEdit = (memory: MemoryCardModel) => {
+    setEditTarget(toActionTarget(memory));
+  };
+
+  const openDeprecate = (memory: MemoryCardModel) => {
+    setDeprecateTarget(toActionTarget(memory));
+  };
+
   return (
     <div className="content-container memory-page memory-vault">
       <PageHeader
         eyebrow="Memory · vault"
         title="Memory Vault"
-        description="Every pressed memory, newest occurrence first. Active crystals stay in search and the timeline; superseded crystals remain readable with their lineage."
+        description="Every pressed memory, newest occurrence first. Active crystals stay in search and the timeline; deprecated crystals remain readable with their lineage."
         meta={
           <span className="memory-masthead__counts">
             <span>
@@ -648,7 +746,7 @@ export function MemoryVault() {
             </span>
             <span>
               <strong>{supersededCount !== undefined ? formatNumber(supersededCount) : "—"}</strong>{" "}
-              superseded
+              deprecated
             </span>
           </span>
         }
@@ -725,6 +823,8 @@ export function MemoryVault() {
           }}
           onClearSearch={handleClearSearch}
           onShowAll={() => setStatusFilter("all")}
+          onEdit={openEdit}
+          onDeprecate={openDeprecate}
         />
       ) : (
         <BrowseResults
@@ -748,8 +848,17 @@ export function MemoryVault() {
             }
           }}
           onShowAll={() => setStatusFilter("all")}
+          onEdit={openEdit}
+          onDeprecate={openDeprecate}
         />
       )}
+
+      <VaultActionDialogs
+        editTarget={editTarget}
+        deprecateTarget={deprecateTarget}
+        onCloseEdit={() => setEditTarget(null)}
+        onCloseDeprecate={() => setDeprecateTarget(null)}
+      />
     </div>
   );
 }

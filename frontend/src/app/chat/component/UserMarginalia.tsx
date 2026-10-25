@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { useAuth } from "../../auth/AuthProvider";
 import { formatTime } from "../../../lib/format";
 
 interface UserMarginaliaProps {
@@ -16,15 +17,17 @@ export function UserMarginalia({
   pending = false,
   action,
 }: UserMarginaliaProps) {
+  const { user } = useAuth();
+  const name = user?.display_name || user?.username || "Owner";
   return (
     <article
       className={pending ? "chat-turn chat-turn--user is-pending" : "chat-turn chat-turn--user"}
     >
       <header className="chat-turn__author">
         <span className="chat-turn__mark" aria-hidden="true">
-          K
+          {name.slice(0, 1).toUpperCase()}
         </span>
-        <span>{pending ? "Keeper · sending" : "Keeper"}</span>
+        <span>{pending ? `${name} · sending` : name}</span>
         {createdAt ? (
           <time dateTime={createdAt}>{formatTime(createdAt)}</time>
         ) : (

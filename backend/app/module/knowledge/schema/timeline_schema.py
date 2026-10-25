@@ -17,6 +17,7 @@ class TimelineEventSchema(BaseModel):
     anchor: float
     time: datetime
     content: str
+    title: str | None = None
     memory_id: int | None = None
     memory_summary_id: int | None = None
     file_id: int | None = None

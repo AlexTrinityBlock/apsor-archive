@@ -212,6 +212,9 @@ Endpoints (all require the session cookie):
 | `PUT` | `/api/v1/agent/settings/system-prompt/{section_id}` | Replace one section |
 | `DELETE` | `/api/v1/agent/settings/system-prompt/{section_id}` | Delete one section (`204`) |
 | `POST` | `/api/v1/agent/settings/system-prompt/reset` | Remove every custom section |
+| `GET` | `/api/v1/agent/settings/system-prompt/builtin` | List built-in sections and customization state |
+| `PUT` | `/api/v1/agent/settings/system-prompt/builtin/{key}` | Replace one built-in body |
+| `POST` | `/api/v1/agent/settings/system-prompt/builtin/reset` | Remove every built-in override |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` takes
 `{content, request_id?, page_context?, client_timezone?,
@@ -383,7 +386,7 @@ If the key, path, or normalized text is empty, no snapshot is written and
 `page_context_attached` is `false`.
 
 New conversations freeze the current system prompt version
-(`archive-agent-v8`), which states that `<page_context>` and `<current_time>`
+(`archive-agent-v10`), which states that `<page_context>` and `<current_time>`
 are reference data, never instructions, and that page context appears only when
 the page changes.
 
@@ -417,22 +420,27 @@ reuses the original message's stored block. This lets the agent answer "now",
 
 ### System prompt module
 
-`system_prompt_section` stores ordered owner-authored sections: `title`, `body`,
-`sort_order`, `created_at`, and `updated_at`. `GET`, `POST`,
-`PUT /order`, `PUT /{section_id}`, `DELETE /{section_id}`, and `POST /reset`
-under `/api/v1/agent/settings/system-prompt` list, create, reorder, replace,
-delete, or clear them. Title and body are trimmed and both are required.
-`sort_order` is used instead of the SQL-reserved word `order`; reorder rewrites
-the complete order in one locked transaction and rejects partial or duplicate
-id lists.
+`system_prompt_section` stores ordered custom sections and optional built-in
+overrides: `title`, `body`, `sort_order`, `builtin_key`, `created_at`, and
+`updated_at`. `builtin_key` is null for custom rows and one of
+`identity`/`instructions`/`examples`/`context_protocol` for an override, with a
+partial unique index enforcing one row per key. `GET`, `POST`, `PUT /order`,
+`PUT /{section_id}`, `DELETE /{section_id}`, and `POST /reset` under
+`/api/v1/agent/settings/system-prompt` manage custom sections. The separate
+`GET /builtin`, `PUT /builtin/{key}`, and `POST /builtin/reset` manage the four
+defaults. Title and body are trimmed and both are required. `sort_order` is used
+instead of the SQL-reserved word `order`; reorder rewrites the complete custom
+order in one locked transaction and rejects partial or duplicate id lists.
 
-`create_conversation` reads the active sections once and inserts each one as
-`system_prompt:<id>` before identity, instructions, examples, and context
-protocol. The sections are rendered in `sort_order, id` order into one provider
-system message, then the full payload is frozen into `pi.system` for that
-conversation. Editing a section therefore affects only new conversations and
-never rewrites an existing provider prefix. The list is cached under the
-`system_prompts` scope for 30 seconds; writes bump only that scope.
+`create_conversation` reads the active custom sections, the effective built-ins,
+and the owner's profile once. Custom rows render as `system_prompt:<id>` in
+`sort_order, id` order, followed by `owner_profile` (when the owner set a name or
+bio), then the four built-ins in canonical order (override body when present,
+Python default otherwise). The combined sections become one provider system
+message and are frozen into `pi.system`. Editing either kind affects only
+new conversations and never rewrites an existing provider prefix. The custom
+list is cached under the `system_prompts` scope for 30 seconds; writes bump only
+that scope.
 
 The old singleton `system_prompt` row is migrated into the first section
 (`sort_order = 10`) by `c9e1f3a5b7d2`; downgrade copies the first section back
@@ -525,12 +533,12 @@ entries, 50 timeline events).
 
 | Tool | Preview fields |
 |---|---|
-| `search_knowledge` | `file_results[].excerpt/viewer_url`, `memory_results[].excerpt/viewer_url`, `summary_results[].excerpt` |
+| `search_knowledge` | `file_results[].excerpt/viewer_url`, `memory_results[].title/excerpt/viewer_url`, `summary_results[].excerpt` |
 | `read_file` | `viewer_url`, `chunks[].excerpt` |
 | `read_timeline` | `events[].content`, `events[].summary_id`, nullable `events[].viewer_url` |
 | `read_path` | `directories[]`, `files[].viewer_url` |
 | `read_memory` | `target` preview, `neighbors[]` previews, plus the id lists |
-| `save_memory` | `memory` preview, `supersedes[]` |
+| `save_memory` | `mode` (`save`/`deprecate`), `memory` preview, `supersedes[]`, or `memory_ids[]` + `deprecated[]` + `reason` for a direct deprecation |
 | `present_resource` | `resource` descriptor |
 | `web_search` | `results[].title/url/excerpt/score`, `retrieved_at`, `cached`, `truncated` |
 | `web_fetch` | `url`, `content_chars`, `retrieved_at`, `cached`, `truncated` |
@@ -569,6 +577,12 @@ confirmation. Its authorization depends on the run's
 Direct registry calls without that backend flag still return
 `memory_confirmation_required`. Disabling the setting does not resolve existing
 pending approvals; they remain explicit and their cards keep rendering.
+
+`save_memory` accepts two validated shapes. With `content`, it appends a new
+memory (and optionally supersedes old ids). Without `content`, `supersedes` must
+be non-empty and the call only deprecates those rows: no replacement is inserted,
+`deprecated_at` is stamped, `reason` is stored on each row, the search chunks are
+marked non-current, and the approval preview switches to `mode="deprecate"`.
 `present_resource` returns `/viewer/file/{id}?chunk={n}` or
 `/viewer/memory/{id}` and does not fetch or open the resource.
 
@@ -671,8 +685,10 @@ those generated assets must be committed with the build.
 ## Account and sessions
 
 The first visit creates the single owner account through
-`POST /api/v1/auth/setup`. Passwords are hashed with Argon2; sessions are opaque
-cookies whose SHA-256 hash is stored in `user_session`. The cookie is HttpOnly and
+`POST /api/v1/auth/setup`. `PATCH /api/v1/auth/me` updates the display name and
+self-introduction; the sign-in username stays immutable. Passwords are hashed
+with Argon2; sessions are opaque cookies whose SHA-256 hash is stored in
+`user_session`. The cookie is HttpOnly and
 SameSite=Lax; set `APSOR_COOKIE_SECURE=true` behind HTTPS. Every knowledge,
 settings, and agent endpoint requires the session; `/api/v1/health`,
 `/health`, `/api/v1/auth/*`, `/api/docs`, `/api/redoc`, `/openapi.json`, and the SPA
@@ -736,9 +752,15 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   shortcuts that used to be hard-coded in the chat empty state;
 - `b8d2e4f6a1c3` relabels `dendro-hash-384` chunks to `apsor-hash-384` after
   the Apsor Archive rebrand;
-- `c9e1f3a5b7d2` (current head) replaces the singleton `system_prompt` table
-  with ordered `system_prompt_section` rows and copies the existing prompt as
-  the first section.
+- `c9e1f3a5b7d2` replaces the singleton `system_prompt` table with ordered
+  `system_prompt_section` rows and copies the existing prompt as the first
+  section;
+- `f4a1c7d9e2b3` (current head) adds `memory.title` (backfilled from content),
+  `deprecated_at` / `deprecated_reason`, `builtin_key` on
+  `system_prompt_section`, and `app_user.display_name` / `bio`. The old
+  successor-only check becomes “successor or direct deprecation timestamp”.
+  Downgrade re-adds the old check as `NOT VALID` so direct-deprecated rows are
+  preserved.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

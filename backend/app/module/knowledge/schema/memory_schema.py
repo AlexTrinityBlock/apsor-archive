@@ -16,11 +16,14 @@ class MemorySchema(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     memory_id: int
+    title: str
     content: str
     status: MemoryStatus
     update_time: datetime
     supersedes_ids: list[int]
     superseded_by_id: int | None
+    deprecated_at: datetime | None
+    deprecated_reason: str | None
     source: MemorySource
     created_at: datetime
     deleted_at: datetime | None
@@ -35,6 +38,22 @@ class MemoryCreateSchema(BaseModel):
     supersedes: list[int] = Field(default_factory=list, max_length=50)
     occurred_at: datetime | None = None
     source: MemorySource = "manual"
+
+
+class MemoryUpdateSchema(BaseModel):
+    """Replace the content of one existing memory."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = Field(min_length=1, max_length=8000)
+
+
+class MemoryDeprecateSchema(BaseModel):
+    """Retire one memory without recording a replacement."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class SummarySchema(BaseModel):

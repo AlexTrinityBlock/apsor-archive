@@ -71,7 +71,7 @@ class AgentInvalidSystemPromptError(AgentError):
 
 
 class AgentSystemPromptNotFoundError(AgentError):
-    def __init__(self, section_id: int) -> None:
+    def __init__(self, section_id: int | str) -> None:
         super().__init__(f"System prompt section {section_id} was not found.")
 
 

@@ -20,6 +20,7 @@ import { finishReasonTone } from "./status";
 interface AssistantEntryProps {
   readonly entry: AgentEntrySchema;
   readonly toolResults: ReadonlyMap<string, ToolResultInfo>;
+  readonly memoryTitles?: ReadonlyMap<number, string>;
   readonly action?: ReactNode;
   readonly selectedTraceId?: string | null;
   readonly onSelectTrace?: (traceId: string) => void;
@@ -43,6 +44,7 @@ function usageRows(
 export function AssistantEntry({
   entry,
   toolResults,
+  memoryTitles,
   action,
   selectedTraceId = null,
   onSelectTrace,
@@ -71,7 +73,11 @@ export function AssistantEntry({
   if (text.length > 0) {
     body = (
       <div className="chat-turn__bubble">
-        <MarkdownBody markdown={text} onOpenCitation={onOpenCitation} />
+        <MarkdownBody
+          markdown={text}
+          memoryTitles={memoryTitles}
+          onOpenCitation={onOpenCitation}
+        />
       </div>
     );
   } else if (calls.length === 0 && !meta.error) {
@@ -129,6 +135,11 @@ export function AssistantEntry({
             <CitationChip
               key={`${token.kind}:${token.id}:${token.chunk ?? ""}`}
               token={token}
+              memoryTitle={
+                token.kind === "memory"
+                  ? memoryTitles?.get(token.id)
+                  : undefined
+              }
               onOpen={onOpenCitation}
             />
           ))}

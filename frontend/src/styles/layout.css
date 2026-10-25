@@ -709,3 +709,31 @@
     font-size: 26px;
   }
 }
+
+.rail-account__identity {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.rail-account__identity:hover .rail-account__copy strong {
+  color: var(--accent-seal);
+}
+
+.rail-account__identity:focus-visible {
+  outline: 1px solid var(--accent-seal);
+  outline-offset: 3px;
+}
+
+.app-shell.rail-collapsed .rail-account__identity {
+  flex: none;
+  justify-content: center;
+}

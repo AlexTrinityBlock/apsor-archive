@@ -288,8 +288,8 @@ export function MethodPage() {
             <p>Apsor Archive · The annual ring archive · Rev. 2026.10</p>
           </div>
           <nav className="method-colophon__links" aria-label="Archive links">
-            <Link className="text-link" to="/">
-              Overview
+            <Link className="text-link" to="/dashboard">
+              Dashboard
             </Link>
             <Link className="text-link" to="/questions">
               Questions

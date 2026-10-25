@@ -56,5 +56,18 @@ class SystemPromptRepositoryProtocol(Protocol):
 
     async def clear_sections(self) -> None: ...
 
+    async def list_builtin_overrides(self) -> dict[str, SystemPromptSection]: ...
+
+    async def upsert_builtin_override(
+        self,
+        *,
+        key: str,
+        title: str,
+        body: str,
+        now: datetime,
+    ) -> SystemPromptSection: ...
+
+    async def clear_builtin_overrides(self) -> None: ...
+
 
 __all__ = ["SystemPromptRepositoryProtocol"]
