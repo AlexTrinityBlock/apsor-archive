@@ -6,7 +6,7 @@ import json
 import logging
 import mimetypes
 import zipfile
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
@@ -62,6 +62,7 @@ from app.module.knowledge.schema.file_schema import (
     DirectorySchema,
     FileChunksSchema,
     FileSchema,
+    LibraryDeleteResultSchema,
     PathFileSchema,
     PathListingSchema,
 )
@@ -1094,6 +1095,63 @@ class FileService:
         file.updated_at = now
         await self.chunk_repository.mark_source_not_current(SOURCE_FILE, file.id)
         await self.cache.bump_version()
+
+    async def delete_library_selection(
+        self,
+        *,
+        file_ids: Sequence[int],
+        folder_paths: Sequence[str],
+    ) -> LibraryDeleteResultSchema:
+        """原子地軟刪除選取的檔案，並遞迴軟刪除所選資料夾下的內容。
+
+        資料夾只保留最上層路徑，子資料夾由父路徑遞迴涵蓋；folder rows 直接
+        刪除，歷史 file rows 與原始 bytes 一律保留。
+        """
+        normalized_folders = list(
+            dict.fromkeys(self._normalized_directory(path) for path in folder_paths)
+        )
+        unique_file_ids = list(dict.fromkeys(file_ids))
+
+        # 先按深度排序，父資料夾一定排在子資料夾前面，再濾掉被涵蓋的路徑。
+        top_level_folders: list[str] = []
+        for path in sorted(normalized_folders, key=lambda value: len(path_segments(value))):
+            if any(path.startswith(f"{parent}/") for parent in top_level_folders):
+                continue
+            top_level_folders.append(path)
+
+        if not unique_file_ids and not top_level_folders:
+            raise InvalidPathError("Select at least one file or folder.")
+
+        files = await self.file_repository.list_current_for_update(
+            file_ids=unique_file_ids,
+            folder_paths=top_level_folders,
+        )
+        files_by_id = {file.id: file for file in files}
+        for file_id in unique_file_ids:
+            if file_id not in files_by_id:
+                raise FileRecordNotFoundError(file_id)
+
+        folders = await self.folder_repository.list_for_update(top_level_folders)
+        found_paths = {folder.path for folder in folders}
+        for path in top_level_folders:
+            if path not in found_paths:
+                raise PathNotFoundError(path)
+
+        now = utcnow()
+        for file in files:
+            file.is_current = False
+            file.deleted_at = now
+            file.updated_at = now
+        deleted_file_ids = sorted(files_by_id)
+        await self.chunk_repository.mark_sources_not_current(SOURCE_FILE, deleted_file_ids)
+        await self.folder_repository.delete_many(folders)
+        await self.cache.bump_version()
+        return LibraryDeleteResultSchema(
+            deleted_file_ids=deleted_file_ids,
+            deleted_folder_paths=top_level_folders,
+            deleted_files=len(deleted_file_ids),
+            deleted_folders=len(folders),
+        )
 
     async def download(self, file_id: int) -> tuple[bytes, str, str]:
         original = await self.read_original(file_id)

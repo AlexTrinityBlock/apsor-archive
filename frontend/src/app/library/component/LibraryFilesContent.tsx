@@ -20,7 +20,9 @@ interface LibraryFilesContentProps {
   readonly seeding: boolean;
   readonly selecting: boolean;
   readonly selectedFileIds: ReadonlySet<number>;
+  readonly selectedFolderPaths: ReadonlySet<string>;
   readonly onToggleSelected: (fileId: number) => void;
+  readonly onToggleSelectedFolder: (path: string) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onOpenFile: (fileId: number) => void;
   readonly onEditFile: (fileId: number) => void;
@@ -57,7 +59,9 @@ export function LibraryFilesContent({
   seeding,
   selecting,
   selectedFileIds,
+  selectedFolderPaths,
   onToggleSelected,
+  onToggleSelectedFolder,
   onOpenFolder,
   onOpenFile,
   onEditFile,
@@ -84,7 +88,9 @@ export function LibraryFilesContent({
         query={query}
         selecting={selecting}
         selectedFileIds={selectedFileIds}
+        selectedFolderPaths={selectedFolderPaths}
         onToggleSelected={onToggleSelected}
+        onToggleSelectedFolder={onToggleSelectedFolder}
         onOpenFolder={onOpenFolder}
         onOpenFile={onOpenFile}
         onEditFile={onEditFile}
@@ -118,7 +124,9 @@ export function LibraryFilesContent({
         query={query}
         selecting={selecting}
         selectedFileIds={selectedFileIds}
+        selectedFolderPaths={selectedFolderPaths}
         onToggleSelected={onToggleSelected}
+        onToggleSelectedFolder={onToggleSelectedFolder}
         onOpenFolder={onOpenFolder}
         onOpenFile={onOpenFile}
         onFileContextMenu={onFileContextMenu}
@@ -136,7 +144,9 @@ export function LibraryFilesContent({
       query={query}
       selecting={selecting}
       selectedFileIds={selectedFileIds}
+      selectedFolderPaths={selectedFolderPaths}
       onToggleSelected={onToggleSelected}
+      onToggleSelectedFolder={onToggleSelectedFolder}
       onOpenFolder={onOpenFolder}
       onOpenFile={onOpenFile}
       onEditFile={onEditFile}

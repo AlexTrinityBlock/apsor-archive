@@ -47,6 +47,23 @@ class ChunkRepository:
             .values(is_current=False)
         )
 
+    async def mark_sources_not_current(
+        self,
+        source_kind: str,
+        source_ids: Sequence[int],
+    ) -> None:
+        if not source_ids:
+            return
+        await self.session.execute(
+            update(ChunkModel)
+            .where(
+                ChunkModel.source_kind == source_kind,
+                ChunkModel.source_id.in_(source_ids),
+                ChunkModel.is_current.is_(True),
+            )
+            .values(is_current=False)
+        )
+
     async def mark_source_current(self, source_kind: str, source_id: int) -> None:
         """Publish the chunks of a staged file after its job succeeds."""
         await self.session.execute(
