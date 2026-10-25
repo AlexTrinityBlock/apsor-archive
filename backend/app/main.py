@@ -49,9 +49,9 @@ from app.shared.time import utcnow
 
 _NOT_BUILT = """<!doctype html>
 <html lang="en">
-  <head><meta charset="utf-8"><title>DendroMatrix</title></head>
+  <head><meta charset="utf-8"><title>Apsor Archive</title></head>
   <body style="font-family: Georgia, serif; max-width: 42rem; margin: 4rem auto">
-    <h1>DendroMatrix</h1>
+    <h1>Apsor Archive</h1>
     <p>The API is running, but the web client has not been built yet.</p>
     <pre>cd frontend &amp;&amp; bun install &amp;&amp; bun run build</pre>
     <p>The OpenAPI docs live at <a href="/docs">/docs</a>.</p>

@@ -64,7 +64,7 @@ async function responseError(response: Response): Promise<ViewerResourceError> {
     }
   }
   if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event("dendromatrix:unauthorized"));
+    window.dispatchEvent(new Event("apsor-archive:unauthorized"));
   }
   return new ViewerResourceError(response.status, code, detail);
 }

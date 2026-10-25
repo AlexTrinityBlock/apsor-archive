@@ -16,7 +16,7 @@ import type { SystemPromptReadSchema } from "../../generated-apis-types/schemas"
 import { apiErrorMessage } from "./settings-utils";
 import { SettingsDialog } from "./SettingsDialog";
 
-const COLLAPSE_KEY = "dendromatrix.settings.systemPromptOpen";
+const COLLAPSE_KEY = "apsor-archive.settings.systemPromptOpen";
 
 function initiallyOpen(): boolean {
   try {

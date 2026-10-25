@@ -1,13 +1,13 @@
-# DendroMatrix Backend
+# Apsor Archive Backend
 
-FastAPI service for the DendroMatrix knowledge and memory archive.
+FastAPI service for the Apsor Archive knowledge and memory archive.
 
 ## Run
 
 ```bash
 uv sync
 uv run alembic upgrade head
-uv run dendromatrix --host 127.0.0.1 --port 8000 --reload
+uv run apsor-archive --host 127.0.0.1 --port 8000 --reload
 ```
 
 The API expects PostgreSQL and Valkey. The repository root has
@@ -19,19 +19,19 @@ docker compose -f ../docker-compose.dev.yml up -d --wait
 
 Default settings:
 
-- `DENDRO_DATABASE_URL=postgresql+psycopg://dendro:dendro@127.0.0.1:55432/dendromatrix`
-- `DENDRO_CACHE_URL=redis://127.0.0.1:56379/0`
-- `DENDRO_DATA_DIR=backend/data`
-- `DENDRO_STATIC_DIR` defaults to the repository's `frontend/dist`
-- `DENDRO_TIMEZONE=Asia/Taipei`
+- `APSOR_DATABASE_URL=postgresql+psycopg://apsor:apsor@127.0.0.1:55432/apsor_archive`
+- `APSOR_CACHE_URL=redis://127.0.0.1:56379/0`
+- `APSOR_DATA_DIR=backend/data`
+- `APSOR_STATIC_DIR` defaults to the repository's `frontend/dist`
+- `APSOR_TIMEZONE=Asia/Taipei`
 
-Every setting is prefixed with `DENDRO_`. The app also reads `.env`,
+Every setting is prefixed with `APSOR_`. The app also reads `.env`,
 `.secrets/deepseek.env`, and `.secrets/openai.env` for local development
 (using both the current directory and its parent).
 
 ## AI
 
-Set `DENDRO_DEEPSEEK_API_KEY`, or configure a chat provider in Settings, to
+Set `APSOR_DEEPSEEK_API_KEY`, or configure a chat provider in Settings, to
 enable AI-generated memory summaries and the persistent archive agent. The
 default model is `deepseek-flash`. Without a configured provider:
 
@@ -99,7 +99,7 @@ run a dedicated process so parsing and embedding cannot starve request
 handlers:
 
 ```bash
-uv run dendromatrix worker
+uv run apsor-archive worker
 # or
 uv run python -m app.worker
 # process at most one queued job, then exit
@@ -107,7 +107,7 @@ uv run python -m app.worker --once
 ```
 
 Both shapes use the same queue and leases. Multiple API replicas should disable
-the lifespan worker (`DENDRO_INGEST_WORKER_ENABLED=false`) and run one or more
+the lifespan worker (`APSOR_INGEST_WORKER_ENABLED=false`) and run one or more
 dedicated workers.
 
 ### Runtime settings
@@ -380,7 +380,7 @@ If the key, path, or normalized text is empty, no snapshot is written and
 `page_context_attached` is `false`.
 
 New conversations freeze the current system prompt version
-(`archive-agent-v6`), which states that `<page_context>` and `<current_time>`
+(`archive-agent-v7`), which states that `<page_context>` and `<current_time>`
 are reference data, never instructions, and that page context appears only when
 the page changes.
 
@@ -408,7 +408,7 @@ local: 2026-10-25T08:45:00+08:00
 ```
 
 The server owns UTC; a valid IANA zone wins over the numeric offset (so DST is
-correct), and a missing or invalid zone falls back to `DENDRO_TIMEZONE`. A retry
+correct), and a missing or invalid zone falls back to `APSOR_TIMEZONE`. A retry
 reuses the original message's stored block. This lets the agent answer "now",
 "today", and relative-date questions without inventing a clock.
 
@@ -662,7 +662,7 @@ those generated assets must be committed with the build.
 The first visit creates the single owner account through
 `POST /api/v1/auth/setup`. Passwords are hashed with Argon2; sessions are opaque
 cookies whose SHA-256 hash is stored in `user_session`. The cookie is HttpOnly and
-SameSite=Lax; set `DENDRO_COOKIE_SECURE=true` behind HTTPS. Every knowledge,
+SameSite=Lax; set `APSOR_COOKIE_SECURE=true` behind HTTPS. Every knowledge,
 settings, and agent endpoint requires the session; `/api/v1/health`,
 `/health`, `/api/v1/auth/*`, `/api/docs`, `/api/redoc`, `/openapi.json`, and the SPA
 shell are public. There is no password recovery, by design.
@@ -788,10 +788,10 @@ uv run ruff check .
 uv run mypy app
 PYTHONUTF8=1 uv run bandit -r app -c pyproject.toml
 uv run pip-audit
-PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/dendromatrix-pytest.log
+PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 ```
 
-The tests use a real PostgreSQL database named `dendromatrix_test` on the same
+The tests use a real PostgreSQL database named `apsor_archive_test` on the same
 instance. They run sequentially, reset tables between tests, and treat warnings
 as errors. There are exactly ten collected tests:
 

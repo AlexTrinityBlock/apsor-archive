@@ -1,6 +1,6 @@
-# Deploy DendroMatrix with Cloudflare Tunnel
+# Deploy Apsor Archive with Cloudflare Tunnel
 
-This guide deploys the complete DendroMatrix stack on a Docker host and exposes
+This guide deploys the complete Apsor Archive stack on a Docker host and exposes
 it through a Cloudflare Tunnel. The origin publishes **no inbound port**:
 `cloudflared` makes outbound connections to Cloudflare, and Cloudflare reaches
 the local Caddy reverse proxy over that tunnel.
@@ -38,8 +38,9 @@ Compose services:
 | `caddy` | Non-root reverse proxy, port 80 inside the Compose network only |
 | `cloudflare-tunnel` | `cloudflared` connector with the tunnel token |
 
-The API lifespan worker is disabled in this stack. The separate `worker`
-service owns the ingestion queue, so exactly one process drains jobs.
+The Compose project is `apsor-archive-cloudflare`. The API lifespan worker is
+disabled in this stack. The separate `worker` service owns the ingestion queue,
+so exactly one process drains jobs.
 
 ## Prerequisites
 
@@ -60,7 +61,7 @@ In the Cloudflare dashboard:
 1. Open **Zero Trust → Networks → Tunnels**.
 2. Select **Create a tunnel**.
 3. Choose **Cloudflared** as the connector.
-4. Name the tunnel, for example `dendromatrix-home`.
+4. Name the tunnel, for example `apsor-archive-home`.
 5. Copy the tunnel token. Treat it as a secret.
 6. Add a public hostname:
    - **Subdomain**: `archive` (or your preferred name)
@@ -79,8 +80,8 @@ connector container itself.
 ## 2. Prepare the repository
 
 ```bash
-git clone git@github.com:AlexTrinityBlock/dendromatrix.git
-cd dendromatrix
+git clone git@github.com:AlexTrinityBlock/apsor-archive.git
+cd apsor-archive
 ```
 
 The image build copies the committed `frontend/dist`. Rebuild the frontend
@@ -113,13 +114,18 @@ See `secrets/README.md` for the same permission guidance.
 ## 4. Configure the public host and start
 
 ```bash
-export DENDRO_PUBLIC_HOST=archive.example.com
+export APSOR_PUBLIC_HOST=archive.example.com
 docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 ```
 
-`DENDRO_PUBLIC_HOST` is used by Caddy for its host matcher. It is not the
+`APSOR_PUBLIC_HOST` is used by Caddy for its host matcher. It is not the
 tunnel DNS target; the target is the `caddy:80` service configured in the
 Cloudflare dashboard.
+
+The live deployment keeps the existing public hostname
+`archive.example.com` as a **legacy hostname**. The examples here
+use `archive.example.com`; do not change DNS or the tunnel ingress as part of
+an application rebrand.
 
 The stack intentionally has no `ports:` mapping. Do not add one unless you are
 debugging on a trusted host.
@@ -144,7 +150,7 @@ Expected shape:
 ```
 
 Then open `https://archive.example.com` and complete the owner setup screen.
-The cookie is configured with `DENDRO_COOKIE_SECURE=true`; use HTTPS, not a
+The cookie is configured with `APSOR_COOKIE_SECURE=true`; use HTTPS, not a
 plain HTTP address.
 
 Check the worker separately:
@@ -167,7 +173,7 @@ The recommended path is the Settings page:
 4. Use **Test connection** before saving if the provider supports it.
 
 Keys are encrypted with Fernet before they are stored in PostgreSQL. The
-encryption key is `DENDRO_SECRET_KEY` or the auto-created
+encryption key is `APSOR_SECRET_KEY` or the auto-created
 `/data/.secret_key` in the mounted data volume. Back up that key with the
 database; without it, stored provider keys cannot be decrypted.
 
@@ -176,7 +182,7 @@ a local secrets file can be mounted read-only:
 
 ```bash
 mkdir -p .secrets
-printf 'DENDRO_DEEPSEEK_API_KEY=sk-your-key\n' > .secrets/deepseek.env
+printf 'APSOR_DEEPSEEK_API_KEY=sk-your-key\n' > .secrets/deepseek.env
 chmod 644 .secrets/deepseek.env
 ```
 
@@ -207,13 +213,13 @@ Database dump:
 
 ```bash
 docker compose -f docker-compose.cloudflare-tunnel.yml exec -T db \
-  pg_dump -U dendro -d dendromatrix | gzip > dendromatrix-$(date +%F).sql.gz
+  pg_dump -U apsor -d apsor_archive | gzip > apsor-archive-$(date +%F).sql.gz
 ```
 
 Data directory snapshot (stored originals and the Fernet key):
 
 ```bash
-sudo tar czf dendromatrix-data-$(date +%F).tar.gz -C data-cloudflare .
+sudo tar czf apsor-archive-data-$(date +%F).tar.gz -C data-cloudflare .
 ```
 
 Stop the stack before restoring both stores, then restore the database dump
@@ -229,7 +235,7 @@ from the database.
   test the login flow and SSE/streaming responses through Access.
 - Use Cloudflare WAF/rate-limiting rules for the hostname if it is exposed to
   the public internet.
-- Keep `DENDRO_COOKIE_SECURE=true` and use HTTPS.
+- Keep `APSOR_COOKIE_SECURE=true` and use HTTPS.
 - Keep `secrets/cf_token.txt` mode `644` and the `secrets` directory `755`;
   never commit either the token or provider keys.
 - Rotate the tunnel token in the Cloudflare dashboard and update the secret
@@ -261,7 +267,7 @@ docker compose -f docker-compose.cloudflare-tunnel.yml restart api worker
 
 The `worker` service shares the PostgreSQL queue with the API. If you ever run
 an additional API process with its lifespan worker enabled, disable
-`DENDRO_INGEST_WORKER_ENABLED` on it to avoid duplicate claims.
+`APSOR_INGEST_WORKER_ENABLED` on it to avoid duplicate claims.
 
 ## 10. Troubleshooting
 
@@ -269,8 +275,8 @@ an additional API process with its lifespan worker enabled, disable
 |---|---|
 | Cloudflare error 1033 | The tunnel is not connected. Check `cloudflared` logs and the token file. |
 | Cloudflare error 502 | `cloudflared` is connected but Caddy/API is unhealthy. Check `caddy` and `api` logs; verify the public hostname service is `HTTP caddy:80`. |
-| Hostname resolves but wrong site | The tunnel public hostname and `DENDRO_PUBLIC_HOST` do not match, or another DNS record is proxied. |
-| Login works but cookies are rejected | You are using HTTP, or `DENDRO_COOKIE_SECURE` was changed. Use HTTPS and restart the API. |
+| Hostname resolves but wrong site | The tunnel public hostname and `APSOR_PUBLIC_HOST` do not match, or another DNS record is proxied. |
+| Login works but cookies are rejected | You are using HTTP, or `APSOR_COOKIE_SECURE` was changed. Use HTTPS and restart the API. |
 | Uploads stay `queued` | Check `worker` logs, the `file_ingest_job` table, and that both `api` and `worker` use the same database. |
 | Ingestion fails at embedding | Test the embedding provider in Settings; check outbound access and the provider key. The worker retries transient failures, then fails the job without publishing partial rows. |
 | Long chat response returns 524 | Cloudflare's proxy has an origin timeout. Keep SSE data flowing; check Caddy/API logs. |

@@ -15,8 +15,8 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_FROZEN=1 \
     UV_PYTHON=/usr/local/bin/python \
     UV_PYTHON_DOWNLOADS=never \
-    DENDRO_DATA_DIR=/data \
-    DENDRO_STATIC_DIR=/app/frontend/dist \
+    APSOR_DATA_DIR=/data \
+    APSOR_STATIC_DIR=/app/frontend/dist \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app/backend
@@ -41,4 +41,4 @@ USER app
 
 VOLUME ["/data"]
 EXPOSE 8000
-CMD ["/app/backend/.venv/bin/dendromatrix", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/backend/.venv/bin/apsor-archive", "--host", "0.0.0.0", "--port", "8000"]

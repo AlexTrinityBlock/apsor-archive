@@ -104,7 +104,7 @@ export function MethodPage() {
             </span>
           </h1>
           <p className="method-hero__lede">
-            Most knowledge tools flatten an archive into a bag of vectors. DendroMatrix
+            Most knowledge tools flatten an archive into a bag of vectors. Apsor Archive
             keeps two shapes at once: the branching path of a file and the linear grain
             of a memory. Both are indexed, cited, and read in the same archive.
           </p>
@@ -285,7 +285,7 @@ export function MethodPage() {
         <footer className="method-colophon">
           <div className="method-colophon__mark">
             <span className="shell-tag">Method</span>
-            <p>DendroMatrix · The annual ring archive · Rev. 2026.10</p>
+            <p>Apsor Archive · The annual ring archive · Rev. 2026.10</p>
           </div>
           <nav className="method-colophon__links" aria-label="Archive links">
             <Link className="text-link" to="/">

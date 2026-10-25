@@ -25,7 +25,7 @@ from app.module.agent.domain.tool_args import (
 # v6 新增外部研究工具（web_search / web_fetch）與 summary 壓縮視圖協定；v3 對應
 # 工具目錄新增兩個唯讀 spec。兩個版本字串都會寫進 pi.system，舊對話因此仍持有
 # 舊前綴，provider 的 KV cache 不會被這次變更破壞。
-PROMPT_VERSION = "archive-agent-v6"
+PROMPT_VERSION = "archive-agent-v7"
 TOOLS_VERSION = "archive-tools-v3"
 
 

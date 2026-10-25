@@ -8,7 +8,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 /**
- * Flat ESLint configuration for the DendroMatrix frontend.
+ * Flat ESLint configuration for the Apsor Archive frontend.
  *
  * TypeScript's recommended set handles syntax and type hygiene; the remaining
  * plugins guard React hook ordering, DOM injection, unsafe Node patterns, and

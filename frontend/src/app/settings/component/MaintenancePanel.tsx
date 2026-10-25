@@ -139,7 +139,7 @@ export function MaintenancePanel() {
 
         <div className="maintenance-colophon">
           <span>
-            DendroMatrix <code>{versionLabel}</code>
+            Apsor Archive <code>{versionLabel}</code>
           </span>
           <span>React 19 + Vite · PostgreSQL · local-first</span>
           <ButtonLink to="/method" variant="ghost" size="sm">
