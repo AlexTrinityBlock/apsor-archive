@@ -220,6 +220,18 @@ The agent sees `view="compressed"`, the coverage window, and the original memory
 count in the tool result itself, so it does not treat a summary as a full
 transcript.
 
+### System prompt settings
+
+`/settings` splits the prompt into two sections. **System default** (01) edits
+the four server-owned sections (`identity`, `instructions`, `examples`,
+`context_protocol`); saving one stores an override, and **Reset defaults**
+removes every override and restores the pristine wording. **Custom prompt** (02)
+edits the owner-authored sections, their order, and the add/edit/delete/reset
+actions. Custom sections render first, in `sort_order`, followed by
+`user_profile`, then the system default. Both panels collapse independently and
+remember that choice locally; changes apply only to conversations created after
+saving.
+
 ### Frequently used prompts
 
 The **Frequent prompts** panel on `/settings` edits the shortcuts shown on the
@@ -592,7 +604,8 @@ client_utc_offset_minutes?}` and `.../retry` accepts `{request_id?}`. Both strea
 server-rendered `<current_time>` block on each user entry; the block is appended
 after the message text exactly once. The ordered custom system sections and the
 four built-in sections are written at conversation creation and frozen into that
-thread; Settings lets the owner edit either kind. The event names are
+thread; **Settings → System default** edits the four defaults, while
+**Settings → Custom prompt** edits the owner-authored sections. The event names are
 `run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
 `tool_end`, `approval_required`, `run_end`, and `error`. `run_start` reports
 `page_context_entry_id` (or `null`), `page_context_attached`, and `resumed` so

@@ -9,21 +9,22 @@ interface SettingsSection {
 }
 
 const SECTIONS: readonly SettingsSection[] = [
-  { id: "settings-system-prompt", label: "System prompt", index: "01" },
+  { id: "settings-system-default", label: "System default", index: "01" },
+  { id: "settings-system-prompt", label: "Custom prompt", index: "02" },
   {
     id: "settings-frequent-prompts",
     label: "Frequent prompts",
-    index: "02",
+    index: "03",
   },
-  { id: "settings-providers", label: "Provider registry", index: "03" },
-  { id: "settings-diagnostics", label: "Diagnostics", index: "04" },
-  { id: "settings-agent-runtime", label: "Agent runtime", index: "05" },
+  { id: "settings-providers", label: "Provider registry", index: "04" },
+  { id: "settings-diagnostics", label: "Diagnostics", index: "05" },
+  { id: "settings-agent-runtime", label: "Agent runtime", index: "06" },
   {
     id: "settings-ingest-runtime",
     label: "Ingestion runtime",
-    index: "06",
+    index: "07",
   },
-  { id: "settings-maintenance", label: "Maintenance", index: "07" },
+  { id: "settings-maintenance", label: "Maintenance", index: "08" },
 ];
 
 const COLLAPSE_KEY = "apsor-archive.settings.navCollapsed";
