@@ -1,5 +1,22 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
@@ -11,6 +28,7 @@ import {
   useCreateFrequentlyUsedPrompt,
   useDeleteFrequentlyUsedPrompt,
   useListFrequentlyUsedPrompts,
+  useReorderFrequentlyUsedPrompts,
   useUpdateFrequentlyUsedPrompt,
 } from "../../generated-apis-types";
 import type {
@@ -48,6 +66,28 @@ function nextSortOrder(
   return highest + 10;
 }
 
+/** A six-dot grip, kept local because the shared icon set has no drag mark. */
+function GripIcon() {
+  return (
+    <svg
+      className="prompt-row__grip"
+      viewBox="0 0 14 20"
+      width="14"
+      height="20"
+      fill="currentColor"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="4" cy="4" r="1.4" />
+      <circle cx="10" cy="4" r="1.4" />
+      <circle cx="4" cy="10" r="1.4" />
+      <circle cx="10" cy="10" r="1.4" />
+      <circle cx="4" cy="16" r="1.4" />
+      <circle cx="10" cy="16" r="1.4" />
+    </svg>
+  );
+}
+
 function PromptEditorDialog({
   prompt,
   defaultSortOrder,
@@ -70,14 +110,10 @@ function PromptEditorDialog({
   const fieldId = useId();
   const [title, setTitle] = useState(prompt?.title ?? "");
   const [promptText, setPromptText] = useState(prompt?.prompt_text ?? "");
-  const [sortOrder, setSortOrder] = useState(
-    String(prompt?.sort_order ?? defaultSortOrder),
-  );
   const [formError, setFormError] = useState<string | null>(null);
 
   const titleId = `${fieldId}-title`;
   const textId = `${fieldId}-text`;
-  const orderId = `${fieldId}-order`;
   let submitLabel = prompt
     ? t("settings.prompts.submitSave")
     : t("settings.prompts.submitAdd");
@@ -105,16 +141,11 @@ function PromptEditorDialog({
       setFormError(t("settings.prompts.errors.textMax"));
       return;
     }
-    const parsedOrder = Number(sortOrder.trim().length === 0 ? "0" : sortOrder);
-    if (!Number.isInteger(parsedOrder) || parsedOrder < 0) {
-      setFormError(t("settings.prompts.errors.sortOrder"));
-      return;
-    }
     setFormError(null);
     onSubmit({
       title: trimmedTitle,
       prompt_text: trimmedText,
-      sort_order: parsedOrder,
+      sort_order: prompt?.sort_order ?? defaultSortOrder,
     });
   };
 
@@ -177,26 +208,6 @@ function PromptEditorDialog({
           <span className="field-help">{t("settings.prompts.titleHelp")}</span>
         </label>
 
-        <label className="field" htmlFor={orderId}>
-          <span className="field-label">
-            {t("settings.prompts.fieldSortOrder")}
-          </span>
-          <input
-            id={orderId}
-            className="input prompt-form__order"
-            type="number"
-            min={0}
-            step={1}
-            value={sortOrder}
-            onChange={(event) => {
-              setSortOrder(event.target.value);
-              setFormError(null);
-            }}
-            disabled={saving}
-          />
-          <span className="field-help">{t("settings.prompts.sortHelp")}</span>
-        </label>
-
         <label className="field" htmlFor={textId}>
           <span className="field-label">
             {t("settings.prompts.fieldPromptText")}
@@ -232,6 +243,212 @@ function PromptEditorDialog({
   );
 }
 
+interface SortablePromptRowProps {
+  readonly prompt: FrequentlyUsedPromptReadSchema;
+  readonly actionsDisabled: boolean;
+  readonly dragDisabled: boolean;
+  readonly onEdit: () => void;
+  readonly onRequestDelete: () => void;
+}
+
+/** One prompt row; only the grip starts a drag so the actions stay clickable. */
+function SortablePromptRow({
+  prompt,
+  actionsDisabled,
+  dragDisabled,
+  onEdit,
+  onRequestDelete,
+}: SortablePromptRowProps) {
+  const { t } = useI18n();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: prompt.id, disabled: dragDisabled });
+
+  const classes = ["prompt-row", isDragging ? "is-dragging" : null]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={classes}
+    >
+      <button
+        type="button"
+        className="prompt-row__drag"
+        {...attributes}
+        {...listeners}
+        aria-label={t("settings.prompts.reorderAria", {
+          title: prompt.title,
+        })}
+        title={t("settings.prompts.reorderTitle")}
+      >
+        <GripIcon />
+      </button>
+
+      <div className="prompt-row__main">
+        <div className="prompt-row__title">
+          <h3>{prompt.title}</h3>
+        </div>
+        <p className="prompt-row__preview" title={prompt.prompt_text}>
+          {prompt.prompt_text}
+        </p>
+      </div>
+
+      <div className="prompt-row__actions">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onEdit}
+          disabled={actionsDisabled}
+        >
+          <Icon name="pencil" size={13} />
+          {t("settings.prompts.edit")}
+        </Button>
+        <Button
+          type="button"
+          variant="danger"
+          size="sm"
+          onClick={onRequestDelete}
+          disabled={actionsDisabled}
+        >
+          <Icon name="trash" size={13} />
+          {t("settings.prompts.delete")}
+        </Button>
+      </div>
+    </li>
+  );
+}
+
+interface SortablePromptListProps {
+  readonly prompts: readonly FrequentlyUsedPromptReadSchema[];
+  readonly saving: boolean;
+  readonly deleting: boolean;
+  readonly onDragActiveChange: (active: boolean) => void;
+  readonly onEdit: (prompt: FrequentlyUsedPromptReadSchema) => void;
+  readonly onRequestDelete: (prompt: FrequentlyUsedPromptReadSchema) => void;
+}
+
+/** The sortable list; every drop persists the complete order immediately. */
+function SortablePromptList({
+  prompts,
+  saving,
+  deleting,
+  onDragActiveChange,
+  onEdit,
+  onRequestDelete,
+}: SortablePromptListProps) {
+  const { t } = useI18n();
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const listKey = getListFrequentlyUsedPromptsQueryKey();
+  const [dragging, setDragging] = useState(false);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+
+  const reorderMutation = useReorderFrequentlyUsedPrompts({
+    mutation: {
+      onSuccess: async (data) => {
+        queryClient.setQueryData<PromptList>(listKey, data);
+        await queryClient.invalidateQueries({
+          queryKey: getListFrequentlyUsedPromptsQueryKey(),
+        });
+      },
+      onError: (caught) => {
+        void queryClient.invalidateQueries({
+          queryKey: getListFrequentlyUsedPromptsQueryKey(),
+        });
+        toast.error(apiErrorMessage(caught));
+      },
+    },
+  });
+
+  const setDragActive = (active: boolean) => {
+    setDragging(active);
+    onDragActiveChange(active);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setDragActive(false);
+    const { active, over } = event;
+    if (!over) {
+      return;
+    }
+    const activeId = Number(active.id);
+    const overId = Number(over.id);
+    if (Number.isNaN(activeId) || Number.isNaN(overId) || activeId === overId) {
+      return;
+    }
+    const current = queryClient.getQueryData<PromptList>(listKey);
+    if (!current) {
+      return;
+    }
+    const oldIndex = current.resources.findIndex(
+      (prompt) => prompt.id === activeId,
+    );
+    const newIndex = current.resources.findIndex(
+      (prompt) => prompt.id === overId,
+    );
+    if (oldIndex < 0 || newIndex < 0) {
+      return;
+    }
+    const moved = arrayMove(current.resources, oldIndex, newIndex).map(
+      (prompt, index) => ({
+        ...prompt,
+        sort_order: (index + 1) * 10,
+      }),
+    );
+    queryClient.setQueryData<PromptList>(listKey, {
+      ...current,
+      resources: moved,
+      total_results: moved.length,
+    });
+    reorderMutation.mutate({
+      data: { prompt_ids: moved.map((prompt) => prompt.id) },
+    });
+  };
+
+  const actionsDisabled =
+    saving || deleting || reorderMutation.isPending || dragging;
+  const dragDisabled = saving || deleting || reorderMutation.isPending;
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={() => setDragActive(true)}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setDragActive(false)}
+    >
+      <SortableContext
+        items={prompts.map((prompt) => prompt.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <ul
+          className="prompt-list"
+          aria-label={t("settings.prompts.title")}
+        >
+          {prompts.map((prompt) => (
+            <SortablePromptRow
+              key={prompt.id}
+              prompt={prompt}
+              actionsDisabled={actionsDisabled}
+              dragDisabled={dragDisabled}
+              onEdit={() => onEdit(prompt)}
+              onRequestDelete={() => onRequestDelete(prompt)}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+    </DndContext>
+  );
+}
+
 /** Editable prompt shortcuts shown on the empty chat page. */
 export function FrequentlyUsedPromptsPanel() {
   const { t, formatNumber } = useI18n();
@@ -244,6 +461,7 @@ export function FrequentlyUsedPromptsPanel() {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<FrequentlyUsedPromptReadSchema | null>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   const prompts = query.data?.resources ?? [];
 
@@ -399,47 +617,14 @@ export function FrequentlyUsedPromptsPanel() {
     );
   } else {
     body = (
-      <div className="prompt-list">
-        {prompts.map((prompt) => (
-          <article className="prompt-row" key={prompt.id}>
-            <div className="prompt-row__main">
-              <div className="prompt-row__title">
-                <h3>{prompt.title}</h3>
-                <span className="prompt-row__order">
-                  {t("settings.prompts.order", {
-                    order: formatNumber(prompt.sort_order),
-                  })}
-                </span>
-              </div>
-              <p className="prompt-row__preview" title={prompt.prompt_text}>
-                {prompt.prompt_text}
-              </p>
-            </div>
-            <div className="prompt-row__actions">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => openEdit(prompt)}
-                disabled={saving || deleteMutation.isPending}
-              >
-                <Icon name="pencil" size={13} />
-                {t("settings.prompts.edit")}
-              </Button>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                onClick={() => setDeleteTarget(prompt)}
-                disabled={saving || deleteMutation.isPending}
-              >
-                <Icon name="trash" size={13} />
-                {t("settings.prompts.delete")}
-              </Button>
-            </div>
-          </article>
-        ))}
-      </div>
+      <SortablePromptList
+        prompts={prompts}
+        saving={saving}
+        deleting={deleteMutation.isPending}
+        onDragActiveChange={setDragActive}
+        onEdit={openEdit}
+        onRequestDelete={(prompt) => setDeleteTarget(prompt)}
+      />
     );
   }
 
@@ -462,7 +647,9 @@ export function FrequentlyUsedPromptsPanel() {
               variant="secondary"
               size="sm"
               onClick={openCreate}
-              disabled={query.isPending || query.isError || limitReached}
+              disabled={
+                query.isPending || query.isError || limitReached || dragActive
+              }
             >
               <Icon name="plus" size={13} />
               {t("settings.prompts.add")}

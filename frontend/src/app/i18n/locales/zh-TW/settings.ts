@@ -324,15 +324,16 @@ export const settings = {
     lede:
       "空白對話室的捷徑。清單儲存在 PostgreSQL 中，並依下列順序顯示；編輯清單不會改變既有對話。",
     hint:
-      "最多 20 個提示詞。標題與提示詞文字會去除首尾空白；空白值會被拒絕。排序數字較小者會先顯示。",
+      "最多 20 個提示詞。標題與提示詞文字會去除首尾空白；空白值會被拒絕。拖曳提示詞可調整順序；這裡的順序就是空白對話頁的顯示順序。",
     add: "新增提示詞",
     emptyTitle: "還沒有常用提示詞。",
     emptyCopy:
       "最多可新增 20 個捷徑。每個捷徑都會出現在空白對話頁，點選後會填入編輯器。",
     addFirst: "新增第一個提示詞",
-    order: "排序 {order}",
     edit: "編輯",
     delete: "刪除",
+    reorderAria: "重新排序「{title}」",
+    reorderTitle: "拖曳調整順序",
     loadErrorTitle: "常用提示詞沒有回應。",
     dialogEyebrow: "設定 · 常用提示詞",
     editTitle: "編輯常用提示詞",
@@ -345,8 +346,6 @@ export const settings = {
     fieldTitle: "標題",
     titlePlaceholder: "追蹤一筆記憶",
     titleHelp: "最多 80 個字元。",
-    fieldSortOrder: "排序",
-    sortHelp: "數字較小者會先顯示。空白會視為零。",
     fieldPromptText: "提示詞文字",
     promptPlaceholder:
       "追蹤最近一筆記憶的來源脈絡，並說明改變了什麼。",
@@ -356,7 +355,6 @@ export const settings = {
       titleMax: "標題必須為 80 個字元以內。",
       textRequired: "提示詞文字為必填。",
       textMax: "提示詞文字必須為 4,000 個字元以內。",
-      sortOrder: "排序必須是零或以上的整數。",
     },
     addedToast: "已新增常用提示詞。",
     updatedToast: "已更新常用提示詞。",
