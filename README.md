@@ -404,10 +404,10 @@ docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 ```
 
 Point the tunnel ingress for `archive.example.com` at `http://caddy:80`. The
-token file is gitignored. The live deployment keeps the existing public hostname
-`archive.example.com`; that is the **legacy hostname** and stays
-unchanged until a separate DNS and tunnel migration. See `secrets/README.md` for
-permissions and [`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md) for the
+token file is gitignored. The live deployment serves
+`archive.example.com`; `archive.example.com` is the
+**legacy hostname** and is no longer in the current tunnel ingress. See
+`secrets/README.md` for permissions and [`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md) for the
 complete English deployment, backup, security, and troubleshooting guide.
 
 ## Tool surface
