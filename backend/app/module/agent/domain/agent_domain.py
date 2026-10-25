@@ -65,7 +65,7 @@ CONVERSATION_STATUSES = (CONVERSATION_ACTIVE, CONVERSATION_ARCHIVED)
 ERROR_FINISH_REASONS = frozenset({"error", "aborted", "cancelled", "canceled"})
 
 MAX_STEPS = 24
-MAX_TOOL_CALLS_PER_TURN = 6
+MAX_TOOL_CALLS_PER_TURN = 20
 MAX_PARALLEL_TOOLS = 6
 # Model capability metadata, not a cost guard. The turn budget below remains the
 # limit the loop enforces; compaction is still measured against that budget.
