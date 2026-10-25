@@ -39,6 +39,9 @@ const MethodPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./settings/page").then((module) => ({ default: module.SettingsPage })),
 );
+const ProfilePage = lazy(() =>
+  import("./profile/page").then((module) => ({ default: module.ProfilePage })),
+);
 
 /** Keeps the old query string when a removed workspace redirects to its home. */
 function RedirectWithQuery({ to }: { readonly to: string }) {
@@ -146,6 +149,7 @@ export const router = createBrowserRouter([
           { path: "method", element: <MethodPage /> },
           { path: "docs", element: <Navigate to="/method" replace /> },
           { path: "settings", element: <SettingsPage /> },
+          { path: "profile", element: <ProfilePage /> },
           { path: "viewer/file/:fileId", element: <ViewerFileRedirect /> },
           { path: "viewer/media/:mediaId", element: <ViewerMediaRedirect /> },
           { path: "viewer/memory/:memoryId", element: <ViewerMemoryRedirect /> },

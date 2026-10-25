@@ -2,12 +2,12 @@
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.dependency.auth import get_current_user
 from app.module.agent.dependencies import (
+    get_current_user_profile,
     get_saved_question_ask_service,
     get_saved_question_service,
 )
-from app.module.agent.domain.owner_profile_domain import OwnerProfile
+from app.module.agent.domain.user_profile_domain import UserProfile
 from app.module.agent.schema.saved_question_schema import (
     SavedQuestionCreateSchema,
     SavedQuestionListSchema,
@@ -15,7 +15,6 @@ from app.module.agent.schema.saved_question_schema import (
     SavedQuestionUpdateSchema,
 )
 from app.module.agent.service.saved_question_service import SavedQuestionService
-from app.module.auth.schema.auth_schema import UserSchema
 
 router = APIRouter(prefix="/questions", tags=["agent"])
 
@@ -84,7 +83,7 @@ async def delete_saved_question(
 async def ask_saved_question(
     question_id: int,
     saved_question_service: SavedQuestionService = Depends(get_saved_question_ask_service),
-    user: UserSchema = Depends(get_current_user),
+    user_profile: UserProfile = Depends(get_current_user_profile),
 ) -> SavedQuestionReadSchema:
     """Run one JSON agent turn and persist its answer, citations, and status.
 
@@ -94,8 +93,5 @@ async def ask_saved_question(
     """
     return await saved_question_service.ask_question(
         question_id,
-        owner_profile=OwnerProfile(
-            display_name=user.display_name,
-            bio=user.bio,
-        ),
+        user_profile=user_profile,
     )

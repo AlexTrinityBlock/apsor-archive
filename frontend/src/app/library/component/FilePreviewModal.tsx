@@ -16,6 +16,7 @@ import { useGetFile, useReadFile } from "../../generated-apis-types/files/files"
 import { formatBytes, formatDateTime, formatNumber } from "../../../lib/format";
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
+import { CopyButton } from "../../component/CopyButton";
 import { Icon } from "../../component/Icon";
 import { useScrollLock } from "../../hook/useScrollLock";
 import { FileRenderer } from "../../viewer/component/FileViewer";
@@ -175,6 +176,12 @@ function ChunkResults({
               tokens
             </span>
             {chunk.is_current ? null : <Badge tone="ochre">History</Badge>}
+            <CopyButton
+              value={chunk.content}
+              label="Copy chunk"
+              iconOnly
+              title={`Copy chunk #${chunk.chunk}`}
+            />
           </header>
           <pre className="library-preview__chunk-body">{chunk.content}</pre>
         </article>

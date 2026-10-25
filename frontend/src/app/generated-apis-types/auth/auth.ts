@@ -29,6 +29,7 @@ import type {
   HTTPValidationError,
   LoginSchema,
   SetupSchema,
+  UserProfileSchema,
   UserProfileUpdateSchema,
   UserSchema
 } from '../schemas';
@@ -318,19 +319,120 @@ export function useGetCurrentUser<TData = Awaited<ReturnType<typeof getCurrentUs
 
 
 
-export const getUpdateCurrentUserUrl = () => {
+export const getGetUserProfileUrl = () => {
 
 
 
 
-  return `/api/v1/auth/me`
+  return `/api/v1/auth/profile`
 }
 
 /**
- * Update the owner's display name and self-introduction.
- * @summary Update Me
+ * Return the display name and every ordered user profile card.
+ * @summary Get Profile
  */
-export const updateCurrentUser = async (userProfileUpdateSchema: UserProfileUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<UserSchema> => {
+export const getUserProfile = async ( options?: Parameters<typeof apiFetch>[1]): Promise<UserProfileSchema> => {
+
+  return apiFetch<UserProfileSchema>(getGetUserProfileUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetUserProfileQueryKey = () => {
+    return [
+    `/api/v1/auth/profile`
+    ] as const;
+    }
+
+
+export const getGetUserProfileQueryOptions = <TData = Awaited<ReturnType<typeof getUserProfile>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetUserProfileQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getUserProfile>>> = ({ signal }) => getUserProfile({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetUserProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getUserProfile>>>
+export type GetUserProfileQueryError = unknown
+
+
+export function useGetUserProfile<TData = Awaited<ReturnType<typeof getUserProfile>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getUserProfile>>,
+          TError,
+          Awaited<ReturnType<typeof getUserProfile>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetUserProfile<TData = Awaited<ReturnType<typeof getUserProfile>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getUserProfile>>,
+          TError,
+          Awaited<ReturnType<typeof getUserProfile>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetUserProfile<TData = Awaited<ReturnType<typeof getUserProfile>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Profile
+ */
+
+export function useGetUserProfile<TData = Awaited<ReturnType<typeof getUserProfile>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getUserProfile>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetUserProfileQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getUpdateUserProfileUrl = () => {
+
+
+
+
+  return `/api/v1/auth/profile`
+}
+
+/**
+ * Replace the display name and every profile card atomically.
+ * @summary Update Profile
+ */
+export const updateUserProfile = async (userProfileUpdateSchema: UserProfileUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<UserProfileSchema> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -346,10 +448,10 @@ export const updateCurrentUser = async (userProfileUpdateSchema: UserProfileUpda
     }
     return headers;
   };
-return apiFetch<UserSchema>(getUpdateCurrentUserUrl(),
+return apiFetch<UserProfileSchema>(getUpdateUserProfileUrl(),
   {
     ...options,
-    method: 'PATCH',
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(userProfileUpdateSchema)
   }
@@ -359,13 +461,13 @@ return apiFetch<UserSchema>(getUpdateCurrentUserUrl(),
 
 
 
-export const getUpdateCurrentUserMutationKey = () => ['updateCurrentUser'] as const;
+export const getUpdateUserProfileMutationKey = () => ['updateUserProfile'] as const;
 
-export const getUpdateCurrentUserMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCurrentUser>>, TError,UpdateCurrentUserMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateCurrentUser>>, TError,UpdateCurrentUserMutationVariables, TContext> => {
+export const getUpdateUserProfileMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUserProfile>>, TError,UpdateUserProfileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateUserProfile>>, TError,UpdateUserProfileMutationVariables, TContext> => {
 
-const mutationKey = getUpdateCurrentUserMutationKey();
+const mutationKey = getUpdateUserProfileMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -375,10 +477,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCurrentUser>>, UpdateCurrentUserMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateUserProfile>>, UpdateUserProfileMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  updateCurrentUser(data,requestOptions)
+          return  updateUserProfile(data,requestOptions)
         }
 
 
@@ -388,23 +490,23 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type UpdateCurrentUserMutationResult = NonNullable<Awaited<ReturnType<typeof updateCurrentUser>>>
-    export type UpdateCurrentUserMutationBody = UserProfileUpdateSchema
-    export type UpdateCurrentUserMutationError = HTTPValidationError
-    export type UpdateCurrentUserMutationVariables = {data: UserProfileUpdateSchema}
+    export type UpdateUserProfileMutationResult = NonNullable<Awaited<ReturnType<typeof updateUserProfile>>>
+    export type UpdateUserProfileMutationBody = UserProfileUpdateSchema
+    export type UpdateUserProfileMutationError = HTTPValidationError
+    export type UpdateUserProfileMutationVariables = {data: UserProfileUpdateSchema}
 
     /**
- * @summary Update Me
+ * @summary Update Profile
  */
-export const useUpdateCurrentUser = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCurrentUser>>, TError,UpdateCurrentUserMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+export const useUpdateUserProfile = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateUserProfile>>, TError,UpdateUserProfileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
-        Awaited<ReturnType<typeof updateCurrentUser>>,
+        Awaited<ReturnType<typeof updateUserProfile>>,
         TError,
-        UpdateCurrentUserMutationVariables,
+        UpdateUserProfileMutationVariables,
         TContext
       > => {
-      return useMutation(getUpdateCurrentUserMutationOptions(options), queryClient);
+      return useMutation(getUpdateUserProfileMutationOptions(options), queryClient);
     }
     export const getSetupAccountUrl = () => {
 

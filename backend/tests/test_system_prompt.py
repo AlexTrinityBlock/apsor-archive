@@ -150,7 +150,7 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
         "examples",
         "context_protocol",
     ]
-    assert system_entry["data"]["prompt_version"] == "archive-agent-v10"
+    assert system_entry["data"]["prompt_version"] == "archive-agent-v11"
     sections = system_entry["data"]["sections"]
     assert sections[0] == {
         "name": f"system_prompt:{first_id}",

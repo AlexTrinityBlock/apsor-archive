@@ -7,10 +7,9 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.dependency.auth import get_current_user
-from app.module.agent.dependencies import get_agent_service
+from app.module.agent.dependencies import get_agent_service, get_current_user_profile
 from app.module.agent.domain.agent_domain import AgentStreamEvent
-from app.module.agent.domain.owner_profile_domain import OwnerProfile
+from app.module.agent.domain.user_profile_domain import UserProfile
 from app.module.agent.schema.agent_schema import (
     AgentApprovalSchema,
     AgentApprovalStatus,
@@ -27,7 +26,6 @@ from app.module.agent.schema.agent_schema import (
     AgentTurnResultSchema,
 )
 from app.module.agent.service.agent_service import AgentService
-from app.module.auth.schema.auth_schema import UserSchema
 from app.shared.types.list_response import ListResponseSchema
 
 router = APIRouter(prefix="/conversations", tags=["agent"])
@@ -56,15 +54,12 @@ _TURN_RESPONSES: dict[int | str, dict[str, Any]] = {
 async def create_conversation(
     payload: AgentConversationCreateSchema,
     agent_service: AgentService = Depends(get_agent_service),
-    user: UserSchema = Depends(get_current_user),
+    user_profile: UserProfile = Depends(get_current_user_profile),
 ) -> AgentConversationSchema:
     """Create a transcript scope and its immutable system entry."""
     return await agent_service.create_conversation(
         payload,
-        owner_profile=OwnerProfile(
-            display_name=user.display_name,
-            bio=user.bio,
-        ),
+        user_profile=user_profile,
     )
 
 

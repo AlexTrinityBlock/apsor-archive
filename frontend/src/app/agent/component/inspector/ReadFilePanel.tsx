@@ -1,4 +1,5 @@
 import { formatNumber, truncate } from "../../../../lib/format";
+import { CopyButton } from "../../../component/CopyButton";
 import {
   numberField,
   recordId,
@@ -18,16 +19,19 @@ interface ChunkRecord {
   readonly chars: number | null;
   readonly tokens: number | null;
   readonly excerpt: string;
+  readonly content: string;
 }
 
 function chunksOf(data: Record<string, unknown> | null): ChunkRecord[] {
   return recordList(data?.chunks).map((record) => {
-    const excerpt = textField(record, "excerpt") ?? textField(record, "content") ?? "";
+    const content = textField(record, "content") ?? textField(record, "excerpt") ?? "";
+    const excerpt = textField(record, "excerpt") ?? content;
     return {
       index: numberField(record, "chunk"),
       chars: numberField(record, "char_count"),
       tokens: numberField(record, "token_count"),
       excerpt: excerpt.length > 520 ? `${truncate(excerpt, 520)}` : excerpt,
+      content,
     };
   });
 }
@@ -60,6 +64,12 @@ function ChunkWindow({ chunks }: { readonly chunks: readonly ChunkRecord[] }) {
               <span>chunk {chunk.index ?? index + 1}</span>
               {chunk.chars !== null ? <span>{formatNumber(chunk.chars)} chars</span> : null}
               {chunk.tokens !== null ? <span>{formatNumber(chunk.tokens)} tokens</span> : null}
+              <CopyButton
+                value={chunk.content || chunk.excerpt}
+                label="Copy chunk"
+                iconOnly
+                title={`Copy chunk ${chunk.index ?? index + 1}`}
+              />
             </div>
           </div>
         </li>

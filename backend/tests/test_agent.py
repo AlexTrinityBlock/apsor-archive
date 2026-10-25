@@ -55,7 +55,7 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v10"
+PROMPT_VERSION = "archive-agent-v11"
 TOOLS_VERSION = "archive-tools-v4"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
@@ -2036,14 +2036,19 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert final_settings_body["config"]["save_memory_requires_approval"] is True
 
     # ------------------------------------------------------------------
-    # The owner profile is frozen into new conversations before the built-in
-    # prompt, so the agent knows the chosen name and self-introduction.
+    # The user profile is frozen into new conversations before the built-in
+    # prompt, so the agent knows the chosen name and profile cards.
     # ------------------------------------------------------------------
-    profile = client.patch(
-        "/api/v1/auth/me",
+    profile = client.put(
+        "/api/v1/auth/profile",
         json={
             "display_name": "Alex",
-            "bio": "I build local-first archives and teach AI courses.",
+            "cards": [
+                {
+                    "title": "Work",
+                    "content": "I build local-first archives and teach AI courses.",
+                }
+            ],
         },
     )
     assert profile.status_code == 200, profile.text
@@ -2057,13 +2062,14 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     )
     profile_sections = profile_system["data"]["sections"]
     assert [section["name"] for section in profile_sections] == [
-        "owner_profile",
+        "user_profile",
         "identity",
         "instructions",
         "examples",
         "context_protocol",
     ]
     assert "Name: Alex" in profile_sections[0]["content"]
+    assert "Work: I build local-first archives" in profile_sections[0]["content"]
     assert "teach AI courses" in profile_sections[0]["content"]
     assert "Name: Alex" in profile_system["model"][0]["content"]
 

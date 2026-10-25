@@ -15,7 +15,7 @@ from app.module.auth.exception.domain_error import (
     SetupAlreadyCompleteError,
     WeakPasswordError,
 )
-from app.module.auth.model.auth_model import AppUserModel
+from app.module.auth.model.auth_model import AppUserModel, UserProfileCardModel
 from app.module.auth.protocol.auth_repository_protocol import (
     SessionRepositoryProtocol,
     UserRepositoryProtocol,
@@ -24,7 +24,13 @@ from app.module.auth.protocol.security_protocol import (
     PasswordHasherProtocol,
     SessionTokenProtocol,
 )
-from app.module.auth.schema.auth_schema import AuthStatusSchema, UserSchema
+from app.module.auth.schema.auth_schema import (
+    AuthStatusSchema,
+    UserProfileCardSchema,
+    UserProfileSchema,
+    UserProfileUpdateSchema,
+    UserSchema,
+)
 from app.shared.time import utcnow
 
 # Failed login attempts are process-local. This is a single-user, single-process
@@ -61,7 +67,6 @@ class AuthService:
             user_id=user.id,
             username=user.username,
             display_name=user.display_name,
-            bio=user.bio,
             created_at=user.created_at,
             last_login_at=user.last_login_at,
         )
@@ -142,32 +147,68 @@ class AuthService:
         token = await self._new_session(user)
         return self._to_schema(user), token
 
-    async def update_profile(
-        self,
-        user_id: int,
-        *,
-        display_name: str,
-        bio: str | None,
-    ) -> UserSchema:
-        """Update the owner's name and self-introduction in one transaction."""
-        cleaned_name = " ".join(display_name.split())
-        if not cleaned_name or len(cleaned_name) > 80:
-            raise InvalidProfileError("Display name must contain between 1 and 80 characters.")
-        cleaned_bio = bio.strip() if isinstance(bio, str) else None
-        if cleaned_bio == "":
-            cleaned_bio = None
-        if cleaned_bio is not None and len(cleaned_bio) > 2000:
-            raise InvalidProfileError("Self-introduction cannot exceed 2,000 characters.")
+    @staticmethod
+    def _profile_schema(
+        user: AppUserModel,
+        cards: list[UserProfileCardModel],
+    ) -> UserProfileSchema:
+        return UserProfileSchema(
+            display_name=user.display_name or user.username,
+            cards=[
+                UserProfileCardSchema(
+                    card_id=card.id,
+                    title=card.title,
+                    content=card.content,
+                    sort_order=card.sort_order,
+                )
+                for card in cards
+            ],
+        )
+
+    async def get_profile(self, user_id: int) -> UserProfileSchema:
+        """Return the effective display name and every ordered profile card."""
         user = await self.user_repository.get_by_id(user_id)
         if user is None:
             raise AuthenticationRequiredError()
-        updated = await self.user_repository.update_profile(
+        cards = await self.user_repository.list_profile_cards(user_id)
+        return self._profile_schema(user, cards)
+
+    async def update_profile(
+        self,
+        user_id: int,
+        payload: UserProfileUpdateSchema,
+    ) -> UserProfileSchema:
+        """Replace the display name and every card in one request transaction."""
+        user = await self.user_repository.get_by_id(user_id)
+        if user is None:
+            raise AuthenticationRequiredError()
+
+        cleaned_name = " ".join(payload.display_name.split())
+        if not cleaned_name or len(cleaned_name) > 80:
+            raise InvalidProfileError("Display name must contain between 1 and 80 characters.")
+
+        cleaned_cards: list[tuple[str, str]] = []
+        for card in payload.cards:
+            title = " ".join(card.title.split())
+            content = card.content.strip()
+            if not title or not content:
+                raise InvalidProfileError("Every profile card needs a title and content.")
+            if len(title) > 120 or len(content) > 2000:
+                raise InvalidProfileError("A profile card exceeds its length limit.")
+            cleaned_cards.append((title, content))
+
+        now = utcnow()
+        updated = await self.user_repository.update_display_name(
             user,
             display_name=cleaned_name,
-            bio=cleaned_bio,
-            now=utcnow(),
+            now=now,
         )
-        return self._to_schema(updated)
+        rows = await self.user_repository.replace_profile_cards(
+            user_id,
+            cards=cleaned_cards,
+            now=now,
+        )
+        return self._profile_schema(updated, rows)
 
     async def resolve_session(self, token: str | None) -> UserSchema:
         """Return the signed-in user or raise a 401 domain error."""

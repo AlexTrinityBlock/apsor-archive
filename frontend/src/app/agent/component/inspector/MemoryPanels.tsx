@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { CopyButton } from "../../../component/CopyButton";
 import { Icon } from "../../../component/Icon";
 import { useReadMemory } from "../../../generated-apis-types/memories/memories";
 import type { MemorySchema } from "../../../generated-apis-types/schemas";
@@ -139,7 +140,15 @@ export function ReadMemoryPanel({ item }: PanelProps) {
           <strong>memory:{target.memory_id}</strong>
           <span>{target.status} · updated {formatDateTime(target.update_time)}</span>
         </div>
-        <PanelLink to={`/memory/${target.memory_id}`}>Full trace</PanelLink>
+        <div className="pi-leaf-chain__head-actions">
+          <CopyButton
+            value={target.content}
+            label="Copy memory"
+            iconOnly
+            title="Copy the memory text"
+          />
+          <PanelLink to={`/memory/${target.memory_id}`}>Full trace</PanelLink>
+        </div>
       </header>
 
       <div className="pi-leaf-chain__target">
