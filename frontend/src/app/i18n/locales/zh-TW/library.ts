@@ -526,6 +526,8 @@ export const library = {
     unsaved: "未儲存",
     statusError: "錯誤",
     readMode: "渲染預覽",
+    chunkWarning:
+      "這個檔案沒有儲存原始檔，編輯器是從索引分段重建內容。儲存後可能會正規化空白與段落換行。",
     closeEditor: "關閉編輯器",
     discardTitle: "要捨棄未儲存的變更嗎？",
     discardBody: "你的編輯仍只存在於這個編輯器中。捨棄後將無法復原。",

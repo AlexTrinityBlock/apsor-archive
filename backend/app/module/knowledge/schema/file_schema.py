@@ -16,6 +16,9 @@ IngestJobStatus = Literal[
 ]
 IngestSourceKind = Literal["upload", "text"]
 
+# Pydantic 解析階段的內容長度上限；service 的 max_text_bytes（2 MiB）仍是最終 byte 限制。
+MAX_TEXT_CONTENT_CHARS = 2_000_000
+
 
 class FileSchema(BaseModel):
     """File metadata returned by the API."""
@@ -48,7 +51,7 @@ class FileTextCreateSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     path: str = Field(min_length=1, max_length=1024)
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=MAX_TEXT_CONTENT_CHARS)
     occurred_at: datetime | None = None
 
 
@@ -57,7 +60,7 @@ class FileTextUpdateSchema(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=MAX_TEXT_CONTENT_CHARS)
     expected_version: int = Field(ge=1)
 
 
