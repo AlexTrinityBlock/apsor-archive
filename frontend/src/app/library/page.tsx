@@ -25,7 +25,7 @@ import {
 } from "../generated-apis-types/files/files";
 import { useSeedDemo } from "../generated-apis-types/system/system";
 import { useReadPath } from "../generated-apis-types/tree/tree";
-import { parentPath, pathSegments } from "../../lib/format";
+import { basename, parentPath, pathSegments } from "../../lib/format";
 import { Button } from "../component/Button";
 import {
   ContextMenu,
@@ -97,6 +97,7 @@ interface DeleteRequest {
 interface DeleteSelectionRequest {
   readonly files: readonly PathFileSchema[];
   readonly folders: readonly DirectorySchema[];
+  readonly afterDeletePath?: string | null;
 }
 
 type LibraryContextTarget =
@@ -739,10 +740,43 @@ export function LibraryPage() {
     setDeleteSelectionRequest({ files: selectedFiles, folders: selectedFolders });
   }, [selectedFiles, selectedFolders]);
 
+  const requestDeleteCurrentFolder = useCallback(() => {
+    if (path === "/") {
+      return;
+    }
+    const segments = pathSegments(path);
+    setDeleteSelectionRequest({
+      files: [],
+      folders: [
+        {
+          depth: segments.length,
+          name: basename(path),
+          path,
+        },
+      ],
+      afterDeletePath: parentPath(path),
+    });
+  }, [path]);
+
   const handleSelectionDeleted = useCallback(
     (result: LibraryDeleteResultSchema) => {
+      const afterDeletePath = deleteSelectionRequest?.afterDeletePath ?? null;
       setDeleteSelectionRequest(null);
       exitSelection();
+      if (afterDeletePath !== null) {
+        updateParams(
+          {
+            path: pathParamValue(afterDeletePath),
+            file: null,
+            media: null,
+            chunk: null,
+            q: null,
+            mode: null,
+          },
+          { replace: true },
+        );
+        return;
+      }
       if (result.deleted_file_ids.includes(previewFileId ?? -1)) {
         updateParams(
           { file: null, media: null, chunk: null, mode: null },
@@ -750,7 +784,7 @@ export function LibraryPage() {
         );
       }
     },
-    [exitSelection, previewFileId, updateParams],
+    [deleteSelectionRequest, exitSelection, previewFileId, updateParams],
   );
 
   const handleBatchMoveFinished = useCallback(
@@ -1129,6 +1163,7 @@ export function LibraryPage() {
         onToggleSelecting={toggleSelecting}
         onUpload={() => openUpload()}
         onNewFolder={() => setNewFolderOpen(true)}
+        onDeleteFolder={requestDeleteCurrentFolder}
         onNewMarkdown={() => openNewMarkdown(path)}
       />
 

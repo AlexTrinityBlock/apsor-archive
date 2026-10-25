@@ -82,6 +82,7 @@ export const library = {
     list: "List",
     select: "Select",
     selecting: "Selecting",
+    deleteFolder: "Delete folder",
     readingShelf: "Reading the shelf…",
     readingPaths: "Reading paths…",
     mediaStatusOne: "{count} image in this folder",

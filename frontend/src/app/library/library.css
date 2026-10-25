@@ -357,8 +357,8 @@ button.library-crumb:hover {
 }
 
 .library-select-toggle.is-active {
-  color: var(--mono-paper);
-  background: var(--mono-ink);
+  color: var(--mono-ink);
+  background: var(--mono-card-bg);
   border-color: var(--mono-ink);
 }
 
