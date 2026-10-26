@@ -187,7 +187,14 @@ async function readFailure(response: Response): Promise<ApiError> {
     payload = null;
   }
 
-  if (response.status === 401 && typeof window !== "undefined") {
+  const code = (isRecord(payload) ? stringValue(payload.error) : null) ?? "http_error";
+  const sessionFailure =
+    response.status === 401 &&
+    (code === "authentication_required" || code === "unauthorized");
+  if (
+    typeof window !== "undefined" &&
+    (sessionFailure || code === "account_disabled")
+  ) {
     window.dispatchEvent(new Event("apsor-archive:unauthorized"));
   }
 
@@ -198,7 +205,6 @@ async function readFailure(response: Response): Promise<ApiError> {
       translate(getActiveLocale(), "chat.errors.requestFailed", {
         status: response.status,
       }));
-  const code = (isRecord(payload) ? stringValue(payload.error) : null) ?? "http_error";
   return new ApiError(response.status, code, detail, payload);
 }
 

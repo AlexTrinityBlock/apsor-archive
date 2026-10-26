@@ -1,9 +1,10 @@
-"""Single-user account and cookie-session models."""
+"""Account, role, and cookie-session models."""
 
 from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -21,7 +22,13 @@ from app.shared.time import utcnow
 
 
 class AppUserModel(Base):
-    """The archive owner. The schema allows more than one row; setup creates one."""
+    """One archive account.
+
+    Exactly one account has ``role='root'``; the partial unique index enforces
+    that invariant. Every other account is a private-archive ``user``. Accounts
+    are disabled instead of deleted so usernames and archive ownership remain
+    stable.
+    """
 
     __tablename__ = "app_user"
     __table_args__ = (
@@ -29,12 +36,54 @@ class AppUserModel(Base):
             "display_name IS NULL OR char_length(display_name) BETWEEN 1 AND 80",
             name="display_name_length",
         ),
+        CheckConstraint("role IN ('root', 'user')", name="role_valid"),
+        CheckConstraint(
+            "(is_active AND disabled_at IS NULL) OR (NOT is_active AND disabled_at IS NOT NULL)",
+            name="active_disabled",
+        ),
+        Index(
+            "uq_app_user_single_root",
+            "role",
+            unique=True,
+            postgresql_where=text("role = 'root'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="user",
+        server_default="user",
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_app_user_created_by_user_id_app_user",
+        ),
+        nullable=True,
+    )
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

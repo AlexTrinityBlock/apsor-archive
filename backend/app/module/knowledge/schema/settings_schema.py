@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class EmbeddingReindexSchema(BaseModel):
-    """The result of re-embedding the current chunk corpus."""
+    """The result of re-embedding the current and historical chunk corpus."""
 
     model_config = ConfigDict(frozen=True)
 

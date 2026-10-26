@@ -6,7 +6,7 @@ import { useI18n } from "../../i18n";
 import { useAuth } from "../AuthProvider";
 import { AuthFrame } from "./AuthFrame";
 
-/** Sign-in form for the single keeper account. */
+/** Sign-in form for any account in the private archive. */
 export function LoginScreen() {
   const { t } = useI18n();
   const { login, isSubmitting, error } = useAuth();

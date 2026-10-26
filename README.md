@@ -5,7 +5,7 @@
 <h1 align="center">Apsor Archive</h1>
 
 <p align="center">
-  A local-first knowledge and memory archive for files, memories, and the links between them.
+  A local-first, private knowledge and memory archive for a family or small team.
 </p>
 
 <p align="center">
@@ -25,14 +25,16 @@
 </p>
 
 A local-first knowledge and memory archive with a branching file library, a
-linear memory timeline, hybrid retrieval, and grounded AI answers.
+linear memory timeline, hybrid retrieval, and grounded AI answers. Each account
+has its own private archive; one root account manages membership and shared
+runtime settings.
 
 Apsor Archive is not a note list. It is a retrieval surface designed for a small
 number of deliberate tool calls: search a passage, read its neighbours, walk the
 path, sample a season, press a new memory, or trace a superseded one. Every
 result carries its source, chunk number, and time.
 
-> Status: v0.1.0 — file/memory archive, owner login, persistent
+> Status: v0.1.0 — file/memory archive, root plus per-user accounts, persistent
 > Pi-shaped agent with database-backed runtime limits, compaction, parallel
 > tools, SSE chat, a saved-question Q&A library, durable async ingestion,
 > dedicated PDF/DOCX/image/text preview engines, a folder workspace, and a
@@ -84,17 +86,25 @@ result carries its source, chunk number, and time.
   Simplified Chinese can be switched from the Settings page. The choice is
   stored per browser and applies to the whole interface, never to archive
   content.
-- **The archive is local and single-owner.** It binds to `127.0.0.1` by default
-  and is protected by one owner account with an Argon2 password hash and an
-  HttpOnly session cookie. Run it on your own machine; put it behind Cloudflare
-  Tunnel only with your own access controls.
+- **The archive is private, multi-account, and local-first.** One root account
+  manages accounts and global runtime settings; every other account gets a
+  private archive of files, folders, chunks, memories, summaries, conversations,
+  entries, runs, approvals, saved questions, prompts, and profile cards.
+  PostgreSQL row-level security enforces ownership on every private table, so a
+  missing query filter cannot expose another person's archive. Passwords use
+  Argon2 and sessions use HttpOnly cookies. Run it on your own machine; put it
+  behind Cloudflare Tunnel only with your own access controls.
+- **Original bytes can live in Cloudflare R2.** `APSOR_STORAGE_BACKEND=local|r2`
+  selects where new originals are written. Reads follow the backend recorded on
+  each row, so a staged migration can serve a mixed archive. The R2 bucket is
+  private and the app never issues presigned or public URLs.
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
 | API | Python 3.13, FastAPI, SQLAlchemy 2 async, Alembic, psycopg 3 |
-| Storage | PostgreSQL 17 (`pg_trgm` for path fuzzy search) |
+| Storage | PostgreSQL 17 (`pg_trgm` for path fuzzy search); original bytes on local disk or in private Cloudflare R2 |
 | Cache | Valkey / Redis-compatible, with a memory fallback |
 | Retrieval | CJK bigram + Latin token n-grams, BM25, signed hashing vectors, RRF |
 | AI | DeepSeek `deepseek-flash` (OpenAI-compatible chat completions) |
@@ -108,17 +118,22 @@ result carries its source, chunk number, and time.
 ```bash
 mkdir -p data
 sudo chown -R 10001:10001 data
-docker compose up --build
+# The production Compose default is R2; local disk is the simplest first run.
+APSOR_STORAGE_BACKEND=local docker compose up --build
 ```
 
 > 注意：`./data` 會以 bind mount 掛進容器，容器程序以 uid `10001` 執行。
 > 首次啟動前必須先建立目錄並調整擁有者，否則上傳與原始檔寫入會失敗。
 > 若主機使用者已是 uid `10001`，可省略 `sudo chown`。
 
-Open <http://127.0.0.1:8000>. The first visit asks you to create the single
-owner account. Once signed in, the archive is ready for uploads, notes, and
-memories. PostgreSQL uses a named volume; uploaded originals and the generated
-secret key live under the host's `./data` directory.
+Open <http://127.0.0.1:8000>. The first visit asks you to create the root
+account. The root can then create normal accounts from **Accounts**; each new
+account receives a one-time temporary password and must change it at first
+sign-in. PostgreSQL uses a named volume; local original bytes and the generated
+secret key live under the host's `./data` directory. The production Compose
+files default to `APSOR_STORAGE_BACKEND=r2`; see
+[Object storage](#object-storage-local-or-r2) for the credentials it needs, or
+keep local storage for a self-contained host.
 
 The API image copies the committed `frontend/dist`; it does not run a frontend
 build. After changing frontend code, run `cd frontend && bun run build` before
@@ -142,10 +157,61 @@ Without it, summaries fall back to a deterministic extractive form, image
 uploads use the filename caption, and agent messages return
 `503 agent_not_configured`.
 
+### Object storage (local or R2)
+
+`APSOR_STORAGE_BACKEND` chooses the default for new original bytes:
+
+- `local` writes under `APSOR_DATA_DIR` and is the default for development and
+  tests.
+- `r2` writes to a private Cloudflare R2 bucket. Both production Compose files
+  default to `r2`; set `APSOR_STORAGE_BACKEND=local` for a first boot or a
+  rollback.
+
+The non-secret R2 values are `APSOR_R2_ENDPOINT_URL`, `APSOR_R2_BUCKET`
+(`apsor-archive` in the deployment), `APSOR_R2_REGION` (`auto`), and
+`APSOR_R2_PREFIX`. Credentials live in the gitignored `.secrets/r2.env`, which
+Compose mounts read-only and the app reads itself, so they never become
+container environment variables:
+
+```bash
+mkdir -p .secrets
+# Fill these in locally; never commit the file.
+printf 'APSOR_R2_ACCESS_KEY_ID=...\nAPSOR_R2_SECRET_ACCESS_KEY=...\n' \
+  > .secrets/r2.env
+chmod 755 .secrets
+# Container uid 10001 needs read access; other host users do not.
+sudo chgrp 10001 .secrets/r2.env
+chmod 640 .secrets/r2.env
+```
+
+The file must be readable by container uid `10001` (mode `640` with group
+`10001`, or `644` on a single-user host). The bucket stays private:
+no presigned URLs, no public bucket access, and no lifecycle expiry on `files/`.
+`data/.secret_key` is the Fernet master key and remains local; back it up
+separately from PostgreSQL.
+
+To move an existing archive from local disk to R2, stop the API and worker and
+run the storage CLI from `backend/`:
+
+```bash
+uv run python -m script.migrate_storage_to_r2 --dry-run
+uv run python -m script.migrate_storage_to_r2 --copy
+uv run python -m script.migrate_storage_to_r2 --verify
+# only after a verified backup and rollback window
+uv run python -m script.migrate_storage_to_r2 --delete-local
+```
+
+`--copy` uploads and verifies size and SHA-256, then marks the matching `file`
+and retryable `file_ingest_job` rows as `storage_backend='r2'`. Keep the
+PostgreSQL dump, the data-directory backup, and the R2 bucket contents together
+as one backup set. Back up the bucket with versioning or an object-sync job;
+soft-deleted files keep their objects.
+
 ### Configure providers in the app
 
-The Settings page is the normal way to configure providers. It writes to four
-independent capability tables, so one capability can never overwrite another:
+The Settings page is the normal way to configure providers, and only the root
+account can edit the global registry. It writes to four independent capability
+tables, so one capability can never overwrite another:
 
 - **Chat** — `chat_provider_config`: DeepSeek or any OpenAI-compatible chat
   endpoint. Multiple saved rows are allowed; exactly one is active.
@@ -160,8 +226,10 @@ independent capability tables, so one capability can never overwrite another:
 
 Every table has a partial unique index on `is_active`; PostgreSQL enforces at
 most one active row per capability. Deleting a row does not reuse its identity
-id. The API never returns a plaintext key: the browser receives only a hint such
-as `...14f8`. `APSOR_SECRET_KEY` supplies the Fernet master key. If it is unset,
+id. Provider rows are global deployment configuration: only the root account can
+list, edit, test, or delete them, and normal users never receive a provider
+secret or a global runtime setting. The API never returns a plaintext key: the
+browser receives only a hint such as `...14f8`. `APSOR_SECRET_KEY` supplies the Fernet master key. If it is unset,
 a `0600` key file is created at `data/.secret_key` (or `/data/.secret_key` in
 Docker), so encrypted values survive restarts. `APSOR_TAVILY_API_KEY` is an
 optional environment fallback for both web capabilities.
@@ -227,18 +295,20 @@ transcript.
 ### Frequently used prompts
 
 The **Frequent prompts** panel on `/settings` edits the shortcuts shown on the
-empty `/chat` page. Each row has a title, prompt text, and `sort_order`; the list
-is capped at 20 rows, ordered by `sort_order` then `id`, and cached for 60
-seconds under the `prompts` cache scope. Clicking a shortcut fills the composer
-with its full prompt text; it does not send the message. The API is
+empty `/chat` page. The list is private to the signed-in account: each row has a
+title, prompt text, and `sort_order`; the list is capped at 20 rows per account,
+ordered by `sort_order` then `id`, and cached for 60 seconds under that account's
+`prompts` cache scope. Clicking a shortcut fills the composer with its full
+prompt text; it does not send the message. The API is
 `GET/POST/PUT/DELETE /api/v1/settings/frequent-prompts`.
 
 ### Agent runtime settings
 
-The **Agent runtime** panel on `/settings` edits the singleton `agent_config`
-row (`id=1`). Provider and model selection stay in the AI settings above, so
-there is still one source of truth for which model answers. All thirteen runtime
-values are stored in PostgreSQL and apply to new runs without a restart.
+The **Agent runtime** panel on `/settings` (root only) edits the singleton
+`agent_config` row (`id=1`). Provider and model selection stay in the AI settings
+above, so there is still one source of truth for which model answers. All
+thirteen runtime values are stored in PostgreSQL, apply to new runs without a
+restart, and are shared by every account.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -322,9 +392,11 @@ The standard and Cloudflare Compose stacks run this as a dedicated `worker`
 service and set `APSOR_INGEST_WORKER_ENABLED=false` on the API, so exactly one
 process owns the queue.
 
-The **Ingestion runtime** panel on `/settings` edits the singleton
+The **Ingestion runtime** panel on `/settings` (root only) edits the singleton
 `ingest_config` row. It is a full replacement, not a patch, and the read body
 carries `{config, defaults, source, updated_at}` with a Database/Defaults badge.
+The worker may claim jobs across accounts, but every parse, chunk, embedding, and
+publish step runs in the job owner's row-level-security context.
 
 | Method | Path | Operation |
 |---|---|---|
@@ -533,8 +605,10 @@ browsing, and it is the fallback layout on narrow screens.
 | `POST` | `/api/v1/files/{file_id}/move` | `{path}` | Move one current file in place; `200` |
 | `POST` | `/api/v1/files/{file_id}/copy` | `{path}` | Copy one current file to a new record; `201` |
 
-All three endpoints require the owner session and bump the archive cache version
-when they change the folder or file index.
+All three endpoints require an authenticated account and operate only on that
+account's folder tree. They bump that account's archive cache version when they
+change the folder or file index; a path in another account is a separate,
+non-conflicting tree.
 
 ### Agent conversations
 
@@ -593,8 +667,8 @@ client_utc_offset_minutes?}` and `.../retry` accepts `{request_id?}`. Both strea
 server-rendered `<current_time>` block on each user entry; the block is appended
 after the message text exactly once. The ordered system prompt sections are
 written at conversation creation and frozen into that thread. The four defaults
-are seeded as ordinary rows; Settings lets the owner edit, delete, or reorder
-every row. The event names are
+are seeded as ordinary rows; Settings lets the root account edit, delete, or
+reorder every row for the whole deployment. The event names are
 `run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
 `tool_end`, `approval_required`, `run_end`, and `error`. `run_start` reports
 `page_context_entry_id` (or `null`), `page_context_attached`, and `resumed` so
@@ -799,8 +873,9 @@ row, so the question keeps a stable id and its latest answer.
 | `POST` | `/api/v1/agent/questions/{question_id}/ask` | Run one turn and persist its outcome |
 
 The list body is `{resources, total, limit, offset}`. All five operations require
-the owner session. Create and update reject unknown fields, so a client cannot
-supply an answer. `question` is trimmed and limited to 32,000 characters.
+an authenticated account and only expose that account's saved questions. Create
+and update reject unknown fields, so a client cannot supply an answer.
+`question` is trimmed and limited to 32,000 characters.
 
 The table (`saved_question`) stores:
 
@@ -871,10 +946,15 @@ hooks resolve normal JSON responses. Markdown is rendered with `skipHtml`;
 citations resolve to File Library previews or memory readers. Saved questions
 remain available at `/questions` for later agent turns.
 
-Chat is the first item in the seven-item archive rail (Chat, File library,
-Timeline, Memory, Search, Dashboard, Settings). The root `/` opens Chat; the
-archive summary now lives at `/dashboard` with the `database` rail icon. Below 980 px the rail becomes a
-navigation drawer opened from the mobile bar.
+The rail is grouped rather than flat. The archive workspaces come first (Chat,
+File library, Timeline, Memory, Search, Dashboard), then a personal block with
+**User profile**, then the system block (Settings, **Accounts** for the root
+account only, About). The account card in the footer keeps only identity plus
+**Change password** and **Sign out**. Index numbers are computed from the
+rendered position, so hiding Accounts for a normal user leaves no gap. The root
+`/` opens Chat; the archive summary lives at `/dashboard` with the `database`
+rail icon. Below 980 px the rail becomes a navigation drawer opened from the
+mobile bar.
 
 ### Chat workspace
 
@@ -946,32 +1026,61 @@ Docker image copies the committed `frontend/dist` and does not run a frontend
 build, those emitted assets must be committed with the rest of `dist/`. They are
 served locally and never fetched from a CDN.
 
-### Account and sessions
+### Accounts, roles, and sessions
 
-On the first visit the app asks you to create the single owner account. There is
-no default password, no email recovery, and no second account. Passwords are
-hashed with Argon2; the database stores only a SHA-256 hash of each session
+On the first visit the app asks you to create the root account. There is no
+default password and no email recovery. The root can then create normal
+accounts from **Accounts**; a new account is created with a generated
+20-character temporary password that is shown once, and it must choose a new
+password before any archive content loads. Root can disable, enable, and reset
+any other account. Disabling an account or resetting its password revokes its
+sessions; revocation is checked at request start, so an SSE turn that was
+already streaming may finish its current run. Accounts are never deleted, so a
+username stays reserved.
+
+Both roles use the same private archive surface. The root additionally manages
+accounts and global settings, but is not a data superuser: the API and
+PostgreSQL row-level security prevent it from reading another account's files,
+memories, or conversations through normal queries. Password reset is the
+trusted-recovery exception: root can issue a temporary password and therefore
+could sign in as that account before the user changes it. Protect the root
+credential accordingly; RLS is not a defense against a malicious root who uses
+the reset capability. Normal users do not see the global Settings tabs or
+the **Accounts** page; their Settings shows only **Frequent prompts** and
+**Language**, while root sees all eight tabs. Dashboard and stats counts are
+scoped to the signed-in account; AI status is global and read-only. Passwords
+are hashed with Argon2; the database stores only a SHA-256 hash of each session
 token. The cookie is HttpOnly, SameSite=Lax, and Secure when
-`APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it). The user can edit
-a display name and any number of ordered title/content profile cards from the
-sidebar account row at `/profile`; the name labels chat turns and the cards are
-frozen into new conversations as the `user_profile` system section. The sign-in
+`APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it). Each
+account can edit its display name and any number of ordered title/content
+profile cards at `/profile`; the name labels chat turns and the cards are frozen
+into new conversations as the `user_profile` system section. The sign-in
 username stays immutable.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/auth/status` | First-run state and current session |
-| `POST` | `/api/v1/auth/setup` | Create the owner account (first run only) |
+| `POST` | `/api/v1/auth/setup` | Create the root account (first run only) |
 | `POST` | `/api/v1/auth/login` | Verify a password and set the session cookie |
 | `POST` | `/api/v1/auth/logout` | Delete the session and clear the cookie |
-| `GET` | `/api/v1/auth/me` | Current owner (requires a session) |
+| `POST` | `/api/v1/auth/password` | Change the signed-in password; allowed while a change is forced |
+| `GET` | `/api/v1/auth/me` | Current account (requires a session) |
 | `GET` | `/api/v1/auth/profile` | Display name plus every ordered profile card |
 | `PUT` | `/api/v1/auth/profile` | Replace the display name and all cards atomically |
+| `GET` | `/api/v1/accounts` | List every account, root first (root only) |
+| `POST` | `/api/v1/accounts` | Create a normal account and return a one-time temporary password (root only) |
+| `POST` | `/api/v1/accounts/{user_id}/disable` | Disable an account and revoke its sessions (root only) |
+| `POST` | `/api/v1/accounts/{user_id}/enable` | Re-enable an account (root only) |
+| `POST` | `/api/v1/accounts/{user_id}/reset-password` | Replace another account's password (root only) |
 
-Every knowledge, settings, and agent endpoint requires the session; only
-`/api/v1/health`, `/health`, `/api/v1/auth/*`, `/api/docs`, `/api/redoc`,
-`/openapi.json`, and the SPA shell are public. Tool endpoints need the session
-cookie too.
+Every knowledge, settings, prompt, and agent endpoint requires a signed-in,
+active account. Root-only settings and account routes return `403 forbidden` to
+a normal user, and a session with `must_change_password=true` can reach only the
+auth status, password-change, and logout endpoints until it changes the
+password. Only `/api/v1/health`, `/health`, `/api/v1/auth/status`,
+`/api/v1/auth/setup`, `/api/v1/auth/login`, `/api/v1/auth/logout`, `/api/docs`,
+`/api/redoc`, `/openapi.json`, and the SPA shell are public. Tool endpoints need
+the session cookie too.
 
 Document intake (`POST /api/v1/files`) supports:
 
@@ -1013,11 +1122,14 @@ make api-check
 
 It re-exports the schema, regenerates the client, and fails on any diff. This
 keeps the convenience of a committed client without letting it drift silently.
-The committed client includes the folder, move, and copy operations, the
-page-context request/detail/entry-kind contracts, agent runtime settings,
-conversation compact/clear operations, saved-question CRUD/ask operations, and
-the async ingest-job and ingestion-settings operations; the library board,
-settings panel, question book, and chat desk call the generated hooks directly.
+The schema currently declares 77 paths. Operation IDs are stable unless a
+contract change is intentional. The committed client includes the account,
+password-change, and root-only account operations; the folder, move, and copy
+operations; the page-context request/detail/entry-kind contracts; agent runtime
+settings; conversation compact/clear operations; saved-question CRUD/ask
+operations; and the async ingest-job and ingestion-settings operations. The
+library board, settings panel, question book, account directory, and chat desk
+call the generated hooks directly.
 
 ### Load a real corpus
 
@@ -1129,8 +1241,9 @@ Consequences:
 
 ## Data model
 
-The schema follows one rule: source metadata lives in its owning table, and the
-unified chunk table stores only the source key.
+The schema follows three rules: source metadata lives in its owning table, the
+unified chunk table stores only the source key, and every private row carries
+exactly one owner.
 
 ```text
 file ─────────────┐
@@ -1139,11 +1252,25 @@ memory ───────────┼──> chunk ──> chunk_ngram
 memory_summary ───┘
 ```
 
+The private archive tables below carry `user_id bigint NOT NULL`. The exceptions
+are the global config tables (`agent_config`, `ingest_config`,
+`system_prompt_section`, and the four provider tables), which are shared
+deployment configuration, and the auth tables (`app_user`, `user_session`),
+which hold identity rather than archive content.
+Parent/child links in private tables use composite `(id, user_id)` foreign keys,
+so a row cannot point into another account's lineage. Forced PostgreSQL
+row-level security on the `apsor_app` role is the database backstop; request
+transactions set `app.user_id` for the duration of one transaction. Auth tables
+deliberately stay outside RLS because login and session lookup happen before a
+user context exists; global config tables are read-all/root-write.
+
 - `file`: one row per version. `is_current` and `deleted_at` are soft state;
   ids are never reused. File leaves are not duplicated in the folder table:
-  their placement is `raw_file_path`.
+  their placement is `raw_file_path`. `storage_backend` records `local` or `r2`
+  for the original bytes and is null exactly when `storage_key` is null.
 - `folder`: explicit folder records (`parent_id`, `path`, `name`, `depth`).
-  Empty folders and folder identity survive independently of files.
+  Empty folders and folder identity survive independently of files. Uniqueness
+  is per account: `(user_id, path)`.
 - `chunk`: `(source_kind, source_id, chunk_index)` with an optional JSONB vector.
 - `chunk_ngram`: the inverted index used by BM25.
 - `memory`: linear timeline with an auto-generated `title`, `supersedes_ids`,
@@ -1156,11 +1283,14 @@ memory_summary ───┘
   provider, with an encrypted API key, a safe hint, and the model/base
   URL/dimension. A partial unique index on `is_active` enforces one active row
   per capability. `web_search` and `web_fetch` are independent credentials.
-- `app_user`: the single sign-in account, with an optional display name.
-- `user_profile_card`: ordered title/content cards that describe the user; the
+- `app_user`: one row per account. `role` is `root` or `user`; `is_active`,
+  `must_change_password`, `disabled_at`, `created_by_user_id`, and the password
+  audit timestamps model the account lifecycle. A partial unique index enforces
+  exactly one root, and usernames stay globally unique and immutable.
+- `user_profile_card`: ordered title/content cards that describe the account; the
   full set is frozen into a new conversation as the `user_profile` section.
-- `frequently_used_prompt`: user-editable shortcuts for the empty chat page,
-  ordered by `sort_order` and capped at 20 rows.
+- `frequently_used_prompt`: private, account-editable shortcuts for the empty
+  chat page, ordered by `sort_order` and capped at 20 rows per account.
 - `agent_conversation` / `agent_entry` / `agent_run`: the persistent agent's
   transcript scope, immutable entry log, and per-submission run state.
   `agent_commit_seq` groups entries written in one transaction. Page snapshots
@@ -1170,18 +1300,22 @@ memory_summary ───┘
   the loop snapshot used to resume the waiting run.
 - `agent_config`: one row (`id=1`) with the validated runtime limits used by the
   agent loop and the settings API.
-- `saved_question`: the Q&A library. `question` is owner-authored; `answer`,
-  `citations`, `conversation_id`, and the run status/error fields are written
-  only by an ask. `conversation_id` uses `ON DELETE SET NULL`, and
+- `saved_question`: the account's Q&A library. `question` is user-authored;
+  `answer`, `citations`, `conversation_id`, and the run status/error fields are
+  written only by an ask. `conversation_id` uses `ON DELETE SET NULL`, and
   `last_asked_at` records the most recent attempt.
 - `file_ingest_job`: the durable intake queue. It stores the source kind, path,
-  payload key, status/stage, `progress_pct`, chunk counts, bounded error fields,
-  and attempt/timestamps. A path can have only one active job. The job points at
-  its staged file, clears that link on failure, and the file and chunks become
-  current only when the job publishes them.
+  payload key and backend, status/stage, `progress_pct`, chunk counts, bounded
+  error fields, and attempt/timestamps. A path can have only one active job per
+  account. The job points at its staged file, clears that link on failure, and
+  the file and chunks become current only when the job publishes them.
 - `ingest_config`: one row (`id=1`) with the validated worker poll, extraction,
   in-flight, embedding, and chunk-size settings. It is not a chunk source; the
   queue references the file that is eventually published.
+
+Original bytes are not stored in PostgreSQL. They live on local disk or in the
+private R2 bucket, selected per file by `storage_backend`; the extracted chunks
+and their n-grams remain in PostgreSQL.
 
 The complete local design notes live under `docs/plan/` (gitignored). The
 committed code, comments, UI copy, and documentation are English.
@@ -1207,8 +1341,16 @@ bun audit
 
 The integration suite uses one real PostgreSQL test database
 (`apsor_archive_test`) on the same instance, runs sequentially, and resets every
-table between tests. There are exactly ten tests; each one exercises the real
-HTTP surface and database. The agent test covers runtime settings defaults,
+tracked table between tests. The database is built by `alembic upgrade head`,
+not `create_all`, so the `apsor_app` role, grants, and RLS policies are present
+in every request. There are 25 collected tests; each one exercises the real HTTP
+surface and database. The multi-user tests cover the root/user lifecycle,
+forced password change, one-time temporary passwords, disable/reset session
+revocation, root-only accounts and global settings, private archive isolation
+across files, folders, memories, summaries, conversations, questions, and
+prompts, per-account prompt caps, direct-SQL RLS denial, and
+`commit_and_reapply` restoring the scoped context after a checkpoint. The agent
+test covers runtime settings defaults,
 full PUT/reset, validation, the runtime snapshot used by later runs, auto and
 manual compaction, clear, page-context reattachment at a boundary, retry,
 parallel/sequential tool execution, human save-memory approval (no write before
@@ -1222,9 +1364,11 @@ returning plaintext, tests the injected provider probe, and verifies identity
 ids are not reused after delete. The prompt coverage creates, lists, updates,
 orders by `sort_order`, caps at 20 rows, and deletes frequently used prompts. The
 file-library test also uploads an image without a vision provider and verifies
-the filename caption, stored original, path listing, and search result.
+the filename caption, stored original, path listing, and search result; its R2
+case exercises the adapter with a fake client and checks missing-object
+translation without network access.
 
-The latest migration is `b7e2d4f6a8c1`, after `f4a1c7d9e2b3`. The migrations
+The latest migration is `e8f1c4d2a7b9`, after `b8f4c2d9e6a1`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1252,7 +1396,7 @@ after `agent_config` on this branch are:
   derived from `file.raw_file_path`. The downgrade recreates current folder rows
   and current file leaves;
 - `d5e9f3a7b2c1` creates the singleton `system_prompt` table for the
-  owner-authored first system section;
+  root-authored first system section;
 - `e1a2b3c4d5f6` splits `ai_provider_config` into four capability tables
   (`chat_provider_config`, `embedding_provider_config`,
   `web_search_provider_config`, `web_fetch_provider_config`), copies existing
@@ -1273,17 +1417,27 @@ after `agent_config` on this branch are:
 - `b7e2d4f6a8c1` creates `user_profile_card` with ordered title/content rows,
   migrates the existing `app_user.bio` into an `About` card, and drops the
   single bio column;
-- `e5c1a9d3b7f2` (current head) unifies custom sections and built-in overrides
-  into one `system_prompt_section` table. The upgrade materializes the effective
-  built-in bodies as ordinary rows after the custom rows, deletes the override
-  rows, and drops `builtin_key` and its constraints. All rows are now editable,
-  deletable, and reorderable; `reset` replaces the collection with the four
-  seeded defaults.
+- `e5c1a9d3b7f2` unifies custom sections and built-in overrides into one
+  `system_prompt_section` table. The upgrade materializes the effective built-in
+  bodies as ordinary rows after the custom rows, deletes the override rows, and
+  drops `builtin_key` and its constraints. All rows are now editable, deletable,
+  and reorderable; `reset` replaces the collection with the four seeded
+  defaults;
+- `b8f4c2d9e6a1` raises the `max_tool_calls_per_turn` default from 6 to 20 and
+  promotes an untouched stored default row;
+- `e8f1c4d2a7b9` (current head) adds `user_id` ownership to every private table,
+  composite `(id, user_id)` lineage foreign keys, per-account unique indexes,
+  `file.storage_backend` / `file_ingest_job.storage_backend`, the single-root
+  partial unique index, and the `role` / `is_active` / `must_change_password`
+  account columns. It backfills existing rows to the oldest account, creates the
+  non-login `apsor_app` role, revokes `alembic_version` from it, and enables
+  forced RLS with owner policies on private tables and read/root-write policies
+  on global config tables. Auth tables stay outside RLS.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
-row `1`. The integration suite builds tables from SQLAlchemy metadata, so
-migration upgrade/downgrade is validated separately against the development
-database.
+row `1`. The integration suite runs the migration chain on a disposable
+PostgreSQL database, so it verifies the role, grants, and RLS policies; Alembic
+downgrade is still validated separately against a development database.
 
 ## Project layout
 
@@ -1305,20 +1459,23 @@ backend/
       router/                   HTTP adapters incl. file intake and settings
       schema/                   Pydantic contracts
       exception/                stable error codes
+    module/auth/                accounts, roles, sessions, profile cards
     module/agent/               transcript, runtime settings, compaction, tools,
                                 saved questions, SSE
     module/prompt/              editable frequently used chat prompts
     module/web_research/        Tavily search/fetch service, URL safety, cache
   alembic/                      migrations
-  tests/                        ten integration tests
+  tests/                        25 integration tests
 frontend/
   src/app/
     component/                  shared archive UI
     generated-apis-types/       committed Orval client
+    auth/                       setup/login gate, forced password change
+    accounts/                   root-only account directory
     agent/                      page capture, trace, and inspector panels
     chat/                       reading room, retry, context actions
     questions/                  saved-question Q&A library
-    settings/                   provider, agent, and ingestion runtime panels
+    settings/                   role-filtered provider and runtime panels
     library/                    files, media gallery, preview modal, intake
     home/ search/ timeline/ memory/ method/ ...
   src/apis/fetch-client.ts      the only JSON mutator
@@ -1336,12 +1493,35 @@ docker/caddy/                   non-root reverse proxy for the tunnel
 
 ## Security and privacy
 
-- One owner account protects the archive. Passwords are hashed with Argon2;
-  session tokens are stored only as SHA-256 hashes in `user_session`. The cookie
-  is HttpOnly, SameSite=Lax, and Secure when `APSOR_COOKIE_SECURE=true`.
+- Complete first-run setup before exposing the service. While no account exists,
+  `/api/v1/auth/setup` is public by design; do not leave a fresh instance
+  reachable through a tunnel before the root account is created.
+- One root plus normal accounts protect the archive. Passwords are hashed with
+  Argon2; session tokens are stored only as SHA-256 hashes in `user_session`.
+  The cookie is HttpOnly, SameSite=Lax, and Secure when
+  `APSOR_COOKIE_SECURE=true`. A temporary password is returned once, never
+  logged or cached, and the account must change it before loading content.
+- Every private row carries `user_id`; composite foreign keys keep lineage
+  inside one account, and PostgreSQL forced row-level security on `apsor_app`
+  denies cross-account reads and writes even if a service filter is missing.
+  Root-only route guards protect accounts and global settings, but root is not a
+  data superuser and cannot read another account's archive through normal API
+  queries. Root password reset is a trusted-recovery capability that can
+  transfer sign-in access to the target account; treat root as the highest-trust
+  credential and do not model RLS as protection against a malicious root.
+- **RLS is an application boundary, not a host boundary.** The deployment login
+  is a PostgreSQL superuser used for migrations and maintenance; the app
+  switches to `apsor_app` for request transactions. Any local OS user, any
+  container on the database/cache network, or anyone who can read
+  `.secrets/`/`.env` can bypass the API and RLS. Keep the host trusted, keep the
+  database and cache bound to localhost or an internal network, use distinct
+  host accounts, set a strong database/cache password for any shared host, and
+  rotate credentials after exposure. A future hardening step is a dedicated
+  non-superuser runtime login plus a separate maintenance credential.
 - The normal Compose file binds the API to `127.0.0.1`; the Cloudflare file
   publishes no host port. Login throttling is in-memory and therefore
-  single-process.
+  single-process; run one API process, or move the throttle to Valkey before
+  scaling out.
 - Paths reject traversal segments, backslashes, control characters, and
   over-long values. Uploads are capped at 10 MB and restricted to an extension
   allowlist.
@@ -1351,6 +1531,9 @@ docker/caddy/                   non-root reverse proxy for the tunnel
 - The DeepSeek key lives in `.secrets/deepseek.env` or the environment. It is
   never logged, returned, or committed. Keys saved from the Settings page are
   encrypted in PostgreSQL and returned only as a four-character hint.
+- R2 credentials live in the gitignored `.secrets/r2.env`, are mounted
+  read-only, and never become container environment variables. The bucket is
+  private, with no presigned or public URLs.
 - AI calls happen for summaries and agent turns. If the provider fails, the API
   returns a stable error instead of inventing an answer.
 

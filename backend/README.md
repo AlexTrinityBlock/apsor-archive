@@ -1,6 +1,8 @@
 # Apsor Archive Backend
 
-FastAPI service for the Apsor Archive knowledge and memory archive.
+FastAPI service for the Apsor Archive knowledge and memory archive. One root
+account manages membership and global runtime settings; every normal account has
+a private archive enforced by PostgreSQL row-level security.
 
 ## Run
 
@@ -24,10 +26,15 @@ Default settings:
 - `APSOR_DATA_DIR=backend/data`
 - `APSOR_STATIC_DIR` defaults to the repository's `frontend/dist`
 - `APSOR_TIMEZONE=Asia/Taipei`
+- `APSOR_STORAGE_BACKEND=local` (`local` or `r2`; production Compose defaults to `r2`)
 
 Every setting is prefixed with `APSOR_`. The app also reads `.env`,
-`.secrets/deepseek.env`, and `.secrets/openai.env` for local development
-(using both the current directory and its parent).
+`.secrets/deepseek.env`, `.secrets/openai.env`, and `.secrets/r2.env` for local
+development (using both the current directory and its parent). R2 uses
+`APSOR_R2_ENDPOINT_URL`, `APSOR_R2_BUCKET`, `APSOR_R2_REGION`,
+`APSOR_R2_PREFIX`, `APSOR_R2_ACCESS_KEY_ID`, and `APSOR_R2_SECRET_ACCESS_KEY`;
+the local secret file may keep the legacy unprefixed `R2_*` names. Credentials
+are never logged or returned.
 
 ## AI
 
@@ -39,12 +46,59 @@ default model is `deepseek-flash`. Without a configured provider:
 - image uploads use a filename-derived caption and metadata;
 - agent messages return `503 agent_not_configured`.
 
+Only the root account can edit the global provider registry. Normal accounts can
+read AI availability but never receive provider secrets or runtime settings.
+
+## Object storage
+
+Original bytes are behind the three-method `FileStorageProtocol` (`save`, `read`,
+`delete`). `StorageRouter` selects an adapter per operation:
+
+- `local_storage.py` keeps bytes under `APSOR_DATA_DIR`.
+- `r2_storage.py` stores bytes in a private Cloudflare R2 bucket. boto3 runs in a
+  worker thread, the client is created lazily once per process, and the
+  constructor performs no network I/O.
+- New writes use `APSOR_STORAGE_BACKEND`. Reads use the row's
+  `file.storage_backend` (or the retryable `file_ingest_job.storage_backend`) and
+  fall back to the configured backend when the row value is null.
+- `storage_errors.py` translates botocore failures into
+  `StorageObjectMissingError`, `StorageUnavailableError`, and
+  `StorageConfigurationError`; provider diagnostics and credentials never reach
+  API responses.
+
+`file.storage_backend` and `file_ingest_job.storage_backend` are nullable and may
+be `local` or `r2`; they are null exactly when `storage_key` is null. Text-only
+records have no stored original. Soft delete keeps the object for history.
+
+`.secrets/r2.env` is gitignored and mounted read-only into the API and worker.
+It must be readable by container uid `10001`. The bucket (`apsor-archive` in the
+deployment) is private: no presigned URLs, no public access, and no lifecycle
+expiry on `files/`. `data/.secret_key` remains local and must be backed up with
+the database.
+
+Move local bytes to R2 with `backend/script/migrate_storage_to_r2.py` while the
+API and worker are stopped:
+
+```bash
+uv run python -m script.migrate_storage_to_r2 --dry-run
+uv run python -m script.migrate_storage_to_r2 --copy
+uv run python -m script.migrate_storage_to_r2 --verify
+uv run python -m script.migrate_storage_to_r2 --delete-local
+```
+
+`--copy` uploads missing objects, verifies size and SHA-256, and marks verified
+rows as `storage_backend='r2'`. `--delete-local` re-verifies each object before
+deleting the local copy and must wait for a verified PostgreSQL and
+data-directory backup. If `APSOR_R2_BUCKET` is absent from the host shell, pass
+`APSOR_R2_BUCKET=apsor-archive` explicitly.
+
 ## File ingestion
 
-Uploads and direct text can be queued as durable `file_ingest_job` rows. The
-synchronous `POST /api/v1/files` and `POST /api/v1/files/text` endpoints remain
-for clients that want a fully indexed file in the response. The async routes
-store the payload and return `202` with an `IngestJobSchema`:
+Uploads and direct text can be queued as durable `file_ingest_job` rows owned by
+the signed-in account. The synchronous `POST /api/v1/files` and
+`POST /api/v1/files/text` endpoints remain for clients that want a fully indexed
+file in the response. The async routes store the payload and return `202` with an
+`IngestJobSchema`:
 
 | Method | Path | Operation |
 |---|---|---|
@@ -57,9 +111,10 @@ store the payload and return `202` with an `IngestJobSchema`:
 The list returns `{total_results, jobs}`, newest first. `limit` is 1–100
 (default 20) and `offset` starts at 0. Retry accepts only a failed job whose
 attempt budget is not exhausted and returns it to `queued` with `202`.
-Missing jobs are `404 ingest_job_not_found`; a path already held by an active
-job is `409 ingest_job_conflict`; an ineligible retry is
-`409 ingest_job_not_retryable`.
+Missing jobs are `404 ingest_job_not_found`; a path already held by an active job
+for the same account is `409 ingest_job_conflict`; an ineligible retry is
+`409 ingest_job_not_retryable`. Every job query is scoped to the acting account,
+so another account's job id resolves as not found.
 
 A job reports its durable stage and percentage:
 
@@ -84,9 +139,10 @@ job with `SELECT ... FOR UPDATE SKIP LOCKED`. Parsing and chunking use a shared
 two in-flight jobs. Embedding is async with a global concurrency of six and
 batched progress updates; it does not consume extraction threads.
 
-The worker writes a staged file and chunks, ensures its folder chain, embeds,
-then
-publishes them only after embedding and summary complete. A failed job discards
+The worker claims a job through a maintenance session that can cross accounts,
+then immediately opens the job owner's `user_session`. It writes a staged file
+and chunks, ensures its folder chain, embeds, and publishes them only after
+embedding and summary complete. A failed job discards
 its staged rows and clears `file_id`, so an unfinished path never appears as a
 partial current file or chunk set. On startup, jobs whose heartbeat is older
 than the stale window (300 seconds by default) are requeued after their staged
@@ -112,10 +168,10 @@ dedicated workers.
 
 ### Runtime settings
 
-`ingest_config` is a singleton row (`id=1`). The worker reads a fresh database
-snapshot at the start of each loop and each claimed job, so a saved change
-applies to the next claim without a restart; a job already running keeps the
-snapshot it started with.
+`ingest_config` is a global singleton row (`id=1`) managed by the root account.
+The worker reads a fresh database snapshot at the start of each loop and each
+claimed job, so a saved change applies to the next claim without a restart; a job
+already running keeps the snapshot it started with.
 
 | Method | Path | Operation |
 |---|---|---|
@@ -146,8 +202,10 @@ ranges and the overlap rule; request validation failures map to
 
 ## Agent conversations
 
-`/api/v1/agent` is a persistent, Pi-shaped multi-turn archive agent. The schema
-is deliberately not a mutable chat log:
+`/api/v1/agent` is a persistent, Pi-shaped multi-turn archive agent. Every
+conversation, entry, run, and approval belongs to the signed-in account and is
+invisible to every other account, including root. The schema is deliberately not
+a mutable chat log:
 
 - `agent_conversation` stores transcript metadata, provider/model identity, and
   `provider_session_id`.
@@ -179,7 +237,8 @@ creates an `agent_approval` row; the run survives an API restart while that row
 is pending. The unique index for an active run covers `status = 'running'`;
 the service enforces one active (`running`/`waiting`) run per conversation.
 
-Endpoints (all require the session cookie):
+Endpoints (all require an authenticated, active account; the settings and
+system-prompt routes additionally require the root role):
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -268,10 +327,12 @@ runs or archived/deleted conversations are expired.
 
 ### Runtime settings
 
-`agent_config` is a singleton row (`id=1`). `GET /api/v1/agent/settings`,
-`PUT /api/v1/agent/settings`, and `POST /api/v1/agent/settings/reset` are thin
-adapters over `AgentSettingsService` with operation ids `getAgentSettings`,
-`updateAgentSettings`, and `resetAgentSettings`. The read body is:
+`agent_config` is a global singleton row (`id=1`) managed by the root account.
+`GET /api/v1/agent/settings`, `PUT /api/v1/agent/settings`, and
+`POST /api/v1/agent/settings/reset` are thin adapters over
+`AgentSettingsService` with operation ids `getAgentSettings`,
+`updateAgentSettings`, and `resetAgentSettings`. The same limits apply to every
+account. The read body is:
 
 ```json
 {
@@ -310,10 +371,10 @@ three cross-field rules. There is deliberately no `context_window_tokens` versus
 budget is the cost guard. The global validation handler maps request validation
 failures to `400 invalid_request`, not 422.
 
-`get_agent_runtime_config` loads one snapshot in a short-lived session and
-returns a frozen dataclass. The dependency runs before an SSE response starts;
-an already active run keeps its snapshot, while a later run reads the current
-row. Provider and model still come from `/api/v1/settings/providers`.
+`get_agent_runtime_config` loads one snapshot in a short-lived system session
+and returns a frozen dataclass. The dependency runs before an SSE response
+starts; an already active run keeps its snapshot, while a later run reads the
+current row. Provider and model still come from `/api/v1/settings/providers`.
 
 ### Compaction and clearing
 
@@ -417,13 +478,13 @@ reuses the original message's stored block. This lets the agent answer "now",
 
 ### System prompt module
 
-`system_prompt_section` stores one ordered collection: `title`, `body`,
-`sort_order`, `created_at`, and `updated_at`. Every row is equal. The four
-defaults (`Identity`, `Instructions`, `Examples`, `Context protocol`) are
-seeded as ordinary rows by migration `e5c1a9d3b7f2` and by
-`POST /reset`; they can then be edited, deleted, and reordered like any
-owner-authored section. There is no `builtin_key`, no Python-only fallback list,
-and no separate built-in endpoint. `GET`, `POST`, `PUT /order`,
+`system_prompt_section` stores one ordered, deployment-wide collection:
+`title`, `body`, `sort_order`, `created_at`, and `updated_at`. Every row is
+equal. The four defaults (`Identity`, `Instructions`, `Examples`, `Context
+protocol`) are seeded as ordinary rows by migration `e5c1a9d3b7f2` and by
+`POST /reset`; only the root account can edit, delete, or reorder them. There is
+no `builtin_key`, no Python-only fallback list, and no separate built-in
+endpoint. `GET`, `POST`, `PUT /order`,
 `PUT /{section_id}`, `DELETE /{section_id}`, and `POST /reset` under
 `/api/v1/agent/settings/system-prompt` manage the whole collection. Title and
 body are trimmed and both are required. `sort_order` is used instead of the
@@ -432,9 +493,10 @@ transaction and rejects partial or duplicate id lists. `POST /reset` deletes
 every row and inserts the four seed rows with fresh identities.
 
 `create_conversation` reads all non-empty rows in `sort_order, id` order and the
-owner's profile once. Every row renders as `system_prompt:<id>`, followed by
-`user_profile` when the user set a display name or cards. The combined sections
-become one provider system message and are frozen into `pi.system`. Editing,
+acting account's profile once. Every row renders as `system_prompt:<id>`,
+followed by `user_profile` when that account set a display name or cards. The
+combined sections become one provider system message and are frozen into
+`pi.system`. Editing,
 deleting, or reordering a row affects only new conversations and never rewrites
 an existing provider prefix. The list is cached under the `system_prompts` scope
 for 30 seconds; writes bump only that scope.
@@ -473,9 +535,10 @@ user message.
 
 ### Saved questions
 
-`saved_question` is the owner's Q&A library. It is separate from the immutable
-conversation log: a row can be created before an answer exists, and asking it
-writes only the latest outcome to that row.
+`saved_question` is the signed-in account's private Q&A library. It is separate
+from the immutable conversation log: a row can be created before an answer
+exists, and asking it writes only the latest outcome to that row. The
+conversation link must belong to the same account.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -593,7 +656,8 @@ No external provider call is made.
 
 ## Folder and file organization
 
-Three session-protected endpoints back the library board:
+Three authenticated endpoints back the library board; every path and file id is
+scoped to the acting account:
 
 | Method | Path | Body | Success |
 |---|---|---|---|
@@ -603,7 +667,8 @@ Three session-protected endpoints back the library board:
 
 `path` is at most 1,024 characters. Empty values reach the service so they
 produce the stable `invalid_path` domain error rather than a generic schema
-error.
+error. Folder and file path uniqueness is per account (`user_id, path`); two
+accounts may hold the same path independently.
 
 ### Create folder
 
@@ -682,18 +747,39 @@ PDF.js CMaps and standard fonts are copied into `frontend/public/pdfjs` by
 `frontend/dist/pdfjs` by Vite. The Docker image copies the committed `dist`, so
 those generated assets must be committed with the build.
 
-## Account and sessions
+## Accounts and sessions
 
-The first visit creates the single owner account through
-`POST /api/v1/auth/setup`. `GET /api/v1/auth/profile` returns the effective
-display name and ordered cards; `PUT /api/v1/auth/profile` replaces the name and
-every card atomically. The sign-in username stays immutable. Passwords are
-hashed with Argon2; sessions are opaque cookies whose SHA-256 hash is stored in
-`user_session`. The cookie is HttpOnly and
-SameSite=Lax; set `APSOR_COOKIE_SECURE=true` behind HTTPS. Every knowledge,
-settings, and agent endpoint requires the session; `/api/v1/health`,
-`/health`, `/api/v1/auth/*`, `/api/docs`, `/api/redoc`, `/openapi.json`, and the SPA
-shell are public. There is no password recovery, by design.
+The first visit creates the root account through `POST /api/v1/auth/setup`.
+`/api/v1/accounts` is the root-only account directory: list, create, disable,
+enable, and reset-password. Creating or resetting returns a generated
+20-character temporary password exactly once, sets
+`must_change_password=true`, and revokes the target's sessions on reset. A
+disabled account cannot log in, and its existing cookies fail on the next
+request. Accounts are never deleted; the username stays reserved. Root cannot
+disable itself or reset its own password through the account endpoints; use
+`POST /api/v1/auth/password` for self-service. There is exactly one root.
+
+`GET /api/v1/auth/profile` returns the acting account's effective display name
+and ordered cards; `PUT /api/v1/auth/profile` replaces the name and every card
+atomically. The sign-in username stays immutable. Passwords are hashed with
+Argon2; sessions are opaque cookies whose SHA-256 hash is stored in
+`user_session`. The cookie is HttpOnly and SameSite=Lax; set
+`APSOR_COOKIE_SECURE=true` behind HTTPS.
+
+Every knowledge, settings, prompt, and agent endpoint requires an authenticated,
+active account. Account and global-settings routes additionally require
+`role='root'` and return `403 forbidden` otherwise. While
+`must_change_password=true`, only auth status, password change, and logout are
+reachable; other protected routes return `403 password_change_required`.
+`/api/v1/health`, `/health`, `/api/v1/auth/status`, `/api/v1/auth/setup`,
+`/api/v1/auth/login`, `/api/v1/auth/logout`, `/api/docs`, `/api/redoc`,
+`/openapi.json`, and the SPA shell are public. There is no email or self-service
+password recovery; root resets a forgotten password from **Accounts**.
+
+Account/auth error codes include `account_disabled` (403),
+`password_change_required` (403), `forbidden` (403),
+`current_password_invalid` (400), `account_not_found` (404), `username_taken`
+(409), `cannot_disable_root` (409), and `last_root_protected` (409).
 
 ## Database
 
@@ -705,7 +791,12 @@ fields, account/session auth (`app_user`,
 `user_session`), the agent tables (`agent_conversation`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
-ingestion (`file_ingest_job`, `ingest_config`). The agent
+ingestion (`file_ingest_job`, `ingest_config`). The current head is
+`e8f1c4d2a7b9`; every private table now has `user_id` and forced RLS, the
+runtime role is `apsor_app`, and `file` / `file_ingest_job` record
+`storage_backend`. The migration chain is executed by the test fixture and
+verifies the role, grants, and policies; downgrades are still a separate check.
+The agent
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
 `c4f1a9e2b7d3` follows it and updates the entry `kind` and `model` check
 constraints to include `pi.page-context`; it does not add a table or column.
@@ -744,7 +835,7 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   are derived from `file.raw_file_path`. The downgrade recreates current folders
   and current file leaves;
 - `d5e9f3a7b2c1` creates the singleton `system_prompt` table for the
-  owner-authored first system section;
+  root-authored first system section;
 - `e1a2b3c4d5f6` splits `ai_provider_config` into four capability tables
   (`chat_provider_config`, `embedding_provider_config`,
   `web_search_provider_config`, `web_fetch_provider_config`), copies existing
@@ -764,21 +855,33 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   preserved;
 - `b7e2d4f6a8c1` creates `user_profile_card` with ordered title/content rows,
   migrates `app_user.bio` into an `About` card, and drops the bio column;
-- `e5c1a9d3b7f2` (current head) unifies custom sections and built-in overrides
-  into one `system_prompt_section` table. The upgrade materializes the effective
-  built-in bodies as ordinary rows after the custom rows, deletes the override
-  rows, and drops `builtin_key` and its constraints. The downgrade restores the
-  column and converts the first row whose title still matches a canonical
-  default back into an override; renamed rows stay custom and the old code falls
-  back to the Python default for that slot.
+- `e5c1a9d3b7f2` unifies custom sections and built-in overrides into one
+  `system_prompt_section` table. The upgrade materializes the effective built-in
+  bodies as ordinary rows after the custom rows, deletes the override rows, and
+  drops `builtin_key` and its constraints. The downgrade restores the column and
+  converts the first row whose title still matches a canonical default back into
+  an override; renamed rows stay custom and the old code falls back to the
+  Python default for that slot;
+- `b8f4c2d9e6a1` raises the `max_tool_calls_per_turn` default from 6 to 20 and
+  promotes an untouched stored default row;
+- `e8f1c4d2a7b9` (current head) adds `user_id` ownership and owner-safe
+  composite lineage foreign keys to the private tables, per-account unique
+  indexes, `storage_backend` on `file` and `file_ingest_job`, the single-root
+  partial unique index, and the `role` / `is_active` / `must_change_password`
+  account columns. It backfills existing rows to the oldest account, creates the
+  non-login `apsor_app` role, grants table/sequence privileges, revokes
+  `alembic_version`, and enables forced RLS with owner policies on private
+  tables and read-all/root-write policies on global config tables. Auth tables
+  stay outside RLS. Its downgrade revokes this database's grants but does not
+  drop the cluster-wide role.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
 Alembic/PostgreSQL identifiers that `a7c41e9d2b60` created. The application test
-suite builds tables from SQLAlchemy metadata (`Base.metadata.create_all`), so it
-does not execute Alembic and would not catch a bad constraint name by itself.
-Validate migration upgrade/downgrade separately against the development
-database.
+suite runs `alembic upgrade head` on a disposable database and verifies the
+role, grants, and policies, so it does execute the migration chain; it still
+does not replace a downgrade check. Validate migration downgrade separately
+against a development database.
 
 ```bash
 uv run alembic revision --autogenerate -m "change"
@@ -796,10 +899,19 @@ app/
     ai/                    DeepSeek client
     cache/                 Valkey + resilient memory fallback
     config/                settings
-    database/              async engine, request session, migrations
+    database/              async engine, RLS session helpers, migrations
     embedding/             hosted embedding client
-    files/                 local original-byte storage
+    files/                 local + R2 storage adapters, router, migration CLI
     logger/
+  module/auth/
+    domain/                username and password policy
+    model/                 app_user, user_session, user_profile_card
+    repository/            account and session persistence
+    router/                auth, password, profile, root-only accounts
+    service/               setup, login, password change, account lifecycle
+    schema/                auth and account contracts
+    exception/             stable auth/account errors
+    dependencies.py        composition root
   module/knowledge/
     domain/                chunking, n-grams, timeline, summary, ingest config
     model/                 SQLAlchemy models (files, chunks, ingest jobs/config)
@@ -822,10 +934,11 @@ app/
     dependencies.py        composition root + snapshot + fake-provider seam
 ```
 
-The agent uses `app.state.db.session_factory()` rather than the request session,
-so an SSE response never holds a request-scoped session. Runtime settings use a
-separate short-lived session in `get_agent_runtime_config`, which returns one
-frozen `AgentRuntimeConfig` per request. The test seam is
+The agent uses scoped `user_session` transactions rather than the request
+session, so an SSE response never holds a request-scoped session and every later
+transaction keeps the conversation owner's RLS context. Runtime settings use a
+separate short-lived system session in `get_agent_runtime_config`, which returns
+one frozen `AgentRuntimeConfig` per request. The test seam is
 `app.state.agent_chat_generator` or an override of
 `get_agent_chat_generator`.
 
@@ -839,20 +952,47 @@ uv run pip-audit
 PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 ```
 
-The tests use a real PostgreSQL database named `apsor_archive_test` on the same
-instance. They run sequentially, reset tables between tests, and treat warnings
-as errors. There are exactly ten collected tests:
+The tests use a disposable PostgreSQL database named `apsor_archive_test` on the
+same instance. The session fixture drops and recreates its schema, runs
+`alembic upgrade head` as the owning login, and verifies the `apsor_app` role,
+grants, RLS flags, and policies before any test starts. Tests run sequentially,
+reset every tracked table between cases, and treat warnings as errors. There are
+25 collected tests:
 
 1. `tests/test_agent.py::test_agent_entry_log_tool_loop_and_cache_usage`
 2. `tests/test_errors.py::test_validation_and_error_envelope`
 3. `tests/test_file_library.py::test_file_ingest_path_read_and_soft_delete`
-4. `tests/test_memories.py::test_save_memory_supersede_and_trace`
-5. `tests/test_search.py::test_hybrid_search_and_union_query`
-6. `tests/test_summaries.py::test_summary_fallback_and_search`
-7. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
-8. `tests/test_system_prompt.py::test_system_prompt_module_and_section_order`
-9. `tests/test_timeline.py::test_timeline_sparse_sampling`
-10. `tests/test_versions.py::test_file_history_and_versioning`
+4. `tests/test_file_library.py::test_delete_library_selection_soft_deletes_folder_tree`
+5. `tests/test_file_library.py::test_rename_file_keeps_identity_and_rejects_path_changes`
+6. `tests/test_file_library.py::test_r2_storage_adapter_roundtrip_and_error_safety`
+7. `tests/test_markdown_update.py::test_update_markdown_creates_new_version_and_reindexes`
+8. `tests/test_markdown_update.py::test_update_markdown_rejects_stale_version`
+9. `tests/test_markdown_update.py::test_update_markdown_rejects_non_markdown`
+10. `tests/test_markdown_update.py::test_update_markdown_rejects_deleted_or_history_file`
+11. `tests/test_markdown_update.py::test_update_markdown_rejects_empty_content`
+12. `tests/test_markdown_update.py::test_update_markdown_rejects_oversized_schema_content`
+13. `tests/test_memories.py::test_save_memory_supersede_and_trace`
+14. `tests/test_multi_user.py::test_account_lifecycle_forced_change_disable_and_reset`
+15. `tests/test_multi_user.py::test_root_only_accounts_and_global_settings`
+16. `tests/test_multi_user.py::test_private_archive_isolation_between_accounts`
+17. `tests/test_multi_user.py::test_frequent_prompt_cap_and_reorder_are_per_account`
+18. `tests/test_multi_user.py::test_rls_blocks_cross_user_direct_sql_and_requires_context`
+19. `tests/test_multi_user.py::test_commit_and_reapply_restores_rls_context`
+20. `tests/test_search.py::test_hybrid_search_and_union_query`
+21. `tests/test_summaries.py::test_summary_fallback_and_search`
+22. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
+23. `tests/test_system_prompt.py::test_system_prompt_module_and_section_order`
+24. `tests/test_timeline.py::test_timeline_sparse_sampling`
+25. `tests/test_versions.py::test_file_history_and_versioning`
+
+The multi-user tests also prove that a normal account gets `403` from
+root-only accounts/settings routes, that two accounts can hold the same library
+path without conflict, that cross-account reads are empty or `404` across files,
+folders, memories, summaries, conversations, questions, and prompts, and that
+`apsor_app` with an owner context cannot select, update, delete, or insert
+another account's rows through direct SQL. One test exercises a bare checkpoint
+followed by `commit_and_reapply` and proves the session returns to the scoped
+role and owner rows instead of the unrestricted owner login.
 
 The agent test injects a deterministic `FakeChatGenerator` by assigning
 `client.app.state.agent_chat_generator`; no DeepSeek or OpenAI request is made.
@@ -905,7 +1045,7 @@ past-life debt and 還淚, the stone's descent and 通靈寶玉, and the ending 
 寶玉 leaves with the monk and the Taoist, with citations such as
 `[file:27#...]`. That run is evidence, not a committed test fixture.
 
-The suite does not execute migrations; upgrade and downgrade are separate
-checks against the development database. Runtime settings and compaction are
-validated by Pydantic, the frozen `AgentRuntimeConfig`, and PostgreSQL check
-constraints.
+The suite executes the Alembic upgrade chain on the disposable database but does
+not validate downgrade; run downgrade separately against the development
+database. Runtime settings and compaction are validated by Pydantic, the frozen
+`AgentRuntimeConfig`, and PostgreSQL check constraints.

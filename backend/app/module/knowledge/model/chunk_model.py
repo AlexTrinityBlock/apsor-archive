@@ -7,11 +7,13 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Identity,
     Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -36,8 +38,10 @@ class ChunkModel(Base):
 
     __tablename__ = "chunk"
     __table_args__ = (
+        UniqueConstraint("id", "user_id", name="uq_chunk_id_user_id"),
         Index(
             "uq_chunk_current_source_ordinal",
+            "user_id",
             "source_kind",
             "source_id",
             "chunk_index",
@@ -46,6 +50,8 @@ class ChunkModel(Base):
         ),
         Index("ix_chunk_source", "source_kind", "source_id"),
         Index("ix_chunk_current", "is_current"),
+        Index("ix_chunk_user_id_source", "user_id", "source_kind", "source_id"),
+        Index("ix_chunk_user_id_current", "user_id", "is_current"),
         CheckConstraint("source_kind IN ('file', 'memory', 'summary')", name="source_kind_valid"),
         CheckConstraint("chunk_index >= 1", name="chunk_index_positive"),
         CheckConstraint("char_count >= 0", name="char_count_non_negative"),
@@ -53,6 +59,15 @@ class ChunkModel(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_chunk_user_id_app_user",
+        ),
+        nullable=False,
+    )
     source_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     source_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)

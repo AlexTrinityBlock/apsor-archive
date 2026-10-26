@@ -58,7 +58,7 @@ export function AuthFrame({
             <p>{t("core.auth.frame.asideDescription")}</p>
             <ul className="auth-aside__facts">
               <li>{t("core.auth.frame.localFirst")}</li>
-              <li>{t("core.auth.frame.singleKeeper")}</li>
+              <li>{t("core.auth.frame.privateAccounts")}</li>
               <li>{t("core.auth.frame.noTelemetry")}</li>
             </ul>
           </div>

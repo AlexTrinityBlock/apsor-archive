@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
+from app.dependency.auth import require_root
 from app.module.knowledge.dependencies import get_provider_config_service
 from app.module.knowledge.schema.provider_config_schema import (
     ProviderCreateSchema,
@@ -12,7 +13,11 @@ from app.module.knowledge.schema.provider_config_schema import (
 from app.module.knowledge.schema.settings_schema import EmbeddingReindexSchema
 from app.module.knowledge.service.provider_config_service import ProviderConfigService
 
-router = APIRouter(prefix="/settings", tags=["settings"])
+router = APIRouter(
+    prefix="/settings",
+    tags=["settings"],
+    dependencies=[Depends(require_root)],
+)
 
 
 @router.get(

@@ -13,6 +13,11 @@ export const settings = {
     description:
       "排序每个新对话使用的系统提示词区段、整理空白聊天页显示的常用提示词，并设置四个能力槽：对话、嵌入、网络搜索与网络抓取。密钥只保存在服务器，永远不会返回这个页面。",
     meta: "设置 08 · 本地优先档案馆",
+    personalEyebrow: "设置 · 个人设置",
+    personalTitle: "个人设置。",
+    personalDescription:
+      "整理空白聊天页显示的常用提示词，并选择界面语言。账号管理与全局运行环境设置属于 root 账号。",
+    personalMeta: "设置 02 · 本地优先档案馆",
   },
   utils: {
     providerHashing: "Hashing（离线）",
@@ -181,12 +186,12 @@ export const settings = {
     versionUnavailable: "无法获取版本",
     version: "v{version}",
     access: "访问",
-    accessTitle: "单一所有者账号",
+    accessTitle: "多用户档案馆",
     accessCopyBefore:
-      "这座档案馆由一个馆长账号与服务器端会话 cookie 保护。你目前以身份“",
+      "这座档案馆为每个账号提供私人档案库，全局设置由 root 管理。Root 负责账号与运行环境设置；每个账号只能读取自己的文件、记忆与对话。你目前以身份“",
     accessCopyAfter:
-      "”登录。没有云端账号、密码恢复，也没有按用户划分的权限模型。离开共享机器时，请从侧栏退出登录。",
-    keeperFallback: "馆长",
+      "”登录。请从主导航的账号页面管理账号。这里没有云端账号或电子邮件恢复；离开共享机器时，请从侧栏退出登录。",
+    keeperFallback: "root 账号",
     readMethod: "阅读方法",
   },
   diagnostics: {

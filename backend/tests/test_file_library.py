@@ -1,9 +1,21 @@
 """File ingestion, path listing, chunk windows, and soft deletion."""
 
+import asyncio
 import base64
+from types import SimpleNamespace
+from typing import Any
 
+import pytest
+from botocore.exceptions import ClientError
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
+from app.infrastructure.files import r2_storage
+from app.infrastructure.files.r2_storage import R2FileStorage
+from app.infrastructure.files.storage_errors import (
+    StorageObjectMissingError,
+    StorageUnavailableError,
+)
 from tests.helpers import create_text
 
 # A 1x1 blue PNG; enough to exercise the image extension and original storage.
@@ -719,3 +731,137 @@ def test_rename_file_keeps_identity_and_rejects_path_changes(client: TestClient)
     )
     assert deleted_rename.status_code == 404
     assert deleted_rename.json()["error"] == "file_not_found"
+
+
+class _FakeR2Body:
+    """A botocore StreamingBody stand-in that records its close state."""
+
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+        self.closed = False
+
+    def read(self) -> bytes:
+        return self._data
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakeR2Client:
+    """Offline S3 client with the small surface the adapter uses."""
+
+    def __init__(self) -> None:
+        self.objects: dict[tuple[str, str], bytes] = {}
+        self.denied = False
+        self.no_bucket = False
+        self.last_body: _FakeR2Body | None = None
+
+    def _client_error(self, code: str, status_code: int, message: str) -> ClientError:
+        return ClientError(
+            {
+                "Error": {"Code": code, "Message": message},
+                "ResponseMetadata": {"HTTPStatusCode": status_code},
+            },
+            "R2Operation",
+        )
+
+    def put_object(self, *, Bucket: str, Key: str, Body: bytes) -> None:
+        self.objects[(Bucket, Key)] = bytes(Body)
+
+    def get_object(self, *, Bucket: str, Key: str) -> dict[str, Any]:
+        if self.denied:
+            raise self._client_error(
+                "AccessDenied",
+                403,
+                "denied for super-secret-value in private-bucket",
+            )
+        if self.no_bucket:
+            raise self._client_error("NoSuchBucket", 404, "private-bucket is gone")
+        if (Bucket, Key) not in self.objects:
+            raise self._client_error(
+                "NoSuchKey",
+                404,
+                "missing key in private-bucket for super-secret-value",
+            )
+        body = _FakeR2Body(self.objects[(Bucket, Key)])
+        self.last_body = body
+        return {"Body": body}
+
+    def head_object(self, *, Bucket: str, Key: str) -> dict[str, int]:
+        if self.no_bucket:
+            raise self._client_error("NoSuchBucket", 404, "private-bucket is gone")
+        if (Bucket, Key) not in self.objects:
+            raise self._client_error(
+                "404",
+                404,
+                "missing key in private-bucket for super-secret-value",
+            )
+        return {"ContentLength": len(self.objects[(Bucket, Key)])}
+
+    def delete_object(self, *, Bucket: str, Key: str) -> None:
+        if self.no_bucket:
+            raise self._client_error("NoSuchBucket", 404, "private-bucket is gone")
+        self.objects.pop((Bucket, Key), None)
+
+
+def test_r2_storage_adapter_roundtrip_and_error_safety(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R2 put/get/delete works offline and never leaks provider details."""
+    fake = _FakeR2Client()
+    monkeypatch.setattr(
+        r2_storage,
+        "boto3",
+        SimpleNamespace(client=lambda *args, **kwargs: fake),
+    )
+    monkeypatch.setattr(r2_storage, "_CLIENT_CACHE", {})
+
+    storage = R2FileStorage(
+        endpoint_url="https://r2.invalid",
+        bucket="private-bucket",
+        access_key_id=SecretStr("access-key"),
+        secret_access_key=SecretStr("super-secret-value"),
+        prefix="archive",
+    )
+
+    async def scenario() -> None:
+        assert await storage.save("u/1/note.txt", b"hello r2") == "u/1/note.txt"
+        assert fake.objects == {
+            ("private-bucket", "archive/u/1/note.txt"): b"hello r2",
+        }
+        assert await storage.read("u/1/note.txt") == b"hello r2"
+        assert fake.last_body is not None
+        assert fake.last_body.closed is True
+        assert await storage.head_size("u/1/note.txt") == len(b"hello r2")
+        assert await storage.head_size("u/1/missing.txt") is None
+
+        await storage.delete("u/1/note.txt")
+        assert fake.objects == {}
+        # S3 deletion is idempotent and must not turn a missing key into an error.
+        await storage.delete("u/1/note.txt")
+
+        with pytest.raises(StorageObjectMissingError) as missing:
+            await storage.read("u/1/missing.txt")
+        assert str(missing.value) == "The stored object was not found."
+        assert "secret" not in str(missing.value).lower()
+        assert "private-bucket" not in str(missing.value)
+
+        fake.denied = True
+        with pytest.raises(StorageUnavailableError) as unavailable:
+            await storage.read("u/1/note.txt")
+        assert str(unavailable.value) == "Object storage is unavailable."
+        assert "secret" not in str(unavailable.value).lower()
+        assert "private-bucket" not in str(unavailable.value)
+
+        # A missing bucket must not look like a successfully deleted object.
+        fake.denied = False
+        fake.no_bucket = True
+        with pytest.raises(StorageUnavailableError) as missing_bucket:
+            await storage.delete("u/1/note.txt")
+        assert str(missing_bucket.value) == "Object storage is unavailable."
+        assert "bucket" not in str(missing_bucket.value).lower()
+
+        with pytest.raises(ValueError):
+            await storage.save("../escape.txt", b"not allowed")
+
+    asyncio.run(scenario())

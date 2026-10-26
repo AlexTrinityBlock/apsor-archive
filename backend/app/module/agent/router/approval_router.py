@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.dependency.auth import require_authenticated
 from app.module.agent.dependencies import get_agent_service
 from app.module.agent.router.conversation_router import (
     _TURN_RESPONSES,
@@ -15,7 +16,11 @@ from app.module.agent.router.conversation_router import (
 from app.module.agent.schema.agent_schema import AgentTurnResultSchema
 from app.module.agent.service.agent_service import AgentService
 
-router = APIRouter(prefix="/approvals", tags=["agent"])
+router = APIRouter(
+    prefix="/approvals",
+    tags=["agent"],
+    dependencies=[Depends(require_authenticated)],
+)
 
 
 @router.post(

@@ -10,14 +10,14 @@ Keep application assembly, infrastructure, and business slices separate so a fea
 
 - `main.py` is the composition shell. `create_app()` installs lifespan resources, exception handlers, middleware, routers, and the SPA fallback. `cli.py` starts the API; `worker.py` starts the durable-ingestion process.
 - `app.state` owns process-wide adapters: `db`, `cache`, `storage`, `secret_cipher`, `ai_runtime`, `ingest_worker`, and `settings`. Tests may replace `agent_chat_generator`, `web_research_service`, or `provider_tester`.
-- `dependency/` holds dependencies shared across slices. Today it exposes the authenticated owner guard; it is not a home for feature services.
-- `infrastructure/` adapts external systems: config, async database/Alembic, cache, local storage, AI/embeddings, web clients, security, and logging. Adapters implement slice protocols but must not own archive policy.
+- `dependency/` holds dependencies shared across slices. Today it exposes the authenticated account guard, the forced-password-change guard, and the root guard; it is not a home for feature services.
+- `infrastructure/` adapts external systems: config, async database/Alembic, cache, local/R2 storage, AI/embeddings, web clients, security, and logging. Adapters implement slice protocols but must not own archive policy.
 - `module/` contains vertical slices: `auth`, `knowledge`, `agent`, `prompt`, and `web_research`. A slice may contain `domain/` (pure rules), `model/` (SQLAlchemy), `schema/` (Pydantic HTTP contracts), `protocol/` (ports), `repository/` (SQL), `service/` (orchestration), `router/` (HTTP), `exception/`, and `dependencies.py`.
 - `module/*/dependencies.py` is the allowed cross-slice assembly point. Routers must receive services from dependencies rather than constructing repositories directly.
 - `shared/` contains only genuinely cross-cutting primitives: the exception registry, the generic list envelope, shared time, and text n-gram helpers. It must not absorb slice-specific logic.
 - All ORM models share the declarative base in `infrastructure/database/base.py`. The model package exports are imported by Alembic and tests, so a new model must be reachable through the owning `model/__init__.py`.
-- The request database session is created by `get_db_session` and committed once at request exit. Streaming agent turns and long-running workers must instead use `app.state.db.session_factory()` in short transactions.
-- Authentication is mounted as a router-level dependency in `main.py`. Do not add a second session-cookie parser or an alternative owner check in a feature router.
+- The request database session is created by `get_db_session`, starts as `apsor_app` with no owner context, and commits once at request exit. `get_current_user` applies `app.user_id`/`app.user_role` after resolving the cookie. Streaming agent turns and long-running workers must use `database.user_session(...)`, `database.system_session()`, or the explicit `maintenance_session(...)` helpers; never open a raw `session_factory()` for private data. Ingestion checkpoints must use `commit_and_reapply(...)`.
+- Authentication is mounted as a router-level dependency in `main.py`. Do not add a second session-cookie parser or an alternative account/role check in a feature router. Root-only global settings use `require_root`; ordinary private data uses `require_authenticated`.
 - `AiRuntime` is the single resolved view of chat, embedding, web-search, and web-fetch providers. Feature code should ask it for clients/config instead of reading provider rows or environment keys directly.
 - Stable errors are registered once during app creation. Every slice's `exception/handler.py` maps its domain exceptions to HTTP status plus a stable code; `shared/exception/registry.py` renders the envelope.
 
@@ -25,8 +25,8 @@ Keep application assembly, infrastructure, and business slices separate so a fea
 
 - `main.py` — app factory, lifespan, middleware, protected/public router mounting, SPA.
 - `cli.py`, `worker.py` — executable entrypoints and worker lifecycle.
-- `dependency/auth.py` — resolves the HttpOnly session cookie into the owner principal.
-- `infrastructure/database/session.py` — engine/session factory and commit boundary.
+- `dependency/auth.py` — resolves the HttpOnly session cookie into the account principal and applies the RLS context; exposes account/root guards.
+- `infrastructure/database/session.py` — engine/session factory, RLS-scoped session helpers, request commit boundary, and checkpoint helper.
 - `infrastructure/ai/runtime.py` — four-capability provider snapshot.
 - `infrastructure/config/settings.py` — settings and secret-file precedence.
 - `shared/exception/registry.py` — error and validation serialization.
@@ -38,13 +38,13 @@ Keep application assembly, infrastructure, and business slices separate so a fea
 - Place behavior in the slice that owns the concept. A route-only helper stays beside its router; a reusable domain rule belongs in `domain/`, not in a router.
 - Keep dependency direction inward: router → service → protocol/repository/domain. Composition roots may import across slices; routers and services should not reach into another slice's repository or call another slice's router.
 - Give services protocols for external collaborators and repositories so tests can inject fakes. Concrete classes are wired in `dependencies.py`.
-- Do not commit inside a request-scoped repository or service. Flush for generated ids and let the request boundary commit. Agent and worker code that owns its transaction scope is the explicit exception.
+- Do not commit inside a request-scoped repository or service. Flush for generated ids and let the request boundary commit. Agent and worker code that owns its transaction scope must open it through the scoped session helpers; use `commit_and_reapply` when a workflow checkpoint must commit inside that scope.
 - Define request contracts with types and bounds, use `extra="forbid"` for closed write payloads, and return explicit response models with stable `operation_id`s. Preserve error envelopes.
 - Raise domain exceptions from services. Register them in the slice handler; do not convert them into generic `HTTPException` at the router.
 - Keep provider and secret handling centralized. Never log API keys or return ciphertext; errors should be safe for the client.
 - Use `async` database and HTTP calls throughout. CPU-heavy extraction belongs in the worker's bounded executor.
 - Rebuild the checked-in OpenAPI/Orval artifacts after any route or schema change. Do not patch generated TypeScript.
-- When adding a model, update the slice model exports, a new Alembic revision, and migration verification. `create_all` in tests is not a migration test.
+- When adding a model, update the slice model exports, a new Alembic revision, and migration verification. The test fixture runs the real migration chain (including the `apsor_app` role, grants, and RLS policies); `Base.metadata.create_all` is deliberately not used.
 
 ## Verification
 

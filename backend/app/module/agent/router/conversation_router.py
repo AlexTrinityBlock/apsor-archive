@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Header, Query, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.dependency.auth import require_authenticated
 from app.module.agent.dependencies import get_agent_service, get_current_user_profile
 from app.module.agent.domain.agent_domain import AgentStreamEvent
 from app.module.agent.domain.user_profile_domain import UserProfile
@@ -28,7 +29,11 @@ from app.module.agent.schema.agent_schema import (
 from app.module.agent.service.agent_service import AgentService
 from app.shared.types.list_response import ListResponseSchema
 
-router = APIRouter(prefix="/conversations", tags=["agent"])
+router = APIRouter(
+    prefix="/conversations",
+    tags=["agent"],
+    dependencies=[Depends(require_authenticated)],
+)
 
 SSE_HEADERS = {
     "Cache-Control": "no-cache, no-transform",

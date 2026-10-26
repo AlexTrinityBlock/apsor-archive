@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.16.0",
     "argon2-cffi>=25.1.0",
+    "boto3>=1.43.118",
     "cryptography>=50.0.2",
     "fastapi>=0.121.0",
     "httpx>=0.28.1",

@@ -6,10 +6,15 @@ branches are validation rules and the runtime slot used to report readiness.
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 from urllib.parse import urlsplit
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.infrastructure.database.session import ROLE_USER, Database
 from app.infrastructure.security.secret_cipher import SecretCipherError
 from app.module.knowledge.domain.provider_config_domain import (
     CAPABILITY_CHAT,
@@ -23,11 +28,14 @@ from app.module.knowledge.domain.provider_config_domain import (
 from app.module.knowledge.exception.domain_error import (
     EmbeddingProviderError,
     InvalidProviderConfigError,
+    KnowledgeError,
     ProviderNotFoundError,
 )
+from app.module.knowledge.model.chunk_model import ChunkModel
 from app.module.knowledge.model.provider_config_model import ProviderConfigMixin
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.chunk_repository_protocol import ChunkRepositoryProtocol
+from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.provider_config import ProviderConfig, ProviderDefaults
 from app.module.knowledge.protocol.provider_config_repository_protocol import (
     ProviderConfigRepositoryProtocol,
@@ -45,13 +53,16 @@ from app.module.knowledge.schema.provider_config_schema import (
     ProviderUpdateSchema,
 )
 from app.module.knowledge.schema.settings_schema import EmbeddingReindexSchema
-from app.module.knowledge.service.cache_keys import cache_key
+from app.module.knowledge.service.cache_keys import cache_key, user_version_scope
 from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
 
 REGISTRY_CACHE_TTL_SECONDS = 30
 PROVIDERS_CACHE_SCOPE = "providers"
+REINDEX_BATCH_SIZE = 64
+
+type ChunkRepositoryFactory = Callable[[AsyncSession, int], ChunkRepositoryProtocol]
 
 
 @dataclass(frozen=True)
@@ -66,25 +77,35 @@ class _NormalizedProvider:
 
 
 class ProviderConfigService:
-    """Read and mutate the provider registry without ever returning a key."""
+    """Manage the global provider registry and fan embedding reindex out per owner.
+
+    The service never returns or logs plaintext keys. Embedding reindex is the
+    only operation that touches private chunk rows, and it does so exclusively
+    inside each owner's scoped session. A model change rebuilds current and
+    historical chunks because history remains searchable.
+    """
 
     def __init__(
         self,
         *,
+        user_id: int,
+        database: Database,
         repository: ProviderConfigRepositoryProtocol,
         runtime: ProviderRuntimeProtocol,
         cipher: SecretCipherProtocol,
         defaults: ProviderDefaults,
-        chunk_repository: ChunkRepositoryProtocol,
+        chunk_repository_factory: ChunkRepositoryFactory,
         cache: CacheProtocol,
         tester: ProviderTesterProtocol,
         registry_ttl_seconds: int = REGISTRY_CACHE_TTL_SECONDS,
     ) -> None:
+        self.user_id = user_id
+        self.database = database
         self.repository = repository
         self.runtime = runtime
         self.cipher = cipher
         self.defaults = defaults
-        self.chunk_repository = chunk_repository
+        self.chunk_repository_factory = chunk_repository_factory
         self.cache = cache
         self.tester = tester
         self.registry_ttl_seconds = registry_ttl_seconds
@@ -237,11 +258,84 @@ class ProviderConfigService:
         return bool(row.api_key_ciphertext)
 
     async def _reindex_required(self) -> bool:
+        """Report whether any owner's chunks use a model other than the active one.
+
+        Current and historical chunks are both considered because a model change
+        rebuilds every stored embedding, including rows reached by
+        ``include_history`` searches.
+        """
         if self.runtime.embedder.dimension <= 0:
             return False
-        counts = await self.chunk_repository.embedding_model_counts()
         current_model = self.runtime.embedder.model_name
-        return any(model != current_model for model in counts)
+        try:
+            owner_ids = await self._list_chunk_owner_ids()
+        except Exception as exc:
+            logger.warning(
+                "Could not enumerate owners while checking embedding state (%s).",
+                type(exc).__name__,
+            )
+            return True
+        for owner_id in owner_ids:
+            try:
+                async with self.database.user_session(owner_id, ROLE_USER) as session:
+                    repository = self.chunk_repository_factory(session, owner_id)
+                    counts = await repository.embedding_model_counts(include_history=True)
+                    total_chunks = await repository.count_chunks()
+            except Exception as exc:
+                logger.warning(
+                    "Could not inspect embedding state for user %d (%s).",
+                    owner_id,
+                    type(exc).__name__,
+                )
+                return True
+            if sum(counts.values()) < total_chunks:
+                return True
+            if any(model != current_model for model in counts):
+                return True
+        return False
+
+    async def _list_chunk_owner_ids(self) -> list[int]:
+        """Enumerate every owner with chunks without reading chunk content.
+
+        Current and historical rows both count. The maintenance session is used
+        only for this distinct owner-id query; every chunk read and write that
+        follows runs inside that owner's ``user_session``.
+        """
+        async with self.database.maintenance_session() as session:
+            statement = (
+                select(ChunkModel.user_id)
+                .distinct()
+                .order_by(ChunkModel.user_id)
+            )
+            return [int(row[0]) for row in (await session.execute(statement)).all()]
+
+    async def _bump_owner_index_version(self, owner_id: int) -> None:
+        """Invalidate one owner's private search/timeline/stats cache namespace."""
+        try:
+            await self.cache.bump_version(user_version_scope(owner_id))
+        except Exception:
+            logger.warning(
+                "Could not invalidate the private index cache for user %d.",
+                owner_id,
+            )
+
+    async def _invalidate_owner_index_caches(self) -> None:
+        """Invalidate every owner with chunks after an embedding change.
+
+        Historical chunks can appear in searches with ``include_history``, so
+        all chunk owners are invalidated, not only owners with current chunks.
+        """
+        try:
+            owner_ids = await self._list_chunk_owner_ids()
+        except Exception as exc:
+            logger.warning(
+                "Could not enumerate owners for embedding cache invalidation (%s).",
+                type(exc).__name__,
+            )
+            await self._bump_owner_index_version(self.user_id)
+            return
+        for owner_id in owner_ids:
+            await self._bump_owner_index_version(owner_id)
 
     # ------------------------------------------------------------------
     # Writes
@@ -355,15 +449,18 @@ class ProviderConfigService:
         return await self.get_registry()
 
     async def _after_write(self, spec: ProviderTableSpec) -> None:
-        """Flush, refresh the runtime, then invalidate the scoped caches."""
+        """Flush, refresh the runtime, then invalidate the scoped caches.
+
+        A provider write invalidates the global registry cache. An embedding
+        change also invalidates every owner's private index namespace because
+        every owner's vectors were produced by the previous model. The
+        maintenance scope is used only to enumerate owner ids.
+        """
         await self.repository.flush()
         await self.runtime.reload(self.repository)
-        # Provider 寫入只失效 providers scope 的 registry cache。Embedding 設定
-        # 另外失效 default "index" scope，因為 search/timeline 的 cache key 都
-        # 綁在 index version 上。
         await self.cache.bump_version(PROVIDERS_CACHE_SCOPE)
         if spec.capability == CAPABILITY_EMBEDDING:
-            await self.cache.bump_version()
+            await self._invalidate_owner_index_caches()
 
     # ------------------------------------------------------------------
     # Validation
@@ -519,41 +616,121 @@ class ProviderConfigService:
         )
 
     async def reindex_embeddings(self) -> EmbeddingReindexSchema:
-        """Re-embed every current chunk with the active embedding provider."""
+        """Re-embed every owner's chunks, current and historical.
+
+        The root request reads the global provider configuration and triggers the
+        operation. Owner ids are enumerated through a maintenance query that
+        selects only ``user_id``; chunk content is never read or written there.
+        Each owner is processed in short, independently committed
+        ``user_session`` batches, so one owner's failure or large corpus cannot
+        hold a transaction across archives.
+
+        A model change rebuilds historical chunks too because they remain
+        reachable by ``include_history`` searches.
+
+        A failed owner is logged with its id and the exception type (never chunk
+        or provider content), its stale search cache is still invalidated, and
+        the remaining owners are processed. The response therefore reports every
+        chunk that was committed, including batches completed before a failure.
+        """
+        await self.runtime.reload(self.repository)
+        spec = PROVIDER_TABLE_SPECS[CAPABILITY_EMBEDDING]
+        active_row = await self.repository.get_active(spec)
+        if active_row is not None:
+            active_config = self._config_from_row(spec, active_row)
+            if not active_config.enabled or active_config.provider == "none":
+                raise InvalidProviderConfigError("Embeddings are disabled.")
         embedder = self.runtime.embedder
         if embedder.dimension <= 0:
             raise InvalidProviderConfigError("Embeddings are disabled.")
-        started = time.perf_counter()
-        offset = 0
-        reindexed = 0
-        batch_size = 64
-        while True:
-            chunks = await self.chunk_repository.list_current_chunks(
-                limit=batch_size,
-                offset=offset,
+        try:
+            owner_ids = await self._list_chunk_owner_ids()
+        except Exception as exc:
+            logger.error(
+                "Could not enumerate owners for embedding reindex (%s).",
+                type(exc).__name__,
             )
-            if not chunks:
-                break
-            vectors = await embedder.embed([chunk.content for chunk in chunks])
-            if len(vectors) != len(chunks):
-                raise EmbeddingProviderError(
-                    f"The provider returned {len(vectors)} vectors for {len(chunks)} chunks."
+            raise KnowledgeError("Embedding reindex could not start.") from exc
+
+        started = time.perf_counter()
+        reindexed = 0
+        failed_owners = 0
+        for owner_id in owner_ids:
+            updated, failed = await self._reindex_owner_embeddings(
+                owner_id,
+                embedder,
+                batch_size=REINDEX_BATCH_SIZE,
+            )
+            reindexed += updated
+            # Even a failed attempt must drop cached results computed with the
+            # previous model; the next search then runs against the new state.
+            await self._bump_owner_index_version(owner_id)
+            if failed:
+                failed_owners += 1
+            else:
+                logger.info(
+                    "Reindexed %d embedding(s) for user %d.",
+                    updated,
+                    owner_id,
                 )
-            for chunk, vector in zip(chunks, vectors, strict=True):
-                await self.chunk_repository.update_embedding(
-                    chunk.id,
-                    vector,
-                    embedder.model_name,
-                )
-            reindexed += len(chunks)
-            offset += len(chunks)
-        await self.cache.bump_version()
+        if failed_owners:
+            logger.warning(
+                "Embedding reindex finished with %d failed owner(s); %d chunk(s) updated.",
+                failed_owners,
+                reindexed,
+            )
         return EmbeddingReindexSchema(
             reindexed=reindexed,
             model=embedder.model_name,
             dimension=embedder.dimension,
             elapsed_ms=int((time.perf_counter() - started) * 1000),
         )
+
+    async def _reindex_owner_embeddings(
+        self,
+        owner_id: int,
+        embedder: EmbedderProtocol,
+        *,
+        batch_size: int,
+    ) -> tuple[int, bool]:
+        """Re-embed one owner in short, independently committed batches.
+
+        Every chunk owned by the account is included, current and historical.
+        """
+        after_id = 0
+        updated = 0
+        while True:
+            try:
+                async with self.database.user_session(owner_id, ROLE_USER) as session:
+                    repository = self.chunk_repository_factory(session, owner_id)
+                    chunks = await repository.list_chunks_after(
+                        after_id=after_id,
+                        limit=batch_size,
+                    )
+                    if not chunks:
+                        return updated, False
+                    vectors = await embedder.embed([chunk.content for chunk in chunks])
+                    if len(vectors) != len(chunks):
+                        raise EmbeddingProviderError(
+                            f"The provider returned {len(vectors)} vectors for "
+                            f"{len(chunks)} chunks."
+                        )
+                    for chunk, vector in zip(chunks, vectors, strict=True):
+                        await repository.update_embedding(
+                            chunk.id,
+                            vector,
+                            embedder.model_name,
+                        )
+                    after_id = chunks[-1].id
+            except Exception as exc:
+                logger.error(
+                    "Embedding reindex failed for user %d after %d chunk(s) (%s).",
+                    owner_id,
+                    updated,
+                    type(exc).__name__,
+                )
+                return updated, True
+            updated += len(chunks)
 
     # ------------------------------------------------------------------
     # Internal configuration helpers
