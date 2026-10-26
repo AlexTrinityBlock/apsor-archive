@@ -107,7 +107,15 @@ class WebResearchServiceProtocol(Protocol):
         exclude_domains: list[str],
     ) -> WebSearchResponse: ...
 
-    async def fetch(self, url: str, *, max_chars: int) -> WebFetchResponse: ...
+    async def fetch(
+        self,
+        url: str,
+        *,
+        max_chars: int,
+        offset: int = 1,
+        limit: int = 200,
+        page: int | None = None,
+    ) -> WebFetchResponse: ...
 
 
 @dataclass(frozen=True)

@@ -28,7 +28,10 @@ from app.module.agent.domain.tool_args import (
 # existing conversations keep their frozen ``pi.system`` and old version string,
 # so their KV cache lineage is untouched.
 PROMPT_VERSION = "archive-agent-v12"
-TOOLS_VERSION = "archive-tools-v4"
+# v5 paginates web_fetch by line offset/page; it is still the same nine tools,
+# but the frozen tool schema changed, so a new conversation must use a new
+# tools version. Existing conversations keep their frozen pi.system snapshot.
+TOOLS_VERSION = "archive-tools-v5"
 
 
 @dataclass(frozen=True)
@@ -135,8 +138,13 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="web_fetch",
         description=(
-            "Fetch one public http(s) URL and return Markdown text. Use after "
-            "web_search when an excerpt is insufficient. Cite the URL. Read-only."
+            "Fetch one public http(s) URL and return a bounded Markdown slice. "
+            "Long pages are paginated: use offset (1-based first line, default "
+            "1) or page, plus limit (maximum lines, default 200). The result "
+            "reports page/total_pages, total_lines, has_more, and next_offset. "
+            "Keep calling web_fetch with offset=next_offset until has_more=false, "
+            "and never claim content beyond what you actually read. Cite the URL. "
+            "Read-only."
         ),
         args_model=WebFetchArgs,
         requires_confirmation=False,

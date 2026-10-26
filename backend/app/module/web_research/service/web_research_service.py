@@ -33,6 +33,17 @@ _MAX_SEARCH_CONTENT_CHARS = 8_000
 _MAX_SEARCH_RESULTS = 10
 _MAX_DOMAINS = 10
 _DEFAULT_FETCH_MAX_CHARS = 20_000
+_MAX_FETCH_LINES_PER_CALL = 2_000
+
+# web_fetch 以「完整文件」為快取單位：同一個 URL 只向 provider 抓一次，後續
+# 頁碼只做本機切片。schema marker 與全文上限都放進 cache key，任何語意變更
+# 都會讓舊資料自然失效。
+_FETCH_CACHE_SCHEMA = "v2"
+_MAX_FETCH_CACHE_CHARS = 2_000_000
+
+# 硬折行寬度刻意小於 max_chars 的最小值（1,000）：任何一行都一定塞得進單次
+# 回應，行式分頁因此永遠能前進，不會卡在「一行超過上限」而重複同一頁。
+_MAX_FETCH_WRAP_CHARS = 800
 
 
 class WebResearchService:
@@ -139,47 +150,225 @@ class WebResearchService:
         )
         return response
 
-    async def fetch(self, url: str, *, max_chars: int) -> WebFetchResponse:
-        """Fetch one public URL as Markdown, clipped at the service boundary."""
+    async def fetch(
+        self,
+        url: str,
+        *,
+        max_chars: int,
+        offset: int = 1,
+        limit: int = 200,
+        page: int | None = None,
+    ) -> WebFetchResponse:
+        """Fetch one public URL and return one line-bounded Markdown slice.
+
+        The full normalized document is cached once per URL. ``offset`` is a
+        1-based line number and ``page`` is a 1-based window of ``limit``
+        lines; both the argument model and the tool layer reject supplying
+        both explicitly, so if a direct caller does, ``page`` wins.
+        """
         # WebUrlSafety 回傳正規化 URL（小寫 scheme/host、去預設 port、去 fragment），
         # 正規化後的字串同時是 fetch cache key 的輸入，確保同一資源只有一份 cache。
         normalized_url = WebUrlSafety.validate(url)
-        bounded_chars = max(1, min(max_chars, self._fetch_max_chars))
         key = _cache_key(
             await self._cache.get_version("providers"),
             "web_fetch",
             normalized_url,
-            str(bounded_chars),
+            _FETCH_CACHE_SCHEMA,
+            str(_MAX_FETCH_WRAP_CHARS),
+            str(_MAX_FETCH_CACHE_CHARS),
         )
         cached = _validate_cached(WebFetchResponse, await self._cache.get_json(key))
         if cached is not None:
-            return cached.model_copy(update={"cached": True})
+            # cache 命中代表 provider 設定版本未變；即使目前暫時沒有金鑰也應該
+            # 回傳既有全文，因此這裡不重新檢查 configured。
+            return self._slice_fetch(
+                cached,
+                max_chars=max_chars,
+                offset=offset,
+                limit=limit,
+                page=page,
+                cached=True,
+            )
 
         if not _is_ready(self._fetch_config, self._fetch_client):
             raise WebFetchNotConfiguredError()
 
-        response = await self._fetch_client.fetch(normalized_url, max_chars=bounded_chars)
-        content = response.content
-        truncated = response.truncated
-        # 裁切統一在 service 邊界做：cache 內存的就是實際回傳給呼叫端的內容，
-        # cache key 也綁定 max_chars，不會出現「同一 key 卻長度不同」的情況。
-        if len(content) > bounded_chars:
-            content = content[:bounded_chars]
-            truncated = True
-        response = response.model_copy(
-            update={
-                "provider": self._fetch_config.provider,
-                "content": content,
-                "truncated": truncated,
-                "cached": False,
-            }
+        # 只向 provider 抓一次完整內容；client 的 max_chars 是全文上限提示，
+        # 真正的切片由 _slice_fetch 依行號完成。
+        response = await self._fetch_client.fetch(
+            normalized_url,
+            max_chars=_MAX_FETCH_CACHE_CHARS,
+        )
+        content = _normalize_fetch_text(response.content)
+        if not content.strip():
+            raise WebProviderError("the page produced no extractable text")
+        source_truncated = response.truncated
+        if len(content) > _MAX_FETCH_CACHE_CHARS:
+            content = content[:_MAX_FETCH_CACHE_CHARS]
+            source_truncated = True
+        full = _full_fetch_response(
+            response,
+            provider=self._fetch_config.provider,
+            content=content,
+            source_truncated=source_truncated,
         )
         await self._cache.set_json(
             key,
-            response.model_dump(mode="json"),
+            full.model_dump(mode="json"),
             self._fetch_ttl_seconds,
         )
-        return response
+        return self._slice_fetch(
+            full,
+            max_chars=max_chars,
+            offset=offset,
+            limit=limit,
+            page=page,
+            cached=False,
+        )
+
+    def _slice_fetch(
+        self,
+        full: WebFetchResponse,
+        *,
+        max_chars: int,
+        offset: int,
+        limit: int,
+        page: int | None,
+        cached: bool,
+    ) -> WebFetchResponse:
+        """Return one fresh response slice without mutating the cached document."""
+        bounded_chars = max(1, min(max_chars, self._fetch_max_chars))
+        bounded_limit = max(1, min(limit, _MAX_FETCH_LINES_PER_CALL))
+        lines = full.content.split("\n")
+        total_lines = len(lines)
+        total_pages = max(1, (total_lines + bounded_limit - 1) // bounded_limit)
+        source_truncated = full.truncated
+        # page 模式與 offset 模式都只影響起點；offset/page 衝突已在 args 層
+        # 擋下，因此服務層直接讓 page 優先。
+        start_index = (page - 1) * bounded_limit if page is not None else offset - 1
+
+        if start_index >= total_lines:
+            return WebFetchResponse(
+                provider=full.provider,
+                url=full.url,
+                content="",
+                elapsed_ms=full.elapsed_ms,
+                truncated=source_truncated,
+                cached=cached,
+                retrieved_at=full.retrieved_at,
+                offset=start_index + 1,
+                limit=bounded_limit,
+                page=start_index // bounded_limit + 1,
+                total_pages=total_pages,
+                total_lines=total_lines,
+                total_chars=len(full.content),
+                returned_lines=0,
+                has_more=False,
+                next_offset=None,
+                next_page=None,
+                source_truncated=source_truncated,
+            )
+
+        selected: list[str] = []
+        used_chars = 0
+        for line in lines[start_index : start_index + bounded_limit]:
+            added_chars = len(line) + (1 if selected else 0)
+            # 至少先放進一行：折行寬度 800 < max_chars 最小值 1,000，第一行
+            # 一定放得下，後續才能靠 next_offset 穩定前進。
+            if selected and used_chars + added_chars > bounded_chars:
+                break
+            selected.append(line)
+            used_chars += added_chars
+
+        returned_lines = len(selected)
+        end_index = start_index + returned_lines
+        has_more = end_index < total_lines
+        next_offset = end_index + 1 if has_more else None
+        current_page = start_index // bounded_limit + 1
+        # next_page 只在切片剛好停在頁邊界時有效；max_chars 可能讓一頁提早
+        # 結束，此時只有 next_offset 能保證不跳行。
+        next_page = (
+            current_page + 1
+            if has_more and next_offset == current_page * bounded_limit + 1
+            else None
+        )
+        return WebFetchResponse(
+            provider=full.provider,
+            url=full.url,
+            content="\n".join(selected),
+            elapsed_ms=full.elapsed_ms,
+            truncated=has_more or source_truncated,
+            cached=cached,
+            retrieved_at=full.retrieved_at,
+            offset=start_index + 1,
+            limit=bounded_limit,
+            page=current_page,
+            total_pages=total_pages,
+            total_lines=total_lines,
+            total_chars=len(full.content),
+            returned_lines=returned_lines,
+            has_more=has_more,
+            next_offset=next_offset,
+            next_page=next_page,
+            source_truncated=source_truncated,
+        )
+
+
+def _normalize_fetch_text(content: str) -> str:
+    """Normalize line endings and hard-wrap very long lines.
+
+    Wrapping is what makes line pagination always progress: every line becomes
+    at most 800 characters, which is below the 1,000-character minimum
+    ``max_chars``. Every original character is preserved; only newlines are
+    inserted.
+    """
+    normalized = content.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+    if not normalized:
+        return ""
+    lines: list[str] = []
+    for line in normalized.split("\n"):
+        if len(line) <= _MAX_FETCH_WRAP_CHARS:
+            lines.append(line)
+            continue
+        lines.extend(
+            line[start : start + _MAX_FETCH_WRAP_CHARS]
+            for start in range(0, len(line), _MAX_FETCH_WRAP_CHARS)
+        )
+    return "\n".join(lines)
+
+
+def _full_fetch_response(
+    response: WebFetchResponse,
+    *,
+    provider: str,
+    content: str,
+    source_truncated: bool,
+) -> WebFetchResponse:
+    """Build the full-document cache payload that every slice starts from."""
+    total_lines = content.count("\n") + 1
+    total_pages = max(
+        1,
+        (total_lines + _MAX_FETCH_LINES_PER_CALL - 1) // _MAX_FETCH_LINES_PER_CALL,
+    )
+    return response.model_copy(
+        update={
+            "provider": provider,
+            "content": content,
+            "truncated": source_truncated,
+            "cached": False,
+            "offset": 1,
+            "limit": _MAX_FETCH_LINES_PER_CALL,
+            "page": 1,
+            "total_pages": total_pages,
+            "total_lines": total_lines,
+            "total_chars": len(content),
+            "returned_lines": total_lines,
+            "has_more": False,
+            "next_offset": None,
+            "next_page": None,
+            "source_truncated": source_truncated,
+        }
+    )
 
 
 def _is_ready(
