@@ -127,9 +127,27 @@ class WebSearchArgs(_ToolArgs):
 
 
 class WebFetchArgs(_ToolArgs):
-    """Arguments for fetching one public http(s) URL."""
+    """Arguments for fetching one page of a public http(s) URL."""
 
-    # max_chars 限制 1,000–20,000：至少足以讀一段文章，又不會讓單一 tool result
-    # 超過 agent 的結果預算。URL 長度上限與 WebUrlSafety 的 1–2048 保持一致。
+    # web_fetch 先快取完整文件，再依 1-based 行號 offset 或頁碼 page 回傳一段。
+    # limit 是單次最多行數（上限 2,000），max_chars 仍是單次 Markdown 片段
+    # 的字元上限（1,000–20,000），不是全文快取上限，因此兩者都保留。offset 與
+    # page 只能擇一：兩者同時出現時無法判斷哪個才是模型的真正起點。
+    # URL 長度上限與 WebUrlSafety 的 1–2048 保持一致。
     url: str = Field(min_length=1, max_length=2048)
     max_chars: int = Field(default=12_000, ge=1_000, le=20_000)
+    offset: int = Field(default=1, ge=1)
+    limit: int = Field(default=200, ge=1, le=2_000)
+    page: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _validate_start(self) -> "WebFetchArgs":
+        """Reject two explicit start positions in one call.
+
+        ``model_fields_set`` distinguishes an explicit ``offset`` from its
+        default, so ``{"page": 2}`` is valid while ``{"offset": 1, "page": 2}``
+        is a validation error.
+        """
+        if "offset" in self.model_fields_set and "page" in self.model_fields_set:
+            raise ValueError("Use either offset or page, not both.")
+        return self

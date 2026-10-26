@@ -97,8 +97,9 @@ class TavilyWebClient:
         )
 
     async def fetch(self, url: str, *, max_chars: int) -> WebFetchResponse:
-        # ``max_chars`` 由 WebResearchService 在 service 邊界裁切，cache key 也
-        # 綁定該值；client 保留完整內容，讓裁切與 truncated 語意只有一個來源。
+        # ``max_chars`` 由 WebResearchService 用於全文快取上限與切片，不在 client
+        # 裁切；client 一律回傳 provider 的完整內容，讓裁切與 truncated 語意只有
+        # 一個來源。
         del max_chars
         if not self.configured:
             raise WebProviderError("Tavily API key is not configured.")

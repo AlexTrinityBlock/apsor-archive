@@ -557,6 +557,10 @@ export const chat = {
       fetchFallback: "web fetch",
       untitledUrl: "Untitled URL",
       chars: "{count} chars",
+      page: "page {page}/{total}",
+      lines: "lines {start}-{end} of {total}",
+      morePages: "More pages",
+      sourceTruncated: "Source truncated",
       noBodyTitle: "No page body was stored in this result",
       noBodyDetail:
         "This record predates the inline fetch preview, or the provider returned an empty body. Open the source URL to read it.",

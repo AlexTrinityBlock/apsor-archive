@@ -610,7 +610,7 @@ entries, 50 timeline events).
 | `save_memory` | `mode` (`save`/`deprecate`), `memory` preview, `supersedes[]`, or `memory_ids[]` + `deprecated[]` + `reason` for a direct deprecation |
 | `present_resource` | `resource` descriptor |
 | `web_search` | `results[].title/url/excerpt/score`, `retrieved_at`, `cached`, `truncated` |
-| `web_fetch` | `url`, `content_chars`, `retrieved_at`, `cached`, `truncated` |
+| `web_fetch` | `url`, `content`, `content_chars`, `offset`, `limit`, `page`, `total_pages`, `total_lines`, `total_chars`, `returned_lines`, `has_more`, `next_offset`, `next_page`, `source_truncated`, `retrieved_at`, `cached`, `truncated` |
 
 The live `tool_end` SSE event carries `entry_id`, `tool_call_id`, `name`,
 `status`, optional `resource`, the UI-only `data`, `duration_ms`, and
@@ -629,6 +629,35 @@ content or keys to the provider. `search_knowledge` summary sources and
 `read_timeline` summary events carry `view="compressed"`, `memory_count`, and a
 `<compressed_view>` child with coverage; the agent must not treat them as the
 complete original text.
+
+`web_fetch` caches the full normalized extracted document once per URL
+(provider version, normalized URL, schema `v2`, the 800-character wrap width,
+and the 2,000,000-character cap form the cache key) for the configured fetch
+TTL. A cache hit never calls the provider and never re-checks the configured
+key, so offline paging still works.
+On a miss, the service checks provider readiness, fetches once, normalizes
+`\r\n`/`\r`, strips leading/trailing newlines, and hard-wraps lines longer than
+800 characters so a line-based slice can always advance. The tool then returns
+at most `limit` whole lines (default 200, maximum 2,000) and at most `max_chars`
+characters (1,000–20,000, default 12,000). `offset` is a 1-based first line and
+`page` is an alternative 1-based window of `limit` lines; supplying both
+explicitly is rejected with `invalid_tool_arguments`.
+
+Every response reports `page`, `total_pages`, `total_lines`, `total_chars`,
+`returned_lines`, `has_more`, `next_offset`, `next_page`, and
+`source_truncated`. `next_offset` is authoritative because `max_chars` can end a
+slice before its line window is full; `next_page` is present only when the slice
+ended exactly on a window boundary. An out-of-range offset or page returns an
+empty slice with `has_more=false` plus the totals, not a provider error.
+`source_truncated=true` means the provider or the 2,000,000-character service
+cache cap cut the full document. The `<web_fetch>` XML carries the same
+attributes and ends with a plain-text footer inside the element, for example:
+
+```text
+[web_fetch: page 1/5, lines 1-150 of 900. More content: call web_fetch again with offset=151.]
+```
+
+A completed document ends with `Complete.` instead.
 
 `save_memory` is a write action and never executes from a model-supplied
 confirmation. Its authorization depends on the run's
@@ -997,43 +1026,52 @@ same instance. The session fixture drops and recreates its schema, runs
 `alembic upgrade head` as the owning login, and verifies the `apsor_app` role,
 grants, RLS flags, and policies before any test starts. Tests run sequentially,
 reset every tracked table between cases, and treat warnings as errors. There are
-35 collected tests:
+44 collected tests:
 
 1. `tests/test_agent.py::test_agent_entry_log_tool_loop_and_cache_usage`
-2. `tests/test_errors.py::test_validation_and_error_envelope`
-3. `tests/test_file_library.py::test_file_ingest_path_read_and_soft_delete`
-4. `tests/test_file_library.py::test_delete_library_selection_soft_deletes_folder_tree`
-5. `tests/test_file_library.py::test_rename_file_keeps_identity_and_rejects_path_changes`
-6. `tests/test_file_library.py::test_r2_storage_adapter_roundtrip_and_error_safety`
-7. `tests/test_markdown_update.py::test_update_markdown_creates_new_version_and_reindexes`
-8. `tests/test_markdown_update.py::test_update_markdown_rejects_stale_version`
-9. `tests/test_markdown_update.py::test_update_markdown_rejects_non_markdown`
-10. `tests/test_markdown_update.py::test_update_markdown_rejects_deleted_or_history_file`
-11. `tests/test_markdown_update.py::test_update_markdown_rejects_empty_content`
-12. `tests/test_markdown_update.py::test_update_markdown_rejects_oversized_schema_content`
-13. `tests/test_memories.py::test_save_memory_supersede_and_trace`
-14. `tests/test_multi_user.py::test_account_lifecycle_forced_change_disable_and_reset`
-15. `tests/test_multi_user.py::test_root_only_accounts_and_global_settings`
-16. `tests/test_multi_user.py::test_account_usage_starts_at_zero`
-17. `tests/test_multi_user.py::test_agent_turn_records_usage_and_account_rollup`
-18. `tests/test_multi_user.py::test_malformed_completion_records_bounded_usage`
-19. `tests/test_multi_user.py::test_root_impersonation_round_trip`
-20. `tests/test_multi_user.py::test_stop_impersonation_requires_the_root_password`
-21. `tests/test_multi_user.py::test_root_password_change_revokes_impersonation_sessions`
-22. `tests/test_multi_user.py::test_impersonation_requires_root_and_stop_requires_impersonation`
-23. `tests/test_multi_user.py::test_impersonation_rejects_self_disabled_and_forced_accounts`
-24. `tests/test_multi_user.py::test_impersonation_rejects_a_root_target`
-25. `tests/test_multi_user.py::test_password_change_is_forbidden_while_impersonating`
-26. `tests/test_multi_user.py::test_private_archive_isolation_between_accounts`
-27. `tests/test_multi_user.py::test_frequent_prompt_cap_and_reorder_are_per_account`
-28. `tests/test_multi_user.py::test_rls_blocks_cross_user_direct_sql_and_requires_context`
-29. `tests/test_multi_user.py::test_commit_and_reapply_restores_rls_context`
-30. `tests/test_search.py::test_hybrid_search_and_union_query`
-31. `tests/test_summaries.py::test_summary_fallback_and_search`
-32. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
-33. `tests/test_system_prompt.py::test_system_prompt_module_and_section_order`
-34. `tests/test_timeline.py::test_timeline_sparse_sampling`
-35. `tests/test_versions.py::test_file_history_and_versioning`
+2. `tests/test_agent.py::test_web_fetch_paginates_across_two_calls`
+3. `tests/test_errors.py::test_validation_and_error_envelope`
+4. `tests/test_file_library.py::test_file_ingest_path_read_and_soft_delete`
+5. `tests/test_file_library.py::test_delete_library_selection_soft_deletes_folder_tree`
+6. `tests/test_file_library.py::test_rename_file_keeps_identity_and_rejects_path_changes`
+7. `tests/test_file_library.py::test_r2_storage_adapter_roundtrip_and_error_safety`
+8. `tests/test_markdown_update.py::test_update_markdown_creates_new_version_and_reindexes`
+9. `tests/test_markdown_update.py::test_update_markdown_rejects_stale_version`
+10. `tests/test_markdown_update.py::test_update_markdown_rejects_non_markdown`
+11. `tests/test_markdown_update.py::test_update_markdown_rejects_deleted_or_history_file`
+12. `tests/test_markdown_update.py::test_update_markdown_rejects_empty_content`
+13. `tests/test_markdown_update.py::test_update_markdown_rejects_oversized_schema_content`
+14. `tests/test_memories.py::test_save_memory_supersede_and_trace`
+15. `tests/test_multi_user.py::test_account_lifecycle_forced_change_disable_and_reset`
+16. `tests/test_multi_user.py::test_root_only_accounts_and_global_settings`
+17. `tests/test_multi_user.py::test_account_usage_starts_at_zero`
+18. `tests/test_multi_user.py::test_agent_turn_records_usage_and_account_rollup`
+19. `tests/test_multi_user.py::test_malformed_completion_records_bounded_usage`
+20. `tests/test_multi_user.py::test_root_impersonation_round_trip`
+21. `tests/test_multi_user.py::test_stop_impersonation_requires_the_root_password`
+22. `tests/test_multi_user.py::test_root_password_change_revokes_impersonation_sessions`
+23. `tests/test_multi_user.py::test_impersonation_requires_root_and_stop_requires_impersonation`
+24. `tests/test_multi_user.py::test_impersonation_rejects_self_disabled_and_forced_accounts`
+25. `tests/test_multi_user.py::test_impersonation_rejects_a_root_target`
+26. `tests/test_multi_user.py::test_password_change_is_forbidden_while_impersonating`
+27. `tests/test_multi_user.py::test_private_archive_isolation_between_accounts`
+28. `tests/test_multi_user.py::test_frequent_prompt_cap_and_reorder_are_per_account`
+29. `tests/test_multi_user.py::test_rls_blocks_cross_user_direct_sql_and_requires_context`
+30. `tests/test_multi_user.py::test_commit_and_reapply_restores_rls_context`
+31. `tests/test_search.py::test_hybrid_search_and_union_query`
+32. `tests/test_summaries.py::test_summary_fallback_and_search`
+33. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
+34. `tests/test_system_prompt.py::test_system_prompt_module_and_section_order`
+35. `tests/test_timeline.py::test_timeline_sparse_sampling`
+36. `tests/test_versions.py::test_file_history_and_versioning`
+37. `tests/test_web_research.py::test_fetch_paginates_full_document_with_one_provider_call`
+38. `tests/test_web_research.py::test_page_mode_starts_at_the_same_line_as_offset`
+39. `tests/test_web_research.py::test_web_fetch_args_accept_page_alone_and_reject_two_starts`
+40. `tests/test_web_research.py::test_out_of_range_offset_and_page_return_empty_slices`
+41. `tests/test_web_research.py::test_long_line_wrapping_preserves_every_character`
+42. `tests/test_web_research.py::test_source_cache_cap_sets_source_truncated`
+43. `tests/test_web_research.py::test_empty_content_raises_web_provider_error`
+44. `tests/test_web_research.py::test_cache_hit_does_not_require_a_configured_provider`
 
 The multi-user tests also prove that a normal account gets `403` from
 root-only accounts/settings routes, that two accounts can hold the same library
@@ -1080,8 +1118,12 @@ proves the partial unique active index, clears a key without ever returning
 plaintext, exercises the injected `app.state.provider_tester`, and verifies an
 identity id is not reused after delete. The agent test injects a deterministic
 `app.state.web_research_service` and asserts the `web_search` / `web_fetch` XML,
-plus the compressed-summary markers. The system-prompt test covers the four
-seeded defaults as ordinary rows, create/list/reorder/update/delete/reset,
+plus the compressed-summary markers and a two-call `web_fetch` pagination loop
+whose result bodies concatenate to the fake full document. The web-research test
+uses an in-memory cache and fetch client to prove full-document caching, offline
+cache hits, page/offset equivalence, out-of-range slices, long-line wrapping, and
+source-cap truncation without contacting Tavily. The system-prompt test covers
+the four seeded defaults as ordinary rows, create/list/reorder/update/delete/reset,
 `system_prompt:<id>` composition order, frozen old conversations, editing and
 deleting defaults, reset restoring fresh default identities, whitespace and
 partial-reorder validation, identity non-reuse, and scoped cache invalidation;

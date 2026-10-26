@@ -159,8 +159,38 @@ export function WebFetchPanel({ item }: PanelProps) {
   const retrievedAt = textField(data, "retrieved_at");
   const content = textField(data, "content") ?? "";
   const chars = numberField(data, "content_chars");
+  const page = numberField(data, "page");
+  const totalPages = numberField(data, "total_pages");
+  const offset = numberField(data, "offset");
+  const returnedLines = numberField(data, "returned_lines");
+  const totalLines = numberField(data, "total_lines");
+  const lineEnd =
+    offset !== null && returnedLines !== null && returnedLines > 0
+      ? offset + returnedLines - 1
+      : null;
+  const pageLabel =
+    page !== null &&
+    totalPages !== null &&
+    page > 0 &&
+    totalPages > 0 &&
+    page <= totalPages
+      ? t("chat.panels.web.page", {
+          page: formatNumber(page),
+          total: formatNumber(totalPages),
+        })
+      : null;
+  const lineLabel =
+    offset !== null && totalLines !== null && lineEnd !== null
+      ? t("chat.panels.web.lines", {
+          start: formatNumber(offset),
+          end: formatNumber(lineEnd),
+          total: formatNumber(totalLines),
+        })
+      : null;
   const cached = data?.cached === true;
   const truncated = data?.truncated === true || data?.tool_truncated === true;
+  const hasMore = data?.has_more === true;
+  const sourceTruncated = data?.source_truncated === true;
 
   return (
     <div className="pi-web">
@@ -189,14 +219,24 @@ export function WebFetchPanel({ item }: PanelProps) {
                   count: formatNumber(chars),
                 })}`
               : ""}
+            {pageLabel ? ` · ${pageLabel}` : ""}
+            {lineLabel ? ` · ${lineLabel}` : ""}
           </code>
         </div>
         <div className="pi-web__badges">
           {cached ? (
             <Badge tone="ochre">{t("chat.panels.web.cached")}</Badge>
           ) : null}
-          {truncated ? (
+          {truncated && !hasMore && !sourceTruncated ? (
             <Badge tone="neutral">{t("chat.panels.web.truncated")}</Badge>
+          ) : null}
+          {hasMore ? (
+            <Badge tone="ochre">{t("chat.panels.web.morePages")}</Badge>
+          ) : null}
+          {sourceTruncated ? (
+            <Badge tone="neutral">
+              {t("chat.panels.web.sourceTruncated")}
+            </Badge>
           ) : null}
         </div>
       </header>
