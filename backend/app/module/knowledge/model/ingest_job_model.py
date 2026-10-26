@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Index,
     Integer,
@@ -70,10 +71,17 @@ class FileIngestJobModel(Base):
 
     __tablename__ = "file_ingest_job"
     __table_args__ = (
-        # Only one active job may target a path. Ready and failed jobs are
-        # historical and must not block a fresh upload.
+        ForeignKeyConstraint(
+            ["file_id", "user_id"],
+            ["file.id", "file.user_id"],
+            name="fk_file_ingest_job_file_user",
+            ondelete="CASCADE",
+        ),
+        # Only one active job may target a path per user. Ready and failed jobs
+        # are historical and must not block a fresh upload.
         Index(
             "uq_file_ingest_job_active_path",
+            "user_id",
             "path",
             unique=True,
             postgresql_where=text(
@@ -87,7 +95,21 @@ class FileIngestJobModel(Base):
             postgresql_where=text("file_id IS NOT NULL"),
         ),
         Index("ix_file_ingest_job_status_created", "status", "created_at"),
+        Index(
+            "ix_file_ingest_job_user_id_status_created",
+            "user_id",
+            "status",
+            "created_at",
+        ),
         Index("ix_file_ingest_job_updated_at", "updated_at"),
+        CheckConstraint(
+            "storage_backend IN ('local', 'r2')",
+            name="storage_backend_valid",
+        ),
+        CheckConstraint(
+            "(storage_key IS NULL) = (storage_backend IS NULL)",
+            name="storage_backend_key_pair",
+        ),
         CheckConstraint(
             "source_kind IN ('upload', 'text')",
             name="source_kind_valid",
@@ -114,13 +136,20 @@ class FileIngestJobModel(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    file_id: Mapped[int | None] = mapped_column(
-        ForeignKey("file.id", ondelete="CASCADE"),
-        nullable=True,
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_file_ingest_job_user_id_app_user",
+        ),
+        nullable=False,
     )
+    file_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     source_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     path: Mapped[str] = mapped_column(Text, nullable=False)
     storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_backend: Mapped[str | None] = mapped_column(String(16), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
     file_name: Mapped[str] = mapped_column(Text, nullable=False)
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)

@@ -1,4 +1,9 @@
-"""SQLAlchemy persistence for memories."""
+"""SQLAlchemy persistence for memories.
+
+Each repository instance belongs to one owner. Neighbors, supersession lookups,
+and aggregate counts are filtered by ``user_id`` before ordering or limits are
+applied.
+"""
 
 from collections.abc import Sequence
 from datetime import datetime
@@ -16,18 +21,24 @@ from app.shared.time import utcnow
 
 
 class MemoryRepository:
-    """Queries over the linear memory timeline."""
+    """Queries over one owner's linear memory timeline."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, user_id: int) -> None:
         self.session = session
+        self.user_id = user_id
 
     async def add(self, memory: MemoryModel) -> MemoryModel:
+        memory.user_id = self.user_id
         self.session.add(memory)
         await self.session.flush()
         return memory
 
     async def get_by_id(self, memory_id: int) -> MemoryModel | None:
-        return await self.session.get(MemoryModel, memory_id)
+        statement = select(MemoryModel).where(
+            MemoryModel.id == memory_id,
+            MemoryModel.user_id == self.user_id,
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def save(self, memory: MemoryModel) -> MemoryModel:
         """Flush an edited memory and stamp its update time."""
@@ -38,7 +49,10 @@ class MemoryRepository:
     async def list_by_ids(self, memory_ids: Sequence[int]) -> list[MemoryModel]:
         if not memory_ids:
             return []
-        statement = select(MemoryModel).where(MemoryModel.id.in_(memory_ids))
+        statement = select(MemoryModel).where(
+            MemoryModel.user_id == self.user_id,
+            MemoryModel.id.in_(memory_ids),
+        )
         return list((await self.session.execute(statement)).scalars().all())
 
     async def deprecate(
@@ -72,6 +86,7 @@ class MemoryRepository:
         previous_statement = (
             select(MemoryModel)
             .where(
+                MemoryModel.user_id == self.user_id,
                 MemoryModel.deleted_at.is_(None),
                 or_(
                     MemoryModel.memory_time < target.memory_time,
@@ -87,6 +102,7 @@ class MemoryRepository:
         next_statement = (
             select(MemoryModel)
             .where(
+                MemoryModel.user_id == self.user_id,
                 MemoryModel.deleted_at.is_(None),
                 or_(
                     MemoryModel.memory_time > target.memory_time,
@@ -107,7 +123,10 @@ class MemoryRepository:
     async def list_recent(self, *, limit: int, offset: int) -> list[MemoryModel]:
         statement = (
             select(MemoryModel)
-            .where(MemoryModel.deleted_at.is_(None))
+            .where(
+                MemoryModel.user_id == self.user_id,
+                MemoryModel.deleted_at.is_(None),
+            )
             .order_by(MemoryModel.memory_time.desc(), MemoryModel.id.desc())
             .offset(offset)
             .limit(limit)
@@ -122,6 +141,7 @@ class MemoryRepository:
         include_deprecated: bool,
     ) -> list[MemoryModel]:
         statement = select(MemoryModel).where(
+            MemoryModel.user_id == self.user_id,
             MemoryModel.deleted_at.is_(None),
             MemoryModel.memory_time >= start,
             MemoryModel.memory_time < end,
@@ -138,12 +158,16 @@ class MemoryRepository:
     ) -> list[MemoryModel]:
         covered = (
             select(MemorySummaryModel.id)
-            .where(MemoryModel.id == any_(MemorySummaryModel.source_memory_ids))
+            .where(
+                MemorySummaryModel.user_id == self.user_id,
+                MemoryModel.id == any_(MemorySummaryModel.source_memory_ids),
+            )
             .exists()
         )
         statement = (
             select(MemoryModel)
             .where(
+                MemoryModel.user_id == self.user_id,
                 MemoryModel.deleted_at.is_(None),
                 MemoryModel.status == MEMORY_ACTIVE,
                 MemoryModel.memory_time >= start,
@@ -155,16 +179,23 @@ class MemoryRepository:
         return list((await self.session.execute(statement)).scalars().all())
 
     async def list_all_ids(self) -> list[int]:
-        statement = select(MemoryModel.id).where(MemoryModel.deleted_at.is_(None))
+        statement = select(MemoryModel.id).where(
+            MemoryModel.user_id == self.user_id,
+            MemoryModel.deleted_at.is_(None),
+        )
         return [int(row[0]) for row in (await self.session.execute(statement)).all()]
 
     async def count_active(self) -> int:
         statement = select(func.count(MemoryModel.id)).where(
+            MemoryModel.user_id == self.user_id,
             MemoryModel.deleted_at.is_(None),
             MemoryModel.status == MEMORY_ACTIVE,
         )
         return int((await self.session.execute(statement)).scalar_one())
 
     async def count_all(self) -> int:
-        statement = select(func.count(MemoryModel.id)).where(MemoryModel.deleted_at.is_(None))
+        statement = select(func.count(MemoryModel.id)).where(
+            MemoryModel.user_id == self.user_id,
+            MemoryModel.deleted_at.is_(None),
+        )
         return int((await self.session.execute(statement)).scalar_one())

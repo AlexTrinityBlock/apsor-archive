@@ -44,6 +44,9 @@ export type IconName =
   | "history"
   | "filter"
   | "ring"
+  | "user"
+  | "users"
+  | "key"
   | "logout";
 
 const ICONS: Record<IconName, ReactNode> = {
@@ -261,6 +264,26 @@ const ICONS: Record<IconName, ReactNode> = {
       <circle cx="12" cy="12" r="8.5" />
       <circle cx="12" cy="12" r="5.2" />
       <circle cx="12" cy="12" r="1.8" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5.5 20c.6-4 3.1-6.2 6.5-6.2s5.9 2.2 6.5 6.2" />
+    </>
+  ),
+  users: (
+    <>
+      <circle cx="9.4" cy="8.2" r="3" />
+      <path d="M3.8 19.5c.5-3.4 2.6-5.3 5.6-5.3s5.1 1.9 5.6 5.3" />
+      <path d="M15.4 5.7a2.9 2.9 0 0 1 0 5.5" />
+      <path d="M17.2 14.6c1.7.6 2.7 2.2 3 4.9" />
+    </>
+  ),
+  key: (
+    <>
+      <circle cx="8" cy="15.5" r="3.4" />
+      <path d="m10.5 13 8.5-8.5M15.9 7.6l2 2M18.1 5.4l2 2" />
     </>
   ),
   logout: (

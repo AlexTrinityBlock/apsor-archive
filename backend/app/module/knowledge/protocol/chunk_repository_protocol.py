@@ -76,9 +76,20 @@ class ChunkRepositoryProtocol(Protocol):
 
     async def count_current(self) -> int: ...
 
-    async def embedding_model_counts(self) -> dict[str, int]: ...
+    async def count_chunks(self) -> int: ...
 
-    async def list_current_chunks(self, *, limit: int, offset: int) -> list[ChunkModel]: ...
+    async def embedding_model_counts(
+        self,
+        *,
+        include_history: bool = False,
+    ) -> dict[str, int]: ...
+
+    async def list_chunks_after(
+        self,
+        *,
+        after_id: int,
+        limit: int,
+    ) -> list[ChunkModel]: ...
 
     async def update_embedding(
         self,

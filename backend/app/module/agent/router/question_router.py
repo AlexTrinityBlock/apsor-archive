@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
+from app.dependency.auth import require_authenticated
 from app.module.agent.dependencies import (
     get_current_user_profile,
     get_saved_question_ask_service,
@@ -16,7 +17,11 @@ from app.module.agent.schema.saved_question_schema import (
 )
 from app.module.agent.service.saved_question_service import SavedQuestionService
 
-router = APIRouter(prefix="/questions", tags=["agent"])
+router = APIRouter(
+    prefix="/questions",
+    tags=["agent"],
+    dependencies=[Depends(require_authenticated)],
+)
 
 
 @router.get(

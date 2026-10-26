@@ -1,6 +1,129 @@
 {
   "components": {
     "schemas": {
+      "AccountCreateSchema": {
+        "additionalProperties": false,
+        "description": "The root submits an initial identity; the server sets role and state.",
+        "properties": {
+          "display_name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 3,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "display_name"
+        ],
+        "title": "AccountCreateSchema",
+        "type": "object"
+      },
+      "AccountListSchema": {
+        "description": "Every account, root first, then creation order.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccountSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "AccountListSchema",
+        "type": "object"
+      },
+      "AccountSchema": {
+        "description": "One account row without any credential material.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "must_change_password": {
+            "title": "Must Change Password",
+            "type": "boolean"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "role",
+          "is_active",
+          "must_change_password",
+          "created_at",
+          "last_login_at"
+        ],
+        "title": "AccountSchema",
+        "type": "object"
+      },
+      "AccountTemporaryPasswordSchema": {
+        "description": "A newly generated password returned exactly once.",
+        "properties": {
+          "temporary_password": {
+            "title": "Temporary Password",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AccountSchema"
+          }
+        },
+        "required": [
+          "user",
+          "temporary_password"
+        ],
+        "title": "AccountTemporaryPasswordSchema",
+        "type": "object"
+      },
       "AgentApprovalSchema": {
         "description": "A durable human decision awaiting resolution.\n\n``arguments`` and ``preview`` are intentionally bounded, validated copies of\nthe proposed write. ``resume_state`` never leaves the repository.",
         "properties": {
@@ -1446,6 +1569,37 @@
         "title": "Body_uploadFileAsync",
         "type": "object"
       },
+      "ChangePasswordSchema": {
+        "additionalProperties": false,
+        "description": "Self-service password change, also used while a change is forced.",
+        "properties": {
+          "confirm_password": {
+            "maxLength": 256,
+            "minLength": 10,
+            "title": "Confirm Password",
+            "type": "string"
+          },
+          "current_password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 256,
+            "minLength": 10,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password",
+          "confirm_password"
+        ],
+        "title": "ChangePasswordSchema",
+        "type": "object"
+      },
       "ChunkSchema": {
         "description": "One chunk in a read window.",
         "properties": {
@@ -1505,7 +1659,7 @@
         "type": "object"
       },
       "EmbeddingReindexSchema": {
-        "description": "The result of re-embedding the current chunk corpus.",
+        "description": "The result of re-embedding the current and historical chunk corpus.",
         "properties": {
           "dimension": {
             "title": "Dimension",
@@ -4690,6 +4844,13 @@
         "title": "UserProfileUpdateSchema",
         "type": "object"
       },
+      "UserRole": {
+        "enum": [
+          "root",
+          "user"
+        ],
+        "type": "string"
+      },
       "UserSchema": {
         "properties": {
           "created_at": {
@@ -4708,6 +4869,10 @@
             ],
             "title": "Display Name"
           },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
           "last_login_at": {
             "anyOf": [
               {
@@ -4719,6 +4884,13 @@
               }
             ],
             "title": "Last Login At"
+          },
+          "must_change_password": {
+            "title": "Must Change Password",
+            "type": "boolean"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
           },
           "user_id": {
             "title": "User Id",
@@ -4733,6 +4905,9 @@
           "user_id",
           "username",
           "display_name",
+          "role",
+          "is_active",
+          "must_change_password",
           "created_at",
           "last_login_at"
         ],
@@ -4787,6 +4962,197 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/accounts": {
+      "get": {
+        "description": "List every account; the root row is always first.",
+        "operationId": "listAccounts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountListSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Accounts",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "post": {
+        "description": "Create a normal user and return its one-time temporary password.",
+        "operationId": "createAccount",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountTemporaryPasswordSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/{user_id}/disable": {
+      "post": {
+        "description": "Disable an account and revoke every session it owns.",
+        "operationId": "disableAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disable Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/{user_id}/enable": {
+      "post": {
+        "description": "Enable a disabled account without issuing a session.",
+        "operationId": "enableAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/{user_id}/reset-password": {
+      "post": {
+        "description": "Replace another user's password with a one-time temporary password.",
+        "operationId": "resetAccountPassword",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountTemporaryPasswordSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Account Password",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
     "/api/v1/agent/approvals/{approval_id}/approve": {
       "post": {
         "description": "Execute the approved write once and resume the waiting run.",
@@ -6230,7 +6596,7 @@
     },
     "/api/v1/auth/me": {
       "get": {
-        "description": "Return the signed-in owner.",
+        "description": "Return the signed-in account.",
         "operationId": "getCurrentUser",
         "responses": {
           "200": {
@@ -6245,6 +6611,41 @@
           }
         },
         "summary": "Get Me",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/password": {
+      "post": {
+        "description": "Change the signed-in password; allowed while a change is forced.",
+        "operationId": "changePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Password",
         "tags": [
           "auth"
         ]
@@ -7672,7 +8073,7 @@
     },
     "/api/v1/settings/frequent-prompts": {
       "get": {
-        "description": "List every prompt shortcut in display order.",
+        "description": "List the acting user's prompt shortcuts in display order.",
         "operationId": "listFrequentlyUsedPrompts",
         "responses": {
           "200": {
@@ -7692,7 +8093,7 @@
         ]
       },
       "post": {
-        "description": "Create a prompt shortcut.",
+        "description": "Create a prompt shortcut in the acting user's list.",
         "operationId": "createFrequentlyUsedPrompt",
         "requestBody": {
           "content": {
@@ -7734,7 +8135,7 @@
     },
     "/api/v1/settings/frequent-prompts/reorder": {
       "post": {
-        "description": "Replace the complete shortcut order atomically.",
+        "description": "Replace the acting user's complete shortcut order atomically.",
         "operationId": "reorderFrequentlyUsedPrompts",
         "requestBody": {
           "content": {
@@ -7776,7 +8177,7 @@
     },
     "/api/v1/settings/frequent-prompts/{prompt_id}": {
       "delete": {
-        "description": "Hard-delete one prompt shortcut.",
+        "description": "Hard-delete one prompt owned by the caller.",
         "operationId": "deleteFrequentlyUsedPrompt",
         "parameters": [
           {
@@ -7810,7 +8211,7 @@
         ]
       },
       "put": {
-        "description": "Replace the title, text, and order of one prompt shortcut.",
+        "description": "Replace the title, text, and order of one prompt owned by the caller.",
         "operationId": "updateFrequentlyUsedPrompt",
         "parameters": [
           {

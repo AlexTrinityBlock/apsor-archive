@@ -2,7 +2,7 @@ import { useId, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "../component/Badge";
-import { Button } from "../component/Button";
+import { Button, ButtonLink } from "../component/Button";
 import { Icon } from "../component/Icon";
 import { Loader } from "../component/Loader";
 import { PageHeader } from "../component/PageHeader";
@@ -240,6 +240,12 @@ function ProfileEditor({ profile }: { readonly profile: UserProfileSchema }) {
         eyebrow={t("memory.profile.identityEyebrow")}
         title={t("memory.profile.displayNameTitle")}
         className="profile-identity-panel"
+        action={
+          <ButtonLink to="/change-password" variant="ghost" size="sm">
+            <Icon name="key" size={14} />
+            {t("core.nav.changePassword")}
+          </ButtonLink>
+        }
       >
         <label className="field" htmlFor={`${formId}-name`}>
           <span className="field-label">{t("memory.profile.nameLabel")}</span>

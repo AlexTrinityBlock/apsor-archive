@@ -3,6 +3,7 @@ import { Navigate, useLocation, useParams } from "react-router-dom";
 import { createBrowserRouter } from "react-router-dom";
 
 import { AuthGate } from "./auth/AuthGate";
+import { RequireRoot } from "./auth/RequireRoot";
 import {
   clearLastChatConversation,
   readLastChatConversation,
@@ -41,6 +42,16 @@ const SettingsPage = lazy(() =>
 );
 const ProfilePage = lazy(() =>
   import("./profile/page").then((module) => ({ default: module.ProfilePage })),
+);
+const AccountsPage = lazy(() =>
+  import("./accounts/page").then((module) => ({
+    default: module.AccountsPage,
+  })),
+);
+const ChangePasswordPage = lazy(() =>
+  import("./auth/ChangePasswordPage").then((module) => ({
+    default: module.ChangePasswordPage,
+  })),
 );
 
 /** Keeps the old query string when a removed workspace redirects to its home. */
@@ -128,10 +139,13 @@ export const router = createBrowserRouter([
     element: <AuthGate />,
     errorElement: <RouteError />,
     children: [
+      // Redirect before mounting the shell so the layout never captures the
+      // transient "/" location. Otherwise a mobile drawer opened right after
+      // login compares against the stale path and never opens.
+      { index: true, element: <Navigate to="/chat" replace /> },
       {
         element: <AppShell />,
         children: [
-          { index: true, element: <Navigate to="/chat" replace /> },
           { path: "dashboard", element: <DashboardPage /> },
           { path: "overview", element: <Navigate to="/dashboard" replace /> },
           { path: "search", element: <SearchPage /> },
@@ -151,6 +165,15 @@ export const router = createBrowserRouter([
           { path: "docs", element: <Navigate to="/about" replace /> },
           { path: "settings", element: <SettingsPage /> },
           { path: "profile", element: <ProfilePage /> },
+          { path: "change-password", element: <ChangePasswordPage /> },
+          {
+            path: "accounts",
+            element: (
+              <RequireRoot>
+                <AccountsPage />
+              </RequireRoot>
+            ),
+          },
           { path: "viewer/file/:fileId", element: <ViewerFileRedirect /> },
           { path: "viewer/media/:mediaId", element: <ViewerMediaRedirect /> },
           { path: "viewer/memory/:memoryId", element: <ViewerMemoryRedirect /> },

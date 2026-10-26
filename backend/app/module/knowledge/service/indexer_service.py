@@ -18,9 +18,10 @@ IndexCheckpoint = Callable[[], Awaitable[None]]
 
 
 class IndexerService:
-    """Persist chunks, n-grams, and optional vectors for any source kind.
+    """Persist chunks, n-grams, and optional vectors for one owner.
 
-    Embedding calls run in bounded batches. A shared semaphore caps concurrent
+    Every row carries the owner id. Embedding calls run in bounded batches. A
+    shared semaphore caps concurrent
     provider calls when several jobs use the same worker. Provider calls run
     concurrently up to that limit, while chunk persistence, checkpoints, and
     progress updates stay serialized on the caller's event loop because the
@@ -35,6 +36,7 @@ class IndexerService:
         chunk_repository: ChunkRepositoryProtocol,
         embedder: EmbedderProtocol,
         *,
+        user_id: int,
         embedding_batch_size: int = 16,
         embedding_concurrency: int = 6,
         embedding_semaphore: asyncio.Semaphore | None = None,
@@ -44,6 +46,7 @@ class IndexerService:
     ) -> None:
         self.chunk_repository = chunk_repository
         self.embedder = embedder
+        self.user_id = user_id
         self.embedding_batch_size = max(1, embedding_batch_size)
         self.embedding_concurrency = max(1, embedding_concurrency)
         self._embedding_slots = embedding_semaphore or asyncio.Semaphore(self.embedding_concurrency)
@@ -131,6 +134,7 @@ class IndexerService:
                     embeddings = task.result()
                     for draft, embedding in zip(batch, embeddings, strict=True):
                         chunk = ChunkModel(
+                            user_id=self.user_id,
                             source_kind=source_kind,
                             source_id=source_id,
                             chunk_index=draft.index,

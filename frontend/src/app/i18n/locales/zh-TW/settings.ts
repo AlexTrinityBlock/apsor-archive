@@ -13,6 +13,11 @@ export const settings = {
     description:
       "排序每個新對話使用的系統提示詞區段、整理空白聊天頁顯示的常用提示詞，並設定四個能力槽：對話、嵌入、網路搜尋與網路擷取。金鑰只存放在伺服器，永遠不會回傳到這個頁面。",
     meta: "設定 08 · 本地優先檔案館",
+    personalEyebrow: "設定 · 個人設定",
+    personalTitle: "個人設定。",
+    personalDescription:
+      "整理空白聊天頁顯示的常用提示詞，並選擇介面語言。帳號管理與全域執行環境設定屬於 root 帳號。",
+    personalMeta: "設定 02 · 本地優先檔案館",
   },
   utils: {
     providerHashing: "Hashing（離線）",
@@ -181,12 +186,12 @@ export const settings = {
     versionUnavailable: "無法取得版本",
     version: "v{version}",
     access: "存取",
-    accessTitle: "單一擁有者帳號",
+    accessTitle: "多使用者檔案館",
     accessCopyBefore:
-      "這座檔案館由一個館長帳號與伺服器端工作階段 cookie 保護。你目前以身分「",
+      "這座檔案館為每個帳號提供私人檔案庫，全域設定則由 root 管理。Root 負責帳號與執行環境設定；每個帳號只能讀取自己的檔案、記憶與對話。你目前以身分「",
     accessCopyAfter:
-      "」登入。沒有雲端帳號、密碼復原，也沒有依使用者劃分的權限模型。離開共用機器時，請從側欄登出。",
-    keeperFallback: "館長",
+      "」登入。請從主導覽的帳號頁面管理帳號。這裡沒有雲端帳號或電子郵件復原；離開共用機器時，請從側欄登出。",
+    keeperFallback: "root 帳號",
     readMethod: "閱讀方法",
   },
   diagnostics: {

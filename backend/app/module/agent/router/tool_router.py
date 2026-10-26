@@ -2,11 +2,16 @@
 
 from fastapi import APIRouter, Depends
 
+from app.dependency.auth import require_authenticated
 from app.module.agent.dependencies import get_agent_service
 from app.module.agent.schema.agent_schema import AgentToolCatalogSchema
 from app.module.agent.service.agent_service import AgentService
 
-router = APIRouter(prefix="/tools", tags=["agent"])
+router = APIRouter(
+    prefix="/tools",
+    tags=["agent"],
+    dependencies=[Depends(require_authenticated)],
+)
 
 
 @router.get(

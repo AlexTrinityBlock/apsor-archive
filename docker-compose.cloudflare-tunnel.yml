@@ -49,11 +49,22 @@ services:
       APSOR_STATIC_DIR: /app/frontend/dist
       APSOR_TIMEZONE: Asia/Taipei
       APSOR_COOKIE_SECURE: "true"
+      # New originals use R2 by default after the staged migration. Override
+      # with APSOR_STORAGE_BACKEND=local for the first cutover boot.
+      APSOR_STORAGE_BACKEND: ${APSOR_STORAGE_BACKEND:-r2}
+      # Non-secret R2 configuration. Credentials are read from the mounted
+      # .secrets/r2.env by the app, never from the container environment.
+      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-https://129b4e3d8fc9fe004f88fbb29dcb124b.r2.cloudflarestorage.com}
+      APSOR_R2_BUCKET: ${APSOR_R2_BUCKET:-apsor-archive}
+      APSOR_R2_REGION: ${APSOR_R2_REGION:-auto}
+      APSOR_R2_PREFIX: ${APSOR_R2_PREFIX:-}
       # The dedicated worker service owns ingestion; keep the API lifespan
       # fallback off so only one process drains the queue.
       APSOR_INGEST_WORKER_ENABLED: "false"
     volumes:
       - ./data-cloudflare:/data
+      # .secrets/r2.env must be readable by container uid 10001 (mode 644 or
+      # matching ownership).
       - ./.secrets:/app/backend/.secrets:ro
     expose:
       - "8000"
@@ -74,8 +85,15 @@ services:
       APSOR_DATA_DIR: /data
       APSOR_TIMEZONE: Asia/Taipei
       APSOR_COOKIE_SECURE: "true"
+      APSOR_STORAGE_BACKEND: ${APSOR_STORAGE_BACKEND:-r2}
+      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-https://129b4e3d8fc9fe004f88fbb29dcb124b.r2.cloudflarestorage.com}
+      APSOR_R2_BUCKET: ${APSOR_R2_BUCKET:-apsor-archive}
+      APSOR_R2_REGION: ${APSOR_R2_REGION:-auto}
+      APSOR_R2_PREFIX: ${APSOR_R2_PREFIX:-}
     volumes:
       - ./data-cloudflare:/data
+      # .secrets/r2.env must be readable by container uid 10001 (mode 644 or
+      # matching ownership).
       - ./.secrets:/app/backend/.secrets:ro
     depends_on:
       db:

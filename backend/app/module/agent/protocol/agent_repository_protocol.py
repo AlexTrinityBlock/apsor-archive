@@ -14,7 +14,11 @@ from app.module.agent.model.agent_model import (
 
 
 class AgentRepositoryProtocol(Protocol):
-    """One writer per conversation, one commit sequence per transaction."""
+    """One owner-bound writer per conversation, one commit sequence per transaction.
+
+    Implementations are constructed for exactly one account and must apply the
+    owner filter to every conversation, entry, run, and approval query.
+    """
 
     async def create_conversation(
         self,
@@ -227,5 +231,3 @@ class AgentRepositoryProtocol(Protocol):
     async def last_page_context_key(self, conversation_id: int) -> str | None: ...
 
     async def is_abort_requested(self, conversation_id: int, run_id: int) -> bool: ...
-
-    async def recover_stale_runs(self, *, now: datetime) -> int: ...

@@ -1,11 +1,13 @@
 """Pi-shaped agent transcript, tool loop, cache usage, and lifecycle."""
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, create_engine, text
 
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
@@ -24,6 +26,7 @@ from tests.conftest import (
     OWNER_PASSWORD,
     OWNER_USERNAME,
     TEST_DATABASE_URL,
+    UserClient,
 )
 from tests.helpers import create_memory, create_text
 
@@ -138,9 +141,20 @@ class FakeWebResearchService:
         )
 
 
+@contextmanager
+def _direct_engine() -> Iterator[Engine]:
+    """Own a maintenance engine so a failed assertion cannot leak a connection."""
+    engine = create_engine(TEST_DATABASE_URL)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+
+
 def test_agent_entry_log_tool_loop_and_cache_usage(
     client: TestClient,
     settings: Settings,
+    root_account: UserClient,
 ) -> None:
     created_file = create_text(
         client,
@@ -522,8 +536,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         == 405
     )
 
-    engine = create_engine(TEST_DATABASE_URL)
-    with engine.connect() as connection:
+    with _direct_engine() as engine, engine.connect() as connection:
         assert (
             connection.execute(
                 text("SELECT to_regclass('public.agent_message')")
@@ -536,7 +549,6 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
             ).scalar_one_or_none()
             is not None
         )
-    engine.dispose()
 
     second_turn = client.post(
         f"/api/v1/agent/conversations/{conversation_id}/messages",
@@ -670,10 +682,12 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     )
 
     # Store one valid and one out-of-range edit to exercise fork remapping.
-    engine = create_engine(TEST_DATABASE_URL)
-    with engine.begin() as connection:
+    with _direct_engine() as engine, engine.begin() as connection:
         connection.execute(
-            text("UPDATE agent_entry SET edits = CAST(:edits AS jsonb) WHERE id = :entry_id"),
+            text(
+                "UPDATE agent_entry SET edits = CAST(:edits AS jsonb) "
+                "WHERE id = :entry_id AND user_id = :user_id"
+            ),
             {
                 "edits": json.dumps(
                     [
@@ -685,9 +699,9 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
                     ]
                 ),
                 "entry_id": source_entries[0]["id"],
+                "user_id": root_account.user_id,
             },
         )
-    engine.dispose()
 
     source_detail = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     source_entries = source_detail["entries"]
@@ -818,32 +832,32 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert missing_cutoff.json()["error"] == "agent_fork_entry_invalid"
     assert client.delete(f"/api/v1/agent/conversations/{cutoff_helper_id}").status_code == 204
 
-    engine = create_engine(TEST_DATABASE_URL)
-    with engine.begin() as connection:
-        busy_run_id = connection.execute(
-            text(
-                "INSERT INTO agent_run (conversation_id, user_entry_id, status, "
-                "abort_requested, last_entry_id, started_at, created_at) "
-                "VALUES (:conversation_id, :user_entry_id, 'running', false, "
-                ":user_entry_id, now(), now()) RETURNING id"
-            ),
-            {
-                "conversation_id": conversation_id,
-                "user_entry_id": first_user_entry["id"],
-            },
-        ).scalar_one()
-    busy_fork = client.post(
-        f"/api/v1/agent/conversations/{conversation_id}/fork",
-        json={},
-    )
-    assert busy_fork.status_code == 409
-    assert busy_fork.json()["error"] == "agent_conversation_busy"
-    with engine.begin() as connection:
-        connection.execute(
-            text("DELETE FROM agent_run WHERE id = :run_id"),
-            {"run_id": busy_run_id},
+    with _direct_engine() as engine:
+        with engine.begin() as connection:
+            busy_run_id = connection.execute(
+                text(
+                    "INSERT INTO agent_run (user_id, conversation_id, user_entry_id, status, "
+                    "abort_requested, last_entry_id, started_at, created_at) "
+                    "VALUES (:user_id, :conversation_id, :user_entry_id, 'running', false, "
+                    ":user_entry_id, now(), now()) RETURNING id"
+                ),
+                {
+                    "user_id": root_account.user_id,
+                    "conversation_id": conversation_id,
+                    "user_entry_id": first_user_entry["id"],
+                },
+            ).scalar_one()
+        busy_fork = client.post(
+            f"/api/v1/agent/conversations/{conversation_id}/fork",
+            json={},
         )
-    engine.dispose()
+        assert busy_fork.status_code == 409
+        assert busy_fork.json()["error"] == "agent_conversation_busy"
+        with engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM agent_run WHERE id = :run_id AND user_id = :user_id"),
+                {"run_id": busy_run_id, "user_id": root_account.user_id},
+            )
 
     long_title = "W" * 200
     renamed_source = client.patch(
@@ -1507,21 +1521,27 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert asked_third["conversation_id"] is not None
     doomed_conversation_id = asked_third["conversation_id"]
 
-    engine = create_engine(TEST_DATABASE_URL)
-    with engine.begin() as connection:
+    with _direct_engine() as engine, engine.begin() as connection:
         connection.execute(
-            text("DELETE FROM agent_run WHERE conversation_id = :conversation_id"),
-            {"conversation_id": doomed_conversation_id},
+            text(
+                "DELETE FROM agent_run "
+                "WHERE conversation_id = :conversation_id AND user_id = :user_id"
+            ),
+            {"conversation_id": doomed_conversation_id, "user_id": root_account.user_id},
         )
         connection.execute(
-            text("DELETE FROM agent_entry WHERE conversation_id = :conversation_id"),
-            {"conversation_id": doomed_conversation_id},
+            text(
+                "DELETE FROM agent_entry "
+                "WHERE conversation_id = :conversation_id AND user_id = :user_id"
+            ),
+            {"conversation_id": doomed_conversation_id, "user_id": root_account.user_id},
         )
         connection.execute(
-            text("DELETE FROM agent_conversation WHERE id = :conversation_id"),
-            {"conversation_id": doomed_conversation_id},
+            text(
+                "DELETE FROM agent_conversation WHERE id = :conversation_id AND user_id = :user_id"
+            ),
+            {"conversation_id": doomed_conversation_id, "user_id": root_account.user_id},
         )
-    engine.dispose()
 
     preserved_library = client.get(
         "/api/v1/agent/questions",
@@ -1566,10 +1586,11 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     # user_confirmed flag is deliberately true here and must not bypass it.
     # ------------------------------------------------------------------
     def memory_count() -> int:
-        engine = create_engine(TEST_DATABASE_URL)
-        with engine.connect() as connection:
-            total = connection.execute(text("SELECT count(*) FROM memory")).scalar_one()
-        engine.dispose()
+        with _direct_engine() as engine, engine.connect() as connection:
+            total = connection.execute(
+                text("SELECT count(*) FROM memory WHERE user_id = :user_id"),
+                {"user_id": root_account.user_id},
+            ).scalar_one()
         return int(total)
 
     approval_content = "The wrench approval memory."
@@ -1662,13 +1683,11 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         )
         assert restarted_approvals.status_code == 200, restarted_approvals.text
         assert [item["id"] for item in restarted_approvals.json()["resources"]] == [approval_id]
-        engine = create_engine(TEST_DATABASE_URL)
-        with engine.connect() as connection:
+        with _direct_engine() as engine, engine.connect() as connection:
             restarted_run = connection.execute(
-                text("SELECT status FROM agent_run WHERE id = :run_id"),
-                {"run_id": waiting_body["run"]["id"]},
+                text("SELECT status FROM agent_run WHERE id = :run_id AND user_id = :user_id"),
+                {"run_id": waiting_body["run"]["id"], "user_id": root_account.user_id},
             ).scalar_one()
-        engine.dispose()
         assert restarted_run == "waiting"
 
     approved_turn = client.post(
@@ -1832,27 +1851,25 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert orphan_waiting["run"]["status"] == "waiting"
     orphan_approval_id = orphan_waiting["pending_approvals"][0]["id"]
     orphan_run_id = orphan_waiting["run"]["id"]
-    engine = create_engine(TEST_DATABASE_URL)
-    with engine.begin() as connection:
+    with _direct_engine() as engine, engine.begin() as connection:
         connection.execute(
             text(
                 "UPDATE agent_approval SET status = 'expired', resolved_at = now() "
-                "WHERE id = :approval_id"
+                "WHERE id = :approval_id AND user_id = :user_id"
             ),
-            {"approval_id": orphan_approval_id},
+            {"approval_id": orphan_approval_id, "user_id": root_account.user_id},
         )
-    engine.dispose()
 
     with TestClient(create_app(settings)):
         pass
 
-    engine = create_engine(TEST_DATABASE_URL)
-    with engine.connect() as connection:
+    with _direct_engine() as engine, engine.connect() as connection:
         orphan_status, orphan_error = connection.execute(
-            text("SELECT status, error_code FROM agent_run WHERE id = :run_id"),
-            {"run_id": orphan_run_id},
+            text(
+                "SELECT status, error_code FROM agent_run WHERE id = :run_id AND user_id = :user_id"
+            ),
+            {"run_id": orphan_run_id, "user_id": root_account.user_id},
         ).one()
-    engine.dispose()
     assert orphan_status == "failed"
     assert orphan_error == "approval_orphaned"
     orphan_resolution = client.post(

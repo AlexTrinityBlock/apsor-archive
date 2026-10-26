@@ -33,6 +33,7 @@ from app.module.knowledge.schema.memory_schema import (
     MemoryStatus,
     SummarySchema,
 )
+from app.module.knowledge.service.cache_keys import user_version_scope
 from app.module.knowledge.service.indexer_service import IndexerService
 from app.shared.time import utcnow
 
@@ -56,11 +57,12 @@ def _fallback_title(content: str) -> str:
 
 
 class MemoryService:
-    """Coordinate the linear memory timeline and its search index."""
+    """Coordinate one owner's linear memory timeline and its search index."""
 
     def __init__(
         self,
         *,
+        user_id: int,
         memory_repository: MemoryRepositoryProtocol,
         chunk_repository: ChunkRepositoryProtocol,
         indexer: IndexerService,
@@ -68,6 +70,7 @@ class MemoryService:
         summary_service: SummaryServiceProtocol,
         text_generator: TextGeneratorProtocol,
     ) -> None:
+        self.user_id = user_id
         self.memory_repository = memory_repository
         self.chunk_repository = chunk_repository
         self.indexer = indexer
@@ -154,6 +157,7 @@ class MemoryService:
         title = await self._generate_title(cleaned)
         memory = await self.memory_repository.add(
             MemoryModel(
+                user_id=self.user_id,
                 title=title,
                 content=cleaned,
                 status=MEMORY_ACTIVE,
@@ -171,7 +175,7 @@ class MemoryService:
             source_id=memory.id,
             content=memory.content,
         )
-        await self.cache.bump_version()
+        await self.cache.bump_version(user_version_scope(self.user_id))
 
         summary: SummarySchema | None = None
         if auto_summary:
@@ -213,7 +217,7 @@ class MemoryService:
         )
         if memory.status == MEMORY_DEPRECATED:
             await self.chunk_repository.mark_source_not_current(SOURCE_MEMORY, memory.id)
-        await self.cache.bump_version()
+        await self.cache.bump_version(user_version_scope(self.user_id))
         return self._to_schema(memory)
 
     async def deprecate_memory(
@@ -261,7 +265,7 @@ class MemoryService:
         for target in targets:
             await self.memory_repository.deprecate(target, reason=cleaned_reason)
             await self.chunk_repository.mark_source_not_current(SOURCE_MEMORY, target.id)
-        await self.cache.bump_version()
+        await self.cache.bump_version(user_version_scope(self.user_id))
         return [self._to_schema(target) for target in targets]
 
     async def read_memory(

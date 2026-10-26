@@ -1,0 +1,368 @@
+/* ==========================================================================
+   Accounts: the root-only directory, dialogs, and one-time credential handoff.
+   Palette, type, and shape come from the global mono tokens.
+   ========================================================================== */
+
+.accounts-page {
+  gap: 22px;
+}
+
+.accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.accounts-list > li {
+  min-width: 0;
+}
+
+.account-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 6px;
+}
+
+.account-card.is-current {
+  box-shadow: inset 3px 0 0 var(--accent-moss);
+}
+
+.account-card__head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-card__identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-card__name {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--mono-ink);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
+.account-card__username {
+  overflow-wrap: anywhere;
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+.account-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.account-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 0.7px solid var(--mono-grid);
+}
+
+.account-card__meta > div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.account-card__meta dt {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account-card__meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--mono-l2);
+  font-size: 12px;
+}
+
+.account-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 0.7px solid var(--mono-grid);
+}
+
+/* --------------------------------------------------------------------------
+   Loading, failure, and empty states
+   -------------------------------------------------------------------------- */
+
+.accounts-state__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 0;
+}
+
+.accounts-state__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.accounts-state__icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--accent-seal);
+  background: #ffffff;
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 4px;
+}
+
+.accounts-state__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.accounts-state__copy h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.accounts-state__copy p {
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.accounts-state__copy .btn {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Dialogs
+   -------------------------------------------------------------------------- */
+
+.accounts-dialog__head {
+  align-items: flex-start;
+}
+
+.accounts-dialog__heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.accounts-dialog__heading .eyebrow {
+  margin: 0;
+}
+
+.accounts-dialog__description {
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.accounts-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.accounts-dialog__actions {
+  gap: 8px;
+}
+
+.accounts-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.accounts-form__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--accent-seal-deep);
+  font-size: 12px;
+  line-height: 1.55;
+  background: rgba(200, 75, 49, 0.07);
+  border: 0.7px solid rgba(200, 75, 49, 0.28);
+  border-left: 3px solid var(--accent-seal);
+  border-radius: 3px;
+}
+
+.accounts-form__error .icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* --------------------------------------------------------------------------
+   One-time temporary password
+   -------------------------------------------------------------------------- */
+
+.accounts-temp {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.accounts-temp__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 12.5px;
+}
+
+.accounts-temp__identity strong {
+  color: var(--mono-ink);
+  font-size: 14px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.accounts-temp__identity span {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+.accounts-temp__row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.accounts-temp__value {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono-font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.accounts-temp__copy {
+  flex-shrink: 0;
+}
+
+.accounts-temp__warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 13px;
+  color: var(--mono-l2);
+  font-size: 11.5px;
+  line-height: 1.55;
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-left: 3px solid var(--accent-ochre);
+  border-radius: 3px;
+}
+
+.accounts-temp__warning .icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--accent-ochre);
+}
+
+.accounts-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.accounts-confirm__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 12.5px;
+}
+
+.accounts-confirm__identity strong {
+  color: var(--mono-ink);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.accounts-confirm__identity span {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 560px) {
+  .account-card {
+    padding: 16px;
+  }
+
+  .account-card__head {
+    flex-direction: column;
+  }
+
+  .account-card__actions .btn {
+    flex: 1;
+  }
+
+  .accounts-state__error {
+    flex-direction: column;
+  }
+
+  .accounts-temp__row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .accounts-temp__copy {
+    align-self: flex-start;
+  }
+}

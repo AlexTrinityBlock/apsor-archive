@@ -45,6 +45,17 @@ class FileContentUnavailableError(KnowledgeError):
         super().__init__(f"File {file_id} has no stored original bytes.")
 
 
+class FileStorageUnavailableError(KnowledgeError):
+    """The object-storage backend could not be reached.
+
+    The message is deliberately generic; provider, bucket, and credential
+    details must never reach an API response or a log record.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("Object storage is temporarily unavailable.")
+
+
 class UnsupportedFileTypeError(KnowledgeError):
     def __init__(self, extension: str) -> None:
         super().__init__(f"Unsupported file type: {extension or '(none)'}.")

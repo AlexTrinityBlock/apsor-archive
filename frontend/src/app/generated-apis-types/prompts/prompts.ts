@@ -63,7 +63,7 @@ export const getListFrequentlyUsedPromptsUrl = () => {
 }
 
 /**
- * List every prompt shortcut in display order.
+ * List the acting user's prompt shortcuts in display order.
  * @summary List Frequently Used Prompts
  */
 export const listFrequentlyUsedPrompts = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ListResponseSchemaFrequentlyUsedPromptReadSchema> => {
@@ -164,7 +164,7 @@ export const getCreateFrequentlyUsedPromptUrl = () => {
 }
 
 /**
- * Create a prompt shortcut.
+ * Create a prompt shortcut in the acting user's list.
  * @summary Create Frequently Used Prompt
  */
 export const createFrequentlyUsedPrompt = async (frequentlyUsedPromptCreateSchema: FrequentlyUsedPromptCreateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<FrequentlyUsedPromptReadSchema> => {
@@ -252,7 +252,7 @@ export const useCreateFrequentlyUsedPrompt = <TError = HTTPValidationError,
 }
 
 /**
- * Replace the complete shortcut order atomically.
+ * Replace the acting user's complete shortcut order atomically.
  * @summary Reorder Frequently Used Prompts
  */
 export const reorderFrequentlyUsedPrompts = async (frequentlyUsedPromptReorderSchema: FrequentlyUsedPromptReorderSchema, options?: Parameters<typeof apiFetch>[1]): Promise<ListResponseSchemaFrequentlyUsedPromptReadSchema> => {
@@ -340,7 +340,7 @@ export const useReorderFrequentlyUsedPrompts = <TError = HTTPValidationError,
 }
 
 /**
- * Hard-delete one prompt shortcut.
+ * Hard-delete one prompt owned by the caller.
  * @summary Delete Frequently Used Prompt
  */
 export const deleteFrequentlyUsedPrompt = async (promptId: number, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
@@ -414,7 +414,7 @@ export const useDeleteFrequentlyUsedPrompt = <TError = HTTPValidationError,
 }
 
 /**
- * Replace the title, text, and order of one prompt shortcut.
+ * Replace the title, text, and order of one prompt owned by the caller.
  * @summary Update Frequently Used Prompt
  */
 export const updateFrequentlyUsedPrompt = async (promptId: number,

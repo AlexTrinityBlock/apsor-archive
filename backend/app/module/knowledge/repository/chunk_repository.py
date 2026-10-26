@@ -1,4 +1,9 @@
-"""SQLAlchemy persistence for chunks, n-grams, BM25, and vector recall."""
+"""SQLAlchemy persistence for chunks, n-grams, BM25, and vector recall.
+
+The repository is bound to one owner. Every chunk and n-gram predicate includes
+that owner *before* limits, corpus statistics, or document-frequency counts are
+computed, so a shared index never mixes two private archives.
+"""
 
 import math
 from collections.abc import Sequence
@@ -17,12 +22,14 @@ MIN_VECTOR_SIMILARITY = 0.12
 
 
 class ChunkRepository:
-    """One inverted index and one vector table for every knowledge source."""
+    """One inverted index and one vector table, scoped to one owner."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, user_id: int) -> None:
         self.session = session
+        self.user_id = user_id
 
     async def add(self, chunk: ChunkModel) -> ChunkModel:
+        chunk.user_id = self.user_id
         self.session.add(chunk)
         await self.session.flush()
         return chunk
@@ -31,7 +38,12 @@ class ChunkRepository:
         if not frequencies:
             return
         rows = [
-            {"chunk_id": chunk_id, "gram": gram, "term_frequency": frequency}
+            {
+                "chunk_id": chunk_id,
+                "user_id": self.user_id,
+                "gram": gram,
+                "term_frequency": frequency,
+            }
             for gram, frequency in frequencies.items()
         ]
         await self.session.execute(insert(ChunkNgramModel), rows)
@@ -40,6 +52,7 @@ class ChunkRepository:
         await self.session.execute(
             update(ChunkModel)
             .where(
+                ChunkModel.user_id == self.user_id,
                 ChunkModel.source_kind == source_kind,
                 ChunkModel.source_id == source_id,
                 ChunkModel.is_current.is_(True),
@@ -57,6 +70,7 @@ class ChunkRepository:
         await self.session.execute(
             update(ChunkModel)
             .where(
+                ChunkModel.user_id == self.user_id,
                 ChunkModel.source_kind == source_kind,
                 ChunkModel.source_id.in_(source_ids),
                 ChunkModel.is_current.is_(True),
@@ -69,6 +83,7 @@ class ChunkRepository:
         await self.session.execute(
             update(ChunkModel)
             .where(
+                ChunkModel.user_id == self.user_id,
                 ChunkModel.source_kind == source_kind,
                 ChunkModel.source_id == source_id,
             )
@@ -79,16 +94,19 @@ class ChunkRepository:
         """Delete staged chunks and their n-grams after a failed ingestion."""
         await self.session.execute(
             delete(ChunkNgramModel).where(
+                ChunkNgramModel.user_id == self.user_id,
                 ChunkNgramModel.chunk_id.in_(
                     select(ChunkModel.id).where(
+                        ChunkModel.user_id == self.user_id,
                         ChunkModel.source_kind == source_kind,
                         ChunkModel.source_id == source_id,
                     )
-                )
+                ),
             )
         )
         await self.session.execute(
             delete(ChunkModel).where(
+                ChunkModel.user_id == self.user_id,
                 ChunkModel.source_kind == source_kind,
                 ChunkModel.source_id == source_id,
             )
@@ -98,6 +116,7 @@ class ChunkRepository:
         statement = (
             select(ChunkModel)
             .where(
+                ChunkModel.user_id == self.user_id,
                 ChunkModel.source_kind == source_kind,
                 ChunkModel.source_id == source_id,
             )
@@ -115,6 +134,7 @@ class ChunkRepository:
         statement = (
             select(ChunkModel)
             .where(
+                ChunkModel.user_id == self.user_id,
                 ChunkModel.source_kind == source_kind,
                 ChunkModel.source_id == source_id,
                 ChunkModel.chunk_index >= start_index,
@@ -127,33 +147,60 @@ class ChunkRepository:
     async def get_by_ids(self, chunk_ids: Sequence[int]) -> list[ChunkModel]:
         if not chunk_ids:
             return []
-        statement = select(ChunkModel).where(ChunkModel.id.in_(chunk_ids))
+        statement = select(ChunkModel).where(
+            ChunkModel.user_id == self.user_id,
+            ChunkModel.id.in_(chunk_ids),
+        )
         return list((await self.session.execute(statement)).scalars().all())
 
     async def count_current(self) -> int:
-        statement = select(func.count(ChunkModel.id)).where(ChunkModel.is_current.is_(True))
+        statement = select(func.count(ChunkModel.id)).where(
+            ChunkModel.user_id == self.user_id,
+            ChunkModel.is_current.is_(True),
+        )
         return int((await self.session.execute(statement)).scalar_one())
 
-    async def embedding_model_counts(self) -> dict[str, int]:
-        statement = (
-            select(ChunkModel.embedding_model, func.count(ChunkModel.id))
-            .where(
-                ChunkModel.is_current.is_(True),
-                ChunkModel.embedding.is_not(None),
-            )
-            .group_by(ChunkModel.embedding_model)
+    async def count_chunks(self) -> int:
+        """Count every chunk owned by this account, including history."""
+        return await self._count_chunks(include_history=True)
+
+    async def embedding_model_counts(
+        self,
+        *,
+        include_history: bool = False,
+    ) -> dict[str, int]:
+        statement = select(ChunkModel.embedding_model, func.count(ChunkModel.id)).where(
+            ChunkModel.user_id == self.user_id,
+            ChunkModel.embedding.is_not(None),
         )
+        if not include_history:
+            statement = statement.where(ChunkModel.is_current.is_(True))
+        statement = statement.group_by(ChunkModel.embedding_model)
         return {
             str(model or "unknown"): int(count)
             for model, count in (await self.session.execute(statement)).all()
         }
 
-    async def list_current_chunks(self, *, limit: int, offset: int) -> list[ChunkModel]:
+    async def list_chunks_after(
+        self,
+        *,
+        after_id: int,
+        limit: int,
+    ) -> list[ChunkModel]:
+        """List one owner's chunks after an id, current and historical.
+
+        Keyset pagination is used by embedding reindex so concurrent
+        soft-deletes or version changes cannot shift an offset and skip rows.
+        The owner predicate is part of the statement; another account's chunks
+        can never enter the batch.
+        """
         statement = (
             select(ChunkModel)
-            .where(ChunkModel.is_current.is_(True))
+            .where(
+                ChunkModel.user_id == self.user_id,
+                ChunkModel.id > after_id,
+            )
             .order_by(ChunkModel.id)
-            .offset(offset)
             .limit(limit)
         )
         return list((await self.session.execute(statement)).scalars().all())
@@ -166,12 +213,17 @@ class ChunkRepository:
     ) -> None:
         await self.session.execute(
             update(ChunkModel)
-            .where(ChunkModel.id == chunk_id)
+            .where(
+                ChunkModel.user_id == self.user_id,
+                ChunkModel.id == chunk_id,
+            )
             .values(embedding=embedding, embedding_model=model, updated_at=func.now())
         )
 
     async def _count_chunks(self, include_history: bool) -> int:
-        statement = select(func.count(ChunkModel.id))
+        statement = select(func.count(ChunkModel.id)).where(
+            ChunkModel.user_id == self.user_id,
+        )
         if not include_history:
             statement = statement.where(ChunkModel.is_current.is_(True))
         return int((await self.session.execute(statement)).scalar_one())
@@ -193,7 +245,10 @@ class ChunkRepository:
 
         current_filter = [] if include_history else [ChunkModel.is_current.is_(True)]
         average_length_row = await self.session.execute(
-            select(func.coalesce(func.avg(ChunkModel.token_count), 0.0)).where(*current_filter)
+            select(func.coalesce(func.avg(ChunkModel.token_count), 0.0)).where(
+                ChunkModel.user_id == self.user_id,
+                *current_filter,
+            )
         )
         average_length = float(average_length_row.scalar_one()) or 1.0
 
@@ -204,6 +259,8 @@ class ChunkRepository:
             )
             .join(ChunkModel, ChunkNgramModel.chunk_id == ChunkModel.id)
             .where(
+                ChunkModel.user_id == self.user_id,
+                ChunkNgramModel.user_id == self.user_id,
                 *current_filter,
                 ChunkNgramModel.gram.in_(unique_terms),
             )
@@ -215,6 +272,8 @@ class ChunkRepository:
             select(ChunkNgramModel.chunk_id, ChunkModel.source_kind)
             .join(ChunkModel, ChunkNgramModel.chunk_id == ChunkModel.id)
             .where(
+                ChunkModel.user_id == self.user_id,
+                ChunkNgramModel.user_id == self.user_id,
                 *current_filter,
                 ChunkNgramModel.gram.in_(unique_terms),
             )
@@ -235,6 +294,7 @@ class ChunkRepository:
                 ChunkNgramModel.gram,
                 ChunkNgramModel.term_frequency,
             ).where(
+                ChunkNgramModel.user_id == self.user_id,
                 ChunkNgramModel.chunk_id.in_(candidate_ids),
                 ChunkNgramModel.gram.in_(unique_terms),
             )
@@ -244,7 +304,10 @@ class ChunkRepository:
             terms_by_chunk.setdefault(int(chunk_id), {})[str(gram)] = int(frequency)
 
         length_rows = await self.session.execute(
-            select(ChunkModel.id, ChunkModel.token_count).where(ChunkModel.id.in_(candidate_ids))
+            select(ChunkModel.id, ChunkModel.token_count).where(
+                ChunkModel.user_id == self.user_id,
+                ChunkModel.id.in_(candidate_ids),
+            )
         )
         lengths = {int(chunk_id): int(length) for chunk_id, length in length_rows.all()}
 
@@ -286,9 +349,14 @@ class ChunkRepository:
             ChunkModel.id,
             ChunkModel.source_kind,
             ChunkModel.embedding,
-        ).where(ChunkModel.embedding.is_not(None))
+        ).where(
+            ChunkModel.user_id == self.user_id,
+            ChunkModel.embedding.is_not(None),
+        )
         if not include_history:
             statement = statement.where(ChunkModel.is_current.is_(True))
+        # The owner filter is part of the statement, so the scan limit applies
+        # inside this account's private vector space, never the whole table.
         rows = await self.session.execute(statement.limit(scan_limit))
         query = [float(value) for value in embedding]
         query_norm = math.sqrt(sum(value * value for value in query))

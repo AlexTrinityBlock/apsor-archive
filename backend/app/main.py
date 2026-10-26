@@ -1,16 +1,16 @@
 """FastAPI application assembly."""
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
-from app.dependency.auth import require_authenticated
+from app.dependency.auth import require_authenticated, require_stateless_authenticated
 from app.infrastructure.ai.provider_factory import (
     ProviderFactory,
     provider_defaults_from_settings,
@@ -19,14 +19,15 @@ from app.infrastructure.ai.runtime import AiRuntime
 from app.infrastructure.cache.resilient_cache import build_cache
 from app.infrastructure.config.settings import Settings, get_settings
 from app.infrastructure.database.migrations import upgrade_to_head
-from app.infrastructure.database.session import Database
-from app.infrastructure.files.local_storage import LocalFileStorage
+from app.infrastructure.database.session import Database, system_session
+from app.infrastructure.files.storage_factory import build_file_storage
 from app.infrastructure.logger.logging import configure_logging
 from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.agent.exception.handler import register_exceptions as register_agent_exceptions
 from app.module.agent.repository.agent_repository import AgentRepository
 from app.module.agent.router import router as agent_router
 from app.module.auth.exception.handler import register_exceptions as register_auth_exceptions
+from app.module.auth.router.account_router import router as account_router
 from app.module.auth.router.auth_router import router as auth_router
 from app.module.knowledge.dependencies import (
     build_ingest_worker,
@@ -77,16 +78,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resolved_settings.database_url,
             echo=resolved_settings.debug,
         )
-        await AgentRepository(app.state.db.session_factory).recover_stale_runs(now=utcnow())
+        await AgentRepository.recover_stale_runs(app.state.db, now=utcnow())
         app.state.cache = build_cache(resolved_settings.cache_url)
-        app.state.storage = LocalFileStorage(resolved_settings.data_dir)
+        app.state.storage = build_file_storage(resolved_settings)
         cipher = SecretCipher.from_settings(resolved_settings)
         runtime = AiRuntime(
             builder=ProviderFactory(resolved_settings),
             cipher=cipher,
             defaults=provider_defaults_from_settings(resolved_settings),
         )
-        async with app.state.db.session_factory() as session:
+        async with system_session(app.state.db.session_factory) as session:
             await runtime.reload(ProviderConfigRepository(session))
         app.state.secret_cipher = cipher
         app.state.ai_runtime = runtime
@@ -161,7 +162,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         minimum_size=resolved_settings.gzip_minimum_size,
     )
 
+    @app.middleware("http")
+    async def private_api_cache_headers(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        """Never let a shared browser reuse authenticated API/download responses.
+
+        File-content handlers set their own ``private`` validator header and are
+        left intact; JSON, downloads, auth, and job responses default to no-store.
+        """
+        response = await call_next(request)
+        if (
+            request.url.path.startswith("/api/v1/")
+            and "cache-control" not in response.headers
+        ):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(account_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(
         knowledge_router,
@@ -170,7 +190,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(
         agent_router,
         prefix="/api/v1",
-        dependencies=[Depends(require_authenticated)],
+        # Agent message/retry routes return SSE. A request-scoped dependency
+        # would stay open for the whole stream; route-level guards and the
+        # owner-scoped agent repository still enforce authentication and RLS.
+        dependencies=[Depends(require_stateless_authenticated)],
     )
     app.include_router(
         prompt_router,

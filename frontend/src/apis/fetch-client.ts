@@ -129,13 +129,23 @@ export async function apiFetch<T>(url: string, options: RequestInit = {}): Promi
   }
 
   if (!response.ok) {
-    if (response.status === 401 && typeof window !== "undefined") {
+    const payload = await parseResponsePayload(response);
+    const code = codeFromPayload(payload);
+    // Only a real session failure may tear down the signed-in UI. A 401 from
+    // the login form (invalid_credentials) or a field-level password error must
+    // stay on the form. An admin-disabled account arrives as a 403 code.
+    const sessionFailure =
+      response.status === 401 &&
+      (code === "authentication_required" || code === "unauthorized");
+    if (
+      typeof window !== "undefined" &&
+      (sessionFailure || code === "account_disabled")
+    ) {
       window.dispatchEvent(new Event("apsor-archive:unauthorized"));
     }
-    const payload = await parseResponsePayload(response);
     throw new ApiError(
       response.status,
-      codeFromPayload(payload),
+      code,
       messageFromPayload(
         payload,
         response.statusText ||

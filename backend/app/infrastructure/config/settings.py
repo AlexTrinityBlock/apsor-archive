@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
@@ -25,6 +25,8 @@ class Settings(BaseSettings):
             "../.secrets/deepseek.env",
             ".secrets/openai.env",
             "../.secrets/openai.env",
+            ".secrets/r2.env",
+            "../.secrets/r2.env",
         ),
         env_file_encoding="utf-8",
         extra="ignore",
@@ -45,6 +47,49 @@ class Settings(BaseSettings):
 
     cache_url: str = "redis://127.0.0.1:56379/0"
     cache_ttl_seconds: int = 120
+
+    # Storage. ``local`` keeps original bytes under ``data_dir``; ``r2`` writes
+    # new originals to the private Cloudflare R2 bucket. Reads always choose the
+    # backend persisted on the row, so a staged migration can mix both.
+    storage_backend: Literal["local", "r2"] = "local"
+    # ``R2_ACCOUNT_ENDPOINT``, ``R2_ACCESS_KEY_ID``, ``R2_SECRET_ACCESS_KEY``,
+    # and ``R2_BUCKET`` are the names used by the local, gitignored
+    # ``.secrets/r2.env``. Keep the unprefixed aliases so existing deployments
+    # do not have to rewrite their secret file.
+    r2_endpoint_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "APSOR_R2_ENDPOINT_URL",
+            "R2_ENDPOINT_URL",
+            "R2_ACCOUNT_ENDPOINT",
+        ),
+    )
+    r2_bucket: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "APSOR_R2_BUCKET",
+            "R2_BUCKET",
+        ),
+    )
+    r2_region: str = "auto"
+    r2_access_key_id: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "APSOR_R2_ACCESS_KEY_ID",
+            "R2_ACCESS_KEY_ID",
+        ),
+    )
+    r2_secret_access_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "APSOR_R2_SECRET_ACCESS_KEY",
+            "R2_SECRET_ACCESS_KEY",
+        ),
+    )
+    # Optional key namespace inside the bucket. Database storage keys stay
+    # unprefixed; the adapter applies this value transparently. Keep it
+    # unchanged after a migration, otherwise existing objects become unreachable.
+    r2_prefix: str = ""
 
     max_upload_bytes: int = 10 * 1024 * 1024
     max_text_bytes: int = 2 * 1024 * 1024
@@ -119,6 +164,29 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     login_attempt_limit: int = 10
     login_window_minutes: int = 5
+
+    @property
+    def r2_configured(self) -> bool:
+        """Whether every non-secret and secret R2 setting is present."""
+        return not self.r2_missing_settings
+
+    @property
+    def r2_missing_settings(self) -> list[str]:
+        """Return missing setting names only; never include values."""
+        missing: list[str] = []
+        if not (self.r2_endpoint_url or "").strip():
+            missing.append("r2_endpoint_url")
+        if not (self.r2_bucket or "").strip():
+            missing.append("r2_bucket")
+        if not self._has_secret(self.r2_access_key_id):
+            missing.append("r2_access_key_id")
+        if not self._has_secret(self.r2_secret_access_key):
+            missing.append("r2_secret_access_key")
+        return missing
+
+    @staticmethod
+    def _has_secret(value: SecretStr | None) -> bool:
+        return value is not None and bool(value.get_secret_value().strip())
 
 
 @lru_cache

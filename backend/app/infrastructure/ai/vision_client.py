@@ -73,8 +73,7 @@ class DeepSeekVisionClient:
         except httpx.HTTPError as exc:
             raise VisionProviderError(f"network error: {exc}") from exc
         if response.status_code >= 400:
-            detail = response.text[:300].replace("\n", " ")
-            raise VisionProviderError(f"HTTP {response.status_code}: {detail}")
+            raise VisionProviderError(f"HTTP {response.status_code}")
         try:
             body = response.json()
             content = body["choices"][0]["message"]["content"]

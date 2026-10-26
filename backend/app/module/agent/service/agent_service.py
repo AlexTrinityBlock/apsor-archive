@@ -130,6 +130,12 @@ class _CompletionOutcome:
 class AgentService:
     """Own conversation CRUD and the durable multi-step turn loop.
 
+    The composition root builds exactly one instance per authenticated request.
+    Its owner-scoped repository and tool service scope capture the acting
+    ``user_id``/role, so the SSE turn loop keeps using that account for every
+    later short transaction even after the request session is gone. A service
+    instance must never be reused for another account.
+
     Provider and model selection come from the existing database-backed AI
     runtime settings (``/api/v1/settings/ai``). Run-loop limits come from the
     immutable ``AgentRuntimeConfig`` snapshot passed by the dependency. A new

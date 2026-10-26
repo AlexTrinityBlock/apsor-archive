@@ -1,4 +1,10 @@
-"""SQLAlchemy persistence for files."""
+"""SQLAlchemy persistence for files.
+
+Every repository instance is bound to one owner. Reads and writes always carry
+``user_id = :user_id`` even though row-level security already scopes the
+transaction: the SQL predicate is the primary isolation boundary and RLS is the
+defense-in-depth layer.
+"""
 
 from collections.abc import Sequence
 from datetime import datetime
@@ -11,12 +17,14 @@ from app.shared.time import utcnow
 
 
 class FileRepository:
-    """Queries over the file table; no business decisions live here."""
+    """Queries over one owner's file table; no business decisions live here."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, user_id: int) -> None:
         self.session = session
+        self.user_id = user_id
 
     async def add(self, file: FileModel) -> FileModel:
+        file.user_id = self.user_id
         self.session.add(file)
         await self.session.flush()
         return file
@@ -48,10 +56,15 @@ class FileRepository:
         await self.session.flush()
 
     async def get_by_id(self, file_id: int) -> FileModel | None:
-        return await self.session.get(FileModel, file_id)
+        statement = select(FileModel).where(
+            FileModel.id == file_id,
+            FileModel.user_id == self.user_id,
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def get_current_by_path(self, path: str) -> FileModel | None:
         statement = select(FileModel).where(
+            FileModel.user_id == self.user_id,
             FileModel.raw_file_path == path,
             FileModel.is_current.is_(True),
             FileModel.deleted_at.is_(None),
@@ -60,13 +73,23 @@ class FileRepository:
 
     async def get_current_for_update(self, file_id: int) -> FileModel | None:
         """以資料列鎖定指定檔案，供版本化內容更新在同一個交易內完成。"""
-        statement = select(FileModel).where(FileModel.id == file_id).with_for_update()
+        statement = (
+            select(FileModel)
+            .where(
+                FileModel.id == file_id,
+                FileModel.user_id == self.user_id,
+            )
+            .with_for_update()
+        )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def list_by_ids(self, file_ids: Sequence[int]) -> list[FileModel]:
         if not file_ids:
             return []
-        statement = select(FileModel).where(FileModel.id.in_(file_ids))
+        statement = select(FileModel).where(
+            FileModel.user_id == self.user_id,
+            FileModel.id.in_(file_ids),
+        )
         return list((await self.session.execute(statement)).scalars().all())
 
     async def list_current_for_update(
@@ -86,6 +109,7 @@ class FileRepository:
         statement = (
             select(FileModel)
             .where(
+                FileModel.user_id == self.user_id,
                 FileModel.is_current.is_(True),
                 FileModel.deleted_at.is_(None),
                 or_(*conditions),
@@ -101,6 +125,7 @@ class FileRepository:
     async def list_files_in_directory(self, directory: str) -> list[FileModel]:
         prefix = self._directory_prefix(directory)
         statement = select(FileModel).where(
+            FileModel.user_id == self.user_id,
             FileModel.is_current.is_(True),
             FileModel.deleted_at.is_(None),
             FileModel.raw_file_path.startswith(prefix),
@@ -114,6 +139,7 @@ class FileRepository:
         statement = (
             select(FileModel)
             .where(
+                FileModel.user_id == self.user_id,
                 FileModel.is_current.is_(True),
                 FileModel.deleted_at.is_(None),
                 FileModel.raw_file_path.startswith(scoped_prefix),
@@ -134,6 +160,7 @@ class FileRepository:
         statement = (
             select(FileModel)
             .where(
+                FileModel.user_id == self.user_id,
                 FileModel.is_current.is_(True),
                 FileModel.deleted_at.is_(None),
                 FileModel.updated_at >= start,
@@ -145,6 +172,7 @@ class FileRepository:
 
     async def count_current(self) -> int:
         statement = select(func.count(FileModel.id)).where(
+            FileModel.user_id == self.user_id,
             FileModel.is_current.is_(True),
             FileModel.deleted_at.is_(None),
         )
@@ -153,6 +181,7 @@ class FileRepository:
     async def count_current_in_directory(self, directory: str) -> int:
         prefix = self._directory_prefix(directory)
         statement = select(func.count(FileModel.id)).where(
+            FileModel.user_id == self.user_id,
             FileModel.is_current.is_(True),
             FileModel.deleted_at.is_(None),
             FileModel.raw_file_path.startswith(prefix),
