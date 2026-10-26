@@ -950,12 +950,15 @@ The rail is grouped rather than flat. The archive workspaces come first (Chat,
 File library, Timeline, Memory, Search, Dashboard), then a personal block with
 **User profile**, then the system block (Settings, **Change password**,
 **Accounts** for the root account only, About), and a separate **Session**
-block with **Sign out**. The account card in the footer shows identity only; it
-has no small action icons. Index numbers are computed from the rendered
-position, so hiding Accounts for a normal user leaves no gap. The root
-`/` opens Chat; the archive summary lives at `/dashboard` with the `database`
-rail icon. Below 980 px the rail becomes a navigation drawer opened from the
-mobile bar.
+block with **Sign out**. The footer identity is also the root user switcher:
+root clicks it to open a searchable account dialog, while normal accounts see a
+plain identity block. While impersonating, the footer keeps the target account
+and a small **Viewing as** marker, and a persistent banner above the page canvas
+names the target and offers **Return to root**, which asks for the root password
+before ending the session. Index numbers are computed from the rendered
+position, so hiding Accounts and the switcher for a normal user leaves no gap. The root `/` opens Chat; the archive summary lives at
+`/dashboard` with the `database` rail icon. Below 980 px the rail becomes a
+navigation drawer opened from the mobile bar.
 
 ### Chat workspace
 
@@ -1033,26 +1036,51 @@ On the first visit the app asks you to create the root account. There is no
 default password and no email recovery. The root can then create normal
 accounts from **Accounts**; a new account is created with a generated
 20-character temporary password that is shown once, and it must choose a new
-password before any archive content loads. Root can disable, enable, and reset
-any other account. Disabling an account or resetting its password revokes its
-sessions; revocation is checked at request start, so an SSE turn that was
-already streaming may finish its current run. Accounts are never deleted, so a
-username stays reserved.
+password before any archive content loads. Root can disable, enable, reset, and
+impersonate other accounts. Disabling an account or resetting its password
+revokes its sessions; revocation is checked at request start, so an SSE turn
+that was already streaming may finish its current run. Accounts are never
+deleted, so a username stays reserved.
+
+**Accounts** now uses larger information cards. Each card carries the avatar,
+name and `@username`, role/state badges, creation date, last sign-in, and the
+rolled-up agent usage for that account: total, prompt, completion, and cached
+tokens, API calls, turns, and the last activity. The prompt/completion split is
+drawn as a small bar, and accounts with no agent activity still show a readable
+zero state. Usage is counted per agent run and rolled up by a database trigger,
+so the card stays a cheap root-only list read rather than a cross-account
+conversation scan.
+
+Root can start an impersonation session from the footer user switcher or from a
+normal active account card. The dialog searches the root-only account list
+locally, excludes root accounts, and refuses disabled accounts or accounts that
+must change their password. Impersonation is a deliberate trusted root
+capability: the cookie becomes the target account's session with an
+`impersonator_user_id` marker, the target's role controls every normal
+authorization decision, and root-only pages disappear. The persistent banner
+names the target and offers **Return to root**, which requires the root password,
+deletes the impersonation session, and issues a fresh root session. Requiring
+the password prevents the impersonated person from taking over root. Password
+changes are rejected while impersonating. A session transition in one tab
+reloads the other tabs so stale DOM, drafts, dialogs, and account-scoped query
+rows cannot survive; the last-chat resume pointer is also cleared. This is not
+an RLS bypass; it is another way for the highest-trust account to act as someone
+else, just like resetting their password.
 
 Both roles use the same private archive surface. The root additionally manages
 accounts and global settings, but is not a data superuser: the API and
 PostgreSQL row-level security prevent it from reading another account's files,
-memories, or conversations through normal queries. Password reset is the
-trusted-recovery exception: root can issue a temporary password and therefore
-could sign in as that account before the user changes it. Protect the root
-credential accordingly; RLS is not a defense against a malicious root who uses
-the reset capability. Normal users do not see the global Settings tabs or
-the **Accounts** page; their Settings shows only **Frequent prompts** and
-**Language**, while root sees all eight tabs. Dashboard and stats counts are
-scoped to the signed-in account; AI status is global and read-only. Passwords
-are hashed with Argon2; the database stores only a SHA-256 hash of each session
-token. The cookie is HttpOnly, SameSite=Lax, and Secure when
-`APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it). Each
+memories, or conversations through normal queries. Password reset and explicit
+impersonation are the trusted-recovery exceptions: root can issue a temporary
+password or open the target's session, and therefore could sign in as that
+account. Protect the root credential accordingly; RLS is not a defense against
+a malicious root who uses those capabilities. Normal users do not see the
+global Settings tabs or the **Accounts** page; their Settings shows only
+**Frequent prompts** and **Language**, while root sees all eight tabs. Dashboard
+and stats counts are scoped to the signed-in account; AI status is global and
+read-only. Passwords are hashed with Argon2; the database stores only a SHA-256
+hash of each session token. The cookie is HttpOnly, SameSite=Lax, and Secure
+when `APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it). Each
 account can edit its display name and any number of ordered title/content
 profile cards at `/profile`; the name labels chat turns and the cards are frozen
 into new conversations as the `user_profile` system section. The sign-in
@@ -1073,6 +1101,8 @@ username stays immutable.
 | `POST` | `/api/v1/accounts/{user_id}/disable` | Disable an account and revoke its sessions (root only) |
 | `POST` | `/api/v1/accounts/{user_id}/enable` | Re-enable an account (root only) |
 | `POST` | `/api/v1/accounts/{user_id}/reset-password` | Replace another account's password (root only) |
+| `POST` | `/api/v1/accounts/{user_id}/impersonate` | Replace the root cookie with a normal target-account session (root only) |
+| `POST` | `/api/v1/auth/impersonation/stop` | Verify the root password, delete the impersonation session, and issue a fresh root session |
 
 Every knowledge, settings, prompt, and agent endpoint requires a signed-in,
 active account. Root-only settings and account routes return `403 forbidden` to
@@ -1344,13 +1374,16 @@ The integration suite uses one real PostgreSQL test database
 (`apsor_archive_test`) on the same instance, runs sequentially, and resets every
 tracked table between tests. The database is built by `alembic upgrade head`,
 not `create_all`, so the `apsor_app` role, grants, and RLS policies are present
-in every request. There are 25 collected tests; each one exercises the real HTTP
+in every request. There are 35 collected tests; each one exercises the real HTTP
 surface and database. The multi-user tests cover the root/user lifecycle,
 forced password change, one-time temporary passwords, disable/reset session
 revocation, root-only accounts and global settings, private archive isolation
 across files, folders, memories, summaries, conversations, questions, and
-prompts, per-account prompt caps, direct-SQL RLS denial, and
-`commit_and_reapply` restoring the scoped context after a checkpoint. The agent
+prompts, per-account prompt caps, direct-SQL RLS denial,
+`commit_and_reapply` restoring the scoped context after a checkpoint, per-turn
+usage accounting and malformed-completion caps, account usage rollups,
+impersonation round trips, root-password re-authentication, and root password
+rotation revoking impersonation sessions. The agent
 test covers runtime settings defaults,
 full PUT/reset, validation, the runtime snapshot used by later runs, auto and
 manual compaction, clear, page-context reattachment at a boundary, retry,
@@ -1369,7 +1402,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `e8f1c4d2a7b9`, after `b8f4c2d9e6a1`. The migrations
+The latest migration is `f9c2a7d4e6b1`, after `e8f1c4d2a7b9`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1426,14 +1459,19 @@ after `agent_config` on this branch are:
   defaults;
 - `b8f4c2d9e6a1` raises the `max_tool_calls_per_turn` default from 6 to 20 and
   promotes an untouched stored default row;
-- `e8f1c4d2a7b9` (current head) adds `user_id` ownership to every private table,
+- `e8f1c4d2a7b9` adds `user_id` ownership to every private table,
   composite `(id, user_id)` lineage foreign keys, per-account unique indexes,
   `file.storage_backend` / `file_ingest_job.storage_backend`, the single-root
   partial unique index, and the `role` / `is_active` / `must_change_password`
   account columns. It backfills existing rows to the oldest account, creates the
   non-login `apsor_app` role, revokes `alembic_version` from it, and enables
   forced RLS with owner policies on private tables and read/root-write policies
-  on global config tables. Auth tables stay outside RLS.
+  on global config tables. Auth tables stay outside RLS;
+- `f9c2a7d4e6b1` (current head) adds per-run token/API-call counters to
+  `agent_run`, per-account rollups to `app_user`, the usage-delta trigger, and
+  the nullable `user_session.impersonator_user_id` impersonation marker. It
+  backfills historical usage from assistant-entry JSON and requires a
+  superuser/BYPASSRLS migration role for the forced-RLS backfill.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable
@@ -1507,8 +1545,10 @@ docker/caddy/                   non-root reverse proxy for the tunnel
   denies cross-account reads and writes even if a service filter is missing.
   Root-only route guards protect accounts and global settings, but root is not a
   data superuser and cannot read another account's archive through normal API
-  queries. Root password reset is a trusted-recovery capability that can
-  transfer sign-in access to the target account; treat root as the highest-trust
+  queries. Root password reset and explicit impersonation are deliberate
+  trusted-recovery capabilities that can transfer sign-in access to the target
+  account; stopping impersonation requires the root password, deletes that
+  session, and issues a fresh root session. Treat root as the highest-trust
   credential and do not model RLS as protection against a malicious root.
 - **RLS is an application boundary, not a host boundary.** The deployment login
   is a PostgreSQL superuser used for migrations and maintenance; the app

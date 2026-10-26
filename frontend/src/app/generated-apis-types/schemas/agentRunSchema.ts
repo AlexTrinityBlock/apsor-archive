@@ -11,6 +11,9 @@ import type { AgentRunSchemaStatus } from './agentRunSchemaStatus';
  */
 export interface AgentRunSchema {
   abort_requested: boolean;
+  api_calls: number;
+  cached_tokens: number;
+  completion_tokens: number;
   conversation_id: number;
   created_at: string;
   error_code: string | null;
@@ -18,8 +21,10 @@ export interface AgentRunSchema {
   finished_at: string | null;
   id: number;
   last_entry_id: number | null;
+  prompt_tokens: number;
   request_id: string | null;
   started_at: string;
   status: AgentRunSchemaStatus;
+  total_tokens: number;
   user_entry_id: number;
 }

@@ -28,6 +28,7 @@ import type {
   AccountListSchema,
   AccountSchema,
   AccountTemporaryPasswordSchema,
+  AuthResponseSchema,
   HTTPValidationError
 } from '../schemas';
 
@@ -389,6 +390,80 @@ export const useEnableAccount = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getEnableAccountMutationOptions(options), queryClient);
+    }
+    export const getImpersonateAccountUrl = (userId: number,) => {
+
+
+
+
+  return `/api/v1/accounts/${userId}/impersonate`
+}
+
+/**
+ * Replace the root cookie with a session acting as one normal account.
+ * @summary Impersonate Account
+ */
+export const impersonateAccount = async (userId: number, options?: Parameters<typeof apiFetch>[1]): Promise<AuthResponseSchema> => {
+
+  return apiFetch<AuthResponseSchema>(getImpersonateAccountUrl(userId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getImpersonateAccountMutationKey = () => ['impersonateAccount'] as const;
+
+export const getImpersonateAccountMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof impersonateAccount>>, TError,ImpersonateAccountMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof impersonateAccount>>, TError,ImpersonateAccountMutationVariables, TContext> => {
+
+const mutationKey = getImpersonateAccountMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof impersonateAccount>>, ImpersonateAccountMutationVariables> = (props) => {
+          const {userId} = props ?? {};
+
+          return  impersonateAccount(userId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImpersonateAccountMutationResult = NonNullable<Awaited<ReturnType<typeof impersonateAccount>>>
+
+    export type ImpersonateAccountMutationError = HTTPValidationError
+    export type ImpersonateAccountMutationVariables = {userId: number}
+
+    /**
+ * @summary Impersonate Account
+ */
+export const useImpersonateAccount = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof impersonateAccount>>, TError,ImpersonateAccountMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof impersonateAccount>>,
+        TError,
+        ImpersonateAccountMutationVariables,
+        TContext
+      > => {
+      return useMutation(getImpersonateAccountMutationOptions(options), queryClient);
     }
     export const getResetAccountPasswordUrl = (userId: number,) => {
 

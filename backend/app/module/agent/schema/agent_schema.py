@@ -162,6 +162,11 @@ class AgentRunSchema(BaseModel):
     started_at: datetime
     finished_at: datetime | None
     created_at: datetime
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    cached_tokens: int
+    api_calls: int
 
 
 class AgentApprovalSchema(BaseModel):
