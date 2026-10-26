@@ -25,6 +25,7 @@ from app.module.auth.schema.account_schema import (
     AccountListSchema,
     AccountSchema,
     AccountTemporaryPasswordSchema,
+    AccountUsageSchema,
 )
 from app.module.auth.schema.auth_schema import UserRole
 from app.shared.time import utcnow
@@ -81,6 +82,15 @@ class AccountService:
             must_change_password=user.must_change_password,
             created_at=user.created_at,
             last_login_at=user.last_login_at,
+            usage=AccountUsageSchema(
+                prompt_tokens=user.prompt_tokens,
+                completion_tokens=user.completion_tokens,
+                total_tokens=user.total_tokens,
+                cached_tokens=user.cached_tokens,
+                api_calls=user.api_calls,
+                turns=user.agent_turns,
+                last_activity_at=user.last_agent_activity_at,
+            ),
         )
 
     async def _require_account(self, user_id: int) -> AppUserModel:

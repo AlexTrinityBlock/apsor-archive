@@ -7,6 +7,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.module.auth.schema.auth_schema import UserRole
 
 
+class AccountUsageSchema(BaseModel):
+    """Rolled-up agent usage for one account."""
+
+    model_config = ConfigDict(frozen=True)
+
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    cached_tokens: int
+    api_calls: int
+    turns: int
+    last_activity_at: datetime | None
+
+
 class AccountSchema(BaseModel):
     """One account row without any credential material."""
 
@@ -20,6 +34,7 @@ class AccountSchema(BaseModel):
     must_change_password: bool
     created_at: datetime
     last_login_at: datetime | None
+    usage: AccountUsageSchema
 
 
 class AccountListSchema(BaseModel):

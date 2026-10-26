@@ -8,10 +8,13 @@ import { useAuth } from "./AuthProvider";
  * callers, so this only keeps the hidden surface out of a normal user's way.
  */
 export function RequireRoot({ children }: { readonly children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, isImpersonating } = useAuth();
 
   if (user?.role !== "root") {
-    return <Navigate to="/profile" replace />;
+    // An impersonation target lands on Chat: the account switcher starts there
+    // and /accounts is no longer a valid surface for this session. A normal
+    // account still falls back to its own profile.
+    return <Navigate to={isImpersonating ? "/chat" : "/profile"} replace />;
   }
   return <>{children}</>;
 }

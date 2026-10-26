@@ -633,6 +633,7 @@ class AgentService:
                         last_entry_id,
                         RuntimeError("truncated or malformed completion"),
                         step,
+                        usage=result.usage,
                     )
                     await self._fail_run(
                         turn,
@@ -677,6 +678,7 @@ class AgentService:
                             data=assistant_data,
                         ),
                         now=utcnow(),
+                        usage=result.usage,
                     )
                 except AgentRunNotActiveError:
                     await self._best_effort_cancel(turn, last_entry_id)
@@ -1363,17 +1365,21 @@ class AgentService:
         code: str,
         detail: str,
         step: int,
+        usage: dict[str, int] | None = None,
     ) -> int:
+        data: dict[str, Any] = {
+            "finish_reason": "error",
+            "error": {"code": code, "detail": detail},
+            "model": turn.conversation.model,
+            "provider": turn.conversation.provider,
+            "step": step,
+        }
+        if usage is not None:
+            data["usage"] = dict(usage)
         draft = EntryDraft(
             kind=KIND_ASSISTANT,
             messages=[{"role": "assistant", "content": ""}],
-            data={
-                "finish_reason": "error",
-                "error": {"code": code, "detail": detail},
-                "model": turn.conversation.model,
-                "provider": turn.conversation.provider,
-                "step": step,
-            },
+            data=data,
         )
         try:
             entry = await self.repository.append_assistant(
@@ -1381,6 +1387,7 @@ class AgentService:
                 run_id=turn.run.id,
                 draft=draft,
                 now=utcnow(),
+                usage=usage,
             )
         except AgentRunNotActiveError:
             return last_entry_id
@@ -1392,6 +1399,7 @@ class AgentService:
         last_entry_id: int,
         error: Exception | None,
         step: int,
+        usage: dict[str, int] | None = None,
     ) -> tuple[int, str, str]:
         if isinstance(error, AiNotConfiguredError):
             code = "not_configured"
@@ -1410,6 +1418,7 @@ class AgentService:
             code,
             detail,
             step,
+            usage=usage,
         )
         return entry_id, code, detail
 

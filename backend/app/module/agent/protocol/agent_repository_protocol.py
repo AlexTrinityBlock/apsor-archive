@@ -118,6 +118,7 @@ class AgentRepositoryProtocol(Protocol):
         run_id: int,
         draft: EntryDraft,
         now: datetime,
+        usage: dict[str, int] | None = None,
     ) -> AgentEntryModel: ...
 
     async def append_tool_results(

@@ -41,6 +41,11 @@ class AppUserModel(Base):
             "(is_active AND disabled_at IS NULL) OR (NOT is_active AND disabled_at IS NOT NULL)",
             name="active_disabled",
         ),
+        CheckConstraint(
+            "prompt_tokens >= 0 AND completion_tokens >= 0 AND total_tokens >= 0 "
+            "AND cached_tokens >= 0 AND api_calls >= 0 AND agent_turns >= 0",
+            name="usage_non_negative",
+        ),
         Index(
             "uq_app_user_single_root",
             "role",
@@ -91,6 +96,45 @@ class AppUserModel(Base):
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    prompt_tokens: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    completion_tokens: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    total_tokens: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    cached_tokens: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    api_calls: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    agent_turns: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    last_agent_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class UserProfileCardModel(Base):
@@ -145,12 +189,22 @@ class UserSessionModel(Base):
         Index("ix_user_session_token_hash", "token_hash", unique=True),
         Index("ix_user_session_expires_at", "expires_at"),
         Index("ix_user_session_user_id", "user_id"),
+        Index("ix_user_session_impersonator_user_id", "impersonator_user_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     user_id: Mapped[int] = mapped_column(
         ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+    )
+    impersonator_user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="CASCADE",
+            name="fk_user_session_impersonator_user_id_app_user",
+        ),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow

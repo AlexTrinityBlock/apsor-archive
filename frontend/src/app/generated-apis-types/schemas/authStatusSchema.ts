@@ -4,10 +4,12 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
+import type { ImpersonationSchema } from './impersonationSchema';
 import type { UserSchema } from './userSchema';
 
 export interface AuthStatusSchema {
   authenticated: boolean;
+  impersonation?: ImpersonationSchema | null;
   requires_setup: boolean;
   user: UserSchema | null;
 }

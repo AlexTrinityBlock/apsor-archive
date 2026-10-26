@@ -4,8 +4,10 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
+import type { ImpersonationSchema } from './impersonationSchema';
 import type { UserSchema } from './userSchema';
 
 export interface AuthResponseSchema {
+  impersonation?: ImpersonationSchema | null;
   user: UserSchema;
 }

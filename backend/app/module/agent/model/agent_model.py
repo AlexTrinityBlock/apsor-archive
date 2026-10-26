@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Identity,
     Index,
+    Integer,
     Sequence,
     String,
     Text,
@@ -310,6 +311,11 @@ class AgentRunModel(Base):
             "status IN ('running', 'waiting', 'completed', 'failed', 'cancelled')",
             name="status_valid",
         ),
+        CheckConstraint(
+            "prompt_tokens >= 0 AND completion_tokens >= 0 AND total_tokens >= 0 "
+            "AND cached_tokens >= 0 AND api_calls >= 0",
+            name="usage_non_negative",
+        ),
         Index("ix_agent_run_conversation_id", "conversation_id", "id"),
         Index("ix_agent_run_conversation_status", "conversation_id", "status"),
         Index(
@@ -373,4 +379,34 @@ class AgentRunModel(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    prompt_tokens: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    completion_tokens: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    total_tokens: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    cached_tokens: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    api_calls: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
     )

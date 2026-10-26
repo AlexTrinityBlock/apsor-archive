@@ -9,12 +9,14 @@ from app.module.auth.dependencies import (
     get_auth_settings,
     get_cookie_token,
 )
+from app.module.auth.router.session_cookie import set_session_cookie
 from app.module.auth.schema.auth_schema import (
     AuthResponseSchema,
     AuthStatusSchema,
     ChangePasswordSchema,
     LoginSchema,
     SetupSchema,
+    StopImpersonationSchema,
     UserProfileSchema,
     UserProfileUpdateSchema,
     UserSchema,
@@ -22,18 +24,6 @@ from app.module.auth.schema.auth_schema import (
 from app.module.auth.service.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _set_session_cookie(response: Response, token: str, settings: Settings) -> None:
-    response.set_cookie(
-        key=settings.cookie_name,
-        value=token,
-        max_age=settings.session_ttl_hours * 3600,
-        httponly=True,
-        secure=settings.cookie_secure,
-        samesite="lax",
-        path="/",
-    )
 
 
 @router.get("/status", response_model=AuthStatusSchema, operation_id="getAuthStatus")
@@ -63,7 +53,7 @@ async def setup_account(
         password=payload.password,
         confirm_password=payload.confirm_password,
     )
-    _set_session_cookie(response, token, settings)
+    set_session_cookie(response, token, settings)
     return AuthResponseSchema(user=user)
 
 
@@ -82,8 +72,33 @@ async def login(
         password=payload.password,
         remote_address=remote_address,
     )
-    _set_session_cookie(response, token, settings)
+    set_session_cookie(response, token, settings)
     return AuthResponseSchema(user=user)
+
+
+@router.post(
+    "/impersonation/stop",
+    response_model=AuthResponseSchema,
+    operation_id="stopImpersonation",
+)
+async def stop_impersonation(
+    payload: StopImpersonationSchema,
+    request: Request,
+    response: Response,
+    token: str | None = Depends(get_cookie_token),
+    settings: Settings = Depends(get_auth_settings),
+    service: AuthService = Depends(get_auth_service),
+) -> AuthResponseSchema:
+    """Return from an impersonation session to a fresh root session."""
+    response.headers["Cache-Control"] = "no-store"
+    remote_address = request.client.host if request.client else "unknown"
+    user, new_token, impersonation = await service.stop_impersonation(
+        token,
+        payload.password,
+        remote_address=remote_address,
+    )
+    set_session_cookie(response, new_token, settings)
+    return AuthResponseSchema(user=user, impersonation=impersonation)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, operation_id="logout")

@@ -163,10 +163,12 @@ class SessionRepository:
         token_hash: str,
         user_id: int,
         expires_at: datetime,
+        impersonator_user_id: int | None = None,
     ) -> UserSessionModel:
         session = UserSessionModel(
             token_hash=token_hash,
             user_id=user_id,
+            impersonator_user_id=impersonator_user_id,
             expires_at=expires_at,
             created_at=utcnow(),
             last_seen_at=utcnow(),
@@ -188,6 +190,14 @@ class SessionRepository:
         """Revoke every session owned by one account."""
         await self.session.execute(
             delete(UserSessionModel).where(UserSessionModel.user_id == user_id)
+        )
+
+    async def delete_impersonations_for_actor(self, actor_user_id: int) -> None:
+        """Revoke every impersonation session started by one account."""
+        await self.session.execute(
+            delete(UserSessionModel).where(
+                UserSessionModel.impersonator_user_id == actor_user_id
+            )
         )
 
     async def delete_others_for_user(self, user_id: int, *, keep_token_hash: str) -> None:
