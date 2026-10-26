@@ -534,7 +534,7 @@ export const chat = {
       untitledUrl: "未命名網址",
       chars: "{count} 個字元",
       page: "第 {page}/{total} 頁",
-      lines: "第 {start}-{end} 行，共 {total} 行",
+      totalChars: "全文件共 {count} 個字元",
       morePages: "尚有頁面",
       sourceTruncated: "來源已截斷",
       noBodyTitle: "這個結果沒有儲存頁面內容",

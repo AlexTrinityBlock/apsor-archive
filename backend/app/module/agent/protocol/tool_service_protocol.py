@@ -111,10 +111,8 @@ class WebResearchServiceProtocol(Protocol):
         self,
         url: str,
         *,
-        max_chars: int,
-        offset: int = 1,
-        limit: int = 200,
         page: int | None = None,
+        offset: int | None = None,
     ) -> WebFetchResponse: ...
 
 

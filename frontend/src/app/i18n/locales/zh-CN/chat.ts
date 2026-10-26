@@ -524,7 +524,7 @@ export const chat = {
       untitledUrl: "未命名网址",
       chars: "{count} 个字符",
       page: "第 {page}/{total} 页",
-      lines: "第 {start}-{end} 行，共 {total} 行",
+      totalChars: "全文档共 {count} 个字符",
       morePages: "还有页面",
       sourceTruncated: "来源已截断",
       noBodyTitle: "这个结果没有保存页面内容",
