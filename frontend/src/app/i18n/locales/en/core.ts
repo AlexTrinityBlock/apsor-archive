@@ -39,6 +39,7 @@ export const core = {
     accounts: "Accounts",
     changePassword: "Change password",
     signOut: "Sign out",
+    sessionSection: "Session",
     systemStatus: "System status",
     localArchive: "Local archive",
     checkingServices: "Checking local services",
