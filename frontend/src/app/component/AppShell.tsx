@@ -2,19 +2,29 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type CSSProperties,
 } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 import { useGetHealth } from "../generated-apis-types";
 import { useAuth } from "../auth/AuthProvider";
 import { ChangePasswordDialog } from "../auth/component/ChangePasswordDialog";
+import { ImpersonateUserDialog } from "../auth/component/ImpersonateUserDialog";
+import { StopImpersonationDialog } from "../auth/component/StopImpersonationDialog";
 import { useScrollLock } from "../hook/useScrollLock";
-import { localizeStatus, useI18n, type TranslationKey } from "../i18n";
+import {
+  localizeStatus,
+  useI18n,
+  type TranslationKey,
+} from "../i18n";
+import { Button } from "./Button";
 import { Icon, type IconName } from "./Icon";
 import { RouteFallback } from "./RouteFallback";
+import { useToast } from "./Toast";
 import { TreeMark } from "./TreeMark";
+
 
 interface NavItem {
   readonly to: string;
@@ -145,6 +155,139 @@ function readRailPreference(): boolean {
   }
 }
 
+function pageClassName(pathname: string): string {
+  return pathname.startsWith("/chat") || pathname.startsWith("/library")
+    ? "app-page app-page--fixed"
+    : "app-page";
+}
+
+interface RailAccountIdentityProps {
+  readonly username: string;
+  readonly displayName: string;
+  readonly isImpersonating: boolean;
+  readonly canSwitchUser: boolean;
+  readonly onSwitch: () => void;
+}
+
+/**
+ * Footer identity. Root gets a button into the user switcher; every other
+ * state is a plain identity block. The target account always stays visible
+ * while impersonating, with a small reviewing marker.
+ */
+function RailAccountIdentity({
+  username,
+  displayName,
+  isImpersonating,
+  canSwitchUser,
+  onSwitch,
+}: RailAccountIdentityProps) {
+  const { t } = useI18n();
+
+  return (
+    <div
+      className={["rail-account", isImpersonating ? "is-impersonating" : null]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {canSwitchUser ? (
+        <button
+          type="button"
+          className="rail-account__identity rail-account__identity--switch"
+          onClick={onSwitch}
+          aria-haspopup="dialog"
+          aria-label={t("core.impersonation.switchUserAria", {
+            name: displayName,
+          })}
+          title={t("core.impersonation.switchUserTitle")}
+        >
+          <span className="rail-account__mark" aria-hidden="true">
+            {displayName.slice(0, 2).toUpperCase()}
+          </span>
+          <span className="rail-account__copy">
+            <span className="rail-account__username">{username}</span>
+            <strong>{displayName}</strong>
+          </span>
+          <span className="rail-account__cue" aria-hidden="true">
+            <Icon name="chevron-down" size={12} />
+          </span>
+        </button>
+      ) : (
+        <div
+          className="rail-account__identity"
+          title={
+            isImpersonating
+              ? t("core.impersonation.bannerTitle", { name: displayName })
+              : displayName
+          }
+        >
+          <span className="rail-account__mark" aria-hidden="true">
+            {displayName.slice(0, 2).toUpperCase()}
+          </span>
+          <span className="rail-account__copy">
+            <span className="rail-account__username">{username}</span>
+            <strong>{displayName}</strong>
+            {isImpersonating ? (
+              <span className="rail-account__viewing">
+                {t("core.impersonation.viewingAs")}
+              </span>
+            ) : null}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ImpersonationBannerProps {
+  readonly targetName: string;
+  readonly rootName: string;
+  readonly onStop: () => void;
+}
+
+interface StopDialogContext {
+  readonly targetName: string;
+  readonly targetUsername: string;
+  readonly rootName: string;
+}
+
+/** Persistent account reminder above the page canvas while impersonating. */
+function ImpersonationBanner({
+  targetName,
+  rootName,
+  onStop,
+}: ImpersonationBannerProps) {
+  const { t } = useI18n();
+
+  return (
+    <div
+      className="impersonation-banner"
+      role="region"
+      aria-label={t("core.impersonation.bannerAria")}
+    >
+      <span className="impersonation-banner__icon" aria-hidden="true">
+        <Icon name="user" size={16} />
+      </span>
+      <div className="impersonation-banner__copy">
+        <strong>
+          {t("core.impersonation.bannerTitle", { name: targetName })}
+        </strong>
+        <span>
+          {t("core.impersonation.bannerDescription", { root: rootName })}
+        </span>
+      </div>
+      <Button
+        type="button"
+        variant="ink"
+        size="sm"
+        className="impersonation-banner__action"
+        onClick={onStop}
+      >
+        {t("core.impersonation.returnToRoot")}
+      </Button>
+    </div>
+  );
+}
+
 /**
  * The fixed archive shell: a collapsible mono rail on desktop, a drawer on
  * mobile, and a single main canvas. The global command palette and floating
@@ -152,8 +295,13 @@ function readRailPreference(): boolean {
  */
 export function AppShell() {
   const { t } = useI18n();
+  const toast = useToast();
+  const navigate = useNavigate();
   const [railCollapsed, setRailCollapsed] = useState(readRailPreference);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [impersonateDialogOpen, setImpersonateDialogOpen] = useState(false);
+  const [stopDialog, setStopDialog] = useState<StopDialogContext | null>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const location = useLocation();
   const [drawer, setDrawer] = useState({
     open: false,
@@ -171,10 +319,16 @@ export function AppShell() {
       refetchInterval: 60_000,
     },
   });
-  const { user, logout, isSubmitting } = useAuth();
+  const { user, logout, isSubmitting, impersonation, isImpersonating } =
+    useAuth();
   const isRoot = user?.role === "root";
+  const canSwitchUser = isRoot && !isImpersonating;
   const navSections = buildNavSections(isRoot);
   const displayName = user?.display_name || user?.username || t("core.nav.owner");
+  const rootName =
+    impersonation?.display_name ||
+    impersonation?.username ||
+    t("core.impersonation.root");
 
   useScrollLock(drawerOpen);
 
@@ -211,10 +365,41 @@ export function AppShell() {
     () => setDrawer((current) => ({ ...current, open: false })),
     [],
   );
+  const openImpersonateDialog = useCallback(() => {
+    closeDrawer();
+    setImpersonateDialogOpen(true);
+  }, [closeDrawer]);
+  const closeImpersonateDialog = useCallback(() => {
+    setImpersonateDialogOpen(false);
+    // The opener lived in the drawer, which closed before the dialog mounted.
+    // Return focus to the visible mobile navigation control instead.
+    if (window.matchMedia("(max-width: 980px)").matches) {
+      window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus());
+    }
+  }, []);
   const toggleRail = useCallback(
     () => setRailCollapsed((previous) => !previous),
     [],
   );
+
+  const openStopDialog = useCallback(() => {
+    if (!user) {
+      return;
+    }
+    setStopDialog({
+      targetName: displayName,
+      targetUsername: user.username,
+      rootName,
+    });
+  }, [displayName, rootName, user]);
+
+  const handleStopped = useCallback(() => {
+    setStopDialog(null);
+    toast.success(t("core.impersonation.returnedToRoot"));
+    navigate("/accounts");
+  }, [navigate, t, toast]);
+
+  const workspaceKey = `${user?.user_id ?? "anonymous"}:${impersonation?.actor_user_id ?? "none"}`;
 
   const health = healthQuery.data;
   let statusTone: StatusTone = "loading";
@@ -254,6 +439,7 @@ export function AppShell() {
 
       <header className="mobile-bar">
         <button
+          ref={mobileMenuButtonRef}
           type="button"
           className="mobile-bar__button"
           onClick={openDrawer}
@@ -391,17 +577,13 @@ export function AppShell() {
 
         <div className="rail-footer">
           {user ? (
-            <div className="rail-account">
-              <div className="rail-account__identity" title={displayName}>
-                <span className="rail-account__mark" aria-hidden="true">
-                  {displayName.slice(0, 2).toUpperCase()}
-                </span>
-                <span className="rail-account__copy">
-                  <span className="rail-account__username">{user.username}</span>
-                  <strong>{displayName}</strong>
-                </span>
-              </div>
-            </div>
+            <RailAccountIdentity
+              username={user.username}
+              displayName={displayName}
+              isImpersonating={isImpersonating}
+              canSwitchUser={canSwitchUser}
+              onSwitch={openImpersonateDialog}
+            />
           ) : null}
 
           <div className="rail-status" aria-label={t("core.nav.systemStatus")}>
@@ -431,14 +613,14 @@ export function AppShell() {
       </aside>
 
       <main id="main-content" className="app-main" tabIndex={-1}>
-        <div
-          className={
-            location.pathname.startsWith("/chat") ||
-            location.pathname.startsWith("/library")
-              ? "app-page app-page--fixed"
-              : "app-page"
-          }
-        >
+        {isImpersonating ? (
+          <ImpersonationBanner
+            targetName={displayName}
+            rootName={rootName}
+            onStop={openStopDialog}
+          />
+        ) : null}
+        <div key={workspaceKey} className={pageClassName(location.pathname)}>
           <Suspense fallback={<RouteFallback />}>
             <Outlet />
           </Suspense>
@@ -447,6 +629,20 @@ export function AppShell() {
 
       {passwordDialogOpen ? (
         <ChangePasswordDialog onClose={() => setPasswordDialogOpen(false)} />
+      ) : null}
+
+      {impersonateDialogOpen && canSwitchUser ? (
+        <ImpersonateUserDialog onClose={closeImpersonateDialog} />
+      ) : null}
+
+      {stopDialog ? (
+        <StopImpersonationDialog
+          targetName={stopDialog.targetName}
+          targetUsername={stopDialog.targetUsername}
+          rootName={stopDialog.rootName}
+          onClose={() => setStopDialog(null)}
+          onStopped={handleStopped}
+        />
       ) : null}
     </div>
   );

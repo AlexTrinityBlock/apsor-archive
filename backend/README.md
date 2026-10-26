@@ -213,8 +213,14 @@ a mutable chat log:
   payload; `data` is UI/diagnostics and is never sent to the provider. Supported
   kinds are `pi.user`, `pi.assistant`, `pi.tool-result`, `pi.page-context`,
   `pi.system`, `pi.reset`, `pi.compaction`, and `ui.notice`.
-- `agent_run` stores one submission's operational state. `agent_commit_seq`
-  assigns one sequence value to every entry written in the same transaction.
+- `agent_run` stores one submission's operational state, including the
+  provider's prompt/completion/total/cached token counts and the number of
+  provider calls for that turn. A successful or malformed completion that
+  returned a usage object counts as one call; a synthetic failure entry without
+  usage does not. `agent_commit_seq` assigns one sequence value to every entry
+  written in the same transaction. A database trigger rolls the counters up into
+  `app_user`, which keeps the root-only account directory independent of private
+  archive reads.
 - `agent_approval` stores a pending human decision for a confirmation-required
   tool call: validated arguments, safe preview, and the loop snapshot used to
   resume the waiting run.
@@ -751,13 +757,36 @@ those generated assets must be committed with the build.
 
 The first visit creates the root account through `POST /api/v1/auth/setup`.
 `/api/v1/accounts` is the root-only account directory: list, create, disable,
-enable, and reset-password. Creating or resetting returns a generated
-20-character temporary password exactly once, sets
+enable, and reset-password. Each listed account includes a nested `usage`
+rollup: prompt/completion/total/cached tokens, provider API calls (successful
+or usage-bearing malformed completions), agent turns, and the last agent
+activity timestamp. Creating or resetting
+returns a generated 20-character temporary password exactly once, sets
 `must_change_password=true`, and revokes the target's sessions on reset. A
 disabled account cannot log in, and its existing cookies fail on the next
 request. Accounts are never deleted; the username stays reserved. Root cannot
 disable itself or reset its own password through the account endpoints; use
 `POST /api/v1/auth/password` for self-service. There is exactly one root.
+
+Root can also impersonate a normal account with
+`POST /api/v1/accounts/{user_id}/impersonate`. The target must be active, must
+not be the actor or a root, and must not require a password change. The response
+replaces the browser cookie with a session whose role is the target's role, so
+root-only routes immediately return `403 forbidden`. `GET /api/v1/auth/status`
+and the sign-in/impersonation responses expose the optional
+`impersonation: {actor_user_id, username, display_name}` marker. While
+impersonating, password change is rejected with
+`impersonation_password_change_forbidden` (403). Returning with
+`POST /api/v1/auth/impersonation/stop` requires a JSON body containing the
+root password: `{"password": "..."}`. The password is verified before the target
+session is deleted; a wrong password returns `impersonation_password_invalid`
+(400) and leaves the impersonation session usable. Failed attempts use the
+login-throttle mechanism with a stop-specific bucket, so a stolen
+impersonation cookie cannot become an unthrottled root-password oracle. A successful stop deletes that session, creates a fresh
+root session, and returns the root identity;
+neither starting nor stopping updates `last_login_at`. Rotating the root
+password also revokes every impersonation session that root started, while the
+existing session-revocation behavior for the changed account stays in place.
 
 `GET /api/v1/auth/profile` returns the acting account's effective display name
 and ordered cards; `PUT /api/v1/auth/profile` replaces the name and every card
@@ -780,6 +809,10 @@ Account/auth error codes include `account_disabled` (403),
 `password_change_required` (403), `forbidden` (403),
 `current_password_invalid` (400), `account_not_found` (404), `username_taken`
 (409), `cannot_disable_root` (409), and `last_root_protected` (409).
+Impersonation adds `cannot_impersonate_self` (409), `cannot_impersonate_root`
+(409), `account_not_impersonatable` (409), `not_impersonating` (400),
+`impersonation_password_invalid` (400), and
+`impersonation_password_change_forbidden` (403).
 
 ## Database
 
@@ -792,9 +825,10 @@ fields, account/session auth (`app_user`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The current head is
-`e8f1c4d2a7b9`; every private table now has `user_id` and forced RLS, the
+`f9c2a7d4e6b1`; every private table now has `user_id` and forced RLS, the
 runtime role is `apsor_app`, and `file` / `file_ingest_job` record
-`storage_backend`. The migration chain is executed by the test fixture and
+`storage_backend`. The head also adds per-run and per-account agent usage
+counters and the impersonation session marker. The migration chain is executed by the test fixture and
 verifies the role, grants, and policies; downgrades are still a separate check.
 The agent
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
@@ -864,7 +898,7 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   Python default for that slot;
 - `b8f4c2d9e6a1` raises the `max_tool_calls_per_turn` default from 6 to 20 and
   promotes an untouched stored default row;
-- `e8f1c4d2a7b9` (current head) adds `user_id` ownership and owner-safe
+- `e8f1c4d2a7b9` adds `user_id` ownership and owner-safe
   composite lineage foreign keys to the private tables, per-account unique
   indexes, `storage_backend` on `file` and `file_ingest_job`, the single-root
   partial unique index, and the `role` / `is_active` / `must_change_password`
@@ -873,7 +907,13 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   `alembic_version`, and enables forced RLS with owner policies on private
   tables and read-all/root-write policies on global config tables. Auth tables
   stay outside RLS. Its downgrade revokes this database's grants but does not
-  drop the cluster-wide role.
+  drop the cluster-wide role;
+- `f9c2a7d4e6b1` (current head) adds per-run token/API-call counters to
+  `agent_run`, per-account rollups to `app_user`, the `agent_run` usage-delta
+  trigger, and the nullable `user_session.impersonator_user_id` marker. It
+  backfills historical usage from assistant-entry JSON, requires a
+  superuser/BYPASSRLS migration role for the forced-RLS backfill, and validates
+  both upgrade and downgrade on a scratch database.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
@@ -957,7 +997,7 @@ same instance. The session fixture drops and recreates its schema, runs
 `alembic upgrade head` as the owning login, and verifies the `apsor_app` role,
 grants, RLS flags, and policies before any test starts. Tests run sequentially,
 reset every tracked table between cases, and treat warnings as errors. There are
-25 collected tests:
+35 collected tests:
 
 1. `tests/test_agent.py::test_agent_entry_log_tool_loop_and_cache_usage`
 2. `tests/test_errors.py::test_validation_and_error_envelope`
@@ -974,16 +1014,26 @@ reset every tracked table between cases, and treat warnings as errors. There are
 13. `tests/test_memories.py::test_save_memory_supersede_and_trace`
 14. `tests/test_multi_user.py::test_account_lifecycle_forced_change_disable_and_reset`
 15. `tests/test_multi_user.py::test_root_only_accounts_and_global_settings`
-16. `tests/test_multi_user.py::test_private_archive_isolation_between_accounts`
-17. `tests/test_multi_user.py::test_frequent_prompt_cap_and_reorder_are_per_account`
-18. `tests/test_multi_user.py::test_rls_blocks_cross_user_direct_sql_and_requires_context`
-19. `tests/test_multi_user.py::test_commit_and_reapply_restores_rls_context`
-20. `tests/test_search.py::test_hybrid_search_and_union_query`
-21. `tests/test_summaries.py::test_summary_fallback_and_search`
-22. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
-23. `tests/test_system_prompt.py::test_system_prompt_module_and_section_order`
-24. `tests/test_timeline.py::test_timeline_sparse_sampling`
-25. `tests/test_versions.py::test_file_history_and_versioning`
+16. `tests/test_multi_user.py::test_account_usage_starts_at_zero`
+17. `tests/test_multi_user.py::test_agent_turn_records_usage_and_account_rollup`
+18. `tests/test_multi_user.py::test_malformed_completion_records_bounded_usage`
+19. `tests/test_multi_user.py::test_root_impersonation_round_trip`
+20. `tests/test_multi_user.py::test_stop_impersonation_requires_the_root_password`
+21. `tests/test_multi_user.py::test_root_password_change_revokes_impersonation_sessions`
+22. `tests/test_multi_user.py::test_impersonation_requires_root_and_stop_requires_impersonation`
+23. `tests/test_multi_user.py::test_impersonation_rejects_self_disabled_and_forced_accounts`
+24. `tests/test_multi_user.py::test_impersonation_rejects_a_root_target`
+25. `tests/test_multi_user.py::test_password_change_is_forbidden_while_impersonating`
+26. `tests/test_multi_user.py::test_private_archive_isolation_between_accounts`
+27. `tests/test_multi_user.py::test_frequent_prompt_cap_and_reorder_are_per_account`
+28. `tests/test_multi_user.py::test_rls_blocks_cross_user_direct_sql_and_requires_context`
+29. `tests/test_multi_user.py::test_commit_and_reapply_restores_rls_context`
+30. `tests/test_search.py::test_hybrid_search_and_union_query`
+31. `tests/test_summaries.py::test_summary_fallback_and_search`
+32. `tests/test_system.py::test_health_gzip_and_cache_invalidation`
+33. `tests/test_system_prompt.py::test_system_prompt_module_and_section_order`
+34. `tests/test_timeline.py::test_timeline_sparse_sampling`
+35. `tests/test_versions.py::test_file_history_and_versioning`
 
 The multi-user tests also prove that a normal account gets `403` from
 root-only accounts/settings routes, that two accounts can hold the same library

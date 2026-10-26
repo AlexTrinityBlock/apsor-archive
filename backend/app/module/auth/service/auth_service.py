@@ -8,17 +8,29 @@ from typing import cast
 from app.module.auth.domain.auth_domain import AuthDomain
 from app.module.auth.exception.domain_error import (
     AccountDisabledError,
+    AccountNotFoundError,
+    AccountNotImpersonatableError,
     AuthenticationRequiredError,
+    CannotImpersonateRootError,
+    CannotImpersonateSelfError,
     CurrentPasswordInvalidError,
+    ForbiddenError,
+    ImpersonationPasswordChangeForbiddenError,
+    ImpersonationPasswordInvalidError,
     InvalidCredentialsError,
     InvalidProfileError,
     InvalidUsernameError,
     LoginThrottledError,
+    NotImpersonatingError,
     PasswordMismatchError,
     SetupAlreadyCompleteError,
     WeakPasswordError,
 )
-from app.module.auth.model.auth_model import AppUserModel, UserProfileCardModel
+from app.module.auth.model.auth_model import (
+    AppUserModel,
+    UserProfileCardModel,
+    UserSessionModel,
+)
 from app.module.auth.protocol.auth_repository_protocol import (
     SessionRepositoryProtocol,
     UserRepositoryProtocol,
@@ -29,6 +41,7 @@ from app.module.auth.protocol.security_protocol import (
 )
 from app.module.auth.schema.auth_schema import (
     AuthStatusSchema,
+    ImpersonationSchema,
     UserProfileCardSchema,
     UserProfileSchema,
     UserProfileUpdateSchema,
@@ -78,6 +91,14 @@ class AuthService:
             last_login_at=user.last_login_at,
         )
 
+    @staticmethod
+    def _impersonation_schema(actor: AppUserModel) -> ImpersonationSchema:
+        return ImpersonationSchema(
+            actor_user_id=actor.id,
+            username=actor.username,
+            display_name=actor.display_name,
+        )
+
     def _check_throttle(self, key: str) -> None:
         now = time.monotonic()
         with _attempt_lock:
@@ -98,12 +119,18 @@ class AuthService:
         with _attempt_lock:
             _attempts.pop(key, None)
 
-    async def _new_session(self, user: AppUserModel) -> str:
+    async def _new_session(
+        self,
+        user: AppUserModel,
+        *,
+        impersonator_user_id: int | None = None,
+    ) -> str:
         token = self.token_generator.generate()
         await self.session_repository.add(
             token_hash=self.token_generator.hash(token),
             user_id=user.id,
             expires_at=utcnow() + self.session_ttl,
+            impersonator_user_id=impersonator_user_id,
         )
         return token
 
@@ -175,6 +202,12 @@ class AuthService:
         user = await self.user_repository.get_by_id(user_id)
         if user is None:
             raise AuthenticationRequiredError()
+        if current_token:
+            current_session = await self.session_repository.get_by_token_hash(
+                self.token_generator.hash(current_token)
+            )
+            if current_session is not None and current_session.impersonator_user_id is not None:
+                raise ImpersonationPasswordChangeForbiddenError()
         if not self.password_hasher.verify(user.password_hash, current_password):
             raise CurrentPasswordInvalidError()
         if not AuthDomain.is_valid_password(new_password):
@@ -194,6 +227,9 @@ class AuthService:
             password_changed_at=now,
             now=now,
         )
+        # Rotating a root password must also revoke sessions that root started
+        # as another account. For a normal account this is a harmless no-op.
+        await self.session_repository.delete_impersonations_for_actor(user.id)
         if current_token:
             await self.session_repository.delete_others_for_user(
                 user.id,
@@ -265,8 +301,15 @@ class AuthService:
         )
         return self._profile_schema(updated, rows)
 
-    async def resolve_session(self, token: str | None) -> UserSchema:
-        """Return the signed-in user or raise a 401 domain error."""
+    async def _resolve_session(
+        self,
+        token: str | None,
+    ) -> tuple[AppUserModel, UserSessionModel]:
+        """Resolve a cookie token to its account and session row.
+
+        Expiry, disabled-account rejection, and the hourly ``last_seen_at``
+        touch are shared by every authenticated entry point.
+        """
         if not token:
             raise AuthenticationRequiredError()
         token_hash = self.token_generator.hash(token)
@@ -288,7 +331,74 @@ class AuthService:
         # guard decides which routes remain reachable while a change is forced.
         if now - user_session.last_seen_at > timedelta(hours=1):
             await self.session_repository.touch(user_session, now)
+        return user, user_session
+
+    async def resolve_session(self, token: str | None) -> UserSchema:
+        """Return the signed-in user or raise a 401 domain error."""
+        user, _ = await self._resolve_session(token)
         return self._to_schema(user)
+
+    async def impersonate(
+        self,
+        *,
+        actor_user_id: int,
+        target_user_id: int,
+    ) -> tuple[UserSchema, str, ImpersonationSchema]:
+        """Act as one normal account from a root session."""
+        actor = await self.user_repository.get_by_id(actor_user_id)
+        if actor is None or not actor.is_active or actor.role != "root":
+            raise ForbiddenError()
+        target = await self.user_repository.get_by_id(target_user_id)
+        if target is None:
+            raise AccountNotFoundError(target_user_id)
+        if target.id == actor.id:
+            raise CannotImpersonateSelfError()
+        if target.role == "root":
+            raise CannotImpersonateRootError()
+        if not target.is_active or target.must_change_password:
+            raise AccountNotImpersonatableError()
+        token = await self._new_session(target, impersonator_user_id=actor.id)
+        return self._to_schema(target), token, self._impersonation_schema(actor)
+
+    async def stop_impersonation(
+        self,
+        token: str | None,
+        password: str,
+        *,
+        remote_address: str,
+    ) -> tuple[UserSchema, str, None]:
+        """Replace an impersonation session with a fresh root session.
+
+        The root password is re-verified before the target session is deleted,
+        so a borrowed browser cannot silently regain root access. Failed
+        attempts use the login-throttle mechanism with a stop-specific bucket;
+        a stolen impersonation cookie must not become an unthrottled
+        root-password oracle.
+        """
+        if not token:
+            raise AuthenticationRequiredError()
+        token_hash = self.token_generator.hash(token)
+        user_session = await self.session_repository.get_by_token_hash(token_hash)
+        if user_session is None:
+            raise AuthenticationRequiredError()
+        if user_session.expires_at <= utcnow():
+            await self.session_repository.delete_by_token_hash(token_hash)
+            raise AuthenticationRequiredError()
+        actor_user_id = user_session.impersonator_user_id
+        if actor_user_id is None:
+            raise NotImpersonatingError()
+        actor = await self.user_repository.get_by_id(actor_user_id)
+        if actor is None or not actor.is_active or actor.role != "root":
+            raise NotImpersonatingError()
+        throttle_key = f"impersonation-stop:{remote_address}:{actor.id}"
+        self._check_throttle(throttle_key)
+        if not self.password_hasher.verify(actor.password_hash, password):
+            self._record_failure(throttle_key)
+            raise ImpersonationPasswordInvalidError()
+        self._clear_failures(throttle_key)
+        await self.session_repository.delete_by_token_hash(token_hash)
+        new_token = await self._new_session(actor)
+        return self._to_schema(actor), new_token, None
 
     async def logout(self, token: str | None) -> None:
         if token:
@@ -309,17 +419,23 @@ class AuthService:
                 user=None,
             )
         try:
-            user = await self.resolve_session(token)
+            user, user_session = await self._resolve_session(token)
         except (AuthenticationRequiredError, AccountDisabledError):
             return AuthStatusSchema(
                 requires_setup=False,
                 authenticated=False,
                 user=None,
             )
+        impersonation = None
+        if user_session.impersonator_user_id is not None:
+            actor = await self.user_repository.get_by_id(user_session.impersonator_user_id)
+            if actor is not None and actor.is_active and actor.role == "root":
+                impersonation = self._impersonation_schema(actor)
         return AuthStatusSchema(
             requires_setup=False,
             authenticated=True,
-            user=user,
+            user=self._to_schema(user),
+            impersonation=impersonation,
         )
 
     async def me(self, token: str | None) -> UserSchema:

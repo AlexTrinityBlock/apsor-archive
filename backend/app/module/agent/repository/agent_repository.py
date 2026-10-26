@@ -745,6 +745,7 @@ class AgentRepository:
         run_id: int,
         draft: EntryDraft,
         now: datetime,
+        usage: dict[str, int] | None = None,
     ) -> AgentEntryModel:
         async with self._transaction() as session:
             conversation = await self._lock_conversation(
@@ -771,8 +772,19 @@ class AgentRepository:
             )
             session.add(entry)
             await session.flush()
+            if usage is not None:
+                prompt_tokens = _usage_int(usage, "prompt_tokens")
+                completion_tokens = _usage_int(usage, "completion_tokens")
+                run.prompt_tokens += prompt_tokens
+                run.completion_tokens += completion_tokens
+                run.total_tokens += (
+                    _usage_int(usage, "total_tokens") or prompt_tokens + completion_tokens
+                )
+                run.cached_tokens += _usage_int(usage, "prompt_cache_hit_tokens")
+                run.api_calls += 1
             run.last_entry_id = entry.id
             conversation.last_entry_at = entry.created_at
+            await session.flush()
             return entry
 
     async def append_tool_results(
@@ -1404,6 +1416,14 @@ def _remap_edits(
             continue
         remapped.append({**deepcopy(item), "target_entry_id": mapped})
     return remapped or None
+
+
+def _usage_int(usage: dict[str, int], key: str) -> int:
+    """Read one bounded, non-negative token counter from provider usage."""
+    value = usage.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return min(max(0, value), 10**15)
 
 
 __all__ = ["AgentRepository"]

@@ -5,7 +5,7 @@ import { useI18n } from "../../i18n";
 import { AccountDialog } from "./AccountDialog";
 import "../accounts.css";
 
-export type AccountAction = "disable" | "enable" | "reset";
+export type AccountAction = "disable" | "enable" | "reset" | "impersonate";
 
 interface ConfirmAccountActionDialogProps {
   readonly action: AccountAction;
@@ -40,6 +40,11 @@ export function ConfirmAccountActionDialog({
     title = t("core.accounts.resetTitle");
     description = t("core.accounts.resetDescription");
     confirmLabel = t("core.accounts.resetPassword");
+  } else if (action === "impersonate") {
+    title = t("core.accounts.impersonateTitle");
+    description = t("core.accounts.impersonateDescription");
+    confirmLabel = t("core.accounts.impersonate");
+    confirmVariant = "primary";
   }
 
   return (
@@ -76,6 +81,12 @@ export function ConfirmAccountActionDialog({
           <strong>{account.display_name ?? account.username}</strong>
           <span>@{account.username}</span>
         </p>
+        {action === "impersonate" ? (
+          <p className="accounts-confirm__warning">
+            <Icon name="info" size={15} />
+            {t("core.accounts.impersonateWarning")}
+          </p>
+        ) : null}
         {error ? (
           <p className="accounts-form__error" role="alert">
             <Icon name="info" size={15} />

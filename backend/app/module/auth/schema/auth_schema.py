@@ -21,12 +21,23 @@ class UserSchema(BaseModel):
     last_login_at: datetime | None
 
 
+class ImpersonationSchema(BaseModel):
+    """The root account acting through an impersonation session."""
+
+    model_config = ConfigDict(frozen=True)
+
+    actor_user_id: int
+    username: str
+    display_name: str | None
+
+
 class AuthStatusSchema(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     requires_setup: bool
     authenticated: bool
     user: UserSchema | None
+    impersonation: ImpersonationSchema | None = None
 
 
 class SetupSchema(BaseModel):
@@ -54,10 +65,19 @@ class ChangePasswordSchema(BaseModel):
     confirm_password: str = Field(min_length=10, max_length=256)
 
 
+class StopImpersonationSchema(BaseModel):
+    """Root credentials required to return from an impersonation session."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(min_length=1, max_length=256)
+
+
 class AuthResponseSchema(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     user: UserSchema
+    impersonation: ImpersonationSchema | None = None
 
 
 class UserProfileCardSchema(BaseModel):
