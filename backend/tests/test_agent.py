@@ -59,7 +59,7 @@ READ_USAGE = {
     "prompt_cache_miss_tokens": 7,
 }
 PROMPT_VERSION = "archive-agent-v12"
-TOOLS_VERSION = "archive-tools-v4"
+TOOLS_VERSION = "archive-tools-v5"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -79,13 +79,17 @@ TOOL_NAMES = [
 ]
 
 
+DEFAULT_FETCH_DOCUMENT = "# Extracted page\n\nMarkdown body for the fetched page."
+
+
 class FakeWebResearchService:
     """Deterministic web service injected through ``app.state``."""
 
-    def __init__(self) -> None:
+    def __init__(self, fetch_document: str | None = None) -> None:
         self.retrieved_at = datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
         self.searches: list[dict[str, Any]] = []
-        self.fetches: list[tuple[str, int]] = []
+        self.fetches: list[dict[str, Any]] = []
+        self.fetch_document = DEFAULT_FETCH_DOCUMENT if fetch_document is None else fetch_document
 
     async def search(
         self,
@@ -128,17 +132,89 @@ class FakeWebResearchService:
             retrieved_at=self.retrieved_at,
         )
 
-    async def fetch(self, url: str, *, max_chars: int) -> WebFetchResponse:
-        self.fetches.append((url, max_chars))
+    async def fetch(
+        self,
+        url: str,
+        *,
+        max_chars: int,
+        offset: int = 1,
+        limit: int = 200,
+        page: int | None = None,
+    ) -> WebFetchResponse:
+        self.fetches.append(
+            {
+                "url": url,
+                "max_chars": max_chars,
+                "offset": offset,
+                "limit": limit,
+                "page": page,
+            }
+        )
+        lines = self.fetch_document.split("\n")
+        bounded_limit = max(1, min(limit, 2_000))
+        total_lines = len(lines)
+        total_pages = max(1, (total_lines + bounded_limit - 1) // bounded_limit)
+        start_index = (page - 1) * bounded_limit if page is not None else offset - 1
+        if start_index >= total_lines:
+            return WebFetchResponse(
+                provider="tavily",
+                url=url,
+                content="",
+                elapsed_ms=4,
+                truncated=False,
+                cached=False,
+                retrieved_at=self.retrieved_at,
+                offset=start_index + 1,
+                limit=bounded_limit,
+                page=start_index // bounded_limit + 1,
+                total_pages=total_pages,
+                total_lines=total_lines,
+                total_chars=len(self.fetch_document),
+                returned_lines=0,
+                has_more=False,
+                next_offset=None,
+                next_page=None,
+                source_truncated=False,
+            )
+        selected = lines[start_index : start_index + bounded_limit]
+        returned_lines = len(selected)
+        end_index = start_index + returned_lines
+        has_more = end_index < total_lines
+        next_offset = end_index + 1 if has_more else None
+        current_page = start_index // bounded_limit + 1
+        next_page = (
+            current_page + 1
+            if has_more and next_offset == current_page * bounded_limit + 1
+            else None
+        )
         return WebFetchResponse(
             provider="tavily",
             url=url,
-            content="# Extracted page\n\nMarkdown body for the fetched page.",
+            content="\n".join(selected),
             elapsed_ms=4,
-            truncated=False,
+            truncated=has_more,
             cached=False,
             retrieved_at=self.retrieved_at,
+            offset=start_index + 1,
+            limit=bounded_limit,
+            page=current_page,
+            total_pages=total_pages,
+            total_lines=total_lines,
+            total_chars=len(self.fetch_document),
+            returned_lines=returned_lines,
+            has_more=has_more,
+            next_offset=next_offset,
+            next_page=next_page,
+            source_truncated=False,
         )
+
+
+def _web_fetch_body(xml: str) -> str:
+    """Return the Markdown body between the <web_fetch> tag and the footer."""
+    open_start = xml.index("<web_fetch ")
+    body_start = xml.index(">", open_start) + 1
+    footer_start = xml.rindex("\n[web_fetch:")
+    return xml[body_start:footer_start]
 
 
 @contextmanager
@@ -2183,7 +2259,15 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert fetch_data["provider"] == "tavily"
     assert fetch_data["url"] == "https://example.com/research/page"
     assert fetch_data["truncated"] is False
-    assert web_fake.fetches == [("https://example.com/research/page", 4_000)]
+    assert web_fake.fetches == [
+        {
+            "url": "https://example.com/research/page",
+            "max_chars": 4_000,
+            "offset": 1,
+            "limit": 200,
+            "page": None,
+        }
+    ]
 
     # ------------------------------------------------------------------
     # Summary sources must advertise that they are a compressed view, not the
@@ -2263,3 +2347,105 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     ]
     assert summary_results[0]["period_start"] == "2026-09-20T09:00:00+00:00"
     assert summary_results[0]["period_end"] == "2026-09-21T09:00:00+00:00"
+
+
+def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
+    """Two web_fetch calls in one turn read a long page without gaps."""
+    document = "\n".join(f"Document line {index:03d}" for index in range(1, 226))
+    web_fake = FakeWebResearchService(fetch_document=document)
+    client.app.state.web_research_service = web_fake
+    client.app.state.agent_chat_generator = FakeChatGenerator(
+        [
+            tool_call_result(
+                "web_fetch",
+                {"url": "https://example.com/long"},
+                call_id="call_fetch_first",
+                usage=TOOL_USAGE,
+            ),
+            tool_call_result(
+                "web_fetch",
+                {"url": "https://example.com/long", "offset": 201},
+                call_id="call_fetch_second",
+                usage=TOOL_USAGE,
+            ),
+            text_result("The long page was read completely.", usage=ANSWER_USAGE),
+        ]
+    )
+
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Long page"},
+    )
+    assert conversation.status_code == 201, conversation.text
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation.json()['id']}/messages",
+        json={"content": "Read the whole long page."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    assert [entry["data"]["tool"] for entry in body["tool_results"]] == [
+        "web_fetch",
+        "web_fetch",
+    ]
+
+    first_result, second_result = body["tool_results"]
+    first_xml = first_result["model"][0]["content"]
+    assert 'offset="1"' in first_xml
+    assert 'limit="200"' in first_xml
+    assert 'page="1"' in first_xml
+    assert 'total_pages="2"' in first_xml
+    assert 'total_lines="225"' in first_xml
+    assert 'has_more="true"' in first_xml
+    assert 'next_offset="201"' in first_xml
+    assert 'next_page="2"' in first_xml
+    assert 'source_truncated="false"' in first_xml
+    assert (
+        "[web_fetch: page 1/2, lines 1-200 of 225. "
+        "More content: call web_fetch again with offset=201 or page=2.]"
+    ) in first_xml
+    first_data = first_result["data"]
+    assert first_data["offset"] == 1
+    assert first_data["limit"] == 200
+    assert first_data["page"] == 1
+    assert first_data["total_pages"] == 2
+    assert first_data["total_lines"] == 225
+    assert first_data["total_chars"] == len(document)
+    assert first_data["returned_lines"] == 200
+    assert first_data["has_more"] is True
+    assert first_data["next_offset"] == 201
+    assert first_data["next_page"] == 2
+    assert first_data["source_truncated"] is False
+
+    second_xml = second_result["model"][0]["content"]
+    assert 'offset="201"' in second_xml
+    assert 'page="2"' in second_xml
+    assert 'has_more="false"' in second_xml
+    assert "next_offset=" not in second_xml
+    assert "next_page=" not in second_xml
+    assert "[web_fetch: page 2/2, lines 201-225 of 225. Complete.]" in second_xml
+    second_data = second_result["data"]
+    assert second_data["offset"] == 201
+    assert second_data["returned_lines"] == 25
+    assert second_data["has_more"] is False
+    assert second_data["next_offset"] is None
+    assert second_data["next_page"] is None
+
+    assert _web_fetch_body(first_xml) + "\n" + _web_fetch_body(second_xml) == document
+    assert web_fake.fetches == [
+        {
+            "url": "https://example.com/long",
+            "max_chars": 12_000,
+            "offset": 1,
+            "limit": 200,
+            "page": None,
+        },
+        {
+            "url": "https://example.com/long",
+            "max_chars": 12_000,
+            "offset": 201,
+            "limit": 200,
+            "page": None,
+        },
+    ]

@@ -47,6 +47,7 @@ Keep one conversation resumable and auditable across model steps and process res
 - Do not hold the request database session in the loop, tool execution, or stream generator. Open short sessions for appends and tool calls.
 - Preserve SSE event names, payload fields, and ordering. Add new event fields compatibly; do not persist incremental assistant deltas.
 - Add tools only with a validated argument model, catalog entry, registry dispatcher, and prompt/tools version decision. Bump `PROMPT_VERSION` or `TOOLS_VERSION` when the frozen prefix changes; existing conversations must stay frozen.
+- `web_fetch` is paginated by 1-based line `offset`/`limit` or `page`; `has_more`/`next_offset` and the continuation footer are part of the frozen tool contract. It slices a cached full document without calling the provider on a cache hit. Changing these arguments, the footer, or its semantics requires a `TOOLS_VERSION` bump.
 - Fail closed on provider/tool errors. Use safe codes and bounded details; never expose raw provider bodies, keys, SQL, or stack traces.
 - Enforce approval through the backend `approved` flag. Never let model arguments, route input, or UI state bypass the durable approval row.
 - Treat runtime limits as data, not constants. Read them from the immutable snapshot; do not add hidden per-module caps that contradict `agent_config`.

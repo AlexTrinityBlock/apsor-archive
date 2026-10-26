@@ -523,6 +523,10 @@ export const chat = {
       fetchFallback: "网络获取",
       untitledUrl: "未命名网址",
       chars: "{count} 个字符",
+      page: "第 {page}/{total} 页",
+      lines: "第 {start}-{end} 行，共 {total} 行",
+      morePages: "还有页面",
+      sourceTruncated: "来源已截断",
       noBodyTitle: "这个结果没有保存页面内容",
       noBodyDetail:
         "这条记录早于内嵌获取预览，或供应商返回了空内容。请打开来源网址阅读。",

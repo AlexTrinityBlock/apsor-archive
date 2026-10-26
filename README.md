@@ -265,16 +265,41 @@ The agent has two read-only tools for external research:
 | Tool | What it does |
 |---|---|
 | `web_search` | Search the public web with the active `web_search` provider; returns title, URL, score, and a bounded excerpt. |
-| `web_fetch` | Fetch one public `http(s)` URL with the active `web_fetch` provider and return Markdown text. |
+| `web_fetch` | Fetch one public `http(s)` URL with the active `web_fetch` provider and return one paginated Markdown slice. |
 
 Tavily is the first adapter (`/search` and `/extract`). The provider seam is a
 protocol, so another search or fetch API can be added without changing the tool
-layer. Search results are cached for 15 minutes and fetched pages for one hour
-under the `providers` cache scope; provider writes invalidate them. `web_fetch`
-rejects non-HTTP(S), credentials in the URL, `localhost`/`.local`/`.internal`,
-and private or special-use IP literals. Both tools return XML carrying
-`provider`, `retrieved_at`, `cached`, and `truncated`, and the agent is
-instructed to cite the URL and retrieval time.
+layer. Search results are cached for 15 minutes under the `providers` cache
+scope; provider writes invalidate them. `web_fetch` rejects non-HTTP(S),
+credentials in the URL, `localhost`/`.local`/`.internal`, and private or
+special-use IP literals.
+
+`web_fetch` caches the complete extracted document once per URL for one hour, so
+paging never calls the provider again. A call returns at most `max_chars`
+characters (1,000–20,000, default 12,000) and at most `limit` whole lines
+(default 200, maximum 2,000). Continue from a 1-based line `offset` (default 1)
+or a `page` number; supplying both explicitly is a validation error. Each result
+reports `page`/`total_pages`, `total_lines`, `returned_lines`, `has_more`,
+`next_offset`, and `next_page`, and the body ends with a plain-text footer such
+as:
+
+```text
+[web_fetch: page 1/5, lines 1-150 of 900. More content: call web_fetch again with offset=151.]
+```
+
+`next_offset` is authoritative: `max_chars` can end a slice before its line
+window is full, so call `web_fetch` again with `offset=next_offset` until
+`has_more=false`. `next_page` is present only when the slice ended exactly on a
+line-window boundary. Concatenating every slice covers the cached document
+exactly once, with no gaps or overlaps. `source_truncated=true` means the
+extracted source exceeded the 2,000,000-character cache cap. Both tools return
+XML carrying `provider`, `retrieved_at`, `cached`, and `truncated`, and the
+agent is instructed to cite the URL and retrieval time.
+
+A conversation freezes its tool snapshot when it is created. An older
+conversation keeps the previous `web_fetch` schema until a new conversation is
+started, but the continuation footer still tells its model how to request the
+next slice with `offset`.
 
 Summary search results and timeline summary events are explicitly marked as
 compressed views:
