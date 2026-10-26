@@ -40,6 +40,7 @@ export const core = {
     accounts: "账号管理",
     changePassword: "修改密码",
     signOut: "退出登录",
+    sessionSection: "会话",
     systemStatus: "系统状态",
     localArchive: "本地档案馆",
     checkingServices: "正在检查本地服务",
