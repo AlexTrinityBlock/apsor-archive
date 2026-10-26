@@ -948,10 +948,11 @@ remain available at `/questions` for later agent turns.
 
 The rail is grouped rather than flat. The archive workspaces come first (Chat,
 File library, Timeline, Memory, Search, Dashboard), then a personal block with
-**User profile**, then the system block (Settings, **Accounts** for the root
-account only, About). The account card in the footer keeps only identity plus
-**Change password** and **Sign out**. Index numbers are computed from the
-rendered position, so hiding Accounts for a normal user leaves no gap. The root
+**User profile**, then the system block (Settings, **Change password**,
+**Accounts** for the root account only, About). The account card in the footer
+keeps only identity plus **Change password** and a labeled **Sign out** action.
+Index numbers are computed from the rendered position, so hiding Accounts for a
+normal user leaves no gap. The root
 `/` opens Chat; the archive summary lives at `/dashboard` with the `database`
 rail icon. Below 980 px the rail becomes a navigation drawer opened from the
 mobile bar.

@@ -314,6 +314,64 @@
   width: min(100%, 460px);
 }
 
+.change-password-dialog .change-password-form {
+  width: 100%;
+}
+
+.change-password-dialog .modal-body {
+  max-height: min(72vh, 680px);
+  overflow-y: auto;
+}
+
+.change-password-dialog__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+  padding-bottom: 14px;
+  border-bottom: 0.7px solid var(--mono-grid);
+}
+
+.change-password-dialog__mark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  color: var(--mono-paper);
+  background: var(--mono-ink);
+  border-radius: 4px;
+  font-family: var(--mono-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.change-password-dialog__identity strong,
+.change-password-dialog__identity span {
+  display: block;
+  min-width: 0;
+}
+
+.change-password-dialog__identity strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-password-dialog__identity > span:last-child > span {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 10px;
+}
+
+.change-password-dialog__description {
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .auth-forced-footer__account {
   min-width: 0;
   max-width: 100%;
