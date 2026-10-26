@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 
 class _ToolArgs(BaseModel):
@@ -127,18 +128,33 @@ class WebSearchArgs(_ToolArgs):
 
 
 class WebFetchArgs(_ToolArgs):
-    """Arguments for fetching one page of a public http(s) URL."""
+    """Arguments for fetching one server-defined page of a public http(s) URL."""
 
-    # web_fetch 先快取完整文件，再依 1-based 行號 offset 或頁碼 page 回傳一段。
-    # limit 是單次最多行數（上限 2,000），max_chars 仍是單次 Markdown 片段
-    # 的字元上限（1,000–20,000），不是全文快取上限，因此兩者都保留。offset 與
-    # page 只能擇一：兩者同時出現時無法判斷哪個才是模型的真正起點。
+    # page 是唯一支援的起點：service 依固定字元預算切頁，模型只要 page=1、2、…
+    # 前進，不必計算行號或 offset。offset / limit / max_chars 只為相容而保留：
+    # 凍結在 archive-tools-v4（url + max_chars）與 archive-tools-v5（offset /
+    # limit / page）的舊對話仍會送這些參數，必須繼續通過驗證；SkipJsonSchema
+    # 讓新對話看到的 model-facing schema 只有 url 與 page。page 模式會忽略
+    # max_chars 與 limit。
     # URL 長度上限與 WebUrlSafety 的 1–2048 保持一致。
     url: str = Field(min_length=1, max_length=2048)
-    max_chars: int = Field(default=12_000, ge=1_000, le=20_000)
-    offset: int = Field(default=1, ge=1)
-    limit: int = Field(default=200, ge=1, le=2_000)
-    page: int | None = Field(default=None, ge=1)
+    page: int = Field(default=1, ge=1)
+    offset: SkipJsonSchema[int | None] = Field(default=None, ge=1)
+    limit: SkipJsonSchema[int | None] = Field(default=None, ge=1, le=2_000)
+    max_chars: SkipJsonSchema[int | None] = Field(default=None, ge=1_000, le=20_000)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_null_page(cls, data: object) -> object:
+        """Treat a legacy explicit ``page=null`` as an omitted page.
+
+        The v5 schema allowed ``page: null``; frozen conversations may still
+        send it together with ``offset``. Dropping it here keeps that payload
+        valid while the new model-facing schema stays a plain integer.
+        """
+        if isinstance(data, dict) and data.get("page") is None:
+            return {key: value for key, value in data.items() if key != "page"}
+        return data
 
     @model_validator(mode="after")
     def _validate_start(self) -> "WebFetchArgs":
@@ -146,7 +162,8 @@ class WebFetchArgs(_ToolArgs):
 
         ``model_fields_set`` distinguishes an explicit ``offset`` from its
         default, so ``{"page": 2}`` is valid while ``{"offset": 1, "page": 2}``
-        is a validation error.
+        is a validation error. A legacy call with only ``offset`` or only
+        ``max_chars`` remains valid.
         """
         if "offset" in self.model_fields_set and "page" in self.model_fields_set:
             raise ValueError("Use either offset or page, not both.")

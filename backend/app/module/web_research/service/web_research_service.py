@@ -33,16 +33,19 @@ _MAX_SEARCH_CONTENT_CHARS = 8_000
 _MAX_SEARCH_RESULTS = 10
 _MAX_DOMAINS = 10
 _DEFAULT_FETCH_MAX_CHARS = 20_000
-_MAX_FETCH_LINES_PER_CALL = 2_000
 
 # web_fetch 以「完整文件」為快取單位：同一個 URL 只向 provider 抓一次，後續
-# 頁碼只做本機切片。schema marker 與全文上限都放進 cache key，任何語意變更
-# 都會讓舊資料自然失效。
-_FETCH_CACHE_SCHEMA = "v2"
+# 頁碼只做本機切片。schema marker、折行寬度、頁面預算與全文上限都放進 cache
+# key，任何語意變更都會讓舊資料自然失效。
+_FETCH_CACHE_SCHEMA = "v3"
 _MAX_FETCH_CACHE_CHARS = 2_000_000
 
-# 硬折行寬度刻意小於 max_chars 的最小值（1,000）：任何一行都一定塞得進單次
-# 回應，行式分頁因此永遠能前進，不會卡在「一行超過上限」而重複同一頁。
+# 頁面大小由 server 決定：預設 12,000 字元，實際值是
+# min(_FETCH_PAGE_CHARS, fetch_max_chars)。模型只看 page，不必計算 offset。
+_FETCH_PAGE_CHARS = 12_000
+
+# 硬折行寬度刻意小於頁面預算（預設 12,000；設定下限 1,000）：任何一行都一定
+# 塞得進一頁，頁碼因此永遠能前進，不會卡在「一行超過上限」而重複同一頁。
 _MAX_FETCH_WRAP_CHARS = 800
 
 
@@ -73,7 +76,10 @@ class WebResearchService:
         self._cache = cache
         self._search_ttl_seconds = search_ttl_seconds
         self._fetch_ttl_seconds = fetch_ttl_seconds
-        self._fetch_max_chars = max(1, fetch_max_chars)
+        # A page must always be able to hold one wrapped line. The default
+        # setting is far above this floor; the clamp keeps pagination moving
+        # even if an operator configures an unusually small value.
+        self._fetch_max_chars = max(_MAX_FETCH_WRAP_CHARS + 1, fetch_max_chars)
 
     async def search(
         self,
@@ -154,39 +160,42 @@ class WebResearchService:
         self,
         url: str,
         *,
-        max_chars: int,
-        offset: int = 1,
-        limit: int = 200,
         page: int | None = None,
+        offset: int | None = None,
     ) -> WebFetchResponse:
-        """Fetch one public URL and return one line-bounded Markdown slice.
+        """Fetch one public URL and return one server-defined Markdown page.
 
-        The full normalized document is cached once per URL. ``offset`` is a
-        1-based line number and ``page`` is a 1-based window of ``limit``
-        lines; both the argument model and the tool layer reject supplying
-        both explicitly, so if a direct caller does, ``page`` wins.
+        The full normalized document is cached once per URL; pages are computed
+        locally from a fixed character budget. ``page`` is the supported
+        surface. ``offset`` is accepted only for conversations frozen on the
+        old line-offset tool schema: it selects the page that contains that
+        1-based line. If a direct caller supplies both, ``page`` wins (the tool
+        argument model already rejects that combination).
         """
         # WebUrlSafety 回傳正規化 URL（小寫 scheme/host、去預設 port、去 fragment），
         # 正規化後的字串同時是 fetch cache key 的輸入，確保同一資源只有一份 cache。
         normalized_url = WebUrlSafety.validate(url)
+        # 頁面預算是 server 端語意的一部分，放進 cache key 後，任何站台設定的
+        # 頁面大小或全文上限變更都會自然產生新的 cache entry。
+        page_chars = min(_FETCH_PAGE_CHARS, self._fetch_max_chars)
         key = _cache_key(
             await self._cache.get_version("providers"),
             "web_fetch",
             normalized_url,
             _FETCH_CACHE_SCHEMA,
             str(_MAX_FETCH_WRAP_CHARS),
+            str(page_chars),
             str(_MAX_FETCH_CACHE_CHARS),
         )
         cached = _validate_cached(WebFetchResponse, await self._cache.get_json(key))
         if cached is not None:
             # cache 命中代表 provider 設定版本未變；即使目前暫時沒有金鑰也應該
             # 回傳既有全文，因此這裡不重新檢查 configured。
-            return self._slice_fetch(
+            return _slice_fetch_page(
                 cached,
-                max_chars=max_chars,
-                offset=offset,
-                limit=limit,
                 page=page,
+                offset=offset,
+                page_chars=page_chars,
                 cached=True,
             )
 
@@ -194,7 +203,7 @@ class WebResearchService:
             raise WebFetchNotConfiguredError()
 
         # 只向 provider 抓一次完整內容；client 的 max_chars 是全文上限提示，
-        # 真正的切片由 _slice_fetch 依行號完成。
+        # 真正的切頁由 _slice_fetch_page 依固定字元預算完成。
         response = await self._fetch_client.fetch(
             normalized_url,
             max_chars=_MAX_FETCH_CACHE_CHARS,
@@ -211,116 +220,139 @@ class WebResearchService:
             provider=self._fetch_config.provider,
             content=content,
             source_truncated=source_truncated,
+            page_chars=page_chars,
         )
         await self._cache.set_json(
             key,
             full.model_dump(mode="json"),
             self._fetch_ttl_seconds,
         )
-        return self._slice_fetch(
+        return _slice_fetch_page(
             full,
-            max_chars=max_chars,
-            offset=offset,
-            limit=limit,
             page=page,
+            offset=offset,
+            page_chars=page_chars,
             cached=False,
         )
 
-    def _slice_fetch(
-        self,
-        full: WebFetchResponse,
-        *,
-        max_chars: int,
-        offset: int,
-        limit: int,
-        page: int | None,
-        cached: bool,
-    ) -> WebFetchResponse:
-        """Return one fresh response slice without mutating the cached document."""
-        bounded_chars = max(1, min(max_chars, self._fetch_max_chars))
-        bounded_limit = max(1, min(limit, _MAX_FETCH_LINES_PER_CALL))
-        lines = full.content.split("\n")
-        total_lines = len(lines)
-        total_pages = max(1, (total_lines + bounded_limit - 1) // bounded_limit)
-        source_truncated = full.truncated
-        # page 模式與 offset 模式都只影響起點；offset/page 衝突已在 args 層
-        # 擋下，因此服務層直接讓 page 優先。
-        start_index = (page - 1) * bounded_limit if page is not None else offset - 1
 
-        if start_index >= total_lines:
-            return WebFetchResponse(
-                provider=full.provider,
-                url=full.url,
-                content="",
-                elapsed_ms=full.elapsed_ms,
-                truncated=source_truncated,
-                cached=cached,
-                retrieved_at=full.retrieved_at,
-                offset=start_index + 1,
-                limit=bounded_limit,
-                page=start_index // bounded_limit + 1,
-                total_pages=total_pages,
-                total_lines=total_lines,
-                total_chars=len(full.content),
-                returned_lines=0,
-                has_more=False,
-                next_offset=None,
-                next_page=None,
-                source_truncated=source_truncated,
-            )
+def _slice_fetch_page(
+    full: WebFetchResponse,
+    *,
+    page: int | None,
+    offset: int | None,
+    page_chars: int,
+    cached: bool,
+) -> WebFetchResponse:
+    """Return one fresh page without mutating the cached full document.
 
-        selected: list[str] = []
-        used_chars = 0
-        for line in lines[start_index : start_index + bounded_limit]:
-            added_chars = len(line) + (1 if selected else 0)
-            # 至少先放進一行：折行寬度 800 < max_chars 最小值 1,000，第一行
-            # 一定放得下，後續才能靠 next_offset 穩定前進。
-            if selected and used_chars + added_chars > bounded_chars:
-                break
-            selected.append(line)
-            used_chars += added_chars
+    Pages are contiguous ``[start, end)`` line ranges. The requested page is
+    either explicit (``page``), legacy-mapped from a 1-based line (``offset``),
+    or page 1. An out-of-range request returns an empty page with the real
+    totals instead of raising.
+    """
+    lines = full.content.split("\n")
+    ranges = _page_ranges(lines, page_chars)
+    total_pages = max(1, len(ranges))
+    total_chars = len(full.content)
+    source_truncated = full.source_truncated
+    if page is not None:
+        requested_page = page
+    elif offset is not None:
+        requested_page = _page_for_line(ranges, offset)
+    else:
+        requested_page = 1
 
-        returned_lines = len(selected)
-        end_index = start_index + returned_lines
-        has_more = end_index < total_lines
-        next_offset = end_index + 1 if has_more else None
-        current_page = start_index // bounded_limit + 1
-        # next_page 只在切片剛好停在頁邊界時有效；max_chars 可能讓一頁提早
-        # 結束，此時只有 next_offset 能保證不跳行。
-        next_page = (
-            current_page + 1
-            if has_more and next_offset == current_page * bounded_limit + 1
-            else None
-        )
+    if requested_page < 1 or requested_page > total_pages:
         return WebFetchResponse(
             provider=full.provider,
             url=full.url,
-            content="\n".join(selected),
+            content="",
             elapsed_ms=full.elapsed_ms,
-            truncated=has_more or source_truncated,
+            truncated=source_truncated,
             cached=cached,
             retrieved_at=full.retrieved_at,
-            offset=start_index + 1,
-            limit=bounded_limit,
-            page=current_page,
+            page=requested_page,
             total_pages=total_pages,
-            total_lines=total_lines,
-            total_chars=len(full.content),
-            returned_lines=returned_lines,
-            has_more=has_more,
-            next_offset=next_offset,
-            next_page=next_page,
+            page_chars=0,
+            total_chars=total_chars,
+            has_more=False,
+            next_page=None,
             source_truncated=source_truncated,
         )
+
+    start, end = ranges[requested_page - 1]
+    content = "\n".join(lines[start:end])
+    has_more = requested_page < total_pages
+    return WebFetchResponse(
+        provider=full.provider,
+        url=full.url,
+        content=content,
+        elapsed_ms=full.elapsed_ms,
+        truncated=has_more or source_truncated,
+        cached=cached,
+        retrieved_at=full.retrieved_at,
+        page=requested_page,
+        total_pages=total_pages,
+        page_chars=len(content),
+        total_chars=total_chars,
+        has_more=has_more,
+        next_page=requested_page + 1 if has_more else None,
+        source_truncated=source_truncated,
+    )
+
+
+def _page_ranges(lines: list[str], page_chars: int) -> list[tuple[int, int]]:
+    """Pack whole lines into contiguous pages under a character budget.
+
+    The budget counts the newline separators that ``"\n".join`` will insert, so
+    a rendered page never exceeds ``page_chars`` as long as each individual line
+    is shorter than the budget. ``_MAX_FETCH_WRAP_CHARS`` (800) guarantees that
+    for the 12,000-character default. As a defensive fallback, a page always
+    takes at least one line, so pagination can never stall on a misconfigured
+    tiny budget.
+    """
+    if not lines:
+        return [(0, 0)]
+    budget = max(1, page_chars)
+    ranges: list[tuple[int, int]] = []
+    start = 0
+    used = 0
+    index = 0
+    while index < len(lines):
+        added = len(lines[index]) + (1 if index > start else 0)
+        if index > start and used + added > budget:
+            ranges.append((start, index))
+            start = index
+            used = 0
+            continue
+        used += added
+        index += 1
+    ranges.append((start, len(lines)))
+    return ranges
+
+
+def _page_for_line(ranges: list[tuple[int, int]], offset: int) -> int:
+    """Map a legacy 1-based line number to the page that contains it.
+
+    An offset past the last line returns one page past the end, which the caller
+    turns into the empty out-of-range response.
+    """
+    line_index = offset - 1
+    if line_index < 0:
+        return 1
+    for page_index, (start, end) in enumerate(ranges, start=1):
+        if start <= line_index < end:
+            return page_index
+    return len(ranges) + 1
 
 
 def _normalize_fetch_text(content: str) -> str:
     """Normalize line endings and hard-wrap very long lines.
 
-    Wrapping is what makes line pagination always progress: every line becomes
-    at most 800 characters, which is below the 1,000-character minimum
-    ``max_chars``. Every original character is preserved; only newlines are
-    inserted.
+    Wrapping is what makes page pagination always progress: every line becomes
+    at most 800 characters, which is below the 12,000-character default page
+    budget. Every original character is preserved; only newlines are inserted.
     """
     normalized = content.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
     if not normalized:
@@ -343,28 +375,26 @@ def _full_fetch_response(
     provider: str,
     content: str,
     source_truncated: bool,
+    page_chars: int,
 ) -> WebFetchResponse:
-    """Build the full-document cache payload that every slice starts from."""
-    total_lines = content.count("\n") + 1
-    total_pages = max(
-        1,
-        (total_lines + _MAX_FETCH_LINES_PER_CALL - 1) // _MAX_FETCH_LINES_PER_CALL,
-    )
+    """Build the full-document cache payload that every page starts from.
+
+    The payload describes the whole document as page 1 with no continuation;
+    ``_slice_fetch_page`` recomputes the real slice for every request.
+    """
+    lines = content.split("\n")
+    total_pages = max(1, len(_page_ranges(lines, page_chars)))
     return response.model_copy(
         update={
             "provider": provider,
             "content": content,
             "truncated": source_truncated,
             "cached": False,
-            "offset": 1,
-            "limit": _MAX_FETCH_LINES_PER_CALL,
             "page": 1,
             "total_pages": total_pages,
-            "total_lines": total_lines,
+            "page_chars": len(content),
             "total_chars": len(content),
-            "returned_lines": total_lines,
             "has_more": False,
-            "next_offset": None,
             "next_page": None,
             "source_truncated": source_truncated,
         }

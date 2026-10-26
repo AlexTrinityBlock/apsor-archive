@@ -610,7 +610,7 @@ entries, 50 timeline events).
 | `save_memory` | `mode` (`save`/`deprecate`), `memory` preview, `supersedes[]`, or `memory_ids[]` + `deprecated[]` + `reason` for a direct deprecation |
 | `present_resource` | `resource` descriptor |
 | `web_search` | `results[].title/url/excerpt/score`, `retrieved_at`, `cached`, `truncated` |
-| `web_fetch` | `url`, `content`, `content_chars`, `offset`, `limit`, `page`, `total_pages`, `total_lines`, `total_chars`, `returned_lines`, `has_more`, `next_offset`, `next_page`, `source_truncated`, `retrieved_at`, `cached`, `truncated` |
+| `web_fetch` | `url`, `content`, `content_chars`, `page`, `total_pages`, `page_chars`, `total_chars`, `has_more`, `next_page`, `source_truncated`, `retrieved_at`, `cached`, `truncated` |
 
 The live `tool_end` SSE event carries `entry_id`, `tool_call_id`, `name`,
 `status`, optional `resource`, the UI-only `data`, `duration_ms`, and
@@ -631,33 +631,44 @@ content or keys to the provider. `search_knowledge` summary sources and
 complete original text.
 
 `web_fetch` caches the full normalized extracted document once per URL
-(provider version, normalized URL, schema `v2`, the 800-character wrap width,
-and the 2,000,000-character cap form the cache key) for the configured fetch
-TTL. A cache hit never calls the provider and never re-checks the configured
-key, so offline paging still works.
+(provider version, normalized URL, schema `v3`, the 800-character wrap width,
+the page budget, and the 2,000,000-character cap form the cache key) for the
+configured fetch TTL. A cache hit never calls the provider and never re-checks
+the configured key, so offline paging still works.
 On a miss, the service checks provider readiness, fetches once, normalizes
 `\r\n`/`\r`, strips leading/trailing newlines, and hard-wraps lines longer than
-800 characters so a line-based slice can always advance. The tool then returns
-at most `limit` whole lines (default 200, maximum 2,000) and at most `max_chars`
-characters (1,000–20,000, default 12,000). `offset` is a 1-based first line and
-`page` is an alternative 1-based window of `limit` lines; supplying both
-explicitly is rejected with `invalid_tool_arguments`.
+800 characters so every page can include at least one whole line. The normalized
+document is capped at 2,000,000 characters; beyond that it is clipped and
+`source_truncated=true`.
 
-Every response reports `page`, `total_pages`, `total_lines`, `total_chars`,
-`returned_lines`, `has_more`, `next_offset`, `next_page`, and
-`source_truncated`. `next_offset` is authoritative because `max_chars` can end a
-slice before its line window is full; `next_page` is present only when the slice
-ended exactly on a window boundary. An out-of-range offset or page returns an
-empty slice with `has_more=false` plus the totals, not a provider error.
-`source_truncated=true` means the provider or the 2,000,000-character service
-cache cap cut the full document. The `<web_fetch>` XML carries the same
-attributes and ends with a plain-text footer inside the element, for example:
+The page budget is `min(12,000, web_fetch_max_chars)` with an 801-character
+floor so at least one 800-character wrapped line always fits. The service scans
+the lines once and packs whole lines into contiguous pages that never exceed the
+budget, then returns one fresh page without mutating the cached document.
+`page` is 1-based and defaults to 1. A legacy `offset` is still accepted and
+selects the page containing that 1-based line; `max_chars` and `limit` are
+accepted but ignored. Supplying both `page` and `offset` explicitly is rejected
+with `invalid_tool_arguments`.
+
+Every response reports `page`, `total_pages`, `page_chars`, `total_chars`,
+`has_more`, `next_page`, and `source_truncated`. `next_page` is exact whenever
+`has_more=true`; concatenating pages 1..N reproduces the cached document with no
+gaps or overlaps. An out-of-range page returns an empty page with
+`has_more=false`, `next_page=null`, and the real totals, not a provider error.
+`truncated` is `has_more or source_truncated`. The `<web_fetch>` XML carries
+`url`, `provider`, `retrieved_at`, `content_chars`, `page`, `total_pages`,
+`page_chars`, `total_chars`, `has_more`, `next_page`, `source_truncated`,
+`truncated`, and `cached`, then ends with a plain-text footer inside the
+element, for example:
 
 ```text
-[web_fetch: page 1/5, lines 1-150 of 900. More content: call web_fetch again with offset=151.]
+[web_fetch: page 1/5. More content: call web_fetch again with page=2.]
 ```
 
-A completed document ends with `Complete.` instead.
+A completed document ends with `[web_fetch: page 5/5. Complete.]`. An
+out-of-range page says `[web_fetch: page 9 is past the end (5 pages).]`, and a
+clipped source appends `The source exceeded the fetch cache cap and was
+truncated.`
 
 `save_memory` is a write action and never executes from a model-supplied
 confirmation. Its authorization depends on the run's
@@ -1026,7 +1037,7 @@ same instance. The session fixture drops and recreates its schema, runs
 `alembic upgrade head` as the owning login, and verifies the `apsor_app` role,
 grants, RLS flags, and policies before any test starts. Tests run sequentially,
 reset every tracked table between cases, and treat warnings as errors. There are
-44 collected tests:
+46 collected tests:
 
 1. `tests/test_agent.py::test_agent_entry_log_tool_loop_and_cache_usage`
 2. `tests/test_agent.py::test_web_fetch_paginates_across_two_calls`
@@ -1065,13 +1076,15 @@ reset every tracked table between cases, and treat warnings as errors. There are
 35. `tests/test_timeline.py::test_timeline_sparse_sampling`
 36. `tests/test_versions.py::test_file_history_and_versioning`
 37. `tests/test_web_research.py::test_fetch_paginates_full_document_with_one_provider_call`
-38. `tests/test_web_research.py::test_page_mode_starts_at_the_same_line_as_offset`
-39. `tests/test_web_research.py::test_web_fetch_args_accept_page_alone_and_reject_two_starts`
-40. `tests/test_web_research.py::test_out_of_range_offset_and_page_return_empty_slices`
-41. `tests/test_web_research.py::test_long_line_wrapping_preserves_every_character`
-42. `tests/test_web_research.py::test_source_cache_cap_sets_source_truncated`
+38. `tests/test_web_research.py::test_single_long_line_is_hard_wrapped_into_contiguous_pages`
+39. `tests/test_web_research.py::test_web_fetch_args_expose_only_url_and_page`
+40. `tests/test_web_research.py::test_legacy_offset_maps_to_the_containing_page`
+41. `tests/test_web_research.py::test_out_of_range_page_returns_empty_page_with_real_totals`
+42. `tests/test_web_research.py::test_source_cache_cap_sets_source_truncated_on_last_page`
 43. `tests/test_web_research.py::test_empty_content_raises_web_provider_error`
 44. `tests/test_web_research.py::test_cache_hit_does_not_require_a_configured_provider`
+45. `tests/test_web_research.py::test_legacy_null_page_is_treated_as_omitted`
+46. `tests/test_web_research.py::test_tiny_fetch_max_still_fits_one_wrapped_line`
 
 The multi-user tests also prove that a normal account gets `403` from
 root-only accounts/settings routes, that two accounts can hold the same library
@@ -1118,11 +1131,12 @@ proves the partial unique active index, clears a key without ever returning
 plaintext, exercises the injected `app.state.provider_tester`, and verifies an
 identity id is not reused after delete. The agent test injects a deterministic
 `app.state.web_research_service` and asserts the `web_search` / `web_fetch` XML,
-plus the compressed-summary markers and a two-call `web_fetch` pagination loop
-whose result bodies concatenate to the fake full document. The web-research test
-uses an in-memory cache and fetch client to prove full-document caching, offline
-cache hits, page/offset equivalence, out-of-range slices, long-line wrapping, and
-source-cap truncation without contacting Tavily. The system-prompt test covers
+plus the compressed-summary markers and a two-call `web_fetch` page loop whose
+result bodies concatenate to the fake full document. The web-research test uses
+an in-memory cache and fetch client to prove full-document caching, offline cache
+hits, exact page traversal, hidden legacy arguments and legacy offset mapping,
+out-of-range pages, long-line wrapping, and source-cap truncation without
+contacting Tavily. The system-prompt test covers
 the four seeded defaults as ordinary rows, create/list/reorder/update/delete/reset,
 `system_prompt:<id>` composition order, frozen old conversations, editing and
 deleting defaults, reset restoring fresh default identities, whitespace and
