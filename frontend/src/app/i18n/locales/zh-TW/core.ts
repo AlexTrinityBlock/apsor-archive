@@ -40,6 +40,7 @@ export const core = {
     accounts: "帳號管理",
     changePassword: "變更密碼",
     signOut: "登出",
+    sessionSection: "工作階段",
     systemStatus: "系統狀態",
     localArchive: "本機檔案館",
     checkingServices: "正在檢查本機服務",
