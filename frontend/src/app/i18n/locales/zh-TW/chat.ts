@@ -533,6 +533,10 @@ export const chat = {
       fetchFallback: "網路擷取",
       untitledUrl: "未命名網址",
       chars: "{count} 個字元",
+      page: "第 {page}/{total} 頁",
+      lines: "第 {start}-{end} 行，共 {total} 行",
+      morePages: "尚有頁面",
+      sourceTruncated: "來源已截斷",
       noBodyTitle: "這個結果沒有儲存頁面內容",
       noBodyDetail:
         "這筆紀錄早於內嵌擷取預覽，或供應商回傳了空白內容。請開啟來源網址閱讀。",
