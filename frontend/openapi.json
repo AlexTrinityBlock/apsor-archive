@@ -84,6 +84,9 @@
           "role": {
             "$ref": "#/components/schemas/UserRole"
           },
+          "usage": {
+            "$ref": "#/components/schemas/AccountUsageSchema"
+          },
           "user_id": {
             "title": "User Id",
             "type": "integer"
@@ -101,7 +104,8 @@
           "is_active",
           "must_change_password",
           "created_at",
-          "last_login_at"
+          "last_login_at",
+          "usage"
         ],
         "title": "AccountSchema",
         "type": "object"
@@ -122,6 +126,58 @@
           "temporary_password"
         ],
         "title": "AccountTemporaryPasswordSchema",
+        "type": "object"
+      },
+      "AccountUsageSchema": {
+        "description": "Rolled-up agent usage for one account.",
+        "properties": {
+          "api_calls": {
+            "title": "Api Calls",
+            "type": "integer"
+          },
+          "cached_tokens": {
+            "title": "Cached Tokens",
+            "type": "integer"
+          },
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "last_activity_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Activity At"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          },
+          "turns": {
+            "title": "Turns",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens",
+          "cached_tokens",
+          "api_calls",
+          "turns",
+          "last_activity_at"
+        ],
+        "title": "AccountUsageSchema",
         "type": "object"
       },
       "AgentApprovalSchema": {
@@ -915,6 +971,18 @@
             "title": "Abort Requested",
             "type": "boolean"
           },
+          "api_calls": {
+            "title": "Api Calls",
+            "type": "integer"
+          },
+          "cached_tokens": {
+            "title": "Cached Tokens",
+            "type": "integer"
+          },
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
           "conversation_id": {
             "title": "Conversation Id",
             "type": "integer"
@@ -973,6 +1041,10 @@
             ],
             "title": "Last Entry Id"
           },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
           "request_id": {
             "anyOf": [
               {
@@ -1000,6 +1072,10 @@
             "title": "Status",
             "type": "string"
           },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          },
           "user_entry_id": {
             "title": "User Entry Id",
             "type": "integer"
@@ -1017,7 +1093,12 @@
           "error_detail",
           "started_at",
           "finished_at",
-          "created_at"
+          "created_at",
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens",
+          "cached_tokens",
+          "api_calls"
         ],
         "title": "AgentRunSchema",
         "type": "object"
@@ -1464,6 +1545,16 @@
       },
       "AuthResponseSchema": {
         "properties": {
+          "impersonation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImpersonationSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "user": {
             "$ref": "#/components/schemas/UserSchema"
           }
@@ -1479,6 +1570,16 @@
           "authenticated": {
             "title": "Authenticated",
             "type": "boolean"
+          },
+          "impersonation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImpersonationSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "requires_setup": {
             "title": "Requires Setup",
@@ -2247,6 +2348,37 @@
           "web_fetch_configured"
         ],
         "title": "HealthSchema",
+        "type": "object"
+      },
+      "ImpersonationSchema": {
+        "description": "The root account acting through an impersonation session.",
+        "properties": {
+          "actor_user_id": {
+            "title": "Actor User Id",
+            "type": "integer"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor_user_id",
+          "username",
+          "display_name"
+        ],
+        "title": "ImpersonationSchema",
         "type": "object"
       },
       "IngestJobListSchema": {
@@ -4130,6 +4262,23 @@
         "title": "StatsSchema",
         "type": "object"
       },
+      "StopImpersonationSchema": {
+        "additionalProperties": false,
+        "description": "Root credentials required to return from an impersonation session.",
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "StopImpersonationSchema",
+        "type": "object"
+      },
       "SummaryCreateSchema": {
         "additionalProperties": false,
         "description": "Create a summary for an explicit set of memories or a period.",
@@ -5105,6 +5254,49 @@
           }
         },
         "summary": "Enable Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/{user_id}/impersonate": {
+      "post": {
+        "description": "Replace the root cookie with a session acting as one normal account.",
+        "operationId": "impersonateAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Impersonate Account",
         "tags": [
           "accounts"
         ]
@@ -6534,6 +6726,48 @@
         "summary": "Get Ai Status",
         "tags": [
           "ai"
+        ]
+      }
+    },
+    "/api/v1/auth/impersonation/stop": {
+      "post": {
+        "description": "Return from an impersonation session to a fresh root session.",
+        "operationId": "stopImpersonation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StopImpersonationSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Impersonation",
+        "tags": [
+          "auth"
         ]
       }
     },

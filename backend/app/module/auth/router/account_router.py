@@ -3,15 +3,22 @@
 from fastapi import APIRouter, Depends, Response, status
 
 from app.dependency.auth import require_root
-from app.module.auth.dependencies import get_account_service
+from app.infrastructure.config.settings import Settings
+from app.module.auth.dependencies import (
+    get_account_service,
+    get_auth_service,
+    get_auth_settings,
+)
+from app.module.auth.router.session_cookie import set_session_cookie
 from app.module.auth.schema.account_schema import (
     AccountCreateSchema,
     AccountListSchema,
     AccountSchema,
     AccountTemporaryPasswordSchema,
 )
-from app.module.auth.schema.auth_schema import UserSchema
+from app.module.auth.schema.auth_schema import AuthResponseSchema, UserSchema
 from app.module.auth.service.account_service import AccountService
+from app.module.auth.service.auth_service import AuthService
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
 
@@ -40,6 +47,28 @@ async def create_account(
     """Create a normal user and return its one-time temporary password."""
     response.headers["Cache-Control"] = "no-store"
     return await service.create_account(actor_user_id=root.user_id, payload=payload)
+
+
+@router.post(
+    "/{user_id}/impersonate",
+    response_model=AuthResponseSchema,
+    operation_id="impersonateAccount",
+)
+async def impersonate_account(
+    user_id: int,
+    response: Response,
+    root: UserSchema = Depends(require_root),
+    settings: Settings = Depends(get_auth_settings),
+    service: AuthService = Depends(get_auth_service),
+) -> AuthResponseSchema:
+    """Replace the root cookie with a session acting as one normal account."""
+    response.headers["Cache-Control"] = "no-store"
+    user, token, impersonation = await service.impersonate(
+        actor_user_id=root.user_id,
+        target_user_id=user_id,
+    )
+    set_session_cookie(response, token, settings)
+    return AuthResponseSchema(user=user, impersonation=impersonation)
 
 
 @router.post(

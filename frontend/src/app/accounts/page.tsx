@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../component/Button";
@@ -58,12 +59,14 @@ function rootFirst(items: readonly AccountSchema[]): AccountSchema[] {
  */
 export function AccountsPage() {
   const { t, formatNumber } = useI18n();
-  const { user } = useAuth();
+  const { user, impersonate } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toast = useToast();
   const apiErrorMessage = useApiErrorMessage();
   const [dialog, setDialog] = useState<DialogState>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [impersonationPending, setImpersonationPending] = useState(false);
 
   const query = useListAccounts({
     query: { retry: false, staleTime: 15_000 },
@@ -78,7 +81,8 @@ export function AccountsPage() {
     createMutation.isPending ||
     disableMutation.isPending ||
     enableMutation.isPending ||
-    resetMutation.isPending;
+    resetMutation.isPending ||
+    impersonationPending;
 
   const invalidateAccounts = () => {
     void queryClient.invalidateQueries({
@@ -130,6 +134,21 @@ export function AccountsPage() {
     }
     const { action, account } = dialog;
     setDialogError(null);
+    if (action === "impersonate") {
+      setImpersonationPending(true);
+      try {
+        await impersonate(account.user_id);
+        setDialog(null);
+        navigate("/chat");
+      } catch (caught) {
+        setDialogError(
+          apiErrorMessage(caught, "core.accounts.impersonateError"),
+        );
+      } finally {
+        setImpersonationPending(false);
+      }
+      return;
+    }
     try {
       if (action === "disable") {
         await disableMutation.mutateAsync({ userId: account.user_id });

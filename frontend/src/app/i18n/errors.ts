@@ -21,6 +21,14 @@ const ERROR_CODE_KEYS = {
   username_taken: "core.errors.username_taken",
   cannot_disable_root: "core.errors.cannot_disable_root",
   last_root_protected: "core.errors.last_root_protected",
+  cannot_impersonate_self: "core.errors.cannot_impersonate_self",
+  cannot_impersonate_root: "core.errors.cannot_impersonate_root",
+  account_not_impersonatable: "core.errors.account_not_impersonatable",
+  not_impersonating: "core.errors.not_impersonating",
+  impersonation_password_change_forbidden:
+    "core.errors.impersonation_password_change_forbidden",
+  impersonation_password_invalid:
+    "core.errors.impersonation_password_invalid",
   setup_already_complete: "core.errors.setup_already_complete",
   invalid_username: "core.errors.invalid_username",
   invalid_profile: "core.errors.invalid_profile",

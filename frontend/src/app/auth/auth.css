@@ -372,6 +372,415 @@
   line-height: 1.6;
 }
 
+/* --------------------------------------------------------------------------
+   Root user switcher
+   -------------------------------------------------------------------------- */
+
+.impersonate-dialog__head {
+  align-items: flex-start;
+}
+
+.impersonate-dialog__heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.impersonate-dialog__heading .eyebrow {
+  margin: 0;
+}
+
+.impersonate-dialog__body {
+  display: flex;
+  max-height: min(72vh, 680px);
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.impersonate-dialog__description {
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.impersonate-dialog__search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  background: #ffffff;
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 6px;
+  transition: border-color var(--transition-fast);
+}
+
+.impersonate-dialog__search:focus-within {
+  border-color: var(--mono-ink);
+}
+
+.impersonate-dialog__search-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--mono-muted);
+}
+
+.impersonate-dialog__input {
+  width: 100%;
+  color: var(--mono-ink);
+  font-family: var(--mono-font);
+  font-size: 13.5px;
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.impersonate-dialog__input:focus-visible {
+  outline: none;
+}
+
+.impersonate-dialog__input:disabled {
+  opacity: 0.6;
+}
+
+.impersonate-dialog__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--accent-seal-deep);
+  font-size: 12px;
+  line-height: 1.55;
+  background: rgba(200, 75, 49, 0.07);
+  border: 0.7px solid rgba(200, 75, 49, 0.28);
+  border-left: 3px solid var(--accent-seal);
+  border-radius: 3px;
+}
+
+.impersonate-dialog__error .icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.impersonate-dialog__list-wrap {
+  min-height: 120px;
+}
+
+.impersonate-dialog__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.impersonate-dialog__row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 5px;
+}
+
+.impersonate-dialog__row-head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.impersonate-dialog__identity {
+  display: flex;
+  flex: 1;
+  min-width: 180px;
+  align-items: center;
+  gap: 9px;
+}
+
+.impersonate-dialog__avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  color: var(--mono-paper);
+  font-family: var(--mono-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--mono-ink);
+  border-radius: 4px;
+}
+
+.impersonate-dialog__identity-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.impersonate-dialog__identity-copy strong {
+  overflow: hidden;
+  color: var(--mono-ink);
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.impersonate-dialog__identity-copy span {
+  overflow: hidden;
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.impersonate-dialog__usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.impersonate-dialog__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.impersonate-dialog__metric > span {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.impersonate-dialog__metric strong {
+  color: var(--mono-ink);
+  font-family: var(--mono-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.impersonate-dialog__action {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.impersonate-dialog__row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding-top: 8px;
+  border-top: 0.7px solid var(--mono-grid);
+}
+
+.impersonate-dialog__reason {
+  color: var(--accent-ochre);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.impersonate-dialog__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 12px;
+  color: var(--mono-l2);
+  font-size: 12.5px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.impersonate-dialog__state p {
+  max-width: 52ch;
+  margin: 0;
+}
+
+.impersonate-dialog__state-icon {
+  display: flex;
+  color: var(--accent-seal);
+}
+
+.impersonate-dialog__empty {
+  padding: 26px 18px;
+}
+
+/* --------------------------------------------------------------------------
+   Return-to-root re-authentication
+   -------------------------------------------------------------------------- */
+
+.stop-impersonation__head {
+  align-items: flex-start;
+}
+
+.stop-impersonation__heading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stop-impersonation__heading .eyebrow {
+  margin: 0;
+}
+
+.stop-impersonation__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stop-impersonation__description {
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.stop-impersonation__context {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 5px;
+}
+
+.stop-impersonation__target {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.stop-impersonation__avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  color: var(--mono-paper);
+  font-family: var(--mono-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--mono-ink);
+  border-radius: 4px;
+}
+
+.stop-impersonation__target-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.stop-impersonation__label {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.stop-impersonation__target-copy strong {
+  overflow: hidden;
+  color: var(--mono-ink);
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stop-impersonation__target-copy > span:last-child {
+  overflow: hidden;
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stop-impersonation__actor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding-top: 9px;
+  color: var(--mono-l2);
+  font-size: 11.5px;
+  border-top: 0.7px solid var(--mono-grid);
+}
+
+.stop-impersonation__actor span {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.stop-impersonation__actor strong {
+  color: var(--mono-ink);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.stop-impersonation__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stop-impersonation__password .input {
+  padding-right: 72px;
+}
+
+.stop-impersonation__error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--accent-seal-deep);
+  font-size: 12px;
+  line-height: 1.55;
+  background: rgba(200, 75, 49, 0.07);
+  border: 0.7px solid rgba(200, 75, 49, 0.28);
+  border-left: 3px solid var(--accent-seal);
+  border-radius: 3px;
+}
+
+.stop-impersonation__error .icon {
+  flex: none;
+  margin-top: 1px;
+}
+
+.stop-impersonation__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
 .auth-forced-footer__account {
   min-width: 0;
   max-width: 100%;
@@ -523,6 +932,32 @@
 }
 
 @media (max-width: 640px) {
+  .stop-impersonation__actions {
+    flex-wrap: wrap;
+  }
+
+  .stop-impersonation__actions .btn {
+    flex: 1;
+  }
+
+  .impersonate-dialog__row-head {
+    align-items: flex-start;
+  }
+
+  .impersonate-dialog__identity {
+    flex-basis: 100%;
+  }
+
+  .impersonate-dialog__usage {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .impersonate-dialog__action {
+    width: 100%;
+    margin-left: 0;
+  }
+
   .auth-screen {
     padding: 0;
   }

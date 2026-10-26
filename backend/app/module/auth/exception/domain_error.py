@@ -86,3 +86,33 @@ class CannotDisableRootError(AuthError):
 class LastRootProtectedError(AuthError):
     def __init__(self) -> None:
         super().__init__("The only root account must stay enabled.")
+
+
+class CannotImpersonateSelfError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("The root account cannot impersonate itself.")
+
+
+class CannotImpersonateRootError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("A root account cannot be impersonated.")
+
+
+class AccountNotImpersonatableError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("This account cannot be impersonated.")
+
+
+class NotImpersonatingError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("The current session is not an impersonation session.")
+
+
+class ImpersonationPasswordChangeForbiddenError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("A password cannot be changed while impersonating an account.")
+
+
+class ImpersonationPasswordInvalidError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("The root password is invalid.")
