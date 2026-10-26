@@ -22,11 +22,11 @@ interface NavItem {
   readonly icon: IconName;
   readonly end?: boolean;
   readonly rootOnly?: boolean;
-  readonly action?: "password";
+  readonly action?: "password" | "logout";
 }
 
 interface NavSection {
-  readonly id: "main" | "personal" | "system";
+  readonly id: "main" | "personal" | "system" | "session";
   readonly labelKey?: TranslationKey;
   readonly items: readonly NavItem[];
 }
@@ -86,6 +86,18 @@ const NAV_SECTIONS: readonly NavSection[] = [
         rootOnly: true,
       },
       { to: "/about", labelKey: "core.nav.about", icon: "method" },
+    ],
+  },
+  {
+    id: "session",
+    labelKey: "core.nav.sessionSection",
+    items: [
+      {
+        to: "/logout",
+        labelKey: "core.nav.signOut",
+        icon: "logout",
+        action: "logout",
+      },
     ],
   },
 ];
@@ -335,7 +347,8 @@ export function AppShell() {
                     </span>
                   </>
                 );
-                if (item.action === "password") {
+                if (item.action !== undefined) {
+                  const isLogout = item.action === "logout";
                   return (
                     <button
                       key={item.to}
@@ -343,10 +356,15 @@ export function AppShell() {
                       className="rail-item rail-item--action"
                       onClick={() => {
                         closeDrawer();
-                        setPasswordDialogOpen(true);
+                        if (isLogout) {
+                          void logout();
+                        } else {
+                          setPasswordDialogOpen(true);
+                        }
                       }}
                       data-tooltip={`${label} (${item.index})`}
-                      aria-haspopup="dialog"
+                      aria-haspopup={isLogout ? undefined : "dialog"}
+                      disabled={isLogout && isSubmitting}
                     >
                       {content}
                     </button>
@@ -382,34 +400,6 @@ export function AppShell() {
                   <span className="rail-account__username">{user.username}</span>
                   <strong>{displayName}</strong>
                 </span>
-              </div>
-              <div className="rail-account__actions">
-                <button
-                  type="button"
-                  className="rail-account__action"
-                  onClick={() => {
-                    closeDrawer();
-                    setPasswordDialogOpen(true);
-                  }}
-                  aria-label={t("core.nav.changePassword")}
-                  aria-haspopup="dialog"
-                  title={t("core.nav.changePassword")}
-                >
-                  <Icon name="key" size={15} />
-                </button>
-                <button
-                  type="button"
-                  className="rail-account__action rail-account__action--labeled"
-                  onClick={() => void logout()}
-                  disabled={isSubmitting}
-                  aria-label={t("core.nav.signOut")}
-                  title={t("core.nav.signOut")}
-                >
-                  <Icon name="logout" size={15} />
-                  <span className="rail-account__action-label">
-                    {t("core.nav.signOut")}
-                  </span>
-                </button>
               </div>
             </div>
           ) : null}
