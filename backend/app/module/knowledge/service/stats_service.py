@@ -3,26 +3,28 @@
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.stats_repository_protocol import StatsRepositoryProtocol
 from app.module.knowledge.schema.system_schema import StatsSchema
-from app.module.knowledge.service.cache_keys import cache_key
+from app.module.knowledge.service.cache_keys import user_cache_key, user_version_scope
 
 
 class StatsService:
-    """Read aggregate counts and cache them under the index version."""
+    """Read one owner's aggregate counts and cache them under its index version."""
 
     def __init__(
         self,
         *,
+        user_id: int,
         stats_repository: StatsRepositoryProtocol,
         cache: CacheProtocol,
         cache_ttl_seconds: int,
     ) -> None:
+        self.user_id = user_id
         self.stats_repository = stats_repository
         self.cache = cache
         self.cache_ttl_seconds = cache_ttl_seconds
 
     async def get_stats(self) -> StatsSchema:
-        version = await self.cache.get_version()
-        key = cache_key(version, "stats")
+        version = await self.cache.get_version(user_version_scope(self.user_id))
+        key = user_cache_key(self.user_id, version, "stats")
         cached = await self.cache.get_json(key)
         if isinstance(cached, dict):
             return StatsSchema.model_validate(cached)

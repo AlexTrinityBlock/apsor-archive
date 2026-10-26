@@ -37,9 +37,12 @@ class ExceptionRegistry:
             status, error_code = cls.resolve(exc)
             if status >= 500:
                 logger.exception("%s: %s", exc.__class__.__name__, exc)
+                # SQL, provider bodies, and stack details stay in server logs;
+                # the API only exposes a stable code and a generic detail.
+                detail = "An internal error occurred."
             else:
                 logger.info("%s: %s", exc.__class__.__name__, exc)
-            detail = str(exc) if str(exc) else error_code
+                detail = str(exc) if str(exc) else error_code
             return JSONResponse(
                 status_code=status,
                 content={"status": status, "error": error_code, "detail": detail},

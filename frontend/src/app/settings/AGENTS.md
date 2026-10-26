@@ -16,7 +16,8 @@ Settings does not own backend validation, generated API definitions, or global i
 ## Architecture
 
 - **Top tab workspace:** `page.tsx` renders `PageHeader`, `SettingsTabs`, and exactly one panel. Do not restore the old left anchor navigation or render all sections with hidden inactive panels.
-- **Section registry:** `component/settings-sections.ts` is the source of order, ids, label keys, and visible indices. `SECTION_PANELS` in `page.tsx` is an exhaustive `Record<SettingsSectionId, ComponentType>`. A new tab needs entries in both places.
+- **Section registry:** `component/settings-sections.ts` is the source of order, ids, label keys, role visibility, and visible indices. `SECTION_PANELS` in `page.tsx` is an exhaustive `Record<SettingsSectionId, ComponentType>`. A new tab needs entries in both places and a `roles` value.
+- **Role visibility:** root sees every tab; a normal account sees only Frequent prompts and Language (the personal tabs). Hidden deep links fall back to the first visible tab and rewrite the hash. Root-only account management lives at `/accounts`, not in Settings.
 - **Stable ids:** section ids are `settings-system-prompt`, `settings-frequent-prompts`, `settings-providers`, `settings-diagnostics`, `settings-agent-runtime`, `settings-ingest-runtime`, `settings-maintenance`, and `settings-language`. An id is both the URL hash and the active tabpanel id.
 - **Deep links:** `parseSettingsSectionHash` maps a known hash to its tab and falls back to the first section. Existing links such as `/settings#settings-language` and the chat link to `#settings-frequent-prompts` must keep working.
 - **Navigation:** clicking a tab uses React Router `navigate()` with the section hash, updates local state, and resets scroll. A `location.hash`/`location.key` sync plus `hashchange` and `popstate` listeners keep direct hash edits, sidebar navigation, and browser back/forward in sync.

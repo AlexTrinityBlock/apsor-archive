@@ -7,7 +7,7 @@ from app.module.agent.model.saved_question_model import SavedQuestionModel
 
 
 class SavedQuestionRepositoryProtocol(Protocol):
-    """CRUD plus last-ask persistence on the request transaction."""
+    """Owner-bound CRUD plus last-ask persistence on the request transaction."""
 
     async def add(
         self,

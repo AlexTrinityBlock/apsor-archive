@@ -165,6 +165,49 @@
   padding: 14px 0;
 }
 
+.rail-section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rail-section + .rail-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 0.7px solid var(--mono-grid);
+}
+
+.rail-section__label {
+  margin: 0;
+  padding: 0 12px 2px;
+  overflow: hidden;
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.app-shell.rail-collapsed .rail-section {
+  align-items: center;
+  gap: 6px;
+}
+
+.app-shell.rail-collapsed .rail-section + .rail-section {
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.app-shell.rail-collapsed .rail-section__label {
+  display: none;
+}
+
 .rail-item {
   position: relative;
   display: flex;
@@ -192,6 +235,10 @@
   background: #ffffff;
   border-color: var(--mono-grid);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.rail-section--personal .rail-item.active .rail-item-icon {
+  color: var(--accent-seal);
 }
 
 .app-shell.rail-collapsed .rail-item {
@@ -290,9 +337,11 @@
 
 .app-shell.rail-collapsed .rail-account {
   width: 44px;
-  height: 44px;
+  height: auto;
+  flex-direction: column;
   justify-content: center;
-  padding: 0;
+  gap: 3px;
+  padding: 4px 0;
 }
 
 .rail-account__mark {
@@ -317,8 +366,19 @@
   color: var(--mono-muted);
   font-size: 9px;
   line-height: 1.25;
-  text-transform: uppercase;
   letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rail-account__username {
+  overflow: hidden;
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
 }
 
 .rail-account__copy strong {
@@ -328,12 +388,24 @@
   font-weight: 600;
   text-overflow: ellipsis;
   text-transform: none;
+  white-space: nowrap;
   letter-spacing: 0;
 }
 
-.app-shell.rail-collapsed .rail-account__copy,
-.app-shell.rail-collapsed .rail-account__action {
+.rail-account__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+}
+
+.app-shell.rail-collapsed .rail-account__copy {
   display: none !important;
+}
+
+.app-shell.rail-collapsed .rail-account__actions {
+  flex-direction: column;
+  gap: 2px;
 }
 
 .rail-account__action {
@@ -349,6 +421,11 @@
 .rail-account__action:hover {
   color: var(--accent-seal);
   background: var(--mono-subtle);
+}
+
+.rail-account__action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .rail-status {
@@ -584,7 +661,6 @@
 
   .app-shell.rail-collapsed .rail-item-text,
   .app-shell.rail-collapsed .rail-item-badge,
-  .app-shell.rail-collapsed .rail-account__copy,
   .app-shell.rail-collapsed .rail-status__copy {
     display: initial !important;
   }
@@ -592,6 +668,21 @@
   .app-shell.rail-collapsed .rail-menu {
     align-items: stretch;
     padding: 14px 10px;
+  }
+
+  .app-shell.rail-collapsed .rail-section {
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .app-shell.rail-collapsed .rail-section + .rail-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 0.7px solid var(--mono-grid);
+  }
+
+  .app-shell.rail-collapsed .rail-section__label {
+    display: block;
   }
 
   .app-shell.rail-collapsed .rail-item {
@@ -611,8 +702,15 @@
   .app-shell.rail-collapsed .rail-account {
     width: auto;
     height: auto;
+    flex-direction: row;
     justify-content: flex-start;
+    gap: 8px;
     padding: 7px 8px;
+  }
+
+  .app-shell.rail-collapsed .rail-account__actions {
+    flex-direction: row;
+    gap: 1px;
   }
 
   .app-shell.rail-collapsed .rail-colophon {
@@ -673,19 +771,6 @@
   gap: 8px;
   padding: 0;
   color: inherit;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-}
-
-.rail-account__identity:hover .rail-account__copy strong {
-  color: var(--accent-seal);
-}
-
-.rail-account__identity:focus-visible {
-  outline: 1px solid var(--accent-seal);
-  outline-offset: 3px;
 }
 
 .app-shell.rail-collapsed .rail-account__identity {

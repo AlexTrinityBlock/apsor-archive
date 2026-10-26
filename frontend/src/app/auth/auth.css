@@ -1,5 +1,5 @@
 /* ==========================================================================
-   auth.css — the public threshold: keeper sign-in and first-run setup.
+   auth.css — the public threshold: sign-in, first-run setup, password change.
    Palette, type, borders, and focus rings come from the global mono tokens.
    ========================================================================== */
 
@@ -294,6 +294,48 @@
 
 .auth-form-panel__footer p {
   margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Password change
+   -------------------------------------------------------------------------- */
+
+.change-password-page {
+  gap: 24px;
+}
+
+.change-password-panel .panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.change-password-form {
+  width: min(100%, 460px);
+}
+
+.auth-forced-footer__account {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--mono-l2);
+  font-family: var(--mono-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-forced-footer p {
+  margin: 0 0 10px;
+}
+
+.auth-forced-footer__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* --------------------------------------------------------------------------

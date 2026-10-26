@@ -1,8 +1,11 @@
-"""HTTP contracts for the owner account and cookie sessions."""
+"""HTTP contracts for accounts and cookie sessions."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+type UserRole = Literal["root", "user"]
 
 
 class UserSchema(BaseModel):
@@ -11,6 +14,9 @@ class UserSchema(BaseModel):
     user_id: int
     username: str
     display_name: str | None
+    role: UserRole
+    is_active: bool
+    must_change_password: bool
     created_at: datetime
     last_login_at: datetime | None
 
@@ -36,6 +42,16 @@ class LoginSchema(BaseModel):
 
     username: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=256)
+
+
+class ChangePasswordSchema(BaseModel):
+    """Self-service password change, also used while a change is forced."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=10, max_length=256)
+    confirm_password: str = Field(min_length=10, max_length=256)
 
 
 class AuthResponseSchema(BaseModel):

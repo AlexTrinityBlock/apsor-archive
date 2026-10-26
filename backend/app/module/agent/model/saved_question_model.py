@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Index,
     String,
@@ -32,6 +33,12 @@ class SavedQuestionModel(Base):
 
     __tablename__ = "saved_question"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["conversation_id", "user_id"],
+            ["agent_conversation.id", "agent_conversation.user_id"],
+            name="fk_saved_question_conversation_user",
+            ondelete="SET NULL (conversation_id)",
+        ),
         CheckConstraint(
             "char_length(question) BETWEEN 1 AND 32000",
             name="question_length",
@@ -43,9 +50,23 @@ class SavedQuestionModel(Base):
             name="run_status_valid",
         ),
         Index("ix_saved_question_conversation_id", "conversation_id"),
+        Index(
+            "ix_saved_question_user_id_conversation_id",
+            "user_id",
+            "conversation_id",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_saved_question_user_id_app_user",
+        ),
+        nullable=False,
+    )
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     citations: Mapped[list[str]] = mapped_column(
@@ -54,11 +75,7 @@ class SavedQuestionModel(Base):
         default=list,
         server_default=text("'[]'::jsonb"),
     )
-    conversation_id: Mapped[int | None] = mapped_column(
-        BigInteger,
-        ForeignKey("agent_conversation.id", ondelete="SET NULL"),
-        nullable=True,
-    )
+    conversation_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     run_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)

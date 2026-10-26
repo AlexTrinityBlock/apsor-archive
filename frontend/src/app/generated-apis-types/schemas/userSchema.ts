@@ -4,11 +4,15 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
+import type { UserRole } from './userRole';
 
 export interface UserSchema {
   created_at: string;
   display_name: string | null;
+  is_active: boolean;
   last_login_at: string | null;
+  must_change_password: boolean;
+  role: UserRole;
   user_id: number;
   username: string;
 }

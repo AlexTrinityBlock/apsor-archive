@@ -91,8 +91,9 @@ class DeepSeekClient:
             raise AiProviderError(f"network error: {exc}") from exc
 
         if response.status_code >= 400:
-            detail = response.text[:300].replace("\n", " ")
-            raise AiProviderError(f"HTTP {response.status_code}: {detail}")
+            # Provider bodies can reflect request metadata or internal details;
+            # keep the stable status only and never persist the raw body.
+            raise AiProviderError(f"HTTP {response.status_code}")
         try:
             body = response.json()
             choice = body["choices"][0]
@@ -157,8 +158,7 @@ class DeepSeekClient:
         except httpx.HTTPError as exc:
             raise AiProviderError(f"network error: {exc}") from exc
         if response.status_code >= 400:
-            detail = response.text[:300].replace("\n", " ")
-            raise AiProviderError(f"HTTP {response.status_code}: {detail}")
+            raise AiProviderError(f"HTTP {response.status_code}")
         try:
             body = response.json()
             choice = body["choices"][0]
@@ -210,9 +210,8 @@ class DeepSeekClient:
                     json=payload,
                 ) as response:
                     if response.status_code >= 400:
-                        body = await response.aread()
-                        detail = body.decode("utf-8", errors="replace")[:300].replace("\n", " ")
-                        raise AiProviderError(f"HTTP {response.status_code}: {detail}")
+                        await response.aread()
+                        raise AiProviderError(f"HTTP {response.status_code}")
                     async for raw_line in response.aiter_lines():
                         line = raw_line.strip()
                         if not line or line.startswith(":"):

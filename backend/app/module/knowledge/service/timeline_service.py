@@ -19,17 +19,18 @@ from app.module.knowledge.schema.timeline_schema import (
     TimelineResponseSchema,
     TimelineSkipSchema,
 )
-from app.module.knowledge.service.cache_keys import cache_key
+from app.module.knowledge.service.cache_keys import user_cache_key, user_version_scope
 
 MAX_EVENTS_PER_KIND = 2000
 
 
 class TimelineService:
-    """Build the sparse timeline from memories, summaries, and file updates."""
+    """Build one owner's sparse timeline from memories, summaries, and files."""
 
     def __init__(
         self,
         *,
+        user_id: int,
         memory_repository: MemoryRepositoryProtocol,
         summary_repository: SummaryRepositoryProtocol,
         file_repository: FileRepositoryProtocol,
@@ -38,6 +39,7 @@ class TimelineService:
         timezone_name: str,
         max_day_range: int,
     ) -> None:
+        self.user_id = user_id
         self.memory_repository = memory_repository
         self.summary_repository = summary_repository
         self.file_repository = file_repository
@@ -68,8 +70,9 @@ class TimelineService:
         start_utc = start_day.astimezone(UTC)
         end_utc = end_day.astimezone(UTC)
 
-        version = await self.cache.get_version()
-        key = cache_key(
+        version = await self.cache.get_version(user_version_scope(self.user_id))
+        key = user_cache_key(
+            self.user_id,
             version,
             "timeline",
             str(year),

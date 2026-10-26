@@ -17,6 +17,11 @@ import pypdfium2 as pdfium
 from docx import Document
 from pypdf import PdfReader
 
+from app.infrastructure.files.storage_errors import (
+    StorageError,
+    StorageObjectMissingError,
+    StorageUnavailableError,
+)
 from app.module.knowledge.domain.chunking_domain import chunk_text
 from app.module.knowledge.domain.path_domain import (
     InvalidPathValueError,
@@ -33,6 +38,7 @@ from app.module.knowledge.exception.domain_error import (
     EmptyContentError,
     FileContentUnavailableError,
     FileRecordNotFoundError,
+    FileStorageUnavailableError,
     FileTooLargeError,
     FileVersionConflictError,
     InvalidChunkWindowError,
@@ -66,6 +72,7 @@ from app.module.knowledge.schema.file_schema import (
     PathFileSchema,
     PathListingSchema,
 )
+from app.module.knowledge.service.cache_keys import user_version_scope
 from app.module.knowledge.service.indexer_service import IndexerService
 from app.shared.time import utcnow
 
@@ -116,11 +123,12 @@ class FileOriginal:
 
 
 class FileService:
-    """Coordinate file storage, multimodal extraction, folder placement, and indexing."""
+    """Coordinate one owner's file storage, extraction, folders, and indexing."""
 
     def __init__(
         self,
         *,
+        user_id: int,
         file_repository: FileRepositoryProtocol,
         folder_repository: FolderRepositoryProtocol,
         chunk_repository: ChunkRepositoryProtocol,
@@ -138,6 +146,7 @@ class FileService:
         pdf_text_threshold: int,
         cpu_runner: CpuRunner | None = None,
     ) -> None:
+        self.user_id = user_id
         self.file_repository = file_repository
         self.folder_repository = folder_repository
         self.chunk_repository = chunk_repository
@@ -163,6 +172,46 @@ class FileService:
     ) -> T:
         """Run parsing or chunking on the caller-supplied bounded executor."""
         return cast(T, await self.cpu_runner(func, *args, **kwargs))
+
+    @property
+    def storage_backend(self) -> str:
+        """Backend that a new original for this service must be written to."""
+        return self.storage.default_backend
+
+    async def _bump_index_version(self) -> None:
+        """Invalidate only the acting owner's search/timeline/stats caches."""
+        await self.cache.bump_version(user_version_scope(self.user_id))
+
+    async def _storage_save(self, key: str, data: bytes) -> None:
+        """Write a new original, translating provider failures into a safe 503."""
+        try:
+            await self.storage.save(key, data, backend=self.storage.default_backend)
+        except StorageObjectMissingError as exc:  # pragma: no cover - defensive
+            raise FileStorageUnavailableError() from exc
+        except (StorageUnavailableError, StorageError, OSError) as exc:
+            raise FileStorageUnavailableError() from exc
+
+    async def _storage_read(
+        self,
+        key: str,
+        *,
+        backend: str | None,
+        file_id: int,
+    ) -> bytes:
+        """Read one original; a missing object becomes ``file_content_unavailable``."""
+        try:
+            return await self.storage.read(key, backend=backend)
+        except (StorageObjectMissingError, FileNotFoundError) as exc:
+            raise FileContentUnavailableError(file_id) from exc
+        except (StorageUnavailableError, StorageError, OSError) as exc:
+            raise FileStorageUnavailableError() from exc
+
+    async def _storage_delete_quietly(self, key: str, *, backend: str | None) -> None:
+        """Best-effort cleanup that never masks the original ingestion failure."""
+        try:
+            await self.storage.delete(key, backend=backend)
+        except Exception:
+            logger.warning("Could not delete stored object %s from %s", key, backend)
 
     @staticmethod
     def _to_schema(file: FileModel) -> FileSchema:
@@ -545,6 +594,7 @@ class FileService:
                     raise TreePathConflictError(directory_path)
                 folder = await self.folder_repository.add_if_absent(
                     FolderModel(
+                        user_id=self.user_id,
                         parent_id=parent_id,
                         path=directory_path,
                         name=segment,
@@ -567,6 +617,7 @@ class FileService:
         text: str,
         mime_type: str,
         storage_key: str | None,
+        storage_backend: str | None,
         occurred_at: datetime | None,
         ai_summary: str | None = None,
         ai_tags: list[str] | None = None,
@@ -606,8 +657,15 @@ class FileService:
             await self.chunk_repository.mark_source_not_current(SOURCE_FILE, existing.id)
 
         timestamp = occurred_at or utcnow()
+        try:
+            resolved_backend = (
+                self.storage.backend_name(storage_backend) if storage_key is not None else None
+            )
+        except StorageError as exc:
+            raise FileStorageUnavailableError() from exc
         file = await self.file_repository.add(
             FileModel(
+                user_id=self.user_id,
                 raw_file_path=path,
                 file_name=file_name(path),
                 extension=extension(path),
@@ -615,6 +673,7 @@ class FileService:
                 size_bytes=len(data),
                 content_hash=hashlib.sha256(data).hexdigest(),
                 storage_key=storage_key,
+                storage_backend=resolved_backend,
                 ai_summary=ai_summary,
                 ai_tags=ai_tags or [],
                 document_type=document_type,
@@ -643,7 +702,7 @@ class FileService:
             checkpoint=checkpoint,
         )
         if publish:
-            await self.cache.bump_version()
+            await self._bump_index_version()
         return self._to_schema(file)
 
     async def ingest_extracted(
@@ -654,6 +713,7 @@ class FileService:
         extracted: ExtractedDocument,
         mime_type: str,
         storage_key: str | None,
+        storage_backend: str | None = None,
         occurred_at: datetime | None,
         publish: bool = True,
         progress: IngestProgressProtocol | None = None,
@@ -666,6 +726,7 @@ class FileService:
             text=extracted.text,
             mime_type=mime_type,
             storage_key=storage_key,
+            storage_backend=storage_backend,
             occurred_at=occurred_at,
             ai_summary=extracted.ai_summary,
             ai_tags=extracted.ai_tags,
@@ -695,7 +756,7 @@ class FileService:
         file.updated_at = now
         await self.chunk_repository.mark_source_current(SOURCE_FILE, file.id)
         await self.file_repository.flush()
-        await self.cache.bump_version()
+        await self._bump_index_version()
         return self._to_schema(file)
 
     async def discard_pending(self, file_id: int) -> bool:
@@ -759,6 +820,7 @@ class FileService:
             text=content,
             mime_type=mime_type,
             storage_key=None,
+            storage_backend=None,
             occurred_at=occurred_at,
             document_type=extension(normalized).lstrip(".") or "text",
             extraction_method="text",
@@ -783,7 +845,7 @@ class FileService:
             raise FileTooLargeError(len(encoded_content), self.max_text_bytes)
 
         storage_key = self._new_storage_key(file.extension)
-        await self.storage.save(storage_key, encoded_content)
+        await self._storage_save(storage_key, encoded_content)
         mime_type = file.mime_type if file.mime_type.startswith("text/") else "text/markdown"
         try:
             return await self._ingest(
@@ -792,6 +854,7 @@ class FileService:
                 text=content,
                 mime_type=mime_type,
                 storage_key=storage_key,
+                storage_backend=self.storage.default_backend,
                 occurred_at=None,
                 ai_summary=file.ai_summary,
                 ai_tags=list(file.ai_tags),
@@ -799,7 +862,10 @@ class FileService:
                 extraction_method="text",
             )
         except Exception:
-            await self.storage.delete(storage_key)
+            await self._storage_delete_quietly(
+                storage_key,
+                backend=self.storage.default_backend,
+            )
             raise
 
     async def ingest_upload(
@@ -823,7 +889,7 @@ class FileService:
             content_type or mimetypes.guess_type(normalized)[0] or "application/octet-stream"
         )
         storage_key = self._new_storage_key(suffix)
-        await self.storage.save(storage_key, data)
+        await self._storage_save(storage_key, data)
         try:
             return await self._ingest(
                 path=normalized,
@@ -831,6 +897,7 @@ class FileService:
                 text=extracted.text,
                 mime_type=mime_type,
                 storage_key=storage_key,
+                storage_backend=self.storage.default_backend,
                 occurred_at=occurred_at,
                 ai_summary=extracted.ai_summary,
                 ai_tags=extracted.ai_tags,
@@ -838,7 +905,10 @@ class FileService:
                 extraction_method=extracted.extraction_method,
             )
         except Exception:
-            await self.storage.delete(storage_key)
+            await self._storage_delete_quietly(
+                storage_key,
+                backend=self.storage.default_backend,
+            )
             raise
 
     async def create_folder(self, path: str) -> DirectorySchema:
@@ -854,7 +924,7 @@ class FileService:
         folder = await self._ensure_folder_chain(normalized)
         if folder is None:  # pragma: no cover - the root path is rejected above
             raise InvalidPathError("A folder path must include a folder name.")
-        await self.cache.bump_version()
+        await self._bump_index_version()
         return self._directory_schema(folder)
 
     async def _require_current_file_for_update(self, file_id: int) -> FileModel:
@@ -915,7 +985,7 @@ class FileService:
             path=target,
             file_name=file_name(target),
         )
-        await self.cache.bump_version()
+        await self._bump_index_version()
         return self._to_schema(file)
 
     async def rename_file(self, file_id: int, *, file_name_value: str) -> FileSchema:
@@ -940,7 +1010,7 @@ class FileService:
             path=target,
             file_name=name,
         )
-        await self.cache.bump_version()
+        await self._bump_index_version()
         return self._to_schema(file)
 
     async def copy_file(self, file_id: int, *, path: str) -> FileSchema:
@@ -957,9 +1027,13 @@ class FileService:
 
         storage_key: str | None = None
         if source.storage_key is not None:
-            data = await self.storage.read(source.storage_key)
+            data = await self._storage_read(
+                source.storage_key,
+                backend=source.storage_backend,
+                file_id=source.id,
+            )
             storage_key = self._new_storage_key(source.extension)
-            await self.storage.save(storage_key, data)
+            await self._storage_save(storage_key, data)
         else:
             data = text.encode("utf-8")
 
@@ -970,6 +1044,9 @@ class FileService:
                 text=text,
                 mime_type=source.mime_type,
                 storage_key=storage_key,
+                storage_backend=(
+                    self.storage.default_backend if storage_key is not None else None
+                ),
                 occurred_at=None,
                 ai_summary=source.ai_summary,
                 ai_tags=list(source.ai_tags),
@@ -978,7 +1055,10 @@ class FileService:
             )
         except Exception:
             if storage_key is not None:
-                await self.storage.delete(storage_key)
+                await self._storage_delete_quietly(
+                    storage_key,
+                    backend=self.storage.default_backend,
+                )
             raise
 
     async def get_file(self, file_id: int) -> FileSchema:
@@ -1094,7 +1174,7 @@ class FileService:
         file.deleted_at = now
         file.updated_at = now
         await self.chunk_repository.mark_source_not_current(SOURCE_FILE, file.id)
-        await self.cache.bump_version()
+        await self._bump_index_version()
 
     async def delete_library_selection(
         self,
@@ -1145,7 +1225,7 @@ class FileService:
         deleted_file_ids = sorted(files_by_id)
         await self.chunk_repository.mark_sources_not_current(SOURCE_FILE, deleted_file_ids)
         await self.folder_repository.delete_many(folders)
-        await self.cache.bump_version()
+        await self._bump_index_version()
         return LibraryDeleteResultSchema(
             deleted_file_ids=deleted_file_ids,
             deleted_folder_paths=top_level_folders,
@@ -1170,7 +1250,11 @@ class FileService:
             raise FileRecordNotFoundError(file_id)
         if not file.storage_key:
             raise FileContentUnavailableError(file_id)
-        data = await self.storage.read(file.storage_key)
+        data = await self._storage_read(
+            file.storage_key,
+            backend=file.storage_backend,
+            file_id=file.id,
+        )
         return FileOriginal(
             data=data,
             file_name=file.file_name,

@@ -10,6 +10,7 @@ from app.infrastructure.database.session import get_db_session
 from app.infrastructure.security.password_hasher import Argon2PasswordHasher
 from app.infrastructure.security.session_token import SessionTokenGenerator
 from app.module.auth.repository.auth_repository import SessionRepository, UserRepository
+from app.module.auth.service.account_service import AccountService
 from app.module.auth.service.auth_service import AuthService
 
 
@@ -24,11 +25,12 @@ def get_cookie_token(
     return request.cookies.get(settings.cookie_name)
 
 
-def get_auth_service(
-    request: Request,
-    session: AsyncSession = Depends(get_db_session),
-) -> AuthService:
-    settings = get_auth_settings(request)
+def build_auth_service(session: AsyncSession, settings: Settings) -> AuthService:
+    """Build the auth service on an explicit session.
+
+    Streaming routes use this with a short-lived public session so they do not
+    pin the request transaction for the lifetime of an SSE response.
+    """
     return AuthService(
         user_repository=UserRepository(session),
         session_repository=SessionRepository(session),
@@ -37,4 +39,22 @@ def get_auth_service(
         session_ttl_hours=settings.session_ttl_hours,
         login_attempt_limit=settings.login_attempt_limit,
         login_window_minutes=settings.login_window_minutes,
+    )
+
+
+def get_auth_service(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+) -> AuthService:
+    return build_auth_service(session, get_auth_settings(request))
+
+
+def get_account_service(
+    session: AsyncSession = Depends(get_db_session),
+) -> AccountService:
+    """Assemble the root-only account management service."""
+    return AccountService(
+        user_repository=UserRepository(session),
+        session_repository=SessionRepository(session),
+        password_hasher=Argon2PasswordHasher(),
     )

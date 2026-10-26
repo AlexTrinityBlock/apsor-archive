@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
+from app.dependency.auth import require_root
 from app.module.knowledge.dependencies import get_ingest_settings_service
 from app.module.knowledge.schema.ingest_settings_schema import (
     IngestSettingsReadSchema,
@@ -9,7 +10,11 @@ from app.module.knowledge.schema.ingest_settings_schema import (
 )
 from app.module.knowledge.service.ingest_settings_service import IngestSettingsService
 
-router = APIRouter(prefix="/settings", tags=["settings"])
+router = APIRouter(
+    prefix="/settings",
+    tags=["settings"],
+    dependencies=[Depends(require_root)],
+)
 
 
 @router.get(

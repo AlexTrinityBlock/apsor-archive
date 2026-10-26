@@ -6,7 +6,7 @@ import { useI18n } from "../../i18n";
 import { useAuth } from "../AuthProvider";
 import { AuthFrame } from "./AuthFrame";
 
-/** First-run form: create the only account and sign in immediately. */
+/** First-run form: create the root account and sign in immediately. */
 export function SetupScreen() {
   const { t } = useI18n();
   const { setup, isSubmitting, error } = useAuth();

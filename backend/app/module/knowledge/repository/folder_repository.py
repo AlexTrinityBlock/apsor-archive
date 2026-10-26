@@ -1,4 +1,8 @@
-"""SQLAlchemy persistence for File Library folders."""
+"""SQLAlchemy persistence for File Library folders.
+
+Folder paths are unique per owner. Every query carries the repository owner so a
+path lookup can never resolve to another account's folder, even without RLS.
+"""
 
 from collections.abc import Sequence
 
@@ -10,12 +14,14 @@ from app.module.knowledge.model.folder_model import FolderModel
 
 
 class FolderRepository:
-    """Queries over explicit folder rows; path validation lives in the service."""
+    """Queries over one owner's explicit folder rows."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, user_id: int) -> None:
         self.session = session
+        self.user_id = user_id
 
     async def add(self, folder: FolderModel) -> FolderModel:
+        folder.user_id = self.user_id
         self.session.add(folder)
         await self.session.flush()
         return folder
@@ -27,6 +33,7 @@ class FolderRepository:
         The unique index rejects the loser; rolling back only the savepoint
         keeps the rest of the job transaction usable.
         """
+        folder.user_id = self.user_id
         try:
             async with self.session.begin_nested():
                 self.session.add(folder)
@@ -39,7 +46,10 @@ class FolderRepository:
             return existing
 
     async def get_by_path(self, path: str) -> FolderModel | None:
-        statement = select(FolderModel).where(FolderModel.path == path)
+        statement = select(FolderModel).where(
+            FolderModel.user_id == self.user_id,
+            FolderModel.path == path,
+        )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def get_children(self, parent_id: int | None) -> list[FolderModel]:
@@ -48,7 +58,14 @@ class FolderRepository:
             if parent_id is None
             else FolderModel.parent_id == parent_id
         )
-        statement = select(FolderModel).where(condition).order_by(FolderModel.name)
+        statement = (
+            select(FolderModel)
+            .where(
+                FolderModel.user_id == self.user_id,
+                condition,
+            )
+            .order_by(FolderModel.name)
+        )
         return list((await self.session.execute(statement)).scalars().all())
 
     async def list_for_update(self, paths: Sequence[str]) -> list[FolderModel]:
@@ -63,7 +80,14 @@ class FolderRepository:
                 FolderModel.path.startswith(f"{path.rstrip('/')}/"),
             )
         ]
-        statement = select(FolderModel).where(or_(*conditions)).with_for_update()
+        statement = (
+            select(FolderModel)
+            .where(
+                FolderModel.user_id == self.user_id,
+                or_(*conditions),
+            )
+            .with_for_update()
+        )
         return list((await self.session.execute(statement)).scalars().all())
 
     async def delete_many(self, folders: Sequence[FolderModel]) -> None:
@@ -71,7 +95,10 @@ class FolderRepository:
         if not folders:
             return
         await self.session.execute(
-            delete(FolderModel).where(FolderModel.id.in_([folder.id for folder in folders]))
+            delete(FolderModel).where(
+                FolderModel.user_id == self.user_id,
+                FolderModel.id.in_([folder.id for folder in folders]),
+            )
         )
 
     async def list_descendants(
@@ -96,6 +123,7 @@ class FolderRepository:
         statement = (
             select(FolderModel)
             .where(
+                FolderModel.user_id == self.user_id,
                 *scope,
                 FolderModel.depth <= root_depth + max_depth,
             )

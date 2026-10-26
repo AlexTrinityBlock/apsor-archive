@@ -34,8 +34,8 @@ class InvalidProfileError(AuthError):
 
 
 class WeakPasswordError(AuthError):
-    def __init__(self) -> None:
-        super().__init__("Password must be between 10 and 256 characters.")
+    def __init__(self, detail: str = "Password must be between 10 and 256 characters.") -> None:
+        super().__init__(detail)
 
 
 class PasswordMismatchError(AuthError):
@@ -46,3 +46,43 @@ class PasswordMismatchError(AuthError):
 class LoginThrottledError(AuthError):
     def __init__(self) -> None:
         super().__init__("Too many login attempts. Try again later.")
+
+
+class AccountDisabledError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("This account is disabled.")
+
+
+class PasswordChangeRequiredError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("You must change your password before continuing.")
+
+
+class ForbiddenError(AuthError):
+    def __init__(self, detail: str = "You do not have permission to perform this action.") -> None:
+        super().__init__(detail)
+
+
+class CurrentPasswordInvalidError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("The current password is invalid.")
+
+
+class AccountNotFoundError(AuthError):
+    def __init__(self, user_id: int) -> None:
+        super().__init__(f"Account {user_id} was not found.")
+
+
+class UsernameTakenError(AuthError):
+    def __init__(self, username: str) -> None:
+        super().__init__(f"Username {username} is already taken.")
+
+
+class CannotDisableRootError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("The root account cannot be disabled.")
+
+
+class LastRootProtectedError(AuthError):
+    def __init__(self) -> None:
+        super().__init__("The only root account must stay enabled.")

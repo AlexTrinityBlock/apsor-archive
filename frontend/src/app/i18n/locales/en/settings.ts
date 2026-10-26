@@ -14,6 +14,11 @@ export const settings = {
     description:
       "Order every system prompt section that opens a new conversation, curate the prompts shown on the empty chat page, and configure the four capability slots: chat, embedding, web search, and web fetch. Stored keys stay on the server and are never returned to this page.",
     meta: "Settings 08 · local-first archive",
+    personalEyebrow: "Settings · personal configuration",
+    personalTitle: "Personal settings.",
+    personalDescription:
+      "Curate the shortcuts shown on your empty chat page and choose the interface language. Account management and global runtime settings belong to the root account.",
+    personalMeta: "Settings 02 · local-first archive",
   },
   utils: {
     providerHashing: "Hashing (offline)",
@@ -185,12 +190,12 @@ export const settings = {
     versionUnavailable: "Version unavailable",
     version: "v{version}",
     access: "Access",
-    accessTitle: "Single owner account",
+    accessTitle: "Multi-user archive",
     accessCopyBefore:
-      "This archive is protected by one keeper account and a server-side session cookie. You are signed in as ",
+      "This archive uses private per-account archives with root-managed global settings. Root manages accounts and runtime configuration; every account can read only its own files, memories, and conversations. You are signed in as ",
     accessCopyAfter:
-      ". There is no cloud account, password recovery, or per-user permission model. Sign out from the rail when you leave a shared machine.",
-    keeperFallback: "the keeper",
+      ". Manage accounts from the Accounts page in the main navigation. There is no cloud account or email recovery; sign out from the rail when you leave a shared machine.",
+    keeperFallback: "the root account",
     readMethod: "Read the method",
   },
   diagnostics: {

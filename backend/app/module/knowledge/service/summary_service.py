@@ -25,6 +25,7 @@ from app.module.knowledge.protocol.memory_repository_protocol import MemoryRepos
 from app.module.knowledge.protocol.summary_repository_protocol import SummaryRepositoryProtocol
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 from app.module.knowledge.schema.memory_schema import SummarySchema
+from app.module.knowledge.service.cache_keys import user_version_scope
 from app.module.knowledge.service.indexer_service import IndexerService
 from app.shared.time import utcnow
 
@@ -40,11 +41,12 @@ SUMMARY_SYSTEM_PROMPT = (
 
 
 class SummaryService:
-    """Create summaries and index them into the shared chunk store."""
+    """Create one owner's summaries and index them into the shared chunk store."""
 
     def __init__(
         self,
         *,
+        user_id: int,
         memory_repository: MemoryRepositoryProtocol,
         summary_repository: SummaryRepositoryProtocol,
         indexer: IndexerService,
@@ -54,6 +56,7 @@ class SummaryService:
         auto_summary_threshold: int,
         min_memories: int,
     ) -> None:
+        self.user_id = user_id
         self.memory_repository = memory_repository
         self.summary_repository = summary_repository
         self.indexer = indexer
@@ -133,6 +136,14 @@ class SummaryService:
             raise SummaryNotEnoughMemoriesError(len(memories), self.min_memories)
         if not memories:
             raise SummaryNotEnoughMemoriesError(0, self.min_memories)
+        # Defense in depth: source_memory_ids must never cross the owner
+        # boundary, even if a caller somehow bypassed the scoped repository.
+        foreign = next(
+            (memory for memory in memories if memory.user_id != self.user_id),
+            None,
+        )
+        if foreign is not None:
+            raise MemoryNotFoundError(foreign.id)
 
         ordered = sorted(memories, key=lambda memory: (memory.memory_time, memory.id))
         draft = await self._ai_draft(ordered)
@@ -141,6 +152,7 @@ class SummaryService:
 
         summary = await self.summary_repository.add(
             MemorySummaryModel(
+                user_id=self.user_id,
                 content=draft.content,
                 period_start=ordered[0].memory_time,
                 period_end=ordered[-1].memory_time,
@@ -156,7 +168,7 @@ class SummaryService:
             source_id=summary.id,
             content=summary.content,
         )
-        await self.cache.bump_version()
+        await self.cache.bump_version(user_version_scope(self.user_id))
         return self._to_schema(summary)
 
     async def create_summary(

@@ -34,6 +34,10 @@ export const core = {
     about: "About",
     openProfile: "Open User Profile",
     userProfile: "User profile",
+    profile: "User profile",
+    personalSection: "Personal",
+    accounts: "Accounts",
+    changePassword: "Change password",
     signOut: "Sign out",
     systemStatus: "System status",
     localArchive: "Local archive",
@@ -79,8 +83,8 @@ export const core = {
     searchArchive: "Search the archive",
   },
   auth: {
-    loadingEyebrow: "Apsor Archive · local archive",
-    loadingLabel: "Checking the keeper session",
+    loadingEyebrow: "Apsor Archive · private archive",
+    loadingLabel: "Checking the archive session",
     opening: "Opening the archive…",
     loadErrorEyebrow: "The archive did not answer",
     loadErrorTitle: "We could not check the session.",
@@ -91,20 +95,20 @@ export const core = {
       asideHeadline: "Memory is not data.",
       asideHeadlineAccent: "It is growth.",
       asideDescription:
-        "A local-first archive of files, memories, and the passages between them. One keeper; no cloud account; the rings stay on this machine.",
+        "A local-first archive of files, memories, and the passages between them. Private accounts; no cloud workspace; the rings stay on this machine.",
       localFirst: "Local-first",
-      singleKeeper: "Single keeper",
+      privateAccounts: "Private accounts",
       noTelemetry: "No telemetry",
       footerProtocol: "0.7px hairline protocol",
       footerYear: "MMXXVI",
     },
     login: {
-      eyebrow: "Keeper sign-in",
+      eyebrow: "Account sign-in",
       title: "Return to the archive.",
       description:
-        "The archive is private. Enter the account created on this machine to read its files and memories.",
+        "The archive is private. Sign in with your own account to read your files and memories; every account keeps its own archive.",
       footer:
-        "No account yet? The setup screen appears automatically when the archive has no keeper. There is no cloud recovery.",
+        "There is no cloud recovery or self-service registration. The root account manages accounts on this machine.",
       username: "Username",
       credentialLabel: "Password",
       showPassword: "Show password",
@@ -115,22 +119,104 @@ export const core = {
       submitting: "Opening the archive…",
     },
     setup: {
-      eyebrow: "First run · create keeper",
+      eyebrow: "First run · create root",
       title: "Press the first ring.",
       description:
-        "This archive has no keeper yet. Create the single account that will protect every file and memory on this machine.",
+        "This archive has no accounts yet. Create the root account; it manages accounts and global settings, and keeps its own private archive.",
       footer:
-        "The password is hashed with Argon2. There is no email recovery, no cloud reset, and no second account. Keep it somewhere safe.",
+        "The password is hashed with Argon2. There is no email recovery or cloud reset. Root can create accounts for other people later.",
       username: "Username",
-      usernameHint: "3–64 characters; letters, digits, dot, dash, underscore.",
+      usernameHint:
+        "3–64 characters; letters, digits, dot, dash, underscore; start and end with a letter or digit.",
       credentialLabel: "Password",
       credentialHint: "At least 10 characters. There is no recovery.",
       confirmCredential: "Confirm password",
       credentialTooShort: "Use at least 10 characters for the password.",
       credentialMismatch: "The password confirmation does not match.",
-      submit: "Create the archive keeper",
+      submit: "Create the root account",
       submitting: "Pressing the first ring…",
     },
+    changePassword: {
+      eyebrow: "Account security",
+      title: "Change your password",
+      description:
+        "Update the password for this account. Your other sessions are signed out; this one stays open.",
+      forcedTitle: "Set a new password before continuing.",
+      forcedDescription:
+        "This account is using a temporary password. Choose your own password to open the archive.",
+      forcedFooter:
+        "You can sign out instead, but the archive stays locked until the password changes.",
+      currentPassword: "Current password",
+      newPassword: "New password",
+      confirmPassword: "Confirm new password",
+      passwordHint:
+        "At least 10 characters. Other sessions are signed out after the change.",
+      currentRequired: "Enter your current password.",
+      currentInvalid: "The current password is not correct.",
+      mismatch: "The new passwords do not match.",
+      weak: "Use at least 10 characters for the new password.",
+      submit: "Change password",
+      submitting: "Changing password…",
+      success: "Password changed. Other sessions were signed out.",
+    },
+  },
+  accounts: {
+    eyebrow: "Root management",
+    title: "Accounts",
+    description:
+      "Manage who can open this archive. Every account keeps a private archive; root also manages global settings.",
+    countOne: "{count} account",
+    countOther: "{count} accounts",
+    create: "Create account",
+    createTitle: "Create an account",
+    createDescription:
+      "The new account receives its own private archive and a one-time temporary password.",
+    username: "Username",
+    usernameHint:
+      "3–64 characters; letters, digits, dot, dash, underscore; start and end with a letter or digit.",
+    usernameRequired: "Enter a username with at least 3 characters.",
+    displayName: "Display name",
+    displayNameHint: "How this person appears in the archive, up to 80 characters.",
+    displayNameRequired: "Enter a display name.",
+    createSubmit: "Create account",
+    creating: "Creating account…",
+    cancel: "Cancel",
+    working: "Working…",
+    empty: "No accounts to show.",
+    emptyDescription: "The root account should always be listed here.",
+    loading: "Reading accounts…",
+    roleRoot: "Root",
+    roleUser: "User",
+    active: "Active",
+    disabled: "Disabled",
+    mustChange: "Must change password",
+    currentAccount: "Current account",
+    lastLogin: "Last sign-in",
+    never: "Never",
+    disable: "Disable",
+    enable: "Enable",
+    resetPassword: "Reset password",
+    disableConfirm:
+      "Disabling this account revokes every active session immediately. The person cannot sign in again until you enable it.",
+    enableConfirm:
+      "Enabling this account lets the person sign in again with their existing password. They must start a new session.",
+    resetTitle: "Reset password",
+    resetDescription:
+      "A new temporary password replaces the current one and revokes every active session. The person must change it at the next sign-in.",
+    temporaryPasswordTitle: "Temporary password",
+    temporaryPasswordDescription:
+      "Share this password with the account holder through a private channel. It cannot be shown again.",
+    temporaryPasswordWarning:
+      "This password is shown once and is not stored in the browser. If you lose it, reset the password again.",
+    temporaryPasswordLabel: "One-time password",
+    copy: "Copy password",
+    copied: "Copied",
+    done: "Done",
+    createSuccess: "Account created.",
+    disableSuccess: "Account disabled. Every session was revoked.",
+    enableSuccess: "Account enabled.",
+    resetSuccess: "Password reset. Every session was revoked.",
+    error: "The account could not be updated.",
   },
   copy: {
     copy: "Copy",
@@ -241,6 +327,29 @@ export const core = {
   errors: {
     invalid_request: "The request was not valid. Check the values and try again.",
     unauthorized: "Your session has expired. Sign in to continue.",
+    invalid_credentials: "The username or password was not accepted.",
+    login_failed: "The username or password was not accepted.",
+    account_disabled:
+      "This account is disabled. Ask the root account to enable it.",
+    password_change_required:
+      "This account must change its password before continuing.",
+    current_password_invalid: "The current password is not correct.",
+    account_not_found: "That account could not be found.",
+    username_taken: "That username is already taken.",
+    cannot_disable_root: "The root account cannot be disabled.",
+    last_root_protected: "The only root account must stay enabled.",
+    setup_required: "The archive still needs its first root account.",
+    setup_already_complete:
+      "The archive already has accounts. Sign in instead.",
+    invalid_username:
+      "Use 3–64 letters, digits, dots, dashes, or underscores; start and end with a letter or digit.",
+    invalid_profile:
+      "The display name must contain between 1 and 80 characters.",
+    weak_password: "Use at least 10 characters for the password.",
+    password_mismatch: "The password confirmation does not match.",
+    login_throttled:
+      "Too many sign-in attempts. Wait a moment and try again.",
+    rate_limited: "Too many requests. Wait a moment and try again.",
     agent_not_configured:
       "The agent is not configured yet. Add an AI provider in Settings.",
     agent_conversation_busy:
@@ -253,9 +362,8 @@ export const core = {
     agent_system_prompt_not_found: "That system prompt could not be found.",
     file_content_unavailable:
       "The file content is not available. It may still be processing or may have been removed.",
-    setup_required: "The archive still needs its first keeper account.",
-    login_failed: "The username or password was not accepted.",
-    rate_limited: "Too many requests. Wait a moment and try again.",
+    storage_unavailable:
+      "File storage is unavailable. Try again shortly.",
     not_found: "The requested item could not be found.",
     internal_error: "The archive hit an internal error. Try again.",
     network_error:

@@ -31,7 +31,7 @@ from app.module.knowledge.schema.search_schema import (
     SearchStatsSchema,
     SummarySearchResultSchema,
 )
-from app.module.knowledge.service.cache_keys import cache_key
+from app.module.knowledge.service.cache_keys import user_cache_key, user_version_scope
 from app.shared.text.ngram import (
     fallback_unigrams,
     unique_query_terms,
@@ -45,11 +45,12 @@ Candidate = tuple[int, str, float]
 
 
 class SearchService:
-    """Retrieve chunks from both paths, de-duplicate them, and hydrate sources."""
+    """Retrieve one owner's chunks from both paths, deduplicate, and hydrate sources."""
 
     def __init__(
         self,
         *,
+        user_id: int,
         chunk_repository: ChunkRepositoryProtocol,
         file_repository: FileRepositoryProtocol,
         memory_repository: MemoryRepositoryProtocol,
@@ -60,6 +61,7 @@ class SearchService:
         candidate_limit: int,
         vector_scan_limit: int,
     ) -> None:
+        self.user_id = user_id
         self.chunk_repository = chunk_repository
         self.file_repository = file_repository
         self.memory_repository = memory_repository
@@ -118,8 +120,9 @@ class SearchService:
         if not terms:
             raise InvalidQueryError("query contains no searchable terms.")
 
-        version = await self.cache.get_version()
-        key = cache_key(
+        version = await self.cache.get_version(user_version_scope(self.user_id))
+        key = user_cache_key(
+            self.user_id,
             version,
             "search",
             cleaned,

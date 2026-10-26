@@ -1,11 +1,13 @@
-"""Manage the ordered system prompt sections.
+"""Manage the ordered, global system prompt sections.
 
 The list is read before every conversation is created, so it is cached under the
-dedicated ``system_prompts`` version scope. Writes bump only that scope; the
-global archive index version stays untouched and archive search caches survive a
-prompt edit.
+dedicated global ``system_prompts`` version scope. Writes bump only that scope;
+the archive index version stays untouched and archive search caches survive a
+prompt edit. Prompt sections are deployment configuration shared by every
+account: the cache is deliberately global, and only the root-guarded router may
+call the write methods.
 
-Every row is equal. The seeded defaults and owner-authored sections share one
+Every row is equal. The seeded defaults and root-authored sections share one
 table and one CRUD surface; reset simply replaces the collection with the four
 seed rows.
 """

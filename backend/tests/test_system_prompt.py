@@ -1,17 +1,29 @@
 """Unified system prompt sections plus the DB-backed frequently used prompts."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import Engine, create_engine, text
 
 from app.module.agent.service.system_prompt import default_sections
 from app.module.agent.test.fake_chat_generator import FakeChatGenerator
-from tests.conftest import TEST_DATABASE_URL
+from tests.conftest import TEST_DATABASE_URL, UserClient
 
 SYSTEM_PROMPT_URL = "/api/v1/agent/settings/system-prompt"
 FREQUENT_PROMPTS_URL = "/api/v1/settings/frequent-prompts"
 DEFAULT_TITLES = ["Identity", "Instructions", "Examples", "Context protocol"]
+
+
+@contextmanager
+def _direct_engine() -> Iterator[Engine]:
+    """Own a maintenance engine so a failed assertion cannot leak a connection."""
+    engine = create_engine(TEST_DATABASE_URL)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
 
 
 def _list_sections(client: TestClient) -> dict[str, Any]:
@@ -68,7 +80,10 @@ def _prompt(system_entry: dict[str, Any]) -> str:
     return system_entry["model"][0]["content"]
 
 
-def test_system_prompt_module_and_section_order(client: TestClient) -> None:
+def test_system_prompt_module_and_section_order(
+    client: TestClient,
+    root_account: UserClient,
+) -> None:
     """Defaults are ordinary rows: editable, deletable, reorderable, and frozen."""
     client.app.state.agent_chat_generator = FakeChatGenerator([])
 
@@ -332,7 +347,10 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     cache = client.app.state.cache
     assert client.portal is not None
     version_before = client.portal.call(cache.get_version, "system_prompts")
-    index_before = client.portal.call(cache.get_version, "index")
+    index_before = client.portal.call(
+        cache.get_version,
+        f"u:{root_account.user_id}:index",
+    )
 
     primed = _list_sections(client)
     assert [item["title"] for item in primed["resources"]] == [
@@ -340,8 +358,7 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
         "Cached title",
     ]
 
-    engine = create_engine(TEST_DATABASE_URL)
-    with engine.begin() as connection:
+    with _direct_engine() as engine, engine.begin() as connection:
         connection.execute(
             text(
                 "UPDATE system_prompt_section SET title = :title, body = :body "
@@ -357,7 +374,6 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
             text("SELECT title FROM system_prompt_section WHERE id = :section_id"),
             {"section_id": cached_id},
         ).scalar_one()
-    engine.dispose()
     assert direct_title == "Direct database title"
 
     stale = _list_sections(client)
@@ -371,7 +387,10 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     assert second_id > cached_id
 
     version_after = client.portal.call(cache.get_version, "system_prompts")
-    index_after = client.portal.call(cache.get_version, "index")
+    index_after = client.portal.call(
+        cache.get_version,
+        f"u:{root_account.user_id}:index",
+    )
     assert version_after == version_before + 1
     assert index_after == index_before
 
@@ -462,19 +481,25 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     assert second_prompt_id > first_prompt_id
 
     # Prime the list cache, then edit the row directly in PostgreSQL. The next
-    # GET must still return the cached snapshot; a real write bumps the
-    # "prompts" scope and the following GET sees the database edit.
+    # GET must still return the cached snapshot; a real write bumps the acting
+    # user's "u:{user_id}:prompts" scope and the following GET sees the edit.
     prompts_cached = client.get(prompts_url)
     assert prompts_cached.status_code == 200
-    prompts_version_before = client.portal.call(cache.get_version, "prompts")
+    prompts_scope = f"u:{root_account.user_id}:prompts"
+    prompts_version_before = client.portal.call(cache.get_version, prompts_scope)
 
-    prompts_engine = create_engine(TEST_DATABASE_URL)
-    with prompts_engine.begin() as connection:
+    with _direct_engine() as prompts_engine, prompts_engine.begin() as connection:
         connection.execute(
-            text("UPDATE frequently_used_prompt SET title = :title WHERE id = :prompt_id"),
-            {"title": "Direct database title", "prompt_id": second_prompt_id},
+            text(
+                "UPDATE frequently_used_prompt SET title = :title "
+                "WHERE id = :prompt_id AND user_id = :user_id"
+            ),
+            {
+                "title": "Direct database title",
+                "prompt_id": second_prompt_id,
+                "user_id": root_account.user_id,
+            },
         )
-    prompts_engine.dispose()
 
     prompts_stale = client.get(prompts_url)
     assert prompts_stale.status_code == 200
@@ -490,7 +515,7 @@ def test_system_prompt_module_and_section_order(client: TestClient) -> None:
     )
     assert third_prompt_created.status_code == 201, third_prompt_created.text
     third_prompt_id = third_prompt_created.json()["id"]
-    prompts_version_after = client.portal.call(cache.get_version, "prompts")
+    prompts_version_after = client.portal.call(cache.get_version, prompts_scope)
     assert prompts_version_after == prompts_version_before + 1
 
     prompts_refreshed = client.get(prompts_url)

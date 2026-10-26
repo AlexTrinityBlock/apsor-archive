@@ -1,8 +1,8 @@
-"""HTTP adapters for the single owner account and cookie sessions."""
+"""HTTP adapters for accounts and cookie sessions."""
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
-from app.dependency.auth import get_current_user
+from app.dependency.auth import get_current_user, require_authenticated
 from app.infrastructure.config.settings import Settings
 from app.module.auth.dependencies import (
     get_auth_service,
@@ -12,6 +12,7 @@ from app.module.auth.dependencies import (
 from app.module.auth.schema.auth_schema import (
     AuthResponseSchema,
     AuthStatusSchema,
+    ChangePasswordSchema,
     LoginSchema,
     SetupSchema,
     UserProfileSchema,
@@ -105,11 +106,32 @@ async def logout(
     return response
 
 
+@router.post(
+    "/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="changePassword",
+)
+async def change_password(
+    payload: ChangePasswordSchema,
+    user: UserSchema = Depends(get_current_user),
+    token: str | None = Depends(get_cookie_token),
+    service: AuthService = Depends(get_auth_service),
+) -> None:
+    """Change the signed-in password; allowed while a change is forced."""
+    await service.change_password(
+        user_id=user.user_id,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+        confirm_password=payload.confirm_password,
+        current_token=token,
+    )
+
+
 @router.get("/me", response_model=UserSchema, operation_id="getCurrentUser")
 async def get_me(
-    user: UserSchema = Depends(get_current_user),
+    user: UserSchema = Depends(require_authenticated),
 ) -> UserSchema:
-    """Return the signed-in owner."""
+    """Return the signed-in account."""
     return user
 
 
@@ -119,7 +141,7 @@ async def get_me(
     operation_id="getUserProfile",
 )
 async def get_profile(
-    user: UserSchema = Depends(get_current_user),
+    user: UserSchema = Depends(require_authenticated),
     service: AuthService = Depends(get_auth_service),
 ) -> UserProfileSchema:
     """Return the display name and every ordered user profile card."""
@@ -133,7 +155,7 @@ async def get_profile(
 )
 async def update_profile(
     payload: UserProfileUpdateSchema,
-    user: UserSchema = Depends(get_current_user),
+    user: UserSchema = Depends(require_authenticated),
     service: AuthService = Depends(get_auth_service),
 ) -> UserProfileSchema:
     """Replace the display name and every profile card atomically."""

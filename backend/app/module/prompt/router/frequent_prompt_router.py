@@ -1,7 +1,13 @@
-"""HTTP adapters for editable frequently used prompts."""
+"""HTTP adapters for editable frequently used prompts.
+
+Every route is authenticated and forwards the acting account to the service.
+All roles manage their own list; there is no root-only guard here.
+"""
 
 from fastapi import APIRouter, Depends, Response, status
 
+from app.dependency.auth import require_authenticated
+from app.module.auth.schema.auth_schema import UserSchema
 from app.module.prompt.dependencies import get_frequent_prompt_service
 from app.module.prompt.schema.frequent_prompt_schema import (
     FrequentlyUsedPromptCreateSchema,
@@ -21,10 +27,11 @@ router = APIRouter(prefix="/settings/frequent-prompts", tags=["prompts"])
     operation_id="listFrequentlyUsedPrompts",
 )
 async def list_frequently_used_prompts(
+    user: UserSchema = Depends(require_authenticated),  # noqa: B008
     service: FrequentlyUsedPromptService = Depends(get_frequent_prompt_service),  # noqa: B008
 ) -> ListResponseSchema[FrequentlyUsedPromptReadSchema]:
-    """List every prompt shortcut in display order."""
-    return await service.list_prompts()
+    """List the acting user's prompt shortcuts in display order."""
+    return await service.list_prompts(user.user_id)
 
 
 @router.post(
@@ -35,10 +42,11 @@ async def list_frequently_used_prompts(
 )
 async def create_frequently_used_prompt(
     payload: FrequentlyUsedPromptCreateSchema,
+    user: UserSchema = Depends(require_authenticated),  # noqa: B008
     service: FrequentlyUsedPromptService = Depends(get_frequent_prompt_service),  # noqa: B008
 ) -> FrequentlyUsedPromptReadSchema:
-    """Create a prompt shortcut."""
-    return await service.create_prompt(payload)
+    """Create a prompt shortcut in the acting user's list."""
+    return await service.create_prompt(user.user_id, payload)
 
 
 @router.post(
@@ -48,10 +56,11 @@ async def create_frequently_used_prompt(
 )
 async def reorder_frequently_used_prompts(
     payload: FrequentlyUsedPromptReorderSchema,
+    user: UserSchema = Depends(require_authenticated),  # noqa: B008
     service: FrequentlyUsedPromptService = Depends(get_frequent_prompt_service),  # noqa: B008
 ) -> ListResponseSchema[FrequentlyUsedPromptReadSchema]:
-    """Replace the complete shortcut order atomically."""
-    return await service.reorder_prompts(payload.prompt_ids)
+    """Replace the acting user's complete shortcut order atomically."""
+    return await service.reorder_prompts(user.user_id, payload.prompt_ids)
 
 
 @router.put(
@@ -62,10 +71,11 @@ async def reorder_frequently_used_prompts(
 async def update_frequently_used_prompt(
     prompt_id: int,
     payload: FrequentlyUsedPromptUpdateSchema,
+    user: UserSchema = Depends(require_authenticated),  # noqa: B008
     service: FrequentlyUsedPromptService = Depends(get_frequent_prompt_service),  # noqa: B008
 ) -> FrequentlyUsedPromptReadSchema:
-    """Replace the title, text, and order of one prompt shortcut."""
-    return await service.update_prompt(prompt_id, payload)
+    """Replace the title, text, and order of one prompt owned by the caller."""
+    return await service.update_prompt(user.user_id, prompt_id, payload)
 
 
 @router.delete(
@@ -75,10 +85,11 @@ async def update_frequently_used_prompt(
 )
 async def delete_frequently_used_prompt(
     prompt_id: int,
+    user: UserSchema = Depends(require_authenticated),  # noqa: B008
     service: FrequentlyUsedPromptService = Depends(get_frequent_prompt_service),  # noqa: B008
 ) -> Response:
-    """Hard-delete one prompt shortcut."""
-    await service.delete_prompt(prompt_id)
+    """Hard-delete one prompt owned by the caller."""
+    await service.delete_prompt(user.user_id, prompt_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

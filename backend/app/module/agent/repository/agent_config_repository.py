@@ -1,4 +1,9 @@
-"""SQLAlchemy persistence for the singleton agent runtime configuration."""
+"""SQLAlchemy persistence for the singleton agent runtime configuration.
+
+The row is global deployment configuration, not private archive content, so it
+has no ``user_id``. Normal accounts read it indirectly at runtime; only a
+root-guarded request may write it.
+"""
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
