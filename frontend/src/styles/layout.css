@@ -224,6 +224,13 @@
   transition: all var(--transition-fast);
 }
 
+.rail-item--action {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .rail-item:hover {
   color: var(--mono-ink);
   background: var(--mono-subtle);
@@ -416,6 +423,31 @@
   height: 24px;
   color: var(--mono-muted);
   border-radius: 3px;
+}
+
+.rail-account__action--labeled {
+  width: auto;
+  flex: none;
+  gap: 5px;
+  padding: 0 6px;
+  font-family: var(--mono-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.rail-account__action-label {
+  display: inline;
+}
+
+.app-shell.rail-collapsed .rail-account__action--labeled {
+  width: 24px;
+  gap: 0;
+  padding: 0;
+}
+
+.app-shell.rail-collapsed .rail-account__action-label {
+  display: none;
 }
 
 .rail-account__action:hover {
@@ -711,6 +743,16 @@
   .app-shell.rail-collapsed .rail-account__actions {
     flex-direction: row;
     gap: 1px;
+  }
+
+  .app-shell.rail-collapsed .rail-account__action--labeled {
+    width: auto;
+    gap: 5px;
+    padding: 0 6px;
+  }
+
+  .app-shell.rail-collapsed .rail-account__action-label {
+    display: inline;
   }
 
   .app-shell.rail-collapsed .rail-colophon {

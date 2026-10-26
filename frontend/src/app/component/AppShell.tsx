@@ -5,10 +5,11 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { useGetHealth } from "../generated-apis-types";
 import { useAuth } from "../auth/AuthProvider";
+import { ChangePasswordDialog } from "../auth/component/ChangePasswordDialog";
 import { useScrollLock } from "../hook/useScrollLock";
 import { localizeStatus, useI18n, type TranslationKey } from "../i18n";
 import { Icon, type IconName } from "./Icon";
@@ -21,6 +22,7 @@ interface NavItem {
   readonly icon: IconName;
   readonly end?: boolean;
   readonly rootOnly?: boolean;
+  readonly action?: "password";
 }
 
 interface NavSection {
@@ -71,6 +73,12 @@ const NAV_SECTIONS: readonly NavSection[] = [
     id: "system",
     items: [
       { to: "/settings", labelKey: "core.nav.settings", icon: "settings" },
+      {
+        to: "/change-password",
+        labelKey: "core.nav.changePassword",
+        icon: "key",
+        action: "password",
+      },
       {
         to: "/accounts",
         labelKey: "core.nav.accounts",
@@ -133,6 +141,7 @@ function readRailPreference(): boolean {
 export function AppShell() {
   const { t } = useI18n();
   const [railCollapsed, setRailCollapsed] = useState(readRailPreference);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const location = useLocation();
   const [drawer, setDrawer] = useState({
     open: false,
@@ -315,6 +324,34 @@ export function AppShell() {
               ) : null}
               {section.items.map((item) => {
                 const label = t(item.labelKey);
+                const content = (
+                  <>
+                    <span className="rail-item-icon" aria-hidden="true">
+                      <Icon name={item.icon} size={18} />
+                    </span>
+                    <span className="rail-item-text">{label}</span>
+                    <span className="rail-item-badge" aria-hidden="true">
+                      {item.index}
+                    </span>
+                  </>
+                );
+                if (item.action === "password") {
+                  return (
+                    <button
+                      key={item.to}
+                      type="button"
+                      className="rail-item rail-item--action"
+                      onClick={() => {
+                        closeDrawer();
+                        setPasswordDialogOpen(true);
+                      }}
+                      data-tooltip={`${label} (${item.index})`}
+                      aria-haspopup="dialog"
+                    >
+                      {content}
+                    </button>
+                  );
+                }
                 return (
                   <NavLink
                     key={item.to}
@@ -326,13 +363,7 @@ export function AppShell() {
                       isActive ? "rail-item active" : "rail-item"
                     }
                   >
-                    <span className="rail-item-icon" aria-hidden="true">
-                      <Icon name={item.icon} size={18} />
-                    </span>
-                    <span className="rail-item-text">{label}</span>
-                    <span className="rail-item-badge" aria-hidden="true">
-                      {item.index}
-                    </span>
+                    {content}
                   </NavLink>
                 );
               })}
@@ -353,24 +384,31 @@ export function AppShell() {
                 </span>
               </div>
               <div className="rail-account__actions">
-                <Link
-                  className="rail-account__action"
-                  to="/change-password"
-                  onClick={closeDrawer}
-                  aria-label={t("core.nav.changePassword")}
-                  title={t("core.nav.changePassword")}
-                >
-                  <Icon name="key" size={15} />
-                </Link>
                 <button
                   type="button"
                   className="rail-account__action"
+                  onClick={() => {
+                    closeDrawer();
+                    setPasswordDialogOpen(true);
+                  }}
+                  aria-label={t("core.nav.changePassword")}
+                  aria-haspopup="dialog"
+                  title={t("core.nav.changePassword")}
+                >
+                  <Icon name="key" size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="rail-account__action rail-account__action--labeled"
                   onClick={() => void logout()}
                   disabled={isSubmitting}
                   aria-label={t("core.nav.signOut")}
                   title={t("core.nav.signOut")}
                 >
                   <Icon name="logout" size={15} />
+                  <span className="rail-account__action-label">
+                    {t("core.nav.signOut")}
+                  </span>
                 </button>
               </div>
             </div>
@@ -417,6 +455,9 @@ export function AppShell() {
         </div>
       </main>
 
+      {passwordDialogOpen ? (
+        <ChangePasswordDialog onClose={() => setPasswordDialogOpen(false)} />
+      ) : null}
     </div>
   );
 }

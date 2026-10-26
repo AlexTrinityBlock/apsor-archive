@@ -24,11 +24,16 @@ function hasFieldErrors(errors: PasswordFieldErrors): boolean {
   return Boolean(errors.current || errors.newPassword || errors.confirm);
 }
 
+interface ChangePasswordFormProps {
+  readonly onSuccess?: () => void;
+}
+
 /**
- * Self-service password form shared by the forced gate and the voluntary
- * route. A wrong current password is a field error, never a session expiry.
+ * Self-service password form shared by the forced gate, the voluntary route,
+ * and the footer dialog. A wrong current password is a field error, never a
+ * session expiry.
  */
-export function ChangePasswordForm() {
+export function ChangePasswordForm({ onSuccess }: ChangePasswordFormProps = {}) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -69,6 +74,7 @@ export function ChangePasswordForm() {
         setFieldErrors({});
         setFormError(null);
         toast.success(t("core.auth.changePassword.success"));
+        onSuccess?.();
       },
       onError: (caught) => {
         if (caught instanceof ApiError) {
