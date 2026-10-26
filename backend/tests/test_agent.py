@@ -59,7 +59,7 @@ READ_USAGE = {
     "prompt_cache_miss_tokens": 7,
 }
 PROMPT_VERSION = "archive-agent-v12"
-TOOLS_VERSION = "archive-tools-v5"
+TOOLS_VERSION = "archive-tools-v6"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -80,6 +80,9 @@ TOOL_NAMES = [
 
 
 DEFAULT_FETCH_DOCUMENT = "# Extracted page\n\nMarkdown body for the fetched page."
+# Smaller than the service default (12,000) so the two-call agent test can walk
+# two pages over a compact fake document.
+FAKE_FETCH_PAGE_CHARS = 3_600
 
 
 class FakeWebResearchService:
@@ -132,30 +135,51 @@ class FakeWebResearchService:
             retrieved_at=self.retrieved_at,
         )
 
+    def _page_ranges(self) -> list[tuple[int, int]]:
+        """Pack whole lines under the fake page budget."""
+        lines = self.fetch_document.split("\n")
+        ranges: list[tuple[int, int]] = []
+        start = 0
+        used = 0
+        index = 0
+        while index < len(lines):
+            added = len(lines[index]) + (1 if index > start else 0)
+            if index > start and used + added > FAKE_FETCH_PAGE_CHARS:
+                ranges.append((start, index))
+                start = index
+                used = 0
+                continue
+            used += added
+            index += 1
+        ranges.append((start, len(lines)))
+        return ranges
+
+    @staticmethod
+    def _page_for_offset(ranges: list[tuple[int, int]], offset: int) -> int:
+        line_index = offset - 1
+        for page_index, (start, end) in enumerate(ranges, start=1):
+            if start <= line_index < end:
+                return page_index
+        return len(ranges) + 1
+
     async def fetch(
         self,
         url: str,
         *,
-        max_chars: int,
-        offset: int = 1,
-        limit: int = 200,
         page: int | None = None,
+        offset: int | None = None,
     ) -> WebFetchResponse:
-        self.fetches.append(
-            {
-                "url": url,
-                "max_chars": max_chars,
-                "offset": offset,
-                "limit": limit,
-                "page": page,
-            }
-        )
+        self.fetches.append({"url": url, "page": page, "offset": offset})
         lines = self.fetch_document.split("\n")
-        bounded_limit = max(1, min(limit, 2_000))
-        total_lines = len(lines)
-        total_pages = max(1, (total_lines + bounded_limit - 1) // bounded_limit)
-        start_index = (page - 1) * bounded_limit if page is not None else offset - 1
-        if start_index >= total_lines:
+        ranges = self._page_ranges()
+        total_pages = len(ranges)
+        if page is not None:
+            requested_page = page
+        elif offset is not None:
+            requested_page = self._page_for_offset(ranges, offset)
+        else:
+            requested_page = 1
+        if requested_page < 1 or requested_page > total_pages:
             return WebFetchResponse(
                 provider="tavily",
                 url=url,
@@ -164,47 +188,31 @@ class FakeWebResearchService:
                 truncated=False,
                 cached=False,
                 retrieved_at=self.retrieved_at,
-                offset=start_index + 1,
-                limit=bounded_limit,
-                page=start_index // bounded_limit + 1,
+                page=requested_page,
                 total_pages=total_pages,
-                total_lines=total_lines,
+                page_chars=0,
                 total_chars=len(self.fetch_document),
-                returned_lines=0,
                 has_more=False,
-                next_offset=None,
                 next_page=None,
                 source_truncated=False,
             )
-        selected = lines[start_index : start_index + bounded_limit]
-        returned_lines = len(selected)
-        end_index = start_index + returned_lines
-        has_more = end_index < total_lines
-        next_offset = end_index + 1 if has_more else None
-        current_page = start_index // bounded_limit + 1
-        next_page = (
-            current_page + 1
-            if has_more and next_offset == current_page * bounded_limit + 1
-            else None
-        )
+        start, end = ranges[requested_page - 1]
+        content = "\n".join(lines[start:end])
+        has_more = requested_page < total_pages
         return WebFetchResponse(
             provider="tavily",
             url=url,
-            content="\n".join(selected),
+            content=content,
             elapsed_ms=4,
             truncated=has_more,
             cached=False,
             retrieved_at=self.retrieved_at,
-            offset=start_index + 1,
-            limit=bounded_limit,
-            page=current_page,
+            page=requested_page,
             total_pages=total_pages,
-            total_lines=total_lines,
+            page_chars=len(content),
             total_chars=len(self.fetch_document),
-            returned_lines=returned_lines,
             has_more=has_more,
-            next_offset=next_offset,
-            next_page=next_page,
+            next_page=requested_page + 1 if has_more else None,
             source_truncated=False,
         )
 
@@ -2253,19 +2261,33 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert 'url="https://example.com/research/page"' in fetch_xml
     assert 'provider="tavily"' in fetch_xml
     assert 'retrieved_at="2026-10-25T00:00:00+00:00"' in fetch_xml
+    assert 'page="1"' in fetch_xml
+    assert 'total_pages="1"' in fetch_xml
+    assert f'page_chars="{len(DEFAULT_FETCH_DOCUMENT)}"' in fetch_xml
+    assert f'total_chars="{len(DEFAULT_FETCH_DOCUMENT)}"' in fetch_xml
+    assert 'has_more="false"' in fetch_xml
+    assert "next_page=" not in fetch_xml
+    assert "[web_fetch: page 1/1. Complete.]" in fetch_xml
     assert "Markdown body for the fetched page." in fetch_xml
     fetch_data = fetch_result["data"]
     assert fetch_data["status"] == "ok"
     assert fetch_data["provider"] == "tavily"
     assert fetch_data["url"] == "https://example.com/research/page"
+    assert fetch_data["page"] == 1
+    assert fetch_data["total_pages"] == 1
+    assert fetch_data["page_chars"] == len(DEFAULT_FETCH_DOCUMENT)
+    assert fetch_data["total_chars"] == len(DEFAULT_FETCH_DOCUMENT)
+    assert fetch_data["has_more"] is False
+    assert fetch_data["next_page"] is None
     assert fetch_data["truncated"] is False
+    assert "offset" not in fetch_data
+    assert "total_lines" not in fetch_data
+    # The v4-style max_chars argument is accepted but hidden and ignored.
     assert web_fake.fetches == [
         {
             "url": "https://example.com/research/page",
-            "max_chars": 4_000,
-            "offset": 1,
-            "limit": 200,
             "page": None,
+            "offset": None,
         }
     ]
 
@@ -2350,7 +2372,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
 
 
 def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
-    """Two web_fetch calls in one turn read a long page without gaps."""
+    """Two page-mode web_fetch calls in one turn read a long page without gaps."""
     document = "\n".join(f"Document line {index:03d}" for index in range(1, 226))
     web_fake = FakeWebResearchService(fetch_document=document)
     client.app.state.web_research_service = web_fake
@@ -2364,7 +2386,7 @@ def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
             ),
             tool_call_result(
                 "web_fetch",
-                {"url": "https://example.com/long", "offset": 201},
+                {"url": "https://example.com/long", "page": 2},
                 call_id="call_fetch_second",
                 usage=TOOL_USAGE,
             ),
@@ -2392,60 +2414,60 @@ def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
 
     first_result, second_result = body["tool_results"]
     first_xml = first_result["model"][0]["content"]
-    assert 'offset="1"' in first_xml
-    assert 'limit="200"' in first_xml
     assert 'page="1"' in first_xml
     assert 'total_pages="2"' in first_xml
-    assert 'total_lines="225"' in first_xml
+    assert 'page_chars="3599"' in first_xml
+    assert f'total_chars="{len(document)}"' in first_xml
     assert 'has_more="true"' in first_xml
-    assert 'next_offset="201"' in first_xml
     assert 'next_page="2"' in first_xml
     assert 'source_truncated="false"' in first_xml
+    assert 'truncated="true"' in first_xml
     assert (
-        "[web_fetch: page 1/2, lines 1-200 of 225. "
-        "More content: call web_fetch again with offset=201 or page=2.]"
+        "[web_fetch: page 1/2. More content: call web_fetch again with page=2.]"
     ) in first_xml
+    assert "offset=" not in first_xml
+    assert "next_offset" not in first_xml
+    assert "total_lines" not in first_xml
+    assert "returned_lines" not in first_xml
+    assert " lines " not in first_xml
     first_data = first_result["data"]
-    assert first_data["offset"] == 1
-    assert first_data["limit"] == 200
     assert first_data["page"] == 1
     assert first_data["total_pages"] == 2
-    assert first_data["total_lines"] == 225
+    assert first_data["page_chars"] == 3_599
     assert first_data["total_chars"] == len(document)
-    assert first_data["returned_lines"] == 200
     assert first_data["has_more"] is True
-    assert first_data["next_offset"] == 201
     assert first_data["next_page"] == 2
     assert first_data["source_truncated"] is False
+    assert first_data["truncated"] is True
+    assert "offset" not in first_data
+    assert "next_offset" not in first_data
+    assert "total_lines" not in first_data
+    assert "returned_lines" not in first_data
 
     second_xml = second_result["model"][0]["content"]
-    assert 'offset="201"' in second_xml
     assert 'page="2"' in second_xml
+    assert 'total_pages="2"' in second_xml
+    assert 'page_chars="449"' in second_xml
     assert 'has_more="false"' in second_xml
-    assert "next_offset=" not in second_xml
     assert "next_page=" not in second_xml
-    assert "[web_fetch: page 2/2, lines 201-225 of 225. Complete.]" in second_xml
+    assert "[web_fetch: page 2/2. Complete.]" in second_xml
     second_data = second_result["data"]
-    assert second_data["offset"] == 201
-    assert second_data["returned_lines"] == 25
+    assert second_data["page"] == 2
+    assert second_data["page_chars"] == 449
     assert second_data["has_more"] is False
-    assert second_data["next_offset"] is None
     assert second_data["next_page"] is None
+    assert second_data["truncated"] is False
 
     assert _web_fetch_body(first_xml) + "\n" + _web_fetch_body(second_xml) == document
     assert web_fake.fetches == [
         {
             "url": "https://example.com/long",
-            "max_chars": 12_000,
-            "offset": 1,
-            "limit": 200,
             "page": None,
+            "offset": None,
         },
         {
             "url": "https://example.com/long",
-            "max_chars": 12_000,
-            "offset": 201,
-            "limit": 200,
-            "page": None,
+            "page": 2,
+            "offset": None,
         },
     ]

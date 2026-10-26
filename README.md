@@ -265,7 +265,7 @@ The agent has two read-only tools for external research:
 | Tool | What it does |
 |---|---|
 | `web_search` | Search the public web with the active `web_search` provider; returns title, URL, score, and a bounded excerpt. |
-| `web_fetch` | Fetch one public `http(s)` URL with the active `web_fetch` provider and return one paginated Markdown slice. |
+| `web_fetch` | Fetch one public `http(s)` URL with the active `web_fetch` provider and return one server-defined Markdown page. |
 
 Tavily is the first adapter (`/search` and `/extract`). The provider seam is a
 protocol, so another search or fetch API can be added without changing the tool
@@ -275,31 +275,33 @@ credentials in the URL, `localhost`/`.local`/`.internal`, and private or
 special-use IP literals.
 
 `web_fetch` caches the complete extracted document once per URL for one hour, so
-paging never calls the provider again. A call returns at most `max_chars`
-characters (1,000–20,000, default 12,000) and at most `limit` whole lines
-(default 200, maximum 2,000). Continue from a 1-based line `offset` (default 1)
-or a `page` number; supplying both explicitly is a validation error. Each result
-reports `page`/`total_pages`, `total_lines`, `returned_lines`, `has_more`,
-`next_offset`, and `next_page`, and the body ends with a plain-text footer such
-as:
+paging never calls the provider again. Its model-facing arguments are only
+`url` and `page` (1-based, default 1). The server hard-wraps every source line
+at 800 characters and packs whole lines into pages of up to 12,000 characters
+(or the configured `web_fetch_max_chars` when smaller, never below 801), so a
+page never exceeds its budget and always contains at least one line. There are no line numbers to count
+and no offsets to compute: call `page=1`, then `page=2`, and so on until
+`has_more=false`. Each result reports `page`/`total_pages`, `page_chars`,
+`total_chars`, `has_more`, `next_page`, and `source_truncated`, and the body ends
+with a plain-text footer such as:
 
 ```text
-[web_fetch: page 1/5, lines 1-150 of 900. More content: call web_fetch again with offset=151.]
+[web_fetch: page 1/2. More content: call web_fetch again with page=2.]
 ```
 
-`next_offset` is authoritative: `max_chars` can end a slice before its line
-window is full, so call `web_fetch` again with `offset=next_offset` until
-`has_more=false`. `next_page` is present only when the slice ended exactly on a
-line-window boundary. Concatenating every slice covers the cached document
-exactly once, with no gaps or overlaps. `source_truncated=true` means the
-extracted source exceeded the 2,000,000-character cache cap. Both tools return
-XML carrying `provider`, `retrieved_at`, `cached`, and `truncated`, and the
-agent is instructed to cite the URL and retrieval time.
+`next_page` is exact whenever `has_more=true`. Concatenating every page covers
+the cached document exactly once, with no gaps or overlaps. The normalized full
+document is capped at 2,000,000 characters; beyond that it is cut and
+`source_truncated=true`, so the final page footer says the source was truncated.
+Both tools return XML carrying `provider`, `retrieved_at`, `cached`, and
+`truncated`, and the agent is instructed to cite the URL and retrieval time.
 
-A conversation freezes its tool snapshot when it is created. An older
-conversation keeps the previous `web_fetch` schema until a new conversation is
-started, but the continuation footer still tells its model how to request the
-next slice with `offset`.
+A conversation freezes its tool snapshot when it is created, so an older
+conversation keeps its previous `web_fetch` schema. The former `offset`,
+`limit`, and `max_chars` arguments are still accepted but hidden from the
+model-facing schema; they exist only so conversations frozen on
+`archive-tools-v4`/`v5` keep validating. Page mode ignores `max_chars` and
+`limit`, and a legacy `offset` simply selects the page that contains that line.
 
 Summary search results and timeline summary events are explicitly marked as
 compressed views:
@@ -1399,7 +1401,7 @@ The integration suite uses one real PostgreSQL test database
 (`apsor_archive_test`) on the same instance, runs sequentially, and resets every
 tracked table between tests. The database is built by `alembic upgrade head`,
 not `create_all`, so the `apsor_app` role, grants, and RLS policies are present
-in every request. There are 35 collected tests; each one exercises the real HTTP
+in every request. There are 46 collected tests; each one exercises the real HTTP
 surface and database. The multi-user tests cover the root/user lifecycle,
 forced password change, one-time temporary passwords, disable/reset session
 revocation, root-only accounts and global settings, private archive isolation
@@ -1416,8 +1418,8 @@ parallel/sequential tool execution, human save-memory approval (no write before
 approval, restart survival, exactly-once approve, reject, orphan/archived
 fail-closed recovery), the approval toggle (default waiting path, direct
 backend-authorized write when off, and pending rows surviving a toggle change),
-the saved-question library, the two read-only web tools, and the
-compressed-summary XML. The provider coverage creates multiple saved rows per
+the saved-question library, the two read-only web tools including page-mode
+traversal and long-line wrapping, and the compressed-summary XML. The provider coverage creates multiple saved rows per
 capability, proves the partial unique active index, clears keys without ever
 returning plaintext, tests the injected provider probe, and verifies identity
 ids are not reused after delete. The prompt coverage creates, lists, updates,

@@ -558,7 +558,7 @@ export const chat = {
       untitledUrl: "Untitled URL",
       chars: "{count} chars",
       page: "page {page}/{total}",
-      lines: "lines {start}-{end} of {total}",
+      totalChars: "document {count} chars",
       morePages: "More pages",
       sourceTruncated: "Source truncated",
       noBodyTitle: "No page body was stored in this result",

@@ -1,4 +1,4 @@
-"""Web research pagination: full-document cache and line slices.
+"""Web research page pagination: full-document cache and server-defined pages.
 
 Every collaborator here is an in-memory fake. No Tavily, HTTP, or live archive
 database is contacted.
@@ -24,6 +24,8 @@ from app.module.web_research.service.web_research_service import WebResearchServ
 
 URL = "https://example.com/guide"
 RETRIEVED_AT = datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
+DEFAULT_FETCH_MAX_CHARS = 20_000
+PAGE_BUDGET = 12_000
 
 
 @dataclass(frozen=True)
@@ -105,6 +107,7 @@ def _service(
     content: str,
     *,
     provider_truncated: bool = False,
+    fetch_max_chars: int = DEFAULT_FETCH_MAX_CHARS,
 ) -> tuple[WebResearchService, FakeWebCache, FakeFetchClient]:
     cache = FakeWebCache()
     client = FakeFetchClient(content, provider_truncated=provider_truncated)
@@ -114,6 +117,7 @@ def _service(
         search_client=FakeSearchClient(),
         fetch_client=client,
         cache=cache,
+        fetch_max_chars=fetch_max_chars,
     )
     return service, cache, client
 
@@ -123,180 +127,196 @@ def _document(lines: int) -> str:
     return "\n".join(f"line {index:04d} payload" for index in range(1, lines + 1))
 
 
+async def _read_all_pages(service: WebResearchService) -> list[WebFetchResponse]:
+    """Walk pages 1..N and assert every continuation link is exact."""
+    responses: list[WebFetchResponse] = []
+    page = 1
+    while True:
+        response = await service.fetch(URL, page=page)
+        responses.append(response)
+        if not response.has_more:
+            return responses
+        assert response.next_page == page + 1
+        page = response.next_page
+
+
 def test_fetch_paginates_full_document_with_one_provider_call() -> None:
     document = _document(1_000)
     service, cache, client = _service(document)
 
-    async def read_every_page() -> list[WebFetchResponse]:
-        responses: list[WebFetchResponse] = []
-        offset = 1
-        while True:
-            response = await service.fetch(
-                URL,
-                max_chars=2_000,
-                offset=offset,
-                limit=200,
-            )
-            responses.append(response)
-            if not response.has_more:
-                return responses
-            assert response.next_offset is not None
-            offset = response.next_offset
+    responses = asyncio.run(_read_all_pages(service))
 
-    responses = asyncio.run(read_every_page())
-
-    assert len(responses) > 1
+    assert len(responses) == 2
     assert "\n".join(response.content for response in responses) == document
-    seen: list[str] = []
-    expected_offset = 1
-    total_lines = len(document.split("\n"))
     for index, response in enumerate(responses):
-        lines = response.content.split("\n")
-        assert response.returned_lines == len(lines)
-        assert response.total_lines == total_lines
-        assert response.total_pages == 5
-        assert response.limit == 200
-        assert response.offset == expected_offset
-        assert response.page == (response.offset - 1) // response.limit + 1
+        assert response.page == index + 1
+        assert response.total_pages == len(responses)
         assert response.total_chars == len(document)
+        assert response.page_chars == len(response.content)
+        assert response.page_chars <= PAGE_BUDGET
         assert response.source_truncated is False
-        if index == 0:
-            assert response.cached is False
-        else:
-            assert response.cached is True
-        aligned_next_page = (
-            response.has_more and response.next_offset == response.page * response.limit + 1
-        )
-        assert response.next_page == (response.page + 1 if aligned_next_page else None)
+        assert response.cached is (index > 0)
         if response.has_more:
-            assert response.next_offset == response.offset + response.returned_lines
+            assert response.next_page == response.page + 1
             assert response.truncated is True
         else:
-            assert response.next_offset is None
             assert response.next_page is None
             assert response.truncated is False
-        seen.extend(lines)
-        expected_offset += response.returned_lines
 
-    assert seen == document.split("\n")
-    assert len(set(seen)) == total_lines
-    # The full document is fetched once and sliced from cache afterwards.
+    # The full document is fetched once and every later page comes from cache.
     assert client.calls == [(URL, 2_000_000)]
     assert cache.ttls == [3_600]
     assert len(cache.values) == 1
 
 
-def test_page_mode_starts_at_the_same_line_as_offset() -> None:
-    document = _document(300)
+def test_single_long_line_is_hard_wrapped_into_contiguous_pages() -> None:
+    document = "a" * 30_000
     service, _cache, _client = _service(document)
 
-    async def compare() -> tuple[WebFetchResponse, WebFetchResponse]:
-        by_page = await service.fetch(URL, max_chars=20_000, limit=50, page=2)
-        by_offset = await service.fetch(URL, max_chars=20_000, limit=50, offset=51)
-        return by_page, by_offset
+    responses = asyncio.run(_read_all_pages(service))
+    wrapped = "\n".join(response.content for response in responses)
+    expected_lines = [
+        document[start : start + 800] for start in range(0, len(document), 800)
+    ]
+    expected = "\n".join(expected_lines)
 
-    by_page, by_offset = asyncio.run(compare())
+    assert len(responses) > 1
+    assert wrapped == expected
+    assert "".join(wrapped.split("\n")) == document
+    for response in responses:
+        assert response.page_chars <= PAGE_BUDGET
+        assert all(len(line) <= 800 for line in response.content.split("\n"))
+    assert responses[-1].total_pages == len(responses)
+    assert responses[-1].total_chars == len(expected)
+    assert responses[-1].has_more is False
+    assert responses[-1].next_page is None
+    assert responses[-1].truncated is False
 
-    assert by_page.content == by_offset.content
-    assert by_page.offset == 51
-    assert by_page.page == 2
-    assert by_page.total_pages == 6
-    assert by_page.content.split("\n")[0] == "line 0051 payload"
-    assert by_page.cached is False
-    assert by_offset.cached is True
 
+def test_web_fetch_args_expose_only_url_and_page() -> None:
+    schema = WebFetchArgs.model_json_schema()
+    assert list(schema["properties"]) == ["url", "page"]
+    assert schema["required"] == ["url"]
 
-def test_web_fetch_args_accept_page_alone_and_reject_two_starts() -> None:
-    parsed = WebFetchArgs(url=URL, page=2)
-    assert parsed.page == 2
-    assert parsed.offset == 1
-    assert parsed.limit == 200
+    parsed = WebFetchArgs(url=URL)
+    assert parsed.page == 1
+    assert parsed.offset is None
+    assert parsed.limit is None
+    assert parsed.max_chars is None
+    assert WebFetchArgs(url=URL, page=2).page == 2
+    # Legacy fields stay accepted for conversations frozen on v4/v5.
+    assert WebFetchArgs(url=URL, offset=5).offset == 5
+    assert WebFetchArgs(url=URL, max_chars=4_000).max_chars == 4_000
 
     with pytest.raises(ValidationError, match=r"Use either offset or page, not both\."):
-        WebFetchArgs(url=URL, offset=1, page=2)
-
+        WebFetchArgs(url=URL, page=2, offset=5)
+    with pytest.raises(ValidationError):
+        WebFetchArgs(url=URL, page=0)
     for arguments in (
         {"offset": 0},
         {"limit": 0},
         {"limit": 2_001},
-        {"page": 0},
     ):
         with pytest.raises(ValidationError):
             WebFetchArgs(url=URL, **arguments)
 
 
-def test_out_of_range_offset_and_page_return_empty_slices() -> None:
+def test_legacy_null_page_is_treated_as_omitted() -> None:
+    """A frozen v5 payload may send page=null together with offset."""
+    parsed = WebFetchArgs(url=URL, page=None, offset=5)
+    assert parsed.page == 1
+    assert parsed.offset == 5
+    assert "page" not in parsed.model_fields_set
+
+
+def test_tiny_fetch_max_still_fits_one_wrapped_line() -> None:
+    """The page budget never drops below one 800-character wrapped line."""
+    service, _cache, _client = _service("x" * 2_500, fetch_max_chars=500)
+
+    first = asyncio.run(service.fetch(URL, page=1))
+
+    assert first.page == 1
+    assert first.total_pages == 4
+    assert first.page_chars == 800
+    assert first.page_chars <= 801
+    assert first.has_more is True
+    assert first.next_page == 2
+
+
+def test_legacy_offset_maps_to_the_containing_page() -> None:
+    document = _document(300)
+    service, _cache, _client = _service(document, fetch_max_chars=1_000)
+
+    async def read_by_offset() -> tuple[
+        WebFetchResponse, WebFetchResponse, WebFetchResponse, WebFetchResponse
+    ]:
+        by_offset = await service.fetch(URL, offset=60)
+        by_page = await service.fetch(URL, page=2)
+        first_page = await service.fetch(URL, page=1)
+        past_end = await service.fetch(URL, offset=10_000)
+        return by_offset, by_page, first_page, past_end
+
+    by_offset, by_page, first_page, past_end = asyncio.run(read_by_offset())
+
+    assert by_offset.page == 2
+    assert by_offset.content == by_page.content
+    # The page starts at its own boundary, not at the requested line.
+    assert by_offset.content.split("\n")[0] == "line 0056 payload"
+    assert first_page.content.split("\n")[0] == "line 0001 payload"
+    assert by_offset.page_chars == len(by_offset.content)
+    assert by_offset.page_chars <= 1_000
+    assert by_offset.has_more is True
+    assert by_offset.next_page == 3
+    assert by_offset.cached is False
+    assert by_page.cached is True
+
+    assert past_end.content == ""
+    assert past_end.page == past_end.total_pages + 1
+    assert past_end.page_chars == 0
+    assert past_end.has_more is False
+    assert past_end.next_page is None
+    assert past_end.total_pages > 1
+    assert past_end.total_chars == len(document)
+    assert past_end.truncated is False
+
+
+def test_out_of_range_page_returns_empty_page_with_real_totals() -> None:
     document = _document(100)
     service, _cache, _client = _service(document)
 
-    async def read_past_the_end() -> tuple[WebFetchResponse, WebFetchResponse]:
-        by_offset = await service.fetch(URL, max_chars=12_000, offset=10_000, limit=200)
-        by_page = await service.fetch(URL, max_chars=12_000, page=99, limit=200)
-        return by_offset, by_page
+    response = asyncio.run(service.fetch(URL, page=99))
 
-    by_offset, by_page = asyncio.run(read_past_the_end())
-
-    for response in (by_offset, by_page):
-        assert response.content == ""
-        assert response.returned_lines == 0
-        assert response.has_more is False
-        assert response.next_offset is None
-        assert response.next_page is None
-        assert response.total_lines == 100
-        assert response.total_pages == 1
-        assert response.truncated is False
-
-    assert by_offset.offset == 10_000
-    assert by_offset.page == 50
-    assert by_page.offset == 19_601
-    assert by_page.page == 99
+    assert response.page == 99
+    assert response.content == ""
+    assert response.page_chars == 0
+    assert response.has_more is False
+    assert response.next_page is None
+    assert response.truncated is False
+    assert response.total_pages == 1
+    assert response.total_chars == len(document)
+    assert response.source_truncated is False
 
 
-def test_long_line_wrapping_preserves_every_character() -> None:
-    document = "a" * 2_500
-    service, _cache, _client = _service(document)
-
-    async def read_wrapped_lines() -> list[WebFetchResponse]:
-        responses: list[WebFetchResponse] = []
-        offset = 1
-        while True:
-            response = await service.fetch(URL, max_chars=1_000, offset=offset, limit=10)
-            responses.append(response)
-            if not response.has_more:
-                return responses
-            assert response.next_offset is not None
-            offset = response.next_offset
-
-    responses = asyncio.run(read_wrapped_lines())
-    wrapped = "\n".join(response.content for response in responses)
-
-    assert len(responses) == 3
-    assert [len(line) for line in wrapped.split("\n")] == [800, 800, 800, 100]
-    assert "".join(wrapped.split("\n")) == document
-    assert responses[-1].returned_lines == 2
-    assert responses[-1].total_lines == 4
-    assert responses[-1].total_chars == 2_503
-    assert responses[-1].truncated is False
-
-
-def test_source_cache_cap_sets_source_truncated(
+def test_source_cache_cap_sets_source_truncated_on_last_page(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(web_research_service, "_MAX_FETCH_CACHE_CHARS", 100)
-    document = "\n".join(["x" * 40, "y" * 40, "z" * 40])
-    service, _cache, _client = _service(document)
+    monkeypatch.setattr(web_research_service, "_MAX_FETCH_CACHE_CHARS", 12_000)
+    document = _document(1_000)
+    # A 1,000-character page budget keeps multiple pages inside the 12,000-char
+    # capped source, so the final page can report the source truncation.
+    service, _cache, client = _service(document, fetch_max_chars=1_000)
 
-    async def read_capped_source() -> WebFetchResponse:
-        return await service.fetch(URL, max_chars=12_000)
+    responses = asyncio.run(_read_all_pages(service))
 
-    response = asyncio.run(read_capped_source())
-
-    assert response.source_truncated is True
-    assert response.truncated is True
-    assert response.has_more is False
-    assert response.total_lines == 3
-    assert response.total_chars == 100
-    assert response.content.endswith("z" * 18)
+    assert len(document) > 12_000
+    assert len(responses) > 1
+    assert all(response.source_truncated is True for response in responses)
+    assert all(response.page_chars <= 1_000 for response in responses)
+    assert responses[-1].has_more is False
+    assert responses[-1].truncated is True
+    assert responses[-1].total_chars == 12_000
+    assert "\n".join(response.content for response in responses) == document[:12_000]
+    assert client.calls == [(URL, 12_000)]
 
 
 def test_empty_content_raises_web_provider_error() -> None:
@@ -304,24 +324,27 @@ def test_empty_content_raises_web_provider_error() -> None:
         service, cache, _client = _service(content)
 
         with pytest.raises(WebProviderError, match="no extractable text"):
-            asyncio.run(service.fetch(URL, max_chars=12_000))
+            asyncio.run(service.fetch(URL))
 
         assert cache.values == {}
 
 
 def test_cache_hit_does_not_require_a_configured_provider() -> None:
-    document = _document(10)
+    document = _document(1_000)
     service, _cache, client = _service(document)
 
     async def read_after_losing_credentials() -> tuple[WebFetchResponse, WebFetchResponse]:
-        first = await service.fetch(URL, max_chars=12_000, limit=5)
+        first = await service.fetch(URL, page=1)
         client.configured = False
-        second = await service.fetch(URL, max_chars=12_000, limit=5, offset=6)
+        second = await service.fetch(URL, page=2)
         return first, second
 
     first, second = asyncio.run(read_after_losing_credentials())
 
     assert first.cached is False
+    assert first.has_more is True
     assert second.cached is True
-    assert second.offset == 6
+    assert second.page == 2
+    assert second.has_more is False
+    assert second.content.startswith(document.split("\n")[len(first.content.split("\n"))])
     assert len(client.calls) == 1

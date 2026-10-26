@@ -790,19 +790,21 @@ async def _web_fetch(
     args: WebFetchArgs,
     services: AgentToolServices,
 ) -> tuple[str, dict[str, Any], None]:
-    """Fetch one public URL and return one line-bounded Markdown slice.
+    """Fetch one public URL and return one server-defined Markdown page.
 
     ``content_chars`` 與 ``truncated`` 都由 service 的實際回應計算，XML 屬性只是
     同一事實的投影；tool 層再裁切時由 ``execute`` 另記 ``tool_truncated``，不覆蓋
-    這裡的 provider 語意。尾端 footer 用純文字告訴模型目前頁碼、行號範圍與如何
-    續讀，因為模型一定會讀到 tool result，即使它忽略了 system prompt。
+    這裡的 provider 語意。尾端 footer 用純文字告訴模型目前頁碼與如何續讀，因為
+    模型一定會讀到 tool result，即使它忽略了 system prompt。
+
+    只有明確送出 ``page`` 時才把它傳給 service；否則讓 service 依 legacy
+    ``offset`` 或預設 page 1 決定起點。``max_chars`` / ``limit`` 是凍結舊對話
+    的相容欄位，page 模式不採用。
     """
     result = await services.web_research_service.fetch(
         args.url,
-        max_chars=args.max_chars,
+        page=args.page if "page" in args.model_fields_set else None,
         offset=args.offset,
-        limit=args.limit,
-        page=args.page,
     )
     retrieved_at = result.retrieved_at.isoformat()
     content_chars = len(result.content)
@@ -814,14 +816,12 @@ async def _web_fetch(
                 "provider": result.provider,
                 "retrieved_at": retrieved_at,
                 "content_chars": content_chars,
-                "offset": result.offset,
-                "limit": result.limit,
                 "page": result.page,
                 "total_pages": result.total_pages,
-                "total_lines": result.total_lines,
+                "page_chars": result.page_chars,
+                "total_chars": result.total_chars,
                 "has_more": _xml_bool(result.has_more),
-                # None 由 _defined 過濾，避免輸出 next_offset="None"。
-                "next_offset": result.next_offset,
+                # None 由 _defined 過濾，避免輸出 next_page="None"。
                 "next_page": result.next_page,
                 "source_truncated": _xml_bool(result.source_truncated),
                 "truncated": _xml_bool(result.truncated),
@@ -838,15 +838,11 @@ async def _web_fetch(
         "provider": result.provider,
         "content_chars": content_chars,
         "content": clip(result.content, WEB_FETCH_PREVIEW_LIMIT),
-        "offset": result.offset,
-        "limit": result.limit,
         "page": result.page,
         "total_pages": result.total_pages,
-        "total_lines": result.total_lines,
+        "page_chars": result.page_chars,
         "total_chars": result.total_chars,
-        "returned_lines": result.returned_lines,
         "has_more": result.has_more,
-        "next_offset": result.next_offset,
         "next_page": result.next_page,
         "source_truncated": result.source_truncated,
         "truncated": result.truncated,
@@ -859,29 +855,23 @@ async def _web_fetch(
 def _web_fetch_footer(result: WebFetchResponse) -> str:
     """Render the plain-text continuation hint appended inside <web_fetch>.
 
-    ``next_offset`` is authoritative because ``max_chars`` can end a slice
-    before its line window is full; ``next_page`` is mentioned only when the
-    slice ended exactly on a window boundary. All values are integers from the
-    service, so the footer cannot smuggle unescaped user content into XML.
+    Pages are contiguous, so ``next_page`` is always exact when ``has_more`` is
+    true. All values are integers from the service, so the footer cannot smuggle
+    unescaped user content into XML.
     """
-    if result.returned_lines == 0:
+    if result.page < 1 or result.page > result.total_pages:
         footer = (
-            f"[web_fetch: offset {result.offset} is past the end ({result.total_lines} lines).]"
+            f"[web_fetch: page {result.page} is past the end "
+            f"({result.total_pages} pages).]"
+        )
+    elif result.has_more:
+        next_page = result.next_page or result.page + 1
+        footer = (
+            f"[web_fetch: page {result.page}/{result.total_pages}. "
+            f"More content: call web_fetch again with page={next_page}.]"
         )
     else:
-        last_line = result.offset + result.returned_lines - 1
-        range_text = (
-            f"page {result.page}/{result.total_pages}, "
-            f"lines {result.offset}-{last_line} of {result.total_lines}."
-        )
-        if result.has_more:
-            next_offset = result.next_offset or last_line + 1
-            continuation = f"call web_fetch again with offset={next_offset}"
-            if result.next_page is not None:
-                continuation += f" or page={result.next_page}"
-            footer = f"[web_fetch: {range_text} More content: {continuation}.]"
-        else:
-            footer = f"[web_fetch: {range_text} Complete.]"
+        footer = f"[web_fetch: page {result.page}/{result.total_pages}. Complete.]"
     if result.source_truncated:
         footer += " The source exceeded the fetch cache cap and was truncated."
     return footer

@@ -28,10 +28,12 @@ from app.module.agent.domain.tool_args import (
 # existing conversations keep their frozen ``pi.system`` and old version string,
 # so their KV cache lineage is untouched.
 PROMPT_VERSION = "archive-agent-v12"
-# v5 paginates web_fetch by line offset/page; it is still the same nine tools,
-# but the frozen tool schema changed, so a new conversation must use a new
-# tools version. Existing conversations keep their frozen pi.system snapshot.
-TOOLS_VERSION = "archive-tools-v5"
+# v6 replaces web_fetch's line-offset pagination with server-defined pages; it
+# is still the same nine tools, but the frozen tool schema changed, so a new
+# conversation must use a new tools version. Existing conversations keep their
+# frozen pi.system snapshot and their hidden legacy offset/max_chars fields
+# still validate in WebFetchArgs.
+TOOLS_VERSION = "archive-tools-v6"
 
 
 @dataclass(frozen=True)
@@ -138,13 +140,10 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="web_fetch",
         description=(
-            "Fetch one public http(s) URL and return a bounded Markdown slice. "
-            "Long pages are paginated: use offset (1-based first line, default "
-            "1) or page, plus limit (maximum lines, default 200). The result "
-            "reports page/total_pages, total_lines, has_more, and next_offset. "
-            "Keep calling web_fetch with offset=next_offset until has_more=false, "
-            "and never claim content beyond what you actually read. Cite the URL. "
-            "Read-only."
+            "Fetch one server-defined page of a public http(s) URL as Markdown. "
+            "Call page=1, then page=2, ... until has_more=false. Pages are "
+            "server-sized, contiguous, and do not require offsets. Never claim "
+            "content beyond what you actually read. Cite the URL. Read-only."
         ),
         args_model=WebFetchArgs,
         requires_confirmation=False,

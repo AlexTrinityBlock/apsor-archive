@@ -158,16 +158,11 @@ export function WebFetchPanel({ item }: PanelProps) {
     textField(data, "provider") ?? t("chat.panels.web.fetchFallback");
   const retrievedAt = textField(data, "retrieved_at");
   const content = textField(data, "content") ?? "";
-  const chars = numberField(data, "content_chars");
+  const pageChars = numberField(data, "page_chars");
+  const chars = numberField(data, "content_chars") ?? pageChars;
+  const totalChars = numberField(data, "total_chars");
   const page = numberField(data, "page");
   const totalPages = numberField(data, "total_pages");
-  const offset = numberField(data, "offset");
-  const returnedLines = numberField(data, "returned_lines");
-  const totalLines = numberField(data, "total_lines");
-  const lineEnd =
-    offset !== null && returnedLines !== null && returnedLines > 0
-      ? offset + returnedLines - 1
-      : null;
   const pageLabel =
     page !== null &&
     totalPages !== null &&
@@ -179,12 +174,12 @@ export function WebFetchPanel({ item }: PanelProps) {
           total: formatNumber(totalPages),
         })
       : null;
-  const lineLabel =
-    offset !== null && totalLines !== null && lineEnd !== null
-      ? t("chat.panels.web.lines", {
-          start: formatNumber(offset),
-          end: formatNumber(lineEnd),
-          total: formatNumber(totalLines),
+  const totalCharsLabel =
+    totalChars !== null &&
+    totalChars > 0 &&
+    (chars === null || totalChars > chars)
+      ? t("chat.panels.web.totalChars", {
+          count: formatNumber(totalChars),
         })
       : null;
   const cached = data?.cached === true;
@@ -220,7 +215,7 @@ export function WebFetchPanel({ item }: PanelProps) {
                 })}`
               : ""}
             {pageLabel ? ` · ${pageLabel}` : ""}
-            {lineLabel ? ` · ${lineLabel}` : ""}
+            {totalCharsLabel ? ` · ${totalCharsLabel}` : ""}
           </code>
         </div>
         <div className="pi-web__badges">
