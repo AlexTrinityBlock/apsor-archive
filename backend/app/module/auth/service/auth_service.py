@@ -1,12 +1,15 @@
-"""Owner-account setup, login, session resolution, and throttling."""
+"""Account setup, login, password change, session resolution, and throttling."""
 
 import threading
 import time
 from datetime import timedelta
+from typing import cast
 
 from app.module.auth.domain.auth_domain import AuthDomain
 from app.module.auth.exception.domain_error import (
+    AccountDisabledError,
     AuthenticationRequiredError,
+    CurrentPasswordInvalidError,
     InvalidCredentialsError,
     InvalidProfileError,
     InvalidUsernameError,
@@ -29,12 +32,13 @@ from app.module.auth.schema.auth_schema import (
     UserProfileCardSchema,
     UserProfileSchema,
     UserProfileUpdateSchema,
+    UserRole,
     UserSchema,
 )
 from app.shared.time import utcnow
 
-# Failed login attempts are process-local. This is a single-user, single-process
-# archive; a multi-process deployment should move the counter to Valkey.
+# Failed login attempts are process-local. The archive is served by one API
+# process; a multi-process deployment should move the counter to Valkey.
 _attempts: dict[str, list[float]] = {}
 _attempt_lock = threading.Lock()
 
@@ -67,6 +71,9 @@ class AuthService:
             user_id=user.id,
             username=user.username,
             display_name=user.display_name,
+            role=cast(UserRole, user.role),
+            is_active=user.is_active,
+            must_change_password=user.must_change_password,
             created_at=user.created_at,
             last_login_at=user.last_login_at,
         )
@@ -120,6 +127,9 @@ class AuthService:
         user = await self.user_repository.create(
             normalized,
             self.password_hasher.hash(password),
+            role="root",
+            is_active=True,
+            must_change_password=False,
         )
         await self.user_repository.touch_login(user, utcnow())
         token = await self._new_session(user)
@@ -138,14 +148,59 @@ class AuthService:
         self._check_throttle(throttle_key)
         user = await self.user_repository.get_by_username(normalized)
         if user is None or not self.password_hasher.verify(user.password_hash, password):
+            # Unknown usernames and wrong passwords share one response. A disabled
+            # account is only revealed after the correct password is supplied.
             self._record_failure(throttle_key)
             raise InvalidCredentialsError()
+        if not user.is_active:
+            self._clear_failures(throttle_key)
+            raise AccountDisabledError()
         self._clear_failures(throttle_key)
         now = utcnow()
         await self.user_repository.touch_login(user, now)
         await self.session_repository.delete_expired(now)
         token = await self._new_session(user)
         return self._to_schema(user), token
+
+    async def change_password(
+        self,
+        *,
+        user_id: int,
+        current_password: str,
+        new_password: str,
+        confirm_password: str,
+        current_token: str | None,
+    ) -> None:
+        """Change the signed-in password and keep only the current session."""
+        user = await self.user_repository.get_by_id(user_id)
+        if user is None:
+            raise AuthenticationRequiredError()
+        if not self.password_hasher.verify(user.password_hash, current_password):
+            raise CurrentPasswordInvalidError()
+        if not AuthDomain.is_valid_password(new_password):
+            raise WeakPasswordError()
+        if new_password != confirm_password:
+            raise PasswordMismatchError()
+        if new_password == current_password:
+            raise WeakPasswordError(
+                "Choose a new password that differs from the current password."
+            )
+
+        now = utcnow()
+        await self.user_repository.update_password(
+            user,
+            password_hash=self.password_hasher.hash(new_password),
+            must_change_password=False,
+            password_changed_at=now,
+            now=now,
+        )
+        if current_token:
+            await self.session_repository.delete_others_for_user(
+                user.id,
+                keep_token_hash=self.token_generator.hash(current_token),
+            )
+        else:
+            await self.session_repository.delete_by_user_id(user.id)
 
     @staticmethod
     def _profile_schema(
@@ -226,6 +281,11 @@ class AuthService:
         if user is None:
             await self.session_repository.delete_by_token_hash(token_hash)
             raise AuthenticationRequiredError()
+        if not user.is_active:
+            await self.session_repository.delete_by_token_hash(token_hash)
+            raise AccountDisabledError()
+        # must_change_password is intentionally not rejected here; the request
+        # guard decides which routes remain reachable while a change is forced.
         if now - user_session.last_seen_at > timedelta(hours=1):
             await self.session_repository.touch(user_session, now)
         return self._to_schema(user)
@@ -250,7 +310,7 @@ class AuthService:
             )
         try:
             user = await self.resolve_session(token)
-        except AuthenticationRequiredError:
+        except (AuthenticationRequiredError, AccountDisabledError):
             return AuthStatusSchema(
                 requires_setup=False,
                 authenticated=False,

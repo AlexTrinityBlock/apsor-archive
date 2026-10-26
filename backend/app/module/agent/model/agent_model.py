@@ -10,11 +10,13 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Index,
     Sequence,
     String,
     Text,
+    UniqueConstraint,
     desc,
     text,
 )
@@ -33,33 +35,54 @@ class AgentConversationModel(Base):
 
     __tablename__ = "agent_conversation"
     __table_args__ = (
+        UniqueConstraint("id", "user_id", name="uq_agent_conversation_id_user_id"),
+        UniqueConstraint(
+            "user_id",
+            "provider_session_id",
+            name="uq_agent_conversation_provider_session_id",
+        ),
+        ForeignKeyConstraint(
+            ["parent_conversation_id", "user_id"],
+            ["agent_conversation.id", "agent_conversation.user_id"],
+            name="fk_agent_conversation_parent_user",
+            ondelete="SET NULL (parent_conversation_id)",
+        ),
+        ForeignKeyConstraint(
+            ["fork_at_entry_id", "user_id"],
+            ["agent_entry.id", "agent_entry.user_id"],
+            name="fk_agent_conversation_fork_entry_user",
+            ondelete="SET NULL (fork_at_entry_id)",
+            use_alter=True,
+        ),
         CheckConstraint("status IN ('active', 'archived')", name="status_valid"),
         Index("ix_agent_conversation_last_entry_at", "last_entry_at"),
         Index("ix_agent_conversation_status", "status"),
+        Index(
+            "ix_agent_conversation_user_id_last_entry_at",
+            "user_id",
+            "last_entry_at",
+        ),
+        Index("ix_agent_conversation_user_id_status", "user_id", "status"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    parent_conversation_id: Mapped[int | None] = mapped_column(
-        ForeignKey("agent_conversation.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    fork_at_entry_id: Mapped[int | None] = mapped_column(
+    user_id: Mapped[int] = mapped_column(
         BigInteger,
         ForeignKey(
-            "agent_entry.id",
-            use_alter=True,
-            name="fk_agent_conversation_fork_at_entry_id_agent_entry",
-            ondelete="SET NULL",
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_agent_conversation_user_id_app_user",
         ),
-        nullable=True,
+        nullable=False,
     )
+    parent_conversation_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    fork_at_entry_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     title: Mapped[str] = mapped_column(Text, nullable=False)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     model: Mapped[str] = mapped_column(String(128), nullable=False)
     provider_session_id: Mapped[UUID] = mapped_column(
         PostgresUUID(as_uuid=True),
         nullable=False,
-        unique=True,
     )
     status: Mapped[str] = mapped_column(
         String(16),
@@ -88,6 +111,26 @@ class AgentEntryModel(Base):
 
     __tablename__ = "agent_entry"
     __table_args__ = (
+        UniqueConstraint("id", "user_id", name="uq_agent_entry_id_user_id"),
+        ForeignKeyConstraint(
+            ["conversation_id", "user_id"],
+            ["agent_conversation.id", "agent_conversation.user_id"],
+            name="fk_agent_entry_conversation_user",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["head_entry_id", "user_id"],
+            ["agent_entry.id", "agent_entry.user_id"],
+            name="fk_agent_entry_head_user",
+            ondelete="SET NULL (head_entry_id)",
+        ),
+        ForeignKeyConstraint(
+            ["by_run_id", "user_id"],
+            ["agent_run.id", "agent_run.user_id"],
+            name="fk_agent_entry_run_user",
+            ondelete="SET NULL (by_run_id)",
+            use_alter=True,
+        ),
         CheckConstraint(
             "kind IN ('pi.user', 'pi.assistant', 'pi.tool-result', "
             "'pi.page-context', 'pi.system', 'pi.reset', 'pi.compaction', "
@@ -110,6 +153,12 @@ class AgentEntryModel(Base):
         Index("ix_agent_entry_conversation_id", "conversation_id", "id"),
         Index("ix_agent_entry_conversation_commit", "conversation_id", "commit_seq"),
         Index(
+            "ix_agent_entry_user_id_conversation_id",
+            "user_id",
+            "conversation_id",
+            "id",
+        ),
+        Index(
             "ix_agent_entry_head",
             "conversation_id",
             desc("id"),
@@ -118,10 +167,16 @@ class AgentEntryModel(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    conversation_id: Mapped[int] = mapped_column(
-        ForeignKey("agent_conversation.id", ondelete="CASCADE"),
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_agent_entry_user_id_app_user",
+        ),
         nullable=False,
     )
+    conversation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     commit_seq: Mapped[int] = mapped_column(
         BigInteger,
         nullable=False,
@@ -130,21 +185,9 @@ class AgentEntryModel(Base):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     model: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
     data: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSONB, nullable=True)
-    head_entry_id: Mapped[int | None] = mapped_column(
-        ForeignKey("agent_entry.id", ondelete="SET NULL"),
-        nullable=True,
-    )
+    head_entry_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     edits: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
-    by_run_id: Mapped[int | None] = mapped_column(
-        BigInteger,
-        ForeignKey(
-            "agent_run.id",
-            use_alter=True,
-            name="fk_agent_entry_by_run_id_agent_run",
-            ondelete="SET NULL",
-        ),
-        nullable=True,
-    )
+    by_run_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -162,6 +205,24 @@ class AgentApprovalModel(Base):
 
     __tablename__ = "agent_approval"
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["conversation_id", "user_id"],
+            ["agent_conversation.id", "agent_conversation.user_id"],
+            name="fk_agent_approval_conversation_user",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "user_id"],
+            ["agent_run.id", "agent_run.user_id"],
+            name="fk_agent_approval_run_user",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["resolved_by_entry_id", "user_id"],
+            ["agent_entry.id", "agent_entry.user_id"],
+            name="fk_agent_approval_resolved_entry_user",
+            ondelete="SET NULL (resolved_by_entry_id)",
+        ),
         CheckConstraint(
             "status IN ('pending', 'approved', 'rejected', 'expired')",
             name="status_valid",
@@ -171,6 +232,12 @@ class AgentApprovalModel(Base):
             "conversation_id",
             "status",
             "id",
+        ),
+        Index(
+            "ix_agent_approval_user_id_conversation_status",
+            "user_id",
+            "conversation_id",
+            "status",
         ),
         Index("ix_agent_approval_run_status", "run_id", "status"),
         Index(
@@ -183,14 +250,17 @@ class AgentApprovalModel(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    conversation_id: Mapped[int] = mapped_column(
-        ForeignKey("agent_conversation.id", ondelete="CASCADE"),
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_agent_approval_user_id_app_user",
+        ),
         nullable=False,
     )
-    run_id: Mapped[int] = mapped_column(
-        ForeignKey("agent_run.id", ondelete="CASCADE"),
-        nullable=False,
-    )
+    conversation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    run_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     tool_call_id: Mapped[str] = mapped_column(String(128), nullable=False)
     tool_name: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(
@@ -202,10 +272,7 @@ class AgentApprovalModel(Base):
     arguments: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     preview: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     resume_state: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    resolved_by_entry_id: Mapped[int | None] = mapped_column(
-        ForeignKey("agent_entry.id", ondelete="SET NULL"),
-        nullable=True,
-    )
+    resolved_by_entry_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     requested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -220,12 +287,43 @@ class AgentRunModel(Base):
 
     __tablename__ = "agent_run"
     __table_args__ = (
+        UniqueConstraint("id", "user_id", name="uq_agent_run_id_user_id"),
+        ForeignKeyConstraint(
+            ["conversation_id", "user_id"],
+            ["agent_conversation.id", "agent_conversation.user_id"],
+            name="fk_agent_run_conversation_user",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["last_entry_id", "user_id"],
+            ["agent_entry.id", "agent_entry.user_id"],
+            name="fk_agent_run_last_entry_user",
+            ondelete="SET NULL (last_entry_id)",
+        ),
+        ForeignKeyConstraint(
+            ["user_entry_id", "user_id"],
+            ["agent_entry.id", "agent_entry.user_id"],
+            name="fk_agent_run_user_entry_user",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint(
             "status IN ('running', 'waiting', 'completed', 'failed', 'cancelled')",
             name="status_valid",
         ),
         Index("ix_agent_run_conversation_id", "conversation_id", "id"),
         Index("ix_agent_run_conversation_status", "conversation_id", "status"),
+        Index(
+            "ix_agent_run_user_id_conversation_id",
+            "user_id",
+            "conversation_id",
+            "id",
+        ),
+        Index(
+            "ix_agent_run_user_id_conversation_status",
+            "user_id",
+            "conversation_id",
+            "status",
+        ),
         Index(
             "uq_agent_run_request",
             "conversation_id",
@@ -242,15 +340,18 @@ class AgentRunModel(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
-    conversation_id: Mapped[int] = mapped_column(
-        ForeignKey("agent_conversation.id", ondelete="CASCADE"),
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_agent_run_user_id_app_user",
+        ),
         nullable=False,
     )
+    conversation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    user_entry_id: Mapped[int] = mapped_column(
-        ForeignKey("agent_entry.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    user_entry_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
@@ -263,10 +364,7 @@ class AgentRunModel(Base):
         default=False,
         server_default=text("false"),
     )
-    last_entry_id: Mapped[int | None] = mapped_column(
-        ForeignKey("agent_entry.id", ondelete="SET NULL"),
-        nullable=True,
-    )
+    last_entry_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(

@@ -6,7 +6,7 @@
  */
 
 /**
- * The result of re-embedding the current chunk corpus.
+ * The result of re-embedding the current and historical chunk corpus.
  */
 export interface EmbeddingReindexSchema {
   dimension: number;

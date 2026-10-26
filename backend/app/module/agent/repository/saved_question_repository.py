@@ -1,9 +1,14 @@
 """SQLAlchemy persistence for the saved-question library.
 
-The repository uses the request-scoped ``AsyncSession`` injected by the
-composition root. Asking a saved question is a JSON request, not an SSE stream,
-so this service may keep its transaction open while the agent runs. The agent
-loop itself still opens its own short-lived sessions.
+The repository is bound to one account and uses the request-scoped
+``AsyncSession`` injected by the composition root. Asking a saved question is a
+JSON request, not an SSE stream, so this service may keep its transaction open
+while the agent runs. The agent loop itself still opens its own short-lived
+sessions.
+
+Every query carries an explicit ``user_id`` predicate even though the request
+transaction also runs with the owner's row-level security context; RLS is
+defense in depth, not a substitute for ownership filters.
 """
 
 from datetime import datetime
@@ -11,14 +16,17 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.module.agent.exception.domain_error import AgentConversationNotFoundError
+from app.module.agent.model.agent_model import AgentConversationModel
 from app.module.agent.model.saved_question_model import SavedQuestionModel
 
 
 class SavedQuestionRepository:
-    """Request-transaction CRUD for saved questions."""
+    """Owner-scoped request-transaction CRUD for saved questions."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, user_id: int) -> None:
         self.session = session
+        self.user_id = user_id
 
     async def add(
         self,
@@ -27,6 +35,7 @@ class SavedQuestionRepository:
         now: datetime,
     ) -> SavedQuestionModel:
         saved_question = SavedQuestionModel(
+            user_id=self.user_id,
             question=question,
             answer=None,
             citations=[],
@@ -50,6 +59,7 @@ class SavedQuestionRepository:
     ) -> list[SavedQuestionModel]:
         statement = (
             select(SavedQuestionModel)
+            .where(SavedQuestionModel.user_id == self.user_id)
             .order_by(SavedQuestionModel.created_at.desc(), SavedQuestionModel.id.desc())
             .limit(limit)
             .offset(offset)
@@ -57,11 +67,19 @@ class SavedQuestionRepository:
         return list((await self.session.execute(statement)).scalars().all())
 
     async def count_questions(self) -> int:
-        statement = select(func.count()).select_from(SavedQuestionModel)
+        statement = (
+            select(func.count())
+            .select_from(SavedQuestionModel)
+            .where(SavedQuestionModel.user_id == self.user_id)
+        )
         return int((await self.session.execute(statement)).scalar_one())
 
     async def get(self, question_id: int) -> SavedQuestionModel | None:
-        return await self.session.get(SavedQuestionModel, question_id)
+        statement = select(SavedQuestionModel).where(
+            SavedQuestionModel.id == question_id,
+            SavedQuestionModel.user_id == self.user_id,
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def update_question(
         self,
@@ -71,7 +89,7 @@ class SavedQuestionRepository:
         reset_answer: bool,
         now: datetime,
     ) -> SavedQuestionModel | None:
-        saved_question = await self.session.get(SavedQuestionModel, question_id)
+        saved_question = await self.get(question_id)
         if saved_question is None:
             return None
         saved_question.question = question
@@ -88,7 +106,7 @@ class SavedQuestionRepository:
         return saved_question
 
     async def delete(self, question_id: int) -> bool:
-        saved_question = await self.session.get(SavedQuestionModel, question_id)
+        saved_question = await self.get(question_id)
         if saved_question is None:
             return False
         await self.session.delete(saved_question)
@@ -107,9 +125,18 @@ class SavedQuestionRepository:
         error_detail: str | None,
         now: datetime,
     ) -> SavedQuestionModel | None:
-        saved_question = await self.session.get(SavedQuestionModel, question_id)
+        """Persist one ask outcome, rejecting a conversation owned by someone else."""
+        saved_question = await self.get(question_id)
         if saved_question is None:
             return None
+        if conversation_id is not None:
+            conversation_statement = select(AgentConversationModel.id).where(
+                AgentConversationModel.id == conversation_id,
+                AgentConversationModel.user_id == self.user_id,
+            )
+            owned = (await self.session.execute(conversation_statement)).scalar_one_or_none()
+            if owned is None:
+                raise AgentConversationNotFoundError(conversation_id)
         saved_question.answer = answer
         saved_question.citations = citations
         saved_question.conversation_id = conversation_id

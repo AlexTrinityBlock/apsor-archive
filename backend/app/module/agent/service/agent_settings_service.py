@@ -1,9 +1,11 @@
-"""Database-backed agent runtime settings.
+"""Database-backed global agent runtime settings.
 
-The settings row is a singleton. Reads lazily create it with the domain defaults
-so a fresh installation has a deterministic config immediately; ``update`` and
-``reset`` always write a full, validated snapshot. Provider and model selection
-live in the existing AI settings service, not here.
+The settings row is a global singleton. Reads lazily create it with the domain
+defaults so a fresh installation has a deterministic config immediately;
+``update`` and ``reset`` always write a full, validated snapshot. Only the
+root-guarded settings router may mutate it, and normal accounts never receive it
+directly. Provider and model selection live in the existing AI settings service,
+not here.
 """
 
 from datetime import datetime

@@ -7,10 +7,12 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Identity,
     Index,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -40,8 +42,21 @@ class MemoryModel(Base):
 
     __tablename__ = "memory"
     __table_args__ = (
+        UniqueConstraint("id", "user_id", name="uq_memory_id_user_id"),
+        ForeignKeyConstraint(
+            ["superseded_by_id", "user_id"],
+            ["memory.id", "memory.user_id"],
+            name="fk_memory_superseded_by_user",
+            ondelete="SET NULL (superseded_by_id)",
+        ),
         Index(
             "ix_memory_time_active",
+            "memory_time",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index(
+            "ix_memory_user_id_time_active",
+            "user_id",
             "memory_time",
             postgresql_where=text("deleted_at IS NULL"),
         ),
@@ -61,12 +76,19 @@ class MemoryModel(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_memory_user_id_app_user",
+        ),
+        nullable=False,
+    )
     title: Mapped[str] = mapped_column(String(120), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default=MEMORY_ACTIVE)
-    superseded_by_id: Mapped[int | None] = mapped_column(
-        ForeignKey("memory.id", ondelete="SET NULL"), nullable=True
-    )
+    superseded_by_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     deprecated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deprecated_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     supersedes_ids: Mapped[list[int]] = mapped_column(

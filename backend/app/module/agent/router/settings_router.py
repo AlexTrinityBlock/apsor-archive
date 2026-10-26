@@ -1,7 +1,13 @@
-"""HTTP adapters for database-backed agent runtime settings."""
+"""HTTP adapters for database-backed agent runtime settings.
+
+The agent configuration is global deployment data. Only the root account may
+read or mutate it; normal accounts receive the same configuration indirectly
+through the agent runtime.
+"""
 
 from fastapi import APIRouter, Depends
 
+from app.dependency.auth import require_root
 from app.module.agent.dependencies import get_agent_settings_service
 from app.module.agent.schema.settings_schema import (
     AgentSettingsReadSchema,
@@ -9,7 +15,11 @@ from app.module.agent.schema.settings_schema import (
 )
 from app.module.agent.service.agent_settings_service import AgentSettingsService
 
-router = APIRouter(prefix="/settings", tags=["agent"])
+router = APIRouter(
+    prefix="/settings",
+    tags=["agent"],
+    dependencies=[Depends(require_root)],
+)
 
 
 @router.get(

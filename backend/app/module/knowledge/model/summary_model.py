@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Identity, Index, Integer, Text, text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Identity, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,10 +16,20 @@ class MemorySummaryModel(Base):
     __tablename__ = "memory_summary"
     __table_args__ = (
         Index("ix_memory_summary_period_end", "period_end"),
+        Index("ix_memory_summary_user_id_period_end", "user_id", "period_end"),
         Index("ix_memory_summary_source_ids", "source_memory_ids", postgresql_using="gin"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_memory_summary_user_id_app_user",
+        ),
+        nullable=False,
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

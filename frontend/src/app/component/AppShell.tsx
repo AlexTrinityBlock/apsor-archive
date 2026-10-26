@@ -18,32 +18,87 @@ import { TreeMark } from "./TreeMark";
 interface NavItem {
   readonly to: string;
   readonly labelKey: TranslationKey;
-  readonly index: string;
   readonly icon: IconName;
   readonly end?: boolean;
+  readonly rootOnly?: boolean;
+}
+
+interface NavSection {
+  readonly id: "main" | "personal" | "system";
+  readonly labelKey?: TranslationKey;
+  readonly items: readonly NavItem[];
+}
+
+interface IndexedNavItem extends NavItem {
+  readonly index: string;
+}
+
+interface IndexedNavSection extends Omit<NavSection, "items"> {
+  readonly items: readonly IndexedNavItem[];
 }
 
 /**
- * The flat rail: seven archive workspaces, then About as the meta page beyond
- * Settings. Order is part of the interface: Chat is the entry point, Settings
- * the exit, and About the colophon.
+ * The rail is grouped, not flat: archive workspaces, a personal block with the
+ * self-only profile, then system pages. The personal block deliberately sits
+ * above Settings so the account card in the footer only carries identity and
+ * session actions.
  */
-const NAV_ITEMS: readonly NavItem[] = [
-  { to: "/chat", labelKey: "core.nav.chat", index: "01", icon: "chat" },
-  { to: "/library", labelKey: "core.nav.library", index: "02", icon: "library" },
-  { to: "/timeline", labelKey: "core.nav.timeline", index: "03", icon: "timeline" },
-  { to: "/memory", labelKey: "core.nav.memory", index: "04", icon: "memory" },
-  { to: "/search", labelKey: "core.nav.search", index: "05", icon: "search" },
+const NAV_SECTIONS: readonly NavSection[] = [
   {
-    to: "/dashboard",
-    labelKey: "core.nav.dashboard",
-    index: "06",
-    icon: "database",
-    end: true,
+    id: "main",
+    items: [
+      { to: "/chat", labelKey: "core.nav.chat", icon: "chat" },
+      { to: "/library", labelKey: "core.nav.library", icon: "library" },
+      { to: "/timeline", labelKey: "core.nav.timeline", icon: "timeline" },
+      { to: "/memory", labelKey: "core.nav.memory", icon: "memory" },
+      { to: "/search", labelKey: "core.nav.search", icon: "search" },
+      {
+        to: "/dashboard",
+        labelKey: "core.nav.dashboard",
+        icon: "database",
+        end: true,
+      },
+    ],
   },
-  { to: "/settings", labelKey: "core.nav.settings", index: "07", icon: "settings" },
-  { to: "/about", labelKey: "core.nav.about", index: "08", icon: "method" },
+  {
+    id: "personal",
+    labelKey: "core.nav.personalSection",
+    items: [
+      { to: "/profile", labelKey: "core.nav.profile", icon: "user" },
+    ],
+  },
+  {
+    id: "system",
+    items: [
+      { to: "/settings", labelKey: "core.nav.settings", icon: "settings" },
+      {
+        to: "/accounts",
+        labelKey: "core.nav.accounts",
+        icon: "users",
+        rootOnly: true,
+      },
+      { to: "/about", labelKey: "core.nav.about", icon: "method" },
+    ],
+  },
 ];
+
+/**
+ * Filter role-only entries first, then number what is actually rendered. This
+ * keeps the mono indices contiguous for non-root readers instead of leaving a
+ * gap where Accounts would have been.
+ */
+function buildNavSections(isRoot: boolean): readonly IndexedNavSection[] {
+  let position = 0;
+  return NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items
+      .filter((item) => !item.rootOnly || isRoot)
+      .map((item) => {
+        position += 1;
+        return { ...item, index: String(position).padStart(2, "0") };
+      }),
+  })).filter((section) => section.items.length > 0);
+}
 
 type StatusTone = "ok" | "degraded" | "error" | "loading";
 
@@ -83,7 +138,11 @@ export function AppShell() {
     open: false,
     path: location.pathname,
   });
-  const drawerOpen = drawer.open && drawer.path === location.pathname;
+  // A redirect can land before the router context re-renders a layout. Use the
+  // browser path for the drawer so a first-login redirect cannot leave the
+  // mobile menu permanently closed.
+  const currentPath = typeof window === "undefined" ? location.pathname : window.location.pathname;
+  const drawerOpen = drawer.open && drawer.path === currentPath;
   const healthQuery = useGetHealth({
     query: {
       enabled: true,
@@ -92,6 +151,8 @@ export function AppShell() {
     },
   });
   const { user, logout, isSubmitting } = useAuth();
+  const isRoot = user?.role === "root";
+  const navSections = buildNavSections(isRoot);
   const displayName = user?.display_name || user?.username || t("core.nav.owner");
 
   useScrollLock(drawerOpen);
@@ -122,8 +183,8 @@ export function AppShell() {
   }, [drawerOpen]);
 
   const openDrawer = useCallback(
-    () => setDrawer({ open: true, path: location.pathname }),
-    [location.pathname],
+    () => setDrawer({ open: true, path: window.location.pathname }),
+    [],
   );
   const closeDrawer = useCallback(
     () => setDrawer((current) => ({ ...current, open: false })),
@@ -244,58 +305,74 @@ export function AppShell() {
         </div>
 
         <nav className="rail-menu" aria-label={t("core.nav.ariaPrimary")}>
-          {NAV_ITEMS.map((item) => {
-            const label = t(item.labelKey);
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                onClick={closeDrawer}
-                data-tooltip={`${label} (${item.index})`}
-                className={({ isActive }) =>
-                  isActive ? "rail-item active" : "rail-item"
-                }
-              >
-                <span className="rail-item-icon" aria-hidden="true">
-                  <Icon name={item.icon} size={18} />
-                </span>
-                <span className="rail-item-text">{label}</span>
-                <span className="rail-item-badge" aria-hidden="true">
-                  {item.index}
-                </span>
-              </NavLink>
-            );
-          })}
+          {navSections.map((section) => (
+            <div
+              key={section.id}
+              className={`rail-section rail-section--${section.id}`}
+            >
+              {section.labelKey ? (
+                <p className="rail-section__label">{t(section.labelKey)}</p>
+              ) : null}
+              {section.items.map((item) => {
+                const label = t(item.labelKey);
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    onClick={closeDrawer}
+                    data-tooltip={`${label} (${item.index})`}
+                    className={({ isActive }) =>
+                      isActive ? "rail-item active" : "rail-item"
+                    }
+                  >
+                    <span className="rail-item-icon" aria-hidden="true">
+                      <Icon name={item.icon} size={18} />
+                    </span>
+                    <span className="rail-item-text">{label}</span>
+                    <span className="rail-item-badge" aria-hidden="true">
+                      {item.index}
+                    </span>
+                  </NavLink>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className="rail-footer">
           {user ? (
             <div className="rail-account">
-              <Link
-                className="rail-account__identity"
-                to="/profile"
-                onClick={closeDrawer}
-                title={t("core.nav.openProfile")}
-              >
+              <div className="rail-account__identity" title={displayName}>
                 <span className="rail-account__mark" aria-hidden="true">
                   {displayName.slice(0, 2).toUpperCase()}
                 </span>
                 <span className="rail-account__copy">
-                  <span>{t("core.nav.userProfile")}</span>
+                  <span className="rail-account__username">{user.username}</span>
                   <strong>{displayName}</strong>
                 </span>
-              </Link>
-              <button
-                type="button"
-                className="rail-account__action"
-                onClick={() => void logout()}
-                disabled={isSubmitting}
-                aria-label={t("core.nav.signOut")}
-                title={t("core.nav.signOut")}
-              >
-                <Icon name="logout" size={15} />
-              </button>
+              </div>
+              <div className="rail-account__actions">
+                <Link
+                  className="rail-account__action"
+                  to="/change-password"
+                  onClick={closeDrawer}
+                  aria-label={t("core.nav.changePassword")}
+                  title={t("core.nav.changePassword")}
+                >
+                  <Icon name="key" size={15} />
+                </Link>
+                <button
+                  type="button"
+                  className="rail-account__action"
+                  onClick={() => void logout()}
+                  disabled={isSubmitting}
+                  aria-label={t("core.nav.signOut")}
+                  title={t("core.nav.signOut")}
+                >
+                  <Icon name="logout" size={15} />
+                </button>
+              </div>
             </div>
           ) : null}
 

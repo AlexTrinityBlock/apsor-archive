@@ -4,6 +4,12 @@ Every write opens its own short session and transaction. This is deliberate: the
 SSE turn loop must not hold a request-scoped session for the lifetime of the
 stream. Each append transaction reserves one ``agent_commit_seq`` value and uses
 it for every entry written in that transaction.
+
+The repository is bound to exactly one account. Every short transaction runs as
+``apsor_app`` with the owner's RLS context, and every request-path query also
+carries an explicit ``user_id`` predicate. A repository instance must never be
+reused for another account. The startup recovery classmethod is the only
+cross-user operation and uses a privileged maintenance session.
 """
 
 from collections.abc import AsyncIterator
@@ -14,8 +20,9 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select, text, update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infrastructure.database.session import Database
 from app.module.agent.domain.agent_domain import (
     ACTIVE_RUN_STATUSES,
     CONVERSATION_ACTIVE,
@@ -54,20 +61,23 @@ from app.module.agent.model.agent_model import (
 
 
 class AgentRepository:
-    """Repository with one transaction per public mutation."""
+    """Repository bound to one account, with one transaction per mutation."""
 
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
-        self.session_factory = session_factory
+    def __init__(self, database: Database, *, user_id: int, role: str) -> None:
+        self.database = database
+        self.user_id = user_id
+        self.role = role
 
     @asynccontextmanager
     async def _transaction(self) -> AsyncIterator[AsyncSession]:
-        async with self.session_factory() as session:
-            async with session.begin():
-                yield session
+        """Open one owner-scoped transaction; the helper owns commit/rollback."""
+        async with self.database.user_session(self.user_id, self.role) as session:
+            yield session
 
     @asynccontextmanager
     async def _read(self) -> AsyncIterator[AsyncSession]:
-        async with self.session_factory() as session:
+        """Open one owner-scoped read transaction."""
+        async with self.database.user_session(self.user_id, self.role) as session:
             yield session
 
     @staticmethod
@@ -81,11 +91,16 @@ class AgentRepository:
     @staticmethod
     async def _lock_conversation(
         session: AsyncSession,
+        *,
+        user_id: int,
         conversation_id: int,
     ) -> AgentConversationModel:
         statement = (
             select(AgentConversationModel)
-            .where(AgentConversationModel.id == conversation_id)
+            .where(
+                AgentConversationModel.id == conversation_id,
+                AgentConversationModel.user_id == user_id,
+            )
             .with_for_update()
         )
         conversation = (await session.execute(statement)).scalar_one_or_none()
@@ -96,6 +111,8 @@ class AgentRepository:
     @staticmethod
     async def _lock_active_run(
         session: AsyncSession,
+        *,
+        user_id: int,
         conversation_id: int,
         run_id: int,
     ) -> AgentRunModel:
@@ -104,6 +121,7 @@ class AgentRepository:
             .where(
                 AgentRunModel.id == run_id,
                 AgentRunModel.conversation_id == conversation_id,
+                AgentRunModel.user_id == user_id,
             )
             .with_for_update()
         )
@@ -127,6 +145,7 @@ class AgentRepository:
     ) -> tuple[AgentConversationModel, AgentEntryModel]:
         async with self._transaction() as session:
             conversation = AgentConversationModel(
+                user_id=self.user_id,
                 title=title,
                 provider=provider,
                 model=model,
@@ -140,6 +159,7 @@ class AgentRepository:
 
             commit_seq = await self._next_commit_seq(session)
             entry = AgentEntryModel(
+                user_id=self.user_id,
                 conversation_id=conversation.id,
                 commit_seq=commit_seq,
                 kind=KIND_SYSTEM,
@@ -170,7 +190,11 @@ class AgentRepository:
         the copied range are dropped.
         """
         async with self._transaction() as session:
-            source = await self._lock_conversation(session, source_id)
+            source = await self._lock_conversation(
+                session,
+                user_id=self.user_id,
+                conversation_id=source_id,
+            )
             if source.status != CONVERSATION_ACTIVE:
                 raise AgentConversationArchivedError(source_id)
 
@@ -178,6 +202,7 @@ class AgentRepository:
                 select(AgentRunModel.id)
                 .where(
                     AgentRunModel.conversation_id == source_id,
+                    AgentRunModel.user_id == self.user_id,
                     AgentRunModel.status.in_(ACTIVE_RUN_STATUSES),
                 )
                 .limit(1)
@@ -187,13 +212,15 @@ class AgentRepository:
 
             cutoff_entry_id = await self._resolve_fork_cutoff(
                 session,
-                source_id,
+                user_id=self.user_id,
+                conversation_id=source_id,
                 at_entry_id=at_entry_id,
             )
             statement = (
                 select(AgentEntryModel)
                 .where(
                     AgentEntryModel.conversation_id == source_id,
+                    AgentEntryModel.user_id == self.user_id,
                     AgentEntryModel.id <= cutoff_entry_id,
                 )
                 .order_by(AgentEntryModel.id.asc())
@@ -201,6 +228,7 @@ class AgentRepository:
             source_entries = list((await session.execute(statement)).scalars().all())
 
             forked = AgentConversationModel(
+                user_id=self.user_id,
                 parent_conversation_id=source.id,
                 fork_at_entry_id=cutoff_entry_id,
                 title=title,
@@ -219,6 +247,7 @@ class AgentRepository:
             for source_entry in source_entries:
                 commit_seq = await self._next_commit_seq(session)
                 copy = AgentEntryModel(
+                    user_id=self.user_id,
                     conversation_id=forked.id,
                     commit_seq=commit_seq,
                     kind=source_entry.kind,
@@ -247,14 +276,16 @@ class AgentRepository:
     @staticmethod
     async def _resolve_fork_cutoff(
         session: AsyncSession,
-        conversation_id: int,
         *,
+        user_id: int,
+        conversation_id: int,
         at_entry_id: int | None,
     ) -> int:
         if at_entry_id is None:
             latest = await session.execute(
                 select(func.max(AgentEntryModel.id)).where(
-                    AgentEntryModel.conversation_id == conversation_id
+                    AgentEntryModel.conversation_id == conversation_id,
+                    AgentEntryModel.user_id == user_id,
                 )
             )
             cutoff_entry_id = latest.scalar_one_or_none()
@@ -262,8 +293,13 @@ class AgentRepository:
                 raise AgentForkEntryInvalidError(conversation_id, 0)
             return int(cutoff_entry_id)
 
-        entry = await session.get(AgentEntryModel, at_entry_id)
-        if entry is None or entry.conversation_id != conversation_id:
+        statement = select(AgentEntryModel).where(
+            AgentEntryModel.id == at_entry_id,
+            AgentEntryModel.conversation_id == conversation_id,
+            AgentEntryModel.user_id == user_id,
+        )
+        entry = (await session.execute(statement)).scalar_one_or_none()
+        if entry is None:
             raise AgentForkEntryInvalidError(conversation_id, at_entry_id)
         return entry.id
 
@@ -274,7 +310,11 @@ class AgentRepository:
         include_deleted: bool = False,
     ) -> AgentConversationModel | None:
         async with self._read() as session:
-            conversation = await session.get(AgentConversationModel, conversation_id)
+            statement = select(AgentConversationModel).where(
+                AgentConversationModel.id == conversation_id,
+                AgentConversationModel.user_id == self.user_id,
+            )
+            conversation = (await session.execute(statement)).scalar_one_or_none()
             if conversation is None:
                 return None
             if not include_deleted and conversation.deleted_at is not None:
@@ -290,7 +330,8 @@ class AgentRepository:
     ) -> list[AgentConversationModel]:
         async with self._read() as session:
             statement = select(AgentConversationModel).where(
-                AgentConversationModel.deleted_at.is_(None)
+                AgentConversationModel.user_id == self.user_id,
+                AgentConversationModel.deleted_at.is_(None),
             )
             if status is not None:
                 statement = statement.where(AgentConversationModel.status == status)
@@ -309,7 +350,10 @@ class AgentRepository:
             statement = (
                 select(func.count())
                 .select_from(AgentConversationModel)
-                .where(AgentConversationModel.deleted_at.is_(None))
+                .where(
+                    AgentConversationModel.user_id == self.user_id,
+                    AgentConversationModel.deleted_at.is_(None),
+                )
             )
             if status is not None:
                 statement = statement.where(AgentConversationModel.status == status)
@@ -324,7 +368,11 @@ class AgentRepository:
         now: datetime,
     ) -> AgentConversationModel | None:
         async with self._transaction() as session:
-            conversation = await self._lock_conversation(session, conversation_id)
+            conversation = await self._lock_conversation(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+            )
             if title is not None:
                 conversation.title = title
             if status is not None:
@@ -336,6 +384,7 @@ class AgentRepository:
                         update(AgentApprovalModel)
                         .where(
                             AgentApprovalModel.conversation_id == conversation_id,
+                            AgentApprovalModel.user_id == self.user_id,
                             AgentApprovalModel.status == "pending",
                         )
                         .values(status="expired", resolved_at=now)
@@ -344,6 +393,7 @@ class AgentRepository:
                         update(AgentRunModel)
                         .where(
                             AgentRunModel.conversation_id == conversation_id,
+                            AgentRunModel.user_id == self.user_id,
                             AgentRunModel.status.in_(ACTIVE_RUN_STATUSES),
                         )
                         .values(
@@ -369,7 +419,10 @@ class AgentRepository:
         async with self._transaction() as session:
             statement = (
                 select(AgentConversationModel)
-                .where(AgentConversationModel.id == conversation_id)
+                .where(
+                    AgentConversationModel.id == conversation_id,
+                    AgentConversationModel.user_id == self.user_id,
+                )
                 .with_for_update()
             )
             conversation = (await session.execute(statement)).scalar_one_or_none()
@@ -383,6 +436,7 @@ class AgentRepository:
                 update(AgentApprovalModel)
                 .where(
                     AgentApprovalModel.conversation_id == conversation_id,
+                    AgentApprovalModel.user_id == self.user_id,
                     AgentApprovalModel.status == "pending",
                 )
                 .values(status="expired", resolved_at=now)
@@ -391,6 +445,7 @@ class AgentRepository:
                 update(AgentRunModel)
                 .where(
                     AgentRunModel.conversation_id == conversation_id,
+                    AgentRunModel.user_id == self.user_id,
                     AgentRunModel.status.in_(ACTIVE_RUN_STATUSES),
                 )
                 .values(
@@ -421,7 +476,11 @@ class AgentRepository:
         AgentEntryModel | None,
     ]:
         async with self._transaction() as session:
-            conversation = await self._lock_conversation(session, conversation_id)
+            conversation = await self._lock_conversation(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+            )
             if conversation.status != CONVERSATION_ACTIVE:
                 raise AgentConversationArchivedError(conversation_id)
 
@@ -429,6 +488,7 @@ class AgentRepository:
                 select(AgentRunModel.id)
                 .where(
                     AgentRunModel.conversation_id == conversation_id,
+                    AgentRunModel.user_id == self.user_id,
                     AgentRunModel.status.in_(ACTIVE_RUN_STATUSES),
                 )
                 .limit(1)
@@ -441,6 +501,7 @@ class AgentRepository:
                     select(AgentRunModel.id)
                     .where(
                         AgentRunModel.conversation_id == conversation_id,
+                        AgentRunModel.user_id == self.user_id,
                         AgentRunModel.request_id == request_id,
                     )
                     .limit(1)
@@ -453,6 +514,7 @@ class AgentRepository:
             if compaction_draft is not None:
                 compaction_entry = await self._append_boundary_entry(
                     session,
+                    user_id=self.user_id,
                     conversation_id=conversation_id,
                     commit_seq=commit_seq,
                     draft=compaction_draft,
@@ -463,10 +525,12 @@ class AgentRepository:
             if page_context_draft is not None and page_context_key is not None:
                 boundary_id = await self._active_boundary_id(
                     session,
-                    conversation_id,
+                    user_id=self.user_id,
+                    conversation_id=conversation_id,
                 )
                 previous_statement = select(AgentEntryModel.data).where(
                     AgentEntryModel.conversation_id == conversation_id,
+                    AgentEntryModel.user_id == self.user_id,
                     AgentEntryModel.kind == KIND_PAGE_CONTEXT,
                 )
                 if boundary_id is not None:
@@ -480,6 +544,7 @@ class AgentRepository:
                 )
                 if previous_key != page_context_key:
                     page_context_entry = AgentEntryModel(
+                        user_id=self.user_id,
                         conversation_id=conversation_id,
                         commit_seq=commit_seq,
                         kind=page_context_draft.kind,
@@ -491,6 +556,7 @@ class AgentRepository:
                     await session.flush()
 
             entry = AgentEntryModel(
+                user_id=self.user_id,
                 conversation_id=conversation_id,
                 commit_seq=commit_seq,
                 kind=draft.kind,
@@ -502,6 +568,7 @@ class AgentRepository:
             await session.flush()
 
             run = AgentRunModel(
+                user_id=self.user_id,
                 conversation_id=conversation_id,
                 request_id=request_id,
                 user_entry_id=entry.id,
@@ -536,13 +603,18 @@ class AgentRepository:
     ) -> AgentEntryModel:
         """Append one standalone compaction/reset boundary and activate it."""
         async with self._transaction() as session:
-            conversation = await self._lock_conversation(session, conversation_id)
+            conversation = await self._lock_conversation(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+            )
             if conversation.status != CONVERSATION_ACTIVE:
                 raise AgentConversationArchivedError(conversation_id)
             active = await session.execute(
                 select(AgentRunModel.id)
                 .where(
                     AgentRunModel.conversation_id == conversation_id,
+                    AgentRunModel.user_id == self.user_id,
                     AgentRunModel.status.in_(ACTIVE_RUN_STATUSES),
                 )
                 .limit(1)
@@ -553,6 +625,7 @@ class AgentRepository:
             commit_seq = await self._next_commit_seq(session)
             entry = await self._append_boundary_entry(
                 session,
+                user_id=self.user_id,
                 conversation_id=conversation_id,
                 commit_seq=commit_seq,
                 draft=draft,
@@ -565,6 +638,7 @@ class AgentRepository:
     async def _append_boundary_entry(
         session: AsyncSession,
         *,
+        user_id: int,
         conversation_id: int,
         commit_seq: int,
         draft: EntryDraft,
@@ -576,6 +650,7 @@ class AgentRepository:
         leaving every earlier transcript row untouched.
         """
         entry = AgentEntryModel(
+            user_id=user_id,
             conversation_id=conversation_id,
             commit_seq=commit_seq,
             kind=draft.kind,
@@ -592,6 +667,8 @@ class AgentRepository:
     @staticmethod
     async def _active_boundary_id(
         session: AsyncSession,
+        *,
+        user_id: int,
         conversation_id: int,
     ) -> int | None:
         """Return the head id from the newest boundary marker, if any."""
@@ -599,6 +676,7 @@ class AgentRepository:
             select(AgentEntryModel.head_entry_id)
             .where(
                 AgentEntryModel.conversation_id == conversation_id,
+                AgentEntryModel.user_id == user_id,
                 AgentEntryModel.head_entry_id.is_not(None),
             )
             .order_by(AgentEntryModel.id.desc())
@@ -616,13 +694,18 @@ class AgentRepository:
         now: datetime,
     ) -> AgentRunModel:
         async with self._transaction() as session:
-            conversation = await self._lock_conversation(session, conversation_id)
+            conversation = await self._lock_conversation(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+            )
             if conversation.status != CONVERSATION_ACTIVE:
                 raise AgentConversationArchivedError(conversation_id)
             active = await session.execute(
                 select(AgentRunModel.id)
                 .where(
                     AgentRunModel.conversation_id == conversation_id,
+                    AgentRunModel.user_id == self.user_id,
                     AgentRunModel.status.in_(ACTIVE_RUN_STATUSES),
                 )
                 .limit(1)
@@ -634,6 +717,7 @@ class AgentRepository:
                     select(AgentRunModel.id)
                     .where(
                         AgentRunModel.conversation_id == conversation_id,
+                        AgentRunModel.user_id == self.user_id,
                         AgentRunModel.request_id == request_id,
                     )
                     .limit(1)
@@ -641,6 +725,7 @@ class AgentRepository:
                 if duplicate.scalar_one_or_none() is not None:
                     raise AgentRequestDuplicateError(request_id)
             run = AgentRunModel(
+                user_id=self.user_id,
                 conversation_id=conversation_id,
                 request_id=request_id,
                 user_entry_id=user_entry_id,
@@ -662,10 +747,20 @@ class AgentRepository:
         now: datetime,
     ) -> AgentEntryModel:
         async with self._transaction() as session:
-            conversation = await self._lock_conversation(session, conversation_id)
-            run = await self._lock_active_run(session, conversation_id, run_id)
+            conversation = await self._lock_conversation(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+            )
+            run = await self._lock_active_run(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+                run_id=run_id,
+            )
             commit_seq = await self._next_commit_seq(session)
             entry = AgentEntryModel(
+                user_id=self.user_id,
                 conversation_id=conversation_id,
                 commit_seq=commit_seq,
                 kind=draft.kind,
@@ -689,12 +784,22 @@ class AgentRepository:
         now: datetime,
     ) -> list[AgentEntryModel]:
         async with self._transaction() as session:
-            conversation = await self._lock_conversation(session, conversation_id)
-            run = await self._lock_active_run(session, conversation_id, run_id)
+            conversation = await self._lock_conversation(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+            )
+            run = await self._lock_active_run(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+                run_id=run_id,
+            )
             commit_seq = await self._next_commit_seq(session)
             entries: list[AgentEntryModel] = []
             for draft in drafts:
                 entry = AgentEntryModel(
+                    user_id=self.user_id,
                     conversation_id=conversation_id,
                     commit_seq=commit_seq,
                     kind=draft.kind,
@@ -730,12 +835,22 @@ class AgentRepository:
         if not approval_drafts:
             raise ValueError("pause_run_with_approvals requires at least one approval")
         async with self._transaction() as session:
-            conversation = await self._lock_conversation(session, conversation_id)
-            run = await self._lock_active_run(session, conversation_id, run_id)
+            conversation = await self._lock_conversation(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+            )
+            run = await self._lock_active_run(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+                run_id=run_id,
+            )
             commit_seq = await self._next_commit_seq(session)
             entries: list[AgentEntryModel] = []
             for draft in result_drafts:
                 entry = AgentEntryModel(
+                    user_id=self.user_id,
                     conversation_id=conversation_id,
                     commit_seq=commit_seq,
                     kind=draft.kind,
@@ -751,6 +866,7 @@ class AgentRepository:
             approvals: list[AgentApprovalModel] = []
             for approval_draft in approval_drafts:
                 approval = AgentApprovalModel(
+                    user_id=self.user_id,
                     conversation_id=conversation_id,
                     run_id=run.id,
                     tool_call_id=approval_draft.tool_call_id,
@@ -782,7 +898,8 @@ class AgentRepository:
     ) -> list[AgentApprovalModel]:
         async with self._read() as session:
             statement = select(AgentApprovalModel).where(
-                AgentApprovalModel.conversation_id == conversation_id
+                AgentApprovalModel.conversation_id == conversation_id,
+                AgentApprovalModel.user_id == self.user_id,
             )
             if status is not None:
                 statement = statement.where(AgentApprovalModel.status == status)
@@ -791,7 +908,11 @@ class AgentRepository:
 
     async def get_approval(self, approval_id: int) -> AgentApprovalModel | None:
         async with self._read() as session:
-            return await session.get(AgentApprovalModel, approval_id)
+            statement = select(AgentApprovalModel).where(
+                AgentApprovalModel.id == approval_id,
+                AgentApprovalModel.user_id == self.user_id,
+            )
+            return (await session.execute(statement)).scalar_one_or_none()
 
     async def list_pending_approvals(self, run_id: int) -> list[AgentApprovalModel]:
         async with self._read() as session:
@@ -799,6 +920,7 @@ class AgentRepository:
                 select(AgentApprovalModel)
                 .where(
                     AgentApprovalModel.run_id == run_id,
+                    AgentApprovalModel.user_id == self.user_id,
                     AgentApprovalModel.status == "pending",
                 )
                 .order_by(AgentApprovalModel.id.asc())
@@ -821,7 +943,10 @@ class AgentRepository:
             approval = (
                 await session.execute(
                     select(AgentApprovalModel)
-                    .where(AgentApprovalModel.id == approval_id)
+                    .where(
+                        AgentApprovalModel.id == approval_id,
+                        AgentApprovalModel.user_id == self.user_id,
+                    )
                     .with_for_update()
                 )
             ).scalar_one_or_none()
@@ -829,7 +954,8 @@ class AgentRepository:
                 raise AgentApprovalNotFoundError(approval_id)
             conversation = await self._lock_conversation(
                 session,
-                approval.conversation_id,
+                user_id=self.user_id,
+                conversation_id=approval.conversation_id,
             )
             if conversation.status != CONVERSATION_ACTIVE:
                 raise AgentConversationArchivedError(conversation.id)
@@ -842,6 +968,7 @@ class AgentRepository:
                     .where(
                         AgentRunModel.id == approval.run_id,
                         AgentRunModel.conversation_id == approval.conversation_id,
+                        AgentRunModel.user_id == self.user_id,
                     )
                     .with_for_update()
                 )
@@ -855,6 +982,7 @@ class AgentRepository:
                 await session.execute(
                     select(func.min(AgentApprovalModel.id)).where(
                         AgentApprovalModel.run_id == run.id,
+                        AgentApprovalModel.user_id == self.user_id,
                         AgentApprovalModel.status == "pending",
                     )
                 )
@@ -883,7 +1011,10 @@ class AgentRepository:
             approval = (
                 await session.execute(
                     select(AgentApprovalModel)
-                    .where(AgentApprovalModel.id == approval_id)
+                    .where(
+                        AgentApprovalModel.id == approval_id,
+                        AgentApprovalModel.user_id == self.user_id,
+                    )
                     .with_for_update()
                 )
             ).scalar_one_or_none()
@@ -891,7 +1022,8 @@ class AgentRepository:
                 raise AgentApprovalNotFoundError(approval_id)
             conversation = await self._lock_conversation(
                 session,
-                approval.conversation_id,
+                user_id=self.user_id,
+                conversation_id=approval.conversation_id,
             )
             if conversation.status != CONVERSATION_ACTIVE:
                 raise AgentConversationArchivedError(conversation.id)
@@ -907,6 +1039,7 @@ class AgentRepository:
                     .where(
                         AgentRunModel.id == approval.run_id,
                         AgentRunModel.conversation_id == approval.conversation_id,
+                        AgentRunModel.user_id == self.user_id,
                     )
                     .with_for_update()
                 )
@@ -918,6 +1051,7 @@ class AgentRepository:
 
             commit_seq = await self._next_commit_seq(session)
             entry = AgentEntryModel(
+                user_id=self.user_id,
                 conversation_id=approval.conversation_id,
                 commit_seq=commit_seq,
                 kind=KIND_TOOL_RESULT,
@@ -938,6 +1072,7 @@ class AgentRepository:
                         select(AgentApprovalModel)
                         .where(
                             AgentApprovalModel.run_id == run.id,
+                            AgentApprovalModel.user_id == self.user_id,
                             AgentApprovalModel.status == "pending",
                         )
                         .order_by(AgentApprovalModel.id.asc())
@@ -1023,6 +1158,7 @@ class AgentRepository:
                 .where(
                     AgentRunModel.id == run_id,
                     AgentRunModel.conversation_id == conversation_id,
+                    AgentRunModel.user_id == self.user_id,
                 )
                 .with_for_update()
             )
@@ -1041,13 +1177,20 @@ class AgentRepository:
 
     async def get_run(self, run_id: int) -> AgentRunModel | None:
         async with self._read() as session:
-            return await session.get(AgentRunModel, run_id)
+            statement = select(AgentRunModel).where(
+                AgentRunModel.id == run_id,
+                AgentRunModel.user_id == self.user_id,
+            )
+            return (await session.execute(statement)).scalar_one_or_none()
 
     async def get_latest_run(self, conversation_id: int) -> AgentRunModel | None:
         async with self._read() as session:
             statement = (
                 select(AgentRunModel)
-                .where(AgentRunModel.conversation_id == conversation_id)
+                .where(
+                    AgentRunModel.conversation_id == conversation_id,
+                    AgentRunModel.user_id == self.user_id,
+                )
                 .order_by(AgentRunModel.id.desc())
                 .limit(1)
             )
@@ -1055,12 +1198,17 @@ class AgentRepository:
 
     async def get_entry(self, entry_id: int) -> AgentEntryModel | None:
         async with self._read() as session:
-            return await session.get(AgentEntryModel, entry_id)
+            statement = select(AgentEntryModel).where(
+                AgentEntryModel.id == entry_id,
+                AgentEntryModel.user_id == self.user_id,
+            )
+            return (await session.execute(statement)).scalar_one_or_none()
 
     async def latest_entry_id(self, conversation_id: int) -> int | None:
         async with self._read() as session:
             statement = select(func.max(AgentEntryModel.id)).where(
-                AgentEntryModel.conversation_id == conversation_id
+                AgentEntryModel.conversation_id == conversation_id,
+                AgentEntryModel.user_id == self.user_id,
             )
             return (await session.execute(statement)).scalar_one_or_none()
 
@@ -1068,7 +1216,10 @@ class AgentRepository:
         async with self._read() as session:
             statement = (
                 select(AgentEntryModel)
-                .where(AgentEntryModel.by_run_id == run_id)
+                .where(
+                    AgentEntryModel.by_run_id == run_id,
+                    AgentEntryModel.user_id == self.user_id,
+                )
                 .order_by(AgentEntryModel.id.asc())
             )
             return list((await session.execute(statement)).scalars().all())
@@ -1081,7 +1232,8 @@ class AgentRepository:
     ) -> list[AgentEntryModel]:
         async with self._read() as session:
             statement = select(AgentEntryModel).where(
-                AgentEntryModel.conversation_id == conversation_id
+                AgentEntryModel.conversation_id == conversation_id,
+                AgentEntryModel.user_id == self.user_id,
             )
             if cutoff_entry_id is not None:
                 statement = statement.where(AgentEntryModel.id <= cutoff_entry_id)
@@ -1097,7 +1249,8 @@ class AgentRepository:
     ) -> tuple[list[AgentEntryModel], bool]:
         async with self._read() as session:
             statement = select(AgentEntryModel).where(
-                AgentEntryModel.conversation_id == conversation_id
+                AgentEntryModel.conversation_id == conversation_id,
+                AgentEntryModel.user_id == self.user_id,
             )
             if after_id is not None:
                 statement = statement.where(AgentEntryModel.id > after_id)
@@ -1111,15 +1264,23 @@ class AgentRepository:
             statement = (
                 select(func.count())
                 .select_from(AgentEntryModel)
-                .where(AgentEntryModel.conversation_id == conversation_id)
+                .where(
+                    AgentEntryModel.conversation_id == conversation_id,
+                    AgentEntryModel.user_id == self.user_id,
+                )
             )
             return int((await session.execute(statement)).scalar_one())
 
     async def last_page_context_key(self, conversation_id: int) -> str | None:
         async with self._read() as session:
-            boundary_id = await self._active_boundary_id(session, conversation_id)
+            boundary_id = await self._active_boundary_id(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+            )
             statement = select(AgentEntryModel.data).where(
                 AgentEntryModel.conversation_id == conversation_id,
+                AgentEntryModel.user_id == self.user_id,
                 AgentEntryModel.kind == KIND_PAGE_CONTEXT,
             )
             if boundary_id is not None:
@@ -1136,6 +1297,7 @@ class AgentRepository:
             statement = select(AgentRunModel.status, AgentRunModel.abort_requested).where(
                 AgentRunModel.id == run_id,
                 AgentRunModel.conversation_id == conversation_id,
+                AgentRunModel.user_id == self.user_id,
             )
             row = (await session.execute(statement)).one_or_none()
             if row is None:
@@ -1143,8 +1305,13 @@ class AgentRepository:
             status, abort_requested = row
             return bool(abort_requested) or status in TERMINAL_RUN_STATUSES
 
-    async def recover_stale_runs(self, *, now: datetime) -> int:
-        """Recover runs orphaned by an API restart.
+    @classmethod
+    async def recover_stale_runs(cls, database: Database, *, now: datetime) -> int:
+        """Recover runs orphaned by an API restart across every account.
+
+        This is startup maintenance, not request work: it intentionally uses the
+        privileged owner session because no user context exists before serving.
+        User-scoped repositories do not expose recovery.
 
         A stale ``running`` run failed mid-flight and is marked ``failed`` with
         ``interrupted``. A ``waiting`` run is resumable only while it still has a
@@ -1152,7 +1319,7 @@ class AgentRepository:
         ``approval_orphaned`` error. Pending approvals on terminal runs or
         inactive conversations are expired.
         """
-        async with self._transaction() as session:
+        async with database.maintenance_session() as session:
             await session.execute(
                 text(
                     """

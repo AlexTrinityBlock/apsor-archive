@@ -5,6 +5,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './accountCreateSchema';
+export * from './accountListSchema';
+export * from './accountSchema';
+export * from './accountTemporaryPasswordSchema';
 export * from './agentApprovalSchema';
 export * from './agentApprovalSchemaArguments';
 export * from './agentApprovalSchemaPreview';
@@ -43,6 +47,7 @@ export * from './authResponseSchema';
 export * from './authStatusSchema';
 export * from './bodyUploadFile';
 export * from './bodyUploadFileAsync';
+export * from './changePasswordSchema';
 export * from './chunkSchema';
 export * from './directorySchema';
 export * from './embeddingReindexSchema';
@@ -150,6 +155,7 @@ export * from './userProfileCardInputSchema';
 export * from './userProfileCardSchema';
 export * from './userProfileSchema';
 export * from './userProfileUpdateSchema';
+export * from './userRole';
 export * from './userSchema';
 export * from './validationError';
 export * from './validationErrorCtx';

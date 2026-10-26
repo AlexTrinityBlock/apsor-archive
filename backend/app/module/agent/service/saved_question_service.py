@@ -1,9 +1,13 @@
 """Saved-question CRUD and ask orchestration.
 
-Asking a saved question creates a fresh agent conversation, runs exactly one
-turn through ``AgentService``, and writes the outcome back to the same saved
-question row. A failed turn keeps the row (and its question) and records the
-failure metadata instead of deleting it.
+Asking a saved question creates a fresh agent conversation for the acting
+account, runs exactly one turn through ``AgentService``, and writes the outcome
+back to the same saved question row. A failed turn keeps the row (and its
+question) and records the failure metadata instead of deleting it.
+
+Both dependencies are built for one account by the composition root: the
+repository filters every row by ``user_id`` and validates the conversation link,
+while the agent service creates the conversation for the same owner.
 """
 
 from app.module.agent.domain.user_profile_domain import UserProfile

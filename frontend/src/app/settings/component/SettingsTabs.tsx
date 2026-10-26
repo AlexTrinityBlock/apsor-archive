@@ -7,13 +7,14 @@ import {
 
 import { useI18n } from "../../i18n";
 import {
-  SETTINGS_SECTIONS,
   settingsTabId,
+  type SettingsSection,
   type SettingsSectionId,
 } from "./settings-sections";
 
 interface SettingsTabsProps {
   readonly active: SettingsSectionId;
+  readonly sections: readonly SettingsSection[];
   readonly onSelect: (section: SettingsSectionId) => void;
 }
 
@@ -24,7 +25,11 @@ const TAB_EDGE_MARGIN = 2;
  * Horizontal settings tab strip. The list may overflow on narrow screens, so
  * it scrolls left and right instead of wrapping into an unpredictable height.
  */
-export function SettingsTabs({ active, onSelect }: SettingsTabsProps) {
+export function SettingsTabs({
+  active,
+  sections,
+  onSelect,
+}: SettingsTabsProps) {
   const { t } = useI18n();
   const listRef = useRef<HTMLDivElement | null>(null);
   const tabRefs = useRef(new Map<SettingsSectionId, HTMLButtonElement>());
@@ -85,7 +90,7 @@ export function SettingsTabs({ active, onSelect }: SettingsTabsProps) {
       observer.observe(tab);
     }
     return () => observer.disconnect();
-  }, [active]);
+  }, [active, sections]);
 
   // Restore focus to the newly selected tab after history navigation, but
   // never pull focus into the strip from skip links, body, or the sidebar.
@@ -119,7 +124,10 @@ export function SettingsTabs({ active, onSelect }: SettingsTabsProps) {
   }, [active]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
-    const currentIndex = SETTINGS_SECTIONS.findIndex(
+    if (sections.length === 0) {
+      return;
+    }
+    const currentIndex = sections.findIndex(
       (section) => settingsTabId(section.id) === event.currentTarget.id,
     );
     if (currentIndex < 0) {
@@ -129,25 +137,23 @@ export function SettingsTabs({ active, onSelect }: SettingsTabsProps) {
     let nextIndex: number;
     switch (event.key) {
       case "ArrowLeft":
-        nextIndex =
-          (currentIndex - 1 + SETTINGS_SECTIONS.length) %
-          SETTINGS_SECTIONS.length;
+        nextIndex = (currentIndex - 1 + sections.length) % sections.length;
         break;
       case "ArrowRight":
-        nextIndex = (currentIndex + 1) % SETTINGS_SECTIONS.length;
+        nextIndex = (currentIndex + 1) % sections.length;
         break;
       case "Home":
         nextIndex = 0;
         break;
       case "End":
-        nextIndex = SETTINGS_SECTIONS.length - 1;
+        nextIndex = sections.length - 1;
         break;
       default:
         return;
     }
 
     event.preventDefault();
-    const next = SETTINGS_SECTIONS[nextIndex];
+    const next = sections[nextIndex];
     onSelect(next.id);
     tabRefs.current.get(next.id)?.focus();
   };
@@ -160,7 +166,7 @@ export function SettingsTabs({ active, onSelect }: SettingsTabsProps) {
       aria-label={t("core.settingsNav.aria")}
       aria-orientation="horizontal"
     >
-      {SETTINGS_SECTIONS.map((section) => {
+      {sections.map((section) => {
         const selected = section.id === active;
         const label = t(section.labelKey);
         return (

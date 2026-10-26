@@ -30,6 +30,9 @@ interface AuthContextValue {
   readonly user: UserSchema | null;
   readonly isLoading: boolean;
   readonly isAuthenticated: boolean;
+  readonly role: UserSchema["role"] | null;
+  readonly isRoot: boolean;
+  readonly mustChangePassword: boolean;
   readonly requiresSetup: boolean;
   readonly isSubmitting: boolean;
   readonly error: string | null;
@@ -43,6 +46,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const UNAUTHORIZED_EVENT = "apsor-archive:unauthorized";
+const AUTH_STATUS_KEY = getGetAuthStatusQueryKey();
 
 function unauthenticatedStatus(): AuthStatusSchema {
   return { requires_setup: false, authenticated: false, user: null };
@@ -70,16 +74,28 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
     [t],
   );
 
+  // Keep the auth-status observer mounted while dropping private query data.
+  // queryClient.clear() would detach that observer, so a later setQueryData
+  // would not re-render AuthGate and a revoked session could leave the old
+  // private page on screen. Remove everything except the auth-status query.
+  const clearPrivateQueries = useCallback(() => {
+    queryClient.removeQueries({
+      predicate: (query) => query.queryKey[0] !== AUTH_STATUS_KEY[0],
+    });
+  }, [queryClient]);
+
   const markSignedIn = useCallback(
     (user: UserSchema) => {
-      queryClient.setQueryData<AuthStatusSchema>(getGetAuthStatusQueryKey(), {
+      // Never carry another session's private query data across a sign-in.
+      // Query keys are not user-scoped, so the old data must be removed.
+      clearPrivateQueries();
+      queryClient.setQueryData<AuthStatusSchema>(AUTH_STATUS_KEY, {
         requires_setup: false,
         authenticated: true,
         user,
       });
-      void queryClient.invalidateQueries();
     },
-    [queryClient],
+    [clearPrivateQueries, queryClient],
   );
 
   const setupMutation = useSetupAccount({
@@ -95,25 +111,31 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
   const logoutMutation = useLogout({
     mutation: {
       onSuccess: () => {
-        queryClient.clear();
+        clearPrivateQueries();
         queryClient.setQueryData<AuthStatusSchema>(
-          getGetAuthStatusQueryKey(),
+          AUTH_STATUS_KEY,
           unauthenticatedStatus(),
         );
+        void statusQuery.refetch();
       },
     },
   });
   useEffect(() => {
     const handleUnauthorized = () => {
-      // Re-read the server state instead of assuming an owner exists. After a
-      // first-run reset there is no owner, so the gate must show Setup again.
-      void queryClient.invalidateQueries({
-        queryKey: getGetAuthStatusQueryKey(),
-      });
+      // A lost/disabled session must not leave the previous account's private
+      // query cache behind. Keep the auth-status observer alive so setting the
+      // unauthenticated snapshot actually re-renders AuthGate, then confirm
+      // with the server (a fresh instance may need the setup screen again).
+      clearPrivateQueries();
+      queryClient.setQueryData<AuthStatusSchema>(
+        AUTH_STATUS_KEY,
+        unauthenticatedStatus(),
+      );
+      void statusQuery.refetch();
     };
     window.addEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, handleUnauthorized);
-  }, [queryClient]);
+  }, [clearPrivateQueries, queryClient, statusQuery]);
 
   const setup = useCallback(
     async (payload: SetupSchema) => {
@@ -150,11 +172,15 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => {
     const status = statusQuery.data;
+    const user = status?.user ?? null;
     return {
       status,
-      user: status?.user ?? null,
+      user,
       isLoading: statusQuery.isPending,
       isAuthenticated: status?.authenticated ?? false,
+      role: user?.role ?? null,
+      isRoot: user?.role === "root",
+      mustChangePassword: user?.must_change_password ?? false,
       requiresSetup: status?.requires_setup ?? false,
       isSubmitting:
         setupMutation.isPending || loginMutation.isPending || logoutMutation.isPending,

@@ -33,8 +33,8 @@ from app.infrastructure.ai.runtime import AiRuntime
 from app.infrastructure.cache.resilient_cache import build_cache
 from app.infrastructure.config.settings import Settings, get_settings
 from app.infrastructure.database.migrations import upgrade_to_head
-from app.infrastructure.database.session import Database
-from app.infrastructure.files.local_storage import LocalFileStorage
+from app.infrastructure.database.session import Database, system_session
+from app.infrastructure.files.storage_factory import build_file_storage
 from app.infrastructure.logger.logging import configure_logging
 from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.knowledge.dependencies import (
@@ -69,7 +69,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
 
     database = Database(settings.database_url, echo=settings.debug)
     cache = build_cache(settings.cache_url)
-    storage = LocalFileStorage(settings.data_dir)
+    storage = build_file_storage(settings)
     cipher = SecretCipher.from_settings(settings)
     runtime = AiRuntime(
         builder=ProviderFactory(settings),
@@ -77,7 +77,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
         defaults=provider_defaults_from_settings(settings),
     )
     try:
-        async with database.session_factory() as session:
+        async with system_session(database.session_factory) as session:
             await runtime.reload(ProviderConfigRepository(session))
 
         state = State()

@@ -6,6 +6,7 @@ import { TreeMark } from "../component/TreeMark";
 import { TreeRings } from "../component/TreeRings";
 import { useI18n } from "../i18n";
 import { useAuth } from "./AuthProvider";
+import { ChangePasswordScreen } from "./component/ChangePasswordScreen";
 import { LoginScreen } from "./component/LoginScreen";
 import { SetupScreen } from "./component/SetupScreen";
 import "./auth.css";
@@ -56,8 +57,9 @@ function AuthLoadError({
 }
 
 /**
- * The gate around every archive route. Setup is only possible before the owner
- * exists; otherwise an invalid or expired cookie lands on the login screen.
+ * The gate around every archive route. Setup is only possible before the first
+ * root exists; an invalid cookie lands on sign-in, and a temporary-password
+ * session cannot reach any content surface until it chooses a new password.
  */
 export function AuthGate() {
   const {
@@ -66,6 +68,7 @@ export function AuthGate() {
     retry,
     requiresSetup,
     isAuthenticated,
+    mustChangePassword,
   } = useAuth();
 
   if (isLoading) {
@@ -79,6 +82,9 @@ export function AuthGate() {
   }
   if (!isAuthenticated) {
     return <LoginScreen />;
+  }
+  if (mustChangePassword) {
+    return <ChangePasswordScreen />;
   }
   return <Outlet />;
 }

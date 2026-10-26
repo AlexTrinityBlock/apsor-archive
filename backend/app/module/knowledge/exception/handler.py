@@ -7,6 +7,7 @@ from app.module.knowledge.exception.domain_error import (
     EmptyContentError,
     FileContentUnavailableError,
     FileRecordNotFoundError,
+    FileStorageUnavailableError,
     FileTooLargeError,
     FileVersionConflictError,
     IngestJobConflictError,
@@ -43,6 +44,7 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(ProviderNotFoundError, 404, "provider_not_found")
     ExceptionRegistry.register(PathNotFoundError, 404, "path_not_found")
     ExceptionRegistry.register(FileContentUnavailableError, 404, "file_content_unavailable")
+    ExceptionRegistry.register(FileStorageUnavailableError, 503, "storage_unavailable")
     ExceptionRegistry.register(UnsupportedFileTypeError, 422, "unsupported_file_type")
     ExceptionRegistry.register(FileTooLargeError, 413, "file_too_large")
     ExceptionRegistry.register(FileVersionConflictError, 409, "file_version_conflict")

@@ -8,22 +8,24 @@ Prove HTTP contracts, persistence behavior, transaction boundaries, and error en
 
 ## Architecture
 
-- `test_database` is a session fixture. It creates `apsor_archive_test` on the local development PostgreSQL instance if needed, drops and recreates the public schema, installs `pg_trgm`, creates `agent_commit_seq`, and builds all tables from SQLAlchemy metadata.
-- The suite does not run Alembic. A migration regression is not caught here; validate migrations separately against development PostgreSQL.
-- `clean_database` is autouse and runs before every test. It `TRUNCATE`s every tracked table with `RESTART IDENTITY CASCADE` and reseeds the four default system-prompt sections. Tests share one database and must be serial.
-- `settings` points at the test database, a per-test temporary data directory, a memory cache, no SPA directory, no external AI, and no lifespan ingestion worker. Migrations are disabled.
-- `anonymous_client` starts a clean app. `client` additionally creates the single owner account and keeps its session cookie. Most tests use `client`; auth-boundary tests use `anonymous_client`.
+- `test_database` is a session fixture. It creates `apsor_archive_test` on the local development PostgreSQL instance if needed, drops and recreates the public schema, runs `alembic upgrade head` as the owning login, and verifies the `apsor_app` role, grants, RLS flags, and policies. `Base.metadata.create_all` is deliberately not used: it cannot reproduce the role or policies requests depend on.
+- The suite therefore executes the migration upgrade chain, but not a downgrade. Validate downgrade separately against development PostgreSQL.
+- `clean_database` is autouse and runs before every test. It truncates every classified application table with `RESTART IDENTITY CASCADE`, resets `agent_commit_seq`, and reseeds the four default system-prompt sections. Tests share one database and must be serial.
+- `settings` points at the test database, a per-test temporary data directory, a memory cache, no SPA directory, no external AI, no R2 storage, and no lifespan ingestion worker. In-app migrations are disabled because the fixture already ran Alembic.
+- `anonymous_client` starts a clean app. `client` additionally creates the bootstrap root account and keeps its session cookie. `root_account` exposes that identity; `client_factory` / `user_client_factory` create independent cookie jars and normal accounts, optionally keeping `must_change_password=true` or completing the forced change. Most tests use `client`; auth-boundary tests use `anonymous_client`.
 - The app factory is still the production `create_app`; only dependencies/resources are substituted. Fake seams are installed on `client.app.state`, not by patching transport internals.
 - Provider seams are installed on `client.app.state` when a test needs them: `agent_chat_generator` uses `FakeChatGenerator`, `provider_tester` uses a deterministic probe, and `web_research_service` uses a local fake. No DeepSeek/OpenAI/Tavily request is made.
+- `owner_engine` is the privileged migration/truncation/fixture connection. `rls_connection(...)` opens a rollback-only `apsor_app` transaction with optional `app.user_id` / `app.user_role`; use it for direct-SQL RLS proof instead of querying as the owner.
 - Tests use fixed aware timestamps and API helpers where practical. Assertions favor HTTP status, parsed JSON, stable `error` codes, entry ordering, lineage, and persisted effects over exact human-readable detail strings.
 - `pyproject.toml` sets `filterwarnings = ["error"]` and strict markers. A new warning fails the test; do not silence warnings globally.
 
 ## Key files
 
-- `conftest.py` — database lifecycle, truncation, settings, owner setup, authenticated/anonymous clients.
+- `conftest.py` — migrated database lifecycle, role/grant/policy verification, truncation, root/user fixtures, RLS connection helper.
 - `helpers.py` — `create_text` and `create_memory` through the public API.
 - `test_agent.py` — transcript replay, tools, SSE events, retry, compaction, fork, approval, page context, saved questions, web tools, cache usage.
-- `test_file_library.py` — upload/text ingestion, paths, versions, folders, move/copy, async jobs, image fallback.
+- `test_multi_user.py` — account lifecycle, forced password change, root-only routes, private-archive isolation, per-account prompts, direct-SQL RLS, checkpoint reapplication.
+- `test_file_library.py` — upload/text ingestion, paths, versions, folders, move/copy, async jobs, image fallback, R2 adapter safety.
 - `test_markdown_update.py` — optimistic version updates, historical/deleted 404s, schema limits.
 - `test_versions.py` — lineage, current-only search, soft-delete visibility.
 - `test_memories.py`, `test_search.py`, `test_summaries.py`, `test_timeline.py` — retrieval and memory behavior.
@@ -35,10 +37,11 @@ Prove HTTP contracts, persistence behavior, transaction boundaries, and error en
 
 - Use only the dedicated disposable test database. `conftest.py` drops its schema; never repoint it at the live archive or put production data in reach.
 - Keep tests serial. They share tables and truncate between cases, so do not add `pytest-xdist`, `-n auto`, or tests that assume isolated concurrent state.
-- Exercise behavior through the public API with `TestClient`. Use direct SQL only for fixture setup or to verify a persistence invariant that the API cannot expose.
-- Add a new table to `TRUNCATE_STATEMENT` in `conftest.py`; otherwise state leaks between tests. Import new model packages so `Base.metadata.create_all` sees them.
-- Inject every external capability through the documented `app.state` seams or a dependency override. Never make a test depend on credentials, network access, or provider availability.
-- If a test changes schema metadata, add/verify the corresponding Alembic migration outside this suite. Passing `create_all` does not mean a migration works.
+- Exercise behavior through the public API with `TestClient`. Use direct SQL only for fixture setup or to verify a persistence invariant that the API cannot expose. For RLS proof, use `rls_connection` and let it roll back.
+- Add a new application table to the correct `PRIVATE_TABLES` / `GLOBAL_TABLES` / `AUTH_TABLES` classification in `conftest.py`; the fixture compares the live catalog with that set and fails on drift. Truncation is derived from the catalog, so a new table cannot silently leak state.
+- A new private table must arrive with `user_id`, owner-safe composite lineage foreign keys, grants, and an RLS policy in the same migration, plus a test that touches it. A new global config table needs read-all/root-write policies.
+- Inject every external capability through the documented `app.state` seams or a dependency override. Never make a test depend on credentials, network access, provider availability, or R2.
+- If a test changes schema metadata, add/verify the corresponding Alembic migration outside this suite. The fixture runs the upgrade chain, but it does not replace a downgrade check.
 - Keep the four system-prompt seeds in the fixture path aligned with migration seed data. Tests that need different prompt rows should create/edit them through the API.
 - Freeze or pass explicit time values for time-sensitive behavior. Use `tmp_path`/the settings fixture for files; never write into `backend/data`.
 - Assert stable status/code contracts and durable rows. Avoid asserting incidental log text, stack traces, or provider wording.

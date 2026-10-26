@@ -6,6 +6,7 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     DateTime,
+    ForeignKey,
     Identity,
     Index,
     Integer,
@@ -39,9 +40,24 @@ class FrequentlyUsedPromptModel(Base):
         ),
         CheckConstraint("sort_order >= 0", name="sort_order"),
         Index("ix_frequently_used_prompt_order", "sort_order", "id"),
+        Index(
+            "ix_frequently_used_prompt_user_id_order",
+            "user_id",
+            "sort_order",
+            "id",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_frequently_used_prompt_user_id_app_user",
+        ),
+        nullable=False,
+    )
     title: Mapped[str] = mapped_column(String(80), nullable=False)
     prompt_text: Mapped[str] = mapped_column(Text, nullable=False)
     sort_order: Mapped[int] = mapped_column(
