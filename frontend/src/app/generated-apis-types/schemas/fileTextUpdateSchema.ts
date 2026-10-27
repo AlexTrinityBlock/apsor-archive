@@ -6,7 +6,7 @@
  */
 
 /**
- * 更新既有 Markdown 檔案內容；expected_version 用於樂觀鎖。
+ * Update an existing Markdown file; expected_version provides optimistic locking.
  */
 export interface FileTextUpdateSchema {
   /**

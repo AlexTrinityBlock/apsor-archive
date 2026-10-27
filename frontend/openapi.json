@@ -2120,7 +2120,7 @@
       },
       "FileTextUpdateSchema": {
         "additionalProperties": false,
-        "description": "\u66f4\u65b0\u65e2\u6709 Markdown \u6a94\u6848\u5167\u5bb9\uff1bexpected_version \u7528\u65bc\u6a02\u89c0\u9396\u3002",
+        "description": "Update an existing Markdown file; expected_version provides optimistic locking.",
         "properties": {
           "content": {
             "maxLength": 2000000,
@@ -7577,7 +7577,7 @@
         ]
       },
       "put": {
-        "description": "\u66f4\u65b0\u65e2\u6709 Markdown \u6a94\u6848\u5167\u5bb9\uff0c\u5efa\u7acb\u65b0\u7248\u672c\u4e26\u91cd\u5efa\u7d22\u5f15\u3002",
+        "description": "Update an existing Markdown file, creating a new version and reindexing it.",
         "operationId": "updateFileContent",
         "parameters": [
           {

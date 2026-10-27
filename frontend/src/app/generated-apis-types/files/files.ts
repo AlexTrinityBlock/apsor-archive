@@ -1182,7 +1182,7 @@ export const getUpdateFileContentUrl = (fileId: number,) => {
 }
 
 /**
- * 更新既有 Markdown 檔案內容，建立新版本並重建索引。
+ * Update an existing Markdown file, creating a new version and reindexing it.
  * @summary Update File Content
  */
 export const updateFileContent = async (fileId: number,
