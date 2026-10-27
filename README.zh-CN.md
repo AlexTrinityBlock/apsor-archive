@@ -168,9 +168,9 @@ root 随后可以从 **账户** 创建普通账户；每个新账户会收到一
 新卷（或在本地 Compose 文件中保留旧名称）。否则 PostgreSQL 会
 初始化一个空数据库。
 
-API 镜像复制已提交的 `frontend/dist`，不会运行前端构建。更改前端
-代码后，请先运行 `cd frontend && bun run build`，再运行
-`docker compose up --build`。
+Docker 构建会在前端阶段从 `frontend/` 编译前端，因此修改前端代码后
+直接运行 `docker compose up --build` 即可，不需要手动构建。只有想在本机
+预览时才需要运行 `cd frontend && bun run build`。
 
 要启用 AI 回答和 AI 摘要：
 
@@ -1014,10 +1014,8 @@ root 用户切换器：root 点击它会打开可搜索的账户对话框，而�
 这些面板成为可能的有界、仅 UI 的摘录和查看器 URL；面向提供商的
 工具内容保持不变。
 
-聊天检查器、文件库工作区和文件夹面板已在当前版本中实现，已提交的
-`frontend/dist` 是重新构建的生产客户端。进一步更改前端后，请重新
-构建并提交 `frontend/dist`，因为 Docker 镜像提供已提交的客户端，
-并且不会运行前端构建。
+聊天检查器、文件库工作区和文件夹面板已在当前版本中实现。生产客户端会在
+Docker 镜像内从 `frontend/` 编译，因此修改前端后只需重新构建镜像。
 
 ### 资源预览
 
@@ -1041,10 +1039,8 @@ root 用户切换器：root 点击它会打开可搜索的账户对话框，而�
 
 PDF.js 的 CMaps 和标准字体由 `bun run pdf-assets` 从固定版本的
 `pdfjs-dist` 包复制到 `frontend/public/pdfjs/`，`dev` 和 `build` 会
-自动运行它。Vite 会把它们输出到 `frontend/dist/pdfjs/`；由于
-Docker 镜像复制已提交的 `frontend/dist` 并且不运行前端构建，这些
-输出的资源必须与 `dist/` 的其余部分一起提交。它们在本地提供，
-永远不会从 CDN 获取。
+自动运行它。Vite 会在构建镜像时把它们输出到 `frontend/dist/pdfjs/`，
+因此会与其余产物一起打包。它们在本地提供，永远不会从 CDN 获取。
 
 ### 账户、角色与会话
 
@@ -1498,7 +1494,7 @@ frontend/
   src/lib/                      formatting and safe highlighting
   src/styles/                   paper / night archive tokens
   scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
-  dist/                         committed production build served by FastAPI
+  dist/                         generated build output, gitignored
 docker-compose.yml              normal deployment
 docker-compose.dev.yml          local dependencies
 docker-compose.cloudflare-tunnel.yml   Cloudflare Tunnel deployment

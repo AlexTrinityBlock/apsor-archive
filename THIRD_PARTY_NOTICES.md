@@ -9,9 +9,11 @@ every license involved, so the notice stays self-contained when the built client
 or the container image is redistributed without the repository. The Docker image
 copies this file and `LICENSE` to `/app/`.
 
-Scope: everything that ships to the browser — the JavaScript and CSS in
-`frontend/dist/assets`, the webfonts in `frontend/dist/fonts`, and the PDF.js
-runtime data in `frontend/dist/pdfjs`. Python packages installed from
+Scope: everything that ships to the browser — the JavaScript and CSS that the
+Docker build emits into `frontend/dist/assets`, the webfonts in
+`frontend/dist/fonts`, and the PDF.js runtime data in `frontend/dist/pdfjs`.
+Those paths are generated at image build time and are not tracked in the
+repository. Python packages installed from
 `backend/uv.lock` into the server image are fetched from PyPI at build time and
 carry their own license metadata in the installed distribution, so they are not
 reproduced here. `devDependencies` are build tooling and are not bundled.

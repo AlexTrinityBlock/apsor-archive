@@ -1,7 +1,7 @@
 # Apsor Archive Frontend
 
-React 19 + TypeScript + Vite single-page archive. The production build is
-committed under `dist/` and served by FastAPI.
+React 19 + TypeScript + Vite single-page archive. The production bundle is
+compiled inside the Docker image; `dist/` is generated and gitignored.
 
 ## Scripts
 
@@ -18,9 +18,8 @@ bun run api:generate:live # Orval from a running API on :8000
 ```
 
 `dev` and `build` run `pdf-assets` automatically. The copied files live in
-`public/pdfjs/` (gitignored) and are emitted to `dist/pdfjs/`; the Docker image
-copies the committed `dist/`, so commit `dist/pdfjs/` with every production
-build.
+`public/pdfjs/` (gitignored) and are emitted to `dist/pdfjs/` during the image
+build, so they ship with the rest of the bundle.
 
 ## Structure
 
@@ -117,8 +116,7 @@ raw URLs, code, and HTTP status text are intentionally not translated.
 ## API generation
 
 Orval reads the committed `frontend/openapi.json` by default, so generation
-works without a running backend (the Docker build only copies the committed
-`dist/`):
+works without a running backend:
 
 ```bash
 # from the repository root after a backend contract change
@@ -316,10 +314,9 @@ only; when it is off, no approval card appears and the backend authorizes the
 write directly. Pending cards created while the setting was on keep rendering
 and still require an explicit decision.
 
-The inspector panels are mounted by the chat workspace. The production build is
-committed under `dist/`; rebuild and commit `dist/` (and `dist/pdfjs/` when it
-changes) after frontend changes, because the Docker image does not run a
-frontend build.
+The inspector panels are mounted by the chat workspace. The production bundle
+is compiled by the Docker build, so a frontend change only needs an image
+rebuild.
 
 ## Settings
 
@@ -453,8 +450,7 @@ no per-file ingestion cards on the library board.
 
 The backend contract and status codes are documented in `backend/README.md`.
 The board, dialogs, and generated folder/move/copy hooks are in the source tree
-and the production `dist/` is rebuilt. The Docker image copies the committed
-client and does not run a frontend build.
+and the production bundle is compiled by the Docker build.
 
 ## Preview
 
@@ -501,7 +497,6 @@ bun audit
 ```
 
 The checks above cover type safety, linting, locale key parity, the production
-build, and dependency audit. After frontend changes, rebuild and commit `dist/` (and
-`dist/pdfjs/` when it changes) because the Docker image serves the committed
-client and does not run a build. The `save_memory` receipt remains a record of
+build, and dependency audit. The Docker image builds the client itself, so a
+frontend change only needs an image rebuild. The `save_memory` receipt remains a record of
 the write; the shared approval card is the human gate that authorizes it.

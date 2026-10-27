@@ -794,8 +794,7 @@ never execute uploaded scripts. Images are served through the normal file
 content endpoint.
 PDF.js CMaps and standard fonts are copied into `frontend/public/pdfjs` by
 `frontend/scripts/copy-pdfjs-assets.mjs`, then emitted into
-`frontend/dist/pdfjs` by Vite. The Docker image copies the committed `dist`, so
-those generated assets must be committed with the build.
+`frontend/dist/pdfjs` by Vite during the Docker build.
 
 ## Accounts and sessions
 

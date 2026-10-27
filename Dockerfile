@@ -5,6 +5,18 @@
 # pointed the venv at /root/.local, which uid 10001 cannot traverse.
 FROM ghcr.io/astral-sh/uv:bookworm-slim AS uv
 
+# The frontend is compiled inside the image, so the repository does not carry a
+# generated bundle and a source change cannot ship a stale client.
+FROM oven/bun:1.3.6-alpine AS web
+
+WORKDIR /app/frontend
+
+COPY frontend/package.json frontend/bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY frontend/ ./
+RUN bun run build
+
 FROM python:3.13-slim AS runtime
 
 COPY --from=uv /usr/local/bin/uv /usr/local/bin/uv
@@ -31,7 +43,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY backend/ ./
 RUN uv sync --frozen --no-dev
 
-COPY frontend/dist /app/frontend/dist
+COPY --from=web /app/frontend/dist /app/frontend/dist
 COPY LICENSE THIRD_PARTY_NOTICES.md /app/
 
 RUN groupadd --gid 10001 app \

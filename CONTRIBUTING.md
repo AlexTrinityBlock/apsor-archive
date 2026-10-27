@@ -60,8 +60,9 @@ Run these from the repository root with the development dependencies up.
   `apsor_archive_test` database, rebuilt with Alembic; never use a live archive.
 - `make api-check` exports OpenAPI, regenerates the Orval client, and fails if
   `frontend/openapi.json` or `frontend/src/app/generated-apis-types/` differs.
-- `make build` is required when frontend sources change. Rebuild and commit
-  `frontend/dist/` (including `dist/pdfjs/`); the container serves it.
+- `make build` is optional locally; the Docker image compiles the frontend in
+  its own Bun stage, so `docker compose up --build` is enough after a frontend
+  change. `frontend/dist/` is generated and gitignored.
 
 Without `make`:
 

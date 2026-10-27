@@ -95,14 +95,11 @@ cd apsor-archive
 If you already have GitHub SSH keys configured, the equivalent SSH URL is
 `git@github.com:AlexTrinityBlock/apsor-archive.git`.
 
-The image build copies the committed `frontend/dist`. Rebuild the frontend
-first if you changed frontend sources:
+The image build compiles the frontend from `frontend/` in its own Bun stage, so
+no manual build step is needed:
 
 ```bash
-cd frontend
-bun install --frozen-lockfile
-bun run build
-cd ..
+docker compose -f docker-compose.cloudflare-tunnel.yml build
 ```
 
 ## 3. Store the tunnel token

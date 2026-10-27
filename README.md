@@ -180,9 +180,9 @@ used a different physical volume name, so copy that volume's contents into the
 new one (or keep the old name in the local Compose file) before starting.
 Otherwise PostgreSQL initialises an empty database.
 
-The API image copies the committed `frontend/dist`; it does not run a frontend
-build. After changing frontend code, run `cd frontend && bun run build` before
-`docker compose up --build`.
+The Docker build compiles the frontend from `frontend/` in a Bun stage, so
+`docker compose up --build` picks up a frontend change without a manual build.
+Run `cd frontend && bun run build` only when you want a local preview.
 
 To enable AI answers and AI summaries:
 
@@ -526,7 +526,8 @@ cd frontend && bun run build
 
 `./start.sh` is the shortest bare-metal path: it starts the dev database/cache
 if Docker is available, sources `.secrets/deepseek.env`, syncs the backend, and
-serves the API and committed client at <http://127.0.0.1:8000>.
+serves the API and the built client at <http://127.0.0.1:8000>. Run
+`cd frontend && bun run build` once before the first bare-metal start.
 
 On Windows, `./start.sh` needs a bash shell. `./run-local.ps1` is the PowerShell
 equivalent: it starts the dev database/cache if Docker is available, syncs the
@@ -1080,10 +1081,8 @@ Every panel provides loading, empty, error, and success states. Tool result
 panels possible; provider-facing tool content is unchanged.
 
 The chat inspector, File Library workspace, and folder board are implemented in
-the current release, and the committed `frontend/dist` is the rebuilt production
-client. Rebuild and commit `frontend/dist` after further frontend changes,
-because the Docker image serves the committed client and does not run a frontend
-build.
+the current release. The production client is compiled inside the Docker image
+from `frontend/`, so a frontend change only needs an image rebuild.
 
 ### Resource preview
 
@@ -1107,10 +1106,9 @@ probe entirely and reads indexed chunks.
 
 PDF.js CMaps and standard fonts are copied from the pinned `pdfjs-dist` package
 into `frontend/public/pdfjs/` by `bun run pdf-assets`, which `dev` and `build`
-run automatically. Vite emits them into `frontend/dist/pdfjs/`; because the
-Docker image copies the committed `frontend/dist` and does not run a frontend
-build, those emitted assets must be committed with the rest of `dist/`. They are
-served locally and never fetched from a CDN.
+run automatically. Vite emits them into `frontend/dist/pdfjs/` during the image
+build, so they ship with the rest of the bundle. They are served locally and
+never fetched from a CDN.
 
 ### Accounts, roles, and sessions
 
@@ -1604,7 +1602,7 @@ frontend/
   src/lib/                      formatting and safe highlighting
   src/styles/                   paper / night archive tokens
   scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
-  dist/                         committed production build served by FastAPI
+  dist/                         generated build output, gitignored
 docker-compose.yml              normal deployment
 docker-compose.dev.yml          local dependencies
 docker-compose.cloudflare-tunnel.yml   Cloudflare Tunnel deployment

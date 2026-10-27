@@ -164,9 +164,9 @@ APSOR_STORAGE_BACKEND=local docker compose up --build
 將該磁碟區的內容複製到新的磁碟區（或在本機 Compose 檔案中保留舊名稱）。
 否則 PostgreSQL 會初始化一個空資料庫。
 
-API 映像檔會複製已提交的 `frontend/dist`；它不會執行前端建置。變更前端
-程式碼後，請先執行 `cd frontend && bun run build`，再執行
-`docker compose up --build`。
+Docker 建置會在前端階段從 `frontend/` 編譯前端，因此變更前端程式碼後
+直接執行 `docker compose up --build` 即可，不需要手動建置。只有在想在本機
+預覽時才需執行 `cd frontend && bun run build`。
 
 若要啟用 AI 回答與 AI 摘要：
 
@@ -984,10 +984,8 @@ End；比例與收合狀態會保存在本機。寬度低於 900 px 時，檢視
 有上限、僅供 UI 使用的摘錄與檢視器 URL，讓這些面板得以運作；面對供應商的
 工具內容則維持不變。
 
-對話檢視器、檔案庫工作區與資料夾看板已在目前版本中實作，且已提交的
-`frontend/dist` 是重新建置的正式用戶端。進一步變更前端後，請重新建置並
-提交 `frontend/dist`，因為 Docker 映像檔會提供已提交的用戶端，且不會
-執行前端建置。
+對話檢視器、檔案庫工作區與資料夾看板已在目前版本中實作。正式用戶端會
+在 Docker 映像檔內從 `frontend/` 編譯，因此變更前端後只需重新建置映像檔。
 
 ### 資源預覽
 
@@ -1011,9 +1009,8 @@ ETag/Last-Modified 與單一範圍 HTTP Range 支援（`206`/`416`；
 
 PDF.js 的 CMaps 與標準字型會由 `bun run pdf-assets` 從固定版本的
 `pdfjs-dist` 套件複製到 `frontend/public/pdfjs/`，`dev` 與 `build` 會
-自動執行此動作。Vite 會將它們輸出到 `frontend/dist/pdfjs/`；由於 Docker
-映像檔會複製已提交的 `frontend/dist` 且不執行前端建置，這些輸出資產必須
-與 `dist/` 的其餘部分一起提交。它們會在本機提供，且永遠不會從 CDN 取得。
+自動執行此動作。Vite 會在建置映像檔時將它們輸出到 `frontend/dist/pdfjs/`，
+因此會與其餘產物一起打包。它們會在本機提供，且永遠不會從 CDN 取得。
 
 ### 帳號、角色與工作階段
 
@@ -1463,7 +1460,7 @@ frontend/
   src/lib/                      formatting and safe highlighting
   src/styles/                   paper / night archive tokens
   scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
-  dist/                         committed production build served by FastAPI
+  dist/                         generated build output, gitignored
 docker-compose.yml              normal deployment
 docker-compose.dev.yml          local dependencies
 docker-compose.cloudflare-tunnel.yml   Cloudflare Tunnel deployment
