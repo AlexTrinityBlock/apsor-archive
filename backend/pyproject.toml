@@ -44,6 +44,8 @@ packages = ["app"]
 [dependency-groups]
 dev = [
     "bandit[toml]>=1.8.6",
+    # Starlette's TestClient prefers httpx2 and warns on plain httpx, which the
+    # test configuration turns into an error.
     "httpx2>=2.13.1",
     "mypy>=1.18.0",
     "pip-audit>=2.9.0",
