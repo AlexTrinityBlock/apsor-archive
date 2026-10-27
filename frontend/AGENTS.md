@@ -7,7 +7,7 @@ Apsor Archive's React single-page application. This directory owns the browser U
 - Implement every archive workspace and shared interaction in the browser.
 - Enforce the root/user surface in the shell: root-only Accounts and global Settings tabs, a private personal block, a forced change-password gate, and a visible impersonation banner with a return-to-root action.
 - Keep the UI aligned with the committed FastAPI contract in `openapi.json`.
-- Ship a reproducible static bundle under `dist/`; the production image serves this bundle and does not run a frontend build.
+- Ship a reproducible static bundle under `dist/`; the Docker image compiles it in a Bun stage and the runtime image serves the result.
 - Own frontend-only concerns: routing, query caching, i18n, accessibility, responsive layout, PDF.js runtime assets, and visual tokens.
 
 It does not own backend behavior, database migrations, API schemas, or deployment configuration. Change the backend contract first, then export OpenAPI and regenerate the client. Hiding a route or nav item is convenience, never the security boundary; the backend independently returns `403` for non-root or cross-account access.
@@ -20,7 +20,7 @@ It does not own backend behavior, database migrations, API schemas, or deploymen
 - **Routing:** `src/app/router.tsx` uses `createBrowserRouter` with a root `AuthGate`, the `AppShell` layout, and lazy page imports. `/` redirects to `/chat`; legacy viewer routes redirect into the Library or Memory reader.
 - **Navigation:** `AppShell` renders four groups: archive workspaces, a personal block with User profile, a system block with Settings, Change password, Accounts (root only), and About, then a Session block with Sign out. The Change password item opens the dialog. The footer identity is a root-only button into `ImpersonateUserDialog` when not already impersonating; normal accounts and impersonation targets see a plain identity block. While impersonating, a banner above the page canvas names the target and exposes Return to root, which opens `StopImpersonationDialog` for root re-authentication. Visible indices are computed after role filtering.
 - **API access:** generated Orval hooks call `src/apis/fetch-client.ts`, which uses same-origin relative URLs and throws `ApiError`. Vite proxies `/api` and `/health` to the backend in development.
-- **Build output:** `dist/` is tracked and committed. `public/pdfjs/` is generated and gitignored, while the emitted `dist/pdfjs/` is committed for the Docker image.
+- **Build output:** `dist/` is generated and gitignored, built by the Docker image and by `bun run build` for a local preview. `public/pdfjs/` is generated and gitignored too.
 - **PDF.js assets:** `scripts/copy-pdfjs-assets.mjs` copies CMaps and standard fonts from the pinned `pdfjs-dist` package. `dev` and `build` run it automatically.
 
 ## Key files
@@ -42,7 +42,7 @@ It does not own backend behavior, database migrations, API schemas, or deploymen
 - `src/app/settings/component/settings-sections.ts` — role-filtered Settings tab registry.
 - `src/app/viewer/component/viewer-utils.ts` — deliberate text/binary viewer fetch exception; URLs still come from generated helpers.
 - `scripts/check-i18n.ts` — locale key-parity check against English.
-- `dist/` — committed production bundle, including `dist/pdfjs/`.
+- `dist/` — generated production bundle, including `dist/pdfjs/`; never edit by hand.
 
 ## Conventions
 
@@ -56,7 +56,7 @@ It does not own backend behavior, database migrations, API schemas, or deploymen
 - Every workspace owns its `page.tsx`, `component/`, `hook/`, and page CSS. Only reusable primitives belong in `src/app/component/`.
 - Prefer the design tokens and shared primitives in `src/styles/` and `src/app/component/`. Do not add a second styling system.
 - Keep TypeScript strict: no `any`, use type-only imports, and preserve the security and sanitization lint rules.
-- Rebuild and commit `dist/` after frontend changes. Commit `dist/pdfjs/` whenever the generated PDF.js assets change; never hand-edit either output.
+- Never hand-edit `dist/`; the Docker build rebuilds it from source. Run `bun run build` only when you need a local preview.
 
 ## Verification
 
@@ -68,7 +68,7 @@ bun run i18n:check
 bun run build
 ```
 
-A successful build must leave the expected source, `dist/`, and generated PDF.js asset changes in the working tree before committing.
+A successful build writes `dist/` and the generated PDF.js assets to the working tree; both are gitignored, so commit only the source changes.
 
 ## Related guides
 
