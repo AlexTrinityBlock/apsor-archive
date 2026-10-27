@@ -7,6 +7,16 @@
 private/
 private-docs/
 
+# Credential files and tool config that can hold tokens
+*.pem
+*.key
+*.crt
+.envrc
+.direnv/
+.npmrc
+.pypirc
+.netrc
+
 # Python
 __pycache__/
 *.py[cod]
@@ -19,6 +29,8 @@ htmlcov/
 .coverage
 coverage.xml
 *.log
+backend/build/
+*.egg-info/
 
 # Data
 backend/data/
@@ -27,20 +39,37 @@ data-cloudflare/
 *.db
 *.sqlite3
 
+# Database dumps and backup archives (never commit)
+*.sql
+*.sql.gz
+*.dump
+*.tar.gz
+backups/
+
 # Node
 node_modules/
 frontend/node_modules/
 frontend/.vite/
 *.tsbuildinfo
+.eslintcache
+frontend/blob-report/
 
 # OS / editors
 .DS_Store
 .idea/
 .vscode/
+*~
+*.swp
 
 # Local-only planning and agent material (never committed)
 docs/plan/
 .agents/
+.dsh/
+.claude/
+.opencode/
+
+# Design prototypes: kept on disk for reference, never published
+template/
 
 # Cloudflare tunnel token
 secrets/*
