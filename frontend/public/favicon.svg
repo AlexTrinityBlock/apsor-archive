@@ -6,9 +6,9 @@
     <circle cx="32" cy="32" r="8" stroke-opacity=".78" />
   </g>
   <g fill="none" stroke="#b9892f" stroke-linecap="round">
-    <path d="M32 49.5V20.6" stroke-width="2" />
-    <path d="M32 36.2C29 35.5 26.2 33.2 24.2 30.1" stroke-width="1.5" />
-    <path d="M32 36.2C35 35.5 37.8 33.2 39.8 30.1" stroke-width="1.5" />
+    <path d="M32 49.5V32" stroke-width="2" />
+    <path d="M32 41.5C28 40.6 24.8 37.8 22.6 34.2" stroke-width="1.5" />
+    <path d="M32 41.5C36 40.6 39.2 37.8 41.4 34.2" stroke-width="1.5" />
   </g>
-  <circle cx="32" cy="20.2" r="2.2" fill="#b7462c" />
+  <circle cx="32" cy="32" r="2.4" fill="#b7462c" />
 </svg>
