@@ -47,7 +47,6 @@ services:
 
 volumes:
   postgres-data:
-    # Legacy physical name, kept so local development reuses its existing data.
-    # The legacy dev volume still holds the old dendro/dendromatrix role and
-    # database; run the same role/database rename before starting this stack.
-    name: dendromatrix-dev_dendro-dev-postgres
+    # The physical name is explicit so a Compose project rename cannot silently
+    # orphan the database volume.
+    name: apsor-archive-dev_postgres-data

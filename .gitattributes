@@ -1,6 +1,5 @@
 # Generated client. Normalize text to LF so a Windows checkout and build do not
 # rewrite the bundle, and leave binary assets (cmaps, fonts, images) byte-exact.
 frontend/index.html text eol=lf
-frontend/dist/**    text=auto eol=lf
 # The production bundle is generated; library CSS may contain trailing spaces.
-frontend/dist/**    -whitespace
+frontend/dist/**    text=auto eol=lf -whitespace

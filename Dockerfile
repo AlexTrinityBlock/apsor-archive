@@ -32,6 +32,7 @@ COPY backend/ ./
 RUN uv sync --frozen --no-dev
 
 COPY frontend/dist /app/frontend/dist
+COPY LICENSE THIRD_PARTY_NOTICES.md /app/
 
 RUN groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --create-home --shell /usr/sbin/nologin app \

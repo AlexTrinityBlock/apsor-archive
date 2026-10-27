@@ -53,9 +53,11 @@ services:
       # New originals use R2 by default. Set APSOR_STORAGE_BACKEND=local for
       # the first cutover boot, then run the storage migration and switch back.
       APSOR_STORAGE_BACKEND: ${APSOR_STORAGE_BACKEND:-r2}
-      # Non-secret R2 configuration. Credentials are read from the mounted
-      # .secrets/r2.env by the app and never enter the container environment.
-      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-https://example-account.r2.cloudflarestorage.com}
+      # Non-secret R2 configuration. The account endpoint has no default: set
+      # APSOR_R2_ENDPOINT_URL in .env before running with the r2 backend.
+      # Credentials are read from the mounted .secrets/r2.env by the app and
+      # never enter the container environment.
+      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-}
       APSOR_R2_BUCKET: ${APSOR_R2_BUCKET:-apsor-archive}
       APSOR_R2_REGION: ${APSOR_R2_REGION:-auto}
       APSOR_R2_PREFIX: ${APSOR_R2_PREFIX:-}
@@ -98,7 +100,7 @@ services:
       APSOR_DATA_DIR: /data
       APSOR_TIMEZONE: Asia/Taipei
       APSOR_STORAGE_BACKEND: ${APSOR_STORAGE_BACKEND:-r2}
-      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-https://example-account.r2.cloudflarestorage.com}
+      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-}
       APSOR_R2_BUCKET: ${APSOR_R2_BUCKET:-apsor-archive}
       APSOR_R2_REGION: ${APSOR_R2_REGION:-auto}
       APSOR_R2_PREFIX: ${APSOR_R2_PREFIX:-}
@@ -116,6 +118,6 @@ services:
 
 volumes:
   postgres-data:
-    # Legacy physical name, kept so the rebrand reuses the existing database
-    # instead of initialising an empty volume. It is an internal identifier.
-    name: dendromatrix_dendro-postgres
+    # The physical name is explicit so a Compose project rename cannot silently
+    # orphan the database volume.
+    name: apsor-archive_postgres-data

@@ -1,8 +1,15 @@
 [project]
 name = "apsor-archive-backend"
 version = "0.1.0"
-description = "Apsor Archive: a tree-indexed knowledge and memory system with hybrid retrieval and AI."
+description = "Apsor Archive: a local-first private knowledge and memory archive with hybrid retrieval and grounded AI answers."
 readme = "README.md"
+# PEP 639 license expression. hatchling rejects a `license-files` entry that
+# points outside the project root (`../LICENSE` fails the sdist safety check), so
+# the repository-root LICENSE travels with the image via the Dockerfile instead.
+license = "MIT"
+authors = [
+    { name = "Wei-Chun, Hsiao", email = "46709835+AlexTrinityBlock@users.noreply.github.com" },
+]
 requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.16.0",

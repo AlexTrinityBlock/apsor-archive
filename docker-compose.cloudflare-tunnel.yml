@@ -7,7 +7,8 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: apsor
-      POSTGRES_PASSWORD: apsor
+      # Mandatory: this stack faces the internet, so there is no default password.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: apsor_archive
     command:
       - postgres
@@ -43,7 +44,7 @@ services:
     build:
       context: .
     environment:
-      APSOR_DATABASE_URL: postgresql+psycopg://apsor:apsor@db:5432/apsor_archive
+      APSOR_DATABASE_URL: postgresql+psycopg://apsor:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/apsor_archive
       APSOR_CACHE_URL: redis://cache:6379/0
       APSOR_DATA_DIR: /data
       APSOR_STATIC_DIR: /app/frontend/dist
@@ -52,9 +53,11 @@ services:
       # New originals use R2 by default after the staged migration. Override
       # with APSOR_STORAGE_BACKEND=local for the first cutover boot.
       APSOR_STORAGE_BACKEND: ${APSOR_STORAGE_BACKEND:-r2}
-      # Non-secret R2 configuration. Credentials are read from the mounted
-      # .secrets/r2.env by the app, never from the container environment.
-      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-https://example-account.r2.cloudflarestorage.com}
+      # Non-secret R2 configuration. The account endpoint has no default: set
+      # APSOR_R2_ENDPOINT_URL in .env before running with the r2 backend.
+      # Credentials are read from the mounted .secrets/r2.env by the app,
+      # never from the container environment.
+      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-}
       APSOR_R2_BUCKET: ${APSOR_R2_BUCKET:-apsor-archive}
       APSOR_R2_REGION: ${APSOR_R2_REGION:-auto}
       APSOR_R2_PREFIX: ${APSOR_R2_PREFIX:-}
@@ -80,13 +83,13 @@ services:
       context: .
     command: ["/app/backend/.venv/bin/apsor-archive", "worker"]
     environment:
-      APSOR_DATABASE_URL: postgresql+psycopg://apsor:apsor@db:5432/apsor_archive
+      APSOR_DATABASE_URL: postgresql+psycopg://apsor:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/apsor_archive
       APSOR_CACHE_URL: redis://cache:6379/0
       APSOR_DATA_DIR: /data
       APSOR_TIMEZONE: Asia/Taipei
       APSOR_COOKIE_SECURE: "true"
       APSOR_STORAGE_BACKEND: ${APSOR_STORAGE_BACKEND:-r2}
-      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-https://example-account.r2.cloudflarestorage.com}
+      APSOR_R2_ENDPOINT_URL: ${APSOR_R2_ENDPOINT_URL:-}
       APSOR_R2_BUCKET: ${APSOR_R2_BUCKET:-apsor-archive}
       APSOR_R2_REGION: ${APSOR_R2_REGION:-auto}
       APSOR_R2_PREFIX: ${APSOR_R2_PREFIX:-}
@@ -106,7 +109,7 @@ services:
     build:
       context: ./docker/caddy
     environment:
-      APSOR_PUBLIC_HOST: ${APSOR_PUBLIC_HOST:-api.example.com}
+      APSOR_PUBLIC_HOST: ${APSOR_PUBLIC_HOST:-archive.example.com}
     expose:
       - "80"
     volumes:
@@ -116,7 +119,7 @@ services:
     restart: unless-stopped
 
   cloudflare-tunnel:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.10.4
     command: tunnel --no-autoupdate run --token-file /run/secrets/cf_token
     secrets:
       - cf_token
