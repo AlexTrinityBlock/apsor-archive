@@ -24,6 +24,42 @@
   <img src="https://img.shields.io/badge/docker%20compose-2496ED?logo=docker&amp;logoColor=white" alt="Docker Compose">
 </p>
 
+**English** · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
+
+## Table of contents
+
+- [Highlights](#highlights)
+- [Stack](#stack)
+- [Quick start](#quick-start)
+  - [Docker Compose (normal)](#docker-compose-normal)
+  - [Object storage (local or R2)](#object-storage-local-or-r2)
+  - [Configure providers in the app](#configure-providers-in-the-app)
+  - [Web research tools](#web-research-tools)
+  - [Frequently used prompts](#frequently-used-prompts)
+  - [Agent runtime settings](#agent-runtime-settings)
+  - [Ingestion runtime](#ingestion-runtime)
+  - [Local development](#local-development)
+  - [Cloudflare Tunnel](#cloudflare-tunnel)
+- [Tool surface](#tool-surface)
+  - [Folder workspace](#folder-workspace)
+  - [Agent conversations](#agent-conversations)
+  - [Saved questions](#saved-questions)
+  - [Chat reading room](#chat-reading-room)
+  - [Chat workspace](#chat-workspace)
+  - [Resource preview](#resource-preview)
+  - [Accounts, roles, and sessions](#accounts-roles-and-sessions)
+  - [Generated API client and drift](#generated-api-client-and-drift)
+  - [Load a real corpus](#load-a-real-corpus)
+  - [Long-document validation](#long-document-validation)
+- [How retrieval works](#how-retrieval-works)
+  - [Do I need an embedding model key?](#do-i-need-an-embedding-model-key)
+  - [What is a signed hashing embedder?](#what-is-a-signed-hashing-embedder)
+- [Data model](#data-model)
+- [Development checks](#development-checks)
+- [Project layout](#project-layout)
+- [Security and privacy](#security-and-privacy)
+- [License](#license)
+
 A local-first knowledge and memory archive with a branching file library, a
 linear memory timeline, hybrid retrieval, and grounded AI answers. Each account
 has its own private archive; one root account manages membership and shared
@@ -122,9 +158,10 @@ sudo chown -R 10001:10001 data
 APSOR_STORAGE_BACKEND=local docker compose up --build
 ```
 
-> 注意：`./data` 會以 bind mount 掛進容器，容器程序以 uid `10001` 執行。
-> 首次啟動前必須先建立目錄並調整擁有者，否則上傳與原始檔寫入會失敗。
-> 若主機使用者已是 uid `10001`，可省略 `sudo chown`。
+> Note: `./data` is bind-mounted into the container and the container process
+> runs as uid `10001`. Create the directory and fix its owner before the first
+> boot, otherwise uploads and original-byte writes fail. If the host user is
+> already uid `10001`, the `sudo chown` can be skipped.
 
 Open <http://127.0.0.1:8000>. The first visit asks you to create the root
 account. The root can then create normal accounts from **Accounts**; each new
@@ -134,6 +171,14 @@ secret key live under the host's `./data` directory. The production Compose
 files default to `APSOR_STORAGE_BACKEND=r2`; see
 [Object storage](#object-storage-local-or-r2) for the credentials it needs, or
 keep local storage for a self-contained host.
+
+The `postgres-data` volume is pinned to an explicit physical name:
+`apsor-archive_postgres-data` for `docker-compose.yml` and
+`apsor-archive-dev_postgres-data` for `docker-compose.dev.yml`, so a Compose
+project rename cannot orphan the database. A stack created before this rename
+used a different physical volume name, so copy that volume's contents into the
+new one (or keep the old name in the local Compose file) before starting.
+Otherwise PostgreSQL initialises an empty database.
 
 The API image copies the committed `frontend/dist`; it does not run a frontend
 build. After changing frontend code, run `cd frontend && bun run build` before
@@ -145,14 +190,16 @@ To enable AI answers and AI summaries:
 mkdir -p .secrets
 printf 'APSOR_DEEPSEEK_API_KEY=sk-your-key\n' > .secrets/deepseek.env
 chmod 755 .secrets
-chmod 644 .secrets/deepseek.env
+sudo chgrp 10001 .secrets/deepseek.env
+chmod 640 .secrets/deepseek.env
 docker compose up -d --build
 ```
 
 The Compose file mounts `.secrets/` read-only. The app reads the env file itself,
 so the key never becomes a container environment variable and never appears in
-`docker compose config`. The `644` mode is required because the API container
-runs as a non-root user. The key is gitignored and is never returned by the API.
+`docker compose config`. The API container runs as uid `10001`, so the file must
+be readable by that uid: group `10001` with mode `640`, or `644` on a
+single-user host. The key is gitignored and is never returned by the API.
 Without it, summaries fall back to a deterministic extractive form, image
 uploads use the filename caption, and agent messages return
 `503 agent_not_configured`.
@@ -169,8 +216,11 @@ uploads use the filename caption, and agent messages return
 
 The non-secret R2 values are `APSOR_R2_ENDPOINT_URL`, `APSOR_R2_BUCKET`
 (`apsor-archive` in the deployment), `APSOR_R2_REGION` (`auto`), and
-`APSOR_R2_PREFIX`. Credentials live in the gitignored `.secrets/r2.env`, which
-Compose mounts read-only and the app reads itself, so they never become
+`APSOR_R2_PREFIX`. The account endpoint has no default: put
+`APSOR_R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com` in a
+gitignored `.env` file next to the Compose file, or export it, before running
+with the `r2` backend. Credentials live in the gitignored `.secrets/r2.env`,
+which Compose mounts read-only and the app reads itself, so they never become
 container environment variables:
 
 ```bash
@@ -507,9 +557,9 @@ docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 ```
 
 Point the tunnel ingress for `archive.example.com` at `http://caddy:80`. The
-token file is gitignored. The live deployment serves
-`archive.example.com`; `archive.example.com` is the
-**legacy hostname** and is no longer in the current tunnel ingress. See
+token file is gitignored. Caddy serves only the host named by
+`APSOR_PUBLIC_HOST` and answers `404` for every other host, so do not add a
+second public hostname to the tunnel ingress. See
 `secrets/README.md` for permissions and [`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md) for the
 complete English deployment, backup, security, and troubleshooting guide.
 
@@ -639,8 +689,13 @@ non-conflicting tree.
 
 ### Agent conversations
 
-`/api/v1/agent` is a persistent, Pi-shaped multi-turn archive agent. It stores an
-immutable entry log instead of mutating a chat array:
+`/api/v1/agent` is a persistent, Pi-shaped multi-turn archive agent. The term
+refers to the durable-transcript model of the Pi coding-agent harness: a
+conversation is an append-only log of immutable entries, and the provider
+context is rebuilt from that log after the newest reset or compaction boundary
+rather than from a mutable chat array. Apsor Archive implements the model in
+Python and PostgreSQL; it does not run the Pi runtime or depend on its packages.
+The tables are:
 
 - `agent_conversation` — transcript scope, provider/model identity, and metadata.
 - `agent_entry` — immutable `pi.user`, `pi.assistant`, `pi.tool-result`,
@@ -1180,7 +1235,7 @@ make api-check
 
 It re-exports the schema, regenerates the client, and fails on any diff. This
 keeps the convenience of a committed client without letting it drift silently.
-The schema currently declares 77 paths. Operation IDs are stable unless a
+The schema currently declares 79 paths. Operation IDs are stable unless a
 contract change is intentional. The committed client includes the account,
 password-change, and root-only account operations; the folder, move, and copy
 operations; the page-context request/detail/entry-kind contracts; agent runtime
@@ -1262,7 +1317,8 @@ APSOR_EMBEDDING_DIMENSION=1536
 APSOR_EMBEDDING_API_KEY=sk-...
 EOF
 chmod 755 .secrets
-chmod 644 .secrets/openai.env
+sudo chgrp 10001 .secrets/openai.env
+chmod 640 .secrets/openai.env
 ```
 
 The Settings page can also store this configuration in the database. After
@@ -1375,8 +1431,7 @@ Original bytes are not stored in PostgreSQL. They live on local disk or in the
 private R2 bucket, selected per file by `storage_backend`; the extracted chunks
 and their n-grams remain in PostgreSQL.
 
-The complete local design notes live under `docs/plan/` (gitignored). The
-committed code, comments, UI copy, and documentation are English.
+The committed code, comments, UI copy, and documentation are English.
 
 ## Development checks
 
@@ -1531,7 +1586,7 @@ backend/
     module/prompt/              editable frequently used chat prompts
     module/web_research/        Tavily search/fetch service, URL safety, cache
   alembic/                      migrations
-  tests/                        25 integration tests
+  tests/                        46 integration tests
 frontend/
   src/app/
     component/                  shared archive UI
@@ -1543,7 +1598,7 @@ frontend/
     questions/                  saved-question Q&A library
     settings/                   role-filtered provider and runtime panels
     library/                    files, media gallery, preview modal, intake
-    home/ search/ timeline/ memory/ method/ ...
+    home/ search/ timeline/ memory/ about/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting

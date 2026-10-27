@@ -26,20 +26,30 @@ build.
 
 ```text
 src/
+  main.tsx                      browser entry; global CSS, providers, router
   apis/fetch-client.ts          JSON fetch mutator; throws ApiError
   apis/agent-stream.ts          SSE parser for agent turns
   app/
+    providers.tsx               app-wide providers; i18n outermost
+    router.tsx                  lazy route table, auth gate, redirects
+    query-client.ts             shared React Query defaults
     component/                  shared shell, panels, badges, toast
     generated-apis-types/       committed Orval client (incl. agent)
-    hook/                       scroll lock, debounce, media queries
+    hook/                       scroll lock, debounce
     type/                       UI types and local demo shapes
+    auth/                       setup/login gate, impersonation, password change
+    accounts/                   root-only account directory and usage
     agent/                      page context, trace, inspector panels
     home/ search/ timeline/     workspace routes
     library/                    files, media gallery, preview modal, intake
     memory/                     vault, pressing room, reader
     chat/                       persistent agent workspace
     questions/                  saved-question Q&A library
-    method/ settings/
+    profile/                    display name and profile cards
+    viewer/                     PDF, DOCX, image, and text renderers
+    about/ settings/            method page, provider and runtime settings
+    i18n/                       locale provider, dictionaries, formatters
+    not-found/                  unmatched-route page
   lib/                          formatting, safe text highlighting
   styles/                       mono archive design tokens
 scripts/copy-pdfjs-assets.mjs   pinned PDF.js runtime assets
@@ -209,7 +219,7 @@ the masthead with a link to the source, and the rail labels them
 `fork of #<id>`. Forking copies transcript entries only; runs, retry state, and
 approval state are not copied.
 
-Chat is the first item in the seven-item archive rail. The rail becomes a
+Chat is the first item in the six-item archive rail. The rail becomes a
 navigation drawer below 980 px; the mobile bar opens it.
 
 ## Saved questions
@@ -281,7 +291,7 @@ offers **Follow current**, keeps the last valid resource visible when a later
 tool has no resource, and reuses the existing file renderer and memory reader
 rather than a second rendering stack.
 
-The seven tools map to distinct panels: result constellation, manuscript chunks,
+The tools map to distinct panels: result constellation, manuscript chunks,
 timeline band, folder branch map, memory chain, save receipt, specimen sheet, and
 display stand. Every panel implements loading, empty, error, and success states,
 and errors show the stable tool error code and the validated arguments.

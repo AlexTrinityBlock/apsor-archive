@@ -19,12 +19,17 @@ Create `secrets/cf_token.txt` with the tunnel token from the Cloudflare dashboar
 (or `cloudflared tunnel token <tunnel-id>`).
 
 The file must be readable by the `cloudflared` container, which runs as uid
-65532. On Linux:
+65532 (the image's default user; the Compose file does not override it). On
+Linux:
 
 ```bash
 chmod 755 secrets
-chmod 644 secrets/cf_token.txt
+sudo chown 65532 secrets/cf_token.txt && chmod 640 secrets/cf_token.txt
 ```
+
+If the host cannot chown the file to uid `65532` (for example, a filesystem
+that does not support it), fall back to `chmod 644 secrets/cf_token.txt`. That
+makes the token world-readable, so prefer a host where the chown works.
 
 ## R2 credentials
 
@@ -36,13 +41,13 @@ APSOR_R2_ACCESS_KEY_ID=...
 APSOR_R2_SECRET_ACCESS_KEY=...
 ```
 
-The endpoint, bucket, region, and prefix are non-secret deployment values and may
-come from the Compose environment or the same file. The production defaults are
-`APSOR_R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com`,
-`APSOR_R2_BUCKET=apsor-archive`, `APSOR_R2_REGION=auto`, and an empty
-`APSOR_R2_PREFIX`. The app also accepts the legacy unprefixed
-`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ENDPOINT`, and
-`R2_BUCKET` names used by local migration shells.
+The endpoint, bucket, region, and prefix are non-secret deployment values.
+`APSOR_R2_BUCKET` (`apsor-archive`), `APSOR_R2_REGION` (`auto`), and an empty
+`APSOR_R2_PREFIX` have production defaults; `APSOR_R2_ENDPOINT_URL` has none and
+must be set to `https://<account-id>.r2.cloudflarestorage.com` in `.env` or in
+this file. The app also accepts the legacy unprefixed `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ENDPOINT`, and `R2_BUCKET` names used by
+local migration shells.
 
 The API and worker run as uid `10001` and must be able to read the file:
 

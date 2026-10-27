@@ -6,13 +6,9 @@ Apsor Archive is a local-first, private family/small-team knowledge and memory a
 
 Use this guide to choose the right subsystem, respect cross-cutting invariants, and run the repository gates. Detailed backend rules live in `backend/AGENTS.md`; frontend rules live in `frontend/AGENTS.md`.
 
-## Task orchestration
+## Working with a coding agent
 
-- The main agent owns the task definition: write a short SSOT plan under `docs/plan/`, create a dedicated worktree and branch, define file ownership, and keep one writer per file set.
-- Delegate implementation, QA, and security work to background subagents. Each task must state the worktree, branch, base commit, scope, allowed files, forbidden actions, verification commands, and a no-commit rule.
-- QA scripts and screenshots belong under `/tmp`; security reviews are read-only. Subagents must not commit, switch branches, merge, deploy, or touch a live archive database.
-- Only the main agent integrates diffs, runs final gates, commits, opens and merges the PR, deploys, and updates local progress notes. Keep the local progress skill current at each milestone.
-- `docs/plan/` and `.agents/` are local-only and must not be committed.
+`docs/plan/` and `.agents/` are local-only working directories. Both are gitignored and absent from a fresh clone, so no contributor needs them. The parts that matter are the architecture below, the conventions that keep the account boundary and the committed client intact, and the verification gates at the end of this file.
 
 ## Architecture
 
@@ -29,7 +25,7 @@ Use this guide to choose the right subsystem, respect cross-cutting invariants, 
 ## Key files
 
 - `README.md` — product behavior, feature surface, and operator-facing setup.
-- `Makefile` — canonical lint, test, build, API-contract, Compose, and seed commands.
+- `Makefile` — canonical lint, test, build, API-contract, and Compose commands.
 - `backend/AGENTS.md` — backend service rules and verification.
 - `frontend/AGENTS.md` — frontend architecture, generated-client, and UI rules.
 - `Dockerfile` / `docker-compose*.yml` — production, dev-dependency, and tunnel runtimes.

@@ -88,9 +88,12 @@ connector container itself.
 ## 2. Prepare the repository
 
 ```bash
-git clone git@github.com:AlexTrinityBlock/apsor-archive.git
+git clone https://github.com/AlexTrinityBlock/apsor-archive.git
 cd apsor-archive
 ```
+
+If you already have GitHub SSH keys configured, the equivalent SSH URL is
+`git@github.com:AlexTrinityBlock/apsor-archive.git`.
 
 The image build copies the committed `frontend/dist`. Rebuild the frontend
 first if you changed frontend sources:
@@ -109,13 +112,17 @@ Create the secret file that Compose mounts read-only:
 ```bash
 mkdir -p secrets
 printf '%s' 'YOUR_TUNNEL_TOKEN' > secrets/cf_token.txt
-chmod 644 secrets/cf_token.txt
 chmod 755 secrets
+sudo chown 65532 secrets/cf_token.txt
+chmod 640 secrets/cf_token.txt
 ```
 
 Write the token without a trailing newline. The `cloudflared` container runs as
-uid `65532` and must be able to read the file. Never put the token in
-`environment:`, a committed `.env` file, or the repository.
+uid `65532` and must be able to read the file. If the host cannot set that owner
+(for example, a filesystem that does not support it), fall back to
+`chmod 644 secrets/cf_token.txt`; that makes the token world-readable, so prefer
+the chown where it works. Never put the token in `environment:`, a committed
+`.env` file, or the repository.
 
 See `secrets/README.md` for the same permission guidance.
 
@@ -137,8 +144,9 @@ chmod 640 .secrets/r2.env
 ```
 
 The non-secret endpoint, bucket, region, and prefix come from the Compose
-environment (`APSOR_R2_ENDPOINT_URL`, `APSOR_R2_BUCKET=apsor-archive`,
-`APSOR_R2_REGION=auto`, `APSOR_R2_PREFIX`). The bucket stays private: do not
+environment (`APSOR_R2_ENDPOINT_URL` has no default and must be set in `.env`;
+`APSOR_R2_BUCKET=apsor-archive`, `APSOR_R2_REGION=auto`, `APSOR_R2_PREFIX` have
+defaults). The bucket stays private: do not
 enable public access or presigned URLs, and do not add a lifecycle expiry rule
 for `files/`. Keep the Fernet key (`/data/.secret_key` in the container,
 `data-cloudflare/.secret_key` on the host) on local storage and back it up; it
@@ -160,10 +168,9 @@ docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 tunnel DNS target; the target is the `caddy:80` service configured in the
 Cloudflare dashboard.
 
-The live deployment serves `archive.example.com`. The previous
-`archive.example.com` is the **legacy hostname** and is no longer in
-the current tunnel ingress. The examples here use `archive.example.com`; do not
-change DNS or the tunnel ingress as part of an application rebrand.
+The examples use `archive.example.com` throughout. Only the hostname named by
+`APSOR_PUBLIC_HOST` is served; do not add a second public hostname to the
+tunnel ingress or change DNS as part of an application rebrand.
 
 The stack intentionally has no `ports:` mapping. Do not add one unless you are
 debugging on a trusted host.
@@ -231,10 +238,14 @@ a local secrets file can be mounted read-only:
 ```bash
 mkdir -p .secrets
 printf 'APSOR_DEEPSEEK_API_KEY=sk-your-key\n' > .secrets/deepseek.env
-chmod 644 .secrets/deepseek.env
+chmod 755 .secrets
+sudo chgrp 10001 .secrets/deepseek.env
+chmod 640 .secrets/deepseek.env
 ```
 
-The Compose file mounts `./.secrets` read-only. Do not commit it.
+The API and worker run as uid `10001` and must be able to read the file. On a
+single-user host, mode `644` also works, but `640` with group `10001` is the
+safer default. The Compose file mounts `./.secrets` read-only. Do not commit it.
 
 The ingestion worker reads runtime settings from the database singleton. The
 defaults are:
@@ -299,11 +310,12 @@ provider keys cannot be recovered.
 - Use Cloudflare WAF/rate-limiting rules for the hostname if it is exposed to
   the public internet.
 - Keep `APSOR_COOKIE_SECURE=true` and use HTTPS.
-- Keep `secrets/cf_token.txt` mode `644` and the `secrets` directory `755` so
-  the cloudflared uid can read it. Keep `.secrets/r2.env` and provider env files
-  mode `640` with group `10001`, and `.secrets` mode `755`, so the API/worker
-  uid can read them without exposing them to unrelated host users. Never commit
-  the tunnel token, R2 credentials, or provider keys.
+- Keep `secrets/cf_token.txt` owned by uid `65532` and mode `640`, and the
+  `secrets` directory `755`, so the cloudflared uid can read it; use mode `644`
+  only on a host that cannot set the owner. Keep `.secrets/r2.env` and provider
+  env files mode `640` with group `10001`, and `.secrets` mode `755`, so the
+  API/worker uid can read them without exposing them to unrelated host users.
+  Never commit the tunnel token, R2 credentials, or provider keys.
 - RLS is an API boundary, not a host boundary. The database login is a
   superuser for migrations/maintenance and the app switches roles per
   transaction; a local OS user or another container with database, Valkey, or

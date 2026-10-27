@@ -202,7 +202,11 @@ ranges and the overlap rule; request validation failures map to
 
 ## Agent conversations
 
-`/api/v1/agent` is a persistent, Pi-shaped multi-turn archive agent. Every
+`/api/v1/agent` is a persistent, Pi-shaped multi-turn archive agent. "Pi-shaped"
+means the durable-transcript model of the Pi coding-agent harness: an append-only
+log of immutable entries is the source of truth and the provider context is
+rebuilt from it. This backend implements the model in Python and PostgreSQL and
+does not run the Pi runtime. Every
 conversation, entry, run, and approval belongs to the signed-in account and is
 invisible to every other account, including root. The schema is deliberately not
 a mutable chat log:
@@ -974,6 +978,7 @@ uv run alembic upgrade head
 app/
   main.py
   worker.py                dedicated durable-ingestion process
+  dependency/              route auth guards and request RLS context
   shared/                  error registry, list envelope
   infrastructure/
     ai/                    DeepSeek client
@@ -983,6 +988,8 @@ app/
     embedding/             hosted embedding client
     files/                 local + R2 storage adapters, router, migration CLI
     logger/
+    security/              Argon2 hashing, secret cipher, session tokens
+    web/                   Tavily search/extract client
   module/auth/
     domain/                username and password policy
     model/                 app_user, user_session, user_profile_card
@@ -1012,6 +1019,21 @@ app/
     exception/             stable agent errors
     test/                  FakeChatGenerator (no collected tests)
     dependencies.py        composition root + snapshot + fake-provider seam
+  module/prompt/
+    model/                 frequently_used_prompt shortcuts
+    repository/            per-account prompt persistence
+    service/               CRUD with scoped cache invalidation
+    router/                authenticated prompt-shortcut routes
+    schema/                prompt request/response contracts
+    exception/             stable prompt errors
+    dependencies.py        composition root
+  module/web_research/
+    domain/                outbound URL policy for web_fetch
+    protocol/              client, cache, and provider-config protocols
+    service/               search/fetch orchestration and page cache
+    schema/                web search and fetch contracts
+    exception/             stable web-provider errors
+    dependencies.py        runtime-snapshot client factory
 ```
 
 The agent uses scoped `user_session` transactions rather than the request
