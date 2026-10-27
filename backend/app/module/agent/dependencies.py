@@ -132,9 +132,11 @@ class _ToolServiceScope:
                     session,
                     user_id=self.user_id,
                 ),
-                # 跨模組依賴只允許出現在這個組裝根：agent 工具層只看
-                # WebResearchServiceProtocol，實際實作由 web_research slice
-                # 從 app.state.ai_runtime 組裝（它不開資料庫 session）。
+                # Cross-module dependencies are only allowed in this assembly
+                # root: the agent tool layer only sees
+                # WebResearchServiceProtocol, and the web_research slice builds
+                # the concrete implementation from app.state.ai_runtime (it opens
+                # no database session).
                 web_research_service=get_web_research_service(self.request),
             )
             yield services
@@ -160,9 +162,9 @@ def get_system_prompt_service(request: Request) -> SystemPromptService:
 
     The cache is injected through the agent slice's own
     ``SystemPromptCacheProtocol`` so the service never imports another slice's
-    protocol. 版本 scope 由 service 管理，這裡只負責把 ``app.state.cache``
-    接進來。Reads are global; writes are only reachable from the root-guarded
-    system-prompt router.
+    protocol. The version scope is managed by the service; this only wires
+    ``app.state.cache`` in. Reads are global; writes are only reachable from the
+    root-guarded system-prompt router.
     """
     database = cast(Database, request.app.state.db)
     cache = cast(SystemPromptCacheProtocol, request.app.state.cache)

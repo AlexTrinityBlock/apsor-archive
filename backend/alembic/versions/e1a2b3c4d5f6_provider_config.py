@@ -4,12 +4,15 @@ Revision ID: e1a2b3c4d5f6
 Revises: d5e9f3a7b2c1
 Create Date: 2026-10-25 04:10:00.000000
 
-舊版只有一個 ``ai_provider_config``，以 ``purpose`` 區分 chat/embedding。
-本版改成四張實體表（使用者最終決策 C），並把舊資料分別搬到 chat 與
-embedding 表。Web search / web fetch 是全新 capability，沒有舊資料。
+The previous version had a single ``ai_provider_config`` table that used
+``purpose`` to distinguish chat from embedding. This version replaces it with
+four physical tables (the user's final decision, option C) and moves the old rows
+into the chat and embedding tables respectively. Web search and web fetch are
+entirely new capabilities with no legacy data.
 
-此檔刻意不 import 已刪除的 ``AiProviderConfigModel``；所有舊表操作都用
-``sa.table()`` / raw SQL，避免 Alembic 依賴目前應用程式的 ORM 模型。
+This file deliberately does not import the deleted ``AiProviderConfigModel``;
+every operation on the old table uses ``sa.table()`` / raw SQL so Alembic does
+not depend on the application's current ORM models.
 """
 
 from collections.abc import Sequence
@@ -34,7 +37,7 @@ def _create_provider_table(
     dimension_constraint: str,
     model_nullable: bool,
 ) -> None:
-    """建立一張 capability 表；四張表欄位相同，只有 constraint 不同。"""
+    """Create one capability table; all four share the columns, only the constraints differ."""
     op.create_table(
         table_name,
         sa.Column("id", sa.BigInteger(), sa.Identity(always=False), nullable=False),
@@ -80,8 +83,9 @@ def _create_provider_table(
         ),
         sa.PrimaryKeyConstraint("id", name=op.f(f"pk_{table_name}")),
     )
-    # Partial unique index：每個 capability 最多一列 is_active=true。
-    # is_active 是唯一 active 狀態來源，不另設 enabled 欄位或 pointer 表。
+    # Partial unique index: at most one row per capability has is_active = true.
+    # is_active is the only source of active state; there is no separate enabled
+    # column or pointer table.
     op.create_index(
         f"uq_{table_name}_active",
         table_name,
@@ -129,8 +133,9 @@ def upgrade() -> None:
         model_nullable=True,
     )
 
-    # 舊資料搬遷：id 不複製，讓新表的 identity 從 1 開始遞增；不重設 sequence。
-    # label 舊表沒有，依 plan 填入 provider 名稱。
+    # Legacy data migration: ids are not copied, so the new tables' identity
+    # columns start at 1; the sequence is not reset. The old table had no label,
+    # so the provider name is used as the label per the plan.
     op.execute(
         sa.text(
             """
@@ -165,7 +170,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # 舊表沿用原本 schema 與 uq_ai_provider_config_purpose。
+    # The old table keeps its original schema and uq_ai_provider_config_purpose.
     op.create_table(
         "ai_provider_config",
         sa.Column("id", sa.BigInteger(), sa.Identity(always=False), nullable=False),
@@ -196,8 +201,9 @@ def downgrade() -> None:
         sa.UniqueConstraint("purpose", name="uq_ai_provider_config_purpose"),
     )
 
-    # 每個 capability 取 active 的一列；若沒有 active，取 id 最小的一列。
-    # 這樣 downgrade 後仍保留使用者最近啟用的設定。
+    # Take the active row for each capability; if none is active, take the row
+    # with the smallest id. That way the downgrade still keeps the settings the
+    # user enabled most recently.
     op.execute(
         sa.text(
             """

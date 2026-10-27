@@ -8,13 +8,13 @@ import {
   fileContentUrl,
 } from "../../viewer/component/viewer-utils";
 
-/** 編輯器載入既有 Markdown 時需要的內容、狀態與重試入口。 */
+/** The content, state, and retry entry point the editor needs to load existing Markdown. */
 export interface MarkdownDocumentState {
-  /** 內容尚未載入完成時為 null。 */
+  /** Null while the content has not finished loading. */
   readonly content: string | null;
   readonly loading: boolean;
   readonly error: unknown;
-  /** 內容是否由已索引分段重建（原始位元組不存在）。 */
+  /** Whether the content was rebuilt from indexed chunks (no raw bytes exist). */
   readonly usingChunks: boolean;
   readonly retry: () => void;
 }
@@ -24,10 +24,12 @@ function isMissingOriginal(error: unknown): boolean {
 }
 
 /**
- * 載入既有 Markdown 的原始內容。
+ * Load the raw content of existing Markdown.
  *
- * 有儲存原始檔時直接讀取 `/content`；若該檔案只有索引分段（或原始檔已
- * 遺失），則沿用 viewer 的 `useChunkedText` 重建，避免兩套錯誤處理分歧。
+ * When a stored original exists it is read directly from `/content`; if the file
+ * only has indexed chunks (or the original is missing), it is rebuilt with the
+ * viewer's `useChunkedText` so the two do not end up with separate error
+ * handling.
  */
 export function useMarkdownDocument(
   file: FileSchema | undefined,
@@ -45,7 +47,8 @@ export function useMarkdownDocument(
     gcTime: 0,
   });
 
-  // 原始檔不存在時才啟用分段重建；404 與「本來就沒有原始檔」走同一條路。
+  // Chunk reconstruction is enabled only when there is no original file; a 404 and
+  // "there never was an original" take the same path.
   const fallbackToChunks = !hasOriginal || isMissingOriginal(originalQuery.error);
   const chunksQuery = useChunkedText(
     fileId,
@@ -68,7 +71,8 @@ export function useMarkdownDocument(
     totalChunks === 0 &&
     !chunksQuery.isLoading
   ) {
-    // 沒有原始檔也沒有分段：明確回報不可讀，避免編輯器永遠停在載入中。
+    // No original and no chunks: report it unreadable explicitly so the editor
+    // never stays stuck on loading.
     error = new ViewerResourceError(
       404,
       "file_content_unavailable",

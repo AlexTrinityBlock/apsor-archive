@@ -349,8 +349,8 @@ class ProviderConfigService:
         spec = self._spec(capability)
         normalized = self._validate(spec, payload)
         now = utcnow()
-        # mixin 沒有帶型別的 __init__；concrete declarative class 接受這些
-        # mapped-column keyword。cast 只是把這個形狀告訴 mypy。
+        # The mixin has no typed __init__; the concrete declarative class accepts
+        # these mapped-column keywords. The cast only tells mypy about that shape.
         model_factory = cast(type[Any], spec.model)
         row: ProviderConfigMixin = model_factory(
             provider=normalized.provider,
@@ -367,8 +367,9 @@ class ProviderConfigService:
             payload=payload,
             keyless=normalized.provider in spec.keyless_providers,
         )
-        # 先存檔取得 identity id；partial unique index 允許任意多列 inactive，
-        # 所以順序必須是「先 insert inactive，再 deactivate 其他列，最後設 active」。
+        # Save first to obtain the identity id; the partial unique index allows any
+        # number of inactive rows, so the order must be "insert inactive,
+        # deactivate the others, then set active".
         await self.repository.save(row)
         if payload.activate:
             await self.repository.deactivate_others(spec, keep_id=row.id)

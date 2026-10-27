@@ -27,25 +27,31 @@ from app.module.web_research.schema.web_research_schema import (
     WebSearchResponse,
 )
 
-# 單一搜尋結果的內容上限：provider 可能回傳整頁內文，這裡只留足以讓 agent
-# 判斷是否值得 web_fetch 的摘要，避免 tool result 與 SSE payload 過大。
+# Content cap for a single search result: a provider may return a whole page of
+# text, and only the excerpt needed for the agent to judge whether the result is
+# worth a web_fetch is kept here, so neither the tool result nor the SSE payload
+# grows too large.
 _MAX_SEARCH_CONTENT_CHARS = 8_000
 _MAX_SEARCH_RESULTS = 10
 _MAX_DOMAINS = 10
 _DEFAULT_FETCH_MAX_CHARS = 20_000
 
-# web_fetch 以「完整文件」為快取單位：同一個 URL 只向 provider 抓一次，後續
-# 頁碼只做本機切片。schema marker、折行寬度、頁面預算與全文上限都放進 cache
-# key，任何語意變更都會讓舊資料自然失效。
+# web_fetch caches by "complete document": one URL is fetched from the provider
+# only once, and later page numbers are sliced locally. The schema marker, wrap
+# width, page budget, and full-text limit all go into the cache key, so any change
+# in meaning naturally invalidates the old entries.
 _FETCH_CACHE_SCHEMA = "v3"
 _MAX_FETCH_CACHE_CHARS = 2_000_000
 
-# 頁面大小由 server 決定：預設 12,000 字元，實際值是
-# min(_FETCH_PAGE_CHARS, fetch_max_chars)。模型只看 page，不必計算 offset。
+# The page size is decided by the server: 12,000 characters by default, actually
+# min(_FETCH_PAGE_CHARS, fetch_max_chars). The model only sees page and never has
+# to compute an offset.
 _FETCH_PAGE_CHARS = 12_000
 
-# 硬折行寬度刻意小於頁面預算（預設 12,000；設定下限 1,000）：任何一行都一定
-# 塞得進一頁，頁碼因此永遠能前進，不會卡在「一行超過上限」而重複同一頁。
+# The hard wrap width is deliberately smaller than the page budget (12,000 by
+# default, 1,000 as the configured minimum): any single line always fits in one
+# page, so the page number can always advance instead of getting stuck repeating
+# the same page because one line exceeds the limit.
 _MAX_FETCH_WRAP_CHARS = 800
 
 
@@ -98,8 +104,9 @@ class WebResearchService:
         include = _normalize_domains(include_domains)
         exclude = _normalize_domains(exclude_domains)
 
-        # 只把「正規化後的參數」放進雜湊輸入；cache_key() 會再做 SHA-256，
-        # 因此原始 query 不會以明文出現在 Valkey key、log 或 metrics 中。
+        # Only the normalized arguments go into the hash input; cache_key() applies
+        # SHA-256 on top, so the raw query never appears in plain text in a Valkey
+        # key, a log line, or a metric.
         canonical_args = json.dumps(
             {
                 "exclude_domains": exclude,
@@ -121,8 +128,9 @@ class WebResearchService:
         if cached is not None:
             return cached.model_copy(update={"cached": True})
 
-        # Cache miss 才檢查設定：cache 命中代表 provider 設定版本未變，
-        # 即使目前暫時沒有金鑰也應該回傳既有結果。
+        # Only a cache miss checks the configuration: a cache hit means the
+        # provider settings version has not changed, so the existing result should
+        # be returned even if no key is configured at the moment.
         if not _is_ready(self._search_config, self._search_client):
             raise WebSearchNotConfiguredError()
 
@@ -172,11 +180,13 @@ class WebResearchService:
         1-based line. If a direct caller supplies both, ``page`` wins (the tool
         argument model already rejects that combination).
         """
-        # WebUrlSafety 回傳正規化 URL（小寫 scheme/host、去預設 port、去 fragment），
-        # 正規化後的字串同時是 fetch cache key 的輸入，確保同一資源只有一份 cache。
+        # WebUrlSafety returns a normalized URL (lowercase scheme/host, default port
+        # removed, fragment removed); the normalized string is also the fetch cache
+        # key input, so one resource has exactly one cache entry.
         normalized_url = WebUrlSafety.validate(url)
-        # 頁面預算是 server 端語意的一部分，放進 cache key 後，任何站台設定的
-        # 頁面大小或全文上限變更都會自然產生新的 cache entry。
+        # The page budget is part of the server-side semantics; putting it in the
+        # cache key means any change to the configured page size or full-text limit
+        # naturally produces a new cache entry.
         page_chars = min(_FETCH_PAGE_CHARS, self._fetch_max_chars)
         key = _cache_key(
             await self._cache.get_version("providers"),
@@ -189,8 +199,9 @@ class WebResearchService:
         )
         cached = _validate_cached(WebFetchResponse, await self._cache.get_json(key))
         if cached is not None:
-            # cache 命中代表 provider 設定版本未變；即使目前暫時沒有金鑰也應該
-            # 回傳既有全文，因此這裡不重新檢查 configured。
+            # A cache hit means the provider settings version has not changed; the
+            # existing full text should be returned even if no key is configured at
+            # the moment, so configured is not checked again here.
             return _slice_fetch_page(
                 cached,
                 page=page,
@@ -202,8 +213,9 @@ class WebResearchService:
         if not _is_ready(self._fetch_config, self._fetch_client):
             raise WebFetchNotConfiguredError()
 
-        # 只向 provider 抓一次完整內容；client 的 max_chars 是全文上限提示，
-        # 真正的切頁由 _slice_fetch_page 依固定字元預算完成。
+        # Fetch the complete content from the provider only once; the client's
+        # max_chars is a hint for the full-text limit, and the actual paging is done
+        # by _slice_fetch_page against a fixed character budget.
         response = await self._fetch_client.fetch(
             normalized_url,
             max_chars=_MAX_FETCH_CACHE_CHARS,
@@ -407,9 +419,11 @@ def _is_ready(
 ) -> bool:
     """Return whether a provider can actually serve a request.
 
-    ``enabled`` 與 ``provider != "none"`` 都必須成立；金鑰只在此處做布林判斷，
-    不會被寫入訊息或 cache。``client.configured`` 是第二道保險，避免 registry
-    顯示已啟用但實際 client 沒有憑證時仍送出空金鑰請求。
+    Both ``enabled`` and ``provider != "none"`` must hold; the key is only ever
+    tested as a boolean here and is never written into a message or the cache.
+    ``client.configured`` is the second safety net, so a registry entry that looks
+    enabled but whose client has no credentials does not send an empty-key
+    request.
     """
     return (
         config.enabled
@@ -436,16 +450,18 @@ def _validate_cached[T: (WebSearchResponse, WebFetchResponse)](
     try:
         return model.model_validate(payload)
     except ValueError:
-        # 舊版 schema 或損壞的 payload 不應讓使用者請求失敗；直接當作 cache miss。
+        # An old schema version or a corrupted payload must not fail the user's
+        # request; it is simply treated as a cache miss.
         return None
 
 
 def _cache_key(version: int, namespace: str, *parts: str) -> str:
     """Build a versioned cache key whose parts are hashed, never stored raw.
 
-    格式與 knowledge 片的 ``cache_key`` 相同（``apsor:<version>:<namespace>:<digest>``）。
-    web slice 不得 import 另一片的 service 模組，因此在本地保留這份純函式。
-    digest 讓原始 query / URL 不會以明文出現在 cache key 中。
+    The format matches the knowledge slice's ``cache_key``
+    (``apsor:<version>:<namespace>:<digest>``). The web slice must not import
+    another slice's service module, so this pure function is kept locally. The
+    digest keeps the raw query / URL out of the cache key in plain text.
     """
     digest = hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:24]
     return f"apsor:{version}:{namespace}:{digest}"

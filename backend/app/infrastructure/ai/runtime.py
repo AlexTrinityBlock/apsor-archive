@@ -131,8 +131,9 @@ class AiRuntime:
         row: ProviderConfigMixin,
     ) -> ProviderConfig:
         key = self._decrypt_key(row)
-        # DB 金鑰優先；若該列沒有金鑰（或解密失敗），才回退到環境變數。
-        # 這是 plan 4.2 的 fallback 規則，web_search / web_fetch 各自獨立解析。
+        # The DB key wins; only when the row has no key (or decryption fails) does
+        # it fall back to the environment variable. This is the plan 4.2 fallback
+        # rule; web_search and web_fetch are each resolved independently.
         if key is None:
             key = self._environment_key(spec.capability)
         return ProviderConfig(
@@ -159,8 +160,9 @@ class AiRuntime:
     async def reload(self, repository: ProviderConfigRepositoryProtocol) -> None:
         """Reload the four capability slots from the database.
 
-        每個 capability 最多一列 active（partial unique index 保證），所以這裡
-        固定四張表各查一次；不用 union，避免 active 語意模糊。
+        Each capability has at most one active row (guaranteed by the partial
+        unique index), so this always queries each of the four tables once; no
+        union is used, so that the meaning of "active" stays unambiguous.
         """
         configs: dict[ProviderCapability, ProviderConfig] = {
             CAPABILITY_CHAT: self._default_chat(),

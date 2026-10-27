@@ -1,4 +1,4 @@
-"""透過公開檔案 API 驗證 Markdown 內容的版本化更新。"""
+"""Verify versioned Markdown content updates through the public file API."""
 
 from fastapi.testclient import TestClient
 
@@ -16,7 +16,7 @@ def test_update_markdown_creates_new_version_and_reindexes(client: TestClient) -
     assert created["has_original"] is False
     assert created["supersedes_file_id"] is None
 
-    # text-only 建立的版本沒有 stored original，listing 必須反映這一點。
+    # A version created from text only has no stored original, and the listing must reflect that.
     before_update = client.get(
         "/api/v1/paths",
         params={"path": "/notes", "path_depth": 1},
@@ -59,7 +59,7 @@ def test_update_markdown_creates_new_version_and_reindexes(client: TestClient) -
     assert "combine harvester sensor" in indexed_text
     assert "legacy tractor" not in indexed_text
 
-    # 更新後的新版本一定有 stored original，listing 只能列出新版本。
+    # The version created by an update always has a stored original, and the listing shows only it.
     listing = client.get(
         "/api/v1/paths",
         params={"path": "/notes", "path_depth": 1},
@@ -119,7 +119,8 @@ def test_update_markdown_rejects_deleted_or_history_file(client: TestClient) -> 
     assert history_update.status_code == 404
     assert history_update.json()["error"] == "file_not_found"
 
-    # DELETE 只允許 current file；對歷史版本 id 發送 DELETE 也必須回 404。
+    # DELETE only accepts a current file; a DELETE against a historical version id
+    # must also return 404.
     history_delete = client.delete(f"/api/v1/files/{original_file_id}")
     assert history_delete.status_code == 404
     assert history_delete.json()["error"] == "file_not_found"
@@ -150,7 +151,7 @@ def test_update_markdown_rejects_empty_content(client: TestClient) -> None:
 
 
 def test_update_markdown_rejects_oversized_schema_content(client: TestClient) -> None:
-    """Schema 的 max_length 必須在進入 service 前擋掉超長 content。"""
+    """The schema's max_length must reject oversized content before it reaches the service."""
     created = create_text(client, "/notes/oversized.md", "# Oversized\n\nSmall source.")
     file_id = int(created["id"])
 
@@ -163,12 +164,13 @@ def test_update_markdown_rejects_oversized_schema_content(client: TestClient) ->
     body = response.json()
     assert body["error"] == "invalid_request"
     detail = body["detail"]
-    # 這是 Pydantic 的長度驗證錯誤，不是 service 的 byte 上限錯誤。
+    # This is a Pydantic length validation error, not the service's byte-limit error.
     assert "content" in detail
     assert "2000000" in detail
     assert "file_too_large" not in response.text
 
-    # 請求在 schema 階段被拒，檔案版本與內容都不得變動。
+    # The request was rejected at the schema stage, so neither the file version
+    # nor its content may change.
     unchanged = client.get(f"/api/v1/files/{file_id}")
     assert unchanged.status_code == 200
     assert unchanged.json()["version"] == 1

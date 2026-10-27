@@ -572,7 +572,7 @@ def test_system_prompt_module_and_section_order(
     assert [item["id"] for item in persisted_prompts] == reordered_prompt_ids
     assert [item["sort_order"] for item in persisted_prompts] == [10, 20, 30]
 
-    # 重送同一份順序必須 idempotent，回傳與資料庫都維持相同結果。
+    # Resending the same order must be idempotent: the response and the database stay identical.
     repeated_reorder = client.post(
         f"{prompts_url}/reorder",
         json={"prompt_ids": reordered_prompt_ids},
@@ -581,7 +581,7 @@ def test_system_prompt_module_and_section_order(
     assert [item["id"] for item in repeated_reorder.json()["resources"]] == reordered_prompt_ids
     assert [item["sort_order"] for item in repeated_reorder.json()["resources"]] == [10, 20, 30]
 
-    # 缺少 id、重複 id、未知 id 都是 422，且不會改動已儲存的順序。
+    # A missing id, a duplicate id, and an unknown id are all 422 and never change the stored order.
     missing_reorder = client.post(
         f"{prompts_url}/reorder",
         json={"prompt_ids": reordered_prompt_ids[:-1]},
@@ -603,7 +603,8 @@ def test_system_prompt_module_and_section_order(
     assert unknown_reorder.status_code == 422, unknown_reorder.text
     assert unknown_reorder.json()["error"] == "invalid_frequent_prompt"
 
-    # 空清單由 Pydantic 的 min_length 擋下，走共用的 invalid_request envelope。
+    # An empty list is rejected by Pydantic's min_length and goes through the
+    # shared invalid_request envelope.
     empty_reorder = client.post(f"{prompts_url}/reorder", json={"prompt_ids": []})
     assert empty_reorder.status_code == 400, empty_reorder.text
     assert empty_reorder.json()["error"] == "invalid_request"
@@ -612,7 +613,7 @@ def test_system_prompt_module_and_section_order(
     assert [item["id"] for item in unchanged_after_rejections] == reordered_prompt_ids
     assert [item["sort_order"] for item in unchanged_after_rejections] == [10, 20, 30]
 
-    # 移除額外建立的兩筆，讓後面的 20 筆上限測試仍從單一 prompt 開始。
+    # Remove the two extra entries so the later 20-entry limit test still starts from one prompt.
     assert client.delete(f"{prompts_url}/{gamma_prompt_id}").status_code == 204
     assert client.delete(f"{prompts_url}/{delta_prompt_id}").status_code == 204
     assert [item["id"] for item in client.get(prompts_url).json()["resources"]] == [

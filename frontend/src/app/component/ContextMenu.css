@@ -1,7 +1,8 @@
 /* ==========================================================================
-   通用右鍵選單。
-   以 portal 掛在 document.body，使用 fixed 定位；層級需高於 modal (300)
-   與 toast (1000)，避免被 Library 的預覽層或浮層蓋住。
+   Shared context menu.
+   Mounted in a portal on document.body with fixed positioning; its stacking
+   level must sit above modal (300) and toast (1000) so the Library preview or
+   overlay layers never cover it.
    ========================================================================== */
 
 .context-menu {

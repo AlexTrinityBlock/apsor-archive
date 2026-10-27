@@ -7,7 +7,7 @@ import {
   type PointerEvent,
 } from "react";
 
-const STORAGE_KEY = "dendro_chat_inspector";
+const STORAGE_KEY = "apsor-archive.chat-inspector";
 const DEFAULT_RATIO = 0.42;
 const MIN_WIDTH = 280;
 const STREAM_MIN_WIDTH = 320;

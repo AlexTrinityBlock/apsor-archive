@@ -867,7 +867,8 @@ export function LibraryPage() {
   );
 
   const downloadArchiveFile = useCallback((file: PathFileSchema) => {
-    // 暫時 anchor 比 window.location 安全：不會離開 SPA，也能沿用下載端點。
+    // A temporary anchor is safer than window.location: it never leaves the SPA
+    // and reuses the download endpoint.
     const anchor = document.createElement("a");
     anchor.href = fileDownloadUrl(file.file_id);
     anchor.download = file.file_name;

@@ -580,15 +580,15 @@ export function FilePreviewModal({
     onCloseRef.current = onClose;
   }, [onClose]);
 
-  // 切換檔案 id 會展開新的預覽工作階段；新的 `mode=edit` 連結由下方
-  // effect 在中繼資料載入後套用。
+  // Switching the file id starts a new preview session; a new `mode=edit` link is
+  // applied by the effect below once the metadata has loaded.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     startInEditAppliedRef.current = false;
     setEditing(false);
   }, [fileId]);
 
-  // 深層連結可能在檔案查詢完成前就要求進入編輯模式。
+  // A deep link may ask for edit mode before the file query has finished.
   useEffect(() => {
     if (!startInEdit || startInEditAppliedRef.current || !file) {
       return;
@@ -601,7 +601,7 @@ export function FilePreviewModal({
     ) {
       setEditing(true);
     } else {
-      // URL 指向不能編輯的檔案時，清掉無效的 `mode=edit`。
+      // When the URL points at a file that cannot be edited, clear the invalid `mode=edit`.
       onEditModeChange?.(false);
     }
   }, [file, onEditModeChange, startInEdit]);
@@ -617,7 +617,7 @@ export function FilePreviewModal({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Markdown 編輯器開啟時，Escape、Tab 與 Ctrl/Cmd+S 都由它接管。
+      // While the Markdown editor is open, it takes over Escape, Tab, and Ctrl/Cmd+S.
       if (editing) {
         return;
       }
@@ -683,9 +683,10 @@ export function FilePreviewModal({
 
   const handleSaved = useCallback(
     (updatedFile: FileSchema) => {
-      // 兩個 callback 可能在同一輪事件中各自更新 query string。先清掉
-      // `mode`，再讓 `onFileVersionChange` 同時帶入新 file id 與 mode=null，
-      // 確保最後一次導覽不會退回舊版本。
+      // The two callbacks may each update the query string within the same event.
+      // Clear `mode` first, then let `onFileVersionChange` carry the new file id
+      // and mode=null together, so the final navigation never falls back to the
+      // old version.
       onEditModeChange?.(false);
       onFileVersionChange(updatedFile.id);
       setEditing(false);

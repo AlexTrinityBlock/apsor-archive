@@ -16,7 +16,8 @@ IngestJobStatus = Literal[
 ]
 IngestSourceKind = Literal["upload", "text"]
 
-# Pydantic 解析階段的內容長度上限；service 的 max_text_bytes（2 MiB）仍是最終 byte 限制。
+# Content length cap at Pydantic parse time; the service's max_text_bytes
+# (2 MiB) is still the final byte limit.
 MAX_TEXT_CONTENT_CHARS = 2_000_000
 
 
@@ -56,7 +57,7 @@ class FileTextCreateSchema(BaseModel):
 
 
 class FileTextUpdateSchema(BaseModel):
-    """更新既有 Markdown 檔案內容；expected_version 用於樂觀鎖。"""
+    """Update an existing Markdown file; expected_version provides optimistic locking."""
 
     model_config = ConfigDict(extra="forbid")
 

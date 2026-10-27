@@ -20,7 +20,7 @@ interface ToolbarButton {
   readonly action: MarkdownAction;
   readonly labelKey: TranslationKey;
   readonly icon?: IconName;
-  /** 沒有對應線稿圖示時顯示的短標記（B、I、H1…）。 */
+  /** Short glyph shown when there is no matching line icon (B, I, H1, ...). */
   readonly glyph?: string;
 }
 
@@ -49,11 +49,12 @@ const TOOLBAR_BUTTONS: readonly ToolbarButton[] = [
 ];
 
 /**
- * Markdown 格式工具列。
+ * Markdown formatting toolbar.
  *
- * 按下按鈕時先阻止 mousedown 的預設行為，避免 textarea 失焦後選取範圍
- * 消失；實際套用時再用記住的選取範圍取代內容，最後把焦點與選取範圍還給
- * textarea。
+ * Pressing a button first prevents the default mousedown behavior so the
+ * selection does not disappear when the textarea loses focus; the edit is then
+ * applied against the remembered selection, and focus plus selection are handed
+ * back to the textarea at the end.
  */
 export function MarkdownToolbar({
   textareaRef,
@@ -106,7 +107,8 @@ export function MarkdownToolbar({
     const nextValue = `${value.slice(0, edit.from)}${edit.text}${value.slice(edit.to)}`;
     onChange(nextValue);
 
-    // 等 React 提交新的 value 後再設定選取範圍，否則瀏覽器會把游標推到結尾。
+    // Set the selection only after React commits the new value; otherwise the
+    // browser pushes the caret to the end.
     window.requestAnimationFrame(() => {
       const current = textareaRef.current;
       if (!current) {

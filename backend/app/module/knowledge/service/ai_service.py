@@ -25,8 +25,9 @@ class AiService:
         self.vector_enabled = vector_enabled
 
     def status(self) -> AiStatusSchema:
-        # 這裡必須回報實際的 chat provider，而不是假設 DeepSeek；openai-compatible
-        # 也是合法的 chat provider，診斷頁不能把它顯示成 deepseek。
+        # This must report the actual chat provider instead of assuming DeepSeek;
+        # openai-compatible is a valid chat provider too, and the diagnostics page
+        # must not display it as deepseek.
         configured = self.text_generator.configured
         return AiStatusSchema(
             configured=configured,

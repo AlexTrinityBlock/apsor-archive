@@ -1,8 +1,8 @@
 /* ==========================================================================
    Design tokens: mono paper, ink, and the three archival accents.
-   The canonical values come from template/pages/chat.html and
-   template/pages/overview.html. Legacy token names are aliased so any page
-   that has not been migrated yet still inherits the new visual language.
+   Canonical values live in this file; they were derived from the original
+   archive UI prototype. Legacy token names are aliased so any page that has
+   not been migrated yet still inherits the new visual language.
    ========================================================================== */
 
 :root {
@@ -82,10 +82,8 @@
   --z-float: 40;
 
   /*
-   * Layer scale / 層級順序：
-   * modal (300) > drawer (200) > mobile bar (150) > rail (50).
+   * Layer scale: modal (300) > drawer (200) > mobile bar (150) > rail (50).
    * Modals must sit above all app chrome; drawers and scrims must stay below modals.
-   * Modal 必須高於所有 app chrome；drawer 與 scrim 不得高於 modal。
    */
   --z-rail: 50;
   --z-mobile-bar: 150;

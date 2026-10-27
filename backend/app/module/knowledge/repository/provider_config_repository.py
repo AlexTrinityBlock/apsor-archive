@@ -39,8 +39,9 @@ class ProviderConfigRepository:
     async def get_active(self, spec: ProviderTableSpec) -> ProviderConfigMixin | None:
         """Return the single active row for one capability, if any.
 
-        partial unique index 保證最多一列，所以用最嚴格的
-        ``scalar_one_or_none``；若真的出現兩列，寧可報錯也不要默默選一列。
+        The partial unique index guarantees at most one row, so the strictest
+        ``scalar_one_or_none`` is used; if two rows ever appear, raising is better
+        than silently picking one.
         """
         statement = select(spec.model).where(spec.model.is_active.is_(True))
         return (await self.session.execute(statement)).scalar_one_or_none()
@@ -60,8 +61,8 @@ class ProviderConfigRepository:
 
     async def save(self, row: ProviderConfigMixin) -> ProviderConfigMixin:
         self.session.add(row)
-        # 先 flush，讓 identity id 與 partial unique index 在 runtime reload 前
-        # 就完成資料庫端檢查。
+        # Flush first so the identity id and the partial unique index are checked
+        # by the database before the runtime reload happens.
         await self.session.flush()
         return row
 

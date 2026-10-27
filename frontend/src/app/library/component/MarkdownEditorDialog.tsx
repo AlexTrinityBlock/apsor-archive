@@ -18,11 +18,11 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**
- * 新增 Markdown 筆記的全螢幕對話框。
+ * The full-screen dialog for creating a new Markdown note.
  *
- * Escape、背景點擊與關閉按鈕都不直接卸載元件，而是先經過
- * `MarkdownEditorHandle.requestClose()`，讓未保存的變更有機會顯示
- * inline discard confirm。
+ * Escape, a background click, and the close button never unmount the component
+ * directly; they all go through `MarkdownEditorHandle.requestClose()` so unsaved
+ * changes get a chance to show the inline discard confirm.
  */
 export function MarkdownEditorDialog({
   defaultDirectory,
@@ -52,7 +52,8 @@ export function MarkdownEditorDialog({
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        // 編輯器自己的 Escape 處理已經執行時，不再重複觸發關閉確認。
+        // If the editor's own Escape handling has already run, do not trigger the
+        // close confirmation again.
         if (event.defaultPrevented) {
           return;
         }

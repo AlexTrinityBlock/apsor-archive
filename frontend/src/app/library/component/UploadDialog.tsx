@@ -48,7 +48,7 @@ function pathPrefix(path: string): string {
 /**
  * Grows a folder-shaped path with the picked file's name.
  *
- * The dialog starts with the current folder (for example `/檔案A/`), and the
+ * The dialog starts with the current folder (for example `/Folder A/`), and the
  * server reads the final path segment as the file name, so leaving it as a
  * folder fails with a missing-extension error. A path that already names a
  * supported file wins, so renaming on upload still works, while a name this

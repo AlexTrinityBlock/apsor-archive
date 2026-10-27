@@ -524,8 +524,8 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
 
 
 def test_delete_library_selection_soft_deletes_folder_tree(client: TestClient) -> None:
-    """批次刪除資料夾時遞迴軟刪除 current files，folder rows 直接移除。"""
-    # 先建立 /journal、/journal/archive、/journal/archive/2026 三層資料夾。
+    """A folder batch delete soft-deletes current files recursively and drops folder rows."""
+    # First create the three folder levels /journal, /journal/archive, /journal/archive/2026.
     for path in ("/journal", "/journal/archive", "/journal/archive/2026"):
         created_folder = client.post("/api/v1/folders", json={"path": path})
         assert created_folder.status_code == 201, created_folder.text
@@ -555,7 +555,7 @@ def test_delete_library_selection_soft_deletes_folder_tree(client: TestClient) -
         "2026-09-04T09:00:00Z",
     )
 
-    # 先更新 old.md 產生 v2，讓 v1 成為歷史版本，稍後驗證它仍然可讀。
+    # Update old.md first to produce v2, leaving v1 as a historical version to verify later.
     updated = client.put(
         f"/api/v1/files/{int(old_v1['id'])}/content",
         json={"content": "Revised archived entry. " * 40, "expected_version": 1},
@@ -583,7 +583,7 @@ def test_delete_library_selection_soft_deletes_folder_tree(client: TestClient) -
         int(outside["id"]),
     }
 
-    # /journal 還在，archive 子樹消失，/journal/keep.md 仍是 current file。
+    # /journal still exists, the archive subtree is gone, and /journal/keep.md is still current.
     journal_listing = client.get(
         "/api/v1/paths",
         params={"path": "/journal", "path_depth": 1},
@@ -594,12 +594,13 @@ def test_delete_library_selection_soft_deletes_folder_tree(client: TestClient) -
     assert client.get("/api/v1/paths", params={"path": "/journal/archive"}).status_code == 404
     assert client.get("/api/v1/paths", params={"path": "/journal/archive/2026"}).status_code == 404
 
-    # 未選取的資料夾 row 會保留；它底下的檔案已被直接選取刪除。
+    # An unselected folder row is kept; the file under it was deleted because it
+    # was selected directly.
     outside_listing = client.get("/api/v1/paths", params={"path": "/outside"})
     assert outside_listing.status_code == 200
     assert outside_listing.json()["files"] == []
 
-    # 被刪除的檔案都變成非 current 並帶 deleted_at，chunks 也全部非 current。
+    # Deleted files become non-current and carry deleted_at; their chunks are all non-current.
     for file_id in (old_v2_id, int(new_file["id"]), int(outside["id"])):
         detail = client.get(f"/api/v1/files/{file_id}")
         assert detail.status_code == 200
@@ -610,13 +611,13 @@ def test_delete_library_selection_soft_deletes_folder_tree(client: TestClient) -
         assert window.json()["chunks"]
         assert all(chunk["is_current"] is False for chunk in window.json()["chunks"])
 
-    # 歷史 v1 row 沒有被刪除，仍可用原本的 id 讀取。
+    # The historical v1 row is not deleted and is still readable through its original id.
     historical = client.get(f"/api/v1/files/{old_v1_id}")
     assert historical.status_code == 200
     assert historical.json()["is_current"] is False
     assert historical.json()["raw_file_path"] == "/journal/archive/old.md"
 
-    # root 不可刪除，錯誤一律回穩定的 domain error code。
+    # root cannot be deleted, and the error always returns a stable domain error code.
     root_delete = client.post(
         "/api/v1/files/batch-delete",
         json={"folder_paths": ["/"]},
@@ -650,7 +651,8 @@ def test_delete_library_selection_soft_deletes_folder_tree(client: TestClient) -
     assert empty_delete.json()["error"] == "invalid_request"
     assert client.get(f"/api/v1/files/{int(keep['id'])}").json()["is_current"] is True
 
-    # 同時選父資料夾與子資料夾只處理最上層；重複的 file id 只算一次。
+    # Selecting a parent and a child folder only handles the top level; a repeated
+    # file id counts once.
     bulk_note = create_text(client, "/bulk/child/note.md", "Bulk note. " * 40)
     bulk_note_id = int(bulk_note["id"])
     deduped = client.post(
@@ -669,7 +671,7 @@ def test_delete_library_selection_soft_deletes_folder_tree(client: TestClient) -
 
 
 def test_rename_file_keeps_identity_and_rejects_path_changes(client: TestClient) -> None:
-    """重新命名只改最後段檔名，保留檔案身分、版本、chunks 與原始資料。"""
+    """Rename changes only the final file name, keeping identity, version, chunks, and raw data."""
     created = create_text(
         client,
         "/journal/day-one.md",
@@ -679,7 +681,8 @@ def test_rename_file_keeps_identity_and_rejects_path_changes(client: TestClient)
     file_id = int(created["id"])
     renamed_path = "/journal/day-one-renamed.md"
 
-    # 成功改名後，檔名與路徑更新，但身分、版本、chunks、大小與原始檔狀態不變。
+    # After a successful rename the name and path change, but identity, version,
+    # chunks, size, and original-file state do not.
     renamed = client.post(
         f"/api/v1/files/{file_id}/rename",
         json={"file_name": "day-one-renamed.md"},
@@ -694,7 +697,7 @@ def test_rename_file_keeps_identity_and_rejects_path_changes(client: TestClient)
     assert body["file_name"] == "day-one-renamed.md"
     assert body["raw_file_path"] == renamed_path
 
-    # 父資料夾不變，listing 只看得到新名稱，舊名稱已消失。
+    # The parent folder is unchanged, the listing shows only the new name, and the old name is gone.
     listing = client.get(
         "/api/v1/paths",
         params={"path": "/journal", "path_depth": 1},
@@ -704,7 +707,7 @@ def test_rename_file_keeps_identity_and_rejects_path_changes(client: TestClient)
     assert listed_paths == {renamed_path}
     assert "/journal/day-one.md" not in listed_paths
 
-    # 只接受單一最後段檔名，且副檔名必須與原檔相同。
+    # Only a single final path segment is accepted, and the extension must match the original file.
     for invalid_name in ("nested/name.md", "../escape.md", "wrong.txt"):
         invalid = client.post(
             f"/api/v1/files/{file_id}/rename",
@@ -713,7 +716,7 @@ def test_rename_file_keeps_identity_and_rejects_path_changes(client: TestClient)
         assert invalid.status_code == 422
         assert invalid.json()["error"] == "invalid_path"
 
-    # 同資料夾已有同名檔案時，不可覆蓋。
+    # An existing file with the same name in the folder must not be overwritten.
     create_text(client, "/journal/occupied.md", "Already occupied.")
     conflict = client.post(
         f"/api/v1/files/{file_id}/rename",
@@ -722,7 +725,7 @@ def test_rename_file_keeps_identity_and_rejects_path_changes(client: TestClient)
     assert conflict.status_code == 409
     assert conflict.json()["error"] == "tree_path_conflict"
 
-    # 軟刪除後，同一個 id 不再是 current file，重新命名應回 404。
+    # After a soft delete the same id is no longer a current file, so a rename must return 404.
     deleted = client.delete(f"/api/v1/files/{file_id}")
     assert deleted.status_code == 204
     deleted_rename = client.post(

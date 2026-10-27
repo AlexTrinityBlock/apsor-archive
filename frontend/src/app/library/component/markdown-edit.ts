@@ -1,8 +1,9 @@
 /**
- * Markdown 工具列的字串操作。
+ * String operations for the Markdown toolbar.
  *
- * 這個模組刻意與 React、DOM、i18n 保持距離：輸入是原始字串與選取範圍，
- * 輸出是一段可套用到 textarea 的編輯結果，方便獨立推理與測試。
+ * This module deliberately stays away from React, the DOM, and i18n: the inputs
+ * are a raw string and a selection, and the output is an edit that can be applied
+ * to a textarea, which makes it easy to reason about and test on its own.
  */
 
 export type MarkdownAction =
@@ -25,14 +26,15 @@ export interface MarkdownEditSelection {
 
 export interface MarkdownEdit {
   /**
-   * 這次編輯要取代的緩衝區範圍。多數動作取代選取範圍；逐行加前綴的動作
-   * 則從游標所在行首開始，所以 `from` 不一定等於 `start`。
+   * The buffer range this edit replaces. Most actions replace the selection; the
+   * actions that prefix each line start at the beginning of the cursor's line, so
+   * `from` is not necessarily `start`.
    */
   readonly from: number;
   readonly to: number;
-  /** 取代 `[from, to)` 的文字。 */
+  /** The text that replaces `[from, to)`. */
   readonly text: string;
-  /** 套用編輯後應留下的選取範圍。 */
+  /** The selection that should remain after the edit is applied. */
   readonly selection: MarkdownEditSelection;
 }
 
@@ -45,7 +47,7 @@ export interface MarkdownActionLabels {
   readonly tableCellPlaceholder: string;
 }
 
-/** 建立一個直接取代選取範圍的編輯。 */
+/** Build an edit that replaces the selection directly. */
 function replace(
   start: number,
   end: number,
@@ -55,7 +57,7 @@ function replace(
   return { from: start, to: end, text, selection };
 }
 
-/** 以 `marker` 包住選取內容；沒有選取時插入 placeholder 並選取它。 */
+/** Wrap the selection in `marker`; with no selection, insert the placeholder and select it. */
 function wrap(
   value: string,
   start: number,
@@ -76,7 +78,7 @@ function wrap(
   });
 }
 
-/** 找出 `start` 所在行的開頭；位置 0 直接視為第一行開頭。 */
+/** Find the start of the line containing `start`; position 0 is simply the first line start. */
 function lineStartAt(value: string, start: number): number {
   if (start <= 0) {
     return 0;
@@ -85,10 +87,11 @@ function lineStartAt(value: string, start: number): number {
 }
 
 /**
- * 在選取範圍觸及的每一行開頭加上 `prefix`。
+ * Add `prefix` to the start of every line the selection touches.
  *
- * 這是一次涵蓋受影響行段的連續取代：從游標所在行首到選取結尾。它不會
- * 延伸到選取範圍之後，因此最後一行游標後方的文字保持不動。
+ * This is a single contiguous replacement covering the affected line span: from
+ * the start of the cursor's line to the end of the selection. It never extends
+ * past the selection, so text after the cursor on the last line stays untouched.
  */
 function prefixLines(
   value: string,
@@ -104,7 +107,8 @@ function prefixLines(
     .map((line) => `${prefix}${line}`)
     .join("\n");
 
-  // span 一定從行首開始，因此涵蓋的行數等於換行數加一，每一行都多了前綴。
+  // span always starts at a line start, so the covered line count is the newline
+  // count plus one, and every line gained a prefix.
   const lineCount = span.split("\n").length;
   const added = prefix.length * lineCount;
   return {
@@ -116,8 +120,8 @@ function prefixLines(
 }
 
 /**
- * 區塊型編輯：在游標所在行首插入多行內容，並在必要時先補一個空行，
- * 讓 Markdown 把它視為獨立區塊。
+ * Block-style edit: insert multi-line content at the start of the cursor's line,
+ * adding a blank line first when needed so Markdown treats it as a separate block.
  */
 function block(value: string, start: number, inner: string): MarkdownEdit {
   const lineStart = lineStartAt(value, start);
@@ -133,8 +137,9 @@ function block(value: string, start: number, inner: string): MarkdownEdit {
 }
 
 /**
- * 套用一個工具列動作到 `value` 的 `[start, end)` 選取範圍。
- * 所有 placeholder 都由 `labels` 傳入，模組本身不含任何語系字串。
+ * Apply one toolbar action to the `[start, end)` selection of `value`.
+ * Every placeholder comes in through `labels`; the module itself contains no
+ * locale-specific strings.
  */
 export function applyMarkdownAction(
   action: MarkdownAction,
@@ -175,7 +180,7 @@ export function applyMarkdownAction(
       const body = value.slice(start, end);
       const linkLabel = body === "" ? labels.linkPlaceholder : body;
       const text = `[${linkLabel}](https://)`;
-      // 選取 URL 區段，讓使用者可以直接輸入網址。
+      // Select the URL part so the user can type the address directly.
       return replace(start, end, text, {
         start: start + linkLabel.length + 3,
         end: start + text.length - 1,

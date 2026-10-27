@@ -91,10 +91,12 @@ class TimelineToolServiceProtocol(Protocol):
 class WebResearchServiceProtocol(Protocol):
     """The two read-only web capabilities the agent tools depend on.
 
-    這是 consumer-owned protocol：agent slice 只宣告自己需要的形狀，實際實作由
-    ``app.module.web_research`` 提供並以結構性型別滿足，所以 agent 不需要 import
-    整個 web service 實作。``search_depth`` 直接沿用工具參數的 Literal，讓
-    provider 實作與工具層對「basic / advanced」有同一個定義。
+    This is a consumer-owned protocol: the agent slice only declares the shape it
+    needs, the real implementation is provided by ``app.module.web_research`` and
+    satisfies it structurally, so agent never imports the whole web service
+    implementation. ``search_depth`` reuses the tool argument Literal directly so
+    the provider implementation and the tool layer share one definition of
+    "basic / advanced".
     """
 
     async def search(

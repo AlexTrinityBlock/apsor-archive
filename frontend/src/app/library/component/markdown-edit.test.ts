@@ -1,9 +1,9 @@
-// @ts-expect-error -- `bun:test` 由 Bun 執行時提供；前端 tsconfig 未載入 @types/bun。
+// @ts-expect-error -- `bun:test` is provided by the Bun runtime; the frontend tsconfig does not load @types/bun.
 import { expect, test } from "bun:test";
 
 import { applyMarkdownAction, type MarkdownActionLabels } from "./markdown-edit";
 
-/** 測試用 placeholder，刻意使用中文以確認沒有硬編英文。 */
+/** Test placeholders, deliberately Chinese to prove nothing is hard-coded in English. */
 const labels: MarkdownActionLabels = {
   boldPlaceholder: "粗體文字",
   italicPlaceholder: "斜體文字",
@@ -13,7 +13,8 @@ const labels: MarkdownActionLabels = {
   tableCellPlaceholder: "儲存格",
 };
 
-/** 依 toolbar 的方式把編輯結果接回原文，才能抓到取代範圍過大的問題。 */
+/** Splice the edit back into the source the way the toolbar does, so an oversized
+ * replacement range shows up. */
 function apply(
   action: Parameters<typeof applyMarkdownAction>[0],
   value: string,

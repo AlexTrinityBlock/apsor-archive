@@ -833,7 +833,10 @@ class FileService:
         content: str,
         expected_version: int,
     ) -> FileSchema:
-        """以新版本更新既有 Markdown 檔案，保留舊版本與原始 bytes。"""
+        """Update an existing Markdown file as a new version.
+
+        The previous version and its raw bytes are kept.
+        """
         file = await self._require_current_file_for_update(file_id)
         if file.extension not in MARKDOWN_EXTENSIONS:
             raise UnsupportedFileTypeError(file.extension)
@@ -928,7 +931,7 @@ class FileService:
         return self._directory_schema(folder)
 
     async def _require_current_file_for_update(self, file_id: int) -> FileModel:
-        """以資料列鎖定 current file；供更新、移動、複製、刪除共用。"""
+        """Lock the current file row; shared by update, move, copy, and delete."""
         file = await self.file_repository.get_current_for_update(file_id)
         if file is None or file.deleted_at is not None or not file.is_current:
             raise FileRecordNotFoundError(file_id)
@@ -992,8 +995,9 @@ class FileService:
         """Rename one current file without changing its parent folder or extension."""
         file = await self._require_current_file_for_update(file_id)
         name = file_name_value.strip()
-        # 先擋掉 slash，否則 target 會被 normalize 成合法的多段路徑；其餘
-        # 空名稱、"."、".." 與 control characters 由 normalize_file_path 擋下。
+        # Reject a slash first, otherwise the target would be normalized into a
+        # valid multi-segment path; empty names, ".", "..", and control characters
+        # are rejected by normalize_file_path.
         if not name or "/" in name or "\\" in name:
             raise InvalidPathError("A renamed file must use a single non-empty file name.")
 
@@ -1167,7 +1171,9 @@ class FileService:
         )
 
     async def delete_file(self, file_id: int) -> None:
-        # DELETE 只允許 current file；歷史版本 id 一律回 404，避免誤刪已取代的版本。
+        # DELETE only accepts a current file; a historical version id always
+        # returns 404 so an already superseded version cannot be deleted by
+        # mistake.
         file = await self._require_current_file_for_update(file_id)
         now = utcnow()
         file.is_current = False
@@ -1182,17 +1188,19 @@ class FileService:
         file_ids: Sequence[int],
         folder_paths: Sequence[str],
     ) -> LibraryDeleteResultSchema:
-        """原子地軟刪除選取的檔案，並遞迴軟刪除所選資料夾下的內容。
+        """Soft-delete the selected files atomically, recursing into selected folders.
 
-        資料夾只保留最上層路徑，子資料夾由父路徑遞迴涵蓋；folder rows 直接
-        刪除，歷史 file rows 與原始 bytes 一律保留。
+        Only the topmost paths are kept for folders; subfolders are covered
+        recursively by their parent path. Folder rows are deleted outright, while
+        historical file rows and the raw bytes are always preserved.
         """
         normalized_folders = list(
             dict.fromkeys(self._normalized_directory(path) for path in folder_paths)
         )
         unique_file_ids = list(dict.fromkeys(file_ids))
 
-        # 先按深度排序，父資料夾一定排在子資料夾前面，再濾掉被涵蓋的路徑。
+        # Sort by depth first so a parent folder always precedes its subfolders,
+        # then drop the paths that are already covered.
         top_level_folders: list[str] = []
         for path in sorted(normalized_folders, key=lambda value: len(path_segments(value))):
             if any(path.startswith(f"{parent}/") for parent in top_level_folders):

@@ -136,9 +136,10 @@ class ProviderFactory:
     def build_web_client(self, config: ProviderConfig) -> WebClientProtocol:
         """Build the Tavily client lazily so knowledge never imports web code at boot.
 
-        web-research slice 擁有 ``app/infrastructure/web``。這裡延後 import，
-        讓 knowledge 在該 slice 尚未存在時仍可啟動；測試則透過 provider-tester
-        seam 換掉實際 client，不會發出外部請求。
+        The web-research slice owns ``app/infrastructure/web``. The import is
+        deferred here so knowledge can still boot while that slice does not
+        exist; tests swap the real client out through the provider-tester seam,
+        so no external request is made.
         """
         if not config.enabled or config.provider != "tavily" or not config.api_key:
             return NullWebClient()
@@ -215,7 +216,7 @@ class ProviderClientTester(ProviderTesterProtocol):
                 await client.fetch("https://example.com", max_chars=500)
             else:  # pragma: no cover - ProviderCapability is exhaustive.
                 return ProviderTestOutcome(ok=False, detail="Unknown capability.")
-        except Exception as exc:  # 連線失敗要回結果，不可讓端點變成 500。
+        except Exception as exc:  # A connection failure must return a result, never a 500.
             logger.warning("Provider test failed for %s: %s", capability, exc)
             return ProviderTestOutcome(
                 ok=False,

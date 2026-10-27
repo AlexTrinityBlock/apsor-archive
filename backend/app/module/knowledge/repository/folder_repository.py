@@ -69,7 +69,7 @@ class FolderRepository:
         return list((await self.session.execute(statement)).scalars().all())
 
     async def list_for_update(self, paths: Sequence[str]) -> list[FolderModel]:
-        """鎖定所選資料夾與其所有 descendants。"""
+        """Lock the selected folders and all of their descendants."""
         if not paths:
             return []
         conditions = [
@@ -91,7 +91,7 @@ class FolderRepository:
         return list((await self.session.execute(statement)).scalars().all())
 
     async def delete_many(self, folders: Sequence[FolderModel]) -> None:
-        """以單一 DELETE 移除整個資料夾子樹，避免父子刪除順序問題。"""
+        """Remove a whole folder subtree with one DELETE, avoiding parent/child ordering issues."""
         if not folders:
             return
         await self.session.execute(

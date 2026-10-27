@@ -12,8 +12,8 @@ DEFAULT_INDEX_SCOPE = "index"
 def _version_key(scope: str) -> str:
     """One version key per scope; the default preserves ``apsor:index:version``.
 
-    Scope 讓 provider registry（"providers"）與 prompt 清單（"prompts"）能各自
-    失效，不需要清掉整個 index。
+    Scopes let the provider registry ("providers") and the prompt list
+    ("prompts") be invalidated independently, without clearing the whole index.
     """
     return f"apsor:{scope}:version"
 

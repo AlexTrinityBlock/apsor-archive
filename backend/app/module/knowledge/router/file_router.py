@@ -383,7 +383,7 @@ async def update_file_content(
     payload: FileTextUpdateSchema,
     file_service: FileService = Depends(get_file_service),
 ) -> FileSchema:
-    """更新既有 Markdown 檔案內容，建立新版本並重建索引。"""
+    """Update an existing Markdown file, creating a new version and reindexing it."""
     return await file_service.update_markdown_content(
         file_id,
         content=payload.content,

@@ -336,15 +336,16 @@ export function isImageFileName(name: string): boolean {
   return IMAGE_EXTENSIONS.some((extension) => lower.endsWith(extension));
 }
 
-/** 判斷儲存路徑是否為編輯器可開啟的 Markdown 文件。 */
+/** Whether a stored path is a Markdown document the editor can open. */
 export function isMarkdownFile(rawPath: string): boolean {
   const lower = rawPath.toLowerCase();
   return lower.endsWith(".md") || lower.endsWith(".markdown");
 }
 
 /**
- * 右鍵選單的觸發事件。滑鼠事件本身即符合這個介面；鍵盤操作則用
- * `contextMenuTriggerFromKeyboard` 以按鈕位置建立一個等價物件。
+ * The triggering event for a context menu. A mouse event already satisfies this
+ * interface; keyboard use goes through `contextMenuTriggerFromKeyboard`, which
+ * builds an equivalent object from the button's position.
  */
 export interface LibraryContextMenuTrigger {
   readonly clientX: number;
@@ -354,7 +355,7 @@ export interface LibraryContextMenuTrigger {
   readonly stopPropagation: () => void;
 }
 
-/** ContextMenu 鍵或 Shift+F10 都能開啟與滑鼠右鍵相同的選單。 */
+/** The ContextMenu key and Shift+F10 open the same menu as a right click. */
 export function isContextMenuKey(event: {
   readonly key: string;
   readonly shiftKey: boolean;
@@ -362,7 +363,7 @@ export function isContextMenuKey(event: {
   return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
 }
 
-/** 以觸發按鈕的可見區域中心建立選單座標。 */
+/** Build the menu coordinates from the center of the trigger button's visible area. */
 export function contextMenuTriggerFromKeyboard(
   target: HTMLElement,
 ): LibraryContextMenuTrigger {

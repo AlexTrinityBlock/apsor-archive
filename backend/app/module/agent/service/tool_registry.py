@@ -57,8 +57,9 @@ WEB_FETCH_PREVIEW_LIMIT = 6_000
 MAX_LISTED_ENTRIES = 100
 MAX_TIMELINE_EVENTS = 50
 PREVIEW_EXCERPT_LIMIT = 600
-# 單一搜尋結果的內文上限。搜尋結果只是「線索」，真正需要全文時模型應改用
-# web_fetch；限制在這裡可以讓 10 筆結果仍然塞得進一次 tool result。
+# Per-result content cap. A search result is only a "lead"; when the model really
+# needs the full text it should switch to web_fetch. Capping here keeps 10 results
+# inside a single tool result.
 WEB_RESULT_CONTENT_LIMIT = 2_000
 
 WEB_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
@@ -175,8 +176,10 @@ class AgentToolRegistry:
             async with self.service_scope() as services:
                 content, data, resource = await _dispatch(name, parsed, services)
         except WebResearchError as exc:
-            # 外部 web provider 的失敗是「工具失敗」，不是串流失敗：回傳帶穩定
-            # code 的 tool-result，SSE 仍可繼續，模型能改寫查詢或說明限制。
+            # A failure from the external web provider is a "tool failure", not a
+            # stream failure: return a tool result with a stable code so the SSE
+            # stream can continue and the model can rewrite the query or explain
+            # the limitation.
             return _error(
                 name,
                 _web_error_code(exc, name),
@@ -209,8 +212,9 @@ class AgentToolRegistry:
             "duration_ms": duration,
         }
         if name in WEB_TOOL_NAMES:
-            # web_search / web_fetch 的 data["truncated"] 是 service（provider）的
-            # 事實；tool 層再裁切時另記 tool_truncated，兩者不可互相覆蓋。
+            # data["truncated"] for web_search / web_fetch is a service (provider)
+            # fact; extra clipping in the tool layer is recorded separately as
+            # tool_truncated, and the two must not overwrite each other.
             payload["tool_truncated"] = tool_truncated
             payload.setdefault("truncated", tool_truncated)
         else:
@@ -288,8 +292,9 @@ async def _search_knowledge(
             + _close("source")
         )
     for summary_result in result.summary_results:
-        # summary 是壓縮視圖，不是原文。XML 本身必須帶 view / memory_count /
-        # coverage，模型即使忽略 system prompt 也能看出這段文字不是原始記憶。
+        # A summary is a compressed view, not the original text. The XML itself
+        # must carry view / memory_count / coverage so the model can tell this is
+        # not a raw memory even if it ignores the system prompt.
         coverage_start = summary_result.period_start.isoformat()
         coverage_end = summary_result.period_end.isoformat()
         content.append(
@@ -442,8 +447,10 @@ async def _read_timeline(
             event_attributes["path"] = event.raw_file_path
         body = xml_text(clip(event.content, 600))
         if event.kind == "summary":
-            # summary event 一律標成壓縮視圖；memory_count 由 timeline service 從
-            # summary row 帶入，缺少時仍保留 view="compressed" 以免模型誤判為原文。
+            # A summary event is always marked as a compressed view; memory_count
+            # comes from the timeline service via the summary row, and
+            # view="compressed" stays even when it is missing so the model never
+            # mistakes the text for the original.
             event_attributes["view"] = COMPRESSED_VIEW
             if event.memory_count is not None:
                 event_attributes["memory_count"] = event.memory_count
@@ -719,10 +726,12 @@ async def _web_search(
 ) -> tuple[str, dict[str, Any], None]:
     """Search the public web and render bounded, citable results.
 
-    XML 形狀固定為 ``<web_search>`` 內含 ``<result>``；provider 與 retrieved_at
-    放在根元素，因為它們是「整批結果」的來源事實，模型引用時只需要看根屬性。
-    ``cached`` / ``truncated`` 也放在根上，讓模型知道這是快取結果或被裁切過的
-    內文，避免把快取內容誤當成當下即時觀測。
+    The XML shape is fixed: ``<web_search>`` containing ``<result>`` elements.
+    provider and retrieved_at sit on the root element because they are the source
+    facts for the whole batch of results, so the model only has to look at the
+    root attributes when citing. ``cached`` / ``truncated`` are on the root as
+    well, telling the model that this is a cached result or clipped text and
+    keeping it from mistaking cached content for a live observation.
     """
     result = await services.web_research_service.search(
         args.query,
@@ -743,7 +752,8 @@ async def _web_search(
                     "index": index,
                     "title": item.title,
                     "url": item.url,
-                    # provider 不一定提供分數；None 由 _open 的 _defined 過濾掉。
+                    # A provider does not always return a score; None is filtered
+                    # out by _defined in _open.
                     "score": round(item.score, 4) if item.score is not None else None,
                 },
             )
@@ -759,7 +769,7 @@ async def _web_search(
                 "results": len(result.results),
                 "retrieved_at": retrieved_at,
                 "cached": _xml_bool(result.cached),
-                # 只要 provider 或 agent 這一層任一處裁切過，XML 就標成 truncated。
+                # If any layer clipped, provider or agent, the XML is marked truncated.
                 "truncated": _xml_bool(result.truncated or clipped_any),
             },
         )
@@ -792,14 +802,18 @@ async def _web_fetch(
 ) -> tuple[str, dict[str, Any], None]:
     """Fetch one public URL and return one server-defined Markdown page.
 
-    ``content_chars`` 與 ``truncated`` 都由 service 的實際回應計算，XML 屬性只是
-    同一事實的投影；tool 層再裁切時由 ``execute`` 另記 ``tool_truncated``，不覆蓋
-    這裡的 provider 語意。尾端 footer 用純文字告訴模型目前頁碼與如何續讀，因為
-    模型一定會讀到 tool result，即使它忽略了 system prompt。
+    ``content_chars`` and ``truncated`` are both computed from the service's real
+    response, and the XML attributes are only a projection of the same fact; extra
+    clipping in the tool layer is recorded separately as ``tool_truncated`` by
+    ``execute`` and does not override the provider semantics here. The trailing
+    footer tells the model the current page number and how to continue in plain
+    text, because the model always reads the tool result even when it ignores the
+    system prompt.
 
-    只有明確送出 ``page`` 時才把它傳給 service；否則讓 service 依 legacy
-    ``offset`` 或預設 page 1 決定起點。``max_chars`` / ``limit`` 是凍結舊對話
-    的相容欄位，page 模式不採用。
+    ``page`` is forwarded to the service only when it was sent explicitly;
+    otherwise the service decides the starting point from the legacy ``offset`` or
+    from the default page 1. ``max_chars`` / ``limit`` are compatibility fields
+    frozen for old conversations and are not used in page mode.
     """
     result = await services.web_research_service.fetch(
         args.url,
@@ -821,7 +835,7 @@ async def _web_fetch(
                 "page_chars": result.page_chars,
                 "total_chars": result.total_chars,
                 "has_more": _xml_bool(result.has_more),
-                # None 由 _defined 過濾，避免輸出 next_page="None"。
+                # None is filtered by _defined so next_page="None" is never emitted.
                 "next_page": result.next_page,
                 "source_truncated": _xml_bool(result.source_truncated),
                 "truncated": _xml_bool(result.truncated),
@@ -885,19 +899,22 @@ def _compressed_view(
 ) -> str:
     """Render the explicit compressed-view marker for a summary.
 
-    為什麼要放進 XML 而不是只寫在 system prompt：模型可能忽略 prompt，但一定會
-    讀到自己正在引用的 tool result。``coverage_start`` / ``coverage_end`` 描述
-    摘要涵蓋的期間，``source_memory_count`` 是原始記憶數，固定內文則直接告訴模型
-    需要精確措辭時應改用 ``read_memory`` 或 ``read_timeline``。內文刻意使用英文，
-    與其他 tool result 的語言一致。
+    Why this goes into the XML instead of only the system prompt: the model may
+    ignore the prompt, but it always reads the tool result it is citing.
+    ``coverage_start`` / ``coverage_end`` describe the period the summary covers,
+    ``source_memory_count`` is the number of original memories, and the fixed body
+    tells the model outright to use ``read_memory`` or ``read_timeline`` when exact
+    wording matters. The body is deliberately in English, matching the language of
+    the other tool results.
     """
     notice = (
         f"This is a compressed summary of {memory_count} original memories, "
         "not the complete original content. Use read_memory for a specific memory "
         "or read_timeline for the covered period when exact wording matters."
     )
-    # 缺少 coverage 時不要輸出 coverage_start="None"；只有真正存在的期間才放進
-    # XML，避免模型把字串 "None" 當成一個有效日期。
+    # Do not emit coverage_start="None" when the coverage is unknown; only a period
+    # that really exists goes into the XML, so the model never treats the string
+    # "None" as a valid date.
     values: dict[str, object] = {"source_memory_count": memory_count}
     if coverage_start is not None:
         values["coverage_start"] = coverage_start
@@ -998,14 +1015,17 @@ _WEB_DEFAULT_CODES = {
 def _web_error_code(exc: WebResearchError, tool_name: str) -> str:
     """Map a web-research failure to one of the five stable tool error codes.
 
-    類別判斷一律走 ``isinstance``，因為 ``web_research`` 已把 leaf exception
-    定義成穩定的 domain 契約；未知的 leaf 會落到該工具的通用碼（search ->
-    ``web_provider_error``、fetch -> ``web_fetch_failed``），模型仍能依 code
-    決定改寫查詢或說明限制。
+    Classification always uses ``isinstance`` because ``web_research`` already
+    defines the leaf exceptions as a stable domain contract; an unknown leaf falls
+    through to that tool's generic code (search -> ``web_provider_error``,
+    fetch -> ``web_fetch_failed``), and the model can still use the code to decide
+    whether to rewrite the query or explain the limitation.
 
-    為什麼通用碼要依工具分開：同一個 provider 失敗在搜尋情境是「查詢失敗」，
-    在抓取情境是「這一頁抓不到」，兩者給模型的行動建議不同。not-configured
-    也刻意對應到各自的 capability，使用者才知道要去 Settings 設定哪一個 slot。
+    Why the generic codes are split per tool: the same provider failure is "the
+    query failed" in a search context and "this page could not be fetched" in a
+    fetch context, and the two suggest different next actions to the model.
+    not-configured deliberately maps to each capability as well, so the user knows
+    which slot to configure in Settings.
     """
     if isinstance(exc, WebUrlInvalidError):
         return "web_url_invalid"

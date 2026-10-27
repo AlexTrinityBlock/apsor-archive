@@ -13,7 +13,7 @@ class MemoryCache:
 
     def __init__(self) -> None:
         self._values: dict[str, tuple[float, JsonValue]] = {}
-        # 每個 scope 一個 monotonic version（index、providers、prompts…）。
+        # One monotonic version per scope (index, providers, prompts, ...).
         self._versions: dict[str, int] = {}
         self._lock = asyncio.Lock()
 

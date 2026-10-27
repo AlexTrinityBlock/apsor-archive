@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 
 import httpx
 
-USER_AGENT = "ApsorArchive/0.1 (local knowledge archive)"
+USER_AGENT = "Apsor-Archive/0.1 (local knowledge archive)"
 
 
 def _slug(title: str) -> str:

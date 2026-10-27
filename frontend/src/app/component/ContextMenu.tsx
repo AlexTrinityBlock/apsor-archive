@@ -30,10 +30,10 @@ export interface ContextMenuProps {
   readonly returnFocus?: HTMLElement | null;
 }
 
-/** 選單與 viewport 邊緣之間保留的距離。 */
+/** Gap kept between the menu and the viewport edge. */
 const VIEWPORT_MARGIN = 8;
 
-/** 取得目前可用（未 disabled）的選單項目按鈕，順序與 items 過濾後一致。 */
+/** Collect the enabled (not disabled) item buttons, in the same order as the filtered items. */
 function enabledElements(menu: HTMLDivElement): HTMLButtonElement[] {
   return Array.from(
     menu.querySelectorAll<HTMLButtonElement>(".context-menu__item:not(:disabled)"),
@@ -41,13 +41,15 @@ function enabledElements(menu: HTMLDivElement): HTMLButtonElement[] {
 }
 
 /**
- * 通用右鍵選單。
+ * Shared context menu.
  *
- * 以 portal 掛到 `document.body`，避免被 Library 的 overflow 或 stacking
- * context 裁切；定位使用 fixed，並在量測後自動往左／往上翻轉。
+ * Mounted in a portal on `document.body` so the Library's overflow or stacking
+ * context cannot clip it; positioning is fixed, and after measuring it flips to
+ * the left or upwards automatically.
  *
- * 鍵盤操作：ArrowDown / ArrowUp / Home / End 移動焦點，Enter / Space 觸發，
- * Escape / Tab 關閉。關閉時若有 `returnFocus`，焦點會回到觸發元素。
+ * Keyboard: ArrowDown / ArrowUp / Home / End move focus, Enter / Space activate,
+ * Escape / Tab close. When closing, `returnFocus` sends focus back to the
+ * triggering element.
  */
 export function ContextMenu({
   x,
@@ -75,7 +77,7 @@ export function ContextMenu({
     onCloseRef.current();
   }, []);
 
-  // 元件卸載（亦即選單關閉）時把焦點還給觸發元素。
+  // Return focus to the trigger when the component unmounts (that is, on close).
   useEffect(() => {
     return () => {
       const target = returnFocusRef.current;
@@ -85,7 +87,8 @@ export function ContextMenu({
     };
   }, []);
 
-  // 先量測實際尺寸，再決定是否往左或往上翻，避免選單突出 viewport。
+  // Measure the real size first, then decide whether to flip left or up, so the
+  // menu never sticks out of the viewport.
   useLayoutEffect(() => {
     const menu = menuRef.current;
     if (!menu) {
@@ -112,7 +115,7 @@ export function ContextMenu({
     setMeasured(true);
   }, [x, y]);
 
-  // 開啟時聚焦第一個可用項目；若全部 disabled，則聚焦選單本身。
+  // On open, focus the first enabled item; if all are disabled, focus the menu itself.
   useEffect(() => {
     if (!measured) {
       return;
@@ -122,10 +125,10 @@ export function ContextMenu({
     (firstItem ?? menu)?.focus({ preventScroll: true });
   }, [measured]);
 
-  // 點擊外部、viewport 尺寸改變或捲動時關閉選單。
+  // Close the menu on an outside click, a viewport resize, or a scroll.
   useEffect(() => {
     const handleOutsideInteraction = (event: Event) => {
-      // 選單自身的點擊與 overflow 捲動不應該把自己關掉。
+      // Clicks and overflow scrolling inside the menu itself must not close it.
       const menu = menuRef.current;
       if (menu && event.target instanceof Node && menu.contains(event.target)) {
         return;
@@ -205,7 +208,8 @@ export function ContextMenu({
       }
       case "Escape":
       case "Tab":
-        // Escape 關閉選單；Tab 不屬於選單的 tab 序列，直接關閉並回到觸發元素。
+        // Escape closes the menu; Tab is outside the menu's tab sequence, so it
+        // closes and returns focus to the trigger.
         event.preventDefault();
         event.stopPropagation();
         closeMenu();

@@ -59,13 +59,14 @@ type MobilePane = "write" | "preview";
 
 const DEFAULT_NEW_FILE_NAME = "untitled.md";
 
-/** 新筆記的資料夾在對話框開啟期間固定，並正規化為絕對資料夾路徑。 */
+/** The folder for a new note is fixed while the dialog is open and normalized to
+ * an absolute folder path. */
 function normalizeNewNoteDirectory(directory: string | undefined): string {
   const normalized = normalizeArchivePath(directory ?? "/");
   return normalized.length === 0 ? "/" : normalized;
 }
 
-/** 未帶 Markdown 副檔名時補上 `.md`，其餘檔名保持使用者輸入的形狀。 */
+/** Append `.md` when there is no Markdown extension; other names keep the shape the user typed. */
 function ensureMarkdownFileName(rawName: string): string {
   const name = rawName.trim();
   if (name.length === 0) {
@@ -78,7 +79,7 @@ function ensureMarkdownFileName(rawName: string): string {
   return `${name}.md`;
 }
 
-/** 控制字元（C0、DEL 與 C1）不得出現在檔名中。 */
+/** Control characters (C0, DEL, and C1) must not appear in a file name. */
 function hasControlCharacter(value: string): boolean {
   for (const character of value) {
     const codePoint = character.codePointAt(0) ?? 0;
@@ -89,7 +90,7 @@ function hasControlCharacter(value: string): boolean {
   return false;
 }
 
-/** 只允許單一檔名：不可空白、不可含路徑分隔符，也不可是 `.` 或 `..`。 */
+/** Allow a single file name only: not blank, no path separators, and not `.` or `..`. */
 function isValidNewFileName(rawName: string): boolean {
   if (hasControlCharacter(rawName)) {
     return false;
@@ -109,7 +110,7 @@ function countWords(value: string): number {
   return trimmed.length === 0 ? 0 : trimmed.split(/\s+/u).length;
 }
 
-/** 新檔案除了內容之外也比對檔名；既有檔案只比較內容。 */
+/** A new file compares the name as well as the content; an existing file compares content only. */
 function isDocumentDirty(
   mode: "edit" | "new",
   content: string,
@@ -130,7 +131,8 @@ interface NewNoteLocation {
   readonly resolvedPath: string;
 }
 
-/** 由固定資料夾與檔名推導前綴、行內錯誤與實際建立路徑。 */
+/** Derive the prefix, the inline error, and the actual path to create from the
+ * fixed folder and the file name. */
 function resolveNewNoteLocation(
   directory: string,
   fileName: string,
@@ -170,7 +172,7 @@ interface EditorStatus {
   readonly className: string;
 }
 
-/** 把載入、儲存、未保存與錯誤狀態收斂成 header 上的一個 chip。 */
+/** Collapse loading, saving, unsaved, and error states into one header chip. */
 function resolveEditorStatus({
   isSaving,
   loadError,
@@ -219,7 +221,7 @@ interface NewNotePathFieldProps {
   readonly onFileNameChange: (nextValue: string) => void;
 }
 
-/** 新筆記的固定資料夾前綴與唯一可編輯的檔名欄位。 */
+/** The fixed folder prefix for a new note and its single editable file name field. */
 function NewNotePathField({
   prefix,
   fileName,
@@ -367,7 +369,8 @@ interface EditorTitleProps {
 }
 
 /**
- * header 的檔名：編輯既有檔案時附帶重新命名按鈕，其餘情況只顯示標題。
+ * The file name in the header: a rename button is attached when editing an
+ * existing file, otherwise only the title is shown.
  */
 function EditorTitle({ mode, file, isSaving, onRename }: EditorTitleProps) {
   const { t } = useI18n();
@@ -401,8 +404,9 @@ interface ChunkReconstructionNoteProps {
 }
 
 /**
- * chunk-only 檔案的編輯警告：內容由索引分段重建，儲存可能正規化空白。
- * 僅在編輯既有檔案且使用分段時顯示，不阻擋儲存。
+ * Editing warning for a chunk-only file: the content is rebuilt from index
+ * segments, so saving may normalize whitespace. It is only shown when editing an
+ * existing file that uses chunks, and it never blocks saving.
  */
 function ChunkReconstructionNote({
   mode,
@@ -423,8 +427,9 @@ function ChunkReconstructionNote({
 }
 
 /**
- * Markdown 編輯器本體：header、格式工具列、左右分割的撰寫／預覽，以及
- * 字數統計與儲存操作。既有檔案走版本化更新，新筆記走同步建立端點。
+ * The Markdown editor itself: header, formatting toolbar, side-by-side writing
+ * and preview, plus word count and save actions. An existing file goes through a
+ * versioned update, while a new note uses the synchronous create endpoint.
  */
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(
   function MarkdownEditor(
@@ -469,8 +474,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const createMutation = useCreateTextFile();
     const isSaving = updateMutation.isPending || createMutation.isPending;
 
-    // 文件內容是非同步載入的；第一次拿到內容時才建立初始快照，避免把載入
-    // 動作誤判成使用者編輯，也避免之後的 refetch 覆蓋正在修改的草稿。
+    // The document content loads asynchronously; the initial snapshot is only
+    // taken when content first arrives so a load is not mistaken for a user edit,
+    // and a later refetch cannot overwrite a draft that is being changed.
     /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
       if (mode !== "edit" || initializedRef.current) {
@@ -643,8 +649,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
         if (event.defaultPrevented) {
           return;
         }
-        // 上層 library 對話框（例如從 header 開啟的重新命名）持有焦點時，
-        // 快捷鍵與 Escape 歸它處理，避免同時關閉編輯器。
+        // While an outer library dialog (for example a rename opened from the
+        // header) holds focus, it owns the shortcuts and Escape, so the editor is
+        // not closed at the same time.
         const editorRoot = rootRef.current;
         const dialogLayer = document.querySelector(".library-dialog-layer");
         if (dialogLayer && editorRoot && !dialogLayer.contains(editorRoot)) {

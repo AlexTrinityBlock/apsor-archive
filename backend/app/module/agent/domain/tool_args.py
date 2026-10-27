@@ -117,9 +117,11 @@ class PresentResourceArgs(_ToolArgs):
 class WebSearchArgs(_ToolArgs):
     """Arguments for one public web search."""
 
-    # max_results 上限 10、domain 清單各 10 筆：單次搜尋不可淹沒 context window，
-    # 也不可讓 provider 收到過大的 filter 清單。query 上限 400 字元足以表達查詢，
-    # 同時避免模型把整段私有內容塞進 URL/查詢字串。
+    # max_results is capped at 10 and each domain list at 10 entries: a single
+    # search must not flood the context window, and the provider must not receive
+    # an oversized filter list. The 400-character query limit is enough to express
+    # a query while keeping the model from stuffing a whole private document into
+    # the URL or query string.
     query: str = Field(min_length=1, max_length=400)
     max_results: int = Field(default=5, ge=1, le=10)
     search_depth: Literal["basic", "advanced"] = "basic"
@@ -130,13 +132,15 @@ class WebSearchArgs(_ToolArgs):
 class WebFetchArgs(_ToolArgs):
     """Arguments for fetching one server-defined page of a public http(s) URL."""
 
-    # page 是唯一支援的起點：service 依固定字元預算切頁，模型只要 page=1、2、…
-    # 前進，不必計算行號或 offset。offset / limit / max_chars 只為相容而保留：
-    # 凍結在 archive-tools-v4（url + max_chars）與 archive-tools-v5（offset /
-    # limit / page）的舊對話仍會送這些參數，必須繼續通過驗證；SkipJsonSchema
-    # 讓新對話看到的 model-facing schema 只有 url 與 page。page 模式會忽略
-    # max_chars 與 limit。
-    # URL 長度上限與 WebUrlSafety 的 1–2048 保持一致。
+    # page is the only supported starting point: the service slices pages by a
+    # fixed character budget, so the model just moves forward with page=1, 2, ...
+    # and never has to compute line numbers or offsets. offset / limit / max_chars
+    # are kept for compatibility only: old conversations frozen at
+    # archive-tools-v4 (url + max_chars) and archive-tools-v5 (offset / limit /
+    # page) still send these parameters and must keep passing validation;
+    # SkipJsonSchema keeps the model-facing schema limited to url and page for new
+    # conversations. Page mode ignores max_chars and limit.
+    # The URL length cap matches WebUrlSafety's 1-2048.
     url: str = Field(min_length=1, max_length=2048)
     page: int = Field(default=1, ge=1)
     offset: SkipJsonSchema[int | None] = Field(default=None, ge=1)

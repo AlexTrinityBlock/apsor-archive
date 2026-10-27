@@ -48,7 +48,7 @@ class ResilientCache:
         return await self._fallback.get_version(scope)
 
     async def bump_version(self, scope: str = "index") -> int:
-        # 兩層都 bump；Valkey 恢復後才不會讀到舊的 scope version。
+        # Bump both layers; otherwise a stale scope version is read once Valkey recovers.
         version = await self._fallback.bump_version(scope)
         if self._primary is not None:
             try:

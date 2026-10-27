@@ -4,18 +4,23 @@ Revision ID: c9e1f3a5b7d2
 Revises: b8d2e4f6a1c3
 Create Date: 2026-10-25 12:00:00.000000
 
-Migration 決策：
-- 先建新表、再複製舊 singleton、最後才 drop 舊表。任何一步失敗時舊資料仍
-  完整保留，部署可以安全重跑。
-- 舊 ``system_prompt`` 的 body 若只有空白（或沒有列），不建立新 section；
-  這與舊 service「空白 body 視為未啟用」的語意一致。
-- 標題只有空白時回退成 ``System prompt``，因為新表要求 title 長度至少 1；
-  這個回退只發生在遷移，之後的空白標題由 service 以 422 拒絕。
-- Downgrade 取 ``sort_order, id`` 最小的 section 複製回 singleton。多條
-  section 無法無損降級成單一列，因此選擇第一條並在訊息中保留可預期的行為；
-  舊表重建後才 drop 新表，避免降級失敗時遺失內容。
-- 不 import 舊 ORM model，全部使用 raw SQL，避免 migration 與未來 model
-  變動互相綁死。
+Migration decisions:
+- Create the new table first, copy the old singleton, and only then drop the old
+  table. If any step fails, the old data is still fully preserved, so the
+  deployment can be retried safely.
+- If the body of the old ``system_prompt`` is blank only (or there is no row), no
+  new section is created. This matches the old service semantics where a blank
+  body meant "not enabled".
+- A title that is blank only falls back to ``System prompt`` because the new
+  table requires a title of at least 1 character. That fallback only happens in
+  the migration; afterwards the service rejects blank titles with 422.
+- Downgrade copies the section with the smallest ``sort_order, id`` back into the
+  singleton. Several sections cannot be downgraded losslessly into a single row,
+  so the first one is chosen and the expected behavior is stated in the
+  message; the old table is rebuilt before the new one is dropped so content is
+  not lost if the downgrade fails.
+- The old ORM model is not imported; everything uses raw SQL so the migration is
+  not tied to future model changes.
 """
 
 from collections.abc import Sequence
@@ -75,9 +80,10 @@ def upgrade() -> None:
         unique=False,
     )
 
-    # 舊 singleton 只有一列（id=1），且沒有 created_at。把 updated_at 同時
-    # 當成新列的 created_at/updated_at，讓 Settings 顯示的建立時間不會倒退。
-    # sort_order 固定 10，為未來手動插入留出空隙。
+    # The old singleton had exactly one row (id = 1) and no created_at. Using
+    # updated_at as both created_at and updated_at on the new row keeps the
+    # creation time shown in Settings from moving backwards. sort_order is fixed
+    # at 10, leaving gaps for future manual inserts.
     op.execute(
         sa.text(
             """
@@ -99,8 +105,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # 先重建舊 singleton schema；id=1 的 check constraint 與原 migration 完全
-    # 相同，確保 downgrade 後舊版程式可以無縫啟動。
+    # Rebuild the old singleton schema first; the id = 1 check constraint is
+    # exactly the same as in the original migration, so the previous application
+    # version starts cleanly after a downgrade.
     op.create_table(
         "system_prompt",
         sa.Column("id", sa.BigInteger(), nullable=False),
@@ -119,8 +126,9 @@ def downgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_system_prompt")),
     )
 
-    # 多對一降級只保留第一條 section；若沒有任何 section，舊表保持沒有列，
-    # 對應舊版「reset 後沒有 custom prompt」的狀態。
+    # The many-to-one downgrade keeps only the first section; if there is no
+    # section at all, the old table stays without rows, matching the previous
+    # "no custom prompt after a reset" state.
     op.execute(
         sa.text(
             """

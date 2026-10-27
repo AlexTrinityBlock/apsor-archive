@@ -4,15 +4,18 @@ Revision ID: b7e2d4f6a8c1
 Revises: f4a1c7d9e2b3
 Create Date: 2026-10-25 20:00:00.000000
 
-Migration 決策：
-- 使用者描述從單一 ``app_user.bio`` 改成有序的 ``user_profile_card``，
-  每張卡有 title/content，讓同一個使用者可以分成 Work、Interests、
-  Answer preferences 等多個區塊。
-- 升級時先建立新表，再把既有 bio 複製成第一張 ``About`` 卡，最後才 drop
-  ``app_user.bio``。任何一步失敗時舊資料仍完整保留。
-- Downgrade 把第一張卡（``sort_order, id``）複製回 ``bio``，然後 drop 新表。
-  多張卡無法無損降級成單一欄位，因此只保留第一張；這與舊版單一自我介紹的
-  語意一致。
+Migration decisions:
+- The user description moves from the single ``app_user.bio`` column to an
+  ordered ``user_profile_card`` table. Each card has a title and content, so one
+  user can split the description into several sections such as Work, Interests,
+  and Answer preferences.
+- Upgrade creates the new table first, copies the existing bio into the first
+  ``About`` card, and only then drops ``app_user.bio``. If any step fails, the old
+  data is still fully preserved.
+- Downgrade copies the first card (``sort_order, id``) back into ``bio`` and then
+  drops the new table. Several cards cannot be downgraded losslessly into a
+  single column, so only the first one is kept, which matches the semantics of
+  the old single self-introduction.
 """
 
 from collections.abc import Sequence

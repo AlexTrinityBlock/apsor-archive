@@ -134,8 +134,9 @@ class SearchService:
             try:
                 return SearchResponseSchema.model_validate(cached)
             except ValidationError:
-                # 部署後舊 cache 可能缺少新欄位（例如 summary 的 memory_count）。
-                # 這種 payload 視為 cache miss，不要讓使用者在 TTL 到期前看到 500。
+                # After a deployment an old cache entry may lack new fields (for
+                # example a summary's memory_count). Such a payload counts as a
+                # cache miss so the user never sees a 500 before the TTL expires.
                 logger.info("Discarding an incompatible cached search response.")
 
         started = time.perf_counter()

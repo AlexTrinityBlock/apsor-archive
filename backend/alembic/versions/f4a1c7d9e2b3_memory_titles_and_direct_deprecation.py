@@ -4,23 +4,29 @@ Revision ID: f4a1c7d9e2b3
 Revises: c9e1f3a5b7d2
 Create Date: 2026-10-25 18:00:00.000000
 
-Migration 決策：
-- ``memory.title`` 先以 nullable 加入，再用內容前 80 字元回填，最後才設
-  NOT NULL。既有列不會因為沒有 AI provider 而卡住升級。
-- 既有 deprecated 列以 ``updated_at`` 回填 ``deprecated_at``，因為舊資料
-  只有「已被取代」這個事實，沒有更精確的退役時間。新的直接作廢一定會在
-  同一筆 UPDATE 寫入 ``deprecated_at``。
-- 舊 constraint ``deprecated_has_successor`` 要求 deprecated 必須有 successor；
-  新 constraint 允許 successor 或 ``deprecated_at`` 其中一種 provenance。
-- downgrade 重加舊 constraint 時使用 ``NOT VALID``：直接作廢的既有列沒有
-  successor，若強制 validate 會讓降級失敗。舊版程式仍然只會產生有 successor
-  的 deprecated 列，所以新寫入不受影響。
-- ``system_prompt_section.builtin_key`` 只存放四個 built-in override；NULL
-  代表使用者自訂 section。Partial unique index 讓每個 built-in 最多一列，
-  刪除該列即回覆 Python 預設值，不需要在 migration 複製整段預設 prompt。
-- ``app_user.display_name`` 與 ``bio`` 是可選的 owner profile；NULL 代表尚未
-  設定，UI 會回退到 username。它們只影響新對話的 ``owner_profile`` section，
-  不會改寫既有對話已凍結的 prompt。
+Migration decisions:
+- ``memory.title`` is added as nullable, backfilled from the first 80 characters
+  of the content, and only then set to NOT NULL. Existing rows therefore never
+  block the upgrade just because no AI provider is configured.
+- Existing deprecated rows get ``deprecated_at`` backfilled from ``updated_at``
+  because the old data only records the fact that a row was superseded, not a
+  more precise retirement time. A new direct deprecation always writes
+  ``deprecated_at`` in the same UPDATE.
+- The old ``deprecated_has_successor`` constraint required every deprecated row
+  to have a successor; the new constraint accepts either a successor or
+  ``deprecated_at`` as provenance.
+- The downgrade re-adds the old constraint with ``NOT VALID``: existing directly
+  deprecated rows have no successor, so forcing validation would make the
+  downgrade fail. The previous code still only ever produced deprecated rows
+  with a successor, so new writes are unaffected.
+- ``system_prompt_section.builtin_key`` only stores the four built-in overrides;
+  NULL means a user-defined section. The partial unique index allows at most one
+  row per built-in, and deleting that row restores the Python default, so the
+  migration does not need to copy a whole default prompt.
+- ``app_user.display_name`` and ``bio`` are an optional owner profile; NULL means
+  unset and the UI falls back to the username. They only affect the
+  ``owner_profile`` section of new conversations and never rewrite the prompt
+  already frozen into an existing conversation.
 """
 
 from collections.abc import Sequence

@@ -2969,7 +2969,7 @@ button.library-crumb:hover {
 }
 
 /* --------------------------------------------------------------------------
-   Markdown 編輯器
+   Markdown editor
    -------------------------------------------------------------------------- */
 
 .library-preview--editing .library-preview__dialog {
@@ -3049,7 +3049,7 @@ button.library-crumb:hover {
   min-width: 0;
 }
 
-/* 編輯模式的檔名重新命名：沿用 header 的小型 icon button 尺寸。 */
+/* Renaming the file in edit mode: reuses the header's small icon button size. */
 .markdown-editor__rename {
   display: grid;
   width: 23px;
@@ -3099,7 +3099,8 @@ button.library-crumb:hover {
   text-transform: uppercase;
 }
 
-/* chunk-only 檔案的編輯警告；沿用既有的 ochre 警示色，不阻擋儲存。 */
+/* Editing warning for a chunk-only file; reuses the existing ochre warning color
+   and never blocks saving. */
 .markdown-editor__reconstruction {
   display: flex;
   flex: none;

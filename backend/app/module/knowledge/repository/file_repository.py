@@ -72,7 +72,7 @@ class FileRepository:
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def get_current_for_update(self, file_id: int) -> FileModel | None:
-        """以資料列鎖定指定檔案，供版本化內容更新在同一個交易內完成。"""
+        """Lock the given file row so a versioned content update fits in one transaction."""
         statement = (
             select(FileModel)
             .where(
@@ -98,7 +98,7 @@ class FileRepository:
         file_ids: Sequence[int],
         folder_paths: Sequence[str],
     ) -> list[FileModel]:
-        """鎖定選取的 current files 與所選資料夾底下的所有 current files。"""
+        """Lock the selected current files and every current file under the selected folders."""
         conditions: list[ColumnElement[bool]] = [FileModel.id.in_(file_ids)] if file_ids else []
         conditions.extend(
             FileModel.raw_file_path.startswith(f"{folder.rstrip('/')}/")

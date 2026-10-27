@@ -28,8 +28,9 @@ from app.shared.time import utcnow
 class ProviderConfigMixin:
     """Columns shared by every provider capability table.
 
-    SQLAlchemy 會把這些 ``mapped_column`` 複製到每個 concrete subclass；mixin
-    本身不是 declarative class，所以不會多出第五張表。
+    SQLAlchemy copies these ``mapped_column`` declarations into every concrete
+    subclass; the mixin itself is not a declarative class, so no fifth table is
+    created.
     """
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
@@ -86,9 +87,6 @@ def _provider_table_args(
 
     ``Any`` is used for the return type because SQLAlchemy's table-argument
     tuple mixes ``CheckConstraint`` and ``Index`` instances.
-
-    ``is_active`` 的 partial unique index 是「每個 capability 最多一列 active」
-    的唯一真實來源；不另設 ``enabled`` 欄位或 active pointer 表。
     """
     return (
         CheckConstraint(provider_check, name="provider_valid"),

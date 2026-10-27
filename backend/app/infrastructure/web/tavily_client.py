@@ -55,7 +55,8 @@ class TavilyWebClient:
 
     @property
     def _headers(self) -> dict[str, str]:
-        # 金鑰只放在 header；payload 與 query string 都不含憑證。
+        # The key only ever goes in a header; neither the payload nor the query
+        # string carries credentials.
         return {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
@@ -97,9 +98,10 @@ class TavilyWebClient:
         )
 
     async def fetch(self, url: str, *, max_chars: int) -> WebFetchResponse:
-        # ``max_chars`` 由 WebResearchService 用於全文快取上限與切片，不在 client
-        # 裁切；client 一律回傳 provider 的完整內容，讓裁切與 truncated 語意只有
-        # 一個來源。
+        # ``max_chars`` is used by WebResearchService for the full-text cache limit
+        # and for slicing, and is not applied here; the client always returns the
+        # provider's full content so there is a single source for slicing and the
+        # truncated semantics.
         del max_chars
         if not self.configured:
             raise WebProviderError("Tavily API key is not configured.")
@@ -140,7 +142,8 @@ class TavilyWebClient:
                     if response.status_code in {401, 403}:
                         raise WebProviderAuthenticationError(self.provider, response.status_code)
                     if response.status_code >= 400:
-                        # 只保留去敏、截斷後的片段；錯誤 envelope 不得帶 header 或金鑰。
+                        # Keep only the redacted, truncated snippet; the error envelope
+                        # must never carry headers or keys.
                         body = await self._read_capped(response, _ERROR_BODY_LIMIT_BYTES)
                         detail = self._redact(body.decode("utf-8", errors="replace"))
                         raise WebProviderError(f"HTTP {response.status_code}: {detail}".strip())
@@ -148,7 +151,8 @@ class TavilyWebClient:
         except httpx.TimeoutException as exc:
             raise WebProviderError("request timed out") from exc
         except httpx.HTTPError as exc:
-            # httpx 的例外字串可能包含 URL 或 proxy 資訊，統一改寫成固定訊息。
+            # httpx exception strings can contain the URL or proxy details, so they
+            # are always replaced with a fixed message.
             raise WebProviderError("network error") from exc
 
         try:
@@ -162,8 +166,9 @@ class TavilyWebClient:
     async def _read_capped(self, response: httpx.Response, limit: int) -> bytes:
         """Read at most ``limit`` bytes, failing the request on overflow.
 
-        先看 Content-Length 只是早期失敗的最佳化；真正的上限由串流累計位元組數
-        保證，因為 provider 可以省略或謊報 Content-Length。
+        Checking Content-Length first is only an optimisation for failing early;
+        the real limit is enforced by counting the streamed bytes, because a
+        provider can omit or misreport Content-Length.
         """
         declared = response.headers.get("content-length")
         if declared is not None:
@@ -201,8 +206,8 @@ def _parse_search_results(
             continue
         url = item.get("url")
         if not isinstance(url, str) or not _is_http_url(url.strip()):
-            # 只回傳可引用的 http(s) 結果，避免把 javascript:/file: 之類的
-            # provider 內容帶進 agent XML 或前端連結。
+            # Only return citable http(s) results, so provider content such as
+            # javascript:/file: never reaches the agent XML or a frontend link.
             continue
         title = item.get("title")
         content = item.get("content")

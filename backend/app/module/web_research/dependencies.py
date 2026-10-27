@@ -52,7 +52,8 @@ class TavilyWebClientFactory:
         self._settings = settings
 
     def _base_url(self, config: WebProviderConfigProtocol) -> str:
-        # 使用者可在 registry 覆寫 base_url；否則用部署層的 Tavily base URL。
+        # The user can override base_url in the registry; otherwise the deployment's
+        # Tavily base URL is used.
         return config.base_url or str(
             getattr(self._settings, "tavily_base_url", DEFAULT_BASE_URL) or DEFAULT_BASE_URL
         )
@@ -83,8 +84,9 @@ def get_web_research_service(request: Request) -> WebResearchService:
 def _build_web_research_service(request: Request) -> WebResearchService:
     settings = cast(Settings, request.app.state.settings)
     runtime = request.app.state.ai_runtime
-    # Provider 設定只從 runtime 快照讀取：SSE 期間不開 DB session，provider 寫入
-    # 會觸發 runtime.reload()，下一個工具呼叫就會拿到新設定。
+    # Provider settings are only read from the runtime snapshot: no DB session is
+    # opened during SSE, and a provider write triggers runtime.reload() so the next
+    # tool call already sees the new settings.
     search_config = _runtime_config(runtime, "web_search_config", "web_search")
     fetch_config = _runtime_config(runtime, "web_fetch_config", "web_fetch")
     factory: WebClientFactoryProtocol = TavilyWebClientFactory(settings)
