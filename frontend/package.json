@@ -32,8 +32,7 @@
     "react-pdf": "11.0.0",
     "react-router-dom": "^7.18.4",
     "react-zoom-pan-pinch": "4.2.0",
-    "remark-gfm": "4.0.1",
-    "yet-another-react-lightbox": "3.32.2"
+    "remark-gfm": "4.0.1"
   },
   "overrides": {
     "fast-uri": "^3.1.9",
