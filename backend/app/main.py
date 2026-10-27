@@ -220,11 +220,14 @@ def _mount_spa(app: FastAPI, directory: Path) -> None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
         candidate = (resolved / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(resolved):
-            cache = (
-                "public, max-age=31536000, immutable"
-                if path.startswith("assets/")
-                else "public, max-age=86400"
-            )
+            if path == "favicon.svg":
+                # Revalidate so an icon change reaches returning readers without
+                # waiting for the long-lived edge cache used by other files.
+                cache = "no-cache, must-revalidate"
+            elif path.startswith("assets/"):
+                cache = "public, max-age=31536000, immutable"
+            else:
+                cache = "public, max-age=86400"
             return FileResponse(
                 candidate,
                 headers={

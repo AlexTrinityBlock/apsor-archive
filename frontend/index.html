@@ -9,7 +9,9 @@
     />
     <meta name="theme-color" content="#f0efeb" />
     <title>Apsor Archive — Archive Studio</title>
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- The version query escapes the edge cache entry created before the icon
+         change; the server revalidates /favicon.svg from then on. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
   </head>
   <body>
     <div id="root"></div>
