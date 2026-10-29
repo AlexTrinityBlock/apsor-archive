@@ -67,8 +67,10 @@ Original bytes are behind the three-method `FileStorageProtocol` (`save`, `read`
   API responses.
 
 `file.storage_backend` and `file_ingest_job.storage_backend` are nullable and may
-be `local` or `r2`; they are null exactly when `storage_key` is null. Text-only
-records have no stored original. Soft delete keeps the object for history.
+be `local` or `r2`; they are null exactly when `storage_key` is null. Text
+created through the API now stores exact bytes as its original; legacy text-only
+records may still have no stored original. Soft delete keeps the object for
+history.
 
 `.secrets/r2.env` is gitignored and mounted read-only into the API and worker.
 It must be readable by container uid `10001`. The bucket (`apsor-archive` in the
@@ -748,9 +750,9 @@ change.
 the same extension. It creates a new current file record at version 1 with a new
 id:
 
-- The stored original is copied to a new storage key when the source has one.
-  Text-only records are reconstructed from their current chunks by removing the
-  known overlap, then re-chunked.
+- The stored original is copied to a new storage key. Legacy text-only records
+  are reconstructed from their current chunks by removing the known overlap,
+  then the reconstructed text is stored as the copy's original.
 - Chunks and embeddings are rebuilt, not shared.
 - `ai_summary`, `ai_tags`, `document_type`, and `extraction_method` are copied.
 - The new record's `created_at` and `updated_at` are the copy time; it does not
@@ -780,7 +782,7 @@ distinct from `/download`:
 - restrictive CSP (`sandbox` for non-PDF, `frame-ancestors 'self'` for PDF);
 - `Accept-Ranges: bytes`, single-range `206`/`416`, `ETag` and `304`;
 - `Cache-Control: private, max-age=0, must-revalidate`;
-- 404 `file_content_unavailable` when a text-only record has no original.
+- 404 `file_content_unavailable` when a legacy text-only record has no original.
 
 The `FileSchema.has_original` flag tells the UI whether to show **Open original**
 and **Download**. Text-only records skip the `/content` probe entirely and read

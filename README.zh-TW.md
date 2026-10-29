@@ -1003,7 +1003,7 @@ End；比例與收合狀態會保存在本機。寬度低於 900 px 時，檢視
 `GET /api/v1/files/{file_id}/content` 會以 `nosniff`、沙箱化 CSP、
 ETag/Last-Modified 與單一範圍 HTTP Range 支援（`206`/`416`；
 `If-None-Match` 傳回 `304`）行內提供原始檔。`/download` 仍為附件。
-純文字紀錄的 `has_original=false`；這類頁面會完全略過 `/content` 探查，
+舊的純文字紀錄的 `has_original=false`；這類頁面會完全略過 `/content` 探查，
 並讀取已索引的分塊。
 
 PDF.js 的 CMaps 與標準字型會由 `bun run pdf-assets` 從固定版本的

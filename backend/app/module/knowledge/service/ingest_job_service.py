@@ -1,7 +1,7 @@
 """Durable ingestion jobs: enqueue, progress tracking, and worker pipeline.
 
-The HTTP layer only validates the payload, stores the original (or a temporary
-text payload), and inserts a job row. A bounded worker claims queued rows with
+The HTTP layer only validates the payload, stores the original bytes, and
+inserts a job row. A bounded worker claims queued rows with
 ``SELECT ... FOR UPDATE SKIP LOCKED`` and advances them through parsing,
 chunking, embedding, and publishing.
 
@@ -32,7 +32,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
-from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -93,8 +92,6 @@ from app.module.knowledge.service.file_service import (
 from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
-
-TEMP_PREFIX = "ingest-tmp"
 
 _ERROR_CODES: tuple[tuple[type[BaseException], str], ...] = (
     (EmptyContentError, "empty_content"),
@@ -247,13 +244,13 @@ class IngestJobService:
         content: str,
         occurred_at: datetime | None,
     ) -> IngestJobSchema:
-        """Store direct text in temporary storage and queue a background ingest."""
+        """Store the exact text as the original and queue a background ingest."""
         normalized = self.file_service.normalize_path(path)
         encoded = content.encode("utf-8")
         if len(encoded) > self.file_service.max_text_bytes:
             raise FileTooLargeError(len(encoded), self.file_service.max_text_bytes)
         mime_type = mimetypes.guess_type(normalized)[0] or "text/plain"
-        storage_key = f"{TEMP_PREFIX}/{uuid4().hex}.txt"
+        storage_key = self.file_service.new_storage_key(extension(normalized))
         storage_backend = self.file_service.storage_backend
         await self._store_payload(storage_key, encoded, storage_backend)
         job = FileIngestJobModel(
@@ -674,14 +671,8 @@ class IngestWorker:
                     data=data,
                     extracted=extracted,
                     mime_type=job.mime_type,
-                    storage_key=(
-                        job.storage_key if job.source_kind == INGEST_SOURCE_UPLOAD else None
-                    ),
-                    storage_backend=(
-                        job.storage_backend
-                        if job.source_kind == INGEST_SOURCE_UPLOAD
-                        else None
-                    ),
+                    storage_key=job.storage_key,
+                    storage_backend=job.storage_backend,
                     occurred_at=job.occurred_at,
                     publish=False,
                     progress=progress,
@@ -715,8 +706,6 @@ class IngestWorker:
                     ready_job.file_id = file_schema.id
                     ready_job.finished_at = utcnow()
                     ready_job.updated_at = utcnow()
-            if job.source_kind == INGEST_SOURCE_TEXT:
-                await self._delete_payload(job.storage_key, job.storage_backend)
         except Exception as exc:
             logger.exception("Ingestion job %d failed", job_id)
             await self._fail(
@@ -774,7 +763,6 @@ class IngestWorker:
 
 
 __all__ = [
-    "TEMP_PREFIX",
     "IngestJobService",
     "IngestWorker",
     "ingest_error_code",
