@@ -135,7 +135,12 @@ function buildComponents(
       </span>
     ),
     table: ({ children }) => (
-      <div className="chat-markdown__table">
+      <div
+        className="chat-markdown__table"
+        role="region"
+        aria-label={t("chat.markdown.tableAria")}
+        tabIndex={0}
+      >
         <table>{children}</table>
       </div>
     ),

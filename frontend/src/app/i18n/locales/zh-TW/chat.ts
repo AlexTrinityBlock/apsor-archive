@@ -286,6 +286,7 @@ export const chat = {
   markdown: {
     imageOmitted: "對話紀錄中省略了圖片",
     imageOmittedAlt: "對話紀錄中省略了圖片：{alt}",
+    tableAria: "表格，可水平捲動以閱讀所有欄位",
   },
   retry: {
     aria: "重試上一次執行",
