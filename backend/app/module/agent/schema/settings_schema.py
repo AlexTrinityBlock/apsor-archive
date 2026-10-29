@@ -17,7 +17,6 @@ class AgentSettingsValuesSchema(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    max_total_tokens: int = Field(ge=8_000, le=200_000)
     compaction_threshold_tokens: int = Field(ge=1_000, le=200_000)
     context_window_tokens: int = Field(ge=8_000, le=2_000_000)
     max_steps: int = Field(ge=1, le=32)
@@ -34,8 +33,10 @@ class AgentSettingsValuesSchema(BaseModel):
     @model_validator(mode="after")
     def _cross_field_ranges(self) -> Self:
         """Enforce the invariants a single-field range cannot express."""
-        if self.compaction_threshold_tokens >= self.max_total_tokens:
-            raise ValueError("compaction_threshold_tokens must be less than max_total_tokens.")
+        if self.compaction_threshold_tokens >= self.context_window_tokens:
+            raise ValueError(
+                "compaction_threshold_tokens must be less than context_window_tokens."
+            )
         if self.max_parallel_tools > self.max_tool_calls_per_turn:
             raise ValueError("max_parallel_tools must not exceed max_tool_calls_per_turn.")
         return self

@@ -57,7 +57,7 @@ export const settings = {
       wholeNumber: "请输入整数。",
       number: "请输入数字。",
       range: "请输入 {min} 到 {max} 之间的值。",
-      thresholdBelowTotal: "必须低于最大总量（{total}）。",
+      thresholdBelowContext: "必须低于模型上下文窗口（{context}）。",
       parallelWithinCalls: "不得超过每轮工具调用数（{calls}）。",
       overlapBelowTarget: "必须低于目标字符数（{target}）。",
     },
@@ -68,16 +68,16 @@ export const settings = {
       "这些边界存储在 PostgreSQL 中，并应用于新的运行。正在进行的运行会保留开始时的快照。",
     badge: "{steps} 步 · {calls} 次工具调用",
     statusSummary:
-      "{context} 模型上下文 · {budget} 轮次预算 · {compaction} 压缩",
+      "{context} 模型上下文 · {compaction} 压缩",
     budgetLabel: "自动压缩阈值",
     budgetValue: "{threshold} / {total} token",
-    budgetAria: "压缩阈值占轮次预算的比例",
-    budgetPercent: "轮次预算的 {percent}%",
-    budgetHeadroom: "剩余 {tokens} token",
+    budgetAria: "压缩阈值占模型上下文窗口的比例",
+    budgetPercent: "模型上下文窗口的 {percent}%",
+    budgetHeadroom: "上下文剩余 {tokens} token",
     groupContextSlot: "分组 01",
     groupContextTitle: "上下文预算",
     groupContextDescription:
-      "模型的输入容量、单轮次的上限、较旧内容何时被折叠收起，以及代理可以读取多少页面文本。上下文窗口属于模型元数据，不是轮次预算。",
+      "模型的输入容量、较早内容何时被折叠收起，以及代理可以读取多少页面文本。",
     groupToolsSlot: "分组 02",
     groupToolsTitle: "工具执行",
     groupToolsDescription:
@@ -89,15 +89,11 @@ export const settings = {
     fieldContextWindowLabel: "模型上下文窗口",
     fieldContextWindowUnit: "token",
     fieldContextWindowHint:
-      "供应商／模型的输入容量，与轮次预算分开计算。DeepSeek V4.1 Flash 约可容纳 1,000,000 个输入 token。",
-    fieldTurnBudgetLabel: "轮次 token 预算",
-    fieldTurnBudgetUnit: "token",
-    fieldTurnBudgetHint:
-      "单个代理轮次的累计模型步骤预算，包含工具结果。这不会提高模型上下文窗口。",
+      "提供商／模型的输入容量。DeepSeek V4.1 Flash 约可容纳 1,000,000 个输入 token。",
     fieldThresholdLabel: "自动压缩阈值",
     fieldThresholdUnit: "token",
     fieldThresholdHint:
-      "当对话记录超过轮次预算的这个比例时，自动压缩会在下一个轮次开始前启动。",
+      "当活动对话记录超过模型上下文窗口的这个比例时，自动压缩会在下一轮开始前启动。",
     fieldMaxStepsLabel: "最大步数",
     fieldMaxStepsUnit: "步",
     fieldMaxStepsHint:

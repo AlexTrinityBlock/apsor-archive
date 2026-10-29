@@ -17,7 +17,6 @@ from app.module.agent.domain.agent_domain import (
     MAX_STEPS,
     MAX_TOOL_CALLS_PER_TURN,
     MAX_TOOL_RESULT_CHARS,
-    MAX_TOTAL_TOKENS,
     PARALLEL_TOOLS_ENABLED,
     SAVE_MEMORY_REQUIRES_APPROVAL,
 )
@@ -34,10 +33,6 @@ class AgentConfigModel(Base):
     __tablename__ = "agent_config"
     __table_args__ = (
         CheckConstraint("id = 1", name="singleton"),
-        CheckConstraint(
-            "max_total_tokens BETWEEN 8000 AND 200000",
-            name="max_total_tokens_range",
-        ),
         CheckConstraint(
             "compaction_threshold_tokens BETWEEN 1000 AND 200000",
             name="compaction_threshold_tokens_range",
@@ -72,8 +67,8 @@ class AgentConfigModel(Base):
             name="max_compaction_last_user_chars_range",
         ),
         CheckConstraint(
-            "compaction_threshold_tokens < max_total_tokens",
-            name="compaction_below_total",
+            "compaction_threshold_tokens < context_window_tokens",
+            name="compaction_below_context",
         ),
         CheckConstraint(
             "max_parallel_tools <= max_tool_calls_per_turn",
@@ -82,12 +77,6 @@ class AgentConfigModel(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    max_total_tokens: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=MAX_TOTAL_TOKENS,
-        server_default=text(str(MAX_TOTAL_TOKENS)),
-    )
     compaction_threshold_tokens: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

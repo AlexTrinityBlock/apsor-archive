@@ -1204,12 +1204,6 @@
             "title": "Max Tool Result Chars",
             "type": "integer"
           },
-          "max_total_tokens": {
-            "maximum": 200000.0,
-            "minimum": 8000.0,
-            "title": "Max Total Tokens",
-            "type": "integer"
-          },
           "parallel_tools_enabled": {
             "title": "Parallel Tools Enabled",
             "type": "boolean"
@@ -1220,7 +1214,6 @@
           }
         },
         "required": [
-          "max_total_tokens",
           "compaction_threshold_tokens",
           "context_window_tokens",
           "max_steps",
@@ -1299,12 +1292,6 @@
             "title": "Max Tool Result Chars",
             "type": "integer"
           },
-          "max_total_tokens": {
-            "maximum": 200000.0,
-            "minimum": 8000.0,
-            "title": "Max Total Tokens",
-            "type": "integer"
-          },
           "parallel_tools_enabled": {
             "title": "Parallel Tools Enabled",
             "type": "boolean"
@@ -1315,7 +1302,6 @@
           }
         },
         "required": [
-          "max_total_tokens",
           "compaction_threshold_tokens",
           "context_window_tokens",
           "max_steps",
