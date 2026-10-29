@@ -1100,8 +1100,8 @@ those surfaces, so old citations and bookmarks keep working.
 `GET /api/v1/files/{file_id}/content` serves originals inline with `nosniff`, a
 sandboxing CSP, ETag/Last-Modified, and single-range HTTP Range support
 (`206`/`416`; `If-None-Match` returns `304`). `/download` stays an attachment.
-Text-only records have `has_original=false`; the sheet skips the `/content`
-probe entirely and reads indexed chunks.
+Legacy text-only records have `has_original=false`; the sheet skips the
+`/content` probe entirely and reads indexed chunks.
 
 PDF.js CMaps and standard fonts are copied from the pinned `pdfjs-dist` package
 into `frontend/public/pdfjs/` by `bun run pdf-assets`, which `dev` and `build`

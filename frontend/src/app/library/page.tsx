@@ -848,19 +848,18 @@ export function LibraryPage() {
   );
 
   const handleNewMarkdownSaved = useCallback(
-    (createdFile: FileSchema) => {
-      setNewMarkdownOpen(false);
+    (savedFile: FileSchema) => {
       resetSelection();
       setMediaFilter("");
-      const nextPath = pathParamValue(parentPath(createdFile.raw_file_path));
+      const nextPath = pathParamValue(parentPath(savedFile.raw_file_path));
+      // Keep the editor dialog open for continuous editing. Only the folder
+      // behind it follows the saved file so closing the dialog lands in place.
       updateParams({
         tab: null,
         path: nextPath,
-        file: createdFile.id,
         media: null,
         chunk: null,
         q: null,
-        mode: null,
       });
     },
     [resetSelection, updateParams],
@@ -1287,7 +1286,7 @@ export function LibraryPage() {
           onChunkChange={handleChunkChange}
           onFileVersionChange={(nextFileId) => {
             updateParams(
-              { file: nextFileId, mode: null, chunk: null },
+              { file: nextFileId, mode: "edit", chunk: null },
               { replace: true },
             );
           }}

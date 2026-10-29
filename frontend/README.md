@@ -467,10 +467,11 @@ into the Library or the Memory reader, so deep links keep working:
 - `/viewer/memory/:memoryId` → `/memory/:memoryId` — the memory leaf with
   lineage and trace links.
 
-Text-only files use `has_original=false`, skip the 404 **Open original** and
-**Download** actions, skip the `/content` probe entirely, and rebuild the sheet
-from indexed chunks. PDF.js CMaps and standard fonts are served from `/pdfjs/`
-in the committed build.
+Legacy text-only files use `has_original=false`, skip the 404 **Open original**
+and **Download** actions, skip the `/content` probe entirely, and rebuild the
+sheet from indexed chunks. Text created through the API now stores its exact
+bytes, so new notes read their original directly. PDF.js CMaps and standard
+fonts are served from `/pdfjs/` in the committed build.
 
 ## Design
 

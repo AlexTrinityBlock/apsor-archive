@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { FileSchema } from "../../generated-apis-types/schemas";
 import { useScrollLock } from "../../hook/useScrollLock";
@@ -32,6 +32,12 @@ export function MarkdownEditorDialog({
   const { t } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MarkdownEditorHandle>(null);
+  const [savedFile, setSavedFile] = useState<FileSchema | null>(null);
+
+  const handleSaved = (file: FileSchema) => {
+    setSavedFile(file);
+    onSaved(file);
+  };
 
   useScrollLock(true);
 
@@ -104,15 +110,19 @@ export function MarkdownEditorDialog({
         className="library-dialog markdown-editor-dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={t("library.editor.newNoteTitle")}
+        aria-label={
+          savedFile ? t("library.editor.editing") : t("library.editor.newNoteTitle")
+        }
         tabIndex={-1}
       >
         <MarkdownEditor
+          key={savedFile ? "edit" : "new"}
           ref={editorRef}
-          mode="new"
+          mode={savedFile ? "edit" : "new"}
+          file={savedFile ?? undefined}
           defaultDirectory={defaultDirectory}
           onCancel={onClose}
-          onSaved={onSaved}
+          onSaved={handleSaved}
         />
       </div>
     </div>

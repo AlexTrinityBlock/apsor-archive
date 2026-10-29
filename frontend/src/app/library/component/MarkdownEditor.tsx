@@ -464,10 +464,13 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const [mobilePane, setMobilePane] = useState<MobilePane>("write");
     const [discardOpen, setDiscardOpen] = useState(false);
     const [serverError, setServerError] = useState<string | null>(null);
+    const [savedOnce, setSavedOnce] = useState(false);
 
-    const markdownDocument = useMarkdownDocument(
-      mode === "edit" ? file : undefined,
-    );
+    // Load the document once for the file the editor mounted with. A save
+    // returns a new file id for the new version; the editor keeps its local
+    // content instead of refetching and flashing a loading state.
+    const [documentFile] = useState(() => (mode === "edit" ? file : undefined));
+    const markdownDocument = useMarkdownDocument(documentFile);
     const deferredContent = useDeferredValue(content);
 
     const updateMutation = useUpdateFileContent();
@@ -571,6 +574,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       });
       void queryClient.invalidateQueries({ queryKey: ["/api/v1/files"] });
       setInitialContent(content);
+      setSavedOnce(true);
       toast.success(
         t("library.editor.savedToast", {
           name: updatedFile.file_name,
@@ -596,6 +600,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
       });
       void queryClient.invalidateQueries({ queryKey: ["/api/v1/files"] });
       setInitialContent(content);
+      setSavedOnce(true);
       toast.success(
         t("library.editor.createdToast", { name: createdFile.file_name }),
       );
@@ -708,7 +713,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
                 {file.raw_file_path}
               </code>
             ) : null}
-            {mode === "edit" && markdownDocument.usingChunks ? (
+            {mode === "edit" && markdownDocument.usingChunks && !savedOnce ? (
               <span className="markdown-editor__source-note">
                 {t("library.viewer.text.indexedChunks")}
               </span>
@@ -766,7 +771,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
 
         <ChunkReconstructionNote
           mode={mode}
-          usingChunks={markdownDocument.usingChunks}
+          usingChunks={markdownDocument.usingChunks && !savedOnce}
         />
 
         {mode === "new" ? (

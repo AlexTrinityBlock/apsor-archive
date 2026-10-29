@@ -191,6 +191,12 @@ class FileService:
         except (StorageUnavailableError, StorageError, OSError) as exc:
             raise FileStorageUnavailableError() from exc
 
+    async def store_new_original(self, data: bytes, *, suffix: str) -> tuple[str, str]:
+        """Persist exact bytes as a new original and return its key and backend."""
+        storage_key = self._new_storage_key(suffix)
+        await self._storage_save(storage_key, data)
+        return storage_key, self.storage.default_backend
+
     async def _storage_read(
         self,
         key: str,
@@ -814,17 +820,25 @@ class FileService:
         if len(encoded) > self.max_text_bytes:
             raise FileTooLargeError(len(encoded), self.max_text_bytes)
         mime_type = mimetypes.guess_type(normalized)[0] or "text/plain"
-        return await self._ingest(
-            path=normalized,
-            data=encoded,
-            text=content,
-            mime_type=mime_type,
-            storage_key=None,
-            storage_backend=None,
-            occurred_at=occurred_at,
-            document_type=extension(normalized).lstrip(".") or "text",
-            extraction_method="text",
+        storage_key, storage_backend = await self.store_new_original(
+            encoded,
+            suffix=extension(normalized),
         )
+        try:
+            return await self._ingest(
+                path=normalized,
+                data=encoded,
+                text=content,
+                mime_type=mime_type,
+                storage_key=storage_key,
+                storage_backend=storage_backend,
+                occurred_at=occurred_at,
+                document_type=extension(normalized).lstrip(".") or "text",
+                extraction_method="text",
+            )
+        except Exception:
+            await self._storage_delete_quietly(storage_key, backend=storage_backend)
+            raise
 
     async def update_markdown_content(
         self,
@@ -1029,18 +1043,19 @@ class FileService:
         if not text.strip():
             raise EmptyContentError()
 
-        storage_key: str | None = None
         if source.storage_key is not None:
             data = await self._storage_read(
                 source.storage_key,
                 backend=source.storage_backend,
                 file_id=source.id,
             )
-            storage_key = self._new_storage_key(source.extension)
-            await self._storage_save(storage_key, data)
         else:
             data = text.encode("utf-8")
 
+        storage_key, storage_backend = await self.store_new_original(
+            data,
+            suffix=source.extension,
+        )
         try:
             return await self._ingest(
                 path=target,
@@ -1048,9 +1063,7 @@ class FileService:
                 text=text,
                 mime_type=source.mime_type,
                 storage_key=storage_key,
-                storage_backend=(
-                    self.storage.default_backend if storage_key is not None else None
-                ),
+                storage_backend=storage_backend,
                 occurred_at=None,
                 ai_summary=source.ai_summary,
                 ai_tags=list(source.ai_tags),
@@ -1058,11 +1071,10 @@ class FileService:
                 extraction_method=source.extraction_method,
             )
         except Exception:
-            if storage_key is not None:
-                await self._storage_delete_quietly(
-                    storage_key,
-                    backend=self.storage.default_backend,
-                )
+            await self._storage_delete_quietly(
+                storage_key,
+                backend=storage_backend,
+            )
             raise
 
     async def get_file(self, file_id: int) -> FileSchema:
@@ -1248,7 +1260,8 @@ class FileService:
     async def read_original(self, file_id: int) -> FileOriginal:
         """Load the stored original for inline viewing or attachment download.
 
-        Text created through ``POST /files/text`` has no stored original; its
+        Text created through ``POST /files/text`` stores its exact bytes as the
+        original. Legacy text-only rows may still have no stored original; their
         content is only available through the indexed chunks. That case keeps
         the existing ``file_content_unavailable`` domain error so callers can
         fall back explicitly instead of receiving an empty body.

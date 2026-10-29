@@ -1032,7 +1032,7 @@ Docker 镜像内从 `frontend/` 编译，因此修改前端后只需重新构建
 `GET /api/v1/files/{file_id}/content` 以内联方式提供原始文件，带有
 `nosniff`、沙箱 CSP、ETag/Last-Modified，以及单范围 HTTP Range 支持
 （`206`/`416`；`If-None-Match` 返回 `304`）。`/download` 仍然是
-附件。纯文本记录具有 `has_original=false`；页面会完全跳过
+附件。旧的纯文本记录具有 `has_original=false`；页面会完全跳过
 `/content` 探测，并读取已索引的分块。
 
 PDF.js 的 CMaps 和标准字体由 `bun run pdf-assets` 从固定版本的
