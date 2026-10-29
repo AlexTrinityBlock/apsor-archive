@@ -268,7 +268,7 @@ system-prompt routes additionally require the root role):
 | `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | Append `memory_rejected`, resume without writing |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog + versions |
 | `GET` | `/api/v1/agent/settings` | Effective runtime config + defaults + source |
-| `PUT` | `/api/v1/agent/settings` | Replace all thirteen runtime fields |
+| `PUT` | `/api/v1/agent/settings` | Replace all twelve runtime fields |
 | `POST` | `/api/v1/agent/settings/reset` | Persist the built-in defaults |
 | `GET` | `/api/v1/agent/questions?limit=&offset=` | List saved questions newest first |
 | `POST` | `/api/v1/agent/questions` | Save a question (`201`); question only |
@@ -321,14 +321,16 @@ agent_approval_not_pending`; a non-earliest approval in a multi-call batch
 returns `409 agent_approval_out_of_order`.
 
 The runtime defaults cap a turn at 24 model steps, 20 tool calls, 6 parallel
-tools, 100,000 total tokens, and 100,000 characters per tool result. Each result
-is clipped independently with a visible truncation marker; there is no
-turn-wide result budget. `context_window_tokens` (default 1,000,000) records
-the provider/model input capacity separately; it is metadata and never triggers
-the turn abort or changes compaction. All of these come from the immutable
-`agent_config` snapshot, not from module constants. The loop uses
-`app.state.db.session_factory()` for appends and a short-lived session for each
-tool call, so the stream does not hold the request session.
+tools, and 100,000 characters per tool result. There is no cumulative per-turn
+token ceiling; a turn ends on a final answer, the step or tool-call limit, a
+user cancellation, or a provider failure. Each result is clipped independently
+with a visible truncation marker; there is no turn-wide result budget.
+`context_window_tokens` (default 1,000,000) records the provider/model input
+capacity and is the bound the auto-compaction threshold is measured against.
+All of these come from the immutable `agent_config` snapshot, not from module
+constants. The loop uses `app.state.db.session_factory()` for appends and a
+short-lived session for each tool call, so the stream does not hold the request
+session.
 
 Startup recovery fails stale `running` runs with `interrupted`. It leaves a
 `waiting` run resumable only while a valid pending approval exists; otherwise
@@ -346,8 +348,8 @@ account. The read body is:
 
 ```json
 {
-  "config": {"max_total_tokens": 100000, "...": "..."},
-  "defaults": {"max_total_tokens": 100000, "...": "..."},
+  "config": {"compaction_threshold_tokens": 75000, "...": "..."},
+  "defaults": {"compaction_threshold_tokens": 75000, "...": "..."},
   "source": "database",
   "updated_at": "2026-10-19T15:00:00Z"
 }
@@ -355,14 +357,13 @@ account. The read body is:
 
 `source` is `default` only when the service had to create or repair the row from
 the built-in defaults; a normal read of the stored row returns `database`.
-`PUT` requires all thirteen fields and uses `extra=forbid`, so it is a full
+`PUT` requires all twelve fields and uses `extra=forbid`, so it is a full
 replacement rather than a patch.
 
 | Field | Default | Constraint |
 |---|---|---|
-| `max_total_tokens` | 100,000 | 8,000–200,000; cumulative across model steps |
-| `compaction_threshold_tokens` | 75,000 | 1,000–200,000; `< max_total_tokens` |
-| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model context metadata, not a turn budget |
+| `compaction_threshold_tokens` | 75,000 | 1,000–200,000; `< context_window_tokens` |
+| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model context metadata |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24; `<= max_tool_calls_per_turn` |
@@ -375,10 +376,10 @@ replacement rather than a patch.
 | `save_memory_requires_approval` | `true` | boolean; waits for user approval before `save_memory` writes |
 
 Pydantic validates the request and `AgentRuntimeConfig` repeats the same
-cross-field checks; PostgreSQL check constraints enforce the ranges and all
-three cross-field rules. There is deliberately no `context_window_tokens` versus
-`max_total_tokens` rule: the context window is provider metadata, while the turn
-budget is the cost guard. The global validation handler maps request validation
+cross-field checks; PostgreSQL check constraints enforce the ranges and both
+cross-field rules. The compaction threshold must stay below the model
+context window, so a long conversation folds before the provider capacity is
+exhausted. The global validation handler maps request validation
 failures to `400 invalid_request`, not 422.
 
 `get_agent_runtime_config` loads one snapshot in a short-lived system session
@@ -951,12 +952,17 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   tables and read-all/root-write policies on global config tables. Auth tables
   stay outside RLS. Its downgrade revokes this database's grants but does not
   drop the cluster-wide role;
-- `f9c2a7d4e6b1` (current head) adds per-run token/API-call counters to
+- `f9c2a7d4e6b1` adds per-run token/API-call counters to
   `agent_run`, per-account rollups to `app_user`, the `agent_run` usage-delta
   trigger, and the nullable `user_session.impersonator_user_id` marker. It
   backfills historical usage from assistant-entry JSON, requires a
   superuser/BYPASSRLS migration role for the forced-RLS backfill, and validates
-  both upgrade and downgrade on a scratch database.
+  both upgrade and downgrade on a scratch database;
+- `a4c8e2f6b9d1` (current head) removes `max_total_tokens` and its check
+  constraints, repairs a threshold that is not below its context window, and
+  replaces the old threshold rule with
+  `compaction_threshold_tokens < context_window_tokens`. The downgrade restores
+  a 100,000-token ceiling and raises it when the stored threshold requires it.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

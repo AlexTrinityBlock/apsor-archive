@@ -22,7 +22,6 @@ import { SwitchField } from "./SwitchField";
 
 /** The runtime bounds the agent applies to a new run. */
 export interface AgentRuntimeValues {
-  readonly max_total_tokens: number;
   readonly compaction_threshold_tokens: number;
   readonly context_window_tokens: number;
   readonly max_steps: number;
@@ -78,15 +77,6 @@ const CONTEXT_FIELDS: readonly NumericFieldSpec[] = [
     max: 2000000,
     step: 50000,
     hintKey: "settings.agent.fieldContextWindowHint",
-  },
-  {
-    key: "max_total_tokens",
-    labelKey: "settings.agent.fieldTurnBudgetLabel",
-    unitKey: "settings.agent.fieldTurnBudgetUnit",
-    min: 8000,
-    max: 200000,
-    step: 5000,
-    hintKey: "settings.agent.fieldTurnBudgetHint",
   },
   {
     key: "compaction_threshold_tokens",
@@ -187,7 +177,6 @@ const ALL_FIELD_SPECS: readonly NumericFieldSpec[] = [
 ];
 
 const VALUE_KEYS: readonly (keyof AgentRuntimeValues)[] = [
-  "max_total_tokens",
   "compaction_threshold_tokens",
   "context_window_tokens",
   "max_steps",
@@ -204,7 +193,6 @@ const VALUE_KEYS: readonly (keyof AgentRuntimeValues)[] = [
 
 function toDraft(values: AgentRuntimeValues): DraftValues {
   return {
-    max_total_tokens: String(values.max_total_tokens),
     compaction_threshold_tokens: String(values.compaction_threshold_tokens),
     context_window_tokens: String(values.context_window_tokens),
     max_steps: String(values.max_steps),
@@ -222,7 +210,6 @@ function toDraft(values: AgentRuntimeValues): DraftValues {
 
 function fromDraft(draft: DraftValues): AgentRuntimeValues {
   return {
-    max_total_tokens: Number(draft.max_total_tokens),
     compaction_threshold_tokens: Number(draft.compaction_threshold_tokens),
     context_window_tokens: Number(draft.context_window_tokens),
     max_steps: Number(draft.max_steps),
@@ -293,17 +280,17 @@ function validateDraft(
     numbers[spec.key] = parsed;
   }
 
-  const totalTokens = numbers.max_total_tokens;
+  const contextWindow = numbers.context_window_tokens;
   const threshold = numbers.compaction_threshold_tokens;
   if (
-    totalTokens !== undefined &&
+    contextWindow !== undefined &&
     threshold !== undefined &&
-    threshold >= totalTokens &&
+    threshold >= contextWindow &&
     fieldErrors.compaction_threshold_tokens === undefined
   ) {
     fieldErrors.compaction_threshold_tokens = t(
-      "settings.runtime.errors.thresholdBelowTotal",
-      { total: formatNumber(totalTokens) },
+      "settings.runtime.errors.thresholdBelowContext",
+      { context: formatNumber(contextWindow) },
     );
   }
 
@@ -374,16 +361,16 @@ export function AgentRuntimePanel({
   const isInvalid = Object.keys(validation.fieldErrors).length > 0;
   const canSave = isDirty && !isInvalid && !saving;
 
-  const draftTotal =
-    positiveNumber(draft.max_total_tokens) ?? values.max_total_tokens;
+  const draftContext =
+    positiveNumber(draft.context_window_tokens) ?? values.context_window_tokens;
   const draftThreshold =
     positiveNumber(draft.compaction_threshold_tokens) ??
     values.compaction_threshold_tokens;
   const thresholdPercent =
-    draftTotal > 0
-      ? Math.min(100, Math.max(0, Math.round((draftThreshold / draftTotal) * 100)))
+    draftContext > 0
+      ? Math.min(100, Math.max(0, Math.round((draftThreshold / draftContext) * 100)))
       : 0;
-  const headroom = Math.max(0, draftTotal - draftThreshold);
+  const headroom = Math.max(0, draftContext - draftThreshold);
   const budgetStyle = {
     "--runtime-budget-fill": `${thresholdPercent}%`,
   } as CSSProperties;
@@ -442,7 +429,6 @@ export function AgentRuntimePanel({
         updatedAt={updatedAt}
         summary={t("settings.agent.statusSummary", {
           context: formatNumber(values.context_window_tokens),
-          budget: formatNumber(values.max_total_tokens),
           compaction: formatNumber(values.compaction_threshold_tokens),
         })}
         dirty={isDirty}
@@ -456,7 +442,7 @@ export function AgentRuntimePanel({
           <span className="runtime-budget__value">
             {t("settings.agent.budgetValue", {
               threshold: formatNumber(draftThreshold),
-              total: formatNumber(draftTotal),
+              total: formatNumber(draftContext),
             })}
           </span>
         </div>
@@ -510,14 +496,6 @@ export function AgentRuntimePanel({
             />
             <RuntimeNumberField
               spec={contextFields[1]}
-              value={draft.max_total_tokens}
-              defaultValue={defaults.max_total_tokens}
-              disabled={saving}
-              error={validation.fieldErrors.max_total_tokens}
-              onValueChange={(next) => updateNumber("max_total_tokens", next)}
-            />
-            <RuntimeNumberField
-              spec={contextFields[2]}
               value={draft.compaction_threshold_tokens}
               defaultValue={defaults.compaction_threshold_tokens}
               disabled={saving}
@@ -538,7 +516,7 @@ export function AgentRuntimePanel({
               />
             </div>
             <RuntimeNumberField
-              spec={contextFields[3]}
+              spec={contextFields[2]}
               value={draft.max_steps}
               defaultValue={defaults.max_steps}
               disabled={saving}
@@ -546,7 +524,7 @@ export function AgentRuntimePanel({
               onValueChange={(next) => updateNumber("max_steps", next)}
             />
             <RuntimeNumberField
-              spec={contextFields[4]}
+              spec={contextFields[3]}
               value={draft.max_page_context_chars}
               defaultValue={defaults.max_page_context_chars}
               disabled={saving}

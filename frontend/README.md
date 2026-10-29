@@ -326,22 +326,21 @@ AgentRuntimePanel.tsx`) backed by the generated `useGetAgentSettings`,
 configuration remains in the existing AI provider panels.
 
 The panel shows a Database/Defaults badge, the last `updated_at`, and a summary
-with model context, turn budget, and compaction side by side. A token budget
-meter shows the compaction threshold as a share of `max_total_tokens` with
-remaining headroom. Every numeric field displays its default and valid range.
-The thirteen runtime values are grouped into context budget, tool execution, and
+with model context and compaction side by side. A compaction meter shows the
+compaction threshold as a share of `context_window_tokens` with remaining
+headroom. Every numeric field displays its default and valid range.
+The twelve runtime values are grouped into context budget, tool execution, and
 compaction detail; auto compaction, parallel tools, and memory-write approval
 are toggles.
 
-The context budget group labels **Model context window** separately from
-**Turn token budget** and **Auto-compaction threshold**. The context window is
-provider/model metadata (default 1,000,000, range 8,000–2,000,000); changing it
-never raises the 100,000-token turn budget or moves the 75,000-token compaction
-threshold.
+The context budget group labels **Model context window** and
+**Auto-compaction threshold**. The context window is provider/model metadata
+(default 1,000,000, range 8,000–2,000,000); the threshold must stay below it.
+There is no per-turn token ceiling, so a long turn is not cut off mid-work.
 
 Validation happens before saving: integer/range checks plus the cross-field
-rules (threshold below total tokens, parallel width within tool calls per turn).
-Save is disabled for an invalid or unchanged draft. The server repeats
+rules (threshold below the context window, parallel width within tool calls per
+turn). Save is disabled for an invalid or unchanged draft. The server repeats
 validation and the app maps failures to `400 invalid_request`; the panel shows
 the returned detail inline.
 

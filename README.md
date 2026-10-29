@@ -91,10 +91,10 @@ result carries its source, chunk number, and time.
 - **The agent has one workspace.** Chat is a three-panel desk: a collapsible
   conversation drawer, the streaming transcript, and a tool inspector with a
   draggable, persisted split. There is no second composer or command palette.
-- **Agent limits are database-backed.** The model context window, turn budget,
-  compaction threshold, step and tool caps, parallel width, and result budgets
-  live in one validated `agent_config` row and apply to new runs without a
-  restart. The context window is model metadata, not the turn budget.
+- **Agent limits are database-backed.** The model context window, compaction
+  threshold, step and tool caps, parallel width, and result budgets live in one
+  validated `agent_config` row and apply to new runs without a restart. The
+  context window is model metadata; compaction is the long-conversation control.
 - **Long threads can be folded or cleared.** Compaction writes a summary
   boundary; clear starts an empty active context. The full transcript remains
   readable in both cases.
@@ -384,13 +384,13 @@ prompt text; it does not send the message. The API is
 The **Agent runtime** panel on `/settings` (root only) edits the singleton
 `agent_config` row (`id=1`). Provider and model selection stay in the AI settings
 above, so there is still one source of truth for which model answers. All
-thirteen runtime values are stored in PostgreSQL, apply to new runs without a
+twelve runtime values are stored in PostgreSQL, apply to new runs without a
 restart, and are shared by every account.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | Effective config, defaults, source, `updated_at` |
-| `PUT` | `/api/v1/agent/settings` | Full replacement; all thirteen fields are required |
+| `PUT` | `/api/v1/agent/settings` | Full replacement; all twelve fields are required |
 | `POST` | `/api/v1/agent/settings/reset` | Persist and return the built-in defaults |
 
 The generated operations are `getAgentSettings`, `updateAgentSettings`, and
@@ -403,9 +403,8 @@ fields are rejected.
 
 | Field | Default | Range |
 |---|---|---|
-| `max_total_tokens` | 100,000 | 8,000–200,000 |
-| `compaction_threshold_tokens` | 75,000 (~75%) | 1,000–200,000 |
-| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model metadata, not a turn budget |
+| `compaction_threshold_tokens` | 75,000 | 1,000–200,000; below the context window |
+| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model metadata |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
@@ -418,10 +417,9 @@ fields are rejected.
 | `save_memory_requires_approval` | `true` | boolean; manual approval for `save_memory` |
 
 Pydantic and matching PostgreSQL check constraints enforce the ranges and two
-cross-field rules: the compaction threshold must be lower than the total token
-budget, and the parallel width must not exceed tool calls per turn. The context
-window is independent of both; changing it never raises the turn budget. The
-app's global validation envelope maps request validation failures to `400
+cross-field rules: the compaction threshold must stay below the model context
+window, and the parallel width must not exceed tool calls per turn. The app's
+global validation envelope maps request validation failures to `400
 invalid_request` rather than 422.
 
 A request loads one immutable runtime snapshot in a short-lived database session.
@@ -767,11 +765,12 @@ is persisted only at `message_end`; deltas are transport-only. Send
 Starlette's GZip middleware excludes `text/event-stream`.
 
 Each conversation allows one active run at a time. The defaults allow 24 model
-steps, 20 tool calls per user turn, 6 parallel tools, 100,000 total tokens per turn
-(cumulative across model steps), 75,000 tokens before auto compaction, and
-100,000 result characters per tool. A separate 1,000,000-token model context
-window records provider capacity; it is metadata and does not raise the turn
-budget or change compaction. Each
+steps, 20 tool calls per user turn, 6 parallel tools, 75,000 tokens of active
+context before auto compaction, and 100,000 result characters per tool. There is
+no cumulative per-turn token ceiling; a turn ends only on a final answer, the
+step or tool-call limits, a user cancellation, or a provider failure. The
+1,000,000-token context window records provider capacity and is the bound the
+compaction threshold is measured against. Each
 result is clipped independently at that per-result cap with a visible
 `[truncated]` marker; there is no turn-wide result budget or second summarization
 call. A 100,000-character cap spans roughly twenty-five 4,000-character chunks.
@@ -788,7 +787,7 @@ failed/cancelled assistant answer, a trailing hard-limit tool result
 `tool_result_budget_exhausted`), or the last stream failed before an assistant
 entry was recorded. Retry starts a new run for the same user entry; the UI does
 not append a second message and disables the action while a stream is active. A
-retry can hit the same context or token budget again if the transcript is still
+retry can hit the same context limit again if the transcript is still
 too long. The endpoint returns `409 agent_run_not_retryable` when the latest run
 is completed or otherwise not failed/cancelled; the UI refetches the transcript
 after that error so a stale Retry action disappears.
@@ -1482,7 +1481,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `f9c2a7d4e6b1`, after `e8f1c4d2a7b9`. The migrations
+The latest migration is `a4c8e2f6b9d1`, after `f9c2a7d4e6b1`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1547,11 +1546,16 @@ after `agent_config` on this branch are:
   non-login `apsor_app` role, revokes `alembic_version` from it, and enables
   forced RLS with owner policies on private tables and read/root-write policies
   on global config tables. Auth tables stay outside RLS;
-- `f9c2a7d4e6b1` (current head) adds per-run token/API-call counters to
+- `f9c2a7d4e6b1` adds per-run token/API-call counters to
   `agent_run`, per-account rollups to `app_user`, the usage-delta trigger, and
   the nullable `user_session.impersonator_user_id` impersonation marker. It
   backfills historical usage from assistant-entry JSON and requires a
-  superuser/BYPASSRLS migration role for the forced-RLS backfill.
+  superuser/BYPASSRLS migration role for the forced-RLS backfill;
+- `a4c8e2f6b9d1` (current head) removes the `max_total_tokens` column and its
+  check constraints, repairs a compaction threshold that is not below its
+  context window, and replaces the old threshold rule with
+  `compaction_threshold_tokens < context_window_tokens`. The downgrade restores
+  a 100,000-token ceiling and raises it when the stored threshold requires it.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

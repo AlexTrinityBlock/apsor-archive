@@ -67,15 +67,14 @@ ERROR_FINISH_REASONS = frozenset({"error", "aborted", "cancelled", "canceled"})
 MAX_STEPS = 24
 MAX_TOOL_CALLS_PER_TURN = 20
 MAX_PARALLEL_TOOLS = 6
-# Model capability metadata, not a cost guard. The turn budget below remains the
-# limit the loop enforces; compaction is still measured against that budget.
+# Model capability metadata, not a cost guard. Auto compaction is measured
+# against the model context window so a long conversation keeps flowing.
 CONTEXT_WINDOW_TOKENS = 1_000_000
-# One turn may use up to 100k provider tokens. Auto compaction triggers before a
-# new user turn once the estimated active context reaches 75% of that budget.
-MAX_TOTAL_TOKENS = 100_000
+# Fold older turns into a summary before a new turn once the estimated active
+# context passes this many tokens.
 COMPACTION_THRESHOLD_TOKENS = 75_000
-# Tool output stays on its own, smaller budget: every tool result is capped at
-# 12k chars and each turn may emit at most 24k characters across all results.
+# Tool output stays on its own, smaller budget: every tool result is clipped
+# independently, with no turn-wide result budget.
 MAX_TOOL_RESULT_CHARS = 100_000
 MAX_COMPACTION_SUMMARY_CHARS = 6_000
 MAX_COMPACTION_LAST_USER_CHARS = 4_000

@@ -91,7 +91,7 @@ CITATION_PATTERN = re.compile(r"\[(?:file|memory|summary):\d+(?:#\d+)?\]")
 _PAGE_CONTEXT_LINE_WS = re.compile(r"[ \t\f\v]+")
 _PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")
 LIMIT_CODES = frozenset(
-    {"step_limit", "token_limit", "tool_call_limit", "tool_result_budget_exhausted"}
+    {"step_limit", "tool_call_limit", "tool_result_budget_exhausted"}
 )
 
 
@@ -545,34 +545,6 @@ class AgentService:
                     )
                     return
 
-                if _token_total(total_usage) >= self.config.max_total_tokens:
-                    last_entry_id = await self._append_failure_assistant(
-                        turn,
-                        last_entry_id,
-                        "token_limit",
-                        "The token budget was exhausted.",
-                        step,
-                    )
-                    await self._fail_run(
-                        turn,
-                        last_entry_id,
-                        "token_limit",
-                        "The token budget was exhausted.",
-                    )
-                    terminal = True
-                    yield AgentStreamEvent(
-                        "error",
-                        {
-                            "code": "token_limit",
-                            "detail": "The token budget was exhausted.",
-                        },
-                    )
-                    yield AgentStreamEvent(
-                        "run_end",
-                        {"run_id": run_id, "status": RUN_FAILED},
-                    )
-                    return
-
                 yield AgentStreamEvent(
                     "message_start",
                     {"entry_id": None, "kind": KIND_ASSISTANT, "role": "assistant"},
@@ -742,44 +714,6 @@ class AgentService:
                     yield AgentStreamEvent(
                         "error",
                         {"code": "step_limit", "detail": "The step limit was reached."},
-                    )
-                    yield AgentStreamEvent(
-                        "run_end",
-                        {"run_id": run_id, "status": RUN_FAILED},
-                    )
-                    return
-
-                if _token_total(total_usage) >= self.config.max_total_tokens:
-                    limit_entries, limit_events = await self._limit_tool_batch(
-                        turn,
-                        calls,
-                        "token_limit",
-                        "The token budget was exhausted before the tool calls could run.",
-                    )
-                    for event in limit_events:
-                        yield event
-                    if limit_entries is None:
-                        await self._best_effort_cancel(turn, last_entry_id)
-                        terminal = True
-                        yield AgentStreamEvent(
-                            "run_end",
-                            {"run_id": run_id, "status": RUN_CANCELLED},
-                        )
-                        return
-                    last_entry_id = limit_entries[-1].id if limit_entries else last_entry_id
-                    await self._fail_run(
-                        turn,
-                        last_entry_id,
-                        "token_limit",
-                        "The token budget was exhausted.",
-                    )
-                    terminal = True
-                    yield AgentStreamEvent(
-                        "error",
-                        {
-                            "code": "token_limit",
-                            "detail": "The token budget was exhausted.",
-                        },
                     )
                     yield AgentStreamEvent(
                         "run_end",
@@ -1844,12 +1778,6 @@ def _merge_usage(total: dict[str, int], usage: dict[str, int]) -> None:
     for key, value in usage.items():
         if isinstance(value, int):
             total[key] = total.get(key, 0) + value
-
-
-def _token_total(usage: dict[str, int]) -> int:
-    if "total_tokens" in usage:
-        return int(usage["total_tokens"])
-    return int(usage.get("prompt_tokens", 0)) + int(usage.get("completion_tokens", 0))
 
 
 def _usage_from_entries(entries: list[AgentEntrySchema]) -> dict[str, int]:
