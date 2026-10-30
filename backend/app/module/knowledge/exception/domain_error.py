@@ -139,6 +139,14 @@ class TreePathConflictError(KnowledgeError):
         super().__init__(f"Path {path} is already occupied by a different node kind.")
 
 
+class FolderCopyTooLargeError(KnowledgeError):
+    def __init__(self, files: int, total_bytes: int) -> None:
+        super().__init__(
+            f"Folder copy needs {files} files / {total_bytes} bytes; "
+            "split the folder or copy a smaller subtree."
+        )
+
+
 class IngestJobNotFoundError(KnowledgeError):
     def __init__(self, job_id: int) -> None:
         super().__init__(f"Ingestion job {job_id} was not found.")

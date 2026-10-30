@@ -909,14 +909,18 @@ button.library-crumb:hover {
   box-shadow: 0 0 0 2px rgba(46, 75, 62, 0.1);
 }
 
+.library-folder-card.has-open-menu {
+  z-index: 12;
+}
+
 .library-folder-card.is-selecting .library-folder-card__open {
-  padding-left: 26px;
+  padding-left: 42px;
 }
 
 .library-folder-card__check {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 10px;
+  left: 10px;
   z-index: 3;
 }
 
@@ -926,6 +930,7 @@ button.library-crumb:hover {
   min-width: 0;
   align-items: center;
   gap: 10px;
+  padding-right: 36px;
   text-align: left;
 }
 
@@ -1080,8 +1085,8 @@ button.library-crumb:hover {
 
 .library-file-card__check {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 10px;
+  left: 10px;
   z-index: 3;
 }
 
@@ -1181,6 +1186,11 @@ button.library-crumb:hover {
   border: 0.7px solid var(--mono-grid);
   border-radius: 5px;
   box-shadow: var(--shadow-modal);
+}
+
+.library-folder-menu {
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
 }
 
 .library-file-menu__item {
@@ -2463,6 +2473,13 @@ button.library-crumb:hover {
   line-height: 1.55;
 }
 
+.library-folder-delete__warning-text {
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
 .library-batch-delete__warning-list li {
   overflow-wrap: anywhere;
 }
@@ -2767,6 +2784,29 @@ button.library-crumb:hover {
 
   .library-table {
     min-width: 520px;
+  }
+
+  .library-table__select-head,
+  .library-table__select {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--mono-card-bg);
+  }
+
+  .library-table__select-head {
+    z-index: 3;
+    background: var(--mono-paper);
+  }
+
+  .library-row:hover > .library-table__select {
+    background: var(--mono-card-warm);
+  }
+
+  .library-row.is-selected > .library-table__select {
+    background:
+      linear-gradient(rgba(46, 75, 62, 0.06), rgba(46, 75, 62, 0.06)),
+      var(--mono-card-bg);
   }
 
   .library-preview__head {

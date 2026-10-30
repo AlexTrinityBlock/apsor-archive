@@ -709,19 +709,29 @@ No external provider call is made.
 
 ## Folder and file organization
 
-Three authenticated endpoints back the library board; every path and file id is
+Authenticated endpoints back the library board; every path and file id is
 scoped to the acting account:
 
 | Method | Path | Body | Success |
 |---|---|---|---|
 | `POST` | `/api/v1/folders` | `{path}` | `201` with `{path, name, depth}` |
+| `POST` | `/api/v1/folders/rename` | `{path, new_name}` | `200` with the folder mutation result |
+| `POST` | `/api/v1/folders/move` | `{path, target_path}` | `200` with the folder mutation result |
+| `POST` | `/api/v1/folders/copy` | `{path, target_path}` | `201` with the folder mutation result |
 | `POST` | `/api/v1/files/{file_id}/move` | `{path}` | `200` with the file |
 | `POST` | `/api/v1/files/{file_id}/copy` | `{path}` | `201` with the new file |
+| `POST` | `/api/v1/files/batch-delete` | `{file_ids, folder_paths}` | `200` with deletion counts |
 
-`path` is at most 1,024 characters. Empty values reach the service so they
-produce the stable `invalid_path` domain error rather than a generic schema
-error. Folder and file path uniqueness is per account (`user_id, path`); two
-accounts may hold the same path independently.
+The folder mutation result is `{folder, affected_folders, affected_files}`,
+where `folder` is the relocated or copied root directory. Folder delete keeps
+using the batch selection endpoint: pass the folder path in `folder_paths` and
+leave `file_ids` empty.
+
+`path` is at most 1,024 characters and a folder name is at most 255. Empty
+values reach the service so they produce the stable `invalid_path` domain
+error rather than a generic schema error. Folder and file path uniqueness is
+per account (`user_id, path`); two accounts may hold the same path
+independently.
 
 ### Create folder
 
@@ -731,7 +741,59 @@ the same folder and `201`. A path occupied by a file returns
 `409 tree_path_conflict`. The archive cache version is bumped only when a new
 folder is created.
 
-### Move
+### Rename and move folders
+
+`rename_folder` changes only the leaf name in the same parent. `move_folder`
+takes a complete destination path, so it can change the parent and the leaf
+name together. Both normalize and validate the target path, reject `/`, reject
+moving a folder into itself or its own subtree with `422 invalid_path`, return
+`404 path_not_found` for a missing source, and return `409 tree_path_conflict`
+when the destination is occupied by a folder or current file. Moving a folder
+to its current path is an idempotent `200` with zero affected rows.
+
+Relocation locks current files first and folder rows second, matching batch
+delete, then updates every folder in the subtree (`path`, `depth`, and the root
+`parent_id`/`name`) and the `raw_file_path` of every current, non-deleted file
+under it. Historical file rows keep their old paths. File ids, versions,
+chunks, embeddings, storage keys, and file names are unchanged, so search,
+citations, and viewer links keep working. The archive cache version is bumped
+once per successful mutation. A concurrent unique conflict becomes
+`409 tree_path_conflict` and the request transaction rolls back.
+
+### Copy folder
+
+`copy_folder` recursively copies the subtree, including empty folders, to a
+complete destination path. It copies only current, non-deleted files; historical
+versions and soft-deleted rows are not copied. A destination inside the source
+subtree is `422 invalid_path`, and an occupied destination is
+`409 tree_path_conflict`.
+
+The copy is bounded to 300 files and 256 MiB. The limits are checked before any
+target folder or stored original is written; exceeding either returns
+`422 folder_copy_too_large` and creates nothing.
+
+Each copied file is a new current row at version 1 with no supersession or
+history:
+
+- The stored original is copied byte-for-byte to a new storage key. A legacy
+  text-only row without an original is promoted by rebuilding its text from the
+  current chunks and storing that as the copy's original, so `has_original`
+  becomes true.
+- Chunks, char/token counts, embeddings, embedding model, and n-grams are
+  cloned from the source's current chunks. The embedding provider is not
+  called, and `total_chunks` is the number of cloned current chunks.
+- `ai_summary`, `ai_tags`, `document_type`, and `extraction_method` are copied.
+- Source rows are never modified. Failures while persisting the copy delete any
+  newly written originals and roll back the new folder and file rows.
+
+### Delete
+
+Folder deletion reuses `deleteLibrarySelection`: it recursively soft-deletes
+the current files under the selected folder, hard-deletes the folder rows, and
+keeps historical file rows and original bytes readable. It is one transaction.
+The archive cache version is bumped once.
+
+### Move file
 
 `move_file` requires a current, non-deleted file id. It normalizes the target,
 requires the same extension, and rejects a target occupied by any folder or
@@ -744,7 +806,7 @@ history links are unchanged. The folder/file cache version is bumped. Search,
 timeline, citations, and viewer links keep working because the id does not
 change.
 
-### Copy
+### Copy file
 
 `copy_file` requires a current, non-deleted source and a free target path with
 the same extension. It creates a new current file record at version 1 with a new
@@ -766,9 +828,11 @@ persisting the new bytes delete the newly written storage object.
 
 | Error code | Status | Cause |
 |---|---|---|
-| `invalid_path` | 422 | Empty path, `/`, traversal, or changed extension |
+| `invalid_path` | 422 | Empty path, `/`, traversal, changed extension, or folder moved/copied into itself |
 | `tree_path_conflict` | 409 | Target is occupied by another folder or current file |
+| `path_not_found` | 404 | Source folder path does not exist |
 | `file_not_found` | 404 | File id is missing, deleted, or not current |
+| `folder_copy_too_large` | 422 | Folder copy exceeds 300 files or 256 MiB |
 | `unsupported_file_type` | 422 | Upload extension is outside the allowlist |
 | `file_too_large` | 413 | Upload exceeds 10 MB, or text creation exceeds 2 MB |
 | `empty_content` | 422 | Text-only copy has no reconstructable content |

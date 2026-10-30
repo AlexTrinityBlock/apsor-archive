@@ -16,6 +16,7 @@ from uuid import uuid4
 import pypdfium2 as pdfium
 from docx import Document
 from pypdf import PdfReader
+from sqlalchemy.exc import IntegrityError
 
 from app.infrastructure.files.storage_errors import (
     StorageError,
@@ -24,6 +25,7 @@ from app.infrastructure.files.storage_errors import (
 )
 from app.module.knowledge.domain.chunking_domain import chunk_text
 from app.module.knowledge.domain.path_domain import (
+    MAX_PATH_LENGTH,
     InvalidPathValueError,
     extension,
     file_name,
@@ -41,6 +43,7 @@ from app.module.knowledge.exception.domain_error import (
     FileStorageUnavailableError,
     FileTooLargeError,
     FileVersionConflictError,
+    FolderCopyTooLargeError,
     InvalidChunkWindowError,
     InvalidPathError,
     PathNotFoundError,
@@ -68,6 +71,7 @@ from app.module.knowledge.schema.file_schema import (
     DirectorySchema,
     FileChunksSchema,
     FileSchema,
+    FolderMutationSchema,
     LibraryDeleteResultSchema,
     PathFileSchema,
     PathListingSchema,
@@ -87,6 +91,9 @@ DOCUMENT_EXTENSIONS = {".pdf", ".docx"}
 MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".csv", ".json", ".log"}
 ALLOWED_EXTENSIONS = TEXT_EXTENSIONS | DOCUMENT_EXTENSIONS | IMAGE_EXTENSIONS
+
+FOLDER_COPY_MAX_FILES = 300
+FOLDER_COPY_MAX_BYTES = 256 * 1024 * 1024
 
 DOCUMENT_ANALYSIS_PROMPT = (
     "You analyze a document before it enters a personal knowledge library. "
@@ -943,6 +950,235 @@ class FileService:
             raise InvalidPathError("A folder path must include a folder name.")
         await self._bump_index_version()
         return self._directory_schema(folder)
+
+    async def rename_folder(self, path: str, *, new_name: str) -> FolderMutationSchema:
+        """Rename one folder in place while keeping its whole subtree intact."""
+        source_path = self._normalized_directory(path)
+        name = new_name.strip()
+        # Reject a slash first, otherwise the joined target would be normalized
+        # into a valid multi-segment move. Empty names, ".", "..", control
+        # characters, and an over-long path are rejected by the normalizer.
+        if not name or "/" in name or "\\" in name:
+            raise InvalidPathError("A renamed folder must use a single non-empty folder name.")
+        parent = parent_directory(source_path)
+        target = "/" + name if parent == "/" else f"{parent}/{name}"
+        target_path = self._normalized_directory(target)
+        return await self._relocate_folder(source_path, target_path)
+
+    async def move_folder(self, path: str, *, target_path: str) -> FolderMutationSchema:
+        """Move one folder subtree to a complete destination path."""
+        source_path = self._normalized_directory(path)
+        target = self._normalized_directory(target_path)
+        return await self._relocate_folder(source_path, target)
+
+    async def copy_folder(self, path: str, *, target_path: str) -> FolderMutationSchema:
+        """Copy one folder subtree without recomputing chunks or embeddings."""
+        source_path = self._normalized_directory(path)
+        target = self._normalized_directory(target_path)
+        source = await self.folder_repository.get_by_path(source_path)
+        if source is None:
+            raise PathNotFoundError(source_path)
+        if target == source_path or target.startswith(f"{source_path}/"):
+            raise InvalidPathError("A folder cannot be copied into itself or its own subtree.")
+        if await self._target_is_occupied(target):
+            raise TreePathConflictError(target)
+        return await self._copy_folder_tree(source, target)
+
+    async def _relocate_folder(
+        self,
+        source_path: str,
+        target_path: str,
+    ) -> FolderMutationSchema:
+        """Rename/move: update the whole folder subtree and current file paths."""
+        source = await self.folder_repository.get_by_path(source_path)
+        if source is None:
+            raise PathNotFoundError(source_path)
+        if target_path == source_path:
+            return FolderMutationSchema(
+                folder=self._directory_schema(source),
+                affected_folders=0,
+                affected_files=0,
+            )
+        if target_path.startswith(f"{source_path}/"):
+            raise InvalidPathError("A folder cannot be moved into itself or its own subtree.")
+        if await self._target_is_occupied(target_path):
+            raise TreePathConflictError(target_path)
+
+        # Files lock first, then folders. Delete, rename, move, and copy all use
+        # this order so concurrent subtree operations cannot form a lock cycle.
+        files = await self.file_repository.list_current_for_update(
+            file_ids=[],
+            folder_paths=[source_path],
+        )
+        folders = await self.folder_repository.list_for_update([source_path])
+        if not any(folder.id == source.id for folder in folders):
+            raise PathNotFoundError(source_path)
+
+        target_parent = await self._ensure_folder_chain(parent_directory(target_path))
+
+        # Resolve and validate every new path before mutating any row so an
+        # over-long descendant fails without a partially renamed subtree.
+        folder_updates: list[tuple[FolderModel, str]] = []
+        for folder in sorted(folders, key=lambda item: item.depth):
+            new_path = f"{target_path}{folder.path[len(source_path):]}"
+            self._check_path_length(new_path)
+            folder_updates.append((folder, new_path))
+        file_updates: list[tuple[FileModel, str]] = []
+        for file in files:
+            new_path = f"{target_path}{file.raw_file_path[len(source_path):]}"
+            self._check_path_length(new_path)
+            file_updates.append((file, new_path))
+
+        now = utcnow()
+        for folder, new_path in folder_updates:
+            folder.path = new_path
+            folder.depth = len(path_segments(new_path))
+            folder.updated_at = now
+            if folder.id == source.id:
+                folder.parent_id = target_parent.id if target_parent is not None else None
+                folder.name = file_name(target_path)
+        for file, new_path in file_updates:
+            # A relocation never versions a file, so the id, chunks, embeddings,
+            # and storage key stay attached to the same current row.
+            file.raw_file_path = new_path
+            file.updated_at = now
+
+        try:
+            await self.file_repository.flush()
+        except IntegrityError as exc:
+            raise TreePathConflictError(target_path) from exc
+
+        await self._bump_index_version()
+        return FolderMutationSchema(
+            folder=self._directory_schema(source),
+            affected_folders=len(folders),
+            affected_files=len(files),
+        )
+
+    async def _copy_folder_tree(
+        self,
+        source: FolderModel,
+        target_path: str,
+    ) -> FolderMutationSchema:
+        """Copy folders, files, originals, chunks, and ngrams without re-embedding."""
+        files = await self.file_repository.list_current_for_update(
+            file_ids=[],
+            folder_paths=[source.path],
+        )
+        folders = await self.folder_repository.list_for_update([source.path])
+        if not any(folder.id == source.id for folder in folders):
+            raise PathNotFoundError(source.path)
+
+        # Enforce the copy envelope before creating any target folder or writing
+        # any original, so an oversized request leaves no partial copy behind.
+        total_bytes = sum(file.size_bytes for file in files)
+        if len(files) > FOLDER_COPY_MAX_FILES or total_bytes > FOLDER_COPY_MAX_BYTES:
+            raise FolderCopyTooLargeError(len(files), total_bytes)
+
+        folder_map: dict[int, FolderModel] = {}
+        created_keys: list[tuple[str, str]] = []
+        try:
+            target_parent = await self._ensure_folder_chain(parent_directory(target_path))
+            for old_folder in sorted(folders, key=lambda item: item.depth):
+                new_path = f"{target_path}{old_folder.path[len(source.path):]}"
+                self._check_path_length(new_path)
+                if old_folder.id == source.id:
+                    parent = target_parent
+                else:
+                    parent_id = old_folder.parent_id
+                    parent = folder_map[parent_id] if parent_id is not None else None
+                    if parent is None:
+                        raise InvalidPathError("The source folder tree is incomplete.")
+                new_folder = await self.folder_repository.add(
+                    FolderModel(
+                        user_id=self.user_id,
+                        parent_id=parent.id if parent is not None else None,
+                        path=new_path,
+                        name=file_name(new_path),
+                        depth=len(path_segments(new_path)),
+                    )
+                )
+                folder_map[old_folder.id] = new_folder
+
+            # Sorting by path keeps row insertion order deterministic even
+            # though the source rows arrive in database order.
+            for old_file in sorted(files, key=lambda item: item.raw_file_path):
+                new_path = f"{target_path}{old_file.raw_file_path[len(source.path):]}"
+                self._check_path_length(new_path)
+                if old_file.storage_key is not None:
+                    data = await self._storage_read(
+                        old_file.storage_key,
+                        backend=old_file.storage_backend,
+                        file_id=old_file.id,
+                    )
+                else:
+                    # Legacy text-only rows have no original; promote the merged
+                    # chunks into a real stored original for the copy.
+                    chunks = await self.chunk_repository.get_source_chunks(
+                        SOURCE_FILE,
+                        old_file.id,
+                    )
+                    text = self._merge_chunk_contents(chunks)
+                    if not text:
+                        raise EmptyContentError()
+                    data = text.encode("utf-8")
+                new_key, new_backend = await self.store_new_original(
+                    data,
+                    suffix=old_file.extension,
+                )
+                created_keys.append((new_key, new_backend))
+                new_file = await self.file_repository.add(
+                    FileModel(
+                        user_id=self.user_id,
+                        raw_file_path=new_path,
+                        file_name=old_file.file_name,
+                        extension=old_file.extension,
+                        mime_type=old_file.mime_type,
+                        size_bytes=len(data),
+                        content_hash=hashlib.sha256(data).hexdigest(),
+                        storage_key=new_key,
+                        storage_backend=new_backend,
+                        ai_summary=old_file.ai_summary,
+                        ai_tags=list(old_file.ai_tags),
+                        document_type=old_file.document_type,
+                        extraction_method=old_file.extraction_method,
+                        version=1,
+                        supersedes_file_id=None,
+                        is_current=True,
+                        total_chunks=0,
+                    )
+                )
+                cloned = await self.chunk_repository.clone_current_source(
+                    source_id=old_file.id,
+                    target_id=new_file.id,
+                )
+                new_file.total_chunks = cloned
+
+            await self.file_repository.flush()
+            await self._bump_index_version()
+        except IntegrityError as exc:
+            await self._delete_created_originals(created_keys)
+            raise TreePathConflictError(target_path) from exc
+        except Exception:
+            await self._delete_created_originals(created_keys)
+            raise
+
+        new_root = folder_map[source.id]
+        return FolderMutationSchema(
+            folder=self._directory_schema(new_root),
+            affected_folders=len(folder_map),
+            affected_files=len(files),
+        )
+
+    @staticmethod
+    def _check_path_length(path: str) -> None:
+        if len(path) > MAX_PATH_LENGTH:
+            raise InvalidPathError(f"Path exceeds {MAX_PATH_LENGTH} characters.")
+
+    async def _delete_created_originals(self, created: Sequence[tuple[str, str]]) -> None:
+        """Best-effort cleanup of originals written for a failed folder copy."""
+        for key, backend in created:
+            await self._storage_delete_quietly(key, backend=backend)
 
     async def _require_current_file_for_update(self, file_id: int) -> FileModel:
         """Lock the current file row; shared by update, move, copy, and delete."""

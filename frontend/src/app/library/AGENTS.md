@@ -8,7 +8,7 @@ The `/library` file workspace: folder-first browsing, media, uploads, preview, M
 - Open files in an in-situ preview with chunk inspection and version metadata.
 - Ingest files and plain text through durable jobs with visible progress.
 - Edit current Markdown files safely against their version.
-- Perform move, copy, soft delete, folder creation, and batch move without breaking citations or open previews.
+- Perform move, copy, soft delete, folder creation, folder rename/move/copy, and batch move without breaking citations or open previews.
 
 Backend validation remains authoritative. The UI mirrors limits for fast feedback, normalizes paths, and surfaces stable API errors.
 
@@ -21,6 +21,9 @@ Backend validation remains authoritative. The UI mirrors limits for fast feedbac
 - **Uploads:** drag/drop, clipboard paste, Media upload, and the intake dialog share `useLibraryUploads`. The browser enforces the extension allowlist, the 10 MB file ceiling, and the 2 MB text ceiling before enqueueing. Async upload endpoints return an `IngestJobSchema`; `waitForIngestJob` polls once per second until `ready` or `failed`. This is polling, not SSE. Closing a dialog or leaving the page cancels local polling, not the durable job.
 - **Versions:** file edits and copies produce new records, not in-place overwrites. The preview shows `version`, `is_current`, `supersedes_file_id`, and soft-deletion state. Markdown saves send `expected_version`; `file_version_conflict` asks the user to reload. A successful save keeps the editor open on the new version and swaps the URL to the new file id, so typing can continue without returning to the preview.
 - **Rename vs move:** rename uses the dedicated filename-only endpoint. The parent folder and extension are fixed, and the file id, version, chunks, and storage stay unchanged. Move remains the only operation that changes the folder path. Do not implement rename by exposing the full path.
+- **Folder CRUD:** folders are addressed by path, not id. `renameFolder` changes only the leaf name; `moveFolder` takes a complete destination path; `copyFolder` clones the whole subtree, files, stored originals, chunks, embeddings, and ngrams without re-embedding (bounded by the backend and surfaced as `folder_copy_too_large`). Rename and move use the same subtree rewrite, so every descendant path and current file path changes. Delete reuses `deleteLibrarySelection` with `folder_paths`, which recursively soft-deletes current files while keeping history and original bytes. Every folder mutation invalidates paths, stats, timeline, and search; delete also invalidates the deleted file ids.
+- **Folder action surfaces:** a folder card exposes a top-right settings trigger with the shared card-menu keyboard behaviour, and the same action order appears in the right-click context menu. The list view puts rename, move, copy, and delete icon buttons in every folder row, so touch users never depend on right-click. After a rename or move, a URL inside the old subtree is remapped to the new path while the preview file id is preserved; after a delete, a URL inside the deleted subtree falls back to its parent and a deleted preview closes. Copy leaves the browser in the current folder.
+- **Selection checkbox:** selection mode is the only state that renders checkboxes. They sit at the top-left of both card types, and the folder card reserves matching padding so the box never overlaps the folder icon. The list keeps the select column first and makes it sticky while the table scrolls horizontally on mobile.
 - **New notes:** the Markdown editor freezes the current folder as a read-only prefix; only the file name is editable. The create request joins that prefix with the validated name and never lets the user rewrite the folder.
 - **Move vs copy:** move preserves the file id, so open citations and previews remain valid; copy creates a new file id and rebuilt chunks. Do not optimistically move a card on a `409` or `422`.
 - **Batch move:** `BatchMoveDialog` sends one generated `moveFile` call at a time. It reports each failure, keeps successful moves, and leaves failed files selected for retry.
@@ -40,6 +43,7 @@ Backend validation remains authoritative. The UI mirrors limits for fast feedbac
 - `hook/useLibraryUploads.ts` — shared upload queue and abort handling.
 - `hook/useIngestRun.ts` — dialog-scoped enqueue/poll lifecycle.
 - `component/MoveCopyDialog.tsx`, `BatchMoveDialog.tsx`, `NewFolderDialog.tsx`, `DeleteFileDialog.tsx` — file operations and confirmations.
+- `component/RenameFolderDialog.tsx`, `MoveCopyFolderDialog.tsx`, `DeleteFolderDialog.tsx` — folder rename, move/copy, and recursive delete confirmations.
 - `component/FilePreviewModal.tsx` — preview tabs, version state, download, rename, move/copy/delete, and edit.
 - `component/RenameFileDialog.tsx` — fixed folder + fixed extension, editable stem only.
 - `component/MarkdownEditor.tsx`, `MarkdownEditorDialog.tsx`, `MarkdownToolbar.tsx`, `markdown-edit.ts`, `useMarkdownDocument.ts` — editor, formatting, fixed-folder new-note form, content loading, and dirty guards.
@@ -48,7 +52,7 @@ Backend validation remains authoritative. The UI mirrors limits for fast feedbac
 
 ## Conventions
 
-- Use generated `useReadPath`, `useUploadFileAsync`, `useCreateTextFileAsync`, `useRetryIngestJob`, `useGetFile`, `useReadFile`, `useUpdateFileContent`, `useRenameFile`, `moveFile`, `copyFile`, and `useDeleteFile`. Do not add a Library-specific fetch client.
+- Use generated `useReadPath`, `useUploadFileAsync`, `useCreateTextFileAsync`, `useRetryIngestJob`, `useGetFile`, `useReadFile`, `useUpdateFileContent`, `useRenameFile`, `moveFile`, `copyFile`, `renameFolder`, `moveFolder`, `copyFolder`, and `useDeleteFile`. Do not add a Library-specific fetch client.
 - Rename is filename-only. Never send a full path to the rename endpoint or expose the parent folder as an input. Move/copy remain the path-changing operations.
 - Reuse `../viewer/component/viewer-utils.ts` and `FileRenderer` for content and previews. Do not create a second renderer or download path.
 - After any mutation, call `invalidateLibraryQueries` with only the affected surfaces and file ids. Update the current preview path when a move changes its folder.

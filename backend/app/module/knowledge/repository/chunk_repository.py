@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.module.knowledge.model.chunk_model import ChunkModel
+from app.module.knowledge.model.chunk_model import SOURCE_FILE, ChunkModel
 from app.module.knowledge.model.ngram_model import ChunkNgramModel
 from app.module.knowledge.protocol.chunk_repository_protocol import (
     TextCandidate,
@@ -123,6 +123,52 @@ class ChunkRepository:
             .order_by(ChunkModel.chunk_index)
         )
         return list((await self.session.execute(statement)).scalars().all())
+
+    async def clone_current_source(
+        self,
+        *,
+        source_id: int,
+        target_id: int,
+    ) -> int:
+        """Clone current file chunks, embeddings, and n-grams to a new file id.
+
+        A folder copy reuses this path so identical content never calls the
+        embedding provider again. Historical chunks stay on the source only.
+        """
+        source_chunks = await self.get_source_chunks(SOURCE_FILE, source_id)
+        cloned = 0
+        for chunk in source_chunks:
+            if not chunk.is_current:
+                continue
+            duplicate = await self.add(
+                ChunkModel(
+                    user_id=self.user_id,
+                    source_kind=SOURCE_FILE,
+                    source_id=target_id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    char_count=chunk.char_count,
+                    token_count=chunk.token_count,
+                    embedding=list(chunk.embedding) if chunk.embedding is not None else None,
+                    embedding_model=chunk.embedding_model,
+                    is_current=True,
+                )
+            )
+            frequencies = await self.get_ngram_frequencies(chunk.id)
+            await self.add_ngrams(duplicate.id, frequencies)
+            cloned += 1
+        return cloned
+
+    async def get_ngram_frequencies(self, chunk_id: int) -> dict[str, int]:
+        """Return gram -> term frequency for one chunk."""
+        statement = select(ChunkNgramModel.gram, ChunkNgramModel.term_frequency).where(
+            ChunkNgramModel.user_id == self.user_id,
+            ChunkNgramModel.chunk_id == chunk_id,
+        )
+        return {
+            str(gram): int(frequency)
+            for gram, frequency in (await self.session.execute(statement)).all()
+        }
 
     async def get_chunk_window(
         self,

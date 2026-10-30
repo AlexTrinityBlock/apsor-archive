@@ -43,6 +43,7 @@ const ERROR_CODE_KEYS = {
   agent_invalid_system_prompt: "core.errors.agent_invalid_system_prompt",
   agent_system_prompt_not_found: "core.errors.agent_system_prompt_not_found",
   file_content_unavailable: "core.errors.file_content_unavailable",
+  folder_copy_too_large: "library.errors.folderCopyTooLarge",
   setup_required: "core.errors.setup_required",
   login_failed: "core.errors.login_failed",
   rate_limited: "core.errors.rate_limited",

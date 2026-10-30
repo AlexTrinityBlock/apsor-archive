@@ -35,6 +35,14 @@ interface LibraryFilesContentProps {
   ) => void;
   readonly onUpload: () => void;
   readonly onUploadHere: (path: string) => void;
+  readonly onNewMarkdownHere: (path: string) => void;
+  readonly onCopyPath: (path: string) => void;
+  readonly onRequestRenameFolder: (folder: DirectorySchema) => void;
+  readonly onRequestMoveCopyFolder: (
+    folder: DirectorySchema,
+    mode: FileOperationMode,
+  ) => void;
+  readonly onRequestDeleteFolder: (folder: DirectorySchema) => void;
   readonly onNewFolder: () => void;
   readonly onClearSearch: () => void;
   readonly onOpenRoot: () => void;
@@ -66,6 +74,11 @@ export function LibraryFilesContent({
   onFolderContextMenu,
   onUpload,
   onUploadHere,
+  onNewMarkdownHere,
+  onCopyPath,
+  onRequestRenameFolder,
+  onRequestMoveCopyFolder,
+  onRequestDeleteFolder,
   onNewFolder,
   onClearSearch,
   onOpenRoot,
@@ -93,6 +106,11 @@ export function LibraryFilesContent({
         onFileContextMenu={onFileContextMenu}
         onFolderContextMenu={onFolderContextMenu}
         onUploadHere={onUploadHere}
+        onNewMarkdownHere={onNewMarkdownHere}
+        onCopyPath={onCopyPath}
+        onRequestRenameFolder={onRequestRenameFolder}
+        onRequestMoveCopyFolder={onRequestMoveCopyFolder}
+        onRequestDeleteFolder={onRequestDeleteFolder}
         onRequestMove={onRequestMove}
         onRequestDelete={onRequestDelete}
         onMoveFile={onMoveFile}
@@ -127,6 +145,9 @@ export function LibraryFilesContent({
         onFolderContextMenu={onFolderContextMenu}
         onRequestMove={onRequestMove}
         onRequestDelete={onRequestDelete}
+        onRequestRenameFolder={onRequestRenameFolder}
+        onRequestMoveCopyFolder={onRequestMoveCopyFolder}
+        onRequestDeleteFolder={onRequestDeleteFolder}
       />
     );
   }
@@ -147,6 +168,11 @@ export function LibraryFilesContent({
       onFileContextMenu={onFileContextMenu}
       onFolderContextMenu={onFolderContextMenu}
       onUploadHere={onUploadHere}
+      onNewMarkdownHere={onNewMarkdownHere}
+      onCopyPath={onCopyPath}
+      onRequestRenameFolder={onRequestRenameFolder}
+      onRequestMoveCopyFolder={onRequestMoveCopyFolder}
+      onRequestDeleteFolder={onRequestDeleteFolder}
       onRequestMove={onRequestMove}
       onRequestDelete={onRequestDelete}
       onMoveFile={onMoveFile}
