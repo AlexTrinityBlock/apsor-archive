@@ -2127,6 +2127,28 @@
         "title": "FileTextUpdateSchema",
         "type": "object"
       },
+      "FolderCopySchema": {
+        "additionalProperties": false,
+        "description": "Copy one folder subtree to a complete destination path.",
+        "properties": {
+          "path": {
+            "maxLength": 1024,
+            "title": "Path",
+            "type": "string"
+          },
+          "target_path": {
+            "maxLength": 1024,
+            "title": "Target Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "target_path"
+        ],
+        "title": "FolderCopySchema",
+        "type": "object"
+      },
       "FolderCreateSchema": {
         "additionalProperties": false,
         "description": "Create one folder and any missing ancestors.\n\nEmpty values reach the service so they become the stable ``invalid_path``\ndomain error instead of a generic schema-validation error.",
@@ -2141,6 +2163,73 @@
           "path"
         ],
         "title": "FolderCreateSchema",
+        "type": "object"
+      },
+      "FolderMoveSchema": {
+        "additionalProperties": false,
+        "description": "Move one folder subtree to a complete destination path.",
+        "properties": {
+          "path": {
+            "maxLength": 1024,
+            "title": "Path",
+            "type": "string"
+          },
+          "target_path": {
+            "maxLength": 1024,
+            "title": "Target Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "target_path"
+        ],
+        "title": "FolderMoveSchema",
+        "type": "object"
+      },
+      "FolderMutationSchema": {
+        "description": "Result of a rename, move, or copy operation.",
+        "properties": {
+          "affected_files": {
+            "title": "Affected Files",
+            "type": "integer"
+          },
+          "affected_folders": {
+            "title": "Affected Folders",
+            "type": "integer"
+          },
+          "folder": {
+            "$ref": "#/components/schemas/DirectorySchema"
+          }
+        },
+        "required": [
+          "folder",
+          "affected_folders",
+          "affected_files"
+        ],
+        "title": "FolderMutationSchema",
+        "type": "object"
+      },
+      "FolderRenameSchema": {
+        "additionalProperties": false,
+        "description": "Rename one folder in place; the parent folder never changes.",
+        "properties": {
+          "new_name": {
+            "maxLength": 255,
+            "title": "New Name",
+            "type": "string"
+          },
+          "path": {
+            "maxLength": 1024,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "new_name"
+        ],
+        "title": "FolderRenameSchema",
         "type": "object"
       },
       "FrequentlyUsedPromptCreateSchema": {
@@ -7850,6 +7939,132 @@
           }
         },
         "summary": "Create Folder",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/api/v1/folders/copy": {
+      "post": {
+        "description": "Copy one folder subtree, cloning its chunks without re-embedding.",
+        "operationId": "copyFolder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderCopySchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderMutationSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Copy Folder",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/api/v1/folders/move": {
+      "post": {
+        "description": "Move one folder subtree to a complete destination path.",
+        "operationId": "moveFolder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderMoveSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderMutationSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Move Folder",
+        "tags": [
+          "folders"
+        ]
+      }
+    },
+    "/api/v1/folders/rename": {
+      "post": {
+        "description": "Rename one folder in place; the parent folder never changes.",
+        "operationId": "renameFolder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FolderRenameSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderMutationSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Folder",
         "tags": [
           "folders"
         ]

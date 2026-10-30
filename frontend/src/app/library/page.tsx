@@ -16,6 +16,7 @@ import "../viewer/viewer.css";
 import type {
   DirectorySchema,
   FileSchema,
+  FolderMutationSchema,
   LibraryDeleteResultSchema,
   PathFileSchema,
 } from "../generated-apis-types/schemas";
@@ -38,6 +39,7 @@ import { useDebouncedValue } from "../hook/useDebouncedValue";
 import { fileDownloadUrl } from "../viewer/component/viewer-utils";
 import { BatchMoveDialog, type BatchMoveResult } from "./component/BatchMoveDialog";
 import { DeleteFileDialog } from "./component/DeleteFileDialog";
+import { DeleteFolderDialog } from "./component/DeleteFolderDialog";
 import { DeleteSelectionDialog } from "./component/DeleteSelectionDialog";
 import { FilePreviewModal } from "./component/FilePreviewModal";
 import { LibraryFilesContent } from "./component/LibraryFilesContent";
@@ -47,8 +49,10 @@ import { LibraryToolbar } from "./component/LibraryToolbar";
 import { LibraryUploadTray } from "./component/LibraryUploadTray";
 import { MarkdownEditorDialog } from "./component/MarkdownEditorDialog";
 import { MoveCopyDialog } from "./component/MoveCopyDialog";
+import { MoveCopyFolderDialog } from "./component/MoveCopyFolderDialog";
 import { NewFolderDialog } from "./component/NewFolderDialog";
 import { RenameFileDialog } from "./component/RenameFileDialog";
+import { RenameFolderDialog } from "./component/RenameFolderDialog";
 import { UploadDialog } from "./component/UploadDialog";
 import {
   IMAGE_UPLOAD_ACCEPT,
@@ -61,11 +65,13 @@ import {
   isImageFileName,
   isMarkdownFile,
   isNotFoundError,
+  isPathInside,
   joinArchivePath,
   nameClipboardFile,
   normalizeLibraryPath,
   parsePositiveInt,
   pathParamValue,
+  remapArchivePath,
   sameArchivePath,
   sortListing,
   type FileOperationMode,
@@ -84,6 +90,11 @@ interface ParamUpdates {
 
 interface MoveCopyRequest {
   readonly file: FileOperationTarget;
+  readonly mode: FileOperationMode;
+}
+
+interface FolderMoveCopyRequest {
+  readonly folder: DirectorySchema;
   readonly mode: FileOperationMode;
 }
 
@@ -140,6 +151,69 @@ function RenameRequestDialog({
       onClose={onClose}
       onRenamed={onClose}
     />
+  );
+}
+
+interface FolderDialogSlotsProps {
+  readonly renameRequest: DirectorySchema | null;
+  readonly moveCopyRequest: FolderMoveCopyRequest | null;
+  readonly deleteRequest: DirectorySchema | null;
+  readonly currentPath: string;
+  readonly onCloseRename: () => void;
+  readonly onRenamed: (result: FolderMutationSchema) => void;
+  readonly onCloseMoveCopy: () => void;
+  readonly onMoveCopyDone: (
+    result: FolderMutationSchema,
+    mode: FileOperationMode,
+  ) => void;
+  readonly onCloseDelete: () => void;
+  readonly onDeleted: (result: LibraryDeleteResultSchema) => void;
+}
+
+/** Renders the folder rename, move/copy, and delete dialogs outside the page body. */
+function FolderDialogSlots({
+  renameRequest,
+  moveCopyRequest,
+  deleteRequest,
+  currentPath,
+  onCloseRename,
+  onRenamed,
+  onCloseMoveCopy,
+  onMoveCopyDone,
+  onCloseDelete,
+  onDeleted,
+}: FolderDialogSlotsProps) {
+  return (
+    <>
+      {renameRequest ? (
+        <RenameFolderDialog
+          key={renameRequest.path}
+          folder={renameRequest}
+          onClose={onCloseRename}
+          onRenamed={onRenamed}
+        />
+      ) : null}
+
+      {moveCopyRequest ? (
+        <MoveCopyFolderDialog
+          key={`${moveCopyRequest.mode}:${moveCopyRequest.folder.path}`}
+          folder={moveCopyRequest.folder}
+          mode={moveCopyRequest.mode}
+          currentPath={currentPath}
+          onClose={onCloseMoveCopy}
+          onDone={onMoveCopyDone}
+        />
+      ) : null}
+
+      {deleteRequest ? (
+        <DeleteFolderDialog
+          key={deleteRequest.path}
+          folder={deleteRequest}
+          onClose={onCloseDelete}
+          onDeleted={onDeleted}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -226,6 +300,12 @@ export function LibraryPage() {
   const [renameRequest, setRenameRequest] = useState<FileOperationTarget | null>(
     null,
   );
+  const [renameFolderRequest, setRenameFolderRequest] =
+    useState<DirectorySchema | null>(null);
+  const [folderMoveCopyRequest, setFolderMoveCopyRequest] =
+    useState<FolderMoveCopyRequest | null>(null);
+  const [deleteFolderRequest, setDeleteFolderRequest] =
+    useState<DirectorySchema | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selectedFileIds, setSelectedFileIds] = useState<ReadonlySet<number>>(
     () => new Set<number>(),
@@ -598,6 +678,93 @@ export function LibraryPage() {
   const handleRequestRename = useCallback((file: FileOperationTarget) => {
     setRenameRequest(file);
   }, []);
+
+  const handleRequestRenameFolder = useCallback((folder: DirectorySchema) => {
+    setRenameFolderRequest(folder);
+  }, []);
+
+  const handleRequestMoveCopyFolder = useCallback(
+    (folder: DirectorySchema, mode: FileOperationMode) => {
+      setFolderMoveCopyRequest({ folder, mode });
+    },
+    [],
+  );
+
+  const handleRequestDeleteFolder = useCallback((folder: DirectorySchema) => {
+    setDeleteFolderRequest(folder);
+  }, []);
+
+  const handleFolderRenamed = useCallback(
+    (result: FolderMutationSchema) => {
+      const sourcePath = renameFolderRequest?.path ?? null;
+      setRenameFolderRequest(null);
+      resetSelection();
+      if (sourcePath !== null && isPathInside(path, sourcePath)) {
+        updateParams(
+          { path: pathParamValue(remapArchivePath(path, sourcePath, result.folder.path)) },
+          { replace: true },
+        );
+      }
+    },
+    [path, renameFolderRequest, resetSelection, updateParams],
+  );
+
+  const handleFolderMoveCopyDone = useCallback(
+    (result: FolderMutationSchema, mode: FileOperationMode) => {
+      const request = folderMoveCopyRequest;
+      setFolderMoveCopyRequest(null);
+      resetSelection();
+      if (
+        mode === "move" &&
+        request !== null &&
+        isPathInside(path, request.folder.path)
+      ) {
+        updateParams(
+          {
+            path: pathParamValue(
+              remapArchivePath(path, request.folder.path, result.folder.path),
+            ),
+          },
+          { replace: true },
+        );
+      }
+    },
+    [folderMoveCopyRequest, path, resetSelection, updateParams],
+  );
+
+  const handleFolderDeleted = useCallback(
+    (result: LibraryDeleteResultSchema) => {
+      const deletedPath = deleteFolderRequest?.path ?? null;
+      setDeleteFolderRequest(null);
+      resetSelection();
+      const previewDeleted =
+        previewFileId !== null && result.deleted_file_ids.includes(previewFileId);
+      if (deletedPath !== null && isPathInside(path, deletedPath)) {
+        updateParams(
+          {
+            path: pathParamValue(parentPath(deletedPath)),
+            file: null,
+            media: null,
+            chunk: null,
+            mode: null,
+          },
+          { replace: true },
+        );
+      } else if (previewDeleted) {
+        updateParams(
+          { file: null, media: null, chunk: null, mode: null },
+          { replace: true },
+        );
+      }
+    },
+    [
+      deleteFolderRequest,
+      path,
+      previewFileId,
+      resetSelection,
+      updateParams,
+    ],
+  );
 
   const handleDeleted = useCallback(
     (deletedFileId: number) => {
@@ -1009,16 +1176,41 @@ export function LibraryPage() {
         onSelect: () => openFolder(folder.path),
       },
       {
+        id: "newMarkdownHere",
+        label: t("library.contextMenu.newMarkdownHere"),
+        icon: "file",
+        onSelect: () => openNewMarkdown(folder.path),
+      },
+      {
         id: "uploadHere",
         label: t("library.contextMenu.uploadHere"),
         icon: "plus",
         onSelect: () => openUpload(folder.path),
       },
       {
-        id: "newMarkdownHere",
-        label: t("library.contextMenu.newMarkdownHere"),
-        icon: "file",
-        onSelect: () => openNewMarkdown(folder.path),
+        id: "renameFolder",
+        label: t("library.contextMenu.renameFolder"),
+        icon: "pencil",
+        onSelect: () => handleRequestRenameFolder(folder),
+      },
+      {
+        id: "moveFolder",
+        label: t("library.contextMenu.moveFolder"),
+        icon: "branch",
+        onSelect: () => handleRequestMoveCopyFolder(folder, "move"),
+      },
+      {
+        id: "copyFolder",
+        label: t("library.contextMenu.copyFolder"),
+        icon: "copy",
+        onSelect: () => handleRequestMoveCopyFolder(folder, "copy"),
+      },
+      {
+        id: "deleteFolder",
+        label: t("library.contextMenu.deleteFolder"),
+        icon: "trash",
+        danger: true,
+        onSelect: () => handleRequestDeleteFolder(folder),
       },
       {
         id: "copyPath",
@@ -1032,8 +1224,11 @@ export function LibraryPage() {
     copyArchivePath,
     downloadArchiveFile,
     handleRequestDelete,
+    handleRequestDeleteFolder,
     handleRequestMoveCopy,
+    handleRequestMoveCopyFolder,
     handleRequestRename,
+    handleRequestRenameFolder,
     openFolder,
     openMarkdownEditor,
     openNewMarkdown,
@@ -1086,6 +1281,13 @@ export function LibraryPage() {
         onFolderContextMenu={openFolderContextMenu}
         onUpload={() => openUpload()}
         onUploadHere={(folderPath) => openUpload(folderPath)}
+        onNewMarkdownHere={openNewMarkdown}
+        onCopyPath={(folderPath) => {
+          void copyArchivePath(folderPath);
+        }}
+        onRequestRenameFolder={handleRequestRenameFolder}
+        onRequestMoveCopyFolder={handleRequestMoveCopyFolder}
+        onRequestDeleteFolder={handleRequestDeleteFolder}
         onNewFolder={() => setNewFolderOpen(true)}
         onClearSearch={clearQuery}
         onOpenRoot={() => openFolder("/")}
@@ -1249,6 +1451,19 @@ export function LibraryPage() {
       <RenameRequestDialog
         request={renameRequest}
         onClose={() => setRenameRequest(null)}
+      />
+
+      <FolderDialogSlots
+        renameRequest={renameFolderRequest}
+        moveCopyRequest={folderMoveCopyRequest}
+        deleteRequest={deleteFolderRequest}
+        currentPath={path}
+        onCloseRename={() => setRenameFolderRequest(null)}
+        onRenamed={handleFolderRenamed}
+        onCloseMoveCopy={() => setFolderMoveCopyRequest(null)}
+        onMoveCopyDone={handleFolderMoveCopyDone}
+        onCloseDelete={() => setDeleteFolderRequest(null)}
+        onDeleted={handleFolderDeleted}
       />
 
       {batchMoveFiles ? (
