@@ -568,13 +568,17 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  overflow: hidden;
+  overflow: clip;
   background: var(--mono-card-bg);
   border: 0.7px solid var(--mono-grid);
   border-radius: 5px;
 }
 
+/* Keep page navigation reachable while the modal body scrolls a tall page. */
 .viewer-pdf__bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -628,10 +632,14 @@
 .viewer-pdf__scroll {
   display: block;
   min-height: 44dvh;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 14px;
   background: var(--mono-paper);
-  overscroll-behavior: contain;
+  /* Keep the horizontal edge gesture local, but let vertical swipes reach the
+     modal body. A plain overscroll-behavior: contain here traps mobile users on
+     the PDF and hides the bottom of the page. */
+  overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
 }
 
