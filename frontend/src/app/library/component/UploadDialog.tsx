@@ -145,7 +145,7 @@ function IntakeActions({
 }: {
   readonly busy: boolean;
   readonly submitLabel: string;
-  readonly submitIcon: "plus" | "arrow-down";
+  readonly submitIcon: "plus" | "arrow-up";
   readonly canRetry: boolean;
   readonly onCancel: () => void;
   readonly onRetry: () => void;
@@ -322,7 +322,7 @@ function UploadTabPanel({
         <IntakeActions
           busy={busy}
           submitLabel={submitLabel}
-          submitIcon="arrow-down"
+          submitIcon="arrow-up"
           canRetry={canRetry}
           onCancel={onCancel}
           onRetry={onRetry}
@@ -586,7 +586,7 @@ export function UploadDialog({ currentPath, onClose, onUploaded }: UploadDialogP
           onClick={() => selectTab("upload")}
           disabled={busy}
         >
-          <Icon name="arrow-down" size={15} />
+          <Icon name="arrow-up" size={15} />
           {t("library.upload.uploadTab")}
         </button>
         <button

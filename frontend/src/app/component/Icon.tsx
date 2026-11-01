@@ -22,6 +22,7 @@ export type IconName =
   | "menu"
   | "close"
   | "arrow-right"
+  | "arrow-up"
   | "arrow-up-right"
   | "arrow-down"
   | "chevron-right"
@@ -155,6 +156,12 @@ const ICONS: Record<IconName, ReactNode> = {
     <>
       <path d="M4 12h15" />
       <path d="m14 6.5 5.5 5.5-5.5 5.5" />
+    </>
+  ),
+  "arrow-up": (
+    <>
+      <path d="M12 20V5" />
+      <path d="m5.5 11.5 6.5-6.5 6.5 6.5" />
     </>
   ),
   "arrow-up-right": (
