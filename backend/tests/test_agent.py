@@ -9,6 +9,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 
+from app.infrastructure.ai.deepseek_client import DeepSeekClient, _is_context_window_error
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
 from app.module.agent.test.fake_chat_generator import (
@@ -17,6 +18,7 @@ from app.module.agent.test.fake_chat_generator import (
     tool_call_result,
     tool_calls_result,
 )
+from app.module.knowledge.exception.domain_error import AiContextWindowError
 from app.module.web_research.schema.web_research_schema import (
     WebFetchResponse,
     WebSearchHit,
@@ -279,6 +281,17 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert invalid_threshold.status_code == 400
     assert invalid_threshold.json()["error"] == "invalid_request"
     assert "compaction_threshold_tokens" in invalid_threshold.json()["detail"]
+    invalid_threshold_cap = client.put(
+        "/api/v1/agent/settings",
+        json={
+            **defaults,
+            "context_window_tokens": 1_500_000,
+            "compaction_threshold_tokens": 1_000_001,
+        },
+    )
+    assert invalid_threshold_cap.status_code == 400
+    assert invalid_threshold_cap.json()["error"] == "invalid_request"
+    assert "compaction_threshold_tokens" in invalid_threshold_cap.json()["detail"]
     invalid_parallel = client.put(
         "/api/v1/agent/settings",
         json={
@@ -304,6 +317,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     non_default_settings = {
         **defaults,
         "context_window_tokens": 1_500_000,
+        "compaction_threshold_tokens": 1_000_000,
         "max_steps": 4,
         "max_tool_calls_per_turn": 4,
         "max_parallel_tools": 2,
@@ -2419,8 +2433,13 @@ def test_cumulative_token_usage_does_not_abort_a_turn(
         "pi.user",
         "pi.assistant",
         "pi.tool-result",
+        "pi.compaction",
         "pi.assistant",
     ]
+    compaction = next(
+        entry for entry in body["entries"] if entry["kind"] == "pi.compaction"
+    )
+    assert compaction["data"]["reason"] == "auto_context_threshold"
 
 
 def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
@@ -2523,3 +2542,134 @@ def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
             "offset": None,
         },
     ]
+
+
+class ContextOverflowChatGenerator:
+    """Raise one context-overflow provider error, then answer normally."""
+
+    configured = True
+    model_name = "fake-chat"
+
+    def __init__(self) -> None:
+        self.requests: list[list[dict[str, Any]]] = []
+
+    async def complete_chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        model: str | None = None,
+        stream: bool = False,
+        on_text_delta: Any = None,
+    ) -> Any:
+        del tools, model, stream
+        self.requests.append([dict(message) for message in messages])
+        if len(self.requests) == 1:
+            raise AiContextWindowError()
+        result = text_result("Recovered after compaction.")
+        if on_text_delta is not None:
+            await on_text_delta(result.text)
+        return result
+
+
+def test_agent_compacts_mid_run_before_provider_call(client: TestClient) -> None:
+    """A full context compacts after tool/page growth instead of failing."""
+    defaults = client.get("/api/v1/agent/settings").json()["defaults"]
+    updated = client.put(
+        "/api/v1/agent/settings",
+        json={**defaults, "compaction_threshold_tokens": 1_000},
+    )
+    assert updated.status_code == 200, updated.text
+
+    fake = FakeChatGenerator.from_texts("Compacted answer.")
+    client.app.state.agent_chat_generator = fake
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Mid-run compaction"},
+    ).json()
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation['id']}/messages",
+        json={
+            "content": "Summarize this page.",
+            "page_context": {
+                "key": PAGE_KEY,
+                "path": PAGE_PATH,
+                "title": PAGE_TITLE,
+                "text": "x" * 11_000,
+            },
+        },
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    assert body["answer"] == "Compacted answer."
+    assert any(
+        isinstance(message.get("content"), str)
+        and message["content"].startswith("<compaction>")
+        for message in fake.requests[0].messages
+    )
+    compactions = [
+        entry for entry in body["entries"] if entry["kind"] == "pi.compaction"
+    ]
+    assert len(compactions) == 1
+    assert compactions[0]["data"]["reason"] == "auto_context_threshold"
+    assert compactions[0]["data"]["auto"] is True
+
+
+def test_agent_compacts_and_retries_after_provider_context_overflow(
+    client: TestClient,
+) -> None:
+    """A provider context rejection becomes a compaction retry, not an error."""
+    fake = ContextOverflowChatGenerator()
+    client.app.state.agent_chat_generator = fake
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Provider context overflow"},
+    ).json()
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation['id']}/messages",
+        json={"content": "Trigger a context overflow."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    assert body["answer"] == "Recovered after compaction."
+    assert len(fake.requests) == 2
+    assert any(
+        isinstance(message.get("content"), str)
+        and message["content"].startswith("<compaction>")
+        for message in fake.requests[1]
+    )
+    compactions = [
+        entry for entry in body["entries"] if entry["kind"] == "pi.compaction"
+    ]
+    assert len(compactions) == 1
+    assert compactions[0]["data"]["reason"] == "provider_context_overflow"
+
+
+def test_context_window_error_body_is_classified() -> None:
+    """Only context-length provider bodies become recoverable compaction errors."""
+    assert _is_context_window_error(
+        b'{"error":{"message":"maximum context length is 1000000 tokens"}}'
+    )
+    assert not _is_context_window_error(b'{"error":{"message":"invalid api key"}}')
+
+
+def test_agent_chat_output_budget_is_larger_than_extraction(settings: Settings) -> None:
+    """Long tool arguments get the chat budget, not the summary cap."""
+    client = DeepSeekClient(
+        api_key="test-key",
+        base_url="https://example.invalid",
+        model=settings.deepseek_model,
+        timeout_seconds=1.0,
+        max_tokens=settings.deepseek_max_tokens,
+        chat_max_tokens=settings.deepseek_chat_max_tokens,
+        temperature=0.0,
+    )
+
+    assert settings.deepseek_chat_max_tokens == 8192
+    assert settings.deepseek_max_tokens == 1800
+    assert client._base_payload(None, chat=True)["max_tokens"] == 8192
+    assert client._base_payload(None)["max_tokens"] == 1800

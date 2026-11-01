@@ -377,7 +377,7 @@ PostgreSQL 中，无需重启即可应用于新的运行，并由每个账户共
 
 | 字段 | 默认值 | 范围 |
 |---|---|---|
-| `compaction_threshold_tokens` | 75,000 | 1,000–200,000；低于上下文窗口 |
+| `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000；低于上下文窗口 |
 | `context_window_tokens` | 1,000,000 | 8,000–2,000,000；模型元数据 |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
@@ -789,9 +789,11 @@ API 重启时，陈旧的 `running` 运行会以 `interrupted` 失败。带有�
 
 #### 压缩与清空
 
-当 `auto_compaction_enabled` 为 true，并且在新用户轮次之前估计的
-活动上下文超过 `compaction_threshold_tokens` 时，该轮次会先追加
-一个 `pi.compaction` 条目：
+当 `auto_compaction_enabled` 为 true，并且估计的活动上下文超过
+`compaction_threshold_tokens` 时，系统会在下一次调用提供商前追加
+一个 `pi.compaction` 条目。该检查既会在新用户轮次之前运行，也会在
+运行中的轮次因工具或页面上下文增长后再次运行，因此上下文塞满时会
+压缩，而不是让提供商调用失败：
 
 - 该条目把 `head_entry_id` 设为自身的 id，因此较早的条目保持
   不可变，但落在新的活动上下文之外。
@@ -1377,7 +1379,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `a4c8e2f6b9d1`，位于 `f9c2a7d4e6b1` 之后。此分支上
+最新的迁移是 `a1c3e5f7b9d2`，位于 `a4c8e2f6b9d1` 之后。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1442,10 +1444,12 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   可空的 `user_session.impersonator_user_id` 模拟标记。它从
   assistant 条目 JSON 回填历史用量，并且强制 RLS 回填需要
   superuser/BYPASSRLS 迁移角色；
-- `a4c8e2f6b9d1`（当前 head）删除 `max_total_tokens` 字段及其检查
-  约束，修复未低于上下文窗口的压缩阈值，并用
+- `a4c8e2f6b9d1` 删除 `max_total_tokens` 字段及其检查约束，修复未低于
+  上下文窗口的压缩阈值，并用
   `compaction_threshold_tokens < context_window_tokens` 取代旧阈值规则。
-  降级会恢复 100,000 令牌上限，并在存储阈值需要时提高该上限。
+  降级会恢复 100,000 令牌上限，并在存储阈值需要时提高该上限；
+- `a1c3e5f7b9d2`（当前 head）把压缩阈值范围提高到 1,000,000 令牌。降级会
+  先把存储值夹回 200,000，再恢复旧检查约束。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，

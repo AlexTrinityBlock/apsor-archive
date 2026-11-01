@@ -368,7 +368,7 @@ PostgreSQL 中，套用至新的執行且無需重新啟動，並由每個帳號
 
 | 欄位 | 預設 | 範圍 |
 |---|---|---|
-| `compaction_threshold_tokens` | 75,000 | 1,000–200,000；低於脈絡視窗 |
+| `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000；低於脈絡視窗 |
 | `context_window_tokens` | 1,000,000 | 8,000–2,000,000；模型中介資料 |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
@@ -767,9 +767,11 @@ API 重新啟動時，過期的 `running` 執行會以 `interrupted` 失敗。�
 
 #### 壓縮與清除
 
-當 `auto_compaction_enabled` 為 true，且在新使用者回合之前估計的活動脈絡
-超過 `compaction_threshold_tokens` 時，該回合會先附加一個 `pi.compaction`
-項目：
+當 `auto_compaction_enabled` 為 true，且估計的活動脈絡超過
+`compaction_threshold_tokens` 時，系統會在下一次呼叫供應商前附加一個
+`pi.compaction` 項目。這項檢查會在新使用者回合之前執行，也會在執行中的
+回合因工具或頁面脈絡而成長後再次執行，因此脈絡塞滿時會壓縮，而不是讓
+供應商呼叫失敗：
 
 - 該項目會將 `head_entry_id` 設為自己的 ID，因此較舊的項目維持不可變，
   但會落在新的活動脈絡之外。
@@ -1345,7 +1347,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `a4c8e2f6b9d1`，在 `f9c2a7d4e6b1` 之後。此分支上
+最新的移轉是 `a1c3e5f7b9d2`，在 `a4c8e2f6b9d1` 之後。此分支上
 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
@@ -1410,10 +1412,12 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   可為 null 的 `user_session.impersonator_user_id` 模擬標記。它會從助理
   項目的 JSON 回填歷史用量，且強制 RLS 回填需要超級使用者／BYPASSRLS
   的移轉角色；
-- `a4c8e2f6b9d1`（目前 head）移除 `max_total_tokens` 欄位及其檢查條件
-  約束、修復未低於脈絡視窗的壓縮門檻，並以
+- `a4c8e2f6b9d1` 移除 `max_total_tokens` 欄位及其檢查條件約束、修復未低於
+  脈絡視窗的壓縮門檻，並以
   `compaction_threshold_tokens < context_window_tokens` 取代舊門檻規則。
-  降級會還原 100,000 權杖上限，並在儲存門檻需要時提高該上限。
+  降級會還原 100,000 權杖上限，並在儲存門檻需要時提高該上限；
+- `a1c3e5f7b9d2`（目前 head）將壓縮門檻範圍提高到 1,000,000 權杖。降級會
+  先將儲存值夾回 200,000，再還原舊檢查條件。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會

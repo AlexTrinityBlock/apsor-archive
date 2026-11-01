@@ -109,6 +109,7 @@ class ProviderFactory:
             model=config.model or self.settings.deepseek_model,
             timeout_seconds=self.settings.deepseek_timeout_seconds,
             max_tokens=self.settings.deepseek_max_tokens,
+            chat_max_tokens=self.settings.deepseek_chat_max_tokens,
             temperature=self.settings.deepseek_temperature,
             supports_thinking=config.provider == "deepseek",
         )

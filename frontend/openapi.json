@@ -1151,7 +1151,7 @@
             "type": "boolean"
           },
           "compaction_threshold_tokens": {
-            "maximum": 200000.0,
+            "maximum": 1000000.0,
             "minimum": 1000.0,
             "title": "Compaction Threshold Tokens",
             "type": "integer"
@@ -1239,7 +1239,7 @@
             "type": "boolean"
           },
           "compaction_threshold_tokens": {
-            "maximum": 200000.0,
+            "maximum": 1000000.0,
             "minimum": 1000.0,
             "title": "Compaction Threshold Tokens",
             "type": "integer"

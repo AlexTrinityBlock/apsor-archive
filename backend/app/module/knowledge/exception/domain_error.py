@@ -129,6 +129,13 @@ class AiProviderError(KnowledgeError):
         super().__init__(f"The AI provider failed: {detail}")
 
 
+class AiContextWindowError(AiProviderError):
+    """The provider rejected a request because its context was too long."""
+
+    def __init__(self) -> None:
+        super().__init__("context window exceeded")
+
+
 class EmbeddingProviderError(KnowledgeError):
     def __init__(self, detail: str) -> None:
         super().__init__(f"The embedding provider failed: {detail}")

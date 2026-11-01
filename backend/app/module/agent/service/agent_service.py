@@ -14,6 +14,7 @@ from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
 from app.module.agent.domain.agent_domain import (
     ERROR_FINISH_REASONS,
     KIND_ASSISTANT,
+    KIND_COMPACTION,
     KIND_PAGE_CONTEXT,
     KIND_RESET,
     KIND_TOOL_RESULT,
@@ -82,7 +83,10 @@ from app.module.agent.service.system_prompt import build_system_data, build_syst
 from app.module.agent.service.system_prompt_service import SystemPromptService
 from app.module.agent.service.time_context import current_time_block
 from app.module.agent.service.tool_registry import AgentToolRegistry
-from app.module.knowledge.exception.domain_error import AiNotConfiguredError
+from app.module.knowledge.exception.domain_error import (
+    AiContextWindowError,
+    AiNotConfiguredError,
+)
 from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -492,6 +496,91 @@ class AgentService:
             max_last_user_chars=self.config.max_compaction_last_user_chars,
         )
 
+    async def _context_for_step(
+        self,
+        conversation_id: int,
+        run_id: int,
+        last_entry_id: int,
+        last_compaction_entry_id: int | None,
+    ) -> tuple[ProviderContext, int, int | None]:
+        """Compact before a provider call when the active context is full.
+
+        The pre-turn check in ``begin_message`` cannot see tool results added
+        during this run. Re-check before every provider step so a long tool loop
+        compacts instead of hitting the provider's context limit.
+        """
+        if not self.config.auto_compaction_enabled:
+            return (
+                await self._context(conversation_id, last_entry_id),
+                last_entry_id,
+                last_compaction_entry_id,
+            )
+        rows = await self.repository.load_context_entries(
+            conversation_id,
+            cutoff_entry_id=last_entry_id,
+        )
+        transcript = _transcript_from_rows(rows)
+        active = compactable_context_entries(transcript)
+        active_compactions = [
+            entry.id for entry in active if entry.kind == KIND_COMPACTION
+        ]
+        latest_compaction = max(active_compactions) if active_compactions else None
+        if last_compaction_entry_id is None:
+            last_compaction_entry_id = latest_compaction
+        # A compaction created by ``begin_message`` already carries the new
+        # user/page input. Do not compact again until tool or assistant entries
+        # have actually added new provider-visible work.
+        pending_turn_only = latest_compaction is not None and not any(
+            entry.id > latest_compaction and entry.kind not in {KIND_USER, KIND_PAGE_CONTEXT}
+            for entry in active
+        )
+        if (
+            not pending_turn_only
+            and last_entry_id != last_compaction_entry_id
+            and estimate_context_tokens(transcript) > self.config.compaction_threshold_tokens
+        ):
+            compacted = await self._compact_active_context(
+                conversation_id,
+                run_id,
+                last_entry_id,
+                reason="auto_context_threshold",
+            )
+            if compacted is not None:
+                context, last_entry_id = compacted
+                return context, last_entry_id, last_entry_id
+        return build_context(transcript), last_entry_id, last_compaction_entry_id
+
+    async def _compact_active_context(
+        self,
+        conversation_id: int,
+        run_id: int,
+        last_entry_id: int,
+        *,
+        reason: str,
+    ) -> tuple[ProviderContext, int] | None:
+        """Append a run-owned compaction boundary and rebuild the context."""
+        rows = await self.repository.load_context_entries(
+            conversation_id,
+            cutoff_entry_id=last_entry_id,
+        )
+        transcript = _transcript_from_rows(rows)
+        if not compactable_context_entries(transcript):
+            return None
+        draft = build_compaction_draft(
+            transcript,
+            reason=reason,
+            auto=True,
+            max_summary_chars=self.config.max_compaction_summary_chars,
+            max_last_user_chars=self.config.max_compaction_last_user_chars,
+        )
+        entry = await self.repository.append_run_compaction(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            draft=draft,
+            now=utcnow(),
+        )
+        return await self._context(conversation_id, entry.id), entry.id
+
     async def stream_turn(self, turn: AgentTurnState) -> AsyncIterator[AgentStreamEvent]:
         """Run the model/tool loop and yield transport-only events."""
         async for event in self._run_loop(
@@ -533,11 +622,31 @@ class AgentService:
                         "resumed": resumed,
                     },
                 )
-            context = await self._context(conversation_id, last_entry_id)
+            last_compaction_entry_id: int | None = None
+            context_overflow_retried = False
 
             for step in range(start_step, self.config.max_steps + 1):
                 if await self.repository.is_abort_requested(conversation_id, run_id):
                     await self._best_effort_cancel(turn, last_entry_id)
+                    terminal = True
+                    yield AgentStreamEvent(
+                        "run_end",
+                        {"run_id": run_id, "status": RUN_CANCELLED},
+                    )
+                    return
+
+                try:
+                    (
+                        context,
+                        last_entry_id,
+                        last_compaction_entry_id,
+                    ) = await self._context_for_step(
+                        conversation_id,
+                        run_id,
+                        last_entry_id,
+                        last_compaction_entry_id,
+                    )
+                except AgentRunNotActiveError:
                     terminal = True
                     yield AgentStreamEvent(
                         "run_end",
@@ -559,6 +668,30 @@ class AgentService:
                 result = completion.result
                 provider_error = completion.error
                 if result is None:
+                    if (
+                        isinstance(provider_error, AiContextWindowError)
+                        and self.config.auto_compaction_enabled
+                        and not context_overflow_retried
+                    ):
+                        try:
+                            compacted = await self._compact_active_context(
+                                conversation_id,
+                                run_id,
+                                last_entry_id,
+                                reason="provider_context_overflow",
+                            )
+                        except AgentRunNotActiveError:
+                            terminal = True
+                            yield AgentStreamEvent(
+                                "run_end",
+                                {"run_id": run_id, "status": RUN_CANCELLED},
+                            )
+                            return
+                        if compacted is not None:
+                            context_overflow_retried = True
+                            context, last_entry_id = compacted
+                            last_compaction_entry_id = last_entry_id
+                            continue
                     (
                         last_entry_id,
                         provider_code,
@@ -956,8 +1089,6 @@ class AgentService:
                         batch_size=batch_size,
                         parallel_index=index,
                     )
-
-                context = await self._context(conversation_id, last_entry_id)
 
             last_entry_id = await self._append_failure_assistant(
                 turn,

@@ -17,7 +17,11 @@ from app.module.agent.protocol.chat_generator_protocol import (
     ChatToolCall,
     TextDeltaCallback,
 )
-from app.module.knowledge.exception.domain_error import AiNotConfiguredError, AiProviderError
+from app.module.knowledge.exception.domain_error import (
+    AiContextWindowError,
+    AiNotConfiguredError,
+    AiProviderError,
+)
 from app.module.knowledge.protocol.text_generator_protocol import AiCompletion
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,7 @@ class DeepSeekClient:
         model: str,
         timeout_seconds: float,
         max_tokens: int,
+        chat_max_tokens: int | None = None,
         temperature: float,
         supports_thinking: bool = True,
     ) -> None:
@@ -44,6 +49,9 @@ class DeepSeekClient:
         self.model_name = model
         self.timeout_seconds = timeout_seconds
         self.max_tokens = max_tokens
+        # Chat turns may need to emit long tool arguments, while summaries and
+        # JSON extraction should keep the smaller extraction budget.
+        self.chat_max_tokens = chat_max_tokens if chat_max_tokens is not None else max_tokens
         self.temperature = temperature
         self.supports_thinking = supports_thinking
 
@@ -54,11 +62,11 @@ class DeepSeekClient:
             "Content-Type": "application/json",
         }
 
-    def _base_payload(self, model: str | None) -> dict[str, Any]:
+    def _base_payload(self, model: str | None, *, chat: bool = False) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model or self.model_name,
             "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
+            "max_tokens": self.chat_max_tokens if chat else self.max_tokens,
         }
         if self.supports_thinking:
             payload["thinking"] = {"type": "disabled"}
@@ -92,8 +100,9 @@ class DeepSeekClient:
 
         if response.status_code >= 400:
             # Provider bodies can reflect request metadata or internal details;
-            # keep the stable status only and never persist the raw body.
-            raise AiProviderError(f"HTTP {response.status_code}")
+            # classify a context overflow so the agent can compact and retry,
+            # but never persist or log the raw body.
+            _raise_http_error(response.status_code, response.content)
         try:
             body = response.json()
             choice = body["choices"][0]
@@ -135,7 +144,7 @@ class DeepSeekClient:
         on_text_delta: TextDeltaCallback | None = None,
     ) -> ChatResult:
         """Run one chat completion, optionally streaming text deltas."""
-        payload = self._base_payload(model)
+        payload = self._base_payload(model, chat=True)
         payload["messages"] = messages
         if tools:
             payload["tools"] = tools
@@ -158,7 +167,7 @@ class DeepSeekClient:
         except httpx.HTTPError as exc:
             raise AiProviderError(f"network error: {exc}") from exc
         if response.status_code >= 400:
-            raise AiProviderError(f"HTTP {response.status_code}")
+            _raise_http_error(response.status_code, response.content)
         try:
             body = response.json()
             choice = body["choices"][0]
@@ -210,8 +219,7 @@ class DeepSeekClient:
                     json=payload,
                 ) as response:
                     if response.status_code >= 400:
-                        await response.aread()
-                        raise AiProviderError(f"HTTP {response.status_code}")
+                        _raise_http_error(response.status_code, await response.aread())
                     async for raw_line in response.aiter_lines():
                         line = raw_line.strip()
                         if not line or line.startswith(":"):
@@ -296,6 +304,27 @@ class NullTextGenerator:
 
 
 NullChatGenerator = NullTextGenerator
+
+
+_CONTEXT_ERROR_MARKERS = (
+    "context_length_exceeded",
+    "maximum context length",
+    "context length",
+    "too many tokens",
+    "prompt is too long",
+)
+
+
+def _raise_http_error(status_code: int, body: bytes) -> None:
+    """Classify an HTTP failure without exposing the provider body."""
+    if _is_context_window_error(body):
+        raise AiContextWindowError()
+    raise AiProviderError(f"HTTP {status_code}")
+
+
+def _is_context_window_error(body: bytes) -> bool:
+    text = body[:8192].decode("utf-8", "ignore").lower()
+    return any(marker in text for marker in _CONTEXT_ERROR_MARKERS)
 
 
 def _normalize_usage(raw: object) -> dict[str, int]:
