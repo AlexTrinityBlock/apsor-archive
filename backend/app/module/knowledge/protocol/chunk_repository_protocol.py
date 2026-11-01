@@ -47,6 +47,15 @@ class ChunkRepositoryProtocol(Protocol):
 
     async def get_source_chunks(self, source_kind: str, source_id: int) -> list[ChunkModel]: ...
 
+    async def clone_current_source(
+        self,
+        *,
+        source_id: int,
+        target_id: int,
+    ) -> int: ...
+
+    async def get_ngram_frequencies(self, chunk_id: int) -> dict[str, int]: ...
+
     async def get_chunk_window(
         self,
         source_kind: str,

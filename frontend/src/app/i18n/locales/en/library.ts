@@ -56,6 +56,11 @@ export const library = {
     moveFile: "Move {name}",
     copyFile: "Copy {name}",
     deleteFile: "Delete {name}",
+    renameFolder: "Rename folder {name}",
+    moveFolder: "Move folder {name}",
+    copyFolder: "Copy folder {name}",
+    deleteFolder: "Delete folder {name}",
+    actionsForFolder: "Actions for folder {name}",
   },
   breadcrumbs: {
     aria: "Breadcrumb",
@@ -95,6 +100,10 @@ export const library = {
     moveTo: "Move to…",
     copyTo: "Copy to…",
     deleteFile: "Delete file",
+    renameFolder: "Rename folder…",
+    moveFolder: "Move folder…",
+    copyFolder: "Copy folder…",
+    deleteFolder: "Delete folder",
     branchDepth: "Branch · depth {depth}",
     uploadHere: "Upload here",
     filesHintDefault: "Click a card to preview · drag to a folder to move",
@@ -223,6 +232,56 @@ export const library = {
     createdToast: "Folder “{name}” is ready.",
     creating: "Creating…",
     submit: "Create folder",
+  },
+  folderRename: {
+    eyebrow: "Rename folder",
+    title: "Rename “{name}”",
+    description:
+      "Only the folder name changes. Every file and subfolder keeps its contents and file ids while its path follows the new branch name.",
+    nameLabel: "Folder name",
+    errorName: "Enter one folder name without slashes.",
+    renamedToast: "Folder renamed to “{name}”.",
+  },
+  folderMoveCopy: {
+    eyebrowMove: "Move folder",
+    eyebrowCopy: "Copy folder",
+    titleMove: "Move “{name}”",
+    titleCopy: "Copy “{name}”",
+    descriptionMove:
+      "Move keeps every file id, version, and chunk. The folder and all paths below it follow the new destination.",
+    descriptionCopy:
+      "Copy duplicates the folder tree, its files, and stored originals. Indexed chunks and embeddings are cloned, so nothing is re-embedded.",
+    currentPath: "Current path",
+    destinationFolder: "Destination folder",
+    folderName: "Folder name",
+    folderHint: "Full parent path. Missing folders are created by the archive.",
+    destinationPath: "Destination path",
+    submitMove: "Move folder",
+    submitCopy: "Copy folder",
+    moving: "Moving…",
+    copying: "Copying…",
+    errorFolder: "Choose a destination folder.",
+    errorName: "Enter one folder name without slashes.",
+    errorCurrent:
+      "That is the folder's current path. Choose a different parent folder or name.",
+    errorInsideSelf: "A folder cannot be moved or copied into itself.",
+    movedToast: "“{name}” moved · {folders} · {files}.",
+    copiedToast: "“{name}” copied · {folders} · {files}.",
+  },
+  folderCopy: {
+    copyName: "{name} copy",
+  },
+  folderDelete: {
+    eyebrow: "Recursive soft delete",
+    title: "Delete “{name}”?",
+    description:
+      "The folder and everything inside it leave the Library, path listings, and search.",
+    path: "Folder path",
+    warning:
+      "Every file and subfolder inside is soft-deleted recursively. File history and stored original bytes remain readable by id, but nothing in this branch appears in the Library again.",
+    submit: "Delete folder",
+    pending: "Deleting…",
+    deletedToast: "“{name}” deleted · {files} · {folders}.",
   },
   moveCopy: {
     eyebrowMove: "Move leaf",
@@ -626,8 +685,14 @@ export const library = {
     pathCopied: "Path copied to the clipboard.",
     uploadHere: "Upload here",
     newMarkdownHere: "New Markdown here",
+    renameFolder: "Rename folder…",
+    moveFolder: "Move folder…",
+    copyFolder: "Copy folder…",
+    deleteFolder: "Delete folder",
   },
   errors: {
     generic: "The archive could not complete that request.",
+    folderCopyTooLarge:
+      "This folder is too large to copy in one request. Split it into smaller folders and try again.",
   },
 };

@@ -89,7 +89,6 @@ class AgentSettingsService:
 
 def _config_from_model(row: AgentConfigModel) -> AgentRuntimeConfig:
     return AgentRuntimeConfig(
-        max_total_tokens=row.max_total_tokens,
         compaction_threshold_tokens=row.compaction_threshold_tokens,
         context_window_tokens=row.context_window_tokens,
         max_steps=row.max_steps,
@@ -111,7 +110,6 @@ def _apply_config(
     *,
     now: datetime,
 ) -> None:
-    row.max_total_tokens = config.max_total_tokens
     row.compaction_threshold_tokens = config.compaction_threshold_tokens
     row.context_window_tokens = config.context_window_tokens
     row.max_steps = config.max_steps
@@ -129,7 +127,6 @@ def _apply_config(
 
 def _values_schema(config: AgentRuntimeConfig) -> AgentSettingsValuesSchema:
     return AgentSettingsValuesSchema(
-        max_total_tokens=config.max_total_tokens,
         compaction_threshold_tokens=config.compaction_threshold_tokens,
         context_window_tokens=config.context_window_tokens,
         max_steps=config.max_steps,

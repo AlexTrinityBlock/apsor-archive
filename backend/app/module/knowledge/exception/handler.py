@@ -10,6 +10,7 @@ from app.module.knowledge.exception.domain_error import (
     FileStorageUnavailableError,
     FileTooLargeError,
     FileVersionConflictError,
+    FolderCopyTooLargeError,
     IngestJobConflictError,
     IngestJobNotFoundError,
     IngestJobNotRetryableError,
@@ -61,6 +62,7 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(AiProviderError, 502, "ai_provider_error")
     ExceptionRegistry.register(EmbeddingProviderError, 502, "embedding_provider_error")
     ExceptionRegistry.register(TreePathConflictError, 409, "tree_path_conflict")
+    ExceptionRegistry.register(FolderCopyTooLargeError, 422, "folder_copy_too_large")
     ExceptionRegistry.register(IngestJobNotFoundError, 404, "ingest_job_not_found")
     ExceptionRegistry.register(IngestJobConflictError, 409, "ingest_job_conflict")
     ExceptionRegistry.register(IngestJobNotRetryableError, 409, "ingest_job_not_retryable")

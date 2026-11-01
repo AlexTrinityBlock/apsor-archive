@@ -67,8 +67,10 @@ Original bytes are behind the three-method `FileStorageProtocol` (`save`, `read`
   API responses.
 
 `file.storage_backend` and `file_ingest_job.storage_backend` are nullable and may
-be `local` or `r2`; they are null exactly when `storage_key` is null. Text-only
-records have no stored original. Soft delete keeps the object for history.
+be `local` or `r2`; they are null exactly when `storage_key` is null. Text
+created through the API now stores exact bytes as its original; legacy text-only
+records may still have no stored original. Soft delete keeps the object for
+history.
 
 `.secrets/r2.env` is gitignored and mounted read-only into the API and worker.
 It must be readable by container uid `10001`. The bucket (`apsor-archive` in the
@@ -268,7 +270,7 @@ system-prompt routes additionally require the root role):
 | `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | Append `memory_rejected`, resume without writing |
 | `GET` | `/api/v1/agent/tools` | Current tool catalog + versions |
 | `GET` | `/api/v1/agent/settings` | Effective runtime config + defaults + source |
-| `PUT` | `/api/v1/agent/settings` | Replace all thirteen runtime fields |
+| `PUT` | `/api/v1/agent/settings` | Replace all twelve runtime fields |
 | `POST` | `/api/v1/agent/settings/reset` | Persist the built-in defaults |
 | `GET` | `/api/v1/agent/questions?limit=&offset=` | List saved questions newest first |
 | `POST` | `/api/v1/agent/questions` | Save a question (`201`); question only |
@@ -321,14 +323,16 @@ agent_approval_not_pending`; a non-earliest approval in a multi-call batch
 returns `409 agent_approval_out_of_order`.
 
 The runtime defaults cap a turn at 24 model steps, 20 tool calls, 6 parallel
-tools, 100,000 total tokens, and 100,000 characters per tool result. Each result
-is clipped independently with a visible truncation marker; there is no
-turn-wide result budget. `context_window_tokens` (default 1,000,000) records
-the provider/model input capacity separately; it is metadata and never triggers
-the turn abort or changes compaction. All of these come from the immutable
-`agent_config` snapshot, not from module constants. The loop uses
-`app.state.db.session_factory()` for appends and a short-lived session for each
-tool call, so the stream does not hold the request session.
+tools, and 100,000 characters per tool result. There is no cumulative per-turn
+token ceiling; a turn ends on a final answer, the step or tool-call limit, a
+user cancellation, or a provider failure. Each result is clipped independently
+with a visible truncation marker; there is no turn-wide result budget.
+`context_window_tokens` (default 1,000,000) records the provider/model input
+capacity and is the bound the auto-compaction threshold is measured against.
+All of these come from the immutable `agent_config` snapshot, not from module
+constants. The loop uses `app.state.db.session_factory()` for appends and a
+short-lived session for each tool call, so the stream does not hold the request
+session.
 
 Startup recovery fails stale `running` runs with `interrupted`. It leaves a
 `waiting` run resumable only while a valid pending approval exists; otherwise
@@ -346,8 +350,8 @@ account. The read body is:
 
 ```json
 {
-  "config": {"max_total_tokens": 100000, "...": "..."},
-  "defaults": {"max_total_tokens": 100000, "...": "..."},
+  "config": {"compaction_threshold_tokens": 75000, "...": "..."},
+  "defaults": {"compaction_threshold_tokens": 75000, "...": "..."},
   "source": "database",
   "updated_at": "2026-10-19T15:00:00Z"
 }
@@ -355,14 +359,13 @@ account. The read body is:
 
 `source` is `default` only when the service had to create or repair the row from
 the built-in defaults; a normal read of the stored row returns `database`.
-`PUT` requires all thirteen fields and uses `extra=forbid`, so it is a full
+`PUT` requires all twelve fields and uses `extra=forbid`, so it is a full
 replacement rather than a patch.
 
 | Field | Default | Constraint |
 |---|---|---|
-| `max_total_tokens` | 100,000 | 8,000–200,000; cumulative across model steps |
-| `compaction_threshold_tokens` | 75,000 | 1,000–200,000; `< max_total_tokens` |
-| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model context metadata, not a turn budget |
+| `compaction_threshold_tokens` | 75,000 | 1,000–200,000; `< context_window_tokens` |
+| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model context metadata |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24; `<= max_tool_calls_per_turn` |
@@ -375,10 +378,10 @@ replacement rather than a patch.
 | `save_memory_requires_approval` | `true` | boolean; waits for user approval before `save_memory` writes |
 
 Pydantic validates the request and `AgentRuntimeConfig` repeats the same
-cross-field checks; PostgreSQL check constraints enforce the ranges and all
-three cross-field rules. There is deliberately no `context_window_tokens` versus
-`max_total_tokens` rule: the context window is provider metadata, while the turn
-budget is the cost guard. The global validation handler maps request validation
+cross-field checks; PostgreSQL check constraints enforce the ranges and both
+cross-field rules. The compaction threshold must stay below the model
+context window, so a long conversation folds before the provider capacity is
+exhausted. The global validation handler maps request validation
 failures to `400 invalid_request`, not 422.
 
 `get_agent_runtime_config` loads one snapshot in a short-lived system session
@@ -706,19 +709,29 @@ No external provider call is made.
 
 ## Folder and file organization
 
-Three authenticated endpoints back the library board; every path and file id is
+Authenticated endpoints back the library board; every path and file id is
 scoped to the acting account:
 
 | Method | Path | Body | Success |
 |---|---|---|---|
 | `POST` | `/api/v1/folders` | `{path}` | `201` with `{path, name, depth}` |
+| `POST` | `/api/v1/folders/rename` | `{path, new_name}` | `200` with the folder mutation result |
+| `POST` | `/api/v1/folders/move` | `{path, target_path}` | `200` with the folder mutation result |
+| `POST` | `/api/v1/folders/copy` | `{path, target_path}` | `201` with the folder mutation result |
 | `POST` | `/api/v1/files/{file_id}/move` | `{path}` | `200` with the file |
 | `POST` | `/api/v1/files/{file_id}/copy` | `{path}` | `201` with the new file |
+| `POST` | `/api/v1/files/batch-delete` | `{file_ids, folder_paths}` | `200` with deletion counts |
 
-`path` is at most 1,024 characters. Empty values reach the service so they
-produce the stable `invalid_path` domain error rather than a generic schema
-error. Folder and file path uniqueness is per account (`user_id, path`); two
-accounts may hold the same path independently.
+The folder mutation result is `{folder, affected_folders, affected_files}`,
+where `folder` is the relocated or copied root directory. Folder delete keeps
+using the batch selection endpoint: pass the folder path in `folder_paths` and
+leave `file_ids` empty.
+
+`path` is at most 1,024 characters and a folder name is at most 255. Empty
+values reach the service so they produce the stable `invalid_path` domain
+error rather than a generic schema error. Folder and file path uniqueness is
+per account (`user_id, path`); two accounts may hold the same path
+independently.
 
 ### Create folder
 
@@ -728,7 +741,59 @@ the same folder and `201`. A path occupied by a file returns
 `409 tree_path_conflict`. The archive cache version is bumped only when a new
 folder is created.
 
-### Move
+### Rename and move folders
+
+`rename_folder` changes only the leaf name in the same parent. `move_folder`
+takes a complete destination path, so it can change the parent and the leaf
+name together. Both normalize and validate the target path, reject `/`, reject
+moving a folder into itself or its own subtree with `422 invalid_path`, return
+`404 path_not_found` for a missing source, and return `409 tree_path_conflict`
+when the destination is occupied by a folder or current file. Moving a folder
+to its current path is an idempotent `200` with zero affected rows.
+
+Relocation locks current files first and folder rows second, matching batch
+delete, then updates every folder in the subtree (`path`, `depth`, and the root
+`parent_id`/`name`) and the `raw_file_path` of every current, non-deleted file
+under it. Historical file rows keep their old paths. File ids, versions,
+chunks, embeddings, storage keys, and file names are unchanged, so search,
+citations, and viewer links keep working. The archive cache version is bumped
+once per successful mutation. A concurrent unique conflict becomes
+`409 tree_path_conflict` and the request transaction rolls back.
+
+### Copy folder
+
+`copy_folder` recursively copies the subtree, including empty folders, to a
+complete destination path. It copies only current, non-deleted files; historical
+versions and soft-deleted rows are not copied. A destination inside the source
+subtree is `422 invalid_path`, and an occupied destination is
+`409 tree_path_conflict`.
+
+The copy is bounded to 300 files and 256 MiB. The limits are checked before any
+target folder or stored original is written; exceeding either returns
+`422 folder_copy_too_large` and creates nothing.
+
+Each copied file is a new current row at version 1 with no supersession or
+history:
+
+- The stored original is copied byte-for-byte to a new storage key. A legacy
+  text-only row without an original is promoted by rebuilding its text from the
+  current chunks and storing that as the copy's original, so `has_original`
+  becomes true.
+- Chunks, char/token counts, embeddings, embedding model, and n-grams are
+  cloned from the source's current chunks. The embedding provider is not
+  called, and `total_chunks` is the number of cloned current chunks.
+- `ai_summary`, `ai_tags`, `document_type`, and `extraction_method` are copied.
+- Source rows are never modified. Failures while persisting the copy delete any
+  newly written originals and roll back the new folder and file rows.
+
+### Delete
+
+Folder deletion reuses `deleteLibrarySelection`: it recursively soft-deletes
+the current files under the selected folder, hard-deletes the folder rows, and
+keeps historical file rows and original bytes readable. It is one transaction.
+The archive cache version is bumped once.
+
+### Move file
 
 `move_file` requires a current, non-deleted file id. It normalizes the target,
 requires the same extension, and rejects a target occupied by any folder or
@@ -741,15 +806,15 @@ history links are unchanged. The folder/file cache version is bumped. Search,
 timeline, citations, and viewer links keep working because the id does not
 change.
 
-### Copy
+### Copy file
 
 `copy_file` requires a current, non-deleted source and a free target path with
 the same extension. It creates a new current file record at version 1 with a new
 id:
 
-- The stored original is copied to a new storage key when the source has one.
-  Text-only records are reconstructed from their current chunks by removing the
-  known overlap, then re-chunked.
+- The stored original is copied to a new storage key. Legacy text-only records
+  are reconstructed from their current chunks by removing the known overlap,
+  then the reconstructed text is stored as the copy's original.
 - Chunks and embeddings are rebuilt, not shared.
 - `ai_summary`, `ai_tags`, `document_type`, and `extraction_method` are copied.
 - The new record's `created_at` and `updated_at` are the copy time; it does not
@@ -763,9 +828,11 @@ persisting the new bytes delete the newly written storage object.
 
 | Error code | Status | Cause |
 |---|---|---|
-| `invalid_path` | 422 | Empty path, `/`, traversal, or changed extension |
+| `invalid_path` | 422 | Empty path, `/`, traversal, changed extension, or folder moved/copied into itself |
 | `tree_path_conflict` | 409 | Target is occupied by another folder or current file |
+| `path_not_found` | 404 | Source folder path does not exist |
 | `file_not_found` | 404 | File id is missing, deleted, or not current |
+| `folder_copy_too_large` | 422 | Folder copy exceeds 300 files or 256 MiB |
 | `unsupported_file_type` | 422 | Upload extension is outside the allowlist |
 | `file_too_large` | 413 | Upload exceeds 10 MB, or text creation exceeds 2 MB |
 | `empty_content` | 422 | Text-only copy has no reconstructable content |
@@ -779,7 +846,7 @@ distinct from `/download`:
 - restrictive CSP (`sandbox` for non-PDF, `frame-ancestors 'self'` for PDF);
 - `Accept-Ranges: bytes`, single-range `206`/`416`, `ETag` and `304`;
 - `Cache-Control: private, max-age=0, must-revalidate`;
-- 404 `file_content_unavailable` when a text-only record has no original.
+- 404 `file_content_unavailable` when a legacy text-only record has no original.
 
 The `FileSchema.has_original` flag tells the UI whether to show **Open original**
 and **Download**. Text-only records skip the `/content` probe entirely and read
@@ -951,12 +1018,17 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   tables and read-all/root-write policies on global config tables. Auth tables
   stay outside RLS. Its downgrade revokes this database's grants but does not
   drop the cluster-wide role;
-- `f9c2a7d4e6b1` (current head) adds per-run token/API-call counters to
+- `f9c2a7d4e6b1` adds per-run token/API-call counters to
   `agent_run`, per-account rollups to `app_user`, the `agent_run` usage-delta
   trigger, and the nullable `user_session.impersonator_user_id` marker. It
   backfills historical usage from assistant-entry JSON, requires a
   superuser/BYPASSRLS migration role for the forced-RLS backfill, and validates
-  both upgrade and downgrade on a scratch database.
+  both upgrade and downgrade on a scratch database;
+- `a4c8e2f6b9d1` (current head) removes `max_total_tokens` and its check
+  constraints, repairs a threshold that is not below its context window, and
+  replaces the old threshold rule with
+  `compaction_threshold_tokens < context_window_tokens`. The downgrade restores
+  a 100,000-token ceiling and raises it when the stored threshold requires it.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

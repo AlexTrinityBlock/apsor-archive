@@ -58,11 +58,6 @@ export interface AgentSettingsValuesSchema {
      * @maximum 200000
      */
   max_tool_result_chars: number;
-  /**
-     * @minimum 8000
-     * @maximum 200000
-     */
-  max_total_tokens: number;
   parallel_tools_enabled: boolean;
   save_memory_requires_approval: boolean;
 }

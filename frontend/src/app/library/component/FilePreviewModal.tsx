@@ -566,10 +566,12 @@ export function FilePreviewModal({
   const editorRef = useRef<MarkdownEditorHandle>(null);
   const onCloseRef = useRef(onClose);
   const startInEditAppliedRef = useRef(false);
+  const keepEditingAfterSaveRef = useRef(false);
   const [activeTab, setActiveTab] = useState<PreviewTab>(
     requestedChunk > 1 ? "chunk" : "page",
   );
   const [editing, setEditing] = useState(false);
+  const [editingFile, setEditingFile] = useState<FileSchema | null>(null);
 
   useScrollLock(true);
 
@@ -580,12 +582,17 @@ export function FilePreviewModal({
     onCloseRef.current = onClose;
   }, [onClose]);
 
-  // Switching the file id starts a new preview session; a new `mode=edit` link is
-  // applied by the effect below once the metadata has loaded.
+  // Switching the file id starts a new preview session; a save keeps the editor
+  // mounted and only swaps the version id in the URL.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    if (keepEditingAfterSaveRef.current) {
+      keepEditingAfterSaveRef.current = false;
+      return;
+    }
     startInEditAppliedRef.current = false;
     setEditing(false);
+    setEditingFile(null);
   }, [fileId]);
 
   // A deep link may ask for edit mode before the file query has finished.
@@ -675,30 +682,35 @@ export function FilePreviewModal({
     },
   );
   const kind = file ? classifyFile(file) : null;
+  const activeEditFile =
+    editingFile && file && editingFile.id === file.id
+      ? file
+      : (editingFile ?? file);
 
   const handleCancelEdit = useCallback(() => {
+    setEditingFile(null);
     setEditing(false);
     onEditModeChange?.(false);
   }, [onEditModeChange]);
 
   const handleSaved = useCallback(
     (updatedFile: FileSchema) => {
-      // The two callbacks may each update the query string within the same event.
-      // Clear `mode` first, then let `onFileVersionChange` carry the new file id
-      // and mode=null together, so the final navigation never falls back to the
-      // old version.
-      onEditModeChange?.(false);
-      onFileVersionChange(updatedFile.id);
-      setEditing(false);
-      setActiveTab("page");
+      // Keep editing the new version. The file id changes with the version, so
+      // remember the saved file and tell the URL without resetting edit mode.
+      setEditingFile(updatedFile);
+      if (updatedFile.id !== fileId) {
+        keepEditingAfterSaveRef.current = true;
+        onFileVersionChange(updatedFile.id);
+      }
     },
-    [onEditModeChange, onFileVersionChange],
+    [fileId, onFileVersionChange],
   );
 
   const handleStartEdit = useCallback(() => {
+    setEditingFile(file ?? null);
     setEditing(true);
     onEditModeChange?.(true);
-  }, [onEditModeChange]);
+  }, [file, onEditModeChange]);
 
   return (
     <div
@@ -788,12 +800,12 @@ export function FilePreviewModal({
               : "modal-body library-preview__body"
           }
         >
-          {editing && file ? (
+          {editing && activeEditFile ? (
             <MarkdownEditor
               ref={editorRef}
               mode="edit"
-              file={file}
-              onRename={() => onRename(operationTarget(file))}
+              file={activeEditFile}
+              onRename={() => onRename(operationTarget(activeEditFile))}
               onCancel={handleCancelEdit}
               onSaved={handleSaved}
             />

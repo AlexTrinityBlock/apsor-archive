@@ -22,7 +22,6 @@ from app.module.agent.domain.agent_domain import (
     MAX_STEPS,
     MAX_TOOL_CALLS_PER_TURN,
     MAX_TOOL_RESULT_CHARS,
-    MAX_TOTAL_TOKENS,
     PARALLEL_TOOLS_ENABLED,
     SAVE_MEMORY_REQUIRES_APPROVAL,
 )
@@ -32,7 +31,6 @@ from app.module.agent.domain.agent_domain import (
 class AgentRuntimeConfig:
     """One validated, immutable snapshot of the agent runtime limits."""
 
-    max_total_tokens: int = MAX_TOTAL_TOKENS
     compaction_threshold_tokens: int = COMPACTION_THRESHOLD_TOKENS
     context_window_tokens: int = CONTEXT_WINDOW_TOKENS
     max_steps: int = MAX_STEPS
@@ -49,7 +47,6 @@ class AgentRuntimeConfig:
     def __post_init__(self) -> None:
         """Reject values the database constraints also reject."""
         ranges = (
-            ("max_total_tokens", self.max_total_tokens, 8_000, 200_000),
             (
                 "compaction_threshold_tokens",
                 self.compaction_threshold_tokens,
@@ -90,8 +87,10 @@ class AgentRuntimeConfig:
                 raise ValueError(f"{name} must be an integer.")
             if value < minimum or value > maximum:
                 raise ValueError(f"{name} must be between {minimum} and {maximum}.")
-        if self.compaction_threshold_tokens >= self.max_total_tokens:
-            raise ValueError("compaction_threshold_tokens must be less than max_total_tokens.")
+        if self.compaction_threshold_tokens >= self.context_window_tokens:
+            raise ValueError(
+                "compaction_threshold_tokens must be less than context_window_tokens."
+            )
         if self.max_parallel_tools > self.max_tool_calls_per_turn:
             raise ValueError("max_parallel_tools must not exceed max_tool_calls_per_turn.")
 

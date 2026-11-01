@@ -82,11 +82,10 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert int(recreated["id"]) > file_id
     assert recreated["version"] == 1
 
-    # Text-only records have no stored original: the inline endpoint keeps the
-    # existing domain error while the viewer falls back to indexed chunks.
-    unavailable = client.get(f"/api/v1/files/{file_id}/content")
-    assert unavailable.status_code == 404
-    assert unavailable.json()["error"] == "file_content_unavailable"
+    # Soft deletion keeps the original bytes readable.
+    retained = client.get(f"/api/v1/files/{file_id}/content")
+    assert retained.status_code == 200
+    assert retained.content.decode("utf-8") == content
 
     payload = b"Engine notes: intake, compression, ignition, exhaust.\n"
     uploaded = client.post(
@@ -260,8 +259,8 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     searched_ids = {item["file_id"] for item in search.json()["file_results"]}
     assert copied_id in searched_ids
 
-    # Text-only sources reconstruct their text from chunks without duplicating
-    # the stored overlap, then re-chunk to the same boundaries.
+    # Text sources keep their exact original bytes; a copy reuses those bytes and
+    # re-chunks to the same boundaries.
     text_source = create_text(
         client,
         "/history/archive/notes.md",
@@ -273,8 +272,14 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
         json={"path": "/history/workshop/engines/notes-copy.md"},
     )
     assert text_copy.status_code == 201, text_copy.text
-    assert text_copy.json()["has_original"] is False
+    assert text_copy.json()["has_original"] is True
     assert text_copy.json()["total_chunks"] == text_source["total_chunks"]
+    source_content = client.get(f"/api/v1/files/{int(text_source['id'])}/content")
+    copy_content = client.get(f"/api/v1/files/{int(text_copy.json()['id'])}/content")
+    assert source_content.status_code == 200
+    assert copy_content.status_code == 200
+    assert source_content.content.decode("utf-8") == content
+    assert copy_content.content.decode("utf-8") == content
     source_window = client.get(
         f"/api/v1/files/{int(text_source['id'])}/chunks/1",
         params={"chunk_range": 1},
@@ -365,6 +370,13 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
     assert text_state["chunks_embedded"] == text_state["chunks_total"]
     assert text_state["finished_at"] is not None
     assert text_state["error_code"] is None
+
+    text_file = client.get(f"/api/v1/files/{text_file_id}")
+    assert text_file.status_code == 200
+    assert text_file.json()["has_original"] is True
+    text_content = client.get(f"/api/v1/files/{text_file_id}/content")
+    assert text_content.status_code == 200
+    assert text_content.content.decode("utf-8") == async_text_content
 
     text_window = client.get(f"/api/v1/files/{text_file_id}/chunks/1")
     assert text_window.status_code == 200

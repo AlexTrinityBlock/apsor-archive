@@ -7,23 +7,28 @@ from tests.helpers import create_text
 
 def test_update_markdown_creates_new_version_and_reindexes(client: TestClient) -> None:
     original_content = (
-        "# Maintenance plan\n\nReplace the legacy tractor filter every 500 operating hours."
+        "# Maintenance plan\n\nReplace the legacy tractor filter every 500 operating hours.\n"
     )
     created = create_text(client, "/notes/plan.md", original_content)
     original_file_id = int(created["id"])
     assert created["version"] == 1
     assert created["is_current"] is True
-    assert created["has_original"] is False
+    assert created["has_original"] is True
     assert created["supersedes_file_id"] is None
 
-    # A version created from text only has no stored original, and the listing must reflect that.
+    # Text creation stores the exact bytes, including blank lines, so the inline
+    # reader and the editor do not need to reconstruct the content from chunks.
+    original_content_response = client.get(f"/api/v1/files/{original_file_id}/content")
+    assert original_content_response.status_code == 200
+    assert original_content_response.content.decode("utf-8") == original_content
+
     before_update = client.get(
         "/api/v1/paths",
         params={"path": "/notes", "path_depth": 1},
     )
     assert before_update.status_code == 200
     assert [item["file_id"] for item in before_update.json()["files"]] == [original_file_id]
-    assert before_update.json()["files"][0]["has_original"] is False
+    assert before_update.json()["files"][0]["has_original"] is True
 
     updated_content = (
         "# Maintenance plan\n\nRecalibrate the combine harvester sensor before the harvest season."
@@ -59,7 +64,7 @@ def test_update_markdown_creates_new_version_and_reindexes(client: TestClient) -
     assert "combine harvester sensor" in indexed_text
     assert "legacy tractor" not in indexed_text
 
-    # The version created by an update always has a stored original, and the listing shows only it.
+    # The current version has a stored original, and the listing shows only it.
     listing = client.get(
         "/api/v1/paths",
         params={"path": "/notes", "path_depth": 1},

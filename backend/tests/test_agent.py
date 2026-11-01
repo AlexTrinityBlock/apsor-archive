@@ -255,7 +255,6 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     defaults = settings_body["defaults"]
     assert settings_body["config"] == defaults
     assert defaults == {
-        "max_total_tokens": 100_000,
         "compaction_threshold_tokens": 75_000,
         "context_window_tokens": 1_000_000,
         "max_steps": 24,
@@ -274,7 +273,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "/api/v1/agent/settings",
         json={
             **defaults,
-            "compaction_threshold_tokens": defaults["max_total_tokens"],
+            "context_window_tokens": 8_000,
         },
     )
     assert invalid_threshold.status_code == 400
@@ -1206,7 +1205,6 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
 
     compact_runtime = {
         **defaults,
-        "max_total_tokens": 8_000,
         "compaction_threshold_tokens": 1_000,
     }
     compact_update = client.put(
@@ -1380,7 +1378,6 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
 
     disabled_compaction_settings = {
         **defaults,
-        "max_total_tokens": 8_000,
         "compaction_threshold_tokens": 1_000,
         "auto_compaction_enabled": False,
     }
@@ -2369,6 +2366,61 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     ]
     assert summary_results[0]["period_start"] == "2026-09-20T09:00:00+00:00"
     assert summary_results[0]["period_end"] == "2026-09-21T09:00:00+00:00"
+
+
+def test_cumulative_token_usage_does_not_abort_a_turn(
+    client: TestClient,
+    root_account: UserClient,
+) -> None:
+    """Large provider usage must not end a turn before its tools run."""
+    create_text(
+        client,
+        "/agent/token-usage.md",
+        "A wrench is still a hand tool.",
+        "2026-10-29T09:00:00Z",
+    )
+
+    created = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Cumulative token usage"},
+    )
+    assert created.status_code == 201, created.text
+    conversation_id = created.json()["id"]
+
+    huge_usage = {
+        "prompt_tokens": 120_000,
+        "completion_tokens": 30_000,
+        "total_tokens": 150_000,
+        "prompt_cache_hit_tokens": 0,
+        "prompt_cache_miss_tokens": 120_000,
+    }
+    client.app.state.agent_chat_generator = FakeChatGenerator(
+        [
+            tool_call_result(
+                "search_knowledge",
+                {"query": "wrench", "result_number": 1},
+                usage=huge_usage,
+            ),
+            text_result("The turn continues.", usage=huge_usage),
+        ]
+    )
+
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/messages",
+        json={"content": "Search the archive."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    assert body["error_code"] is None
+    assert body["answer"] == "The turn continues."
+    assert [entry["kind"] for entry in body["entries"]] == [
+        "pi.user",
+        "pi.assistant",
+        "pi.tool-result",
+        "pi.assistant",
+    ]
 
 
 def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:

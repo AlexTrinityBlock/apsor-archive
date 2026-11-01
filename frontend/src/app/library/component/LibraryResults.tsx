@@ -34,6 +34,12 @@ interface LibraryResultsProps {
     event: LibraryContextMenuTrigger,
     folder: DirectorySchema,
   ) => void;
+  readonly onRequestRenameFolder: (folder: DirectorySchema) => void;
+  readonly onRequestMoveCopyFolder: (
+    folder: DirectorySchema,
+    mode: FileOperationMode,
+  ) => void;
+  readonly onRequestDeleteFolder: (folder: DirectorySchema) => void;
   readonly onRequestMove: (file: PathFileSchema, mode: FileOperationMode) => void;
   readonly onRequestDelete: (file: PathFileSchema) => void;
 }
@@ -51,6 +57,9 @@ export function LibraryResults({
   onOpenFile,
   onFileContextMenu,
   onFolderContextMenu,
+  onRequestRenameFolder,
+  onRequestMoveCopyFolder,
+  onRequestDeleteFolder,
   onRequestMove,
   onRequestDelete,
 }: LibraryResultsProps) {
@@ -155,7 +164,52 @@ export function LibraryResults({
                 <span className="library-row__empty">—</span>
               </td>
               <td data-label={t("library.list.actions")}>
-                <span className="library-row__empty">—</span>
+                <div
+                  className="library-row__actions"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    iconOnly
+                    aria-label={t("library.a11y.renameFolder", { name: folder.name })}
+                    title={t("library.board.renameFolder")}
+                    onClick={() => onRequestRenameFolder(folder)}
+                  >
+                    <Icon name="pencil" size={15} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    iconOnly
+                    aria-label={t("library.a11y.moveFolder", { name: folder.name })}
+                    title={t("library.board.moveFolder")}
+                    onClick={() => onRequestMoveCopyFolder(folder, "move")}
+                  >
+                    <Icon name="branch" size={15} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    iconOnly
+                    aria-label={t("library.a11y.copyFolder", { name: folder.name })}
+                    title={t("library.board.copyFolder")}
+                    onClick={() => onRequestMoveCopyFolder(folder, "copy")}
+                  >
+                    <Icon name="copy" size={15} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    iconOnly
+                    className="library-row__delete"
+                    aria-label={t("library.a11y.deleteFolder", { name: folder.name })}
+                    title={t("library.board.deleteFolder")}
+                    onClick={() => onRequestDeleteFolder(folder)}
+                  >
+                    <Icon name="trash" size={15} />
+                  </Button>
+                </div>
               </td>
             </tr>
           ))}

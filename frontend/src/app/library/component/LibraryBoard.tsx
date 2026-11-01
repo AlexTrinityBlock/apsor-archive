@@ -7,6 +7,7 @@ import {
   type DragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 
 import type {
@@ -121,37 +122,15 @@ interface FileCardProps {
   readonly onDragEnd: () => void;
 }
 
-function FileCard({
-  file,
-  dragging,
-  menuOpen,
-  selecting,
-  selected,
-  onToggleSelected,
-  onOpen,
-  onEditFile,
-  onFileContextMenu,
-  onToggleMenu,
-  onRequestMove,
-  onRequestDelete,
-  onDragStart,
-  onDragEnd,
-}: FileCardProps) {
-  const { t, formatNumber, formatDateTime } = useI18n();
-  const menuId = useId();
+interface CardMenuRefs {
+  readonly triggerRef: RefObject<HTMLButtonElement | null>;
+  readonly menuRef: RefObject<HTMLDivElement | null>;
+}
+
+/** Shared menu focus and keyboard behaviour for file and folder cards. */
+function useCardMenu(menuOpen: boolean, onClose: () => void): CardMenuRefs {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const handleContextMenuKeyDown = (
-    event: ReactKeyboardEvent<HTMLButtonElement>,
-  ) => {
-    if (!isContextMenuKey(event)) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    onFileContextMenu(contextMenuTriggerFromKeyboard(event.currentTarget), file);
-  };
 
   useEffect(() => {
     if (!menuOpen) {
@@ -167,7 +146,7 @@ function FileCard({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onToggleMenu(null);
+        onClose();
         triggerRef.current?.focus();
         return;
       }
@@ -189,7 +168,42 @@ function FileCard({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [menuOpen, onToggleMenu]);
+  }, [menuOpen, onClose]);
+
+  return { triggerRef, menuRef };
+}
+
+function FileCard({
+  file,
+  dragging,
+  menuOpen,
+  selecting,
+  selected,
+  onToggleSelected,
+  onOpen,
+  onEditFile,
+  onFileContextMenu,
+  onToggleMenu,
+  onRequestMove,
+  onRequestDelete,
+  onDragStart,
+  onDragEnd,
+}: FileCardProps) {
+  const { t, formatNumber, formatDateTime } = useI18n();
+  const menuId = useId();
+  const closeMenu = useCallback(() => onToggleMenu(null), [onToggleMenu]);
+  const { triggerRef, menuRef } = useCardMenu(menuOpen, closeMenu);
+
+  const handleContextMenuKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (!isContextMenuKey(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onFileContextMenu(contextMenuTriggerFromKeyboard(event.currentTarget), file);
+  };
 
   const classes = [
     "library-file-card",
@@ -350,9 +364,19 @@ interface FolderCardProps extends DropHandlers {
   readonly dropAllowed: boolean;
   readonly selecting: boolean;
   readonly selected: boolean;
+  readonly menuOpen: boolean;
   readonly onToggleSelected: (path: string) => void;
+  readonly onToggleMenu: (path: string | null) => void;
   readonly onOpenFolder: (path: string) => void;
   readonly onUploadHere: (path: string) => void;
+  readonly onNewMarkdownHere: (path: string) => void;
+  readonly onCopyPath: (path: string) => void;
+  readonly onRequestRename: (folder: DirectorySchema) => void;
+  readonly onRequestMoveCopy: (
+    folder: DirectorySchema,
+    mode: FileOperationMode,
+  ) => void;
+  readonly onRequestDelete: (folder: DirectorySchema) => void;
   readonly onFolderContextMenu: (
     event: LibraryContextMenuTrigger,
     folder: DirectorySchema,
@@ -365,24 +389,40 @@ function FolderCard({
   dropAllowed,
   selecting,
   selected,
+  menuOpen,
   onToggleSelected,
+  onToggleMenu,
   onDragOver,
   onDragLeave,
   onDrop,
   onOpenFolder,
   onUploadHere,
+  onNewMarkdownHere,
+  onCopyPath,
+  onRequestRename,
+  onRequestMoveCopy,
+  onRequestDelete,
   onFolderContextMenu,
 }: FolderCardProps) {
   const { t } = useI18n();
+  const menuId = useId();
+  const closeMenu = useCallback(() => onToggleMenu(null), [onToggleMenu]);
+  const { triggerRef, menuRef } = useCardMenu(menuOpen, closeMenu);
   const classes = [
     "library-folder-card",
     dropLabel ? "is-drop-target" : null,
     dropLabel && !dropAllowed ? "is-drop-blocked" : null,
+    menuOpen ? "has-open-menu" : null,
     selected ? "is-selected" : null,
     selecting ? "is-selecting" : null,
   ]
     .filter(Boolean)
     .join(" ");
+
+  const runMenuAction = (action: () => void) => {
+    onToggleMenu(null);
+    action();
+  };
 
   return (
     <article
@@ -432,6 +472,105 @@ function FolderCard({
         </span>
         <Icon name="chevron-right" size={15} className="library-folder-card__chevron" />
       </button>
+
+      <button
+        ref={triggerRef}
+        type="button"
+        className="library-file-card__menu-trigger library-folder-card__menu-trigger"
+        data-library-folder-menu-trigger={folder.path}
+        aria-label={t("library.a11y.actionsForFolder", { name: folder.name })}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-controls={menuOpen ? menuId : undefined}
+        onClick={() => onToggleMenu(menuOpen ? null : folder.path)}
+      >
+        <Icon name="settings" size={15} />
+      </button>
+
+      {menuOpen ? (
+        <div
+          ref={menuRef}
+          id={menuId}
+          className="library-file-menu library-folder-menu"
+          role="menu"
+          aria-label={t("library.a11y.actionsForFolder", { name: folder.name })}
+          data-library-folder-menu
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="library-file-menu__item"
+            onClick={() => runMenuAction(() => onOpenFolder(folder.path))}
+          >
+            <Icon name="folder" size={15} />
+            <span>{t("library.contextMenu.openFolder")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="library-file-menu__item"
+            onClick={() => runMenuAction(() => onNewMarkdownHere(folder.path))}
+          >
+            <Icon name="file" size={15} />
+            <span>{t("library.contextMenu.newMarkdownHere")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="library-file-menu__item"
+            onClick={() => runMenuAction(() => onUploadHere(folder.path))}
+          >
+            <Icon name="plus" size={15} />
+            <span>{t("library.contextMenu.uploadHere")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="library-file-menu__item"
+            onClick={() => runMenuAction(() => onRequestRename(folder))}
+          >
+            <Icon name="pencil" size={15} />
+            <span>{t("library.board.renameFolder")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="library-file-menu__item"
+            onClick={() => runMenuAction(() => onRequestMoveCopy(folder, "move"))}
+          >
+            <Icon name="branch" size={15} />
+            <span>{t("library.board.moveFolder")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="library-file-menu__item"
+            onClick={() => runMenuAction(() => onRequestMoveCopy(folder, "copy"))}
+          >
+            <Icon name="copy" size={15} />
+            <span>{t("library.board.copyFolder")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="library-file-menu__item library-file-menu__item--danger"
+            onClick={() => runMenuAction(() => onRequestDelete(folder))}
+          >
+            <Icon name="trash" size={15} />
+            <span>{t("library.board.deleteFolder")}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="library-file-menu__item"
+            onClick={() => runMenuAction(() => onCopyPath(folder.path))}
+          >
+            <Icon name="copy" size={15} />
+            <span>{t("library.contextMenu.copyPath")}</span>
+          </button>
+        </div>
+      ) : null}
+
       <div className="library-folder-card__foot">
         <span className="library-folder-card__depth">
           {t("library.board.branchDepth", { depth: folder.depth })}
@@ -467,6 +606,14 @@ interface LibraryBoardProps {
     folder: DirectorySchema,
   ) => void;
   readonly onUploadHere: (path: string) => void;
+  readonly onNewMarkdownHere: (path: string) => void;
+  readonly onCopyPath: (path: string) => void;
+  readonly onRequestRenameFolder: (folder: DirectorySchema) => void;
+  readonly onRequestMoveCopyFolder: (
+    folder: DirectorySchema,
+    mode: FileOperationMode,
+  ) => void;
+  readonly onRequestDeleteFolder: (folder: DirectorySchema) => void;
   readonly onRequestMove: (file: PathFileSchema, mode: FileOperationMode) => void;
   readonly onRequestDelete: (file: PathFileSchema) => void;
   readonly onMoveFile: (
@@ -498,6 +645,11 @@ export function LibraryBoard({
   onFileContextMenu,
   onFolderContextMenu,
   onUploadHere,
+  onNewMarkdownHere,
+  onCopyPath,
+  onRequestRenameFolder,
+  onRequestMoveCopyFolder,
+  onRequestDeleteFolder,
   onRequestMove,
   onRequestDelete,
   onMoveFile,
@@ -511,6 +663,7 @@ export function LibraryBoard({
   const [dropAllowed, setDropAllowed] = useState(true);
   const [copyIntent, setCopyIntent] = useState(false);
   const [menuFileId, setMenuFileId] = useState<number | null>(null);
+  const [menuFolderPath, setMenuFolderPath] = useState<string | null>(null);
 
   const folders = query ? [] : listing.directories;
   const hasEntries = folders.length > 0 || listing.files.length > 0;
@@ -533,26 +686,52 @@ export function LibraryBoard({
   }, [resetDrag]);
 
   useEffect(() => {
-    if (menuFileId === null) {
+    if (menuFileId === null && menuFolderPath === null) {
       return;
     }
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) {
         setMenuFileId(null);
+        setMenuFolderPath(null);
         return;
       }
-      if (target.closest("[data-library-file-menu]")) {
+      if (
+        target.closest("[data-library-file-menu]") ||
+        target.closest("[data-library-folder-menu]")
+      ) {
         return;
       }
-      if (target.closest(`[data-library-menu-trigger="${menuFileId}"]`)) {
+      if (
+        menuFileId !== null &&
+        target.closest(`[data-library-menu-trigger="${menuFileId}"]`)
+      ) {
+        return;
+      }
+      if (
+        menuFolderPath !== null &&
+        target
+          .closest("[data-library-folder-menu-trigger]")
+          ?.getAttribute("data-library-folder-menu-trigger") === menuFolderPath
+      ) {
         return;
       }
       setMenuFileId(null);
+      setMenuFolderPath(null);
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [menuFileId]);
+  }, [menuFileId, menuFolderPath]);
+
+  const handleToggleFileMenu = useCallback((fileId: number | null) => {
+    setMenuFolderPath(null);
+    setMenuFileId(fileId);
+  }, []);
+
+  const handleToggleFolderMenu = useCallback((folderPath: string | null) => {
+    setMenuFileId(null);
+    setMenuFolderPath(folderPath);
+  }, []);
 
   const handleFileDragStart = useCallback(
     (event: DragEvent<HTMLElement>, file: PathFileSchema) => {
@@ -564,6 +743,7 @@ export function LibraryBoard({
       event.dataTransfer.effectAllowed = "copyMove";
       setDragFile(file);
       setMenuFileId(null);
+      setMenuFolderPath(null);
     },
     [],
   );
@@ -688,9 +868,16 @@ export function LibraryBoard({
                       dropAllowed={dropAllowed}
                       selecting={selecting}
                       selected={selectedFolderPaths.has(folder.path)}
+                      menuOpen={menuFolderPath === folder.path}
                       onToggleSelected={onToggleSelectedFolder}
+                      onToggleMenu={handleToggleFolderMenu}
                       onOpenFolder={onOpenFolder}
                       onUploadHere={onUploadHere}
+                      onNewMarkdownHere={onNewMarkdownHere}
+                      onCopyPath={onCopyPath}
+                      onRequestRename={onRequestRenameFolder}
+                      onRequestMoveCopy={onRequestMoveCopyFolder}
+                      onRequestDelete={onRequestDeleteFolder}
                       onFolderContextMenu={onFolderContextMenu}
                       {...dropHandlers}
                     />
@@ -730,7 +917,7 @@ export function LibraryBoard({
                       onOpen={onOpenFile}
                       onEditFile={onEditFile}
                       onFileContextMenu={onFileContextMenu}
-                      onToggleMenu={setMenuFileId}
+                      onToggleMenu={handleToggleFileMenu}
                       onRequestMove={onRequestMove}
                       onRequestDelete={onRequestDelete}
                       onDragStart={handleFileDragStart}

@@ -16,7 +16,11 @@ import type {
 
 import type {
   DirectorySchema,
+  FolderCopySchema,
   FolderCreateSchema,
+  FolderMoveSchema,
+  FolderMutationSchema,
+  FolderRenameSchema,
   HTTPValidationError
 } from '../schemas';
 
@@ -117,4 +121,268 @@ export const useCreateFolder = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getCreateFolderMutationOptions(options), queryClient);
+    }
+    export const getCopyFolderUrl = () => {
+
+
+
+
+  return `/api/v1/folders/copy`
+}
+
+/**
+ * Copy one folder subtree, cloning its chunks without re-embedding.
+ * @summary Copy Folder
+ */
+export const copyFolder = async (folderCopySchema: FolderCopySchema, options?: Parameters<typeof apiFetch>[1]): Promise<FolderMutationSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<FolderMutationSchema>(getCopyFolderUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(folderCopySchema)
+  }
+);}
+
+
+
+
+
+export const getCopyFolderMutationKey = () => ['copyFolder'] as const;
+
+export const getCopyFolderMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof copyFolder>>, TError,CopyFolderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof copyFolder>>, TError,CopyFolderMutationVariables, TContext> => {
+
+const mutationKey = getCopyFolderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof copyFolder>>, CopyFolderMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  copyFolder(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CopyFolderMutationResult = NonNullable<Awaited<ReturnType<typeof copyFolder>>>
+    export type CopyFolderMutationBody = FolderCopySchema
+    export type CopyFolderMutationError = HTTPValidationError
+    export type CopyFolderMutationVariables = {data: FolderCopySchema}
+
+    /**
+ * @summary Copy Folder
+ */
+export const useCopyFolder = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof copyFolder>>, TError,CopyFolderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof copyFolder>>,
+        TError,
+        CopyFolderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCopyFolderMutationOptions(options), queryClient);
+    }
+    export const getMoveFolderUrl = () => {
+
+
+
+
+  return `/api/v1/folders/move`
+}
+
+/**
+ * Move one folder subtree to a complete destination path.
+ * @summary Move Folder
+ */
+export const moveFolder = async (folderMoveSchema: FolderMoveSchema, options?: Parameters<typeof apiFetch>[1]): Promise<FolderMutationSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<FolderMutationSchema>(getMoveFolderUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(folderMoveSchema)
+  }
+);}
+
+
+
+
+
+export const getMoveFolderMutationKey = () => ['moveFolder'] as const;
+
+export const getMoveFolderMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof moveFolder>>, TError,MoveFolderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof moveFolder>>, TError,MoveFolderMutationVariables, TContext> => {
+
+const mutationKey = getMoveFolderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof moveFolder>>, MoveFolderMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  moveFolder(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MoveFolderMutationResult = NonNullable<Awaited<ReturnType<typeof moveFolder>>>
+    export type MoveFolderMutationBody = FolderMoveSchema
+    export type MoveFolderMutationError = HTTPValidationError
+    export type MoveFolderMutationVariables = {data: FolderMoveSchema}
+
+    /**
+ * @summary Move Folder
+ */
+export const useMoveFolder = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof moveFolder>>, TError,MoveFolderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof moveFolder>>,
+        TError,
+        MoveFolderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getMoveFolderMutationOptions(options), queryClient);
+    }
+    export const getRenameFolderUrl = () => {
+
+
+
+
+  return `/api/v1/folders/rename`
+}
+
+/**
+ * Rename one folder in place; the parent folder never changes.
+ * @summary Rename Folder
+ */
+export const renameFolder = async (folderRenameSchema: FolderRenameSchema, options?: Parameters<typeof apiFetch>[1]): Promise<FolderMutationSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<FolderMutationSchema>(getRenameFolderUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(folderRenameSchema)
+  }
+);}
+
+
+
+
+
+export const getRenameFolderMutationKey = () => ['renameFolder'] as const;
+
+export const getRenameFolderMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameFolder>>, TError,RenameFolderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof renameFolder>>, TError,RenameFolderMutationVariables, TContext> => {
+
+const mutationKey = getRenameFolderMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof renameFolder>>, RenameFolderMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  renameFolder(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RenameFolderMutationResult = NonNullable<Awaited<ReturnType<typeof renameFolder>>>
+    export type RenameFolderMutationBody = FolderRenameSchema
+    export type RenameFolderMutationError = HTTPValidationError
+    export type RenameFolderMutationVariables = {data: FolderRenameSchema}
+
+    /**
+ * @summary Rename Folder
+ */
+export const useRenameFolder = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameFolder>>, TError,RenameFolderMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof renameFolder>>,
+        TError,
+        RenameFolderMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRenameFolderMutationOptions(options), queryClient);
     }

@@ -390,6 +390,20 @@ export function isSafeUploadName(name: string): boolean {
   );
 }
 
+/** Validates one folder leaf name for rename, move, and copy requests. */
+export function isSafeFolderName(name: string): boolean {
+  if (!isSafeUploadName(name) || name.length > 255) {
+    return false;
+  }
+  for (const character of name) {
+    const code = character.charCodeAt(0);
+    if (code < 0x20 || code === 0x7f) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Joins a folder path and a file name into one absolute archive path. */
 export function joinArchivePath(folderPath: string, fileName: string): string {
   const folder = normalizeArchivePath(folderPath);
@@ -403,6 +417,28 @@ export function joinArchivePath(folderPath: string, fileName: string): string {
 /** Compares two archive paths after tolerant normalization. */
 export function sameArchivePath(left: string, right: string): boolean {
   return normalizeArchivePath(left) === normalizeArchivePath(right);
+}
+
+/** True when `path` is `ancestor` itself or lives anywhere below it. */
+export function isPathInside(path: string, ancestor: string): boolean {
+  const trimmedAncestor = ancestor.replace(/\/$/, "");
+  return path === ancestor || path.startsWith(`${trimmedAncestor}/`);
+}
+
+/** Rewrites a path below `source` to the matching path below `target`. */
+export function remapArchivePath(
+  path: string,
+  source: string,
+  target: string,
+): string {
+  if (path === source) {
+    return target;
+  }
+  const trimmedSource = source.replace(/\/$/, "");
+  if (!path.startsWith(`${trimmedSource}/`)) {
+    return path;
+  }
+  return `${target}${path.slice(source.length)}`;
 }
 
 /** The allowed-type hint shared by the intake dialog and the drag-and-drop tray. */

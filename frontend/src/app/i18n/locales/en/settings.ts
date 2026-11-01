@@ -58,7 +58,7 @@ export const settings = {
       wholeNumber: "Enter a whole number.",
       number: "Enter a number.",
       range: "Enter a value between {min} and {max}.",
-      thresholdBelowTotal: "Must be lower than the max total ({total}).",
+      thresholdBelowContext: "Must be lower than the model context window ({context}).",
       parallelWithinCalls:
         "Must not exceed tool calls per turn ({calls}).",
       overlapBelowTarget: "Must be lower than target chars ({target}).",
@@ -70,16 +70,16 @@ export const settings = {
       "These bounds are stored in PostgreSQL and apply to new runs. An active run keeps the snapshot it started with.",
     badge: "{steps} steps · {calls} tool calls",
     statusSummary:
-      "{context} model context · {budget} turn budget · {compaction} compaction",
+      "{context} model context · {compaction} compaction",
     budgetLabel: "Auto-compaction threshold",
     budgetValue: "{threshold} / {total} tokens",
-    budgetAria: "Compaction threshold as a share of the turn budget",
-    budgetPercent: "{percent}% of the turn budget",
-    budgetHeadroom: "{tokens} tokens headroom",
+    budgetAria: "Compaction threshold as a share of the model context window",
+    budgetPercent: "{percent}% of the model context window",
+    budgetHeadroom: "{tokens} tokens of context headroom",
     groupContextSlot: "Group 01",
     groupContextTitle: "Context budget",
     groupContextDescription:
-      "The model's input capacity, the ceiling for a single turn, when older material is folded away, and how much page text the agent may read. The context window is model metadata; it is not the turn budget.",
+      "The model's input capacity, when older material is folded away, and how much page text the agent may read.",
     groupToolsSlot: "Group 02",
     groupToolsTitle: "Tool execution",
     groupToolsDescription:
@@ -91,15 +91,11 @@ export const settings = {
     fieldContextWindowLabel: "Model context window",
     fieldContextWindowUnit: "tokens",
     fieldContextWindowHint:
-      "Provider/model input capacity, separate from the turn budget. DeepSeek V4.1 Flash is about 1,000,000 input tokens.",
-    fieldTurnBudgetLabel: "Turn token budget",
-    fieldTurnBudgetUnit: "tokens",
-    fieldTurnBudgetHint:
-      "Cumulative model-step budget for one agent turn, including tool results. It does not raise the model context window.",
+      "Provider/model input capacity. DeepSeek V4.1 Flash is about 1,000,000 input tokens.",
     fieldThresholdLabel: "Auto-compaction threshold",
     fieldThresholdUnit: "tokens",
     fieldThresholdHint:
-      "Auto compaction starts before a new turn once the transcript passes this share of the turn budget.",
+      "Auto compaction starts before a new turn once the active transcript passes this share of the model context window.",
     fieldMaxStepsLabel: "Max steps",
     fieldMaxStepsUnit: "steps",
     fieldMaxStepsHint:

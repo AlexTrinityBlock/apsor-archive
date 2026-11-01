@@ -113,6 +113,53 @@ class FolderCreateSchema(BaseModel):
     path: str = Field(max_length=1024)
 
 
+class DirectorySchema(BaseModel):
+    """One directory in a path listing."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    name: str
+    depth: int
+
+
+class FolderRenameSchema(BaseModel):
+    """Rename one folder in place; the parent folder never changes."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(max_length=1024)
+    new_name: str = Field(max_length=255)
+
+
+class FolderMoveSchema(BaseModel):
+    """Move one folder subtree to a complete destination path."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(max_length=1024)
+    target_path: str = Field(max_length=1024)
+
+
+class FolderCopySchema(BaseModel):
+    """Copy one folder subtree to a complete destination path."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(max_length=1024)
+    target_path: str = Field(max_length=1024)
+
+
+class FolderMutationSchema(BaseModel):
+    """Result of a rename, move, or copy operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    folder: DirectorySchema
+    affected_folders: int
+    affected_files: int
+
+
 class FileMoveSchema(BaseModel):
     """Move one current file to another logical path."""
 
@@ -188,16 +235,6 @@ class FileChunksSchema(BaseModel):
     chunk_start: int
     chunk_end: int
     chunks: list[ChunkSchema]
-
-
-class DirectorySchema(BaseModel):
-    """One directory in a path listing."""
-
-    model_config = ConfigDict(frozen=True)
-
-    path: str
-    name: str
-    depth: int
 
 
 class PathFileSchema(BaseModel):

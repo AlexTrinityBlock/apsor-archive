@@ -299,6 +299,7 @@ export const chat = {
   markdown: {
     imageOmitted: "Image omitted from the transcript",
     imageOmittedAlt: "Image omitted from the transcript: {alt}",
+    tableAria: "Table, scroll horizontally to read all columns",
   },
   retry: {
     aria: "Retry the last run",

@@ -326,22 +326,21 @@ AgentRuntimePanel.tsx`) backed by the generated `useGetAgentSettings`,
 configuration remains in the existing AI provider panels.
 
 The panel shows a Database/Defaults badge, the last `updated_at`, and a summary
-with model context, turn budget, and compaction side by side. A token budget
-meter shows the compaction threshold as a share of `max_total_tokens` with
-remaining headroom. Every numeric field displays its default and valid range.
-The thirteen runtime values are grouped into context budget, tool execution, and
+with model context and compaction side by side. A compaction meter shows the
+compaction threshold as a share of `context_window_tokens` with remaining
+headroom. Every numeric field displays its default and valid range.
+The twelve runtime values are grouped into context budget, tool execution, and
 compaction detail; auto compaction, parallel tools, and memory-write approval
 are toggles.
 
-The context budget group labels **Model context window** separately from
-**Turn token budget** and **Auto-compaction threshold**. The context window is
-provider/model metadata (default 1,000,000, range 8,000–2,000,000); changing it
-never raises the 100,000-token turn budget or moves the 75,000-token compaction
-threshold.
+The context budget group labels **Model context window** and
+**Auto-compaction threshold**. The context window is provider/model metadata
+(default 1,000,000, range 8,000–2,000,000); the threshold must stay below it.
+There is no per-turn token ceiling, so a long turn is not cut off mid-work.
 
 Validation happens before saving: integer/range checks plus the cross-field
-rules (threshold below total tokens, parallel width within tool calls per turn).
-Save is disabled for an invalid or unchanged draft. The server repeats
+rules (threshold below the context window, parallel width within tool calls per
+turn). Save is disabled for an invalid or unchanged draft. The server repeats
 validation and the app maps failures to `400 invalid_request`; the panel shows
 the returned detail inline.
 
@@ -398,6 +397,25 @@ remains the compact table fallback.
   refreshes the current path. The backend creates missing ancestors and returns
   an existing folder idempotently; a path occupied by a file is a real `409`
   conflict shown as an error.
+- **Folder actions** — every folder card has a visible settings menu in the
+  top-right, and right-click (or the ContextMenu key) opens the same order:
+  open, new Markdown, upload here, rename, move, copy, delete, and copy path.
+  The list view exposes rename, move, copy, and delete icon buttons on every
+  folder row, so every action is reachable without right-click.
+- **Rename and move folders** — `renameFolder` changes only the leaf name;
+  `moveFolder` takes a complete destination path. Both rewrite the whole subtree
+  and its current file paths, keep file ids/versions/chunks, and remap a browse
+  URL that pointed inside the old subtree. An open preview keeps its file id.
+- **Copy folders** — `copyFolder` clones the subtree, files, stored originals,
+  chunks, embeddings, and ngrams without re-embedding. The browser stays in the
+  current folder and the toast reports the cloned folder and file counts. The
+  backend rejects a copy over its file/byte ceiling with
+  `folder_copy_too_large` before creating anything.
+- **Delete folders** — `DeleteFolderDialog` reuses `deleteLibrarySelection`
+  with one `folder_paths` entry. The delete is recursive and soft, so current
+  files leave listings and search while history and original bytes remain. A
+  browse URL inside the deleted subtree falls back to its parent, and an open
+  preview of a deleted file closes.
 - **Drag upload** — files dropped from the desktop onto a folder card upload
   directly into that folder. The board rejects unsafe names and unsupported
   types before upload, enforces the 10 MB limit, and shows an intake tray with
@@ -423,10 +441,13 @@ remains the compact table fallback.
 - **Conflicts and extensions** — a changed extension is `422 invalid_path`; an
   occupied target is `409 tree_path_conflict`. The board reports both without
   optimistic movement.
-- **Mobile** — drag is never the only path. Each file card exposes **Move** and
-  **Copy** actions from its menu, and the destination is chosen in the dialog.
-  Selection mode and **Move selected** also work in the mobile list view, which
-  is the default below 761 px. The layout must not overflow at 390 px.
+- **Mobile** — drag is never the only path. Each folder card exposes its full
+  action menu and each file card exposes **Move** and **Copy** actions, and the
+  destination is chosen in the dialog. Selection mode and **Move selected** also
+  work in the mobile list view, which is the default below 761 px. The selection
+  checkbox is rendered only in selection mode, fixed at the card's top-left,
+  and the list's select column stays first and sticky while the table scrolls.
+  The layout must not overflow at 390 px.
 
 ### Ingestion progress
 
@@ -468,10 +489,11 @@ into the Library or the Memory reader, so deep links keep working:
 - `/viewer/memory/:memoryId` → `/memory/:memoryId` — the memory leaf with
   lineage and trace links.
 
-Text-only files use `has_original=false`, skip the 404 **Open original** and
-**Download** actions, skip the `/content` probe entirely, and rebuild the sheet
-from indexed chunks. PDF.js CMaps and standard fonts are served from `/pdfjs/`
-in the committed build.
+Legacy text-only files use `has_original=false`, skip the 404 **Open original**
+and **Download** actions, skip the `/content` probe entirely, and rebuild the
+sheet from indexed chunks. Text created through the API now stores its exact
+bytes, so new notes read their original directly. PDF.js CMaps and standard
+fonts are served from `/pdfjs/` in the committed build.
 
 ## Design
 
