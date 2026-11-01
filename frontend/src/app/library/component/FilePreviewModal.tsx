@@ -714,11 +714,14 @@ export function FilePreviewModal({
 
   return (
     <div
-      className={
-        editing
-          ? "modal library-preview library-preview--editing"
-          : "modal library-preview"
-      }
+      className={[
+        "modal",
+        "library-preview",
+        editing ? "library-preview--editing" : null,
+        kind === "pdf" ? "library-preview--pdf" : null,
+      ]
+        .filter(Boolean)
+        .join(" ")}
       onMouseDown={(event) => {
         if (!editing && event.target === event.currentTarget) {
           onClose();
