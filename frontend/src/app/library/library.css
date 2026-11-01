@@ -2814,12 +2814,38 @@ button.library-crumb:hover {
   }
 
   .library-preview__head {
-    align-items: flex-start;
+    align-items: center;
+    padding: 8px 12px;
+    gap: 6px 10px;
+  }
+
+  .library-preview__identity {
+    flex-basis: 0;
+    gap: 1px;
+  }
+
+  .library-preview__title {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .library-preview__path {
+    font-size: 9px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .library-preview__tabs {
     order: 3;
     width: 100%;
+  }
+
+  .library-preview__actions {
+    padding: 5px 12px;
+    gap: 5px 10px;
   }
 
   .library-preview__tabs .tabs {
@@ -2840,6 +2866,43 @@ button.library-crumb:hover {
 }
 
 @media (max-width: 720px) {
+  /* The PDF viewer follows the Google Drive model: a thin file-name/tab bar,
+     while metadata and file actions stay in the library layer or Meta tab. */
+  .library-preview--pdf .library-preview__head {
+    min-height: 0;
+    padding: 6px 10px;
+    gap: 4px 8px;
+  }
+
+  .library-preview--pdf .library-preview__identity {
+    flex-basis: 0;
+  }
+
+  .library-preview--pdf .library-preview__identity .eyebrow,
+  .library-preview--pdf .library-preview__path,
+  .library-preview--pdf .library-preview__actions {
+    display: none;
+  }
+
+  .library-preview--pdf .library-preview__title {
+    font-size: 12.5px;
+  }
+
+  .library-preview--pdf .library-preview__tabs {
+    order: 0;
+    width: auto;
+  }
+
+  .library-preview--pdf .library-preview__tabs .tabs {
+    width: auto;
+  }
+
+  .library-preview--pdf .library-preview__tabs .tab {
+    flex: none;
+    padding: 4px 6px;
+    font-size: 10.5px;
+  }
+
   .library-dialog-layer {
     padding: 0;
   }
@@ -2978,12 +3041,15 @@ button.library-crumb:hover {
   }
 
   .library-preview__title {
-    white-space: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .library-preview__path {
-    white-space: normal;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .library-preview__chunkbar {
