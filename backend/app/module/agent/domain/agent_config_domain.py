@@ -51,7 +51,7 @@ class AgentRuntimeConfig:
                 "compaction_threshold_tokens",
                 self.compaction_threshold_tokens,
                 1_000,
-                200_000,
+                1_000_000,
             ),
             (
                 "context_window_tokens",

@@ -34,7 +34,7 @@ class AgentConfigModel(Base):
     __table_args__ = (
         CheckConstraint("id = 1", name="singleton"),
         CheckConstraint(
-            "compaction_threshold_tokens BETWEEN 1000 AND 200000",
+            "compaction_threshold_tokens BETWEEN 1000 AND 1000000",
             name="compaction_threshold_tokens_range",
         ),
         CheckConstraint(

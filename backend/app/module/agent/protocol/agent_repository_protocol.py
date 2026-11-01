@@ -101,6 +101,15 @@ class AgentRepositoryProtocol(Protocol):
         now: datetime,
     ) -> AgentEntryModel: ...
 
+    async def append_run_compaction(
+        self,
+        *,
+        conversation_id: int,
+        run_id: int,
+        draft: EntryDraft,
+        now: datetime,
+    ) -> AgentEntryModel: ...
+
     async def create_run(
         self,
         *,

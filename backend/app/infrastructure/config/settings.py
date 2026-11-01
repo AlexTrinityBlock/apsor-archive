@@ -132,7 +132,11 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-flash"
     deepseek_timeout_seconds: float = 60.0
+    # Small extraction/summary completions keep a tight cap. Agent turns can
+    # legitimately emit large tool arguments (for example a long memory), so
+    # they use a separate, larger output budget.
     deepseek_max_tokens: int = 1800
+    deepseek_chat_max_tokens: int = 8192
     deepseek_temperature: float = 0.2
 
     # Tavily is the environment fallback for the two independent web

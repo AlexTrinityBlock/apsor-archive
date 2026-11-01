@@ -83,7 +83,7 @@ const CONTEXT_FIELDS: readonly NumericFieldSpec[] = [
     labelKey: "settings.agent.fieldThresholdLabel",
     unitKey: "settings.agent.fieldThresholdUnit",
     min: 1000,
-    max: 200000,
+    max: 1000000,
     step: 5000,
     hintKey: "settings.agent.fieldThresholdHint",
   },

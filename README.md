@@ -403,7 +403,7 @@ fields are rejected.
 
 | Field | Default | Range |
 |---|---|---|
-| `compaction_threshold_tokens` | 75,000 | 1,000–200,000; below the context window |
+| `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000; below the context window |
 | `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model metadata |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
@@ -839,8 +839,10 @@ knows which page snapshot was attached last.
 #### Compaction and clearing
 
 When `auto_compaction_enabled` is true and the estimated active context exceeds
-`compaction_threshold_tokens` before a new user turn, the turn first appends a
-`pi.compaction` entry:
+`compaction_threshold_tokens`, the turn appends a `pi.compaction` entry before
+the next provider call. The check runs before a new user turn and again after
+tool or page-context growth inside a running turn, so a full context compacts
+instead of failing the provider call:
 
 - The entry sets `head_entry_id` to its own id, so older entries stay immutable
   but fall outside the new active context.
@@ -1481,7 +1483,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `a4c8e2f6b9d1`, after `f9c2a7d4e6b1`. The migrations
+The latest migration is `a1c3e5f7b9d2`, after `a4c8e2f6b9d1`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1551,11 +1553,14 @@ after `agent_config` on this branch are:
   the nullable `user_session.impersonator_user_id` impersonation marker. It
   backfills historical usage from assistant-entry JSON and requires a
   superuser/BYPASSRLS migration role for the forced-RLS backfill;
-- `a4c8e2f6b9d1` (current head) removes the `max_total_tokens` column and its
-  check constraints, repairs a compaction threshold that is not below its
-  context window, and replaces the old threshold rule with
+- `a4c8e2f6b9d1` removes the `max_total_tokens` column and its check
+  constraints, repairs a compaction threshold that is not below its context
+  window, and replaces the old threshold rule with
   `compaction_threshold_tokens < context_window_tokens`. The downgrade restores
-  a 100,000-token ceiling and raises it when the stored threshold requires it.
+  a 100,000-token ceiling and raises it when the stored threshold requires it;
+- `a1c3e5f7b9d2` (current head) raises the compaction threshold range to
+  1,000,000 tokens. The downgrade clamps stored values back to 200,000 before
+  restoring the old check constraint.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable
