@@ -626,29 +626,28 @@
 }
 
 .viewer-pdf__scroll {
-  display: flex;
+  display: block;
   min-height: 44dvh;
-  align-items: flex-start;
-  justify-content: flex-start;
   overflow: auto;
   padding: 14px;
   background: var(--mono-paper);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* Center the page when it fits, but let auto margins collapse to zero when the
-   page is wider than the viewport. A centered flex item would clip the left
-   edge and make it unreachable on mobile after zooming. */
+/* Use block layout so the document grows to the page's real width. A flex item
+   here can collapse to the scroll container width while the page itself stays
+   wider, clipping the left edge and making it unreachable on mobile. */
 .viewer-pdf__scroll .react-pdf__Document {
-  display: flex;
+  display: block;
   width: max-content;
   min-width: 100%;
-  flex-direction: column;
-  align-items: center;
   margin-inline: auto;
 }
 
 .viewer-pdf__scroll .react-pdf__Page {
   max-width: none;
+  margin-inline: auto;
   background: #fdfaf3;
   box-shadow:
     0 0 0 0.7px rgba(28, 28, 26, 0.14),
