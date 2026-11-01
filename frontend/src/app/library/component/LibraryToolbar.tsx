@@ -215,7 +215,7 @@ export function LibraryToolbar({
           ) : null}
 
           <Button variant="secondary" size="sm" onClick={onUpload}>
-            <Icon name="arrow-down" size={14} />
+            <Icon name="arrow-up" size={14} />
             {t("library.common.upload")}
           </Button>
           <Button variant="secondary" size="sm" onClick={onNewMarkdown}>
