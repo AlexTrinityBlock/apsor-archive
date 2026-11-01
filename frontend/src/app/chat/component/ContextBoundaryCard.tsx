@@ -45,7 +45,7 @@ function reasonLabel(reason: string | null, t: Translate): string | null {
   if (reason === "manual") {
     return t("chat.boundary.manualCompaction");
   }
-  if (reason === "auto_context_threshold") {
+  if (reason === "auto_context_threshold" || reason === "provider_context_overflow") {
     return t("chat.boundary.threshold");
   }
   if (reason === "manual_clear") {

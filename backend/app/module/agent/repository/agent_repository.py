@@ -634,6 +634,42 @@ class AgentRepository:
             conversation.last_entry_at = entry.created_at
             return entry
 
+    async def append_run_compaction(
+        self,
+        *,
+        conversation_id: int,
+        run_id: int,
+        draft: EntryDraft,
+        now: datetime,
+    ) -> AgentEntryModel:
+        """Append an auto-compaction boundary inside an active run."""
+        async with self._transaction() as session:
+            conversation = await self._lock_conversation(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+            )
+            run = await self._lock_active_run(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+                run_id=run_id,
+            )
+            commit_seq = await self._next_commit_seq(session)
+            entry = await self._append_boundary_entry(
+                session,
+                user_id=self.user_id,
+                conversation_id=conversation_id,
+                commit_seq=commit_seq,
+                draft=draft,
+                now=now,
+            )
+            entry.by_run_id = run.id
+            run.last_entry_id = entry.id
+            conversation.last_entry_at = entry.created_at
+            await session.flush()
+            return entry
+
     @staticmethod
     async def _append_boundary_entry(
         session: AsyncSession,

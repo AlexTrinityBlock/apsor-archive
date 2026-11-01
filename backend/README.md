@@ -46,6 +46,12 @@ default model is `deepseek-flash`. Without a configured provider:
 - image uploads use a filename-derived caption and metadata;
 - agent messages return `503 agent_not_configured`.
 
+Agent chat uses a larger output budget than summaries: the default
+`APSOR_DEEPSEEK_CHAT_MAX_TOKENS` is 8192, while short summary and extraction
+calls keep the 1800-token `APSOR_DEEPSEEK_MAX_TOKENS` cap. The chat budget must
+leave room for long tool arguments such as a detailed `save_memory` payload;
+truncating that JSON would otherwise surface as `provider_error`.
+
 Only the root account can edit the global provider registry. Normal accounts can
 read AI availability but never receive provider secrets or runtime settings.
 
@@ -364,7 +370,7 @@ replacement rather than a patch.
 
 | Field | Default | Constraint |
 |---|---|---|
-| `compaction_threshold_tokens` | 75,000 | 1,000–200,000; `< context_window_tokens` |
+| `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000; `< context_window_tokens` |
 | `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model context metadata |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
@@ -391,11 +397,15 @@ current row. Provider and model still come from `/api/v1/settings/providers`.
 
 ### Compaction and clearing
 
-Auto compaction runs before a new user turn when
-`auto_compaction_enabled` is true, the active context has at least one user
-entry, and the estimated context exceeds `compaction_threshold_tokens`.
-`estimate_context_tokens` uses a conservative character estimate and the latest
-valid assistant usage, whichever is larger.
+Auto compaction runs before a new user turn and before each provider step inside
+a running turn when `auto_compaction_enabled` is true, the active context has at
+least one user entry, and the estimated context exceeds
+`compaction_threshold_tokens`. Tool results and page-context growth therefore
+trigger a new compaction boundary instead of an overlong provider request.
+If the provider still rejects a request with a context-window error, the agent
+appends one compaction boundary and retries the step; a second context rejection
+fails the run normally. `estimate_context_tokens` uses a conservative character
+estimate and the latest valid assistant usage, whichever is larger.
 
 The service appends one `pi.compaction` entry with `head_entry_id` set to its own
 id. Its provider message is a user-role envelope:
@@ -1024,11 +1034,14 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   backfills historical usage from assistant-entry JSON, requires a
   superuser/BYPASSRLS migration role for the forced-RLS backfill, and validates
   both upgrade and downgrade on a scratch database;
-- `a4c8e2f6b9d1` (current head) removes `max_total_tokens` and its check
-  constraints, repairs a threshold that is not below its context window, and
-  replaces the old threshold rule with
-  `compaction_threshold_tokens < context_window_tokens`. The downgrade restores
-  a 100,000-token ceiling and raises it when the stored threshold requires it.
+- `a4c8e2f6b9d1` removes `max_total_tokens` and its check constraints, repairs a
+  threshold that is not below its context window, and replaces the old threshold
+  rule with `compaction_threshold_tokens < context_window_tokens`. The downgrade
+  restores a 100,000-token ceiling and raises it when the stored threshold
+  requires it;
+- `a1c3e5f7b9d2` (current head) raises the compaction threshold range to
+  1,000,000 tokens. The downgrade clamps stored values back to 200,000 before
+  restoring the old check constraint.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

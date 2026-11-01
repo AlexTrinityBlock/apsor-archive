@@ -12,7 +12,7 @@ export interface AgentSettingsUpdateSchema {
   auto_compaction_enabled: boolean;
   /**
      * @minimum 1000
-     * @maximum 200000
+     * @maximum 1000000
      */
   compaction_threshold_tokens: number;
   /**
