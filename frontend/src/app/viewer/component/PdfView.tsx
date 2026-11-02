@@ -50,8 +50,7 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
   const [documentError, setDocumentError] = useState<Error | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const viewerRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const containerWidth = useElementWidth(scrollRef);
+  const [setScrollElement, containerWidth] = useElementWidth<HTMLDivElement>();
 
   const binaryQuery = useQuery({
     queryKey: ["viewer", "file-binary", fileId],
@@ -327,7 +326,7 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
         </div>
       </div>
 
-      <div className="viewer-pdf__scroll" ref={scrollRef}>
+      <div className="viewer-pdf__scroll" ref={setScrollElement}>
         <Document
           file={documentSource}
           options={PDF_OPTIONS}

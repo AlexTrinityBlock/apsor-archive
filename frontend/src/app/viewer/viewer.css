@@ -660,6 +660,10 @@
 }
 
 .viewer-pdf__scroll .react-pdf__Page {
+  /* Shrink the page frame to the rendered canvas so a narrow page centers in
+     the viewer instead of leaving the canvas pinned to the left of a
+     full-width block. */
+  width: max-content;
   max-width: none;
   margin-inline: auto;
   background: #fdfaf3;
