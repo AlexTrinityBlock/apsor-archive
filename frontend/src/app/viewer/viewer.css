@@ -623,10 +623,16 @@
 
 .viewer-pdf__zoom {
   min-width: 42px;
+  height: 30px;
+  padding: 0 4px;
   color: var(--mono-muted);
   font-family: var(--mono-font-mono);
   font-size: 10px;
   text-align: center;
+}
+
+.viewer-pdf__zoom:hover {
+  color: var(--mono-ink);
 }
 
 .viewer-pdf__scroll {
@@ -671,6 +677,38 @@
   color: var(--mono-muted);
   font-family: var(--mono-font-mono);
   font-size: 10px;
+}
+
+/* Fullscreen viewing fills the viewport and owns both scroll axes, so page
+   dragging and zoom stay usable without the modal body behind it. */
+.viewer-pdf--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-fullscreen);
+  height: 100vh;
+  height: 100dvh;
+  border: 0;
+  border-radius: 0;
+}
+
+.viewer-pdf--fullscreen .viewer-pdf__bar {
+  padding-top: max(6px, env(safe-area-inset-top));
+  padding-right: max(9px, env(safe-area-inset-right));
+  padding-left: max(9px, env(safe-area-inset-left));
+}
+
+.viewer-pdf--fullscreen .viewer-pdf__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: max(14px, env(safe-area-inset-right));
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  padding-left: max(14px, env(safe-area-inset-left));
+}
+
+.viewer-pdf--fullscreen .viewer-pdf__foot {
+  display: none;
 }
 
 .viewer-pdf__foot {

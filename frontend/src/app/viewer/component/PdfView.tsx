@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Document, Page, pdfjs } from "react-pdf";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?worker&url";
@@ -7,6 +7,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { useScrollLock } from "../../hook/useScrollLock";
 import { useI18n } from "../../i18n";
 import { ViewerErrorState, ViewerLoading } from "./ViewerStates";
 import { useElementWidth } from "./useElementWidth";
@@ -31,6 +32,9 @@ const PDF_OPTIONS = {
   isEvalSupported: false,
 } as unknown as NonNullable<ComponentProps<typeof Document>["options"]>;
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 /**
  * PDF.js viewer with page navigation, zoom, fit width, and a selectable text
  * layer. PDF evaluation is disabled; the worker is bundled through Vite's URL
@@ -44,6 +48,8 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
   const [fitWidth, setFitWidth] = useState(true);
   const [pageWidth, setPageWidth] = useState<number | null>(null);
   const [documentError, setDocumentError] = useState<Error | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const viewerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const containerWidth = useElementWidth(scrollRef);
 
@@ -61,6 +67,95 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
     }
     return { data: new Uint8Array(binaryQuery.data.slice(0)) };
   }, [binaryQuery.data]);
+
+  const fullscreenActive =
+    fullscreen &&
+    documentSource !== null &&
+    !binaryQuery.isLoading &&
+    !binaryQuery.error &&
+    !documentError;
+
+  useScrollLock(fullscreenActive);
+
+  // Native fullscreen is an enhancement: desktop and Android can hide the
+  // browser chrome, while iOS Safari falls back to the in-app overlay.
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (document.fullscreenElement !== viewerRef.current) {
+        setFullscreen(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (fullscreenActive) {
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => undefined);
+      }
+      setFullscreen(false);
+      return;
+    }
+    setFullscreen(true);
+    const viewer = viewerRef.current;
+    if (!viewer || typeof viewer.requestFullscreen !== "function") {
+      return;
+    }
+    void viewer.requestFullscreen().catch(() => undefined);
+  };
+
+  // Fullscreen is a viewing mode, not a second dialog: Escape leaves it
+  // without closing the preview underneath, and Tab stays inside the viewer so
+  // the modal's own focus trap cannot jump to controls hidden behind it.
+  useEffect(() => {
+    if (!fullscreenActive) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (document.fullscreenElement) {
+          void document.exitFullscreen().catch(() => undefined);
+        }
+        setFullscreen(false);
+        return;
+      }
+      if (event.key !== "Tab") {
+        return;
+      }
+      event.stopPropagation();
+      const viewer = viewerRef.current;
+      if (!viewer) {
+        return;
+      }
+      const focusable = Array.from(
+        viewer.querySelectorAll<HTMLElement>(FOCUSABLE),
+      ).filter((element) => element.offsetParent !== null);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        viewer.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (!viewer.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [fullscreenActive]);
 
   const fitScale =
     pageWidth !== null && containerWidth > 0
@@ -114,7 +209,16 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
   }
 
   return (
-    <div className="viewer-pdf">
+    <div
+      ref={viewerRef}
+      className={
+        fullscreenActive ? "viewer-pdf viewer-pdf--fullscreen" : "viewer-pdf"
+      }
+      role={fullscreenActive ? "dialog" : undefined}
+      aria-modal={fullscreenActive ? true : undefined}
+      aria-label={fullscreenActive ? fileName : undefined}
+      tabIndex={fullscreenActive ? -1 : undefined}
+    >
       <div className="viewer-pdf__bar">
         <div className="viewer-pdf__group">
           <Button
@@ -164,9 +268,21 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
           >
             <span aria-hidden="true">−</span>
           </Button>
-          <span className="viewer-pdf__zoom">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="viewer-pdf__zoom"
+            onClick={() => {
+              setFitWidth(false);
+              setScale(1);
+            }}
+            aria-label={t("library.viewer.pdf.resetZoomLabel", {
+              value: formatNumber(Math.round(activeScale * 100)),
+            })}
+            title={t("library.viewer.pdf.resetZoom")}
+          >
             {formatNumber(Math.round(activeScale * 100))}%
-          </span>
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -188,12 +304,25 @@ export function PdfView({ fileId, fileUrl, fileName, downloadUrl }: PdfViewProps
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              setFitWidth(false);
-              setScale(1);
-            }}
+            iconOnly
+            className="viewer-pdf__fullscreen"
+            onClick={toggleFullscreen}
+            aria-label={t(
+              fullscreenActive
+                ? "library.viewer.pdf.exitFullscreen"
+                : "library.viewer.pdf.enterFullscreen",
+            )}
+            title={t(
+              fullscreenActive
+                ? "library.viewer.pdf.exitFullscreen"
+                : "library.viewer.pdf.enterFullscreen",
+            )}
+            aria-pressed={fullscreenActive}
           >
-            100%
+            <Icon
+              name={fullscreenActive ? "minimize" : "maximize"}
+              size={16}
+            />
           </Button>
         </div>
       </div>
