@@ -27,6 +27,8 @@ export type IconName =
   | "arrow-down"
   | "chevron-right"
   | "chevron-down"
+  | "maximize"
+  | "minimize"
   | "file"
   | "folder"
   | "branch"
@@ -178,6 +180,22 @@ const ICONS: Record<IconName, ReactNode> = {
   ),
   "chevron-right": <path d="m9 5 7 7-7 7" />,
   "chevron-down": <path d="m5 9 7 7 7-7" />,
+  maximize: (
+    <>
+      <path d="M8.5 3.5h-5v5" />
+      <path d="M15.5 3.5h5v5" />
+      <path d="M20.5 15.5v5h-5" />
+      <path d="M3.5 15.5v5h5" />
+    </>
+  ),
+  minimize: (
+    <>
+      <path d="M8 3.5V8H3.5" />
+      <path d="M16 3.5V8h4.5" />
+      <path d="M20.5 16H16v4.5" />
+      <path d="M3.5 16H8v4.5" />
+    </>
+  ),
   file: (
     <>
       <path d="M6 3.5h8l4 4V20.5H6z" />
