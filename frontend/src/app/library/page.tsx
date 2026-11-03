@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import "./library.css";
 import "../viewer/viewer.css";
@@ -23,9 +23,17 @@ import type {
 import {
   copyFile,
   moveFile,
+  useGetFile,
 } from "../generated-apis-types/files/files";
 import { useReadPath } from "../generated-apis-types/tree/tree";
 import { basename, parentPath, pathSegments } from "../../lib/format";
+import {
+  legacyLibraryRedirect,
+  libraryFileUrl,
+  libraryFolderUrl,
+  parseLibraryUrl,
+  type LibraryRoute,
+} from "../../lib/library-url";
 import { Button } from "../component/Button";
 import {
   ContextMenu,
@@ -70,7 +78,6 @@ import {
   nameClipboardFile,
   normalizeLibraryPath,
   parsePositiveInt,
-  pathParamValue,
   remapArchivePath,
   sameArchivePath,
   sortListing,
@@ -267,14 +274,91 @@ function LibrarySelectionBarSlot({
   return <LibrarySelectionBar {...barProps} />;
 }
 
+type LibraryDestination =
+  | {
+      readonly kind: "folder";
+      readonly path: string;
+      readonly tab?: LibraryTab;
+    }
+  | {
+      readonly kind: "file";
+      readonly fileId: number;
+      readonly tab?: LibraryTab;
+    };
+
+/**
+ * Canonical entry point. Old query-string Library links are redirected before
+ * the browser state hooks mount so saved citations and history entries keep
+ * working after the REST URL migration.
+ */
+export function LibraryPage() {
+  const location = useLocation();
+  const legacy = legacyLibraryRedirect(location.pathname, location.search);
+  if (legacy) {
+    return <Navigate to={legacy.to} state={legacy.state} replace />;
+  }
+  const route = parseLibraryUrl(location.pathname);
+  if (route === null) {
+    return <Navigate to="/library" replace />;
+  }
+  return <LibraryBrowser route={route} />;
+}
+
+/**
+ * Resolve the shelf behind a preview.
+ *
+ * A direct `/library/files/:id` link has no folder in the path. The file
+ * resource itself carries its current parent, so refresh-safe deep links still
+ * render the correct shelf behind the preview. Navigation state is a faster
+ * first paint when the user opened the file from a folder.
+ */
+function usePreviewRoute(route: LibraryRoute) {
+  const location = useLocation();
+  const previewFileId = route.fileId;
+  const previewFileQuery = useGetFile(previewFileId ?? 0, {
+    query: { enabled: previewFileId !== null },
+  });
+  const routeState = location.state as
+    | { readonly libraryFolderPath?: unknown }
+    | null;
+  const stateFolderPath =
+    typeof routeState?.libraryFolderPath === "string"
+      ? normalizeLibraryPath(routeState.libraryFolderPath)
+      : null;
+
+  let previewFolderPath: string | null = null;
+  if (previewFileId !== null) {
+    previewFolderPath = previewFileQuery.data
+      ? parentPath(previewFileQuery.data.raw_file_path)
+      : stateFolderPath ?? "/";
+  }
+
+  const path = route.folderPath ?? previewFolderPath ?? "/";
+  const resolvingPath =
+    previewFileId !== null &&
+    route.folderPath === null &&
+    !previewFileQuery.isSuccess &&
+    !previewFileQuery.isError &&
+    stateFolderPath === null;
+
+  return { previewFileQuery, previewFolderPath, path, resolvingPath };
+}
+
 /**
  * The unified file workspace. One `readPath` listing feeds both the Files tab
  * and the image-only Media gallery; the preview modal keeps the shelf behind
- * it. Browse state lives in the query string: `tab`, `path`, `q`, `view`,
- * `file`, `chunk`, and `media` (an image file id).
+ * it. Resource location lives in path parameters: `/library/folders/...`,
+ * `/library/files/:id`, and the `/library/media` variants. `q`, `view`,
+ * `chunk`, and `mode` remain query parameters because they refine the current
+ * resource rather than identify it.
  */
-export function LibraryPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
+function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const searchParams = useMemo(
+    () => new URLSearchParams(location.search),
+    [location.search],
+  );
   const queryClient = useQueryClient();
   const toast = useToast();
   const { t, formatNumber } = useI18n();
@@ -320,12 +404,10 @@ export function LibraryPage() {
   const [sort, setSort] = useState<LibrarySort>("modified");
   const [mediaFilter, setMediaFilter] = useState("");
 
-  const rawTab = searchParams.get("tab");
-  const tab: LibraryTab = rawTab === "media" ? "media" : "files";
-  const path = normalizeLibraryPath(searchParams.get("path"));
-  const fileId = parsePositiveInt(searchParams.get("file"));
-  const mediaId = parsePositiveInt(searchParams.get("media"));
-  const previewFileId = tab === "media" ? mediaId ?? fileId : fileId;
+  const tab: LibraryTab = route.tab;
+  const previewFileId = route.fileId;
+  const { previewFolderPath, path, resolvingPath } = usePreviewRoute(route);
+
   const requestedChunk = parsePositiveInt(searchParams.get("chunk")) ?? 1;
   const rawQuery = tab === "files" ? searchParams.get("q") ?? "" : "";
   const query = rawQuery.trim();
@@ -334,11 +416,14 @@ export function LibraryPage() {
   const view = resolveView(searchParams.get("view"), isDesktop);
   const startInEdit = searchParams.get("mode") === "edit";
 
-  const browseQuery = useReadPath({
-    path,
-    path_depth: 1,
-    fuzzy_search: tab === "files" && activeQuery ? activeQuery : undefined,
-  });
+  const browseQuery = useReadPath(
+    {
+      path,
+      path_depth: 1,
+      fuzzy_search: tab === "files" && activeQuery ? activeQuery : undefined,
+    },
+    { query: { enabled: !resolvingPath } },
+  );
 
   const resetSelection = useCallback(() => {
     setSelecting(false);
@@ -349,58 +434,90 @@ export function LibraryPage() {
 
   const updateParams = useCallback(
     (updates: ParamUpdates, options?: { readonly replace?: boolean }) => {
-      setSearchParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          for (const [key, value] of Object.entries(updates)) {
-            if (value === null || value === "") {
-              next.delete(key);
-            } else {
-              next.set(key, String(value));
-            }
-          }
-          return next;
+      const next = new URLSearchParams(location.search);
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === null || value === "") {
+          next.delete(key);
+        } else {
+          next.set(key, String(value));
+        }
+      }
+      const search = next.toString();
+      navigate(
+        {
+          pathname: location.pathname,
+          search: search.length > 0 ? `?${search}` : "",
         },
         { replace: options?.replace ?? false },
       );
     },
-    [setSearchParams],
+    [location.pathname, location.search, navigate],
+  );
+
+  const navigateLibrary = useCallback(
+    (
+      destination: LibraryDestination,
+      updates?: ParamUpdates,
+      options?: { readonly replace?: boolean; readonly state?: unknown },
+    ) => {
+      const next = new URLSearchParams(location.search);
+      // Legacy keys never belong in a canonical resource URL. Clearing them
+      // here also covers a redirect followed by an immediate action.
+      for (const key of ["tab", "path", "file", "media"]) {
+        next.delete(key);
+      }
+      for (const [key, value] of Object.entries(updates ?? {})) {
+        if (value === null || value === "") {
+          next.delete(key);
+        } else {
+          next.set(key, String(value));
+        }
+      }
+      const targetTab = destination.tab ?? tab;
+      const pathname =
+        destination.kind === "folder"
+          ? libraryFolderUrl(destination.path || "/", targetTab)
+          : libraryFileUrl(destination.fileId, targetTab);
+      const search = next.toString();
+      navigate(
+        { pathname, search: search.length > 0 ? `?${search}` : "" },
+        { replace: options?.replace ?? false, state: options?.state ?? null },
+      );
+    },
+    [location.search, navigate, tab],
   );
 
   const openFolder = useCallback(
     (folderPath: string) => {
       resetSelection();
       setMediaFilter("");
-      updateParams({
-        path: pathParamValue(folderPath || "/"),
-        file: null,
-        media: null,
-        chunk: null,
-        q: null,
-        mode: null,
-      });
+      navigateLibrary(
+        { kind: "folder", path: folderPath || "/" },
+        { chunk: null, q: null, mode: null },
+      );
     },
-    [resetSelection, updateParams],
+    [navigateLibrary, resetSelection],
   );
 
   const openPreview = useCallback(
     (nextFileId: number) => {
       resetSelection();
-      if (tab === "media") {
-        updateParams({ media: nextFileId, file: null, chunk: null, mode: null });
-      } else {
-        updateParams({ file: nextFileId, media: null, chunk: null, mode: null });
-      }
+      navigateLibrary(
+        { kind: "file", fileId: nextFileId },
+        { chunk: null, mode: null },
+        { state: { libraryFolderPath: path } },
+      );
     },
-    [resetSelection, tab, updateParams],
+    [navigateLibrary, path, resetSelection],
   );
 
   const closePreview = useCallback(() => {
-    updateParams(
-      { file: null, media: null, chunk: null, mode: null },
+    navigateLibrary(
+      { kind: "folder", path: previewFolderPath ?? path },
+      { chunk: null, mode: null },
       { replace: true },
     );
-  }, [updateParams]);
+  }, [navigateLibrary, path, previewFolderPath]);
 
   const handleEditModeChange = useCallback(
     (editing: boolean) => {
@@ -413,16 +530,13 @@ export function LibraryPage() {
     (nextFileId: number) => {
       resetSelection();
       setMediaFilter("");
-      updateParams({
-        tab: null,
-        file: nextFileId,
-        mode: "edit",
-        media: null,
-        chunk: null,
-        q: null,
-      });
+      navigateLibrary(
+        { kind: "file", fileId: nextFileId },
+        { mode: "edit", chunk: null, q: null },
+        { state: { libraryFolderPath: path } },
+      );
     },
-    [resetSelection, updateParams],
+    [navigateLibrary, path, resetSelection],
   );
 
   const openNewMarkdown = useCallback((directory: string) => {
@@ -436,13 +550,9 @@ export function LibraryPage() {
         return;
       }
       const chunk = Math.max(1, nextChunk);
-      if (tab === "media") {
-        updateParams({ media: previewFileId, chunk }, { replace: true });
-      } else {
-        updateParams({ file: previewFileId, chunk }, { replace: true });
-      }
+      updateParams({ chunk }, { replace: true });
     },
-    [previewFileId, tab, updateParams],
+    [previewFileId, updateParams],
   );
 
   const openUpload = useCallback(
@@ -472,30 +582,15 @@ export function LibraryPage() {
         fileIds: [file.id],
       });
       const image = isImageFileName(file.file_name) || file.mime_type.startsWith("image/");
-      const nextPath = pathParamValue(parentPath(file.raw_file_path));
-      if (tab === "media" && image) {
-        updateParams({
-          tab: "media",
-          path: nextPath,
-          media: file.id,
-          file: null,
-          chunk: null,
-          q: null,
-          mode: null,
-        });
-      } else {
-        updateParams({
-          tab: null,
-          path: nextPath,
-          file: file.id,
-          media: null,
-          chunk: null,
-          q: null,
-          mode: null,
-        });
-      }
+      const nextPath = parentPath(file.raw_file_path);
+      const targetTab: LibraryTab = tab === "media" && image ? "media" : "files";
+      navigateLibrary(
+        { kind: "file", fileId: file.id, tab: targetTab },
+        { chunk: null, q: null, mode: null },
+        { state: { libraryFolderPath: nextPath } },
+      );
     },
-    [queryClient, resetSelection, t, tab, toast, updateParams],
+    [navigateLibrary, queryClient, resetSelection, t, tab, toast],
   );
 
   const handleQueryChange = useCallback(
@@ -523,16 +618,12 @@ export function LibraryPage() {
       }
       resetSelection();
       setMediaFilter("");
-      updateParams({
-        tab: nextTab === "media" ? "media" : null,
-        file: null,
-        media: null,
-        chunk: null,
-        q: null,
-        mode: null,
-      });
+      navigateLibrary(
+        { kind: "folder", path, tab: nextTab },
+        { chunk: null, q: null, mode: null },
+      );
     },
-    [resetSelection, tab, updateParams],
+    [navigateLibrary, path, resetSelection, tab],
   );
 
   const handleViewChange = useCallback(
@@ -595,31 +686,13 @@ export function LibraryPage() {
           }),
         );
         if (previewFileId === result.id) {
-          const nextPath = pathParamValue(parentPath(result.raw_file_path));
+          const nextPath = parentPath(result.raw_file_path);
           const chunk = requestedChunk > 1 ? requestedChunk : null;
-          if (tab === "media") {
-            updateParams(
-              {
-                path: nextPath,
-                media: result.id,
-                file: null,
-                chunk,
-                mode: null,
-              },
-              { replace: true },
-            );
-          } else {
-            updateParams(
-              {
-                path: nextPath,
-                file: result.id,
-                media: null,
-                chunk,
-                mode: null,
-              },
-              { replace: true },
-            );
-          }
+          navigateLibrary(
+            { kind: "file", fileId: result.id },
+            { chunk, mode: null },
+            { replace: true, state: { libraryFolderPath: nextPath } },
+          );
         }
       } else {
         toast.success(
@@ -632,7 +705,7 @@ export function LibraryPage() {
       }
       setMoveCopyRequest(null);
     },
-    [previewFileId, queryClient, requestedChunk, t, tab, toast, updateParams],
+    [navigateLibrary, previewFileId, queryClient, requestedChunk, t, toast],
   );
 
   const handleDropMoveCopy = useCallback(
@@ -700,13 +773,29 @@ export function LibraryPage() {
       setRenameFolderRequest(null);
       resetSelection();
       if (sourcePath !== null && isPathInside(path, sourcePath)) {
-        updateParams(
-          { path: pathParamValue(remapArchivePath(path, sourcePath, result.folder.path)) },
-          { replace: true },
-        );
+        const nextPath = remapArchivePath(path, sourcePath, result.folder.path);
+        if (previewFileId !== null) {
+          navigateLibrary(
+            { kind: "file", fileId: previewFileId },
+            undefined,
+            { replace: true, state: { libraryFolderPath: nextPath } },
+          );
+        } else {
+          navigateLibrary(
+            { kind: "folder", path: nextPath },
+            undefined,
+            { replace: true },
+          );
+        }
       }
     },
-    [path, renameFolderRequest, resetSelection, updateParams],
+    [
+      navigateLibrary,
+      path,
+      previewFileId,
+      renameFolderRequest,
+      resetSelection,
+    ],
   );
 
   const handleFolderMoveCopyDone = useCallback(
@@ -719,17 +808,33 @@ export function LibraryPage() {
         request !== null &&
         isPathInside(path, request.folder.path)
       ) {
-        updateParams(
-          {
-            path: pathParamValue(
-              remapArchivePath(path, request.folder.path, result.folder.path),
-            ),
-          },
-          { replace: true },
+        const nextPath = remapArchivePath(
+          path,
+          request.folder.path,
+          result.folder.path,
         );
+        if (previewFileId !== null) {
+          navigateLibrary(
+            { kind: "file", fileId: previewFileId },
+            undefined,
+            { replace: true, state: { libraryFolderPath: nextPath } },
+          );
+        } else {
+          navigateLibrary(
+            { kind: "folder", path: nextPath },
+            undefined,
+            { replace: true },
+          );
+        }
       }
     },
-    [folderMoveCopyRequest, path, resetSelection, updateParams],
+    [
+      folderMoveCopyRequest,
+      navigateLibrary,
+      path,
+      previewFileId,
+      resetSelection,
+    ],
   );
 
   const handleFolderDeleted = useCallback(
@@ -740,29 +845,25 @@ export function LibraryPage() {
       const previewDeleted =
         previewFileId !== null && result.deleted_file_ids.includes(previewFileId);
       if (deletedPath !== null && isPathInside(path, deletedPath)) {
-        updateParams(
-          {
-            path: pathParamValue(parentPath(deletedPath)),
-            file: null,
-            media: null,
-            chunk: null,
-            mode: null,
-          },
+        navigateLibrary(
+          { kind: "folder", path: parentPath(deletedPath) },
+          { chunk: null, mode: null },
           { replace: true },
         );
       } else if (previewDeleted) {
-        updateParams(
-          { file: null, media: null, chunk: null, mode: null },
+        navigateLibrary(
+          { kind: "folder", path },
+          { chunk: null, mode: null },
           { replace: true },
         );
       }
     },
     [
       deleteFolderRequest,
+      navigateLibrary,
       path,
       previewFileId,
       resetSelection,
-      updateParams,
     ],
   );
 
@@ -778,13 +879,14 @@ export function LibraryPage() {
         return next;
       });
       if (previewFileId === deletedFileId) {
-        updateParams(
-          { file: null, media: null, chunk: null, mode: null },
+        navigateLibrary(
+          { kind: "folder", path },
+          { chunk: null, mode: null },
           { replace: true },
         );
       }
     },
-    [previewFileId, updateParams],
+    [navigateLibrary, path, previewFileId],
   );
 
   const listing = browseQuery.data;
@@ -912,27 +1014,28 @@ export function LibraryPage() {
       setDeleteSelectionRequest(null);
       exitSelection();
       if (afterDeletePath !== null) {
-        updateParams(
-          {
-            path: pathParamValue(afterDeletePath),
-            file: null,
-            media: null,
-            chunk: null,
-            q: null,
-            mode: null,
-          },
+        navigateLibrary(
+          { kind: "folder", path: afterDeletePath },
+          { chunk: null, q: null, mode: null },
           { replace: true },
         );
         return;
       }
       if (result.deleted_file_ids.includes(previewFileId ?? -1)) {
-        updateParams(
-          { file: null, media: null, chunk: null, mode: null },
+        navigateLibrary(
+          { kind: "folder", path },
+          { chunk: null, mode: null },
           { replace: true },
         );
       }
     },
-    [deleteSelectionRequest, exitSelection, previewFileId, updateParams],
+    [
+      deleteSelectionRequest,
+      exitSelection,
+      navigateLibrary,
+      path,
+      previewFileId,
+    ],
   );
 
   const handleBatchMoveFinished = useCallback(
@@ -949,31 +1052,15 @@ export function LibraryPage() {
         return next.size === current.size ? current : next;
       });
       if (previewFileId !== null && result.movedIds.includes(previewFileId)) {
-        const nextPath = pathParamValue(result.targetFolder);
         const chunk = requestedChunk > 1 ? requestedChunk : null;
-        if (tab === "media") {
-          updateParams(
-            {
-              path: nextPath,
-              media: previewFileId,
-              file: null,
-              chunk,
-              mode: null,
-            },
-            { replace: true },
-          );
-        } else {
-          updateParams(
-            {
-              path: nextPath,
-              file: previewFileId,
-              media: null,
-              chunk,
-              mode: null,
-            },
-            { replace: true },
-          );
-        }
+        navigateLibrary(
+          { kind: "file", fileId: previewFileId, tab },
+          { chunk, mode: null },
+          {
+            replace: true,
+            state: { libraryFolderPath: result.targetFolder },
+          },
+        );
       }
       if (result.movedIds.length > 0) {
         toast.success(
@@ -1011,25 +1098,31 @@ export function LibraryPage() {
         setBatchMoveFiles(null);
       }
     },
-    [formatNumber, previewFileId, queryClient, requestedChunk, t, tab, toast, updateParams],
+    [
+      formatNumber,
+      navigateLibrary,
+      previewFileId,
+      queryClient,
+      requestedChunk,
+      t,
+      tab,
+      toast,
+    ],
   );
 
   const handleNewMarkdownSaved = useCallback(
     (savedFile: FileSchema) => {
       resetSelection();
       setMediaFilter("");
-      const nextPath = pathParamValue(parentPath(savedFile.raw_file_path));
+      const nextPath = parentPath(savedFile.raw_file_path);
       // Keep the editor dialog open for continuous editing. Only the folder
       // behind it follows the saved file so closing the dialog lands in place.
-      updateParams({
-        tab: null,
-        path: nextPath,
-        media: null,
-        chunk: null,
-        q: null,
-      });
+      navigateLibrary(
+        { kind: "folder", path: nextPath },
+        { chunk: null, q: null, mode: null },
+      );
     },
-    [resetSelection, updateParams],
+    [navigateLibrary, resetSelection],
   );
 
   const downloadArchiveFile = useCallback((file: PathFileSchema) => {
@@ -1390,7 +1483,7 @@ export function LibraryPage() {
           </Panel>
         ) : (
           <QueryState
-            loading={browseQuery.isLoading}
+            loading={resolvingPath || browseQuery.isLoading}
             error={browseQuery.error}
             loadingLabel={t("library.page.loadingShelf")}
           >
@@ -1500,9 +1593,10 @@ export function LibraryPage() {
           onClose={closePreview}
           onChunkChange={handleChunkChange}
           onFileVersionChange={(nextFileId) => {
-            updateParams(
-              { file: nextFileId, mode: "edit", chunk: null },
-              { replace: true },
+            navigateLibrary(
+              { kind: "file", fileId: nextFileId },
+              { mode: "edit", chunk: null },
+              { replace: true, state: { libraryFolderPath: path } },
             );
           }}
           onEditModeChange={handleEditModeChange}

@@ -9,7 +9,7 @@ interface LibraryBreadcrumbsProps {
 
 /**
  * The compact archive-path trail. Every folder segment is a button that
- * updates the `path` query parameter; the current leaf stays a quiet marker.
+ * navigates to that folder's REST route; the current leaf stays a quiet marker.
  */
 export function LibraryBreadcrumbs({ path, onNavigate }: LibraryBreadcrumbsProps) {
   const { t } = useI18n();

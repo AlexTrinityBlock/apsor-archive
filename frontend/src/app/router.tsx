@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import { createBrowserRouter } from "react-router-dom";
 
+import { libraryFileUrl } from "../lib/library-url";
 import { AuthGate } from "./auth/AuthGate";
 import { RequireRoot } from "./auth/RequireRoot";
 import {
@@ -106,15 +107,31 @@ function ChatEntry() {
   return <ChatPage />;
 }
 
+function viewerFileTarget(fileId: string | undefined): number | null {
+  if (!fileId || !/^\d+$/.test(fileId)) {
+    return null;
+  }
+  const parsed = Number(fileId);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 function ViewerFileRedirect() {
   const { fileId } = useParams<{ fileId: string }>();
   const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  params.set("tab", "files");
-  if (fileId) {
-    params.set("file", fileId);
+  const id = viewerFileTarget(fileId);
+  if (id === null) {
+    return <Navigate to="/library" replace />;
   }
-  return <Navigate to={`/library?${params.toString()}`} replace />;
+  const params = new URLSearchParams(location.search);
+  return (
+    <Navigate
+      to={libraryFileUrl(id, "files", {
+        chunk: params.get("chunk"),
+        mode: params.get("mode"),
+      })}
+      replace
+    />
+  );
 }
 
 function ViewerMemoryRedirect() {
@@ -125,12 +142,20 @@ function ViewerMemoryRedirect() {
 function ViewerMediaRedirect() {
   const { mediaId } = useParams<{ mediaId: string }>();
   const location = useLocation();
-  const params = new URLSearchParams(location.search);
-  params.set("tab", "media");
-  if (mediaId) {
-    params.set("media", mediaId);
+  const id = viewerFileTarget(mediaId);
+  if (id === null) {
+    return <Navigate to="/library/media" replace />;
   }
-  return <Navigate to={`/library?${params.toString()}`} replace />;
+  const params = new URLSearchParams(location.search);
+  return (
+    <Navigate
+      to={libraryFileUrl(id, "media", {
+        chunk: params.get("chunk"),
+        mode: params.get("mode"),
+      })}
+      replace
+    />
+  );
 }
 
 export const router = createBrowserRouter([
@@ -150,9 +175,9 @@ export const router = createBrowserRouter([
           { path: "overview", element: <Navigate to="/dashboard" replace /> },
           { path: "search", element: <SearchPage /> },
           { path: "timeline", element: <TimelinePage /> },
-          { path: "library", element: <LibraryPage /> },
+          { path: "library/*", element: <LibraryPage /> },
           { path: "tree", element: <Navigate to="/library" replace /> },
-          { path: "media", element: <RedirectWithQuery to="/library?tab=media" /> },
+          { path: "media", element: <RedirectWithQuery to="/library/media" /> },
           { path: "memory", element: <MemoryPage /> },
           { path: "memory/new", element: <MemoryPage /> },
           { path: "memory/:memoryId", element: <MemoryPage /> },

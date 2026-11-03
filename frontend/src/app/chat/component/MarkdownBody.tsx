@@ -11,6 +11,7 @@ import type { CitationToken } from "../types";
 const SUMMARY_HREF = /^#citation-summary-(\d+)$/;
 const MEMORY_HREF = /^\/memory\/(\d+)\/?$/;
 const VIEWER_HREF = /^\/viewer\/(file|memory)\/(\d+)\/?$/;
+const LIBRARY_FILE_HREF = /^\/library\/(?:media\/)?files\/(\d+)\/?$/;
 
 function positiveId(value: string | null): number | null {
   if (value === null) {
@@ -30,6 +31,21 @@ function citationFromHref(href: string): CitationToken | null {
   try {
     const url = new URL(href, "http://localhost");
 
+    const libraryFile = LIBRARY_FILE_HREF.exec(url.pathname);
+    if (libraryFile) {
+      const id = positiveId(libraryFile[1]);
+      if (id === null) {
+        return null;
+      }
+      return {
+        kind: "file",
+        id,
+        chunk: positiveId(url.searchParams.get("chunk")),
+      };
+    }
+
+    // Legacy citations and stored assistant messages still use the old
+    // query-string form. Keep reading it so old links remain citations.
     if (url.pathname === "/library") {
       const id = positiveId(url.searchParams.get("file"));
       if (id === null) {

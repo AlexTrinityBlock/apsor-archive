@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { highlightTerms, snippetAround } from "../../../lib/highlight";
+import { libraryFileUrl } from "../../../lib/library-url";
 import { Badge } from "../../component/Badge";
 import { Button, ButtonLink } from "../../component/Button";
 import { Icon } from "../../component/Icon";
@@ -38,12 +39,7 @@ function memoryStatusLabel(status: string, t: Translate): string {
 }
 
 function libraryHref(fileId: number, chunk: number): string {
-  const params = new URLSearchParams({
-    tab: "files",
-    file: String(fileId),
-    chunk: String(chunk),
-  });
-  return `/library?${params.toString()}`;
+  return libraryFileUrl(fileId, "files", { chunk });
 }
 
 function MatchedByBadges({ matchedBy }: { readonly matchedBy: readonly MatchSource[] }) {

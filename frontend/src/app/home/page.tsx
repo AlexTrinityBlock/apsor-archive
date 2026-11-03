@@ -32,6 +32,7 @@ import {
   formatBytes,
   truncate,
 } from "../../lib/format";
+import { libraryFileUrl } from "../../lib/library-url";
 import "./home.css";
 
 
@@ -65,7 +66,7 @@ interface RecentFile {
 
 
 function fileHref(fileId: number): string {
-  return `/library?tab=files&file=${fileId}&chunk=1`;
+  return libraryFileUrl(fileId, "files", { chunk: 1 });
 }
 
 function errorText(

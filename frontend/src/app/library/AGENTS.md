@@ -15,7 +15,8 @@ Backend validation remains authoritative. The UI mirrors limits for fast feedbac
 ## Architecture
 
 - **One listing:** `useReadPath({ path, path_depth: 1, fuzzy_search })` feeds the Files tab, Media tab, counts, and search. Board and list are two presentations of the same payload; switching views does not refetch a different contract.
-- **URL state:** `tab`, `path`, `q`, `view`, `file`, `chunk`, `mode`, and `media` are query parameters. `page.tsx` derives browse and preview state from them so refresh and back/forward work. Root path and defaults are omitted from the URL.
+- **URL state:** resources use REST path parameters: `/library/folders/<encoded path>`, `/library/files/:id`, and the `/library/media` variants. `q`, `view`, `chunk`, and `mode` remain query parameters because they refine the current resource. Root collection URLs omit the folder suffix. `page.tsx` derives browse and preview state from the pathname so refresh and back/forward work. Legacy `/library?path=...&file=...` links redirect to the canonical form.
+- **Folder encoding:** folder names are user text. Encode every archive segment with `encodeURIComponent` and decode exactly once when parsing; reject empty, traversal, separator, and control segments instead of throwing. Never interpolate a raw archive path into a route or query string. File resources use numeric ids, so file names never enter the URL.
 - **Views:** board is the desktop default; list is the default below 761 px and the explicit compact fallback. Sorting is client-side (`modified`, `name`, `size`, `type`) because the API exposes no sort parameter. Folders always sort by name.
 - **Drag and drop:** folder cards are drop targets. Internal file drags default to move and Alt/Option-drag copies; desktop file drops upload into the target folder. The custom MIME type identifies internal drags. Touch and keyboard users use menus and dialogs instead.
 - **Uploads:** drag/drop, clipboard paste, Media upload, and the intake dialog share `useLibraryUploads`. The browser enforces the extension allowlist, the 10 MB file ceiling, and the 2 MB text ceiling before enqueueing. Async upload endpoints return an `IngestJobSchema`; `waitForIngestJob` polls once per second until `ready` or `failed`. This is polling, not SSE. Closing a dialog or leaving the page cancels local polling, not the durable job.
@@ -36,6 +37,7 @@ Backend validation remains authoritative. The UI mirrors limits for fast feedbac
 ## Key files
 
 - `page.tsx` — URL state, listing, selection, dialogs, mutations, and query invalidation.
+- `../../lib/library-url.ts` — canonical folder/file URL builders, segment encoding and decoding, and legacy redirects.
 - `component/library-utils.ts` — path rules, upload limits, sorting, filtering, polling, and invalidation helpers.
 - `component/LibraryToolbar.tsx`, `LibraryBreadcrumbs.tsx` — search, sort, tabs, view controls, and path navigation.
 - `component/LibraryFilesContent.tsx`, `LibraryBoard.tsx`, `LibraryResults.tsx` — board/list rendering, drop targets, card menus, and empty states.
