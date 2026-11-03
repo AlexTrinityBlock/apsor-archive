@@ -8,6 +8,7 @@ import type {
   AgentConversationDetailSchema,
   AgentEntrySchema,
 } from "../generated-apis-types/schemas";
+import { libraryFileUrl } from "../../lib/library-url";
 import { getActiveLocale, translate, type Locale } from "../i18n";
 
 export type JsonRecord = Record<string, unknown>;
@@ -505,8 +506,7 @@ export function citationLabel(token: CitationToken): string {
 
 export function citationHref(token: CitationToken): string | null {
   if (token.kind === "file") {
-    const chunk = token.chunk === null ? "" : `&chunk=${token.chunk}`;
-    return `/library?tab=files&file=${token.id}${chunk}`;
+    return libraryFileUrl(token.id, "files", { chunk: token.chunk });
   }
   if (token.kind === "memory") {
     return `/memory/${token.id}`;
@@ -520,8 +520,9 @@ export function resourceHref(resource: ResourceMeta): string | null {
     return null;
   }
   if (resource.resourceType === "file") {
-    const chunk = resource.chunk === null ? "" : `&chunk=${resource.chunk}`;
-    return `/library?tab=files&file=${resource.resourceId}${chunk}`;
+    return libraryFileUrl(resource.resourceId, "files", {
+      chunk: resource.chunk,
+    });
   }
   return `/memory/${resource.resourceId}`;
 }

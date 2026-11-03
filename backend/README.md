@@ -447,8 +447,8 @@ blank lines to one. It then caps the snapshot at 6,000 characters. The entry's
 
 ```json
 {
-  "page_key": "/library?path=/history",
-  "path": "/library?path=/history",
+  "page_key": "/library/folders/history",
+  "path": "/library/folders/history",
   "title": "File Library",
   "text_chars": 1482,
   "truncated": false
@@ -460,7 +460,7 @@ message with an XML envelope (shown wrapped here; the stored value has no
 formatting whitespace):
 
 ```xml
-<page_context key="/library?path=/history" path="/library?path=/history" title="File Library"><text>...normalized page text...</text></page_context>
+<page_context key="/library/folders/history" path="/library/folders/history" title="File Library"><text>...normalized page text...</text></page_context>
 ```
 
 If the key, path, or normalized text is empty, no snapshot is written and

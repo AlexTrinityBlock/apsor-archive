@@ -313,11 +313,6 @@ export function normalizeArchivePath(value: string): string {
   return collapsed;
 }
 
-/** Omits the default root path so a clean `/library` URL means the archive root. */
-export function pathParamValue(path: string): string | null {
-  return path === "/" ? null : path;
-}
-
 /** Returns true when a path has a final segment, i.e. a file name. */
 export function hasFileName(path: string): boolean {
   const segments = path.split("/").filter(Boolean);

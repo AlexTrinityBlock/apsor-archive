@@ -7,6 +7,7 @@ import type {
   TimelineSkipSchema,
 } from "../../generated-apis-types/schemas";
 
+import { libraryFileUrl } from "../../../lib/library-url";
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
@@ -210,7 +211,7 @@ function EventFooter({
       {event.kind === "file_update" && typeof event.file_id === "number" ? (
         <Link
           className="timeline-node__link"
-          to={`/library?tab=files&file=${event.file_id}`}
+          to={libraryFileUrl(event.file_id)}
         >
           {t("insights.timeline.spine.openLibrary")}
           <Icon name="arrow-up-right" size={12} />
