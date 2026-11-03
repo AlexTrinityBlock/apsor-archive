@@ -20,7 +20,7 @@ The application layer does not define backend behavior. API shapes come from `ge
 - **Workspaces:** each page lives in `<workspace>/page.tsx` with page-specific `component/`, `hook/`, and `<workspace>.css`. `agent/` and `viewer/` are supporting domains rather than navigation entries: the first feeds chat inspection, the second renders files in the Library and chat.
 - **Shared layer:** `component/` contains only cross-page primitives such as `AppShell`, `PageHeader`, `Panel`, `Button`, `QueryState`, `Toast`, `ContextMenu`, `SearchField`, and icon/ring primitives. `hook/` contains general hooks such as scroll lock and debounced values. `type/` holds local UI types.
 - **Fixed canvases:** `AppShell` gives Chat and Library a fixed-height `.app-page--fixed`; other routes use the normal scrolling `.app-page`. The impersonation banner sits above that canvas as a flex-shrink-0 row, so fixed pages keep their own scroll owner. The page canvas is keyed by current user id plus impersonation actor id, so a same-tab account switch remounts the workspace and drops drafts/dialog state. Pages should not fight those scroll owners.
-- **Legacy URLs:** `/ask`, `/tree`, `/overview`, `/docs`, and `/viewer/*` redirect in the router. Keep redirects in the route table, not inside page components.
+- **Legacy URLs:** `/ask`, `/tree`, `/overview`, `/docs`, `/viewer/*`, and old query-string `/library?path=...&file=...` links redirect to their canonical destinations. Keep route-table redirects in the router; Library URLs canonicalize inside `LibraryPage` before its state hooks mount.
 
 ## Key files
 

@@ -1,4 +1,5 @@
 import { truncate } from "../../../../lib/format";
+import { libraryFileUrl } from "../../../../lib/library-url";
 import { CopyButton } from "../../../component/CopyButton";
 import { useI18n } from "../../../i18n";
 import {
@@ -99,10 +100,7 @@ function viewerPathFor(fileId: number | null, chunk: number | null): string | nu
   if (fileId === null) {
     return null;
   }
-  if (chunk === null) {
-    return "/library?tab=files&file=" + fileId;
-  }
-  return "/library?tab=files&file=" + fileId + "&chunk=" + chunk;
+  return libraryFileUrl(fileId, "files", { chunk });
 }
 
 /** `read_file`: a manuscript window with the real file renderer underneath. */

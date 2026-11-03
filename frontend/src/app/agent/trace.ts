@@ -6,6 +6,7 @@
  * exposes. Tool `data` is the structured preview payload, not the XML content
  * sent to the model.
  */
+import { libraryFileUrl } from "../../lib/library-url";
 import type { AgentEntrySchema } from "../generated-apis-types/schemas";
 import {
   assistantText,
@@ -547,8 +548,7 @@ export function itemResourceTarget(item: TraceItem): ResourceTarget | null {
 /** The library or memory destination for a known target. */
 export function viewerHref(target: ResourceTarget): string {
   if (target.type === "file") {
-    const chunk = target.chunk === null ? "" : `&chunk=${target.chunk}`;
-    return `/library?tab=files&file=${target.id}${chunk}`;
+    return libraryFileUrl(target.id, "files", { chunk: target.chunk });
   }
   return `/memory/${target.id}`;
 }

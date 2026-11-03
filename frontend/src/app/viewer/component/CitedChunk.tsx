@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { libraryFileUrl } from "../../../lib/library-url";
 import { useReadFile } from "../../generated-apis-types/files/files";
 import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
@@ -24,7 +25,7 @@ export function CitedChunk({ fileId, chunk }: CitedChunkProps) {
           <Icon name="quote" size={13} />{" "}
           {t("library.viewer.citation.eyebrow", { chunk })}
         </span>
-        <Link to={`/library?tab=files&file=${fileId}`} className="viewer-citation__clear">
+        <Link to={libraryFileUrl(fileId)} className="viewer-citation__clear">
           {t("library.viewer.citation.openInLibrary")}
         </Link>
       </div>

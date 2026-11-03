@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 
+import { libraryFileUrl } from "../../../lib/library-url";
 import { Icon } from "../../component/Icon";
 import {
   citationLabel,
@@ -22,11 +23,7 @@ function parseSavedCitation(label: string): CitationToken | null {
 }
 
 function fileHref(token: CitationToken): string {
-  const params = new URLSearchParams({ tab: "files", file: String(token.id) });
-  if (token.chunk !== null) {
-    params.set("chunk", String(token.chunk));
-  }
-  return `/library?${params.toString()}`;
+  return libraryFileUrl(token.id, "files", { chunk: token.chunk });
 }
 
 function CitationTokenChip({ label }: { readonly label: string }) {
