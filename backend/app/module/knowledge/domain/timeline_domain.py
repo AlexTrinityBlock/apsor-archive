@@ -1,4 +1,4 @@
-"""Sparse timeline sampling with proportional anchors and skip accounting."""
+"""Sparse sampling and density accounting for timeline reads."""
 
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
@@ -83,6 +83,22 @@ def _skip_counts(events: list[TimelineEvent]) -> tuple[int, int, int]:
     return counts["file_update"], counts["memory"], counts["summary"]
 
 
+def timeline_density(events: list[TimelineEvent]) -> tuple[TimelineDensity, ...]:
+    """Count events per local date for the density strip."""
+    density_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    for event in events:
+        density_counts[event.date_label][event.kind] += 1
+    return tuple(
+        TimelineDensity(
+            date=date_label,
+            file_count=counter["file_update"],
+            memory_count=counter["memory"],
+            summary_count=counter["summary"],
+        )
+        for date_label, counter in sorted(density_counts.items())
+    )
+
+
 def sample_timeline(
     events: list[TimelineEvent],
     *,
@@ -152,18 +168,7 @@ def sample_timeline(
             )
         )
 
-    density_counts: dict[str, Counter[str]] = defaultdict(Counter)
-    for event in events:
-        density_counts[event.date_label][event.kind] += 1
-    density = tuple(
-        TimelineDensity(
-            date=date_label,
-            file_count=counter["file_update"],
-            memory_count=counter["memory"],
-            summary_count=counter["summary"],
-        )
-        for date_label, counter in sorted(density_counts.items())
-    )
+    density = timeline_density(events)
 
     return TimelineSample(
         selections=tuple(selections),

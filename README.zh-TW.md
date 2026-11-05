@@ -96,8 +96,9 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
   但仍可沿其鏈結閱讀。
 - **搜尋是混合式的。** 以 CJK 雙字組與拉丁詞元進行的 BM25，與向量召回
   並行。結果會去重並融合，同時記錄原因。
-- **時間取樣忠實呈現。** 時間軸每種事件種類最多傳回五個錨點，並精確回報
-  略過了多少事件。
+- **時間取樣忠實呈現。** 代理的時間軸工具每種事件種類最多傳回五個錨點，
+  並精確回報略過多少事件。人類時間軸頁面則以 `complete=true` 取得所選視窗
+  的完整事件，並在向下捲動時自動載入更早的視窗。
 - **AI 回答有憑據。** DeepSeek 收到的是檢索到的段落，不是整個檔案庫，且
   每項主張都必須附上引用。沒有金鑰時，代理回合會封閉式失敗。
 - **問題的生命超越對話。** 可以在還沒有答案時先儲存問題，之後再提問，並把
@@ -534,10 +535,16 @@ docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 |---|---|---|
 | `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | 依來源種類分別取 BM25 + 向量的前幾名結果，以 RRF 融合並去重 |
 | `read_file` | `GET /api/v1/files/{file_id}/chunks/{chunk}?chunk_range=1` | 從 1 開始算起的分塊視窗 |
-| `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | 每種事件種類最多五個取樣事件、密度與略過數量 |
+| `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | 預設稀疏：每種事件種類最多五個取樣事件、密度與略過數量；`complete=true` 傳回整個視窗 |
 | `read_path` | `GET /api/v1/paths?path=/history&path_depth=1&fuzzy_search=` | 目錄與檔案，或模糊路徑比對 |
 | `save_memory` | `POST /api/v1/memories` | 一則帶有自動產生標題的新記憶、它所取代的已汰除記憶，以及任何新摘要；省略 `content` 即可汰除 `supersedes` ID 而不提供替代內容 |
 | `read_memory` | `GET /api/v1/memories/{memory_id}?memory_range=1&trace_history=true` | 目標、相鄰項目、取代者、後繼者與鏈結 |
+
+代理工具與 `/api/v1/tools/read_timeline` 一律使用稀疏預設；時間軸頁面會為
+所選視窗加上 `complete=true`，並在向下捲動時自動載入上一個視窗。完整回應
+回報 `mode="complete"`、`sampled == total == len(events)`、`skipped=0`、空的
+`skips`，且每個事件的 `anchor=null`。頁面會將事件主軸排除在頁面脈絡之外，
+因此完整清單不會成為代理的脈絡。
 
 常駐典藏代理對模型提供九個工具：上述六個加上 `present_resource`、
 `web_search` 與 `web_fetch`。HTTP 範例使用明確參數；HTTP 伺服器預設值為

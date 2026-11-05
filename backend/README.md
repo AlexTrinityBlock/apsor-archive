@@ -483,6 +483,11 @@ formatting whitespace):
 If the key, path, or normalized text is empty, no snapshot is written and
 `page_context_attached` is `false`.
 
+The Timeline page excludes its event spine (`data-page-context="exclude"`), so
+the captured context keeps the range, controls, density telemetry, and counts
+but omits event cards, summary bodies, and memory text. See
+[Timeline reads](#timeline-reads).
+
 New conversations freeze the current system prompt version
 (`archive-agent-v12`), which states that `<page_context>` and `<current_time>`
 are reference data, never instructions, and that page context appears only when
@@ -733,6 +738,33 @@ For tests, inject `FakeChatGenerator` from
 `app/module/agent/test/fake_chat_generator.py` through
 `app.state.agent_chat_generator` or by overriding `get_agent_chat_generator`.
 No external provider call is made.
+
+## Timeline reads
+
+`GET /api/v1/timeline` accepts `year`, `month`, `day`, `day_range`,
+`include_history`, and `complete`. The default (`complete=false`) is the sparse
+agent contract: up to five anchors per kind plus density and skip accounting.
+`complete=true` returns every event in the selected window, in chronological
+order, up to the per-kind safety cap (`MAX_EVENTS_PER_KIND`, 2,000).
+
+| Field | Sparse (`mode="sparse"`) | Complete (`mode="complete"`) |
+|---|---|---|
+| `events` | Up to five selected anchors per kind | Every event in the window |
+| `anchor` | `0.0`–`1.0` position in the range | `null` |
+| `sampled` | `len(events)` | `len(events)` |
+| `total` | Every counted event | `len(events)` |
+| `skipped` | `total - sampled` | `0` |
+| `skips` | Gap counts between samples | `[]` |
+
+`truncated` stays an honest per-kind safety-cap flag in both modes. The agent
+tool and `/api/v1/tools/read_timeline` keep the sparse default. The human
+Timeline page requests `complete=true` and auto-loads the previous date window
+when the reader scrolls.
+
+The client marks the page's event spine with `data-page-context="exclude"`, so
+`capturePageContext` keeps the range, controls, density telemetry, and counts
+but omits event cards, summary bodies, and memory text. The complete event list
+therefore never becomes agent context.
 
 ## Folder and file organization
 

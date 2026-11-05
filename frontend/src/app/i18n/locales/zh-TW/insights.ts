@@ -142,10 +142,10 @@ export const insights = {
   timeline: {
     header: {
       kicker: "時間密度 // 03",
-      kickerMeta: "連續年表主軸 · 分段視窗讀取",
-      title: "稀疏時間軸與年輪年表",
+      kickerMeta: "完整年表主軸 · 分段視窗讀取",
+      title: "年輪年表",
       description:
-        "在選定的範圍內，按比例取樣記憶、摘要與檔案更新。每一道空隙都會如實記錄取樣器略過了多少事件，而每個範圍都直接讀取運作中的檔案館。",
+        "選定範圍內的每一筆記憶、摘要與檔案更新，串成一份連續年表。較早的範圍會隨捲動自動載入；代理仍只讀取稀疏取樣。",
       readingWindow: "正在讀取範圍",
       windowSpan: "範圍跨度",
       recordMemory: "記錄記憶",
@@ -190,7 +190,7 @@ export const insights = {
       aria: "時間軸密度帶",
       title: "範圍內的年輪密度",
       protocol: "0.7px 細線協定",
-      telemetry: "{days} 天範圍 · {active} 天有活動 · 取樣 {sampled} / {total}",
+      telemetry: "{days} 天範圍 · {active} 天有活動 · {total} 筆事件",
       listSeparator: "、",
       tooltip: "{date} · {composition}",
       tooltipOutside: "{date} 超出支援的 1900–2200 範圍結束日",
@@ -206,7 +206,7 @@ export const insights = {
       legendHint: "點選一根枝條，即可將範圍結束日移到那一天。",
     },
     spine: {
-      aria: "取樣後的時間軸事件",
+      aria: "完整年表事件",
       kindMemory: "記憶",
       kindSummary: "摘要",
       kindFileUpdate: "檔案更新",
@@ -234,23 +234,20 @@ export const insights = {
       sentinelReading: "正在讀取較早範圍 · {label}…",
       sentinelErrorTitle: "較早範圍沒有回應。",
       retryEarlier: "重試較早範圍",
-      searchFurther: "繼續往前搜尋",
-      loadEarlier: "載入較早範圍 · {label}",
-      loadEarlierTitle: "載入 {label} 範圍",
+      scrollForEarlier: "向下捲動以載入較早的範圍。",
+      keepScrollingEarlier: "繼續捲動以搜尋更早的內容。",
     },
     page: {
       exhaustedEarliestTitle: "已到達最早支援的錨點。",
       exhaustedEarliestDetail:
         "下一個較早範圍會結束在 1900-01-01 之前，那是 API 接受的最早錨點。目前範圍仍可能包含更早的事件，因為它的長度會從錨點往回延伸。",
       exhaustedEmptyTitle: "較早範圍內沒有事件（{label}）。",
-      exhaustedEmptyDetail:
-        "檔案館在這個時間點之前一片寂靜。如果想搜尋更早的範圍，可以繼續往前。",
       emptyEyebrow: "範圍內一片寂靜",
       emptyTitle: "這個範圍內沒有年輪。",
       emptySampled:
         "檔案館在這個範圍內計有 {count} 筆事件，但沒有取樣到任何一筆。將範圍稍微移動，即可重新取樣。",
       emptyBase:
-        "檔案館在這個範圍內沒有回傳任何記憶、摘要或檔案更新（{caption}）。請移動範圍、加寬長度，或搜尋下方的較早範圍。",
+        "檔案館在這個範圍內沒有回傳任何記憶、摘要或檔案更新（{caption}）。請移動範圍、加寬長度，或向下捲動以載入較早的範圍。",
       emptyHistoryNote:
         " 已淘汰的記憶目前被排除；開啟「包含歷史」即可擴大讀取範圍。",
       jumpToday: "跳到今天",

@@ -1,6 +1,6 @@
 # Knowledge Module — Agent Guide
 
-The knowledge slice owns the archive itself: versioned files, the folder tree, extracted text and chunks, embeddings, hybrid search, memories and supersession, periodic summaries, the sparse timeline, durable ingestion, and provider configuration.
+The knowledge slice owns the archive itself: versioned files, the folder tree, extracted text and chunks, embeddings, hybrid search, memories and supersession, periodic summaries, sparse and complete timeline reads, durable ingestion, and provider configuration.
 
 ## Purpose
 
@@ -22,7 +22,7 @@ Keep file lineage, search visibility, and memory history consistent across synch
 - File, memory, summary, and folder changes bump the default index version. Provider writes bump the `providers` scope, while system prompts and frequent prompts use their own scopes. Ingest-settings changes are read fresh and do not need cache invalidation.
 - Memories are a linear timeline. Active rows are searchable; supersession or direct deprecation marks the old row deprecated, stamps provenance, and makes its chunks non-current. The row and its text remain readable through `read_memory` and the chain.
 - Summaries are derived views over memories and are indexed as `summary` chunks. Agent-facing summary output must remain visibly compressed, with coverage and source-memory counts.
-- `TimelineService` merges memories, summaries, and current-file updates, samples up to five anchors per kind, returns density, and reports skipped/truncated counts honestly.
+- `TimelineService` merges memories, summaries, and current-file updates. Sparse reads (the agent tool and the default API) sample up to five anchors per kind and report skipped counts; complete reads (`complete=true`, the human Timeline page) return the whole window with `anchor=None`, `sampled == total`, `skipped=0`, `skips=[]`, and density from `timeline_density`. The cache key includes the mode, and both modes keep the per-kind safety cap and `truncated` flag.
 - Provider configuration uses four capability tables (`chat`, `embedding`, `web_search`, `web_fetch`) with one active row each enforced by partial unique indexes. Keys are Fernet-encrypted; `AiRuntime` resolves active row → environment → default and reloads after writes.
 - Markdown edits require `expected_version`. A stale value is `409 file_version_conflict`; a changed extension is `422 invalid_path`; non-Markdown content is rejected as `unsupported_file_type`.
 
@@ -36,7 +36,7 @@ Keep file lineage, search visibility, and memory history consistent across synch
 - `service/ingest_job_service.py` — job enqueue, leases, staging, publication, failure recovery.
 - `service/indexer_service.py` — chunk persistence, n-grams, embeddings, retries.
 - `service/search_service.py` — BM25 + vector recall + RRF + caching.
-- `service/memory_service.py`, `service/timeline_service.py` — memory lineage and sparse time reads.
+- `service/memory_service.py`, `service/timeline_service.py` — memory lineage and sparse/complete time reads.
 - `service/provider_config_service.py` — capability registry, encryption, activation, reindexing.
 - `dependencies.py` — composition of all knowledge services, worker factories, provider runtime.
 - `router/` — files, folders, paths, memories, summaries, search, timeline, settings, tool facade.
