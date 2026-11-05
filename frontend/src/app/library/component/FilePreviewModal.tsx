@@ -493,7 +493,7 @@ function PreviewActions({
       </div>
       <div className="library-preview__action-buttons">
         {markdown && file.is_current && !file.deleted_at ? (
-          <Button variant="ghost" size="sm" onClick={onEdit}>
+          <Button variant="secondary" size="sm" onClick={onEdit}>
             <FilePenLine size={14} strokeWidth={1.7} aria-hidden="true" />
             {t("library.editor.editFile")}
           </Button>
