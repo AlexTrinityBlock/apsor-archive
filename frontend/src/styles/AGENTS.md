@@ -42,7 +42,7 @@ The application is light-only: `tokens.css` declares `color-scheme: light` and t
 - Give page CSS a workspace prefix and import it from that page or its owning component. A shared primitive belongs in `components.css` or `app/component/`; it does not belong in a page stylesheet.
 - Do not introduce Tailwind, CSS modules, a preprocessor, or runtime CSS-in-JS. The project uses plain CSS imported by Vite.
 - Preserve the shell's scroll model: `html`/`body` do not scroll; `.app-page` is the normal canvas, while Chat and Library use `.app-page--fixed`. Do not add another full-viewport scroll container.
-- Use `100dvh` for full-height surfaces and account for the mobile bar below 980 px.
+- Use `100dvh` for full-height surfaces and account for the mobile bar below 980 px. A full-screen editor that hosts a textarea must also track the visual viewport on mobile, because the on-screen keyboard shrinks the visual viewport without changing `100dvh`.
 - Prevent horizontal overflow. Use `min-width: 0`, wrapping, and truncation where headers, paths, tabs, and tables can grow. Check 390 px, 761 px, 980 px, and desktop widths.
 - Reuse the established breakpoints (980 for shell, 900/760/720 for content and modals, 560/600 for compact layouts) rather than adding one-off widths.
 - Respect the z-index scale. Modals use `--z-modal`, drawers `--z-drawer`, the rail `--z-rail`, and toasts `--z-toast`. Do not invent large values; the context menu's 1400 is a documented portal exception above modals and toasts.
