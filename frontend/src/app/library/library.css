@@ -3082,10 +3082,21 @@ button.library-crumb:hover {
    Markdown editor
    -------------------------------------------------------------------------- */
 
+/* The editor surface follows the visible viewport so the on-screen keyboard
+   cannot cover its bottom edge. The variables come from useVisualViewport and
+   fall back to the normal full-height layer before the effect runs. */
+.markdown-editor-dialog-layer,
+.library-preview--editing {
+  top: var(--app-visual-viewport-top, 0px);
+  bottom: auto;
+  height: var(--app-visual-viewport-height, 100dvh);
+}
+
 .library-preview--editing .library-preview__dialog {
   width: 96vw;
   max-width: 1280px;
   height: 92vh;
+  max-height: calc(var(--app-visual-viewport-height, 100dvh) - 48px);
 }
 
 .library-preview--editing .library-preview__body,
@@ -3105,7 +3116,7 @@ button.library-crumb:hover {
   display: flex;
   width: min(1280px, 96vw);
   height: min(92vh, 980px);
-  max-height: 92vh;
+  max-height: calc(var(--app-visual-viewport-height, 100dvh) - 48px);
   overflow: hidden;
 }
 
@@ -3673,28 +3684,32 @@ button.library-crumb:hover {
 }
 
 @media (max-width: 720px) {
-  .markdown-editor-dialog-layer {
+  .markdown-editor-dialog-layer,
+  .library-preview--editing {
     padding: 0;
   }
 
   .markdown-editor-dialog {
     width: 100vw;
-    height: 100dvh;
+    height: 100%;
     max-height: none;
     border: 0;
     border-radius: 0;
   }
 
-  .library-preview--editing {
-    padding: 0;
-  }
-
   .library-preview--editing .library-preview__dialog {
     width: 100vw;
-    height: 100dvh;
+    height: 100%;
     max-width: none;
+    max-height: none;
     border: 0;
     border-radius: 0;
+  }
+
+  /* Keep iOS Safari from zooming the page when the editor takes focus. */
+  .markdown-editor__textarea,
+  .markdown-editor__path-input {
+    font-size: 16px;
   }
 
   .markdown-editor__head {
