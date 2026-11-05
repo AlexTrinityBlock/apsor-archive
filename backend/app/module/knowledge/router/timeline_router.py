@@ -1,4 +1,4 @@
-"""HTTP adapter for the sparse timeline."""
+"""HTTP adapter for sparse and complete timeline reads."""
 
 from fastapi import APIRouter, Depends, Query
 
@@ -16,13 +16,15 @@ async def read_timeline(
     day: int = Query(ge=1, le=31),
     day_range: int = Query(default=1, ge=1, le=366),
     include_history: bool = False,
+    complete: bool = False,
     timeline_service: TimelineService = Depends(get_timeline_service),
 ) -> TimelineResponseSchema:
-    """Read a date range with up to five sampled events per source kind."""
+    """Read a date range; complete=true returns every event in the window."""
     return await timeline_service.get_timeline(
         year=year,
         month=month,
         day=day,
         day_range=day_range,
         include_history=include_history,
+        complete=complete,
     )

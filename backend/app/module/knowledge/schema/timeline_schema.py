@@ -1,4 +1,4 @@
-"""Schemas for the sparsely sampled timeline."""
+"""Schemas for sparse and complete timeline reads."""
 
 from datetime import datetime
 from typing import Literal
@@ -6,15 +6,16 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 TimelineKind = Literal["memory", "summary", "file_update"]
+TimelineMode = Literal["sparse", "complete"]
 
 
 class TimelineEventSchema(BaseModel):
-    """One sampled timeline event."""
+    """One timeline event; ``anchor`` is set only for sparse samples."""
 
     model_config = ConfigDict(frozen=True)
 
     kind: TimelineKind
-    anchor: float
+    anchor: float | None = None
     time: datetime
     content: str
     title: str | None = None
@@ -54,7 +55,7 @@ class TimelineDensitySchema(BaseModel):
 
 
 class TimelineResponseSchema(BaseModel):
-    """The read_timeline tool result."""
+    """A sparse agent timeline or a complete human window."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -68,3 +69,4 @@ class TimelineResponseSchema(BaseModel):
     events: list[TimelineEventSchema]
     skips: list[TimelineSkipSchema]
     density: list[TimelineDensitySchema]
+    mode: TimelineMode = "sparse"

@@ -4730,7 +4730,7 @@
         "type": "object"
       },
       "TimelineEventSchema": {
-        "description": "One sampled timeline event.",
+        "description": "One timeline event; ``anchor`` is set only for sparse samples.",
         "properties": {
           "action": {
             "anyOf": [
@@ -4744,8 +4744,15 @@
             "title": "Action"
           },
           "anchor": {
-            "title": "Anchor",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor"
           },
           "content": {
             "title": "Content",
@@ -4869,7 +4876,6 @@
         },
         "required": [
           "kind",
-          "anchor",
           "time",
           "content"
         ],
@@ -4877,7 +4883,7 @@
         "type": "object"
       },
       "TimelineResponseSchema": {
-        "description": "The read_timeline tool result.",
+        "description": "A sparse agent timeline or a complete human window.",
         "properties": {
           "day_range": {
             "title": "Day Range",
@@ -4896,6 +4902,15 @@
             },
             "title": "Events",
             "type": "array"
+          },
+          "mode": {
+            "default": "sparse",
+            "enum": [
+              "sparse",
+              "complete"
+            ],
+            "title": "Mode",
+            "type": "string"
           },
           "range_end": {
             "format": "date-time",
@@ -9312,7 +9327,7 @@
     },
     "/api/v1/timeline": {
       "get": {
-        "description": "Read a date range with up to five sampled events per source kind.",
+        "description": "Read a date range; complete=true returns every event in the window.",
         "operationId": "readTimeline",
         "parameters": [
           {
@@ -9367,6 +9382,16 @@
             "schema": {
               "default": false,
               "title": "Include History",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "complete",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Complete",
               "type": "boolean"
             }
           }

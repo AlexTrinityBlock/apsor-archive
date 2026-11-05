@@ -102,8 +102,10 @@ result carries its source, chunk number, and time.
   The old memory leaves the search surface but stays readable through its chain.
 - **Search is hybrid.** BM25 over CJK bigrams and Latin tokens runs beside vector
   recall. Results are de-duplicated and fused, with the reason recorded.
-- **Time is sampled honestly.** A timeline returns up to five anchors per event
-  kind and reports exactly how many events were skipped.
+- **Time is sampled honestly.** The agent's timeline tool returns up to five
+  anchors per event kind and reports exactly how many events were skipped. The
+  human Timeline page requests the complete selected window (`complete=true`)
+  and loads earlier windows automatically as you scroll.
 - **AI answers are grounded.** DeepSeek receives retrieved passages, not the
   whole library, and every claim must carry a citation. Without a key, agent
   turns fail closed.
@@ -578,10 +580,17 @@ for an LLM to use in sequence.
 |---|---|---|
 | `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | Top results per source kind from BM25 + vector, fused with RRF and deduplicated |
 | `read_file` | `GET /api/v1/files/{file_id}/chunks/{chunk}?chunk_range=1` | A 1-based chunk window |
-| `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | Up to five sampled events per kind, density, and skip counts |
+| `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | Sparse by default: up to five sampled events per kind, density, and skip counts; `complete=true` returns the whole window |
 | `read_path` | `GET /api/v1/paths?path=/history&path_depth=1&fuzzy_search=` | Directories and files, or fuzzy path matches |
 | `save_memory` | `POST /api/v1/memories` | A new memory with an auto-generated title, the deprecated memories it replaced, and any new summary; omit `content` to deprecate `supersedes` ids without a replacement |
 | `read_memory` | `GET /api/v1/memories/{memory_id}?memory_range=1&trace_history=true` | Target, neighbours, supersedes, successor, and chain |
+
+The agent tool and `/api/v1/tools/read_timeline` keep the sparse default; the
+Timeline page adds `complete=true` for the selected window and auto-loads the
+previous window when you scroll. Complete responses report `mode="complete"`,
+`sampled == total == len(events)`, `skipped=0`, empty `skips`, and an
+`anchor=null` on every event. The page excludes its event spine from the page
+context, so the complete list is never sent to the agent as context.
 
 The persistent archive agent exposes nine model tools: the six above plus
 `present_resource`, `web_search`, and `web_fetch`. The HTTP examples use

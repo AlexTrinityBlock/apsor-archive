@@ -160,7 +160,6 @@ export function TimelineDensity({ data, anchor, onAnchorChange }: TimelineDensit
           {t("insights.timeline.density.telemetry", {
             days: formatNumber(dayRange),
             active: formatNumber(data.density.length),
-            sampled: formatNumber(data.sampled),
             total: formatNumber(data.total),
           })}
         </span>

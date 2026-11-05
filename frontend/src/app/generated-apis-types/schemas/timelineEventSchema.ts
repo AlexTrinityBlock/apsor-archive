@@ -7,11 +7,11 @@
 import type { TimelineEventSchemaKind } from './timelineEventSchemaKind';
 
 /**
- * One sampled timeline event.
+ * One timeline event; ``anchor`` is set only for sparse samples.
  */
 export interface TimelineEventSchema {
   action?: string | null;
-  anchor: number;
+  anchor?: number | null;
   content: string;
   file_id?: number | null;
   kind: TimelineEventSchemaKind;

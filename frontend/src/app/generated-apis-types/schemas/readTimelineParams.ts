@@ -27,4 +27,5 @@ day: number;
  */
 day_range?: number;
 include_history?: boolean;
+complete?: boolean;
 };

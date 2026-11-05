@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -54,6 +55,7 @@ import {
   writeHistoryParam,
   writeRangeParam,
 } from "./component/helpers";
+import { useTimelineAutoLoad } from "./hook/useTimelineAutoLoad";
 import "./timeline.css";
 
 interface EarlierState {
@@ -171,7 +173,6 @@ function buildSentinelState({
       kind: "exhausted",
       title: t("insights.timeline.page.exhaustedEarliestTitle"),
       detail: t("insights.timeline.page.exhaustedEarliestDetail"),
-      canContinue: false,
     };
   }
   if (lastWindowEmpty) {
@@ -180,11 +181,10 @@ function buildSentinelState({
       title: t("insights.timeline.page.exhaustedEmptyTitle", {
         label: lastEarlierLabel ?? nextEarlierLabel,
       }),
-      detail: t("insights.timeline.page.exhaustedEmptyDetail"),
-      canContinue: true,
+      detail: t("insights.timeline.spine.keepScrollingEarlier"),
     };
   }
-  return { kind: "ready", nextLabel: nextEarlierLabel };
+  return { kind: "ready" };
 }
 
 function buildEmptyDescription(
@@ -220,7 +220,7 @@ interface BodyInput {
   readonly currentEmptyContent: ReactNode;
   readonly isLoadingEarlier: boolean;
   readonly sentinelState: SentinelState;
-  readonly onLoadEarlier: () => void;
+  readonly sentinelRef: Ref<HTMLDivElement>;
   readonly onRetryEarlier: () => void;
   readonly onEditMemory: (event: TimelineEventSchema) => void;
   readonly onDeprecateMemory: (event: TimelineEventSchema) => void;
@@ -240,7 +240,7 @@ function renderTimelineBody({
   currentEmptyContent,
   isLoadingEarlier,
   sentinelState,
-  onLoadEarlier,
+  sentinelRef,
   onRetryEarlier,
   onEditMemory,
   onDeprecateMemory,
@@ -266,7 +266,7 @@ function renderTimelineBody({
         sentinel={
           <TimelineSentinel
             state={sentinelState}
-            onLoadEarlier={onLoadEarlier}
+            sentinelRef={sentinelRef}
             onRetry={onRetryEarlier}
           />
         }
@@ -276,9 +276,10 @@ function renderTimelineBody({
 }
 
 /**
- * Sparse timeline: a real date window, a hairline density strip, and a continuous
- * spine of sampled events with honest gap rows. The URL owns the anchor, range,
- * and history switch. "Load earlier" requests the previous API window and appends it.
+ * Complete chronology: a real date window, a hairline density strip, and a
+ * continuous spine of every event. The URL owns the anchor, range, and history
+ * switch. Scrolling to the sentinel requests the previous API window and appends
+ * it; the agent tool keeps its sparse sample.
  */
 export function TimelinePage() {
   const { t, formatDate, formatNumber } = useI18n();
@@ -286,6 +287,13 @@ export function TimelinePage() {
   const [editTarget, setEditTarget] = useState<MemoryActionTarget | null>(null);
   const [deprecateTarget, setDeprecateTarget] =
     useState<MemoryActionTarget | null>(null);
+  const [sentinelElement, setSentinelElement] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const sentinelRef = useCallback((element: HTMLDivElement | null) => {
+    setSentinelElement(element);
+  }, []);
+  const loadInFlightRef = useRef(false);
   const fallbackDay = useMemo(() => startOfDay(new Date()), []);
   const urlDate = useMemo(() => parseDateParams(searchParams), [searchParams]);
 
@@ -400,6 +408,7 @@ export function TimelinePage() {
       day: anchor.getDate(),
       day_range: range,
       include_history: includeHistory,
+      complete: true,
     },
     { query: { enabled: !awaitingAnchor } },
   );
@@ -433,6 +442,7 @@ export function TimelinePage() {
       day: date.getDate(),
       day_range: range,
       include_history: includeHistory,
+      complete: true,
     }),
   );
   const earlierQueries = useQueries({ queries: earlierQueryOptions });
@@ -463,7 +473,14 @@ export function TimelinePage() {
       ? earlierWindowLabel(anchor, range, earlierAnchors.length - 1, formatDate)
       : null;
 
+  // The auto-load hook keeps this callback in a ref, so it intentionally does
+  // not need a stable identity. A normal function also keeps the React Compiler
+  // from rejecting the Date-based closure as manual memoization.
   const handleLoadEarlier = () => {
+    if (loadInFlightRef.current) {
+      return;
+    }
+    loadInFlightRef.current = true;
     setEarlierState((previous) => {
       const anchors = previous.key === windowKey ? previous.anchors : [];
       const nextAnchor = addDays(anchor, -range * (anchors.length + 1));
@@ -473,6 +490,17 @@ export function TimelinePage() {
       return { key: windowKey, anchors: [...anchors, nextAnchor] };
     });
   };
+
+  useEffect(() => {
+    loadInFlightRef.current = false;
+  }, [earlierState]);
+
+  useTimelineAutoLoad({
+    sentinel: sentinelElement,
+    enabled: canLoadEarlier && !isLoadingEarlier && earlierError === null,
+    resetKey: windowKey,
+    onLoad: handleLoadEarlier,
+  });
 
   const handleRetryEarlier = () => {
     const query = earlierErrorIndex >= 0 ? earlierQueries[earlierErrorIndex] : null;
@@ -579,7 +607,7 @@ export function TimelinePage() {
           currentEmptyContent,
           isLoadingEarlier,
           sentinelState,
-          onLoadEarlier: handleLoadEarlier,
+          sentinelRef,
           onRetryEarlier: handleRetryEarlier,
           onEditMemory: openEditMemory,
           onDeprecateMemory: openDeprecateMemory,
