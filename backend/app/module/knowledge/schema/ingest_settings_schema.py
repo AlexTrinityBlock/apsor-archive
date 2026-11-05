@@ -3,7 +3,11 @@
 from datetime import datetime
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.module.knowledge.domain.ingest_config_domain import (
+    normalize_vision_description_language,
+)
 
 IngestSettingsSource = Literal["database", "default"]
 
@@ -23,6 +27,13 @@ class IngestSettingsValuesSchema(BaseModel):
     embedding_concurrency: int = Field(ge=1, le=32)
     chunk_target_chars: int = Field(ge=1_000, le=20_000)
     chunk_overlap_chars: int = Field(ge=0, le=5_000)
+    vision_description_language: str = Field(min_length=1, max_length=80)
+
+    @field_validator("vision_description_language")
+    @classmethod
+    def _normalize_language(cls, value: str) -> str:
+        """Trim and validate the prompt-facing language name."""
+        return normalize_vision_description_language(value)
 
     @model_validator(mode="after")
     def _overlap_below_target(self) -> Self:

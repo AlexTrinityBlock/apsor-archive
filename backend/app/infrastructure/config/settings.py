@@ -99,6 +99,10 @@ class Settings(BaseSettings):
 
     chunk_target_chars: int = 4_000
     chunk_overlap_chars: int = 500
+    # Seeds a fresh installation and remains the fallback when the
+    # ``ingest_config`` row is absent. The database value applies to future
+    # vision ingests.
+    vision_description_language: str = "English"
 
     # Durable ingestion worker. The lifespan task is a convenience for local
     # single-process development; production can run ``python -m app.worker``

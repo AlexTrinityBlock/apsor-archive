@@ -58,6 +58,7 @@ export const settings = {
       wholeNumber: "Enter a whole number.",
       number: "Enter a number.",
       range: "Enter a value between {min} and {max}.",
+      maxLength: "Enter {max} characters or fewer.",
       thresholdBelowContext: "Must be lower than the model context window ({context}).",
       parallelWithinCalls:
         "Must not exceed tool calls per turn ({calls}).",
@@ -140,7 +141,7 @@ export const settings = {
     statusSummary:
       "{poll}s poll · {threads} threads · {inflight} in flight",
     warning:
-      "Worker settings apply to the next loop or job. Changing chunk sizes only affects files ingested after saving; existing files must be re-ingested before their chunk boundaries match.",
+      "Worker settings apply to the next loop or job. Changing chunk sizes or the vision description language applies only to future ingests; existing files keep their current extraction and chunk boundaries until they are re-ingested.",
     groupWorkerSlot: "Group 01",
     groupWorkerTitle: "Worker",
     groupWorkerDescription:
@@ -149,6 +150,10 @@ export const settings = {
     groupChunkingTitle: "Chunking",
     groupChunkingDescription:
       "Chunk boundaries decide retrieval granularity. The overlap must stay below the target size.",
+    groupVisionSlot: "Group 03",
+    groupVisionTitle: "Vision extraction",
+    groupVisionDescription:
+      "Standalone images and embedded images are described in the language below; scanned pages keep a brief layout note.",
     fieldPollSecondsLabel: "Poll seconds",
     fieldPollSecondsUnit: "seconds",
     fieldPollSecondsHint: "Idle wait between database claims.",
@@ -171,6 +176,9 @@ export const settings = {
     fieldChunkOverlapUnit: "chars",
     fieldChunkOverlapHint:
       "Text repeated at the start of the next chunk.",
+    fieldVisionLanguageLabel: "Description language",
+    fieldVisionLanguageHint:
+      "OCR stays in its original language. This language is used for the visual description, caption, summary, and tags, and applies to future ingests only. Default: {default} · up to {max} characters.",
     loadReadingAria: "Reading ingestion runtime settings",
     loadErrorTitle: "Ingestion runtime settings did not answer.",
     savedToast: "Ingestion runtime settings saved to the database.",

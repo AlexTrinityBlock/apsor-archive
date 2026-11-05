@@ -42,4 +42,9 @@ export interface IngestSettingsValuesSchema {
      * @maximum 30
      */
   poll_seconds: number;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  vision_description_language: string;
 }
