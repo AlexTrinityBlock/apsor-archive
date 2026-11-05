@@ -1,12 +1,14 @@
-"""Timeline reads with proportional sparse sampling."""
+"""Timeline reads with sparse sampling and complete windows."""
 
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.module.knowledge.domain.timeline_domain import (
+    TimelineDensity,
     TimelineEvent,
     TimelineSample,
     sample_timeline,
+    timeline_density,
 )
 from app.module.knowledge.exception.domain_error import InvalidTimelineRangeError
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
@@ -25,7 +27,7 @@ MAX_EVENTS_PER_KIND = 2000
 
 
 class TimelineService:
-    """Build one owner's sparse timeline from memories, summaries, and files."""
+    """Build one owner's timeline as a sparse sample or a complete window."""
 
     def __init__(
         self,
@@ -56,6 +58,7 @@ class TimelineService:
         day: int,
         day_range: int,
         include_history: bool,
+        complete: bool = False,
     ) -> TimelineResponseSchema:
         if day_range < 1 or day_range > self.max_day_range:
             raise InvalidTimelineRangeError(
@@ -80,6 +83,7 @@ class TimelineService:
             str(day),
             str(day_range),
             str(include_history),
+            "complete" if complete else "sparse",
         )
         cached = await self.cache.get_json(key)
         if isinstance(cached, dict):
@@ -139,19 +143,38 @@ class TimelineService:
                 )
             )
 
-        sample = sample_timeline(
-            events,
-            start=start_day,
-            end=end_day,
-            anchors=5,
-            truncated=truncated,
-        )
-        response = self._to_response(
-            sample,
-            start_day=start_day,
-            end_day=end_day,
-            day_range=day_range,
-        )
+        if complete:
+            ordered = sorted(
+                events,
+                key=lambda event: (event.time, event.kind, event.source_id),
+            )
+            response = TimelineResponseSchema(
+                range_start=start_day,
+                range_end=end_day - timedelta(microseconds=1),
+                day_range=day_range,
+                sampled=len(ordered),
+                total=len(ordered),
+                skipped=0,
+                truncated=truncated,
+                events=[self._event_schema(event, None) for event in ordered],
+                skips=[],
+                density=self._density_schema(timeline_density(events)),
+                mode="complete",
+            )
+        else:
+            sample = sample_timeline(
+                events,
+                start=start_day,
+                end=end_day,
+                anchors=5,
+                truncated=truncated,
+            )
+            response = self._to_response(
+                sample,
+                start_day=start_day,
+                end_day=end_day,
+                day_range=day_range,
+            )
         await self.cache.set_json(
             key,
             response.model_dump(mode="json"),
@@ -160,34 +183,53 @@ class TimelineService:
         return response
 
     @staticmethod
+    def _event_schema(
+        event: TimelineEvent,
+        anchor: float | None,
+    ) -> TimelineEventSchema:
+        return TimelineEventSchema(
+            kind=event.kind,
+            anchor=anchor,
+            time=event.time,
+            content=event.content,
+            title=event.title,
+            memory_id=event.source_id if event.kind == "memory" else None,
+            memory_summary_id=event.source_id if event.kind == "summary" else None,
+            file_id=event.source_id if event.kind == "file_update" else None,
+            raw_file_path=event.title if event.kind == "file_update" else None,
+            action=event.action,
+            status=event.status,
+            memory_count=event.memory_count if event.kind == "summary" else None,
+            period_start=event.period_start if event.kind == "summary" else None,
+            period_end=event.period_end if event.kind == "summary" else None,
+        )
+
+    @staticmethod
+    def _density_schema(
+        density: tuple[TimelineDensity, ...],
+    ) -> list[TimelineDensitySchema]:
+        return [
+            TimelineDensitySchema(
+                date=item.date,
+                file_count=item.file_count,
+                memory_count=item.memory_count,
+                summary_count=item.summary_count,
+            )
+            for item in density
+        ]
+
     def _to_response(
+        self,
         sample: TimelineSample,
         *,
         start_day: datetime,
         end_day: datetime,
         day_range: int,
     ) -> TimelineResponseSchema:
-        events: list[TimelineEventSchema] = []
-        for selection in sample.selections:
-            event = selection.event
-            events.append(
-                TimelineEventSchema(
-                    kind=event.kind,
-                    anchor=selection.anchor,
-                    time=event.time,
-                    content=event.content,
-                    title=event.title,
-                    memory_id=event.source_id if event.kind == "memory" else None,
-                    memory_summary_id=event.source_id if event.kind == "summary" else None,
-                    file_id=event.source_id if event.kind == "file_update" else None,
-                    raw_file_path=event.title if event.kind == "file_update" else None,
-                    action=event.action,
-                    status=event.status,
-                    memory_count=event.memory_count if event.kind == "summary" else None,
-                    period_start=event.period_start if event.kind == "summary" else None,
-                    period_end=event.period_end if event.kind == "summary" else None,
-                )
-            )
+        events = [
+            self._event_schema(selection.event, selection.anchor)
+            for selection in sample.selections
+        ]
         skips = [
             TimelineSkipSchema(
                 from_time=skip.from_time,
@@ -197,15 +239,6 @@ class TimelineService:
                 summary_number=skip.summary_number,
             )
             for skip in sample.skips
-        ]
-        density = [
-            TimelineDensitySchema(
-                date=item.date,
-                file_count=item.file_count,
-                memory_count=item.memory_count,
-                summary_count=item.summary_count,
-            )
-            for item in sample.density
         ]
         return TimelineResponseSchema(
             range_start=start_day,
@@ -217,5 +250,6 @@ class TimelineService:
             truncated=sample.truncated,
             events=events,
             skips=skips,
-            density=density,
+            density=self._density_schema(sample.density),
+            mode="sparse",
         )

@@ -28,6 +28,7 @@ const MEANINGFUL_PARAMS = [
   "year",
   "month",
   "day",
+  "day_range",
   "range",
   "root",
   "depth",

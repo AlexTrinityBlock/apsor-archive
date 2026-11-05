@@ -63,7 +63,7 @@ export const getReadTimelineUrl = (params: ReadTimelineParams,) => {
 }
 
 /**
- * Read a date range with up to five sampled events per source kind.
+ * Read a date range; complete=true returns every event in the window.
  * @summary Read Timeline
  */
 export const readTimeline = async (params: ReadTimelineParams, options?: Parameters<typeof apiFetch>[1]): Promise<TimelineResponseSchema> => {

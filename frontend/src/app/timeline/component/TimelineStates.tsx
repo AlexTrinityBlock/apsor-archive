@@ -8,7 +8,7 @@ interface TimelineSkeletonProps {
   readonly label?: string;
 }
 
-/** Initial loading skeleton for the density strip and the sampled spine. */
+/** Initial loading skeleton for the density strip and the event spine. */
 export function TimelineSkeleton({ label }: TimelineSkeletonProps) {
   const { t } = useI18n();
   const resolvedLabel = label ?? t("insights.timeline.states.skeleton");

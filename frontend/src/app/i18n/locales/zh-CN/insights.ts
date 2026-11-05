@@ -142,10 +142,10 @@ export const insights = {
   timeline: {
     header: {
       kicker: "时间密度 // 03",
-      kickerMeta: "连续年表主轴 · 分段窗口读取",
-      title: "稀疏时间线与年轮年表",
+      kickerMeta: "完整年表主轴 · 分段窗口读取",
+      title: "年轮年表",
       description:
-        "在选定的范围内，按比例采样记忆、摘要与文件更新。每一道空隙都会如实记录采样器略过了多少事件，而每个范围都直接读取运行中的档案馆。",
+        "选定范围内的每一条记忆、摘要与文件更新，串成一份连续年表。更早的范围会随滚动自动加载；代理仍只读取稀疏采样。",
       readingWindow: "正在读取范围",
       windowSpan: "范围跨度",
       recordMemory: "记录记忆",
@@ -190,7 +190,7 @@ export const insights = {
       aria: "时间线密度带",
       title: "范围内的年轮密度",
       protocol: "0.7px 细线协议",
-      telemetry: "{days} 天范围 · {active} 天有活动 · 采样 {sampled} / {total}",
+      telemetry: "{days} 天范围 · {active} 天有活动 · {total} 条事件",
       listSeparator: "、",
       tooltip: "{date} · {composition}",
       tooltipOutside: "{date} 超出支持的 1900–2200 范围结束日",
@@ -206,7 +206,7 @@ export const insights = {
       legendHint: "点击一根枝条，即可将范围结束日移到那一天。",
     },
     spine: {
-      aria: "采样后的时间线事件",
+      aria: "完整年表事件",
       kindMemory: "记忆",
       kindSummary: "摘要",
       kindFileUpdate: "文件更新",
@@ -234,23 +234,20 @@ export const insights = {
       sentinelReading: "正在读取更早范围 · {label}…",
       sentinelErrorTitle: "更早范围没有响应。",
       retryEarlier: "重试更早范围",
-      searchFurther: "继续往前搜索",
-      loadEarlier: "加载更早范围 · {label}",
-      loadEarlierTitle: "加载 {label} 范围",
+      scrollForEarlier: "向下滚动以加载更早的范围。",
+      keepScrollingEarlier: "继续滚动以搜索更早的内容。",
     },
     page: {
       exhaustedEarliestTitle: "已到达最早支持的锚点。",
       exhaustedEarliestDetail:
         "下一个更早范围会结束在 1900-01-01 之前，那是 API 接受的最早锚点。当前范围仍可能包含更早的事件，因为它的长度会从锚点往回延伸。",
       exhaustedEmptyTitle: "更早范围内没有事件（{label}）。",
-      exhaustedEmptyDetail:
-        "档案馆在这个时间点之前一片寂静。如果想搜索更早的范围，可以继续往前。",
       emptyEyebrow: "范围内一片寂静",
       emptyTitle: "这个范围内没有年轮。",
       emptySampled:
         "档案馆在这个范围内计有 {count} 条事件，但没有采样到任何一条。将范围稍微移动，即可重新采样。",
       emptyBase:
-        "档案馆在这个范围内没有返回任何记忆、摘要或文件更新（{caption}）。请移动范围、加宽长度，或搜索下方的更早范围。",
+        "档案馆在这个范围内没有返回任何记忆、摘要或文件更新（{caption}）。请移动范围、加宽长度，或向下滚动以加载更早的范围。",
       emptyHistoryNote:
         " 已淘汰的记忆目前被排除；开启“包含历史”即可扩大读取范围。",
       jumpToday: "跳到今天",

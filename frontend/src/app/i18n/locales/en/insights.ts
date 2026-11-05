@@ -145,10 +145,10 @@ export const insights = {
   timeline: {
     header: {
       kicker: "Temporal Density // 03",
-      kickerMeta: "Continuous chronological spine · windowed reads",
-      title: "Sparse Timeline & Tree-Ring Chronology",
+      kickerMeta: "Complete chronological spine · windowed reads",
+      title: "The Annual-Ring Chronology",
       description:
-        "A proportional sample of memories, summaries, and file updates across the selected window. Each gap records exactly how many events the sampler omitted, and every window is read from the live archive.",
+        "Every memory, summary, and file update in the selected window, read as one continuous chronology. Earlier windows load automatically as you scroll; the agent still reads a sparse sample.",
       readingWindow: "Reading window",
       windowSpan: "Window span",
       recordMemory: "Record Memory",
@@ -193,7 +193,7 @@ export const insights = {
       aria: "Timeline density strip",
       title: "Growth-ring density across the window",
       protocol: "0.7px hairline protocol",
-      telemetry: "{days}-day window · {active} active · {sampled} sampled of {total}",
+      telemetry: "{days}-day window · {active} active days · {total} events",
       listSeparator: ", ",
       tooltip: "{date} · {composition}",
       tooltipOutside:
@@ -210,7 +210,7 @@ export const insights = {
       legendHint: "Click a stem to move the window end to that day.",
     },
     spine: {
-      aria: "Sampled timeline events",
+      aria: "Complete chronology events",
       kindMemory: "MEMORY",
       kindSummary: "SUMMARY",
       kindFileUpdate: "FILE UPDATE",
@@ -239,23 +239,20 @@ export const insights = {
       sentinelReading: "Reading earlier window · {label}…",
       sentinelErrorTitle: "The earlier window did not answer.",
       retryEarlier: "Retry earlier window",
-      searchFurther: "Search further back",
-      loadEarlier: "Load earlier · {label}",
-      loadEarlierTitle: "Load the window {label}",
+      scrollForEarlier: "Scroll down to load the earlier window.",
+      keepScrollingEarlier: "Keep scrolling to search earlier.",
     },
     page: {
       exhaustedEarliestTitle: "Reached the earliest supported anchor.",
       exhaustedEarliestDetail:
         "The next earlier window would end before 1900-01-01, the earliest anchor the API accepts. The current window can still include earlier events because its range extends backward from the anchor.",
       exhaustedEmptyTitle: "No events in the earlier window ({label}).",
-      exhaustedEmptyDetail:
-        "The archive is quiet this far back. Continue further if you want to search an older window.",
       emptyEyebrow: "Window is quiet",
       emptyTitle: "No rings in this window.",
       emptySampled:
         "The archive counted {count} events in this window but sampled none. Move the window slightly to resample it.",
       emptyBase:
-        "The archive returned no memories, summaries, or file updates ending in this window ({caption}). Move the window, widen the range, or search the earlier window below.",
+        "The archive returned no memories, summaries, or file updates ending in this window ({caption}). Move the window, widen the range, or scroll down to load the earlier window.",
       emptyHistoryNote:
         " Deprecated memories are excluded; turn on Include history to widen the read.",
       jumpToday: "Jump to today",

@@ -6,15 +6,17 @@
  */
 import type { TimelineDensitySchema } from './timelineDensitySchema';
 import type { TimelineEventSchema } from './timelineEventSchema';
+import type { TimelineResponseSchemaMode } from './timelineResponseSchemaMode';
 import type { TimelineSkipSchema } from './timelineSkipSchema';
 
 /**
- * The read_timeline tool result.
+ * A sparse agent timeline or a complete human window.
  */
 export interface TimelineResponseSchema {
   day_range: number;
   density: TimelineDensitySchema[];
   events: TimelineEventSchema[];
+  mode?: TimelineResponseSchemaMode;
   range_end: string;
   range_start: string;
   sampled: number;

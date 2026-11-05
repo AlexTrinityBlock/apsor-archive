@@ -1,4 +1,10 @@
-import { Fragment, useId, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useId,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { Link } from "react-router-dom";
 
 import type {
@@ -38,19 +44,18 @@ interface TimelineSpineProps {
 }
 
 export type SentinelState =
-  | { readonly kind: "ready"; readonly nextLabel: string }
+  | { readonly kind: "ready" }
   | { readonly kind: "loading"; readonly nextLabel: string }
   | { readonly kind: "error"; readonly nextLabel: string; readonly error: unknown }
   | {
       readonly kind: "exhausted";
       readonly title: string;
       readonly detail: string;
-      readonly canContinue: boolean;
     };
 
 interface TimelineSentinelProps {
   readonly state: SentinelState;
-  readonly onLoadEarlier: () => void;
+  readonly sentinelRef: Ref<HTMLDivElement>;
   readonly onRetry: () => void;
 }
 
@@ -449,12 +454,20 @@ function WindowBreak({ window }: { readonly window: TimelineWindowView }) {
   );
 }
 
-/** The load-earlier control at the bottom of the continuous spine. */
-export function TimelineSentinel({ state, onLoadEarlier, onRetry }: TimelineSentinelProps) {
+/** The scroll sentinel at the bottom of the continuous spine. */
+export function TimelineSentinel({
+  state,
+  sentinelRef,
+  onRetry,
+}: TimelineSentinelProps) {
   const { t } = useI18n();
   if (state.kind === "loading") {
     return (
-      <div className="timeline-sentinel timeline-sentinel--loading" role="status">
+      <div
+        ref={sentinelRef}
+        className="timeline-sentinel timeline-sentinel--loading"
+        role="status"
+      >
         <span className="timeline-sentinel__spinner" aria-hidden="true" />
         <span>
           {t("insights.timeline.spine.sentinelReading", {
@@ -467,7 +480,11 @@ export function TimelineSentinel({ state, onLoadEarlier, onRetry }: TimelineSent
 
   if (state.kind === "error") {
     return (
-      <div className="timeline-sentinel timeline-sentinel--error" role="alert">
+      <div
+        ref={sentinelRef}
+        className="timeline-sentinel timeline-sentinel--error"
+        role="alert"
+      >
         <div className="timeline-sentinel__panel">
           <p className="timeline-sentinel__title">
             {t("insights.timeline.spine.sentinelErrorTitle")}
@@ -486,35 +503,28 @@ export function TimelineSentinel({ state, onLoadEarlier, onRetry }: TimelineSent
 
   if (state.kind === "exhausted") {
     return (
-      <div className="timeline-sentinel timeline-sentinel--exhausted" role="note">
+      <div
+        ref={sentinelRef}
+        className="timeline-sentinel timeline-sentinel--exhausted"
+        role="note"
+      >
         <div className="timeline-sentinel__panel">
           <p className="timeline-sentinel__title">{state.title}</p>
           <p className="timeline-sentinel__detail">{state.detail}</p>
-          {state.canContinue ? (
-            <Button variant="ghost" size="sm" onClick={onLoadEarlier}>
-              {t("insights.timeline.spine.searchFurther")}
-              <Icon name="arrow-down" size={13} />
-            </Button>
-          ) : null}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="timeline-sentinel">
-      <button
-        type="button"
-        className="timeline-sentinel__button"
-        onClick={onLoadEarlier}
-        title={t("insights.timeline.spine.loadEarlierTitle", {
-          label: state.nextLabel,
-        })}
-      >
-        <span className="timeline-sentinel__dot" aria-hidden="true" />
-        {t("insights.timeline.spine.loadEarlier", { label: state.nextLabel })}
-        <Icon name="arrow-down" size={13} />
-      </button>
+    <div
+      ref={sentinelRef}
+      className="timeline-sentinel timeline-sentinel--ready"
+      role="status"
+      aria-live="polite"
+    >
+      <span className="timeline-sentinel__dot" aria-hidden="true" />
+      <span>{t("insights.timeline.spine.scrollForEarlier")}</span>
     </div>
   );
 }
@@ -534,6 +544,7 @@ export function TimelineSpine({
       className="timeline-spine"
       aria-label={t("insights.timeline.spine.aria")}
       aria-busy={loadingEarlier}
+      data-page-context="exclude"
     >
       {currentEmptyContent ? (
         <div className="timeline-spine__empty">{currentEmptyContent}</div>

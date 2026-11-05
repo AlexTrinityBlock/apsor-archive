@@ -98,7 +98,8 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 - **搜索是混合式的。** 基于 CJK 二元组和拉丁词元的 BM25 与向量
   召回并行运行。结果会去重并融合，同时记录原因。
 - **时间采样是诚实的。** 时间线为每种事件类型最多返回五个锚点，
-  并准确报告跳过了多少事件。
+  并准确报告跳过了多少事件。人类时间线页面则用 `complete=true`
+  获取所选窗口的全部事件，并在向下滚动时自动加载更早的窗口。
 - **AI 回答有据可依。** DeepSeek 收到的是检索到的段落，而不是整个
   文件库；每条论断都必须带引用。没有密钥时，Agent 轮次会失败关闭。
 - **问题比对话更长久。** 可以在还没有答案时保存问题，稍后再提问，
@@ -546,10 +547,16 @@ docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 |---|---|---|
 | `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | 来自 BM25 + 向量的每种来源类型的顶部结果，使用 RRF 融合并去重 |
 | `read_file` | `GET /api/v1/files/{file_id}/chunks/{chunk}?chunk_range=1` | 一个从 1 开始的分块窗口 |
-| `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | 每种类型最多五个采样事件、密度以及跳过计数 |
+| `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | 默认稀疏：每种类型最多五个采样事件、密度以及跳过计数；`complete=true` 返回整个窗口 |
 | `read_path` | `GET /api/v1/paths?path=/history&path_depth=1&fuzzy_search=` | 目录和文件，或模糊路径匹配 |
 | `save_memory` | `POST /api/v1/memories` | 一条带有自动生成标题的新记忆、它取代的已弃用记忆，以及任何新摘要；省略 `content` 可在没有替代内容的情况下弃用 `supersedes` id |
 | `read_memory` | `GET /api/v1/memories/{memory_id}?memory_range=1&trace_history=true` | 目标、邻居、取代关系、后继者和链条 |
+
+Agent 工具与 `/api/v1/tools/read_timeline` 始终使用稀疏默认值；时间线页面会
+为所选窗口加上 `complete=true`，并在向下滚动时自动加载上一个窗口。完整响应
+报告 `mode="complete"`、`sampled == total == len(events)`、`skipped=0`、空的
+`skips`，并且每个事件的 `anchor=null`。页面会把事件主轴排除在页面上下文之外，
+因此完整列表不会成为 Agent 的上下文。
 
 持久化档案 agent 暴露九个模型工具：上述六个加上
 `present_resource`、`web_search` 和 `web_fetch`。HTTP 示例使用
