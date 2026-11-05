@@ -57,6 +57,7 @@ export const settings = {
       wholeNumber: "请输入整数。",
       number: "请输入数字。",
       range: "请输入 {min} 到 {max} 之间的值。",
+      maxLength: "最多只能输入 {max} 个字符。",
       thresholdBelowContext: "必须低于模型上下文窗口（{context}）。",
       parallelWithinCalls: "不得超过每轮工具调用数（{calls}）。",
       overlapBelowTarget: "必须低于目标字符数（{target}）。",
@@ -137,7 +138,7 @@ export const settings = {
     statusSummary:
       "轮询 {poll} 秒 · {threads} 个线程 · {inflight} 个进行中",
     warning:
-      "工作进程设置会应用于下一个循环或作业。更改分段大小只会影响保存后摄取的文件；现有文件必须重新摄取，分段边界才会相符。",
+      "工作进程设置会应用于下一个循环或作业。更改分段大小或视觉描述语言只会影响未来的摄取；现有文件会保留当前的提取结果与分段边界，直到重新摄取为止。",
     groupWorkerSlot: "分组 01",
     groupWorkerTitle: "工作进程",
     groupWorkerDescription:
@@ -146,6 +147,10 @@ export const settings = {
     groupChunkingTitle: "分段",
     groupChunkingDescription:
       "分段边界决定检索的精细度。重叠长度必须小于目标大小。",
+    groupVisionSlot: "分组 03",
+    groupVisionTitle: "视觉提取",
+    groupVisionDescription:
+      "独立图像与内嵌图像会使用下列语言生成视觉描述；扫描页面则保留简要的版面说明。",
     fieldPollSecondsLabel: "轮询秒数",
     fieldPollSecondsUnit: "秒",
     fieldPollSecondsHint: "两次领取数据库作业之间的空闲等待时间。",
@@ -167,6 +172,9 @@ export const settings = {
     fieldChunkOverlapLabel: "重叠字符数",
     fieldChunkOverlapUnit: "字符",
     fieldChunkOverlapHint: "下一个分段开头重复的文本量。",
+    fieldVisionLanguageLabel: "描述语言",
+    fieldVisionLanguageHint:
+      "OCR 会保留原始语言。此语言用于视觉描述、标题、摘要与标签，且只应用于未来的摄取。默认值：{default} · 最多 {max} 个字符。",
     loadReadingAria: "正在读取摄取运行环境设置",
     loadErrorTitle: "摄取运行环境设置没有响应。",
     savedToast: "摄取运行环境设置已保存到数据库。",

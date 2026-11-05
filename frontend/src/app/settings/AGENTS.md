@@ -7,7 +7,7 @@ The `/settings` system-configuration workspace. It owns the top settings tab str
 - Configure the four provider capability slots without exposing stored secrets.
 - Edit durable system prompts and frequently used prompts.
 - Inspect health, AI configuration, vector state, and reindex status.
-- Persist agent and ingestion runtime limits with validation and reset-to-default.
+- Persist agent and ingestion runtime limits, including the vision description language, with validation and reset-to-default.
 - Switch interface language immediately.
 - Keep every section directly linkable through its established hash id.
 
@@ -31,6 +31,7 @@ Settings does not own backend validation, generated API definitions, or global i
 - **Panel data:** panels own their generated queries and mutations. Runtime wrappers in `RuntimeSettingsPanels.tsx` load the singleton settings row, cache the update/reset response, and refetch active queries. Provider changes refresh registry, AI status, health, and stats through `settings-invalidation.ts`.
 - **Panels:** System prompt (ordered sections), Frequent prompts, Provider registry (chat, embedding, web search, web fetch), Diagnostics (health/stats/status/reindex), Agent runtime, Ingestion runtime, Maintenance (access notes and version), and Language.
 - **Forms:** validate ranges and cross-field rules before save, disable save for unchanged or invalid drafts, send full update payloads, and persist reset through the reset endpoint rather than only clearing local state.
+- **Vision extraction:** the ingestion panel's third group is one full-width free-text `Description language` field. Canonical English suggestions (`English`, `Traditional Chinese`, `Simplified Chinese`, `Japanese`, `Korean`, `Spanish`, `French`, `German`) are offered through a datalist, but the stored value is never localized. Trim before save, require 1–80 characters after trimming, and keep it inside the existing singleton payload rather than adding a second config field or settings tab.
 - **Secrets:** provider read models expose only `key_hint`/`key_source`. Never render or request full keys.
 
 ## Key files
@@ -40,7 +41,7 @@ Settings does not own backend validation, generated API definitions, or global i
 - `component/settings-sections.ts` — section order, ids, labels, defaults, and hash parsing.
 - `component/RuntimeSettingsPanels.tsx` — agent/ingestion query, update, and reset wrappers.
 - `component/AgentRuntimePanel.tsx` — context budget, tool execution, compaction fields, and validation.
-- `component/IngestRuntimePanel.tsx` — worker and chunking fields, validation, and warnings.
+- `component/IngestRuntimePanel.tsx` — worker, chunking, and vision description-language fields, validation, and warnings.
 - `component/ProviderVaultPanel.tsx` — four capability groups, provider CRUD, testing, and reindexing.
 - `component/SystemPromptPanel.tsx` — sortable prompt sections and their dialogs.
 - `component/FrequentlyUsedPromptsPanel.tsx` — saved prompt CRUD.
@@ -59,7 +60,8 @@ Settings does not own backend validation, generated API definitions, or global i
 - Let only the active panel mount. Do not hide inactive panels with CSS or `hidden`.
 - Keep tab selection in the hash; do not create a separate route per section.
 - Invalidate narrowly with generated query keys. Do not use a blanket cache reset after settings mutations.
-- Use `SwitchField`, `RuntimeNumberField`, `Panel`, `Button`, `StatusPill`, and shared error/empty patterns rather than new controls.
+- Use `SwitchField`, `RuntimeNumberField`, `RuntimeTextField`, `Panel`, `Button`, `StatusPill`, and shared error/empty patterns rather than new controls.
+- Keep the vision description language a free-text value with canonical English suggestions; translate only the label, hint, and error copy. The field keeps the full seven-field ingestion snapshot and applies to future ingests only.
 - Treat destructive actions (reset, delete, deactivate, reindex, seed) as confirmed actions with pending and error states.
 - Keep labels, hints, validation messages, and ARIA copy under the `settings` or `core` namespaces; no hardcoded UI strings.
 - Reuse `settings.css`; new page CSS belongs in this workspace, not global styles. Respect reduced motion and avoid horizontal page overflow.

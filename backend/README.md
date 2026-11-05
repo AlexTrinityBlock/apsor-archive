@@ -189,7 +189,7 @@ already running keeps the snapshot it started with.
 
 The read body is `{config, defaults, source, updated_at}`. `source` is
 `default` only when the service created or repaired the row; a stored row
-returns `database`. `PUT` requires all six fields and uses `extra=forbid`, so it
+returns `database`. `PUT` requires all seven fields and uses `extra=forbid`, so it
 is a full replacement.
 
 | Field | Default | Constraint |
@@ -200,6 +200,7 @@ is a full replacement.
 | `embedding_concurrency` | 6 | 1–32 |
 | `chunk_target_chars` | 4,000 | 1,000–20,000 |
 | `chunk_overlap_chars` | 500 | 0–5,000; `< chunk_target_chars` |
+| `vision_description_language` | `English` | 1–80 characters after trimming; no control characters |
 
 Environment values seed a fresh installation and remain the fallback when the
 row is absent. Changing chunk sizes applies only to future ingests; existing
@@ -207,6 +208,22 @@ files keep their current boundaries until they are re-ingested. Pydantic,
 `IngestRuntimeConfig`, and matching PostgreSQL check constraints enforce the
 ranges and the overlap rule; request validation failures map to
 `400 invalid_request`.
+
+`vision_description_language` is free text with canonical suggestions such as
+`English`, `Traditional Chinese`, and `Japanese`; the stored value is never
+localized. It controls only the visual description, caption, title, summary, and
+tags. OCR text and table cell text stay verbatim in the source language and are
+never translated. Standalone images and DOCX embedded images use image mode: a
+complete visual description, GitHub-Flavored Markdown tables, and every visible
+non-table text string in reading order. Scanned PDF pages use document-page
+mode: OCR plus tables plus a brief layout note. The prompt is fixed and
+versioned in code; only the language is configurable. Tables use
+GitHub-Flavored Markdown, a merged cell repeats its value in every covered cell,
+and complex `rowspan`/`colspan` is a documented limitation. A saved language
+applies only to future ingests; existing files keep the extraction they already
+have, with no automatic re-index or cross-account backfill.
+`APSOR_VISION_DESCRIPTION_LANGUAGE` seeds a fresh install and is the fallback
+when the row is absent.
 
 ## Agent conversations
 
@@ -1039,9 +1056,12 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   rule with `compaction_threshold_tokens < context_window_tokens`. The downgrade
   restores a 100,000-token ceiling and raises it when the stored threshold
   requires it;
-- `a1c3e5f7b9d2` (current head) raises the compaction threshold range to
-  1,000,000 tokens. The downgrade clamps stored values back to 200,000 before
-  restoring the old check constraint.
+- `a1c3e5f7b9d2` raises the compaction threshold range to 1,000,000 tokens. The
+  downgrade clamps stored values back to 200,000 before restoring the old check
+  constraint;
+- `c2f6a8d4e1b3` (current head) adds `ingest_config.vision_description_language`
+  as a non-null `varchar(80)` with an `English` server default and a
+  trimmed-length check. The downgrade drops the check and column.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

@@ -2746,6 +2746,12 @@
             "minimum": 0.25,
             "title": "Poll Seconds",
             "type": "number"
+          },
+          "vision_description_language": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Vision Description Language",
+            "type": "string"
           }
         },
         "required": [
@@ -2754,7 +2760,8 @@
           "max_inflight_jobs",
           "embedding_concurrency",
           "chunk_target_chars",
-          "chunk_overlap_chars"
+          "chunk_overlap_chars",
+          "vision_description_language"
         ],
         "title": "IngestSettingsUpdateSchema",
         "type": "object"
@@ -2798,6 +2805,12 @@
             "minimum": 0.25,
             "title": "Poll Seconds",
             "type": "number"
+          },
+          "vision_description_language": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Vision Description Language",
+            "type": "string"
           }
         },
         "required": [
@@ -2806,7 +2819,8 @@
           "max_inflight_jobs",
           "embedding_concurrency",
           "chunk_target_chars",
-          "chunk_overlap_chars"
+          "chunk_overlap_chars",
+          "vision_description_language"
         ],
         "title": "IngestSettingsValuesSchema",
         "type": "object"

@@ -82,6 +82,81 @@ export function RuntimeNumberField({
   );
 }
 
+interface RuntimeTextFieldProps {
+  readonly label: string;
+  readonly value: string;
+  readonly hint: string;
+  readonly disabled: boolean;
+  readonly error: string | undefined;
+  readonly wide?: boolean;
+  readonly suggestions?: readonly string[];
+  readonly onValueChange: (value: string) => void;
+}
+
+/** One validated free-text runtime value with optional canonical suggestions. */
+export function RuntimeTextField({
+  label,
+  value,
+  hint,
+  disabled,
+  error,
+  wide = false,
+  suggestions,
+  onValueChange,
+}: RuntimeTextFieldProps) {
+  const fieldId = useId();
+  const hintId = `${fieldId}-hint`;
+  const errorId = `${fieldId}-error`;
+  const describedBy = error ? `${hintId} ${errorId}` : hintId;
+  const suggestionsId =
+    suggestions && suggestions.length > 0
+      ? `${fieldId}-suggestions`
+      : undefined;
+
+  return (
+    <div
+      className={
+        wide ? "runtime-field runtime-field--wide" : "runtime-field"
+      }
+    >
+      <label className="runtime-field__label" htmlFor={fieldId}>
+        <span>{label}</span>
+      </label>
+      <input
+        id={fieldId}
+        className={
+          error ? "runtime-input runtime-input--invalid" : "runtime-input"
+        }
+        type="text"
+        value={value}
+        dir="auto"
+        spellCheck={false}
+        autoComplete="off"
+        list={suggestionsId}
+        disabled={disabled}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        onChange={(event) => onValueChange(event.currentTarget.value)}
+      />
+      {suggestionsId && suggestions ? (
+        <datalist id={suggestionsId}>
+          {suggestions.map((suggestion) => (
+            <option key={suggestion} value={suggestion} />
+          ))}
+        </datalist>
+      ) : null}
+      <span className="runtime-field__hint" id={hintId}>
+        {hint}
+      </span>
+      {error ? (
+        <span className="runtime-field__error" id={errorId}>
+          {error}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 interface RuntimeGroupProps {
   readonly slot: string;
   readonly title: string;

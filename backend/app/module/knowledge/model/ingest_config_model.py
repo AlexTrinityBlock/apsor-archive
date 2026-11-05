@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, Float, Integer, text
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, Float, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base
@@ -13,6 +13,7 @@ from app.module.knowledge.domain.ingest_config_domain import (
     INGEST_EXTRACT_WORKERS,
     INGEST_MAX_INFLIGHT_JOBS,
     INGEST_POLL_SECONDS,
+    VISION_DESCRIPTION_LANGUAGE,
 )
 from app.shared.time import utcnow
 
@@ -57,6 +58,10 @@ class IngestConfigModel(Base):
             "chunk_overlap_chars < chunk_target_chars",
             name="overlap_below_target",
         ),
+        CheckConstraint(
+            "char_length(btrim(vision_description_language)) BETWEEN 1 AND 80",
+            name="vision_description_language_length",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -95,6 +100,12 @@ class IngestConfigModel(Base):
         nullable=False,
         default=INGEST_CHUNK_OVERLAP_CHARS,
         server_default=text(str(INGEST_CHUNK_OVERLAP_CHARS)),
+    )
+    vision_description_language: Mapped[str] = mapped_column(
+        String(80),
+        nullable=False,
+        default=VISION_DESCRIPTION_LANGUAGE,
+        server_default=text(f"'{VISION_DESCRIPTION_LANGUAGE}'"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

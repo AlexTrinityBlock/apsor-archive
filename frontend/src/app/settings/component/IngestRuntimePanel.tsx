@@ -15,6 +15,7 @@ import {
   RuntimeGroup,
   RuntimeNumberField,
   RuntimeStatus,
+  RuntimeTextField,
   type RuntimeNumberSpec,
 } from "./RuntimeControls";
 
@@ -26,6 +27,7 @@ export interface IngestRuntimeValues {
   readonly embedding_concurrency: number;
   readonly chunk_target_chars: number;
   readonly chunk_overlap_chars: number;
+  readonly vision_description_language: string;
 }
 
 /** Props for the presentational panel; persistence stays with the page. */
@@ -41,8 +43,9 @@ export interface IngestRuntimePanelProps {
   readonly className?: string;
 }
 
-type NumericField = keyof IngestRuntimeValues;
-type DraftValues = { readonly [Key in NumericField]: string };
+type ValueField = keyof IngestRuntimeValues;
+type NumericField = Exclude<ValueField, "vision_description_language">;
+type DraftValues = { readonly [Key in ValueField]: string };
 
 interface NumericFieldSpec
   extends Omit<RuntimeNumberSpec, "label" | "unit" | "hint"> {
@@ -118,6 +121,23 @@ const CHUNK_FIELDS: readonly NumericFieldSpec[] = [
   },
 ];
 
+const VISION_LANGUAGE_MAX_CHARS = 80;
+
+/**
+ * Canonical English language names offered as suggestions. The stored value is
+ * never localized; the input remains free text.
+ */
+const VISION_LANGUAGE_SUGGESTIONS: readonly string[] = [
+  "English",
+  "Traditional Chinese",
+  "Simplified Chinese",
+  "Japanese",
+  "Korean",
+  "Spanish",
+  "French",
+  "German",
+];
+
 function localizeSpec(
   spec: NumericFieldSpec,
   t: Translate,
@@ -135,13 +155,14 @@ const ALL_FIELD_SPECS: readonly NumericFieldSpec[] = [
   ...CHUNK_FIELDS,
 ];
 
-const VALUE_KEYS: readonly NumericField[] = [
+const VALUE_KEYS: readonly ValueField[] = [
   "poll_seconds",
   "extract_workers",
   "max_inflight_jobs",
   "embedding_concurrency",
   "chunk_target_chars",
   "chunk_overlap_chars",
+  "vision_description_language",
 ];
 
 function toDraft(values: IngestRuntimeValues): DraftValues {
@@ -152,6 +173,7 @@ function toDraft(values: IngestRuntimeValues): DraftValues {
     embedding_concurrency: String(values.embedding_concurrency),
     chunk_target_chars: String(values.chunk_target_chars),
     chunk_overlap_chars: String(values.chunk_overlap_chars),
+    vision_description_language: values.vision_description_language,
   };
 }
 
@@ -163,6 +185,7 @@ function fromDraft(draft: DraftValues): IngestRuntimeValues {
     embedding_concurrency: Number(draft.embedding_concurrency),
     chunk_target_chars: Number(draft.chunk_target_chars),
     chunk_overlap_chars: Number(draft.chunk_overlap_chars),
+    vision_description_language: draft.vision_description_language.trim(),
   };
 }
 
@@ -174,14 +197,21 @@ function draftMatchesValues(
   draft: DraftValues,
   values: IngestRuntimeValues,
 ): boolean {
-  return ALL_FIELD_SPECS.every((spec) => {
+  const numbersMatch = ALL_FIELD_SPECS.every((spec) => {
     const raw = draft[spec.key].trim();
     return raw.length > 0 && Number(raw) === values[spec.key];
   });
+  if (!numbersMatch) {
+    return false;
+  }
+  return (
+    draft.vision_description_language.trim() ===
+    values.vision_description_language.trim()
+  );
 }
 
 interface ValidationResult {
-  readonly fieldErrors: Partial<Record<NumericField, string>>;
+  readonly fieldErrors: Partial<Record<ValueField, string>>;
   readonly parsed: IngestRuntimeValues | null;
 }
 
@@ -190,7 +220,7 @@ function validateDraft(
   t: Translate,
   formatNumber: (value: number) => string,
 ): ValidationResult {
-  const fieldErrors: Partial<Record<NumericField, string>> = {};
+  const fieldErrors: Partial<Record<ValueField, string>> = {};
   const numbers: Partial<Record<NumericField, number>> = {};
 
   for (const spec of ALL_FIELD_SPECS) {
@@ -229,6 +259,18 @@ function validateDraft(
     fieldErrors.chunk_overlap_chars = t(
       "settings.runtime.errors.overlapBelowTarget",
       { target: formatNumber(target) },
+    );
+  }
+
+  const language = draft.vision_description_language.trim();
+  if (language.length === 0) {
+    fieldErrors.vision_description_language = t(
+      "settings.runtime.errors.required",
+    );
+  } else if (language.length > VISION_LANGUAGE_MAX_CHARS) {
+    fieldErrors.vision_description_language = t(
+      "settings.runtime.errors.maxLength",
+      { max: formatNumber(VISION_LANGUAGE_MAX_CHARS) },
     );
   }
 
@@ -280,7 +322,7 @@ export function IngestRuntimePanel({
   const workerFields = WORKER_FIELDS.map((spec) => localizeSpec(spec, t));
   const chunkFields = CHUNK_FIELDS.map((spec) => localizeSpec(spec, t));
 
-  const updateNumber = (field: NumericField, next: string) => {
+  const updateField = (field: ValueField, next: string) => {
     setDraft((current) => ({ ...current, [field]: next }));
   };
 
@@ -357,7 +399,7 @@ export function IngestRuntimePanel({
                 defaultValue={defaults[spec.key]}
                 disabled={saving}
                 error={validation.fieldErrors[spec.key]}
-                onValueChange={(next) => updateNumber(spec.key, next)}
+                onValueChange={(next) => updateField(spec.key, next)}
               />
             ))}
           </RuntimeGroup>
@@ -375,9 +417,31 @@ export function IngestRuntimePanel({
                 defaultValue={defaults[spec.key]}
                 disabled={saving}
                 error={validation.fieldErrors[spec.key]}
-                onValueChange={(next) => updateNumber(spec.key, next)}
+                onValueChange={(next) => updateField(spec.key, next)}
               />
             ))}
+          </RuntimeGroup>
+
+          <RuntimeGroup
+            slot={t("settings.ingest.groupVisionSlot")}
+            title={t("settings.ingest.groupVisionTitle")}
+            description={t("settings.ingest.groupVisionDescription")}
+          >
+            <RuntimeTextField
+              label={t("settings.ingest.fieldVisionLanguageLabel")}
+              value={draft.vision_description_language}
+              hint={t("settings.ingest.fieldVisionLanguageHint", {
+                default: defaults.vision_description_language,
+                max: formatNumber(VISION_LANGUAGE_MAX_CHARS),
+              })}
+              disabled={saving}
+              error={validation.fieldErrors.vision_description_language}
+              suggestions={VISION_LANGUAGE_SUGGESTIONS}
+              wide
+              onValueChange={(next) =>
+                updateField("vision_description_language", next)
+              }
+            />
           </RuntimeGroup>
         </div>
 
