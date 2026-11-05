@@ -455,6 +455,7 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
         "embedding_concurrency": 6,
         "chunk_target_chars": 4_000,
         "chunk_overlap_chars": 500,
+        "vision_description_language": "English",
     }
     assert ingest_body["config"] == ingest_defaults
     assert ingest_body["updated_at"] is not None
@@ -475,6 +476,7 @@ def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
         "embedding_concurrency": 12,
         "chunk_target_chars": 8_000,
         "chunk_overlap_chars": 1_000,
+        "vision_description_language": "Traditional Chinese",
     }
     stored_ingest = client.put(
         "/api/v1/settings/ingest",

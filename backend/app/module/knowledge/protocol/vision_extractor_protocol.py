@@ -1,8 +1,8 @@
 """Document vision extraction and structured analysis contracts."""
 
-from typing import Protocol
+from typing import Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class VisionDocument(BaseModel):
@@ -18,13 +18,22 @@ class VisionDocument(BaseModel):
     document_type: str
     tags: list[str]
     language: str
+    description: str = ""
+    tables: list[str] = Field(default_factory=list)
 
 
 class VisionExtractorProtocol(Protocol):
     configured: bool
     model_name: str
 
-    async def extract(self, data: bytes, mime_type: str) -> VisionDocument: ...
+    async def extract(
+        self,
+        data: bytes,
+        mime_type: str,
+        *,
+        description_language: str,
+        mode: Literal["image", "document"] = "image",
+    ) -> VisionDocument: ...
 
 
 class DocumentAnalysis(BaseModel):

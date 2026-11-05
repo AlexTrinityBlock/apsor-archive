@@ -144,6 +144,7 @@ class FileService:
         cache: CacheProtocol,
         text_generator: TextGeneratorProtocol,
         vision_extractor: VisionExtractorProtocol,
+        vision_description_language: str,
         target_chars: int,
         overlap_chars: int,
         max_chunks: int,
@@ -162,6 +163,7 @@ class FileService:
         self.cache = cache
         self.text_generator = text_generator
         self.vision_extractor = vision_extractor
+        self.vision_description_language = vision_description_language
         self.target_chars = target_chars
         self.overlap_chars = overlap_chars
         self.max_chunks = max_chunks
@@ -399,9 +401,32 @@ class FileService:
             pdf.close()
         return images
 
+    @staticmethod
+    def _compose_vision_text(
+        *,
+        text: str,
+        tables: Sequence[str],
+        description: str,
+    ) -> str:
+        """Compose the indexed text from OCR, tables, and the description."""
+        sections: list[str] = []
+        if text.strip():
+            sections.append("## Visible text\n" + text.strip())
+        if tables:
+            sections.append(
+                "## Tables\n"
+                + "\n\n".join(table.strip() for table in tables if table.strip())
+            )
+        if description.strip():
+            sections.append("## Visual description\n" + description.strip())
+        return "\n\n".join(sections)
+
     async def _vision_pdf(self, data: bytes) -> tuple[str, str | None, list[str], str]:
-        """Render up to N PDF pages and OCR them with the vision provider."""
+        """Render up to N PDF pages and extract text, tables, and a layout note."""
         texts: list[str] = []
+        tables: list[str] = []
+        descriptions: list[str] = []
+        captions: list[str] = []
         summary: str | None = None
         tags: list[str] = []
         document_type = "scanned_pdf"
@@ -412,11 +437,19 @@ class FileService:
                 self.vision_max_pages,
             )
             for page in pages:
-                vision = await self.vision_extractor.extract(page, "image/png")
+                vision = await self.vision_extractor.extract(
+                    page,
+                    "image/png",
+                    description_language=self.vision_description_language,
+                    mode="document",
+                )
                 if vision.text.strip():
                     texts.append(vision.text.strip())
-                elif vision.caption.strip():
-                    texts.append(vision.caption.strip())
+                tables.extend(table for table in vision.tables if table.strip())
+                if vision.description.strip():
+                    descriptions.append(vision.description.strip())
+                if vision.caption.strip():
+                    captions.append(vision.caption.strip())
                 summary = summary or vision.summary or None
                 tags.extend(vision.tags)
                 document_type = vision.document_type or document_type
@@ -424,7 +457,17 @@ class FileService:
             raise
         except Exception as exc:
             raise EmptyContentError() from exc
-        return "\n\n".join(texts).strip(), summary, list(dict.fromkeys(tags))[:8], document_type
+        composed = self._compose_vision_text(
+            text="\n\n".join(texts),
+            tables=tables,
+            description="\n\n".join(descriptions),
+        )
+        return (
+            composed or "\n\n".join(captions),
+            summary,
+            list(dict.fromkeys(tags))[:8],
+            document_type,
+        )
 
     @staticmethod
     def _docx_text(data: bytes) -> str:
@@ -460,20 +503,42 @@ class FileService:
         self,
         images: list[tuple[bytes, str]],
     ) -> tuple[str, str | None, list[str], str]:
+        """Extract text, tables, and visual descriptions from DOCX media."""
         texts: list[str] = []
+        tables: list[str] = []
+        descriptions: list[str] = []
+        captions: list[str] = []
         summary: str | None = None
         tags: list[str] = []
         document_type = "docx"
         for data, mime_type in images[: self.vision_max_pages]:
-            vision = await self.vision_extractor.extract(data, mime_type)
+            vision = await self.vision_extractor.extract(
+                data,
+                mime_type,
+                description_language=self.vision_description_language,
+                mode="image",
+            )
             if vision.text.strip():
                 texts.append(vision.text.strip())
-            elif vision.caption.strip():
-                texts.append(vision.caption.strip())
+            tables.extend(table for table in vision.tables if table.strip())
+            if vision.description.strip():
+                descriptions.append(vision.description.strip())
+            if vision.caption.strip():
+                captions.append(vision.caption.strip())
             summary = summary or vision.summary or None
             tags.extend(vision.tags)
             document_type = vision.document_type or document_type
-        return "\n\n".join(texts).strip(), summary, list(dict.fromkeys(tags))[:8], document_type
+        composed = self._compose_vision_text(
+            text="\n\n".join(texts),
+            tables=tables,
+            description="\n\n".join(descriptions),
+        )
+        return (
+            composed or "\n\n".join(captions),
+            summary,
+            list(dict.fromkeys(tags))[:8],
+            document_type,
+        )
 
     async def _extract_document(self, path: str, data: bytes) -> ExtractedDocument:
         """Extract text; use vision when text is absent or AI says it is needed."""
@@ -581,8 +646,14 @@ class FileService:
                     ".png": "image/png",
                     ".webp": "image/webp",
                 }[suffix],
+                description_language=self.vision_description_language,
+                mode="image",
             )
-            text = vision.text.strip() or vision.caption.strip()
+            text = self._compose_vision_text(
+                text=vision.text,
+                tables=vision.tables,
+                description=vision.description,
+            ) or vision.caption.strip()
             if not text:
                 raise EmptyContentError()
             return ExtractedDocument(

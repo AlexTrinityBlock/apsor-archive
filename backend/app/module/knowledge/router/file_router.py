@@ -23,6 +23,7 @@ from app.module.knowledge.dependencies import (
     get_app_settings,
     get_file_service,
     get_ingest_job_service,
+    get_upload_file_service,
 )
 from app.module.knowledge.schema.file_schema import (
     FileChunksSchema,
@@ -126,7 +127,7 @@ async def upload_file(
     path: Annotated[str, Form(min_length=1, max_length=1024)],
     file: Annotated[UploadFile, File()],
     occurred_at: Annotated[datetime | None, Form()] = None,
-    file_service: FileService = Depends(get_file_service),
+    file_service: FileService = Depends(get_upload_file_service),
     settings: Settings = Depends(get_app_settings),
 ) -> FileSchema:
     """Upload one file; the server extracts text and indexes it."""

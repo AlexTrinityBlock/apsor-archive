@@ -44,6 +44,20 @@ class IngestSettingsService:
         config, _row, _source = await self._effective()
         return config
 
+    async def peek_runtime_config(self) -> IngestRuntimeConfig:
+        """Return the stored snapshot without creating or repairing the row.
+
+        Uploads use this read-only view so an absent ``ingest_config`` row is
+        left for the settings API to create on its first read.
+        """
+        row = await self.repository.get_singleton()
+        if row is None:
+            return self.defaults
+        try:
+            return _config_from_model(row)
+        except ValueError:
+            return self.defaults
+
     async def update_settings(
         self,
         values: IngestSettingsUpdateSchema,
@@ -97,6 +111,7 @@ def _config_from_model(row: IngestConfigModel) -> IngestRuntimeConfig:
         embedding_concurrency=row.embedding_concurrency,
         chunk_target_chars=row.chunk_target_chars,
         chunk_overlap_chars=row.chunk_overlap_chars,
+        vision_description_language=row.vision_description_language,
     )
 
 
@@ -112,6 +127,7 @@ def _apply_config(
     row.embedding_concurrency = config.embedding_concurrency
     row.chunk_target_chars = config.chunk_target_chars
     row.chunk_overlap_chars = config.chunk_overlap_chars
+    row.vision_description_language = config.vision_description_language
     row.updated_at = now
 
 
@@ -123,6 +139,7 @@ def _values_schema(config: IngestRuntimeConfig) -> IngestSettingsValuesSchema:
         embedding_concurrency=config.embedding_concurrency,
         chunk_target_chars=config.chunk_target_chars,
         chunk_overlap_chars=config.chunk_overlap_chars,
+        vision_description_language=config.vision_description_language,
     )
 
 

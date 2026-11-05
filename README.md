@@ -112,9 +112,11 @@ result carries its source, chunk number, and time.
   a link to the conversation on the same row. Editing the question clears the
   stale answer instead of leaving a mismatched pair on screen.
 - **Images live in the File Library.** An image is a normal file record with its
-  original bytes, path, and chunks. A vision-capable chat provider adds OCR and
-  caption metadata; without one, a filename-derived caption keeps local uploads
-  searchable. There is no separate image index.
+  original bytes, path, and chunks. A vision-capable chat provider adds OCR,
+  GitHub-Flavored Markdown tables, and a complete visual description; the OCR
+  text stays in its original language while the description language is a
+  root-only setting. Without a provider, a filename-derived caption keeps local
+  uploads searchable. There is no separate image index.
 - **Documents choose their extractor.** PDFs try text first and fall back to
   vision for scanned pages. DOCX, TXT, JSON, CSV, and logs use text, with AI
   structured metadata; images use vision or the filename fallback.
@@ -487,12 +489,16 @@ publish step runs in the job owner's row-level-security context.
 | `embedding_concurrency` | 6 | 1–32 |
 | `chunk_target_chars` | 4,000 | 1,000–20,000 |
 | `chunk_overlap_chars` | 500 | 0–5,000; below target |
+| `vision_description_language` | `English` | 1–80 characters; free text |
 
 The worker reads a fresh database snapshot each loop and job, so saved worker
 changes apply without a restart; a job already running keeps its snapshot.
 Environment values seed a fresh install and remain the fallback. Changing chunk
-sizes affects only future ingests. The backend contract is described in
-`backend/README.md`.
+sizes affects only future ingests. `vision_description_language` controls only
+the visual description, caption, title, summary, and tags; OCR text and table
+cell text stay verbatim in the source language. Changing it applies only to
+future ingests, and existing files keep their current extraction. The backend
+contract is described in `backend/README.md`.
 
 ### Local development
 
@@ -1196,14 +1202,16 @@ the session cookie too.
 
 Document intake (`POST /api/v1/files`) supports:
 
-- **Images** (`jpg`, `jpeg`, `png`, `webp`) — DeepSeek vision caption + OCR when
-  configured; otherwise a filename-derived caption with
+- **Images** (`jpg`, `jpeg`, `png`, `webp`) — DeepSeek vision extraction when
+  configured: OCR text in the original language, GitHub-Flavored Markdown
+  tables, and a complete visual description in the configured description
+  language. Without a provider, a filename-derived caption is used with
   `extraction_method=filename`. Images remain normal File Library files.
 - **PDF** — pypdf text first; when the text is empty, garbled, or the AI
   structured analysis says `use_vision`, render up to 10 pages with pypdfium2
-  and run vision OCR.
+  and run document-page vision: OCR, tables, and a brief layout note.
 - **DOCX** — python-docx paragraphs and tables; embedded images can provide a
-  vision fallback.
+  vision fallback with full image-mode descriptions and tables.
 - **TXT / MD / CSV / JSON / LOG** — direct text plus AI structured metadata
   (title, summary, tags, document_type).
 
@@ -1483,7 +1491,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `a1c3e5f7b9d2`, after `a4c8e2f6b9d1`. The migrations
+The latest migration is `c2f6a8d4e1b3`, after `a1c3e5f7b9d2`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1558,9 +1566,13 @@ after `agent_config` on this branch are:
   window, and replaces the old threshold rule with
   `compaction_threshold_tokens < context_window_tokens`. The downgrade restores
   a 100,000-token ceiling and raises it when the stored threshold requires it;
-- `a1c3e5f7b9d2` (current head) raises the compaction threshold range to
-  1,000,000 tokens. The downgrade clamps stored values back to 200,000 before
-  restoring the old check constraint.
+- `a1c3e5f7b9d2` raises the compaction threshold range to 1,000,000 tokens.
+  The downgrade clamps stored values back to 200,000 before restoring the old
+  check constraint;
+- `c2f6a8d4e1b3` (current head) adds
+  `ingest_config.vision_description_language` as a non-null `varchar(80)` with
+  an `English` server default and a trimmed-length check. The downgrade drops
+  the check and column.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

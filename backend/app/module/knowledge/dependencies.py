@@ -35,7 +35,10 @@ from app.infrastructure.database.session import (
     system_session,
 )
 from app.module.auth.schema.auth_schema import UserSchema
-from app.module.knowledge.domain.ingest_config_domain import IngestRuntimeConfig
+from app.module.knowledge.domain.ingest_config_domain import (
+    IngestRuntimeConfig,
+    normalize_vision_description_language,
+)
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
@@ -98,6 +101,9 @@ def get_storage(request: Request) -> FileStorageProtocol:
 
 
 def _vision_extractor_for_state(state: State) -> VisionExtractorProtocol:
+    override = getattr(state, "vision_extractor", None)
+    if override is not None:
+        return cast(VisionExtractorProtocol, override)
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
     chat_config = runtime.chat_config
@@ -166,6 +172,7 @@ def build_file_service(
     *,
     user_id: int,
     runtime_config: IngestRuntimeConfig | None = None,
+    vision_description_language: str | None = None,
     cpu_runner: CpuRunner | None = None,
     embedding_semaphore: asyncio.Semaphore | None = None,
     fail_on_embedding_error: bool = False,
@@ -173,6 +180,16 @@ def build_file_service(
     """Compose a file service for one owner, for requests, workers, and tools."""
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
+    if vision_description_language is not None:
+        resolved_vision_language = normalize_vision_description_language(
+            vision_description_language
+        )
+    elif runtime_config is not None:
+        resolved_vision_language = runtime_config.vision_description_language
+    else:
+        resolved_vision_language = normalize_vision_description_language(
+            settings.vision_description_language
+        )
     chunk_repository = ChunkRepository(session, user_id)
     indexer = IndexerService(
         chunk_repository,
@@ -199,6 +216,7 @@ def build_file_service(
         cache=cast(CacheProtocol, state.cache),
         text_generator=runtime.text_generator,
         vision_extractor=_vision_extractor_for_state(state),
+        vision_description_language=resolved_vision_language,
         target_chars=(
             runtime_config.chunk_target_chars
             if runtime_config is not None
@@ -495,6 +513,7 @@ def ingest_runtime_defaults(settings: Settings) -> IngestRuntimeConfig:
         embedding_concurrency=settings.ingest_embedding_concurrency,
         chunk_target_chars=settings.chunk_target_chars,
         chunk_overlap_chars=settings.chunk_overlap_chars,
+        vision_description_language=settings.vision_description_language,
     )
 
 
@@ -527,6 +546,19 @@ async def load_ingest_runtime_config(
         return await service.get_runtime_config()
 
 
+async def load_ingest_runtime_peek(
+    session_factory: async_sessionmaker[AsyncSession],
+    defaults: IngestRuntimeConfig,
+) -> IngestRuntimeConfig:
+    """Read one snapshot without creating or repairing the singleton row."""
+    async with system_session(session_factory) as session:
+        service = IngestSettingsService(
+            IngestConfigRepository(session),
+            defaults=defaults,
+        )
+        return await service.peek_runtime_config()
+
+
 async def get_ingest_runtime_config(request: Request) -> IngestRuntimeConfig:
     """Load one immutable snapshot for a worker loop or job.
 
@@ -537,3 +569,36 @@ async def get_ingest_runtime_config(request: Request) -> IngestRuntimeConfig:
     database = cast(Database, request.app.state.db)
     defaults = ingest_runtime_defaults(get_app_settings(request))
     return await load_ingest_runtime_config(database.session_factory, defaults)
+
+
+async def get_upload_vision_description_language(request: Request) -> str:
+    """Return the stored upload language without materializing global settings.
+
+    A synchronous upload must not make an absent ``ingest_config`` row exist;
+    the settings API remains the only path that lazily creates or repairs it.
+    """
+    database = cast(Database, request.app.state.db)
+    defaults = ingest_runtime_defaults(get_app_settings(request))
+    config = await load_ingest_runtime_peek(database.session_factory, defaults)
+    return config.vision_description_language
+
+
+async def get_upload_file_service(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    user: UserSchema = Depends(require_authenticated),
+    vision_description_language: str = Depends(get_upload_vision_description_language),
+) -> FileService:
+    """Build the synchronous upload service with the stored vision language.
+
+    Only ``POST /files`` needs the stored language; reads, moves, copies,
+    deletes, chunk windows, and content keep the plain ``get_file_service`` so
+    they do not load the global config on every request. The language read is
+    deliberately non-materializing: uploads never create the settings row.
+    """
+    return build_file_service(
+        request.app.state,
+        session,
+        user_id=user.user_id,
+        vision_description_language=vision_description_language,
+    )
