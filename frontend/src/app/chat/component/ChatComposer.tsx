@@ -10,6 +10,7 @@ import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
 import { useI18n } from "../../i18n";
+import { useMobileComposer } from "../hook/useMobileComposer";
 
 interface ChatComposerProps {
   readonly value: string;
@@ -23,7 +24,11 @@ interface ChatComposerProps {
 
 const MAX_HEIGHT = 220;
 
-/** A sticky composer: Enter sends, Shift+Enter inserts a newline. */
+/**
+ * A sticky composer. A hardware keyboard keeps Enter-to-send and Shift+Enter
+ * for a newline; touch-first phones and narrow windows use Enter as a newline
+ * and submit only through the Send button.
+ */
 export function ChatComposer({
   value,
   onChange,
@@ -37,6 +42,7 @@ export function ChatComposer({
   const hintId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { t } = useI18n();
+  const mobileComposer = useMobileComposer();
   const canSubmit = value.trim().length > 0 && !pending && !disabled;
 
   useEffect(() => {
@@ -56,7 +62,9 @@ export function ChatComposer({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submit();
+    if (!mobileComposer) {
+      submit();
+    }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -65,6 +73,11 @@ export function ChatComposer({
       event.shiftKey ||
       event.nativeEvent.isComposing
     ) {
+      return;
+    }
+    // On touch-first layouts Enter is a normal newline. The Send button is the
+    // only submit affordance, so mobile keyboards can compose multiple lines.
+    if (mobileComposer) {
       return;
     }
     event.preventDefault();
@@ -100,6 +113,7 @@ export function ChatComposer({
           rows={2}
           maxLength={32000}
           autoComplete="off"
+          enterKeyHint={mobileComposer ? "enter" : "send"}
           disabled={disabled}
           aria-describedby={hintId}
           aria-busy={pending}
@@ -107,7 +121,13 @@ export function ChatComposer({
 
         <div className="chat-composer__foot">
           <span className="chat-composer__note" id={hintId}>
-            <span>{t("chat.composer.enterHint")}</span>
+            <span>
+              {t(
+                mobileComposer
+                  ? "chat.composer.enterHintMobile"
+                  : "chat.composer.enterHint",
+              )}
+            </span>
             <span className="chat-composer__state">{note}</span>
           </span>
 
@@ -125,11 +145,12 @@ export function ChatComposer({
               </Button>
             ) : null}
             <Button
-              type="submit"
+              type="button"
               variant="ink"
               size="sm"
               disabled={!canSubmit}
               aria-busy={pending}
+              onClick={submit}
             >
               {pending && !streaming ? (
                 <>
