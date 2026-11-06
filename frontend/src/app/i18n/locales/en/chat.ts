@@ -93,13 +93,14 @@ export const chat = {
     promptsEmpty: "No frequent prompts yet.",
     addPrompts: "Add them in Settings.",
     note:
-      "Enter sends · Shift+Enter adds a newline. The first send opens a new thread.",
+      "Enter sends on a keyboard; on a touch device use Send. Shift+Enter adds a newline. The first send opens a new thread.",
   },
   composer: {
     formAria: "Write to the archive",
     message: "Message",
     placeholder: "Ask about the archive, or ask it to open a resource…",
     enterHint: "Enter to send · Shift+Enter for newline",
+    enterHintMobile: "Enter adds a new line · Use Send to submit",
     note: "The transcript is persistent; citations open in the inspector.",
     noteStreaming: "A run is open. Stop it to keep the completed entries.",
     noteDisabled: "This thread cannot accept new notes right now.",
