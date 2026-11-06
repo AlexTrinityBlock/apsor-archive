@@ -1859,6 +1859,22 @@
         "title": "FileMoveSchema",
         "type": "object"
       },
+      "FileReingestSchema": {
+        "additionalProperties": false,
+        "description": "Re-extract a current vision-capable file as a new version.",
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "FileReingestSchema",
+        "type": "object"
+      },
       "FileRenameSchema": {
         "additionalProperties": false,
         "description": "Rename one current file without changing its parent folder.",
@@ -1977,6 +1993,43 @@
           "version": {
             "title": "Version",
             "type": "integer"
+          },
+          "vision_description_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Description Language"
+          },
+          "vision_prompt_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "image",
+                  "document"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Prompt Mode"
+          },
+          "vision_prompt_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vision Prompt Sha256"
           }
         },
         "required": [
@@ -1995,6 +2048,9 @@
           "ai_tags",
           "document_type",
           "extraction_method",
+          "vision_prompt_sha256",
+          "vision_prompt_mode",
+          "vision_description_language",
           "created_at",
           "updated_at",
           "deleted_at"
@@ -2593,10 +2649,22 @@
             "title": "Size Bytes",
             "type": "integer"
           },
+          "source_file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Id"
+          },
           "source_kind": {
             "enum": [
               "upload",
-              "text"
+              "text",
+              "reingest"
             ],
             "title": "Source Kind",
             "type": "string"
@@ -2646,6 +2714,7 @@
         "required": [
           "id",
           "file_id",
+          "source_file_id",
           "source_kind",
           "path",
           "file_name",
@@ -5205,6 +5274,116 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VisionPromptSettingsReadSchema": {
+        "description": "Current prompts, built-in defaults, fingerprints, and save warnings.",
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/VisionPromptSettingsValuesSchema"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/VisionPromptSettingsValuesSchema"
+          },
+          "document_prompt_sha256": {
+            "title": "Document Prompt Sha256",
+            "type": "string"
+          },
+          "image_prompt_sha256": {
+            "title": "Image Prompt Sha256",
+            "type": "string"
+          },
+          "max_chars": {
+            "title": "Max Chars",
+            "type": "integer"
+          },
+          "required_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Keys",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "database",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "config",
+          "defaults",
+          "source",
+          "updated_at",
+          "max_chars",
+          "required_keys",
+          "image_prompt_sha256",
+          "document_prompt_sha256",
+          "warnings"
+        ],
+        "title": "VisionPromptSettingsReadSchema",
+        "type": "object"
+      },
+      "VisionPromptSettingsUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace both prompts in one root-only save.",
+        "properties": {
+          "document_prompt": {
+            "title": "Document Prompt",
+            "type": "string"
+          },
+          "image_prompt": {
+            "title": "Image Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image_prompt",
+          "document_prompt"
+        ],
+        "title": "VisionPromptSettingsUpdateSchema",
+        "type": "object"
+      },
+      "VisionPromptSettingsValuesSchema": {
+        "additionalProperties": false,
+        "description": "The two current templates, including any ``{language}`` placeholder.",
+        "properties": {
+          "document_prompt": {
+            "title": "Document Prompt",
+            "type": "string"
+          },
+          "image_prompt": {
+            "title": "Image Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "image_prompt",
+          "document_prompt"
+        ],
+        "title": "VisionPromptSettingsValuesSchema",
         "type": "object"
       }
     }
@@ -7878,6 +8057,59 @@
         ]
       }
     },
+    "/api/v1/files/{file_id}/reingest": {
+      "post": {
+        "description": "Re-extract a current image, PDF, or DOCX with the current vision prompts.\n\nThe job creates a new file version only after extraction and indexing\nsucceed; the previous version stays current until then.",
+        "operationId": "reingestFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileReingestSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestJobSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reingest File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/api/v1/files/{file_id}/rename": {
       "post": {
         "description": "Rename a current file without changing its parent folder.",
@@ -8805,6 +9037,68 @@
           }
         },
         "summary": "Reset Ingest Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/ingest/vision-prompts": {
+      "get": {
+        "description": "Return the editable vision prompts and their built-in defaults.",
+        "operationId": "getIngestVisionPrompts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisionPromptSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Ingest Vision Prompts",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Validate and replace both vision prompt templates.",
+        "operationId": "updateIngestVisionPrompts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisionPromptSettingsUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisionPromptSettingsReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Ingest Vision Prompts",
         "tags": [
           "settings"
         ]

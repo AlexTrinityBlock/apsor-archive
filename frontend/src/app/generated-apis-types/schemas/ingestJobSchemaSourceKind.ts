@@ -11,4 +11,5 @@ export type IngestJobSchemaSourceKind = typeof IngestJobSchemaSourceKind[keyof t
 export const IngestJobSchemaSourceKind = {
   upload: 'upload',
   text: 'text',
+  reingest: 'reingest',
 } as const;

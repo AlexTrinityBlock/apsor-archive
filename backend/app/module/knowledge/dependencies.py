@@ -39,6 +39,10 @@ from app.module.knowledge.domain.ingest_config_domain import (
     IngestRuntimeConfig,
     normalize_vision_description_language,
 )
+from app.module.knowledge.domain.vision_prompt_domain import (
+    DEFAULT_VISION_DOCUMENT_PROMPT,
+    DEFAULT_VISION_IMAGE_PROMPT,
+)
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
@@ -173,6 +177,8 @@ def build_file_service(
     user_id: int,
     runtime_config: IngestRuntimeConfig | None = None,
     vision_description_language: str | None = None,
+    vision_image_prompt: str | None = None,
+    vision_document_prompt: str | None = None,
     cpu_runner: CpuRunner | None = None,
     embedding_semaphore: asyncio.Semaphore | None = None,
     fail_on_embedding_error: bool = False,
@@ -190,6 +196,24 @@ def build_file_service(
         resolved_vision_language = normalize_vision_description_language(
             settings.vision_description_language
         )
+    resolved_image_prompt = (
+        vision_image_prompt
+        if vision_image_prompt is not None
+        else (
+            runtime_config.vision_image_prompt
+            if runtime_config is not None
+            else DEFAULT_VISION_IMAGE_PROMPT
+        )
+    )
+    resolved_document_prompt = (
+        vision_document_prompt
+        if vision_document_prompt is not None
+        else (
+            runtime_config.vision_document_prompt
+            if runtime_config is not None
+            else DEFAULT_VISION_DOCUMENT_PROMPT
+        )
+    )
     chunk_repository = ChunkRepository(session, user_id)
     indexer = IndexerService(
         chunk_repository,
@@ -217,6 +241,8 @@ def build_file_service(
         text_generator=runtime.text_generator,
         vision_extractor=_vision_extractor_for_state(state),
         vision_description_language=resolved_vision_language,
+        vision_image_prompt=resolved_image_prompt,
+        vision_document_prompt=resolved_document_prompt,
         target_chars=(
             runtime_config.chunk_target_chars
             if runtime_config is not None
@@ -571,34 +597,34 @@ async def get_ingest_runtime_config(request: Request) -> IngestRuntimeConfig:
     return await load_ingest_runtime_config(database.session_factory, defaults)
 
 
-async def get_upload_vision_description_language(request: Request) -> str:
-    """Return the stored upload language without materializing global settings.
+async def get_upload_ingest_runtime_config(request: Request) -> IngestRuntimeConfig:
+    """Return the stored upload snapshot without materializing global settings.
 
     A synchronous upload must not make an absent ``ingest_config`` row exist;
     the settings API remains the only path that lazily creates or repairs it.
     """
     database = cast(Database, request.app.state.db)
     defaults = ingest_runtime_defaults(get_app_settings(request))
-    config = await load_ingest_runtime_peek(database.session_factory, defaults)
-    return config.vision_description_language
+    return await load_ingest_runtime_peek(database.session_factory, defaults)
 
 
 async def get_upload_file_service(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     user: UserSchema = Depends(require_authenticated),
-    vision_description_language: str = Depends(get_upload_vision_description_language),
+    runtime_config: IngestRuntimeConfig = Depends(get_upload_ingest_runtime_config),
 ) -> FileService:
-    """Build the synchronous upload service with the stored vision language.
+    """Build the synchronous upload service with the stored vision settings.
 
-    Only ``POST /files`` needs the stored language; reads, moves, copies,
-    deletes, chunk windows, and content keep the plain ``get_file_service`` so
-    they do not load the global config on every request. The language read is
-    deliberately non-materializing: uploads never create the settings row.
+    Only ``POST /files`` needs the stored prompts and language; reads, moves,
+    copies, deletes, chunk windows, and content keep the plain
+    ``get_file_service`` so they do not load the global config on every request.
+    The settings read is deliberately non-materializing: uploads never create
+    the settings row.
     """
     return build_file_service(
         request.app.state,
         session,
         user_id=user.user_id,
-        vision_description_language=vision_description_language,
+        runtime_config=runtime_config,
     )

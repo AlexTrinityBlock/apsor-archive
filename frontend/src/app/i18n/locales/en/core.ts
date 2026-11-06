@@ -438,6 +438,19 @@ export const core = {
     agent_invalid_system_prompt:
       "The system prompt is not valid. Check the text and try again.",
     agent_system_prompt_not_found: "That system prompt could not be found.",
+    ai_not_configured:
+      "Vision extraction is not configured. Add a vision-capable provider in Settings.",
+    invalid_vision_prompt:
+      "The vision prompt is not valid. Check the required JSON keys and character limit.",
+    ingest_job_conflict:
+      "This file already has an active ingestion job. Wait for it to finish.",
+    ingest_source_stale:
+      "The file changed while it was being re-ingested. The newer version remains current.",
+    file_version_conflict:
+      "This file changed since it was loaded. Reload the preview and try again.",
+    unsupported_file_type: "This file type cannot be re-ingested.",
+    file_not_found:
+      "That file could not be found. It may be deleted, historical, or unavailable.",
     file_content_unavailable:
       "The file content is not available. It may still be processing or may have been removed.",
     storage_unavailable:

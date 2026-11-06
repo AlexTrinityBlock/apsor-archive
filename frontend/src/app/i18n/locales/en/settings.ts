@@ -184,6 +184,72 @@ export const settings = {
     savedToast: "Ingestion runtime settings saved to the database.",
     resetToast: "Ingestion runtime settings reset to defaults.",
   },
+  visionPrompts: {
+    title: "Vision & OCR prompts",
+    lede:
+      "The full system prompt sent to the configured vision model for images and scanned PDF pages. This is saved separately from the ingestion runtime values above; existing files keep their extraction until you re-ingest them.",
+    tabsAria: "Vision prompt mode",
+    tabImage: "Images",
+    tabDocument: "Scanned pages",
+    tabError: "This prompt has an error.",
+    builtIn: "Built-in default",
+    custom: "Custom",
+    imageLabel: "Images prompt",
+    imageDescription:
+      "Used for standalone images and images embedded in DOCX files.",
+    documentLabel: "Scanned PDF pages prompt",
+    documentDescription:
+      "Used for scanned PDF pages. Text-based PDFs use vision only when a re-ingest forces it.",
+    placeholder: "Write or paste the full system prompt.",
+    placeholderHint:
+      "Use {token} where the current description language should be inserted. Change the language in Ingestion runtime above; a prompt without the placeholder is sent verbatim.",
+    contractTitle: "Required JSON keys",
+    contractBody:
+      "Every prompt must instruct the model to return one JSON object containing these keys. Saving is blocked when a key is missing.",
+    contractKeysAria: "Required JSON keys",
+    warningTitle: "Safety wording may be missing",
+    warningNonBlocking: "Warnings do not block saving.",
+    warningMissingVerbatim:
+      "The prompt does not ask the model to transcribe text verbatim.",
+    warningMissingTranslationRule:
+      "The prompt does not say not to translate the original text.",
+    warningMissingTableRule:
+      "The prompt does not mention GitHub-flavored Markdown tables.",
+    characterCount: "{count} / {max} characters",
+    restoreDefault: "Restore default",
+    restoreDefaultHint:
+      "Loads the built-in default into this draft; you still need to save.",
+    discard: "Discard changes",
+    save: "Save prompts",
+    saving: "Saving…",
+    unsavedChanges: "Unsaved changes",
+    invalidNote: "Fix the prompt errors before saving.",
+    statusAria: "Vision prompt settings status",
+    sourceDatabase: "Stored in database",
+    sourceDefault: "Built-in defaults",
+    lastUpdated: "Last updated",
+    noUpdate: "No saved update yet",
+    unsavedDraft: "Unsaved draft",
+    loadReadingAria: "Reading vision prompt settings",
+    loadErrorTitle: "Vision prompt settings did not answer.",
+    savedToast: "Vision prompts saved to the database.",
+    existingFilesNote:
+      "Existing files keep their current extraction until you re-ingest them. Saving a prompt does not re-ingest anything.",
+    technical: "Technical details",
+    technicalNote:
+      "These fingerprints cover the saved template text. A file fingerprint instead hashes the rendered prompt after {token} is replaced.",
+    imageFingerprint: "Images template SHA-256",
+    documentFingerprint: "Scanned pages template SHA-256",
+    fullFingerprint: "Full SHA-256",
+    copyFingerprint: "Copy full fingerprint",
+    fingerprintUnavailable: "No fingerprint available.",
+    errors: {
+      required: "The prompt cannot be empty.",
+      maxLength: "The prompt must be {max} characters or fewer.",
+      missingKeys: "The prompt is missing required JSON keys: {keys}.",
+      missingKeysOne: "The prompt is missing the required JSON key: {keys}.",
+    },
+  },
   agentMessages: {
     savedToast: "Agent runtime settings saved to the database.",
     resetToast: "Agent runtime settings reset to defaults.",

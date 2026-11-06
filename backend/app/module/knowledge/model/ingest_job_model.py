@@ -1,9 +1,10 @@
-"""Durable ingestion jobs for uploads and direct text documents.
+"""Durable ingestion jobs for uploads, direct text documents, and re-ingest.
 
 The job table is the queue, the progress ledger, and the crash-recovery record
 for one worker pipeline. Large payloads are never stored here: uploads keep
-their original bytes in file storage, and direct text is written to a small
-temporary storage key that the worker deletes after the job finishes.
+their original bytes in file storage, direct text is written to a small
+temporary storage key that the worker deletes after the job finishes, and a
+re-ingest job references the current file row instead of owning any bytes.
 """
 
 from datetime import datetime
@@ -28,7 +29,8 @@ from app.shared.time import utcnow
 
 INGEST_SOURCE_UPLOAD = "upload"
 INGEST_SOURCE_TEXT = "text"
-INGEST_SOURCES = (INGEST_SOURCE_UPLOAD, INGEST_SOURCE_TEXT)
+INGEST_SOURCE_REINGEST = "reingest"
+INGEST_SOURCES = (INGEST_SOURCE_UPLOAD, INGEST_SOURCE_TEXT, INGEST_SOURCE_REINGEST)
 
 INGEST_STATUS_QUEUED = "queued"
 INGEST_STATUS_PARSING = "parsing"
@@ -77,6 +79,12 @@ class FileIngestJobModel(Base):
             name="fk_file_ingest_job_file_user",
             ondelete="CASCADE",
         ),
+        ForeignKeyConstraint(
+            ["source_file_id", "user_id"],
+            ["file.id", "file.user_id"],
+            name="fk_file_ingest_job_source_file_user",
+            ondelete="RESTRICT",
+        ),
         # Only one active job may target a path per user. Ready and failed jobs
         # are historical and must not block a fresh upload.
         Index(
@@ -102,6 +110,21 @@ class FileIngestJobModel(Base):
             "created_at",
         ),
         Index("ix_file_ingest_job_updated_at", "updated_at"),
+        Index(
+            "uq_file_ingest_job_source_file_active",
+            "user_id",
+            "source_file_id",
+            unique=True,
+            postgresql_where=text(
+                "source_kind = 'reingest' AND status IN "
+                "('queued', 'parsing', 'chunking', 'embedding', 'summarizing')"
+            ),
+        ),
+        Index(
+            "ix_file_ingest_job_user_id_source_file",
+            "user_id",
+            "source_file_id",
+        ),
         CheckConstraint(
             "storage_backend IN ('local', 'r2')",
             name="storage_backend_valid",
@@ -111,8 +134,13 @@ class FileIngestJobModel(Base):
             name="storage_backend_key_pair",
         ),
         CheckConstraint(
-            "source_kind IN ('upload', 'text')",
+            "source_kind IN ('upload', 'text', 'reingest')",
             name="source_kind_valid",
+        ),
+        CheckConstraint(
+            "source_kind <> 'reingest' OR (source_file_id IS NOT NULL "
+            "AND storage_key IS NULL AND storage_backend IS NULL)",
+            name="reingest_source",
         ),
         CheckConstraint(
             "status IN ('queued', 'parsing', 'chunking', 'embedding', "
@@ -146,6 +174,7 @@ class FileIngestJobModel(Base):
         nullable=False,
     )
     file_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    source_file_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     source_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     path: Mapped[str] = mapped_column(Text, nullable=False)
     storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)

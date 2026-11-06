@@ -4,6 +4,7 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
+import type { FileSchemaVisionPromptMode } from './fileSchemaVisionPromptMode';
 
 /**
  * File metadata returned by the API.
@@ -27,4 +28,7 @@ export interface FileSchema {
   total_chunks: number;
   updated_at: string;
   version: number;
+  vision_description_language: string | null;
+  vision_prompt_mode: FileSchemaVisionPromptMode;
+  vision_prompt_sha256: string | null;
 }

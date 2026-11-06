@@ -422,6 +422,19 @@ export const core = {
     agent_run_not_retryable: "這次執行已無法重試。",
     agent_invalid_system_prompt: "系統提示詞無效。請檢查內容後再試一次。",
     agent_system_prompt_not_found: "找不到這個系統提示詞。",
+    ai_not_configured:
+      "視覺擷取尚未設定。請在設定中新增支援視覺的供應商。",
+    invalid_vision_prompt:
+      "視覺提示詞無效。請檢查必要的 JSON 鍵與字元上限。",
+    ingest_job_conflict:
+      "這個檔案已經有進行中的擷取工作。請等待完成。",
+    ingest_source_stale:
+      "檔案在重新擷取期間已變更。較新的版本仍為目前版本。",
+    file_version_conflict:
+      "這個檔案在載入後已變更。請重新載入預覽後再試。",
+    unsupported_file_type: "這個檔案類型無法重新擷取。",
+    file_not_found:
+      "找不到這個檔案。它可能已刪除、屬於歷史版本，或無法取得。",
     file_content_unavailable:
       "目前無法取得檔案內容。檔案可能仍在處理中，或已被移除。",
     storage_unavailable: "檔案儲存服務目前無法使用。請稍後再試。",

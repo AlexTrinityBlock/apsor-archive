@@ -59,6 +59,7 @@ import { MarkdownEditorDialog } from "./component/MarkdownEditorDialog";
 import { MoveCopyDialog } from "./component/MoveCopyDialog";
 import { MoveCopyFolderDialog } from "./component/MoveCopyFolderDialog";
 import { NewFolderDialog } from "./component/NewFolderDialog";
+import { ReingestDialog } from "./component/ReingestDialog";
 import { RenameFileDialog } from "./component/RenameFileDialog";
 import { RenameFolderDialog } from "./component/RenameFolderDialog";
 import { UploadDialog } from "./component/UploadDialog";
@@ -88,6 +89,7 @@ import {
   type LibraryTab,
   type LibraryView,
 } from "./component/library-utils";
+import { useFileReingest } from "./hook/useFileReingest";
 import { useLibraryUploads } from "./hook/useLibraryUploads";
 import { useMediaQuery } from "./hook/useMediaQuery";
 
@@ -486,6 +488,37 @@ function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
     },
     [location.search, navigate, tab],
   );
+
+  // Re-ingest lives at page level so progress survives closing the preview.
+  // The hook owns enqueue/poll state; the callback invalidates both versions
+  // and follows the new file when the preview is still on the source.
+  const reingest = useFileReingest({
+    onSuccess: (source, result) => {
+      invalidateLibraryQueries(queryClient, {
+        paths: true,
+        stats: true,
+        timeline: true,
+        search: true,
+        fileIds: [source.id, result.id],
+      });
+      toast.success(
+        t("library.reingest.successToast", {
+          name: result.file_name,
+          version: result.version,
+        }),
+      );
+      if (previewFileId === source.id) {
+        navigateLibrary(
+          { kind: "file", fileId: result.id },
+          { chunk: null, mode: null },
+          {
+            replace: true,
+            state: { libraryFolderPath: parentPath(result.raw_file_path) },
+          },
+        );
+      }
+    },
+  });
 
   const openFolder = useCallback(
     (folderPath: string) => {
@@ -1604,6 +1637,20 @@ function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
           onCopy={(target) => handleRequestMoveCopy(target, "copy")}
           onRename={handleRequestRename}
           onDelete={handleRequestDelete}
+          reingestActive={reingest.busy}
+          onReingest={reingest.open}
+        />
+      ) : null}
+
+      {reingest.sourceFile ? (
+        <ReingestDialog
+          sourceFile={reingest.sourceFile}
+          phase={reingest.phase}
+          job={reingest.job}
+          result={reingest.result}
+          failureMessage={reingest.failureMessage}
+          onConfirm={reingest.confirm}
+          onClose={reingest.close}
         />
       ) : null}
 

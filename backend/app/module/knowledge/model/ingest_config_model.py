@@ -2,7 +2,16 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, Float, Integer, String, text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base
@@ -24,7 +33,8 @@ class IngestConfigModel(Base):
     The worker reads this table into ``IngestRuntimeConfig``; the values here are
     separate from the environment variables used by the synchronous file
     ingestion path, so changing the worker knobs never silently reconfigures an
-    in-flight request.
+    in-flight request. The two nullable vision prompt columns store the current
+    templates; ``NULL`` means the built-in default.
     """
 
     __tablename__ = "ingest_config"
@@ -61,6 +71,16 @@ class IngestConfigModel(Base):
         CheckConstraint(
             "char_length(btrim(vision_description_language)) BETWEEN 1 AND 80",
             name="vision_description_language_length",
+        ),
+        CheckConstraint(
+            "vision_image_prompt IS NULL "
+            "OR char_length(btrim(vision_image_prompt)) BETWEEN 1 AND 32000",
+            name="vision_image_prompt_length",
+        ),
+        CheckConstraint(
+            "vision_document_prompt IS NULL "
+            "OR char_length(btrim(vision_document_prompt)) BETWEEN 1 AND 32000",
+            name="vision_document_prompt_length",
         ),
     )
 
@@ -107,6 +127,8 @@ class IngestConfigModel(Base):
         default=VISION_DESCRIPTION_LANGUAGE,
         server_default=text(f"'{VISION_DESCRIPTION_LANGUAGE}'"),
     )
+    vision_image_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    vision_document_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -694,6 +694,66 @@ export const library = {
     copyFolder: "Copy folder…",
     deleteFolder: "Delete folder",
   },
+  extraction: {
+    eyebrow: "Extraction trace",
+    title: "Extraction",
+    description:
+      "How the archive produced this file's text and which vision prompt was recorded.",
+    method: "Method",
+    promptMode: "Prompt mode",
+    descriptionLanguage: "Description language",
+    promptFingerprint: "Prompt fingerprint",
+    noValue: "—",
+    technical: "Technical details",
+    fullFingerprint: "Full SHA-256",
+    copyFingerprint: "Copy full fingerprint",
+    legacy: "Legacy extraction — prompt not recorded.",
+    legacyHint:
+      "This file was indexed before prompt fingerprints were stored. Re-ingest it to apply the current prompt.",
+    notApplicable: "Text extraction — no vision prompt applies.",
+    modeAria: "Vision prompt mode: {mode}",
+    reingest: "Re-ingest file",
+    reingestAria: "Re-ingest {name}",
+    reasons: {
+      deleted: "Deleted files cannot be re-ingested.",
+      historical: "Only the current version can be re-ingested.",
+      noOriginal:
+        "The stored original is unavailable, so this file cannot be re-ingested.",
+      unsupported:
+        "Re-ingest is available only for images, PDF, and DOCX files.",
+      active: "A re-ingest is already running. Wait for it to finish.",
+    },
+  },
+  reingest: {
+    eyebrow: "New version",
+    title: "Re-ingest “{name}”?",
+    description:
+      "The archive reads the stored original again with the current vision prompt and publishes the result as a new version. The current version stays readable until the new one succeeds.",
+    progressTitle: "Re-ingesting “{name}”",
+    progressDescription:
+      "The durable job keeps running even if you close this dialog.",
+    versionLine: "Current version v{version}",
+    costNote:
+      "This calls the configured vision provider and uses provider tokens. A PDF is processed page by page.",
+    newVersionNote:
+      "The previous version remains in history and stays available through its file id.",
+    confirm: "Re-ingest file",
+    starting: "Queuing…",
+    processing: "Re-ingesting…",
+    stopWaiting: "Stop waiting",
+    progressAria: "Re-ingest progress",
+    closeNote: "Stopping this progress view does not cancel the durable job.",
+    failureTitle: "Re-ingest did not finish.",
+    failureNote: "The previous version remains current and readable.",
+    successTitle: "A new version is ready.",
+    successBody:
+      "“{name}” is now version {version}. The previous version remains in history.",
+    done: "Done",
+    alreadyProcessingTitle: "A re-ingest is already running.",
+    alreadyProcessingBody:
+      "This file already has an active ingestion job. Wait for it to finish before starting another.",
+    successToast: "“{name}” re-ingested as version {version}.",
+  },
   errors: {
     generic: "The archive could not complete that request.",
     folderCopyTooLarge:

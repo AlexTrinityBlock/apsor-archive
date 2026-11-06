@@ -14,12 +14,10 @@ import { useI18n } from "../i18n";
 import { DiagnosticsPanel } from "./component/DiagnosticsPanel";
 import { FrequentlyUsedPromptsPanel } from "./component/FrequentlyUsedPromptsPanel";
 import { LanguagePanel } from "./component/LanguagePanel";
+import { IngestRuntimeSection } from "./component/IngestRuntimeSection";
 import { MaintenancePanel } from "./component/MaintenancePanel";
 import { ProviderVaultPanel } from "./component/ProviderVaultPanel";
-import {
-  AgentRuntimeSettingsPanel,
-  IngestRuntimeSettingsPanel,
-} from "./component/RuntimeSettingsPanels";
+import { AgentRuntimeSettingsPanel } from "./component/RuntimeSettingsPanels";
 import {
   defaultSettingsSection,
   isSettingsSectionVisible,
@@ -39,7 +37,7 @@ const SECTION_PANELS: Record<SettingsSectionId, ComponentType> = {
   "settings-providers": ProviderVaultPanel,
   "settings-diagnostics": DiagnosticsPanel,
   "settings-agent-runtime": AgentRuntimeSettingsPanel,
-  "settings-ingest-runtime": IngestRuntimeSettingsPanel,
+  "settings-ingest-runtime": IngestRuntimeSection,
   "settings-maintenance": MaintenancePanel,
   "settings-language": LanguagePanel,
 };

@@ -58,6 +58,63 @@ export const IMAGE_EXTENSIONS = [
 /** The image types the file ingest endpoint currently accepts. */
 export const IMAGE_UPLOAD_ACCEPT = ".jpg,.jpeg,.png,.webp";
 
+/** Vision prompt modes selectable for a re-ingested source. */
+export type ReingestVisionMode = "image" | "document";
+
+/** Why the Library disables the re-ingest action for a file. */
+export type ReingestBlockReason =
+  | "deleted"
+  | "historical"
+  | "noOriginal"
+  | "unsupported"
+  | "active";
+
+/** Maps a re-ingestable file name to the prompt mode the worker will use. */
+export function reingestVisionMode(file: FileSchema): ReingestVisionMode | null {
+  const name = file.file_name.toLowerCase();
+  if (name.endsWith(".pdf")) {
+    return "document";
+  }
+  if (
+    [".jpg", ".jpeg", ".png", ".webp", ".docx"].some((extension) =>
+      name.endsWith(extension),
+    )
+  ) {
+    return "image";
+  }
+  return null;
+}
+
+/**
+ * Checks the explicit re-ingest rules: current, non-deleted, with a stored
+ * original, supported by the vision pipeline, and not already being processed
+ * by the Library's page-level run.
+ */
+export function reingestBlockReason(
+  file: FileSchema,
+  active: boolean,
+): ReingestBlockReason | null {
+  if (file.deleted_at) {
+    return "deleted";
+  }
+  if (!file.is_current) {
+    return "historical";
+  }
+  if (!file.has_original) {
+    return "noOriginal";
+  }
+  if (reingestVisionMode(file) === null) {
+    return "unsupported";
+  }
+  return active ? "active" : null;
+}
+
+/** A compact display form of a SHA-256 fingerprint. */
+export function shortFingerprint(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length <= 12 ? trimmed : `${trimmed.slice(0, 12)}…`;
+}
+
 /** One file operation target; both `FileSchema` and `PathFileSchema` map to it. */
 export interface FileOperationTarget {
   readonly file_id: number;
