@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.module.knowledge.model.ingest_job_model import (
     INGEST_ACTIVE_STATUSES,
     INGEST_PROCESSING_STATUSES,
+    INGEST_SOURCE_REINGEST,
     INGEST_STATUS_FAILED,
     INGEST_STATUS_PARSING,
     INGEST_STATUS_QUEUED,
@@ -180,7 +181,11 @@ class IngestJobRepository:
                     "attempt limit was reached."
                 )
                 job.finished_at = now
-                if job.storage_key is not None and job.file_id is None:
+                if (
+                    job.storage_key is not None
+                    and job.file_id is None
+                    and job.source_kind != INGEST_SOURCE_REINGEST
+                ):
                     terminal_payloads.append((job.storage_key, job.storage_backend))
             else:
                 job.status = INGEST_STATUS_QUEUED

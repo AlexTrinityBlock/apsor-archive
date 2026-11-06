@@ -107,9 +107,14 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
   会清除过期的答案，而不是在屏幕上留下一对不匹配的内容。
 - **图像保存在文件库中。** 图像是一条普通的文件记录，带有原始字节、
   路径和分块。支持视觉的聊天提供商会补充 OCR、GitHub-Flavored Markdown
-  表格和完整的视觉描述；OCR 文本保留原文语言，描述语言则是仅限 root 的
-  设置。没有这样的提供商时，由文件名派生的说明文字可让本地上传仍可搜索。
-  不存在单独的图像索引。
+  表格和完整的视觉描述；OCR 文本保留原文语言，描述语言与图像／文档提示词
+  模板则是仅限 root 的设置。每个视觉提取的文件都会记录实际发送提示词的
+  SHA-256、模式和描述语言。没有这样的提供商时，由文件名派生的说明文字可
+  让本地上传仍可搜索。不存在单独的图像索引。
+- **视觉提示词可完整编辑，但不做版本历史。** root 可以替换完整的图像与
+  扫描页系统提示词。保存时只验证九个输出 JSON 键仍然存在；当前模板存放
+  在 `ingest_config`。现有文件会保留当前提取结果，直到显式重新摄取并创建
+  新的文件版本。
 - **文档自行选择提取器。** PDF 先尝试文本，扫描页则使用文档页模式提取
   OCR、表格和简短版面说明。DOCX、TXT、JSON、CSV 和日志使用文本，并辅以
   AI 结构化元数据；图像使用完整图像模式或文件名回退。
@@ -414,6 +419,7 @@ Pydantic 和匹配的 PostgreSQL 检查约束会强制执行范围以及两条
 | `GET` | `/api/v1/files/ingest-jobs?limit=&offset=` | `listIngestJobs` |
 | `GET` | `/api/v1/files/ingest-jobs/{id}` | `getIngestJob` |
 | `POST` | `/api/v1/files/ingest-jobs/{id}/retry` | `retryIngestJob` |
+| `POST` | `/api/v1/files/{file_id}/reingest` | `reingestFile` |
 
 一个任务会经过 `queued(0)`、`parsing(5)`、`chunking(15–20)`、
 `embedding(25–90)`、`summarizing(95)` 和 `ready(100)`，或以
@@ -470,6 +476,30 @@ worker 更改无需重启即可生效；已在运行的任务保留其快照。�
 标签；OCR 文本与表格单元格文本保持原文语言。更改该设置只会影响未来的
 摄取，现有文件保留当前的提取结果。后端契约描述于
 `backend/README.md`。
+
+#### 视觉提示词
+
+两个视觉系统提示词与运行时快照分开存储，因此
+`PUT /settings/ingest` 和运行时重置永远不会覆盖它们。`NULL` 表示使用
+内置默认值。root 可以在一次保存中读取并替换两个模板；正文是完整提示词，
+可包含 `{language}` 占位符。
+
+| 方法 | 路径 | 操作 |
+|---|---|---|
+| `GET` | `/api/v1/settings/ingest/vision-prompts` | `getIngestVisionPrompts` |
+| `PUT` | `/api/v1/settings/ingest/vision-prompts` | `updateIngestVisionPrompts` |
+
+读取响应会返回当前 `config`、内置 `defaults`、`source`、`updated_at`、
+`max_chars`、九个必需键、模板 SHA-256 以及非阻塞性的 `warnings`。保存时
+会拒绝空白或超过 32K、含控制字符，或缺少任何必需输出键的提示词（`422
+invalid_vision_prompt`）。如果提示词缺少 `verbatim`、`do not translate` 或
+GitHub-Flavored Markdown 措辞，响应也会带回警告。
+
+`POST /api/v1/files/{file_id}/reingest` 接受 `{expected_version}`，为当前
+且具有已存储原始文件的图像、PDF 或 DOCX 排队执行强制视觉流程。任务只会在
+提取和索引成功后创建新的文件版本；在此之前，旧版本仍是最新且可读取的。
+原始字节会被共用，不会被任务复制或删除。如果路径已更改，或已有更新的上传
+成为最新，任务会以 `409 ingest_source_stale` 失败，更新的文件保持最新。
 
 ### 本地开发
 
@@ -1138,6 +1168,12 @@ SPA 外壳是公开的。工具端点也需要会话 cookie。
 - **TXT / MD / CSV / JSON / LOG** — 直接文本加上 AI 结构化元数据
   （标题、摘要、标签、document_type）。
 
+每个视觉提取的文件都会记录 `vision_prompt_sha256`、`vision_prompt_mode`
+（`image` 或 `document`）和 `vision_description_language`；旧行保持
+`null`，表示未记录提示词。自定义提示词只会应用于未来的摄取。若要基于
+已存储的原始文件创建新版本，请使用上文的重新摄取路由；文本文件不符合
+条件，而没有嵌入图像的 DOCX 会保留纯文本结果，不记录提示词指纹。
+
 相同的摄取可通过 `POST /api/v1/files/async` 和
 `POST /api/v1/files/text/async` 异步使用；轮询
 `GET /api/v1/files/ingest-jobs/{id}` 获取阶段和分块进度。见上文的
@@ -1394,7 +1430,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `c2f6a8d4e1b3`，位于 `a1c3e5f7b9d2` 之后。此分支上
+最新的迁移是 `f7a3c2d9e1b4`，位于 `c2f6a8d4e1b3` 之后。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1465,10 +1501,16 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   降级会恢复 100,000 令牌上限，并在存储阈值需要时提高该上限；
 - `a1c3e5f7b9d2` 把压缩阈值范围提高到 1,000,000 令牌。降级会先把存储值夹回
   200,000，再恢复旧检查约束；
-- `c2f6a8d4e1b3`（当前 head）把
+- `c2f6a8d4e1b3` 把
   `ingest_config.vision_description_language` 添加为非空 `varchar(80)`，
   服务器默认值为 `English`，并带有去除首尾空白后的长度检查。降级会删除
-  检查约束和列。
+  检查约束和列；
+- `f7a3c2d9e1b4`（当前 head）新增可为空的
+  `ingest_config.vision_image_prompt` / `vision_document_prompt` 模板、
+  `file` 提示词指纹列，以及 `file_ingest_job.source_file_id` 与其
+  拥有者安全的复合外键、重新摄取检查、活动来源唯一索引和查询索引。
+  它不会预置或回填提示词／指纹值。降级会先删除重新摄取任务，再恢复旧的
+  来源类型检查。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，

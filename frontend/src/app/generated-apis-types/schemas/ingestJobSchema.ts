@@ -26,6 +26,7 @@ export interface IngestJobSchema {
   path: string;
   progress_pct: number;
   size_bytes: number;
+  source_file_id: number | null;
   source_kind: IngestJobSchemaSourceKind;
   stage: string | null;
   started_at: string | null;

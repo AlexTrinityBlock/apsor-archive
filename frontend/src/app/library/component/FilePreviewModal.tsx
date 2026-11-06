@@ -30,6 +30,7 @@ import {
   fileDownloadUrl,
   kindLabel,
 } from "../../viewer/component/viewer-utils";
+import { ExtractionTracePanel } from "./ExtractionTracePanel";
 import {
   MarkdownEditor,
   type MarkdownEditorHandle,
@@ -54,6 +55,8 @@ interface FilePreviewModalProps {
   readonly onCopy: (target: FileOperationTarget) => void;
   readonly onRename: (target: FileOperationTarget) => void;
   readonly onDelete: (target: FileOperationTarget) => void;
+  readonly reingestActive: boolean;
+  readonly onReingest: (file: FileSchema) => void;
 }
 
 interface PreviewBodyProps {
@@ -66,6 +69,8 @@ interface PreviewBodyProps {
   readonly chunkQuery: UseQueryResult<FileChunksSchema, HTTPValidationError>;
   readonly onChunkChange: (chunk: number) => void;
   readonly onClose: () => void;
+  readonly reingestActive: boolean;
+  readonly onReingest: (file: FileSchema) => void;
 }
 
 const FOCUSABLE =
@@ -321,7 +326,15 @@ function PagePreview({
   );
 }
 
-function MetadataPanel({ file }: { readonly file: FileSchema }) {
+function MetadataPanel({
+  file,
+  reingestActive,
+  onReingest,
+}: {
+  readonly file: FileSchema;
+  readonly reingestActive: boolean;
+  readonly onReingest: (file: FileSchema) => void;
+}) {
   const { t, formatDateTime, formatNumber } = useI18n();
   return (
     <div className="library-preview__metadata">
@@ -398,6 +411,11 @@ function MetadataPanel({ file }: { readonly file: FileSchema }) {
           />
         ) : null}
       </dl>
+      <ExtractionTracePanel
+        file={file}
+        reingestActive={reingestActive}
+        onReingest={onReingest}
+      />
       <p className="library-preview__meta-note">
         {t("library.preview.metaNote")}
       </p>
@@ -415,6 +433,8 @@ function PreviewBody({
   chunkQuery,
   onChunkChange,
   onClose,
+  reingestActive,
+  onReingest,
 }: PreviewBodyProps) {
   const { t } = useI18n();
   if (fileQuery.isLoading) {
@@ -451,7 +471,13 @@ function PreviewBody({
     );
   }
   if (activeTab === "meta") {
-    return <MetadataPanel file={file} />;
+    return (
+      <MetadataPanel
+        file={file}
+        reingestActive={reingestActive}
+        onReingest={onReingest}
+      />
+    );
   }
   return <PagePreview file={file} isImage={classifyFile(file) === "image"} />;
 }
@@ -559,6 +585,8 @@ export function FilePreviewModal({
   onCopy,
   onRename,
   onDelete,
+  reingestActive,
+  onReingest,
 }: FilePreviewModalProps) {
   const { t } = useI18n();
   const titleId = useId();
@@ -823,6 +851,8 @@ export function FilePreviewModal({
               chunkQuery={chunkQuery}
               onChunkChange={onChunkChange}
               onClose={onClose}
+              reingestActive={reingestActive}
+              onReingest={onReingest}
             />
           )}
         </div>

@@ -106,9 +106,14 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
   答案，而不是在畫面上留下彼此不符的配對。
 - **圖片存在於檔案庫中。** 圖片是普通的檔案紀錄，帶有原始位元組、路徑與
   分塊。支援視覺的對話供應商會加上 OCR、GitHub-Flavored Markdown 表格與
-  完整的視覺描述；OCR 文字保留原文語言，描述語言則是僅限 root 的設定。
-  沒有這類供應商時，由檔名衍生的圖說仍讓本機上傳的內容可被搜尋。沒有另外
-  的圖片索引。
+  完整的視覺描述；OCR 文字保留原文語言，描述語言與影像／文件提示詞範本
+  則是僅限 root 的設定。每個視覺擷取的檔案會記錄實際送出提示詞的
+  SHA-256、模式與描述語言。沒有這類供應商時，由檔名衍生的圖說仍讓本機
+  上傳的內容可被搜尋。沒有另外的圖片索引。
+- **視覺提示詞可完整編輯，但不做版本歷史。** root 可以取代完整的影像與
+  掃描頁系統提示詞。儲存時只驗證九個輸出 JSON 鍵仍然存在；目前範本存放
+  在 `ingest_config`。既有檔案會保留目前的擷取結果，直到明確重新匯入
+  並建立新檔案版本。
 - **文件會選擇自己的擷取器。** PDF 先嘗試文字，掃描頁面則以文件頁模式擷取
   OCR、表格與簡短版面說明。DOCX、TXT、JSON、CSV 與日誌使用文字，並搭配
   AI 結構化中介資料；圖片使用完整影像模式或檔名備援。
@@ -405,6 +410,7 @@ UI 可以改為將工作排入佇列。非同步路由會儲存酬載並傳回 `
 | `GET` | `/api/v1/files/ingest-jobs?limit=&offset=` | `listIngestJobs` |
 | `GET` | `/api/v1/files/ingest-jobs/{id}` | `getIngestJob` |
 | `POST` | `/api/v1/files/ingest-jobs/{id}/retry` | `retryIngestJob` |
+| `POST` | `/api/v1/files/{file_id}/reingest` | `reingestFile` |
 
 工作會依序經過 `queued(0)`、`parsing(5)`、`chunking(15–20)`、
 `embedding(25–90)`、`summarizing(95)` 與 `ready(100)`，或以 `failed` 結束。
@@ -459,6 +465,30 @@ worker 會在每次迴圈與每個工作讀取最新的資料庫快照，因此�
 `vision_description_language` 只控制視覺描述、圖說、標題、摘要與標籤；
 OCR 文字與表格儲存格文字會維持原文語言。變更此設定只會影響未來的匯入，
 既有檔案會保留目前的擷取結果。後端契約描述於 `backend/README.md`。
+
+#### 視覺提示詞
+
+兩個視覺系統提示詞與執行階段快照分開儲存，因此
+`PUT /settings/ingest` 與執行階段重設永遠不會覆寫它們。`NULL` 代表使用
+內建預設值。root 可以在一次儲存中讀取並取代兩個範本；本文是完整提示詞，
+可包含 `{language}` 佔位符。
+
+| 方法 | 路徑 | 操作 |
+|---|---|---|
+| `GET` | `/api/v1/settings/ingest/vision-prompts` | `getIngestVisionPrompts` |
+| `PUT` | `/api/v1/settings/ingest/vision-prompts` | `updateIngestVisionPrompts` |
+
+讀取本文會傳回目前的 `config`、內建 `defaults`、`source`、`updated_at`、
+`max_chars`、九個必要鍵、範本 SHA-256 與非阻擋性的 `warnings`。儲存時會
+拒絕空白或超過 32K、含控制字元，或缺少任何必要輸出鍵的提示詞（`422
+invalid_vision_prompt`）。若提示詞缺少 `verbatim`、`do not translate` 或
+GitHub-Flavored Markdown 措辭，回應也會帶回警告。
+
+`POST /api/v1/files/{file_id}/reingest` 接受 `{expected_version}`，為目前
+且具有已儲存原始檔的圖片、PDF 或 DOCX 排入強制視覺流程。工作只會在擷取
+與索引成功後建立新檔案版本；在此之前，舊版本仍是最新且可讀取。原始位元組
+會共用，不會被工作複製或刪除。若路徑已變更，或已有較新的上傳成為最新，
+工作會以 `409 ingest_source_stale` 失敗，較新的檔案維持最新。
 
 ### 本機開發
 
@@ -1108,6 +1138,12 @@ compose 會設定它）。每個帳號都可以在 `/profile` 編輯其顯示名
 - **TXT / MD / CSV / JSON / LOG** —— 直接文字加上 AI 結構化中介資料
   （標題、摘要、標籤、document_type）。
 
+每個視覺擷取的檔案會記錄 `vision_prompt_sha256`、`vision_prompt_mode`
+（`image` 或 `document`）與 `vision_description_language`；舊資料列維持
+`null`，代表未記錄提示詞。自訂提示詞只會套用至未來的匯入。若要從已儲存的
+原始檔建立新版本，請使用上方的重新匯入路由；文字檔不符合資格，而沒有內嵌
+圖片的 DOCX 會維持純文字結果，不記錄提示詞指紋。
+
 相同的匯入也可以透過 `POST /api/v1/files/async` 與
 `POST /api/v1/files/text/async` 非同步使用；請輪詢
 `GET /api/v1/files/ingest-jobs/{id}` 取得階段與分塊進度。請見上方的
@@ -1362,7 +1398,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `c2f6a8d4e1b3`，在 `a1c3e5f7b9d2` 之後。此分支上
+最新的移轉是 `f7a3c2d9e1b4`，在 `c2f6a8d4e1b3` 之後。此分支上
 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
@@ -1433,9 +1469,15 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   降級會還原 100,000 權杖上限，並在儲存門檻需要時提高該上限；
 - `a1c3e5f7b9d2` 將壓縮門檻範圍提高到 1,000,000 權杖。降級會先將儲存值夾回
   200,000，再還原舊檢查條件；
-- `c2f6a8d4e1b3`（目前 head）將 `ingest_config.vision_description_language`
+- `c2f6a8d4e1b3` 將 `ingest_config.vision_description_language`
   新增為非 null 的 `varchar(80)`，伺服器預設為 `English`，並附去除空白後
-  的長度檢查。降級會移除檢查條件與欄位。
+  的長度檢查。降級會移除檢查條件與欄位；
+- `f7a3c2d9e1b4`（目前 head）新增可為 null 的
+  `ingest_config.vision_image_prompt` / `vision_document_prompt` 範本、
+  `file` 提示詞指紋欄位，以及 `file_ingest_job.source_file_id` 與其
+  擁有者安全的複合外鍵、重新匯入檢查、使用中來源唯一索引與查詢索引。
+  它不會植入或回填提示詞／指紋值。降級會先移除重新匯入工作，再還原舊的
+  來源種類檢查。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會

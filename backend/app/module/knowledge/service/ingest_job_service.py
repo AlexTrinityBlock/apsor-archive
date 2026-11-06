@@ -49,15 +49,20 @@ from app.infrastructure.files.storage_errors import (
 )
 from app.module.knowledge.domain.ingest_config_domain import IngestRuntimeConfig
 from app.module.knowledge.domain.path_domain import extension
+from app.module.knowledge.domain.vision_prompt_domain import vision_mode_for_extension
 from app.module.knowledge.exception.domain_error import (
+    AiNotConfiguredError,
     AiProviderError,
     EmbeddingProviderError,
     EmptyContentError,
+    FileContentUnavailableError,
     FileStorageUnavailableError,
     FileTooLargeError,
+    FileVersionConflictError,
     IngestJobConflictError,
     IngestJobNotFoundError,
     IngestJobNotRetryableError,
+    IngestSourceStaleError,
     InvalidPathError,
     KnowledgeError,
     TooManyChunksError,
@@ -66,6 +71,7 @@ from app.module.knowledge.exception.domain_error import (
     VisionExtractionError,
 )
 from app.module.knowledge.model.ingest_job_model import (
+    INGEST_SOURCE_REINGEST,
     INGEST_SOURCE_TEXT,
     INGEST_SOURCE_UPLOAD,
     INGEST_STATUS_CHUNKING,
@@ -88,6 +94,7 @@ from app.module.knowledge.schema.file_schema import (
 from app.module.knowledge.service.file_service import (
     ALLOWED_EXTENSIONS,
     FileService,
+    ReingestSource,
 )
 from app.shared.time import utcnow
 
@@ -101,9 +108,13 @@ _ERROR_CODES: tuple[tuple[type[BaseException], str], ...] = (
     (TreePathConflictError, "tree_path_conflict"),
     (InvalidPathError, "invalid_path"),
     (VisionExtractionError, "vision_extraction_failed"),
+    (AiNotConfiguredError, "ai_not_configured"),
     (AiProviderError, "ai_provider_error"),
     (EmbeddingProviderError, "embedding_provider_error"),
     (FileStorageUnavailableError, "storage_unavailable"),
+    (IngestSourceStaleError, "ingest_source_stale"),
+    (FileContentUnavailableError, "file_content_unavailable"),
+    (FileVersionConflictError, "file_version_conflict"),
     (FileNotFoundError, "ingest_payload_missing"),
     (KnowledgeError, "knowledge_error"),
 )
@@ -139,6 +150,7 @@ def _to_schema(job: FileIngestJobModel) -> IngestJobSchema:
     return IngestJobSchema(
         id=job.id,
         file_id=job.file_id,
+        source_file_id=job.source_file_id,
         source_kind=cast(IngestSourceKind, job.source_kind),
         path=job.path,
         file_name=job.file_name,
@@ -282,6 +294,42 @@ class IngestJobService:
         job = await self.repository.get(job_id)
         if job is None:
             raise IngestJobNotFoundError(job_id)
+        return _to_schema(job)
+
+    async def enqueue_reingest(
+        self,
+        file_id: int,
+        *,
+        expected_version: int,
+    ) -> IngestJobSchema:
+        """Queue a vision re-extraction that creates a new file version."""
+        source = await self.file_service.get_reingest_source(
+            file_id,
+            expected_version=expected_version,
+        )
+        mode = vision_mode_for_extension(source.path)
+        if mode is None:  # pragma: no cover - get_reingest_source already rejects
+            raise UnsupportedFileTypeError(source.extension)
+        job = FileIngestJobModel(
+            user_id=self.user_id,
+            source_kind=INGEST_SOURCE_REINGEST,
+            source_file_id=source.file_id,
+            path=source.path,
+            storage_key=None,
+            storage_backend=None,
+            mime_type=source.mime_type,
+            file_name=source.file_name,
+            size_bytes=source.size_bytes,
+            occurred_at=source.created_at,
+            status=INGEST_STATUS_QUEUED,
+            stage=f"Queued {mode} re-ingest",
+            progress_pct=0,
+        )
+        try:
+            async with self.repository.session.begin_nested():
+                await self.repository.add(job)
+        except IntegrityError as exc:
+            raise IngestJobConflictError(source.path) from exc
         return _to_schema(job)
 
     async def list_jobs(self, *, limit: int, offset: int) -> IngestJobListSchema:
@@ -638,8 +686,39 @@ class IngestWorker:
             return
         progress = _JobProgress(self, job_id, user_id)
         staged_file_id: int | None = None
+        source: ReingestSource | None = None
+        storage_key: str | None = None
+        storage_backend: str | None = None
+        occurred_at: datetime | None = None
         try:
-            data = await self._read_payload(job.storage_key, job.storage_backend)
+            if job.source_kind == INGEST_SOURCE_REINGEST:
+                if job.source_file_id is None:
+                    raise IngestSourceStaleError(job.id)
+                async with user_session(self.session_factory, user_id, ROLE_USER) as session:
+                    source_service = self.file_service_factory(
+                        session,
+                        user_id,
+                        runtime.config,
+                        runtime.extract_semaphore,
+                        runtime.embedding_semaphore,
+                    )
+                    source = await source_service.get_reingest_source_by_file_id(
+                        job.source_file_id,
+                        expected_path=job.path,
+                    )
+                # The source original is shared with the current file version;
+                # read it after the locking transaction closes.
+                data = await source_service.read_reingest_bytes(source)
+                storage_key = source.storage_key
+                storage_backend = source.storage_backend
+                occurred_at = source.created_at
+                force_vision = True
+            else:
+                data = await self._read_payload(job.storage_key, job.storage_backend)
+                storage_key = job.storage_key
+                storage_backend = job.storage_backend
+                occurred_at = job.occurred_at
+                force_vision = False
 
             async with user_session(self.session_factory, user_id, ROLE_USER) as session:
                 file_service = self.file_service_factory(
@@ -653,6 +732,7 @@ class IngestWorker:
                     source_kind=job.source_kind,
                     path=job.path,
                     data=data,
+                    force_vision=force_vision,
                 )
                 await self.update_job(
                     job_id,
@@ -671,9 +751,9 @@ class IngestWorker:
                     data=data,
                     extracted=extracted,
                     mime_type=job.mime_type,
-                    storage_key=job.storage_key,
-                    storage_backend=job.storage_backend,
-                    occurred_at=job.occurred_at,
+                    storage_key=storage_key,
+                    storage_backend=storage_backend,
+                    occurred_at=occurred_at,
                     publish=False,
                     progress=progress,
                     checkpoint=checkpoint,
@@ -688,6 +768,7 @@ class IngestWorker:
                 stage="Publishing file",
                 progress_pct=95,
             )
+            expected_current_file_id = source.file_id if source is not None else None
             async with user_session(self.session_factory, user_id, ROLE_USER) as session:
                 file_service = self.file_service_factory(
                     session,
@@ -696,7 +777,10 @@ class IngestWorker:
                     runtime.extract_semaphore,
                     runtime.embedding_semaphore,
                 )
-                await file_service.publish_pending(file_schema.id)
+                await file_service.publish_pending(
+                    file_schema.id,
+                    expected_current_file_id=expected_current_file_id,
+                )
                 ready_job = await IngestJobRepository(session, user_id).get(job_id)
                 if ready_job is not None:
                     ready_job.status = INGEST_STATUS_READY
@@ -746,7 +830,9 @@ class IngestWorker:
                     runtime.embedding_semaphore,
                 )
                 discarded = await file_service.discard_pending(file_id)
-        can_delete_payload = file_id is None or discarded
+        can_delete_payload = (file_id is None or discarded) and (
+            job.source_kind != INGEST_SOURCE_REINGEST
+        )
         if job.attempts >= self.max_attempts and can_delete_payload:
             await self._delete_payload(job.storage_key, job.storage_backend)
         detail = str(exc) or exc.__class__.__name__

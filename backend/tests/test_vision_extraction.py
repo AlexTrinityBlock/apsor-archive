@@ -16,6 +16,10 @@ from app.module.knowledge.dependencies import (
     ingest_runtime_defaults,
     load_ingest_runtime_config,
 )
+from app.module.knowledge.domain.vision_prompt_domain import (
+    DEFAULT_VISION_IMAGE_PROMPT,
+    render_vision_prompt,
+)
 from app.module.knowledge.protocol.vision_extractor_protocol import VisionDocument
 
 # A 1x1 blue PNG; enough to exercise the image extension and vision path.
@@ -56,7 +60,7 @@ class _StubVisionClient:
 
 
 class FakeVisionExtractor:
-    """Records the language/mode and returns one complete vision document."""
+    """Records the exact system prompt and mode, then returns one vision document."""
 
     configured = True
     model_name = "fake-vision"
@@ -69,10 +73,10 @@ class FakeVisionExtractor:
         data: bytes,
         mime_type: str,
         *,
-        description_language: str,
+        system_prompt: str,
         mode: Literal["image", "document"] = "image",
     ) -> VisionDocument:
-        self.calls.append((description_language, mode))
+        self.calls.append((system_prompt, mode))
         return VisionDocument(
             text="Receipt total 42",
             caption="A receipt",
@@ -114,8 +118,9 @@ def test_vision_prompt_contract_and_parsing() -> None:
     assert "GitHub-Flavored Markdown" in document_prompt
     assert "Do not translate" in document_prompt
     assert "brief layout note" in document_prompt
-    assert "Do not produce an exhaustive visual essay" in document_prompt
-    assert "preserves line breaks" in document_prompt
+    normalized_document_prompt = " ".join(document_prompt.split())
+    assert "Do not produce an exhaustive visual essay" in normalized_document_prompt
+    assert "preserves line breaks" in normalized_document_prompt
     assert "complete visual description" not in document_prompt
 
     extractor = DeepSeekVisionExtractor(
@@ -143,7 +148,8 @@ def test_vision_prompt_contract_and_parsing() -> None:
         extractor.extract(
             BLUE_PNG,
             "image/png",
-            description_language="Traditional Chinese",
+            system_prompt=image_prompt,
+            mode="image",
         )
     )
     assert stub.calls[0]["system_prompt"] == image_prompt
@@ -163,11 +169,11 @@ def test_vision_prompt_contract_and_parsing() -> None:
         extractor.extract(
             BLUE_PNG,
             "image/png",
-            description_language="Japanese",
+            system_prompt=document_prompt,
             mode="document",
         )
     )
-    assert stub.calls[1]["system_prompt"] == build_vision_prompt("Japanese", "document")
+    assert stub.calls[1]["system_prompt"] == document_prompt
     assert stub.calls[1]["max_tokens"] == VISION_DOCUMENT_MAX_TOKENS
     assert "document page" in stub.calls[1]["user_prompt"]
     assert missing.text == "only text"
@@ -208,6 +214,11 @@ def test_vision_description_language_applies_to_sync_and_async_ingest(
 
     fake = FakeVisionExtractor()
     client.app.state.vision_extractor = fake
+    traditional_rendered = render_vision_prompt(
+        DEFAULT_VISION_IMAGE_PROMPT,
+        "Traditional Chinese",
+        mode="image",
+    )
 
     sync_upload = client.post(
         "/api/v1/files",
@@ -217,7 +228,10 @@ def test_vision_description_language_applies_to_sync_and_async_ingest(
     assert sync_upload.status_code == 201, sync_upload.text
     sync_file = sync_upload.json()
     assert sync_file["extraction_method"] == "vision"
-    assert fake.calls == [("Traditional Chinese", "image")]
+    assert sync_file["vision_prompt_sha256"] == traditional_rendered.sha256
+    assert sync_file["vision_prompt_mode"] == "image"
+    assert sync_file["vision_description_language"] == "Traditional Chinese"
+    assert fake.calls == [(traditional_rendered.system_prompt, "image")]
 
     sync_chunks = _chunk_text(client, int(sync_file["id"]))
     assert "## Visible text" in sync_chunks
@@ -246,11 +260,15 @@ def test_vision_description_language_applies_to_sync_and_async_ingest(
     processed = client.portal.call(worker.process_job, job["id"])
     assert processed is not None
     assert processed.status == "ready"
-    assert fake.calls[-1] == ("Traditional Chinese", "image")
+    assert fake.calls[-1] == (traditional_rendered.system_prompt, "image")
 
     async_state = client.get(f"/api/v1/files/ingest-jobs/{job['id']}")
     assert async_state.status_code == 200, async_state.text
     async_file_id = int(async_state.json()["file_id"])
+    async_file = client.get(f"/api/v1/files/{async_file_id}").json()
+    assert async_file["vision_prompt_sha256"] == traditional_rendered.sha256
+    assert async_file["vision_prompt_mode"] == "image"
+    assert async_file["vision_description_language"] == "Traditional Chinese"
     async_chunks = _chunk_text(client, async_file_id)
     assert "Receipt total 42" in async_chunks
     assert TABLE in async_chunks
@@ -271,7 +289,14 @@ def test_vision_description_language_applies_to_sync_and_async_ingest(
         files={"file": ("japanese-receipt.png", BLUE_PNG, "image/png")},
     )
     assert japanese_upload.status_code == 201, japanese_upload.text
-    assert fake.calls[-1] == ("Japanese", "image")
+    japanese_rendered = render_vision_prompt(
+        DEFAULT_VISION_IMAGE_PROMPT,
+        "Japanese",
+        mode="image",
+    )
+    assert fake.calls[-1] == (japanese_rendered.system_prompt, "image")
+    assert japanese_upload.json()["vision_prompt_sha256"] == japanese_rendered.sha256
+    assert japanese_upload.json()["vision_description_language"] == "Japanese"
     assert _chunk_text(client, int(sync_file["id"])) == sync_chunks
     assert _chunk_text(client, async_file_id) == async_chunks
 
@@ -281,3 +306,8 @@ def test_vision_description_language_applies_to_sync_and_async_ingest(
     assert reset_body["source"] == "database"
     assert reset_body["config"]["vision_description_language"] == "English"
     assert reset_body["defaults"]["vision_description_language"] == "English"
+
+    prompts = client.get("/api/v1/settings/ingest/vision-prompts")
+    assert prompts.status_code == 200, prompts.text
+    assert prompts.json()["source"] == "default"
+    assert prompts.json()["config"]["image_prompt"] == DEFAULT_VISION_IMAGE_PROMPT

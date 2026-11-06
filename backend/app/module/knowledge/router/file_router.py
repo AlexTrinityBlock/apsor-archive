@@ -29,6 +29,7 @@ from app.module.knowledge.schema.file_schema import (
     FileChunksSchema,
     FileCopySchema,
     FileMoveSchema,
+    FileReingestSchema,
     FileRenameSchema,
     FileSchema,
     FileTextCreateSchema,
@@ -287,6 +288,28 @@ async def rename_file(
 ) -> FileSchema:
     """Rename a current file without changing its parent folder."""
     return await file_service.rename_file(file_id, file_name_value=payload.file_name)
+
+
+@router.post(
+    "/{file_id}/reingest",
+    response_model=IngestJobSchema,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="reingestFile",
+)
+async def reingest_file(
+    file_id: int,
+    payload: FileReingestSchema,
+    ingest_job_service: IngestJobService = Depends(get_ingest_job_service),
+) -> IngestJobSchema:
+    """Re-extract a current image, PDF, or DOCX with the current vision prompts.
+
+    The job creates a new file version only after extraction and indexing
+    succeed; the previous version stays current until then.
+    """
+    return await ingest_job_service.enqueue_reingest(
+        file_id,
+        expected_version=payload.expected_version,
+    )
 
 
 @router.post(

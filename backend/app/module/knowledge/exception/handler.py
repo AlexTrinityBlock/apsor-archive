@@ -14,11 +14,13 @@ from app.module.knowledge.exception.domain_error import (
     IngestJobConflictError,
     IngestJobNotFoundError,
     IngestJobNotRetryableError,
+    IngestSourceStaleError,
     InvalidChunkWindowError,
     InvalidPathError,
     InvalidProviderConfigError,
     InvalidQueryError,
     InvalidTimelineRangeError,
+    InvalidVisionPromptError,
     KnowledgeError,
     MemoryAlreadyDeprecatedError,
     MemoryNotFoundError,
@@ -66,4 +68,6 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(IngestJobNotFoundError, 404, "ingest_job_not_found")
     ExceptionRegistry.register(IngestJobConflictError, 409, "ingest_job_conflict")
     ExceptionRegistry.register(IngestJobNotRetryableError, 409, "ingest_job_not_retryable")
+    ExceptionRegistry.register(IngestSourceStaleError, 409, "ingest_source_stale")
+    ExceptionRegistry.register(InvalidVisionPromptError, 422, "invalid_vision_prompt")
     ExceptionRegistry.register(KnowledgeError, 500, "knowledge_error")

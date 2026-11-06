@@ -2,12 +2,25 @@
 
 The settings row is a singleton. Reads lazily create it with the environment-
 derived defaults so a fresh installation has a deterministic config
-immediately; ``update`` and ``reset`` always write a full, validated snapshot.
+immediately; ``update`` and ``reset`` always write a full, validated runtime
+snapshot. The two vision prompts are a separate surface: runtime update and
+reset never write those columns, so a custom prompt survives a runtime reset.
 """
 
+import hashlib
 from datetime import datetime
 
 from app.module.knowledge.domain.ingest_config_domain import IngestRuntimeConfig
+from app.module.knowledge.domain.vision_prompt_domain import (
+    DEFAULT_VISION_DOCUMENT_PROMPT,
+    DEFAULT_VISION_IMAGE_PROMPT,
+    VISION_PROMPT_MAX_CHARS,
+    VISION_REQUIRED_JSON_KEYS,
+    normalize_vision_prompt,
+    prompt_warnings,
+    validate_vision_prompt,
+)
+from app.module.knowledge.exception.domain_error import InvalidVisionPromptError
 from app.module.knowledge.model.ingest_config_model import IngestConfigModel
 from app.module.knowledge.protocol.ingest_config_repository_protocol import (
     IngestConfigRepositoryProtocol,
@@ -17,6 +30,11 @@ from app.module.knowledge.schema.ingest_settings_schema import (
     IngestSettingsSource,
     IngestSettingsUpdateSchema,
     IngestSettingsValuesSchema,
+)
+from app.module.knowledge.schema.vision_prompt_schema import (
+    VisionPromptSettingsReadSchema,
+    VisionPromptSettingsUpdateSchema,
+    VisionPromptSettingsValuesSchema,
 )
 from app.shared.time import utcnow
 
@@ -58,11 +76,36 @@ class IngestSettingsService:
         except ValueError:
             return self.defaults
 
+    async def get_vision_prompts(self) -> VisionPromptSettingsReadSchema:
+        """Return the effective prompts, defaults, fingerprints, and warnings."""
+        config, row, _source = await self._effective()
+        return _vision_prompt_read_schema(config, row, self.defaults)
+
+    async def update_vision_prompts(
+        self,
+        values: VisionPromptSettingsUpdateSchema,
+    ) -> VisionPromptSettingsReadSchema:
+        """Validate and store both templates without touching runtime settings."""
+        image_prompt = _validated_prompt(values.image_prompt)
+        document_prompt = _validated_prompt(values.document_prompt)
+        row = await self.repository.get_singleton()
+        if row is None:
+            row = IngestConfigModel(id=SINGLETON_ID)
+        _apply_prompts(
+            row,
+            image_prompt=image_prompt,
+            document_prompt=document_prompt,
+            now=utcnow(),
+        )
+        await self.repository.save(row)
+        config = _config_from_model(row)
+        return _vision_prompt_read_schema(config, row, self.defaults)
+
     async def update_settings(
         self,
         values: IngestSettingsUpdateSchema,
     ) -> IngestSettingsReadSchema:
-        """Replace every stored setting with one validated request payload."""
+        """Replace every stored runtime setting with one validated payload."""
         config = IngestRuntimeConfig(**values.model_dump())
         row = await self.repository.get_singleton()
         if row is None:
@@ -72,7 +115,10 @@ class IngestSettingsService:
         return _read_schema(config, row, "database", self.defaults)
 
     async def reset_settings(self) -> IngestSettingsReadSchema:
-        """Write the environment-seeded defaults back to the singleton row."""
+        """Write the environment-seeded runtime defaults back to the row.
+
+        The prompt columns are deliberately left untouched.
+        """
         config = self.defaults
         row = await self.repository.get_singleton()
         if row is None:
@@ -103,6 +149,26 @@ class IngestSettingsService:
             return config, row, "default"
 
 
+def _validated_prompt(value: str) -> str:
+    try:
+        normalized = normalize_vision_prompt(value)
+        validate_vision_prompt(normalized)
+    except ValueError as exc:
+        raise InvalidVisionPromptError(str(exc)) from exc
+    return normalized
+
+
+def _normalized_prompt_or_default(value: str | None, default: str) -> str:
+    if value is None:
+        return default
+    try:
+        normalized = normalize_vision_prompt(value)
+        validate_vision_prompt(normalized)
+    except ValueError:
+        return default
+    return normalized
+
+
 def _config_from_model(row: IngestConfigModel) -> IngestRuntimeConfig:
     return IngestRuntimeConfig(
         poll_seconds=row.poll_seconds,
@@ -112,6 +178,14 @@ def _config_from_model(row: IngestConfigModel) -> IngestRuntimeConfig:
         chunk_target_chars=row.chunk_target_chars,
         chunk_overlap_chars=row.chunk_overlap_chars,
         vision_description_language=row.vision_description_language,
+        vision_image_prompt=_normalized_prompt_or_default(
+            row.vision_image_prompt,
+            DEFAULT_VISION_IMAGE_PROMPT,
+        ),
+        vision_document_prompt=_normalized_prompt_or_default(
+            row.vision_document_prompt,
+            DEFAULT_VISION_DOCUMENT_PROMPT,
+        ),
     )
 
 
@@ -131,6 +205,18 @@ def _apply_config(
     row.updated_at = now
 
 
+def _apply_prompts(
+    row: IngestConfigModel,
+    *,
+    image_prompt: str,
+    document_prompt: str,
+    now: datetime,
+) -> None:
+    row.vision_image_prompt = image_prompt
+    row.vision_document_prompt = document_prompt
+    row.updated_at = now
+
+
 def _values_schema(config: IngestRuntimeConfig) -> IngestSettingsValuesSchema:
     return IngestSettingsValuesSchema(
         poll_seconds=config.poll_seconds,
@@ -140,6 +226,46 @@ def _values_schema(config: IngestRuntimeConfig) -> IngestSettingsValuesSchema:
         chunk_target_chars=config.chunk_target_chars,
         chunk_overlap_chars=config.chunk_overlap_chars,
         vision_description_language=config.vision_description_language,
+    )
+
+
+def _prompt_values_schema(config: IngestRuntimeConfig) -> VisionPromptSettingsValuesSchema:
+    return VisionPromptSettingsValuesSchema(
+        image_prompt=config.vision_image_prompt,
+        document_prompt=config.vision_document_prompt,
+    )
+
+
+def _prompt_sha256(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _vision_prompt_read_schema(
+    config: IngestRuntimeConfig,
+    row: IngestConfigModel,
+    defaults: IngestRuntimeConfig,
+) -> VisionPromptSettingsReadSchema:
+    warnings = sorted(
+        {
+            *prompt_warnings(config.vision_image_prompt),
+            *prompt_warnings(config.vision_document_prompt),
+        }
+    )
+    source: IngestSettingsSource = (
+        "database"
+        if row.vision_image_prompt is not None or row.vision_document_prompt is not None
+        else "default"
+    )
+    return VisionPromptSettingsReadSchema(
+        config=_prompt_values_schema(config),
+        defaults=_prompt_values_schema(defaults),
+        source=source,
+        updated_at=row.updated_at,
+        max_chars=VISION_PROMPT_MAX_CHARS,
+        required_keys=VISION_REQUIRED_JSON_KEYS,
+        image_prompt_sha256=_prompt_sha256(config.vision_image_prompt),
+        document_prompt_sha256=_prompt_sha256(config.vision_document_prompt),
+        warnings=warnings,
     )
 
 

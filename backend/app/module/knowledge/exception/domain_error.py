@@ -167,3 +167,19 @@ class IngestJobConflictError(KnowledgeError):
 class IngestJobNotRetryableError(KnowledgeError):
     def __init__(self, job_id: int, detail: str) -> None:
         super().__init__(f"Ingestion job {job_id} cannot be retried: {detail}")
+
+
+class InvalidVisionPromptError(KnowledgeError):
+    """The submitted vision prompt failed save-time validation."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+
+
+class IngestSourceStaleError(KnowledgeError):
+    """The source file changed or moved before re-ingest publication."""
+
+    def __init__(self, file_id: int) -> None:
+        super().__init__(
+            f"File {file_id} changed or moved while its re-ingest was running."
+        )

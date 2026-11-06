@@ -65,6 +65,23 @@ class FileModel(Base):
             "(storage_key IS NULL) = (storage_backend IS NULL)",
             name="storage_backend_key_pair",
         ),
+        CheckConstraint(
+            "(vision_prompt_sha256 IS NULL) = (vision_prompt_mode IS NULL)",
+            name="vision_prompt_pair",
+        ),
+        CheckConstraint(
+            "vision_prompt_mode IS NULL OR vision_prompt_mode IN ('image', 'document')",
+            name="vision_prompt_mode_valid",
+        ),
+        CheckConstraint(
+            "vision_prompt_sha256 IS NULL OR vision_prompt_sha256 ~ '^[0-9a-f]{64}$'",
+            name="vision_prompt_sha256_format",
+        ),
+        CheckConstraint(
+            "vision_description_language IS NULL "
+            "OR char_length(btrim(vision_description_language)) BETWEEN 1 AND 80",
+            name="vision_description_language_length",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
@@ -95,6 +112,9 @@ class FileModel(Base):
     extraction_method: Mapped[str] = mapped_column(
         String(16), nullable=False, default="text", server_default="text"
     )
+    vision_prompt_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    vision_prompt_mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    vision_description_language: Mapped[str | None] = mapped_column(String(80), nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     supersedes_file_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     is_current: Mapped[bool] = mapped_column(

@@ -14,7 +14,7 @@ IngestJobStatus = Literal[
     "ready",
     "failed",
 ]
-IngestSourceKind = Literal["upload", "text"]
+IngestSourceKind = Literal["upload", "text", "reingest"]
 
 # Content length cap at Pydantic parse time; the service's max_text_bytes
 # (2 MiB) is still the final byte limit.
@@ -41,6 +41,9 @@ class FileSchema(BaseModel):
     ai_tags: list[str]
     document_type: str
     extraction_method: str
+    vision_prompt_sha256: str | None
+    vision_prompt_mode: Literal["image", "document"] | None
+    vision_description_language: str | None
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
@@ -72,6 +75,7 @@ class IngestJobSchema(BaseModel):
 
     id: int
     file_id: int | None
+    source_file_id: int | None
     source_kind: IngestSourceKind
     path: str
     file_name: str
@@ -182,6 +186,14 @@ class FileRenameSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     file_name: str = Field(min_length=1, max_length=255)
+
+
+class FileReingestSchema(BaseModel):
+    """Re-extract a current vision-capable file as a new version."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
 
 
 class LibraryDeleteSchema(BaseModel):

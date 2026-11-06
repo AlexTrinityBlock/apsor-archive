@@ -420,6 +420,19 @@ export const core = {
     agent_run_not_retryable: "这次运行已无法重试。",
     agent_invalid_system_prompt: "系统提示词无效。请检查内容后重试。",
     agent_system_prompt_not_found: "找不到这个系统提示词。",
+    ai_not_configured:
+      "视觉提取尚未配置。请在设置中添加支持视觉的供应商。",
+    invalid_vision_prompt:
+      "视觉提示词无效。请检查必需的 JSON 键与字符上限。",
+    ingest_job_conflict:
+      "此文件已经有进行中的摄取作业。请等待完成。",
+    ingest_source_stale:
+      "文件在重新摄取期间已更改。较新的版本仍为当前版本。",
+    file_version_conflict:
+      "此文件在加载后已更改。请重新加载预览后重试。",
+    unsupported_file_type: "此文件类型无法重新摄取。",
+    file_not_found:
+      "找不到这个文件。它可能已删除、属于历史版本，或不可用。",
     file_content_unavailable:
       "目前无法获取文件内容。文件可能仍在处理中，或已被移除。",
     storage_unavailable: "文件存储服务目前不可用。请稍后再试。",

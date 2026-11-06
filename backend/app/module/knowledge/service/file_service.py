@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from io import BytesIO
-from typing import Any, TypeVar, cast
+from typing import Any, Literal, TypeVar, cast
 from uuid import uuid4
 
 import pypdfium2 as pdfium
@@ -35,7 +35,14 @@ from app.module.knowledge.domain.path_domain import (
     parent_directory,
     path_segments,
 )
+from app.module.knowledge.domain.vision_prompt_domain import (
+    RenderedVisionPrompt,
+    VisionPromptMode,
+    render_vision_prompt,
+    vision_mode_for_extension,
+)
 from app.module.knowledge.exception.domain_error import (
+    AiNotConfiguredError,
     AiProviderError,
     EmptyContentError,
     FileContentUnavailableError,
@@ -44,6 +51,7 @@ from app.module.knowledge.exception.domain_error import (
     FileTooLargeError,
     FileVersionConflictError,
     FolderCopyTooLargeError,
+    IngestSourceStaleError,
     InvalidChunkWindowError,
     InvalidPathError,
     PathNotFoundError,
@@ -116,6 +124,26 @@ class ExtractedDocument:
     extraction_method: str
     ai_summary: str | None
     ai_tags: list[str]
+    vision_prompt_sha256: str | None = None
+    vision_prompt_mode: str | None = None
+    vision_description_language: str | None = None
+
+
+@dataclass(frozen=True)
+class ReingestSource:
+    """One locked current file original that a re-ingest job may re-extract."""
+
+    file_id: int
+    path: str
+    file_name: str
+    extension: str
+    mime_type: str
+    size_bytes: int
+    content_hash: str
+    storage_key: str
+    storage_backend: str | None
+    created_at: datetime
+    version: int
 
 
 @dataclass(frozen=True)
@@ -145,6 +173,8 @@ class FileService:
         text_generator: TextGeneratorProtocol,
         vision_extractor: VisionExtractorProtocol,
         vision_description_language: str,
+        vision_image_prompt: str,
+        vision_document_prompt: str,
         target_chars: int,
         overlap_chars: int,
         max_chunks: int,
@@ -164,6 +194,18 @@ class FileService:
         self.text_generator = text_generator
         self.vision_extractor = vision_extractor
         self.vision_description_language = vision_description_language
+        self._vision_prompts: dict[VisionPromptMode, RenderedVisionPrompt] = {
+            "image": render_vision_prompt(
+                vision_image_prompt,
+                vision_description_language,
+                mode="image",
+            ),
+            "document": render_vision_prompt(
+                vision_document_prompt,
+                vision_description_language,
+                mode="document",
+            ),
+        }
         self.target_chars = target_chars
         self.overlap_chars = overlap_chars
         self.max_chunks = max_chunks
@@ -246,6 +288,12 @@ class FileService:
             ai_tags=list(file.ai_tags),
             document_type=file.document_type,
             extraction_method=file.extraction_method,
+            vision_prompt_sha256=file.vision_prompt_sha256,
+            vision_prompt_mode=cast(
+                Literal["image", "document"] | None,
+                file.vision_prompt_mode,
+            ),
+            vision_description_language=file.vision_description_language,
             created_at=file.created_at,
             updated_at=file.updated_at,
             deleted_at=file.deleted_at,
@@ -421,8 +469,12 @@ class FileService:
             sections.append("## Visual description\n" + description.strip())
         return "\n\n".join(sections)
 
-    async def _vision_pdf(self, data: bytes) -> tuple[str, str | None, list[str], str]:
+    async def _vision_pdf(
+        self,
+        data: bytes,
+    ) -> tuple[str, str | None, list[str], str, RenderedVisionPrompt]:
         """Render up to N PDF pages and extract text, tables, and a layout note."""
+        rendered = self._vision_prompts["document"]
         texts: list[str] = []
         tables: list[str] = []
         descriptions: list[str] = []
@@ -440,7 +492,7 @@ class FileService:
                 vision = await self.vision_extractor.extract(
                     page,
                     "image/png",
-                    description_language=self.vision_description_language,
+                    system_prompt=rendered.system_prompt,
                     mode="document",
                 )
                 if vision.text.strip():
@@ -467,6 +519,7 @@ class FileService:
             summary,
             list(dict.fromkeys(tags))[:8],
             document_type,
+            rendered,
         )
 
     @staticmethod
@@ -502,8 +555,9 @@ class FileService:
     async def _vision_images(
         self,
         images: list[tuple[bytes, str]],
-    ) -> tuple[str, str | None, list[str], str]:
+    ) -> tuple[str, str | None, list[str], str, RenderedVisionPrompt]:
         """Extract text, tables, and visual descriptions from DOCX media."""
+        rendered = self._vision_prompts["image"]
         texts: list[str] = []
         tables: list[str] = []
         descriptions: list[str] = []
@@ -515,7 +569,7 @@ class FileService:
             vision = await self.vision_extractor.extract(
                 data,
                 mime_type,
-                description_language=self.vision_description_language,
+                system_prompt=rendered.system_prompt,
                 mode="image",
             )
             if vision.text.strip():
@@ -538,10 +592,22 @@ class FileService:
             summary,
             list(dict.fromkeys(tags))[:8],
             document_type,
+            rendered,
         )
 
-    async def _extract_document(self, path: str, data: bytes) -> ExtractedDocument:
-        """Extract text; use vision when text is absent or AI says it is needed."""
+    async def _extract_document(
+        self,
+        path: str,
+        data: bytes,
+        *,
+        force_vision: bool = False,
+    ) -> ExtractedDocument:
+        """Extract text; use vision when required or explicitly forced.
+
+        ``force_vision`` is used by re-ingest so a text-based PDF or DOCX still
+        applies the current prompt. Images are always extracted with vision when
+        a provider is configured.
+        """
         suffix = extension(path)
         file_name_value = file_name(path)
         if suffix in TEXT_EXTENSIONS:
@@ -566,12 +632,19 @@ class FileService:
                 document_type="pdf",
             )
             needs_vision = (
-                not analysis.has_meaningful_text
+                force_vision
+                or not analysis.has_meaningful_text
                 or analysis.use_vision
                 or len(text.strip()) < self.pdf_text_threshold
             )
             if needs_vision and self.vision_extractor.configured:
-                vision_text, summary, tags, document_type = await self._vision_pdf(data)
+                (
+                    vision_text,
+                    summary,
+                    tags,
+                    document_type,
+                    rendered,
+                ) = await self._vision_pdf(data)
                 combined = "\n\n".join(part for part in (text.strip(), vision_text) if part)
                 if not combined:
                     raise EmptyContentError()
@@ -581,6 +654,9 @@ class FileService:
                     extraction_method="mixed" if text.strip() else "vision",
                     ai_summary=summary or analysis.summary or None,
                     ai_tags=list(dict.fromkeys([*analysis.tags, *tags]))[:8],
+                    vision_prompt_sha256=rendered.sha256,
+                    vision_prompt_mode=rendered.mode,
+                    vision_description_language=rendered.description_language,
                 )
             if not text.strip():
                 raise EmptyContentError()
@@ -601,12 +677,19 @@ class FileService:
                 file_name_value=file_name_value,
                 document_type="docx",
             )
-            if (
-                not analysis.has_meaningful_text or analysis.use_vision
-            ) and self.vision_extractor.configured:
+            needs_vision = (
+                force_vision or not analysis.has_meaningful_text or analysis.use_vision
+            )
+            if needs_vision and self.vision_extractor.configured:
                 images = await self._run_cpu(self._docx_images, data)
                 if images:
-                    vision_text, summary, tags, document_type = await self._vision_images(images)
+                    (
+                        vision_text,
+                        summary,
+                        tags,
+                        document_type,
+                        rendered,
+                    ) = await self._vision_images(images)
                     combined = "\n\n".join(part for part in (text.strip(), vision_text) if part)
                     if combined:
                         return ExtractedDocument(
@@ -615,6 +698,9 @@ class FileService:
                             extraction_method="mixed" if text.strip() else "vision",
                             ai_summary=summary or analysis.summary or None,
                             ai_tags=list(dict.fromkeys([*analysis.tags, *tags]))[:8],
+                            vision_prompt_sha256=rendered.sha256,
+                            vision_prompt_mode=rendered.mode,
+                            vision_description_language=rendered.description_language,
                         )
             if not text.strip():
                 raise EmptyContentError()
@@ -638,6 +724,7 @@ class FileService:
                     ai_summary=None,
                     ai_tags=[],
                 )
+            rendered = self._vision_prompts["image"]
             vision = await self.vision_extractor.extract(
                 data,
                 {
@@ -646,7 +733,7 @@ class FileService:
                     ".png": "image/png",
                     ".webp": "image/webp",
                 }[suffix],
-                description_language=self.vision_description_language,
+                system_prompt=rendered.system_prompt,
                 mode="image",
             )
             text = self._compose_vision_text(
@@ -662,6 +749,9 @@ class FileService:
                 extraction_method="vision",
                 ai_summary=vision.summary or None,
                 ai_tags=vision.tags,
+                vision_prompt_sha256=rendered.sha256,
+                vision_prompt_mode=rendered.mode,
+                vision_description_language=rendered.description_language,
             )
         raise UnsupportedFileTypeError(suffix)
 
@@ -707,6 +797,9 @@ class FileService:
         ai_tags: list[str] | None = None,
         document_type: str = "text",
         extraction_method: str = "text",
+        vision_prompt_sha256: str | None = None,
+        vision_prompt_mode: str | None = None,
+        vision_description_language: str | None = None,
         publish: bool = True,
         progress: IngestProgressProtocol | None = None,
         checkpoint: IngestCheckpoint | None = None,
@@ -762,6 +855,9 @@ class FileService:
                 ai_tags=ai_tags or [],
                 document_type=document_type,
                 extraction_method=extraction_method,
+                vision_prompt_sha256=vision_prompt_sha256,
+                vision_prompt_mode=vision_prompt_mode,
+                vision_description_language=vision_description_language,
                 version=existing.version + 1 if existing is not None else 1,
                 supersedes_file_id=existing.id if existing is not None else None,
                 is_current=publish,
@@ -816,20 +912,39 @@ class FileService:
             ai_tags=extracted.ai_tags,
             document_type=extracted.document_type,
             extraction_method=extracted.extraction_method,
+            vision_prompt_sha256=extracted.vision_prompt_sha256,
+            vision_prompt_mode=extracted.vision_prompt_mode,
+            vision_description_language=extracted.vision_description_language,
             publish=publish,
             progress=progress,
             checkpoint=checkpoint,
         )
 
-    async def publish_pending(self, file_id: int) -> FileSchema:
-        """Make a staged file version and its chunks current at once."""
+    async def publish_pending(
+        self,
+        file_id: int,
+        *,
+        expected_current_file_id: int | None = None,
+    ) -> FileSchema:
+        """Make a staged file version and its chunks current at once.
+
+        ``expected_current_file_id`` is the re-ingest race guard: if a newer
+        upload became current while the job was running, publication fails with
+        ``ingest_source_stale`` and the newer file stays current.
+        """
         file = await self.file_repository.get_by_id(file_id)
         if file is None:
             raise FileRecordNotFoundError(file_id)
         if file.is_current:
             return self._to_schema(file)
 
-        existing = await self.file_repository.get_current_by_path(file.raw_file_path)
+        existing = await self.file_repository.get_current_by_path_for_update(
+            file.raw_file_path
+        )
+        if expected_current_file_id is not None and (
+            existing is None or existing.id != expected_current_file_id
+        ):
+            raise IngestSourceStaleError(expected_current_file_id)
         if existing is not None and existing.id != file.id:
             await self.file_repository.mark_not_current(existing)
             await self.chunk_repository.mark_source_not_current(SOURCE_FILE, existing.id)
@@ -856,7 +971,84 @@ class FileService:
         await self.file_repository.delete(file)
         return True
 
-    async def extract_upload(self, *, path: str, data: bytes) -> ExtractedDocument:
+    @staticmethod
+    def _reingest_source(file: FileModel) -> ReingestSource:
+        if file.storage_key is None:  # pragma: no cover - callers validate first
+            raise FileContentUnavailableError(file.id)
+        return ReingestSource(
+            file_id=file.id,
+            path=file.raw_file_path,
+            file_name=file.file_name,
+            extension=file.extension,
+            mime_type=file.mime_type,
+            size_bytes=file.size_bytes,
+            content_hash=file.content_hash,
+            storage_key=file.storage_key,
+            storage_backend=file.storage_backend,
+            created_at=file.created_at,
+            version=file.version,
+        )
+
+    @staticmethod
+    def _require_visionable_source(file: FileModel) -> None:
+        if vision_mode_for_extension(file.raw_file_path) is None:
+            raise UnsupportedFileTypeError(file.extension)
+
+    async def get_reingest_source(
+        self,
+        file_id: int,
+        *,
+        expected_version: int,
+    ) -> ReingestSource:
+        """Lock and validate a current file that can be re-ingested."""
+        file = await self.file_repository.get_current_for_update(file_id)
+        if file is None or file.deleted_at is not None or not file.is_current:
+            raise FileRecordNotFoundError(file_id)
+        if file.version != expected_version:
+            raise FileVersionConflictError(file_id, expected_version, file.version)
+        if file.storage_key is None:
+            raise FileContentUnavailableError(file_id)
+        self._require_visionable_source(file)
+        if not self.vision_extractor.configured:
+            raise AiNotConfiguredError()
+        return self._reingest_source(file)
+
+    async def get_reingest_source_by_file_id(
+        self,
+        file_id: int,
+        *,
+        expected_path: str | None = None,
+    ) -> ReingestSource:
+        """Re-validate a re-ingest source when the worker processes the job."""
+        file = await self.file_repository.get_current_for_update(file_id)
+        if (
+            file is None
+            or file.deleted_at is not None
+            or not file.is_current
+            or file.storage_key is None
+            or (expected_path is not None and file.raw_file_path != expected_path)
+            or vision_mode_for_extension(file.raw_file_path) is None
+        ):
+            raise IngestSourceStaleError(file_id)
+        if not self.vision_extractor.configured:
+            raise AiNotConfiguredError()
+        return self._reingest_source(file)
+
+    async def read_reingest_bytes(self, source: ReingestSource) -> bytes:
+        """Read the shared source original without owning or deleting it."""
+        return await self._storage_read(
+            source.storage_key,
+            backend=source.storage_backend,
+            file_id=source.file_id,
+        )
+
+    async def extract_upload(
+        self,
+        *,
+        path: str,
+        data: bytes,
+        force_vision: bool = False,
+    ) -> ExtractedDocument:
         """Validate and extract one uploaded document for a queued job."""
         normalized = self._normalized_path(path)
         suffix = extension(normalized)
@@ -864,7 +1056,7 @@ class FileService:
             raise UnsupportedFileTypeError(suffix)
         if len(data) > self.max_upload_bytes:
             raise FileTooLargeError(len(data), self.max_upload_bytes)
-        return await self._extract_document(normalized, data)
+        return await self._extract_document(normalized, data, force_vision=force_vision)
 
     async def prepare_job_document(
         self,
@@ -872,6 +1064,7 @@ class FileService:
         source_kind: str,
         path: str,
         data: bytes,
+        force_vision: bool = False,
     ) -> ExtractedDocument:
         """Extract the payload referenced by a durable ingestion job."""
         if source_kind == "text":
@@ -883,7 +1076,7 @@ class FileService:
                 ai_summary=None,
                 ai_tags=[],
             )
-        return await self.extract_upload(path=path, data=data)
+        return await self.extract_upload(path=path, data=data, force_vision=force_vision)
 
     async def ingest_text(
         self,
@@ -998,6 +1191,9 @@ class FileService:
                 ai_tags=extracted.ai_tags,
                 document_type=extracted.document_type,
                 extraction_method=extracted.extraction_method,
+                vision_prompt_sha256=extracted.vision_prompt_sha256,
+                vision_prompt_mode=extracted.vision_prompt_mode,
+                vision_description_language=extracted.vision_description_language,
             )
         except Exception:
             await self._storage_delete_quietly(
@@ -1213,6 +1409,9 @@ class FileService:
                         ai_tags=list(old_file.ai_tags),
                         document_type=old_file.document_type,
                         extraction_method=old_file.extraction_method,
+                        vision_prompt_sha256=old_file.vision_prompt_sha256,
+                        vision_prompt_mode=old_file.vision_prompt_mode,
+                        vision_description_language=old_file.vision_description_language,
                         version=1,
                         supersedes_file_id=None,
                         is_current=True,
@@ -1376,6 +1575,9 @@ class FileService:
                 ai_tags=list(source.ai_tags),
                 document_type=source.document_type,
                 extraction_method=source.extraction_method,
+                vision_prompt_sha256=source.vision_prompt_sha256,
+                vision_prompt_mode=source.vision_prompt_mode,
+                vision_description_language=source.vision_description_language,
             )
         except Exception:
             await self._storage_delete_quietly(
