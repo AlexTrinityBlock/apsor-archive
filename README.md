@@ -116,9 +116,16 @@ result carries its source, chunk number, and time.
 - **Images live in the File Library.** An image is a normal file record with its
   original bytes, path, and chunks. A vision-capable chat provider adds OCR,
   GitHub-Flavored Markdown tables, and a complete visual description; the OCR
-  text stays in its original language while the description language is a
-  root-only setting. Without a provider, a filename-derived caption keeps local
-  uploads searchable. There is no separate image index.
+  text stays in its original language while the description language and the
+  image/document prompt templates are root-only settings. Each vision-extracted
+  file records the SHA-256 of the exact rendered prompt, its mode, and the
+  description language. Without a provider, a filename-derived caption keeps
+  local uploads searchable. There is no separate image index.
+- **Vision prompts are editable, without prompt version history.** Root can
+  replace the full image and scanned-page system prompts. Saving validates only
+  that the nine output JSON keys remain present; the current templates live in
+  `ingest_config`. Existing files keep their extraction until an explicit
+  re-ingest creates a new file version.
 - **Documents choose their extractor.** PDFs try text first and fall back to
   vision for scanned pages. DOCX, TXT, JSON, CSV, and logs use text, with AI
   structured metadata; images use vision or the filename fallback.
@@ -443,6 +450,7 @@ and return `202` with an `IngestJobSchema`:
 | `GET` | `/api/v1/files/ingest-jobs?limit=&offset=` | `listIngestJobs` |
 | `GET` | `/api/v1/files/ingest-jobs/{id}` | `getIngestJob` |
 | `POST` | `/api/v1/files/ingest-jobs/{id}/retry` | `retryIngestJob` |
+| `POST` | `/api/v1/files/{file_id}/reingest` | `reingestFile` |
 
 A job moves through `queued(0)`, `parsing(5)`, `chunking(15–20)`,
 `embedding(25–90)`, `summarizing(95)`, and `ready(100)`, or ends as `failed`.
@@ -501,6 +509,33 @@ the visual description, caption, title, summary, and tags; OCR text and table
 cell text stay verbatim in the source language. Changing it applies only to
 future ingests, and existing files keep their current extraction. The backend
 contract is described in `backend/README.md`.
+
+#### Vision prompts
+
+The two vision system prompts are stored separately from the runtime snapshot,
+so `PUT /settings/ingest` and the runtime reset never overwrite them. `NULL`
+means the built-in default. Root can read and replace both templates in one
+save; the body is the full prompt text, including any `{language}` placeholder.
+
+| Method | Path | Operation |
+|---|---|---|
+| `GET` | `/api/v1/settings/ingest/vision-prompts` | `getIngestVisionPrompts` |
+| `PUT` | `/api/v1/settings/ingest/vision-prompts` | `updateIngestVisionPrompts` |
+
+The read body returns the current `config`, built-in `defaults`, `source`,
+`updated_at`, `max_chars`, the nine required keys, template SHA-256 values, and
+non-blocking `warnings`. Saving rejects an empty or over-32K prompt, control
+characters, or a prompt missing any required output key (`422
+invalid_vision_prompt`). The response also returns warnings when the prompt
+omits `verbatim`, `do not translate`, or GitHub-Flavored Markdown wording.
+
+`POST /api/v1/files/{file_id}/reingest` accepts `{expected_version}` and queues
+a forced vision pass for a current image, PDF, or DOCX with a stored original.
+The job creates a new file version only after extraction and indexing succeed;
+the previous version remains current and readable until then. The original
+bytes are shared, never copied or deleted by the job. If the path changes or a
+newer upload becomes current first, the job fails with `409
+ingest_source_stale` and the newer file stays current.
 
 ### Local development
 
@@ -1224,6 +1259,14 @@ Document intake (`POST /api/v1/files`) supports:
 - **TXT / MD / CSV / JSON / LOG** — direct text plus AI structured metadata
   (title, summary, tags, document_type).
 
+Every vision-extracted file records `vision_prompt_sha256`,
+`vision_prompt_mode` (`image` or `document`), and
+`vision_description_language`; legacy rows keep `null`, meaning the prompt was
+not recorded. A custom prompt applies only to future ingests. Use the re-ingest
+route above to create a new version from the stored original; text files are not
+eligible, and a DOCX with no embedded images keeps a text-only result without a
+prompt fingerprint.
+
 The same intake is available asynchronously through
 `POST /api/v1/files/async` and `POST /api/v1/files/text/async`; poll
 `GET /api/v1/files/ingest-jobs/{id}` for stage and chunk progress. See
@@ -1500,7 +1543,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `c2f6a8d4e1b3`, after `a1c3e5f7b9d2`. The migrations
+The latest migration is `f7a3c2d9e1b4`, after `c2f6a8d4e1b3`. The migrations
 after `agent_config` on this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1578,10 +1621,16 @@ after `agent_config` on this branch are:
 - `a1c3e5f7b9d2` raises the compaction threshold range to 1,000,000 tokens.
   The downgrade clamps stored values back to 200,000 before restoring the old
   check constraint;
-- `c2f6a8d4e1b3` (current head) adds
+- `c2f6a8d4e1b3` adds
   `ingest_config.vision_description_language` as a non-null `varchar(80)` with
   an `English` server default and a trimmed-length check. The downgrade drops
-  the check and column.
+  the check and column;
+- `f7a3c2d9e1b4` (current head) adds the nullable
+  `ingest_config.vision_image_prompt` / `vision_document_prompt` templates, the
+  `file` prompt fingerprint columns, and `file_ingest_job.source_file_id` with
+  its owner-safe composite FK, re-ingest check, active-source unique index, and
+  lookup index. It does not seed or backfill prompt/fingerprint values. The
+  downgrade removes re-ingest jobs before restoring the old source-kind check.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

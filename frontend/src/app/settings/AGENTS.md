@@ -29,9 +29,10 @@ Settings does not own backend validation, generated API definitions, or global i
 - **Sticky:** the tab strip stays sticky at the top of `.app-page` so a long panel does not force a scroll back to the top before switching sections.
 - **Active-only mount:** switching tabs unmounts the previous panel. Panel-local drafts, open dialogs, and in-flight UI state are intentionally not preserved across tabs. Do not store cross-tab workflows in a panel.
 - **Panel data:** panels own their generated queries and mutations. Runtime wrappers in `RuntimeSettingsPanels.tsx` load the singleton settings row, cache the update/reset response, and refetch active queries. Provider changes refresh registry, AI status, health, and stats through `settings-invalidation.ts`.
-- **Panels:** System prompt (ordered sections), Frequent prompts, Provider registry (chat, embedding, web search, web fetch), Diagnostics (health/stats/status/reindex), Agent runtime, Ingestion runtime, Maintenance (access notes and version), and Language.
-- **Forms:** validate ranges and cross-field rules before save, disable save for unchanged or invalid drafts, send full update payloads, and persist reset through the reset endpoint rather than only clearing local state.
+- **Panels:** System prompt (ordered sections), Frequent prompts, Provider registry (chat, embedding, web search, web fetch), Diagnostics (health/stats/status/reindex), Agent runtime, Ingestion runtime (runtime settings plus the vision prompt editor), Maintenance (access notes and version), and Language.
+- **Forms:** validate ranges and cross-field rules before save, disable save for unchanged drafts, block invalid payloads, send full update payloads, and persist reset through the reset endpoint rather than only clearing local state. The vision prompt editor redirects an invalid submit to the first broken tab and focuses that textarea.
 - **Vision extraction:** the ingestion panel's third group is one full-width free-text `Description language` field. Canonical English suggestions (`English`, `Traditional Chinese`, `Simplified Chinese`, `Japanese`, `Korean`, `Spanish`, `French`, `German`) are offered through a datalist, but the stored value is never localized. Trim before save, require 1–80 characters after trimming, and keep it inside the existing singleton payload rather than adding a second config field or settings tab.
+- **Vision prompt editor:** `IngestRuntimeSection` stacks the existing runtime panel and a sibling `VisionPromptSettingsPanel` inside `settings-ingest-runtime`; do not add another Settings tab. The prompt panel owns `GET`/`PUT /settings/ingest/vision-prompts`, a separate query/mutation from the runtime snapshot, so resetting runtime values never clears custom prompts and saving prompts never re-ingests files. Images and Scanned pages are two tabs over one form whose parent holds both drafts; switching tabs must not lose edits. Save mirrors the backend's non-empty, 32K, and required-JSON-key checks; safety warnings are non-blocking. Restore-default only edits the draft, and there is no prompt history, diff, activation, or rollback UI. Prompt bodies are data and must never be passed through `t()`; only labels, hints, errors, and warnings are localized. The `<details>` technical section shows the saved template fingerprints, not a version history.
 - **Secrets:** provider read models expose only `key_hint`/`key_source`. Never render or request full keys.
 
 ## Key files
@@ -42,6 +43,10 @@ Settings does not own backend validation, generated API definitions, or global i
 - `component/RuntimeSettingsPanels.tsx` — agent/ingestion query, update, and reset wrappers.
 - `component/AgentRuntimePanel.tsx` — context budget, tool execution, compaction fields, and validation.
 - `component/IngestRuntimePanel.tsx` — worker, chunking, and vision description-language fields, validation, and warnings.
+- `component/IngestRuntimeSection.tsx` — stacks the ingestion runtime panel and the vision prompt editor in one Settings tab.
+- `component/VisionPromptSettingsPanel.tsx` — prompt query/save mutation, both drafts, status, contract notice, and fingerprint details.
+- `component/VisionPromptEditor.tsx` — one full-prompt textarea with count, per-field error, safety warnings, and restore-default.
+- `component/vision-prompt-utils.ts` — prompt draft matching, required-key validation, warning detection, and short fingerprints.
 - `component/ProviderVaultPanel.tsx` — four capability groups, provider CRUD, testing, and reindexing.
 - `component/SystemPromptPanel.tsx` — sortable prompt sections and their dialogs.
 - `component/FrequentlyUsedPromptsPanel.tsx` — saved prompt CRUD.
@@ -62,6 +67,8 @@ Settings does not own backend validation, generated API definitions, or global i
 - Invalidate narrowly with generated query keys. Do not use a blanket cache reset after settings mutations.
 - Use `SwitchField`, `RuntimeNumberField`, `RuntimeTextField`, `Panel`, `Button`, `StatusPill`, and shared error/empty patterns rather than new controls.
 - Keep the vision description language a free-text value with canonical English suggestions; translate only the label, hint, and error copy. The field keeps the full seven-field ingestion snapshot and applies to future ingests only.
+- Keep prompt persistence separate from `PUT /settings/ingest`: the vision prompt editor sends both prompts in one request to its own endpoint. Do not add prompt fields to the runtime update/reset payload, and do not add a prompt version table or history UI.
+- Inspect both prompt drafts before save, switch to the first invalid tab, and keep per-field errors and character counts associated through `aria-describedby`. Use 16px textarea text at 720px and below.
 - Treat destructive actions (reset, delete, deactivate, reindex, seed) as confirmed actions with pending and error states.
 - Keep labels, hints, validation messages, and ARIA copy under the `settings` or `core` namespaces; no hardcoded UI strings.
 - Reuse `settings.css`; new page CSS belongs in this workspace, not global styles. Respect reduced motion and avoid horizontal page overflow.

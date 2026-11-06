@@ -83,6 +83,20 @@ class FileRepository:
         )
         return (await self.session.execute(statement)).scalar_one_or_none()
 
+    async def get_current_by_path_for_update(self, path: str) -> FileModel | None:
+        """Lock the current row at a path so re-ingest publish can re-check it."""
+        statement = (
+            select(FileModel)
+            .where(
+                FileModel.user_id == self.user_id,
+                FileModel.raw_file_path == path,
+                FileModel.is_current.is_(True),
+                FileModel.deleted_at.is_(None),
+            )
+            .with_for_update()
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
     async def list_by_ids(self, file_ids: Sequence[int]) -> list[FileModel]:
         if not file_ids:
             return []

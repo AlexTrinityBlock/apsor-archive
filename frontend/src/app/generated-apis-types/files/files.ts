@@ -29,6 +29,7 @@ import type {
   FileChunksSchema,
   FileCopySchema,
   FileMoveSchema,
+  FileReingestSchema,
   FileRenameSchema,
   FileSchema,
   FileTextCreateSchema,
@@ -1539,6 +1540,98 @@ export const useMoveFile = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getMoveFileMutationOptions(options), queryClient);
+    }
+    export const getReingestFileUrl = (fileId: number,) => {
+
+
+
+
+  return `/api/v1/files/${fileId}/reingest`
+}
+
+/**
+ * Re-extract a current image, PDF, or DOCX with the current vision prompts.
+ *
+ * The job creates a new file version only after extraction and indexing
+ * succeed; the previous version stays current until then.
+ * @summary Reingest File
+ */
+export const reingestFile = async (fileId: number,
+    fileReingestSchema: FileReingestSchema, options?: Parameters<typeof apiFetch>[1]): Promise<IngestJobSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<IngestJobSchema>(getReingestFileUrl(fileId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(fileReingestSchema)
+  }
+);}
+
+
+
+
+
+export const getReingestFileMutationKey = () => ['reingestFile'] as const;
+
+export const getReingestFileMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reingestFile>>, TError,ReingestFileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reingestFile>>, TError,ReingestFileMutationVariables, TContext> => {
+
+const mutationKey = getReingestFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reingestFile>>, ReingestFileMutationVariables> = (props) => {
+          const {fileId,data} = props ?? {};
+
+          return  reingestFile(fileId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReingestFileMutationResult = NonNullable<Awaited<ReturnType<typeof reingestFile>>>
+    export type ReingestFileMutationBody = FileReingestSchema
+    export type ReingestFileMutationError = HTTPValidationError
+    export type ReingestFileMutationVariables = {fileId: number;data: FileReingestSchema}
+
+    /**
+ * @summary Reingest File
+ */
+export const useReingestFile = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reingestFile>>, TError,ReingestFileMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof reingestFile>>,
+        TError,
+        ReingestFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReingestFileMutationOptions(options), queryClient);
     }
     export const getRenameFileUrl = (fileId: number,) => {
 

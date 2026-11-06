@@ -31,7 +31,9 @@ import type {
   ProviderCreateSchema,
   ProviderRegistryReadSchema,
   ProviderTestResultSchema,
-  ProviderUpdateSchema
+  ProviderUpdateSchema,
+  VisionPromptSettingsReadSchema,
+  VisionPromptSettingsUpdateSchema
 } from '../schemas';
 
 import { apiFetch } from '../../../apis/fetch-client';
@@ -318,6 +320,195 @@ export const useResetIngestSettings = <TError = unknown,
         TContext
       > => {
       return useMutation(getResetIngestSettingsMutationOptions(options), queryClient);
+    }
+    export const getGetIngestVisionPromptsUrl = () => {
+
+
+
+
+  return `/api/v1/settings/ingest/vision-prompts`
+}
+
+/**
+ * Return the editable vision prompts and their built-in defaults.
+ * @summary Get Ingest Vision Prompts
+ */
+export const getIngestVisionPrompts = async ( options?: Parameters<typeof apiFetch>[1]): Promise<VisionPromptSettingsReadSchema> => {
+
+  return apiFetch<VisionPromptSettingsReadSchema>(getGetIngestVisionPromptsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetIngestVisionPromptsQueryKey = () => {
+    return [
+    `/api/v1/settings/ingest/vision-prompts`
+    ] as const;
+    }
+
+
+export const getGetIngestVisionPromptsQueryOptions = <TData = Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetIngestVisionPromptsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getIngestVisionPrompts>>> = ({ signal }) => getIngestVisionPrompts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetIngestVisionPromptsQueryResult = NonNullable<Awaited<ReturnType<typeof getIngestVisionPrompts>>>
+export type GetIngestVisionPromptsQueryError = unknown
+
+
+export function useGetIngestVisionPrompts<TData = Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getIngestVisionPrompts>>,
+          TError,
+          Awaited<ReturnType<typeof getIngestVisionPrompts>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetIngestVisionPrompts<TData = Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getIngestVisionPrompts>>,
+          TError,
+          Awaited<ReturnType<typeof getIngestVisionPrompts>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetIngestVisionPrompts<TData = Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Ingest Vision Prompts
+ */
+
+export function useGetIngestVisionPrompts<TData = Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getIngestVisionPrompts>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetIngestVisionPromptsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getUpdateIngestVisionPromptsUrl = () => {
+
+
+
+
+  return `/api/v1/settings/ingest/vision-prompts`
+}
+
+/**
+ * Validate and replace both vision prompt templates.
+ * @summary Update Ingest Vision Prompts
+ */
+export const updateIngestVisionPrompts = async (visionPromptSettingsUpdateSchema: VisionPromptSettingsUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<VisionPromptSettingsReadSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<VisionPromptSettingsReadSchema>(getUpdateIngestVisionPromptsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(visionPromptSettingsUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateIngestVisionPromptsMutationKey = () => ['updateIngestVisionPrompts'] as const;
+
+export const getUpdateIngestVisionPromptsMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIngestVisionPrompts>>, TError,UpdateIngestVisionPromptsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateIngestVisionPrompts>>, TError,UpdateIngestVisionPromptsMutationVariables, TContext> => {
+
+const mutationKey = getUpdateIngestVisionPromptsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateIngestVisionPrompts>>, UpdateIngestVisionPromptsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateIngestVisionPrompts(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateIngestVisionPromptsMutationResult = NonNullable<Awaited<ReturnType<typeof updateIngestVisionPrompts>>>
+    export type UpdateIngestVisionPromptsMutationBody = VisionPromptSettingsUpdateSchema
+    export type UpdateIngestVisionPromptsMutationError = HTTPValidationError
+    export type UpdateIngestVisionPromptsMutationVariables = {data: VisionPromptSettingsUpdateSchema}
+
+    /**
+ * @summary Update Ingest Vision Prompts
+ */
+export const useUpdateIngestVisionPrompts = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIngestVisionPrompts>>, TError,UpdateIngestVisionPromptsMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateIngestVisionPrompts>>,
+        TError,
+        UpdateIngestVisionPromptsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateIngestVisionPromptsMutationOptions(options), queryClient);
     }
     export const getGetProviderRegistryUrl = () => {
 

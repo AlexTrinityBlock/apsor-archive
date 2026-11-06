@@ -31,7 +31,7 @@ class VisionExtractorProtocol(Protocol):
         data: bytes,
         mime_type: str,
         *,
-        description_language: str,
+        system_prompt: str,
         mode: Literal["image", "document"] = "image",
     ) -> VisionDocument: ...
 

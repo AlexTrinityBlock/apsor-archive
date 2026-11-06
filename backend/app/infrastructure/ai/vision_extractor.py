@@ -1,11 +1,12 @@
 """Vision extraction for images and scanned PDF pages."""
 
-import json
 from typing import Literal
 
 from app.infrastructure.ai.vision_client import DeepSeekVisionClient, VisionProviderError
-from app.module.knowledge.domain.ingest_config_domain import (
-    normalize_vision_description_language,
+from app.module.knowledge.domain.vision_prompt_domain import (
+    DEFAULT_VISION_DOCUMENT_PROMPT,
+    DEFAULT_VISION_IMAGE_PROMPT,
+    render_vision_prompt,
 )
 from app.module.knowledge.exception.domain_error import VisionExtractionError
 from app.module.knowledge.protocol.vision_extractor_protocol import VisionDocument
@@ -13,58 +14,32 @@ from app.module.knowledge.protocol.vision_extractor_protocol import VisionDocume
 VISION_IMAGE_MAX_TOKENS = 4096
 VISION_DOCUMENT_MAX_TOKENS = 2400
 
+VISION_IMAGE_USER_PROMPT = (
+    "Extract the text, tables, description, and metadata from this image."
+)
+VISION_DOCUMENT_USER_PROMPT = (
+    "Extract the text, tables, layout note, and metadata from this document page."
+)
+
 
 def build_vision_prompt(
     description_language: str,
     mode: Literal["image", "document"],
 ) -> str:
-    """Build the fixed, versioned prompt for one vision extraction mode.
+    """Render the matching built-in prompt for one vision extraction mode.
 
-    OCR text and table cell text stay verbatim in the source language. Only the
-    description and the short metadata fields use ``description_language``.
+    The extraction path renders the configured prompt in ``FileService``; this
+    wrapper remains for callers that need the built-in text, including tests and
+    older integrations.
     """
-    language = json.dumps(normalize_vision_description_language(description_language))
-    shared = (
-        "Return one JSON object with the keys text, tables, description, caption, "
-        "title, summary, document_type, tags, and language. "
-        f"Use {language} for description, caption, title, summary, and tags. "
-        "text must contain OCR text verbatim in its original language. Do not "
-        "translate, paraphrase, summarize, or invent text. tables must be an array "
-        "of GitHub-Flavored Markdown tables; preserve header rows, column order, row "
-        "order, and cell text verbatim, and repeat a merged cell's value in every "
-        "cell it covers. Do not translate the OCR text or table cell text. caption is "
-        "one sentence in the configured language. title is a short title in the "
-        "configured language. summary is one or two sentences in the configured "
-        "language. tags is 5 to 8 short strings in the configured language. language "
-        "is the dominant language of the visible text, or an empty string when there "
-        "is none. Never invent content that is not visible."
+    template = (
+        DEFAULT_VISION_DOCUMENT_PROMPT if mode == "document" else DEFAULT_VISION_IMAGE_PROMPT
     )
-    if mode == "document":
-        return (
-            "You extract searchable text, tables, and a brief layout note from one "
-            f"scanned document page. {shared} "
-            "text covers all readable non-table text on the page and preserves line "
-            "breaks; use an empty string when there is no non-table text. tables is "
-            "an empty array when there are no tables. description is a brief layout "
-            "note in the configured language: where text blocks, tables, figures, "
-            "headers, and footers sit. Do not produce an exhaustive visual essay. "
-            "Keep document_type accurate (scanned_document, receipt, table, chart, "
-            "diagram, screenshot, photo, or other)."
-        )
-    return (
-        "You extract searchable text, tables, and metadata from one image. "
-        f"{shared} "
-        "text is every visible non-table text string, verbatim in its original "
-        "language, in natural reading order (left-to-right, top-to-bottom; finish "
-        "one column before the next). Use an empty string when there is no non-table "
-        "text. tables is an empty array when there are no tables. description is a "
-        "complete visual description in the configured language; read left-to-right "
-        "and top-to-bottom, and cover layout, regions, shapes, colors, objects, "
-        "people, UI controls, and their spatial relationships. Be specific and "
-        "factual. Do not repeat or translate the OCR text or table cell text. "
-        "document_type is one of screenshot, photo, receipt, chart, diagram, "
-        "scanned_document, table, or other."
-    )
+    return render_vision_prompt(
+        template,
+        description_language,
+        mode=mode,
+    ).system_prompt
 
 
 class DeepSeekVisionExtractor:
@@ -93,19 +68,18 @@ class DeepSeekVisionExtractor:
         data: bytes,
         mime_type: str,
         *,
-        description_language: str,
+        system_prompt: str,
         mode: Literal["image", "document"] = "image",
     ) -> VisionDocument:
         try:
             parsed = await self._client.analyze(
                 data,
                 mime_type,
-                system_prompt=build_vision_prompt(description_language, mode),
+                system_prompt=system_prompt,
                 user_prompt=(
-                    "Extract the text, tables, layout note, and metadata from this "
-                    "document page."
+                    VISION_DOCUMENT_USER_PROMPT
                     if mode == "document"
-                    else "Extract the text, tables, description, and metadata from this image."
+                    else VISION_IMAGE_USER_PROMPT
                 ),
                 max_tokens=(
                     VISION_IMAGE_MAX_TOKENS
@@ -174,7 +148,7 @@ class NullVisionExtractor:
         data: bytes,
         mime_type: str,
         *,
-        description_language: str,
+        system_prompt: str,
         mode: Literal["image", "document"] = "image",
     ) -> VisionDocument:
         raise VisionExtractionError("A vision-capable chat provider is required for this document.")
@@ -182,7 +156,9 @@ class NullVisionExtractor:
 
 __all__ = [
     "VISION_DOCUMENT_MAX_TOKENS",
+    "VISION_DOCUMENT_USER_PROMPT",
     "VISION_IMAGE_MAX_TOKENS",
+    "VISION_IMAGE_USER_PROMPT",
     "DeepSeekVisionExtractor",
     "NullVisionExtractor",
     "build_vision_prompt",

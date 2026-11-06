@@ -115,6 +115,7 @@ file in the response. The async routes store the payload and return `202` with a
 | `GET` | `/api/v1/files/ingest-jobs?limit=&offset=` | `listIngestJobs` |
 | `GET` | `/api/v1/files/ingest-jobs/{id}` | `getIngestJob` |
 | `POST` | `/api/v1/files/ingest-jobs/{id}/retry` | `retryIngestJob` |
+| `POST` | `/api/v1/files/{file_id}/reingest` | `reingestFile` |
 
 The list returns `{total_results, jobs}`, newest first. `limit` is 1–100
 (default 20) and `offset` starts at 0. Retry accepts only a failed job whose
@@ -123,6 +124,20 @@ Missing jobs are `404 ingest_job_not_found`; a path already held by an active jo
 for the same account is `409 ingest_job_conflict`; an ineligible retry is
 `409 ingest_job_not_retryable`. Every job query is scoped to the acting account,
 so another account's job id resolves as not found.
+
+`POST /api/v1/files/{file_id}/reingest` accepts `{expected_version}` and queues
+a forced vision pass for a current image, PDF, or DOCX with a stored original.
+The job keeps `storage_key = NULL` and `storage_backend = NULL` and reads the
+source original through the same owner-scoped file service. It stages a new
+file version and only publishes it after extraction and indexing succeed; the
+previous version remains current and readable until then. A missing, deleted,
+or historical source is `404 file_record_not_found`; a stale version is
+`409 file_version_conflict`; a text kind is `422 unsupported_file_type`; no
+stored original is `404 file_content_unavailable`; no vision provider is
+`503 ai_not_configured`; and an active job for the same path or source is
+`409 ingest_job_conflict`. If the path moved or a newer upload became current
+before publication, the job fails with `409 ingest_source_stale` and the newer
+file stays current.
 
 A job reports its durable stage and percentage:
 
@@ -216,14 +231,47 @@ tags. OCR text and table cell text stay verbatim in the source language and are
 never translated. Standalone images and DOCX embedded images use image mode: a
 complete visual description, GitHub-Flavored Markdown tables, and every visible
 non-table text string in reading order. Scanned PDF pages use document-page
-mode: OCR plus tables plus a brief layout note. The prompt is fixed and
-versioned in code; only the language is configurable. Tables use
-GitHub-Flavored Markdown, a merged cell repeats its value in every covered cell,
-and complex `rowspan`/`colspan` is a documented limitation. A saved language
-applies only to future ingests; existing files keep the extraction they already
-have, with no automatic re-index or cross-account backfill.
+mode: OCR plus tables plus a brief layout note. Tables use GitHub-Flavored
+Markdown, a merged cell repeats its value in every covered cell, and complex
+`rowspan`/`colspan` is a documented limitation. A saved language applies only to
+future ingests; existing files keep the extraction they already have, with no
+automatic re-index or cross-account backfill.
 `APSOR_VISION_DESCRIPTION_LANGUAGE` seeds a fresh install and is the fallback
 when the row is absent.
+
+#### Vision prompt settings
+
+The two vision system prompts are edited independently of the runtime snapshot.
+`NULL` in `ingest_config.vision_image_prompt` or
+`ingest_config.vision_document_prompt` means "use the built-in default"; the
+runtime `PUT` and reset never write these columns, so a custom prompt survives a
+runtime reset. Both templates are fully editable, may contain `{language}`, and
+are only length/control-character checked at request normalization. Saving is
+blocked only when a template is empty, exceeds 32,000 characters, contains
+forbidden controls, or omits one of the nine required output JSON keys. Missing
+safety wording (`verbatim`, `do not translate`, or GitHub-Flavored Markdown)
+returns non-blocking warning codes.
+
+| Method | Path | Operation |
+|---|---|---|
+| `GET` | `/api/v1/settings/ingest/vision-prompts` | `getIngestVisionPrompts` |
+| `PUT` | `/api/v1/settings/ingest/vision-prompts` | `updateIngestVisionPrompts` |
+
+The read body is `{config, defaults, source, updated_at, max_chars,
+required_keys, image_prompt_sha256, document_prompt_sha256, warnings}`. `config`
+contains the stored templates with `{language}` intact; the SHA-256 values hash
+the templates, while each file records the SHA-256 of the rendered prompt.
+`source` is `database` when either prompt column is non-null and `default`
+otherwise. A save validates both templates and returns `422
+invalid_vision_prompt` on failure.
+
+`FileService` renders the configured template once per service instance and
+passes the exact system prompt to the extractor. Every vision-extracted file
+records `vision_prompt_sha256`, `vision_prompt_mode`, and
+`vision_description_language`; text, filename-fallback, and legacy rows keep
+`NULL`. Copy operations clone the fingerprint fields; move and rename keep the
+same row. A DOCX re-ingest with no embedded images keeps a text-only result and
+records no fingerprint.
 
 ## Agent conversations
 
@@ -994,10 +1042,12 @@ fields, account/session auth (`app_user`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The current head is
-`f9c2a7d4e6b1`; every private table now has `user_id` and forced RLS, the
+`f7a3c2d9e1b4`; every private table now has `user_id` and forced RLS, the
 runtime role is `apsor_app`, and `file` / `file_ingest_job` record
-`storage_backend`. The head also adds per-run and per-account agent usage
-counters and the impersonation session marker. The migration chain is executed by the test fixture and
+`storage_backend`. Earlier migrations add per-run and per-account agent usage
+counters and the impersonation session marker; the current head adds the
+editable vision prompt templates, per-file prompt fingerprints, and re-ingest
+source linkage. The migration chain is executed by the test fixture and
 verifies the role, grants, and policies; downgrades are still a separate check.
 The agent
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
@@ -1091,9 +1141,18 @@ and seeds row `id=1` with the defaults. Later migrations in order:
 - `a1c3e5f7b9d2` raises the compaction threshold range to 1,000,000 tokens. The
   downgrade clamps stored values back to 200,000 before restoring the old check
   constraint;
-- `c2f6a8d4e1b3` (current head) adds `ingest_config.vision_description_language`
+- `c2f6a8d4e1b3` adds `ingest_config.vision_description_language`
   as a non-null `varchar(80)` with an `English` server default and a
-  trimmed-length check. The downgrade drops the check and column.
+  trimmed-length check. The downgrade drops the check and column;
+- `f7a3c2d9e1b4` (current head) adds nullable
+  `ingest_config.vision_image_prompt` / `vision_document_prompt` templates, the
+  `file.vision_prompt_sha256` / `vision_prompt_mode` /
+  `vision_description_language` fingerprint columns with their pair, mode,
+  hash-format, and length checks, and `file_ingest_job.source_file_id` with the
+  owner-safe composite FK, `reingest` source-kind check, NULL-payload check,
+  active-source unique index, and `(user_id, source_file_id)` lookup index. It
+  seeds no prompt rows and backfills no fingerprints. The downgrade deletes
+  re-ingest jobs before restoring the two-kind source check.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

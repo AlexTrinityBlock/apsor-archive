@@ -9,31 +9,22 @@ used when no database row exists.
 
 from dataclasses import dataclass
 
+from app.module.knowledge.domain.vision_prompt_domain import (
+    DEFAULT_VISION_DOCUMENT_PROMPT,
+    DEFAULT_VISION_IMAGE_PROMPT,
+    VISION_DESCRIPTION_LANGUAGE,
+    VISION_DESCRIPTION_LANGUAGE_MAX_CHARS,
+    normalize_vision_description_language,
+    normalize_vision_prompt,
+    validate_vision_prompt,
+)
+
 INGEST_POLL_SECONDS = 1.0
 INGEST_EXTRACT_WORKERS = 2
 INGEST_MAX_INFLIGHT_JOBS = 2
 INGEST_EMBEDDING_CONCURRENCY = 6
 INGEST_CHUNK_TARGET_CHARS = 4_000
 INGEST_CHUNK_OVERLAP_CHARS = 500
-VISION_DESCRIPTION_LANGUAGE = "English"
-VISION_DESCRIPTION_LANGUAGE_MAX_CHARS = 80
-
-
-def normalize_vision_description_language(value: str) -> str:
-    """Trim and validate one prompt-facing language name."""
-    if not isinstance(value, str):
-        raise ValueError("vision_description_language must be a string.")
-    normalized = value.strip()
-    if not normalized:
-        raise ValueError("vision_description_language must not be empty.")
-    if len(normalized) > VISION_DESCRIPTION_LANGUAGE_MAX_CHARS:
-        raise ValueError(
-            f"vision_description_language must be at most "
-            f"{VISION_DESCRIPTION_LANGUAGE_MAX_CHARS} characters."
-        )
-    if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
-        raise ValueError("vision_description_language must not contain control characters.")
-    return normalized
 
 
 @dataclass(frozen=True)
@@ -47,6 +38,8 @@ class IngestRuntimeConfig:
     chunk_target_chars: int = INGEST_CHUNK_TARGET_CHARS
     chunk_overlap_chars: int = INGEST_CHUNK_OVERLAP_CHARS
     vision_description_language: str = VISION_DESCRIPTION_LANGUAGE
+    vision_image_prompt: str = DEFAULT_VISION_IMAGE_PROMPT
+    vision_document_prompt: str = DEFAULT_VISION_DOCUMENT_PROMPT
 
     def __post_init__(self) -> None:
         """Reject values the database constraints also reject."""
@@ -76,6 +69,10 @@ class IngestRuntimeConfig:
             "vision_description_language",
             normalize_vision_description_language(self.vision_description_language),
         )
+        for field_name in ("vision_image_prompt", "vision_document_prompt"):
+            normalized = normalize_vision_prompt(getattr(self, field_name))
+            validate_vision_prompt(normalized)
+            object.__setattr__(self, field_name, normalized)
 
 
 __all__ = [
