@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 
 import { useI18n } from "../../i18n";
@@ -24,7 +25,8 @@ function MarkdownImage({ alt }: ComponentProps<"img">) {
 }
 
 /**
- * Markdown is rendered as React elements with raw HTML skipped. External
+ * Markdown is rendered as React elements with raw HTML skipped. Soft line
+ * breaks stay visible so the preview matches the typed source. External
  * images are deliberately suppressed so opening a note never leaks a request
  * to an arbitrary host; links open in a new tab with `noopener`.
  */
@@ -32,7 +34,7 @@ export function MarkdownSheet({ content }: { readonly content: string }) {
   return (
     <div className="viewer-markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkBreaks]}
         skipHtml
         components={{ a: MarkdownLink, img: MarkdownImage }}
       >
