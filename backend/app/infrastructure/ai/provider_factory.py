@@ -93,6 +93,8 @@ def provider_defaults_from_settings(settings: Settings) -> ProviderDefaults:
         web_fetch_provider="exa" if use_exa else "tavily" if tavily_key else "none",
         web_fetch_base_url=settings.exa_base_url if use_exa else settings.tavily_base_url,
         web_fetch_api_key=exa_key if use_exa else tavily_key,
+        tavily_api_key=tavily_key,
+        exa_api_key=exa_key,
     )
 
 

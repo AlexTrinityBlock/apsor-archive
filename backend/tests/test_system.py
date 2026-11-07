@@ -5,7 +5,16 @@ from typing import Any
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
-from app.module.knowledge.domain.provider_config_domain import ProviderCapability
+from app.infrastructure.ai.provider_factory import (
+    NullWebClient,
+    provider_defaults_from_settings,
+)
+from app.infrastructure.ai.runtime import AiRuntime
+from app.infrastructure.config.settings import Settings
+from app.module.knowledge.domain.provider_config_domain import (
+    CAPABILITY_WEB_SEARCH,
+    ProviderCapability,
+)
 from app.module.knowledge.protocol.provider_config import ProviderConfig
 from app.module.knowledge.protocol.provider_tester_protocol import ProviderTestOutcome
 from tests.conftest import TEST_DATABASE_URL
@@ -28,6 +37,21 @@ class FakeProviderTester:
             ok=True,
             detail=f"fake {capability} connection ok",
         )
+
+
+class _NullBuilder:
+    def build_web_client(self, config: object) -> NullWebClient:
+        del config
+        return NullWebClient()
+
+
+def test_exa_database_row_uses_the_exa_environment_key() -> None:
+    settings = Settings(tavily_api_key="tvly-test", exa_api_key="exa-test")
+    defaults = provider_defaults_from_settings(settings)
+    runtime = AiRuntime(builder=_NullBuilder(), cipher=None, defaults=defaults)  # type: ignore[arg-type]
+
+    assert runtime._environment_key(CAPABILITY_WEB_SEARCH, "exa") == "exa-test"
+    assert runtime._environment_key(CAPABILITY_WEB_SEARCH, "tavily") == "tvly-test"
 
 
 def _capability(registry: dict[str, Any], name: str) -> dict[str, Any]:
