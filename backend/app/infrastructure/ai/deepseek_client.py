@@ -8,7 +8,9 @@ never persisted.
 
 import json
 import logging
+import time
 from typing import Any
+from uuid import uuid4
 
 import httpx
 
@@ -25,6 +27,11 @@ from app.module.knowledge.exception.domain_error import (
 from app.module.knowledge.protocol.text_generator_protocol import AiCompletion
 
 logger = logging.getLogger(__name__)
+
+# Status codes where the provider itself declares a temporary condition. A
+# request can be retried without changing the payload.
+_RETRYABLE_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504, 529})
+_ERROR_MESSAGE_LIMIT = 300
 
 
 class DeepSeekClient:
@@ -79,6 +86,10 @@ class DeepSeekClient:
         user_prompt: str,
         json_mode: bool,
     ) -> AiCompletion:
+        operation = "complete_json" if json_mode else "complete_text"
+        call_id = uuid4().hex[:12]
+        model = self.model_name
+        started = time.monotonic()
         payload = self._base_payload(None)
         payload["messages"] = [
             {"role": "system", "content": system_prompt},
@@ -87,6 +98,17 @@ class DeepSeekClient:
         payload["stream"] = False
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
+        _log_request_started(
+            operation=operation,
+            call_id=call_id,
+            model=model,
+            stream=False,
+            messages=2,
+            tools=0,
+            max_tokens=int(payload["max_tokens"]),
+            temperature=self.temperature,
+            timeout_seconds=self.timeout_seconds,
+        )
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
@@ -96,29 +118,89 @@ class DeepSeekClient:
                     json=payload,
                 )
         except httpx.HTTPError as exc:
-            raise AiProviderError(f"network error: {exc}") from exc
+            raise _network_error(
+                exc,
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=False,
+                started=started,
+            ) from exc
 
+        request_id = _response_request_id(response)
         if response.status_code >= 400:
-            # Provider bodies can reflect request metadata or internal details;
-            # classify a context overflow so the agent can compact and retry,
-            # but never persist or log the raw body.
-            _raise_http_error(response.status_code, response.content)
+            # The raw body is never logged. A bounded provider error code and
+            # message are logged so an operator can classify the failure.
+            raise _http_error(
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=False,
+                status_code=response.status_code,
+                request_id=request_id,
+                body=response.content,
+                started=started,
+            )
         try:
             body = response.json()
             choice = body["choices"][0]
             text = choice["message"]["content"]
         except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise AiProviderError("malformed completion response") from exc
+            _log_invalid_response(
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=False,
+                response=response,
+                started=started,
+                reason="malformed_response",
+            )
+            raise AiProviderError(
+                "malformed completion response",
+                status_code=response.status_code,
+                provider_request_id=request_id,
+            ) from exc
         if not isinstance(text, str) or not text.strip():
-            raise AiProviderError("empty completion")
+            _log_invalid_response(
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=False,
+                response=response,
+                started=started,
+                reason="empty_completion",
+            )
+            raise AiProviderError(
+                "empty completion",
+                status_code=response.status_code,
+                retryable=True,
+                provider_request_id=request_id,
+            )
 
         usage = _normalize_usage(body.get("usage")) if isinstance(body, dict) else {}
-        model = body.get("model") if isinstance(body, dict) else None
-        return AiCompletion(
+        response_model = body.get("model") if isinstance(body, dict) else None
+        result = AiCompletion(
             text=text.strip(),
-            model=str(model or self.model_name),
+            model=str(response_model or self.model_name),
             usage=usage,
         )
+        _log_request_completed(
+            operation=operation,
+            call_id=call_id,
+            model=model,
+            stream=False,
+            status_code=response.status_code,
+            request_id=request_id,
+            started=started,
+            finish_reason="complete",
+            response_model=result.model,
+            text_chars=len(result.text),
+            tool_names=[],
+            chunks=None,
+            first_chunk_ms=None,
+            usage=result.usage,
+        )
+        return result
 
     async def complete_text(self, system_prompt: str, user_prompt: str) -> AiCompletion:
         return await self._complete(
@@ -157,6 +239,22 @@ class DeepSeekClient:
         return await self._chat_once(payload)
 
     async def _chat_once(self, payload: dict[str, Any]) -> ChatResult:
+        operation = "chat"
+        call_id = uuid4().hex[:12]
+        model = str(payload.get("model") or self.model_name)
+        stream = False
+        started = time.monotonic()
+        _log_request_started(
+            operation=operation,
+            call_id=call_id,
+            model=model,
+            stream=stream,
+            messages=len(payload.get("messages") or []),
+            tools=len(payload.get("tools") or []),
+            max_tokens=int(payload.get("max_tokens") or self.chat_max_tokens),
+            temperature=self.temperature,
+            timeout_seconds=self.timeout_seconds,
+        )
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                 response = await client.post(
@@ -165,9 +263,26 @@ class DeepSeekClient:
                     json=payload,
                 )
         except httpx.HTTPError as exc:
-            raise AiProviderError(f"network error: {exc}") from exc
+            raise _network_error(
+                exc,
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=stream,
+                started=started,
+            ) from exc
+        request_id = _response_request_id(response)
         if response.status_code >= 400:
-            _raise_http_error(response.status_code, response.content)
+            raise _http_error(
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=stream,
+                status_code=response.status_code,
+                request_id=request_id,
+                body=response.content,
+                started=started,
+            )
         try:
             body = response.json()
             choice = body["choices"][0]
@@ -175,29 +290,99 @@ class DeepSeekClient:
                 raise AiProviderError("malformed chat response")
             message = choice.get("message") or {}
         except (KeyError, IndexError, TypeError, ValueError) as exc:
-            raise AiProviderError("malformed chat response") from exc
+            _log_invalid_response(
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=stream,
+                response=response,
+                started=started,
+                reason="malformed_response",
+            )
+            raise AiProviderError(
+                "malformed chat response",
+                status_code=response.status_code,
+                provider_request_id=request_id,
+            ) from exc
         if not isinstance(message, dict):
-            raise AiProviderError("malformed chat response")
+            _log_invalid_response(
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=stream,
+                response=response,
+                started=started,
+                reason="malformed_message",
+            )
+            raise AiProviderError(
+                "malformed chat response",
+                status_code=response.status_code,
+                provider_request_id=request_id,
+            )
 
         text = message.get("content")
         if text is None:
             text = ""
         if not isinstance(text, str):
-            raise AiProviderError("malformed chat response")
+            _log_invalid_response(
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=stream,
+                response=response,
+                started=started,
+                reason="malformed_content",
+            )
+            raise AiProviderError(
+                "malformed chat response",
+                status_code=response.status_code,
+                provider_request_id=request_id,
+            )
         tool_calls = _parse_tool_calls(message.get("tool_calls"))
         if not text.strip() and not tool_calls:
-            raise AiProviderError("empty completion")
+            _log_invalid_response(
+                operation=operation,
+                call_id=call_id,
+                model=model,
+                stream=stream,
+                response=response,
+                started=started,
+                reason="empty_completion",
+            )
+            raise AiProviderError(
+                "empty completion",
+                status_code=response.status_code,
+                retryable=True,
+                provider_request_id=request_id,
+            )
         finish_reason = str(choice.get("finish_reason") or ("tool_calls" if tool_calls else "stop"))
         usage = _normalize_usage(body.get("usage"))
-        model = body.get("model") or payload.get("model") or self.model_name
-        return ChatResult(
+        response_model = body.get("model") or payload.get("model") or self.model_name
+        result = ChatResult(
             text=text,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
-            model=str(model),
+            model=str(response_model),
             usage=usage,
             raw_assistant_message=message,
         )
+        _log_request_completed(
+            operation=operation,
+            call_id=call_id,
+            model=model,
+            stream=stream,
+            status_code=response.status_code,
+            request_id=request_id,
+            started=started,
+            finish_reason=finish_reason,
+            response_model=result.model,
+            text_chars=len(result.text),
+            tool_names=[call.name for call in result.tool_calls],
+            chunks=None,
+            first_chunk_ms=None,
+            usage=result.usage,
+        )
+        return result
 
     async def _stream_chat(
         self,
@@ -209,6 +394,26 @@ class DeepSeekClient:
         finish_reason = ""
         usage: dict[str, int] = {}
         model_name = str(payload.get("model") or self.model_name)
+        operation = "chat"
+        call_id = uuid4().hex[:12]
+        request_model = model_name
+        started = time.monotonic()
+        chunk_count = 0
+        first_chunk_ms: int | None = None
+        response_status: int | None = None
+        response_request_id: str | None = None
+        response_content_type: str | None = None
+        _log_request_started(
+            operation=operation,
+            call_id=call_id,
+            model=request_model,
+            stream=True,
+            messages=len(payload.get("messages") or []),
+            tools=len(payload.get("tools") or []),
+            max_tokens=int(payload.get("max_tokens") or self.chat_max_tokens),
+            temperature=self.temperature,
+            timeout_seconds=self.timeout_seconds,
+        )
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
@@ -218,8 +423,20 @@ class DeepSeekClient:
                     headers=self._headers,
                     json=payload,
                 ) as response:
+                    response_status = response.status_code
+                    response_request_id = _response_request_id(response)
+                    response_content_type = response.headers.get("content-type")
                     if response.status_code >= 400:
-                        _raise_http_error(response.status_code, await response.aread())
+                        raise _http_error(
+                            operation=operation,
+                            call_id=call_id,
+                            model=request_model,
+                            stream=True,
+                            status_code=response.status_code,
+                            request_id=response_request_id,
+                            body=await response.aread(),
+                            started=started,
+                        )
                     async for raw_line in response.aiter_lines():
                         line = raw_line.strip()
                         if not line or line.startswith(":"):
@@ -235,6 +452,9 @@ class DeepSeekClient:
                             continue
                         if not isinstance(chunk, dict):
                             continue
+                        chunk_count += 1
+                        if first_chunk_ms is None:
+                            first_chunk_ms = _elapsed_ms(started)
                         chunk_usage = chunk.get("usage")
                         if isinstance(chunk_usage, dict):
                             usage = _normalize_usage(chunk_usage)
@@ -262,14 +482,40 @@ class DeepSeekClient:
                         if isinstance(reason, str) and reason:
                             finish_reason = reason
         except httpx.HTTPError as exc:
-            raise AiProviderError(f"network error: {exc}") from exc
+            raise _network_error(
+                exc,
+                operation=operation,
+                call_id=call_id,
+                model=request_model,
+                stream=True,
+                started=started,
+            ) from exc
 
         text = "".join(content_parts)
         tool_calls = _build_streamed_tool_calls(call_slots)
         if not text.strip() and not tool_calls:
-            raise AiProviderError("empty completion")
+            logger.warning(
+                "provider response invalid provider=deepseek operation=%s "
+                "call_id=%s model=%s stream=true status=%s duration_ms=%d "
+                "request_id=%s content_type=%s chunks=%d "
+                "reason=empty_completion retryable=true",
+                operation,
+                call_id,
+                request_model,
+                response_status,
+                _elapsed_ms(started),
+                response_request_id or "-",
+                response_content_type or "-",
+                chunk_count,
+            )
+            raise AiProviderError(
+                "empty completion",
+                status_code=response_status,
+                retryable=True,
+                provider_request_id=response_request_id,
+            )
         resolved_finish = finish_reason or ("tool_calls" if tool_calls else "stop")
-        return ChatResult(
+        result = ChatResult(
             text=text,
             tool_calls=tool_calls,
             finish_reason=resolved_finish,
@@ -277,6 +523,23 @@ class DeepSeekClient:
             usage=usage,
             raw_assistant_message=_raw_assistant_message(text, tool_calls),
         )
+        _log_request_completed(
+            operation=operation,
+            call_id=call_id,
+            model=request_model,
+            stream=True,
+            status_code=response_status or 200,
+            request_id=response_request_id,
+            started=started,
+            finish_reason=resolved_finish,
+            response_model=model_name,
+            text_chars=len(text),
+            tool_names=[call.name for call in tool_calls],
+            chunks=chunk_count,
+            first_chunk_ms=first_chunk_ms,
+            usage=usage,
+        )
+        return result
 
 
 class NullTextGenerator:
@@ -315,11 +578,242 @@ _CONTEXT_ERROR_MARKERS = (
 )
 
 
-def _raise_http_error(status_code: int, body: bytes) -> None:
-    """Classify an HTTP failure without exposing the provider body."""
-    if _is_context_window_error(body):
-        raise AiContextWindowError()
-    raise AiProviderError(f"HTTP {status_code}")
+def _log_request_started(
+    *,
+    operation: str,
+    call_id: str,
+    model: str,
+    stream: bool,
+    messages: int,
+    tools: int,
+    max_tokens: int,
+    temperature: float,
+    timeout_seconds: float,
+) -> None:
+    logger.info(
+        "provider request started provider=deepseek operation=%s call_id=%s "
+        "model=%s stream=%s messages=%d tools=%d max_tokens=%d "
+        "temperature=%s timeout_s=%s",
+        operation,
+        call_id,
+        model or "-",
+        stream,
+        messages,
+        tools,
+        max_tokens,
+        temperature,
+        timeout_seconds,
+    )
+
+
+def _log_request_completed(
+    *,
+    operation: str,
+    call_id: str,
+    model: str,
+    stream: bool,
+    status_code: int,
+    request_id: str | None,
+    started: float,
+    finish_reason: str,
+    response_model: str,
+    text_chars: int,
+    tool_names: list[str],
+    chunks: int | None,
+    first_chunk_ms: int | None,
+    usage: dict[str, int],
+) -> None:
+    logger.info(
+        "provider request completed provider=deepseek operation=%s call_id=%s "
+        "model=%s stream=%s status=%d duration_ms=%d request_id=%s "
+        "finish_reason=%s response_model=%s text_chars=%d tool_calls=%d "
+        "tool_names=%s chunks=%s first_chunk_ms=%s prompt_tokens=%d "
+        "completion_tokens=%d total_tokens=%d cached_tokens=%d",
+        operation,
+        call_id,
+        model or "-",
+        stream,
+        status_code,
+        _elapsed_ms(started),
+        request_id or "-",
+        finish_reason or "-",
+        response_model or "-",
+        text_chars,
+        len(tool_names),
+        ",".join(tool_names) if tool_names else "-",
+        chunks if chunks is not None else "-",
+        first_chunk_ms if first_chunk_ms is not None else "-",
+        usage.get("prompt_tokens", 0),
+        usage.get("completion_tokens", 0),
+        usage.get("total_tokens", 0),
+        usage.get("prompt_cache_hit_tokens", 0),
+    )
+
+
+def _log_invalid_response(
+    *,
+    operation: str,
+    call_id: str,
+    model: str,
+    stream: bool,
+    response: httpx.Response,
+    started: float,
+    reason: str,
+) -> None:
+    logger.warning(
+        "provider response invalid provider=deepseek operation=%s call_id=%s "
+        "model=%s stream=%s status=%d duration_ms=%d request_id=%s "
+        "content_type=%s body_bytes=%d reason=%s",
+        operation,
+        call_id,
+        model or "-",
+        stream,
+        response.status_code,
+        _elapsed_ms(started),
+        _response_request_id(response) or "-",
+        response.headers.get("content-type", "-"),
+        len(response.content),
+        reason,
+    )
+
+
+def _http_error(
+    *,
+    operation: str,
+    call_id: str,
+    model: str,
+    stream: bool,
+    status_code: int,
+    request_id: str | None,
+    body: bytes,
+    started: float,
+) -> AiProviderError:
+    """Classify an HTTP failure and log bounded provider error metadata.
+
+    The raw response body is deliberately never logged: it can echo request
+    metadata. Only the provider's own error code/type/message, clipped to a
+    fixed length, is recorded for diagnosis.
+    """
+    error_code, error_type, error_message = _error_metadata(body)
+    context_window = _is_context_window_error(body)
+    retryable = _is_retryable_status(status_code)
+    logger.warning(
+        "provider request failed provider=deepseek operation=%s call_id=%s "
+        "model=%s stream=%s status=%d duration_ms=%d request_id=%s "
+        "error_code=%s error_type=%s error_message=%r body_bytes=%d "
+        "classification=%s retryable=%s",
+        operation,
+        call_id,
+        model or "-",
+        stream,
+        status_code,
+        _elapsed_ms(started),
+        request_id or "-",
+        error_code or "-",
+        error_type or "-",
+        error_message or "-",
+        len(body),
+        "context_window" if context_window else "http_error",
+        retryable,
+    )
+    if context_window:
+        return AiContextWindowError()
+    detail = f"HTTP {status_code}"
+    if error_code:
+        detail += f" ({error_code})"
+    if error_message:
+        detail += f": {error_message}"
+    return AiProviderError(
+        detail,
+        status_code=status_code,
+        retryable=retryable,
+        provider_request_id=request_id,
+        provider_error_code=error_code,
+        provider_error_type=error_type,
+        provider_error_message=error_message,
+    )
+
+
+def _network_error(
+    exc: httpx.HTTPError,
+    *,
+    operation: str,
+    call_id: str,
+    model: str,
+    stream: bool,
+    started: float,
+) -> AiProviderError:
+    retryable = isinstance(
+        exc,
+        (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError),
+    )
+    classification = (
+        "timeout" if isinstance(exc, httpx.TimeoutException) else "network_error"
+    )
+    message = _clip_error_text(str(exc))
+    logger.warning(
+        "provider request failed provider=deepseek operation=%s call_id=%s "
+        "model=%s stream=%s status=network_error duration_ms=%d "
+        "error_type=%s error_message=%r classification=%s retryable=%s",
+        operation,
+        call_id,
+        model or "-",
+        stream,
+        _elapsed_ms(started),
+        type(exc).__name__,
+        message or "-",
+        classification,
+        retryable,
+    )
+    return AiProviderError(
+        f"network error ({type(exc).__name__}): {message or 'no detail'}",
+        retryable=retryable,
+        provider_error_type=type(exc).__name__,
+        provider_error_message=message,
+    )
+
+
+def _response_request_id(response: httpx.Response) -> str | None:
+    for header in ("x-request-id", "x-ds-request-id", "cf-ray"):
+        value = response.headers.get(header)
+        if value:
+            return value
+    return None
+
+
+def _error_metadata(body: bytes) -> tuple[str | None, str | None, str | None]:
+    """Extract the provider's bounded error fields, never the raw body."""
+    try:
+        payload = json.loads(body[:8192].decode("utf-8", "ignore"))
+    except ValueError:
+        return None, None, None
+    if not isinstance(payload, dict):
+        return None, None, None
+    error = payload.get("error")
+    if isinstance(error, dict):
+        return (
+            _clip_error_text(error.get("code")),
+            _clip_error_text(error.get("type")),
+            _clip_error_text(error.get("message")),
+        )
+    return None, None, _clip_error_text(payload.get("message"))
+
+
+def _clip_error_text(value: object, limit: int = _ERROR_MESSAGE_LIMIT) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split())
+    if not text:
+        return None
+    return text[:limit]
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.monotonic() - started) * 1000)
+
+
+def _is_retryable_status(status_code: int) -> bool:
+    return status_code in _RETRYABLE_STATUS_CODES
 
 
 def _is_context_window_error(body: bytes) -> bool:

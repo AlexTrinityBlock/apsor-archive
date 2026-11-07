@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
@@ -86,6 +87,7 @@ from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.knowledge.exception.domain_error import (
     AiContextWindowError,
     AiNotConfiguredError,
+    AiProviderError,
 )
 from app.shared.time import utcnow
 
@@ -97,6 +99,10 @@ _PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")
 LIMIT_CODES = frozenset(
     {"step_limit", "tool_call_limit", "tool_result_budget_exhausted"}
 )
+# A transient upstream outage is retried only when no text has reached the
+# client yet. Delays are deliberately short: the durable run is still
+# retryable from the UI after these automatic attempts are exhausted.
+_PROVIDER_RETRY_DELAYS_SECONDS = (1.0, 3.0)
 
 
 @dataclass(frozen=True)
@@ -609,6 +615,19 @@ class AgentService:
         conversation_id = turn.conversation.id
         run_id = turn.run.id
         terminal = False
+        loop_started = time.monotonic()
+        completed_steps = 0
+        logger.info(
+            "agent run started run_id=%s conversation_id=%s provider=%s "
+            "model=%s resumed=%s max_steps=%d page_context=%s",
+            run_id,
+            conversation_id,
+            turn.conversation.provider,
+            turn.conversation.model or "-",
+            resumed,
+            self.config.max_steps,
+            turn.page_context_entry_id is not None,
+        )
 
         try:
             if emit_start:
@@ -654,6 +673,23 @@ class AgentService:
                     )
                     return
 
+                step_started = time.monotonic()
+                logger.info(
+                    "agent step started run_id=%s conversation_id=%s step=%d "
+                    "messages=%d tools=%d message_chars=%d tool_chars=%d",
+                    run_id,
+                    conversation_id,
+                    step,
+                    len(context.messages) + (1 if context.system_message.get("content") else 0),
+                    len(context.tools),
+                    len(
+                        json.dumps(
+                            [context.system_message, *context.messages],
+                            ensure_ascii=False,
+                        )
+                    ),
+                    len(json.dumps(context.tools, ensure_ascii=False)),
+                )
                 yield AgentStreamEvent(
                     "message_start",
                     {"entry_id": None, "kind": KIND_ASSISTANT, "role": "assistant"},
@@ -663,6 +699,8 @@ class AgentService:
                     context,
                     turn.conversation.model,
                     completion,
+                    run_id=run_id,
+                    step=step,
                 ):
                     yield event
                 result = completion.result
@@ -765,6 +803,25 @@ class AgentService:
                     )
                     return
 
+                completed_steps += 1
+                logger.info(
+                    "agent step completed run_id=%s conversation_id=%s step=%d "
+                    "duration_ms=%d finish_reason=%s text_chars=%d "
+                    "tool_calls=%d tool_names=%s prompt_tokens=%d "
+                    "completion_tokens=%d total_tokens=%d cached_tokens=%d",
+                    run_id,
+                    conversation_id,
+                    step,
+                    int((time.monotonic() - step_started) * 1000),
+                    finish_reason,
+                    len(result.text),
+                    len(result.tool_calls),
+                    ",".join(call.name for call in result.tool_calls) or "-",
+                    result.usage.get("prompt_tokens", 0),
+                    result.usage.get("completion_tokens", 0),
+                    result.usage.get("total_tokens", 0),
+                    result.usage.get("prompt_cache_hit_tokens", 0),
+                )
                 assistant_message = _assistant_message(result)
                 assistant_data = _assistant_data(
                     result,
@@ -810,6 +867,17 @@ class AgentService:
                         run_id=run_id,
                         last_entry_id=last_entry_id,
                         now=utcnow(),
+                    )
+                    logger.info(
+                        "agent run completed run_id=%s conversation_id=%s "
+                        "duration_ms=%d steps=%d finish_reason=%s "
+                        "last_entry_id=%s",
+                        run_id,
+                        conversation_id,
+                        int((time.monotonic() - loop_started) * 1000),
+                        completed_steps,
+                        finish_reason,
+                        last_entry_id,
                     )
                     terminal = True
                     yield AgentStreamEvent(
@@ -1049,6 +1117,16 @@ class AgentService:
                         )
                     for approval in approvals:
                         yield _approval_required_event(_approval_schema(approval))
+                    logger.info(
+                        "agent run waiting run_id=%s conversation_id=%s "
+                        "duration_ms=%d steps=%d approvals=%d last_entry_id=%s",
+                        run_id,
+                        conversation_id,
+                        int((time.monotonic() - loop_started) * 1000),
+                        completed_steps,
+                        len(approvals),
+                        last_entry_id,
+                    )
                     terminal = True
                     yield AgentStreamEvent(
                         "run_end",
@@ -1327,14 +1405,46 @@ class AgentService:
         confirmation-required write for this snapshot; it never comes from the
         model's tool arguments.
         """
-        return await self.tool_registry.execute(
+        started = time.monotonic()
+        argument_keys = ",".join(sorted(call.arguments)) or "-"
+        logger.info(
+            "agent tool started tool=%s call_id=%s approved=%s "
+            "parse_error=%s argument_keys=%s argument_chars=%d",
             call.name,
-            call.arguments,
-            call_id=call.call_id,
-            max_chars=self.config.max_tool_result_chars,
-            parse_error=call.parse_error,
-            approved=approved,
+            call.call_id,
+            approved,
+            call.parse_error is not None,
+            argument_keys,
+            len(call.raw_arguments),
         )
+        try:
+            outcome = await self.tool_registry.execute(
+                call.name,
+                call.arguments,
+                call_id=call.call_id,
+                max_chars=self.config.max_tool_result_chars,
+                parse_error=call.parse_error,
+                approved=approved,
+            )
+        except Exception:
+            logger.exception(
+                "agent tool crashed tool=%s call_id=%s duration_ms=%d",
+                call.name,
+                call.call_id,
+                int((time.monotonic() - started) * 1000),
+            )
+            raise
+        logger.info(
+            "agent tool completed tool=%s call_id=%s status=%s "
+            "error_code=%s duration_ms=%d result_chars=%d",
+            call.name,
+            call.call_id,
+            outcome.status,
+            outcome.error_code or "-",
+            int((time.monotonic() - started) * 1000),
+            len(outcome.content),
+        )
+        return outcome
 
     async def _gather_tools(
         self,
@@ -1363,29 +1473,119 @@ class AgentService:
         context: ProviderContext,
         model: str,
         outcome: _CompletionOutcome,
+        *,
+        run_id: int,
+        step: int,
     ) -> AsyncIterator[AgentStreamEvent]:
-        """Run one provider call and yield transport-only text deltas."""
-        queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+        """Run one provider call and yield transport-only text deltas.
 
-        async def on_delta(delta: str) -> None:
-            await queue.put(("delta", delta))
+        A retryable upstream failure is retried automatically only while no
+        text delta has reached the client. Once a token has been streamed, a
+        retry could duplicate visible output, so the failure is returned and
+        the normal durable retry path takes over.
+        """
+        queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
+        provider_messages: list[dict[str, Any]] = []
+        if context.system_message.get("content"):
+            provider_messages.append(context.system_message)
+        provider_messages.extend(context.messages)
+        max_attempts = len(_PROVIDER_RETRY_DELAYS_SECONDS) + 1
 
         async def run() -> None:
-            try:
-                provider_messages: list[dict[str, Any]] = []
-                if context.system_message.get("content"):
-                    provider_messages.append(context.system_message)
-                provider_messages.extend(context.messages)
-                result = await self.chat_generator.complete_chat(
-                    provider_messages,
-                    context.tools,
-                    model=model,
-                    stream=True,
-                    on_text_delta=on_delta,
+            for attempt in range(1, max_attempts + 1):
+                emitted = False
+
+                async def on_delta(delta: str) -> None:
+                    nonlocal emitted
+                    emitted = True
+                    await queue.put(("delta", delta))
+
+                attempt_started = time.monotonic()
+                try:
+                    result = await self.chat_generator.complete_chat(
+                        provider_messages,
+                        context.tools,
+                        model=model,
+                        stream=True,
+                        on_text_delta=on_delta,
+                    )
+                except AiProviderError as exc:
+                    duration_ms = int((time.monotonic() - attempt_started) * 1000)
+                    if exc.retryable and not emitted and attempt < max_attempts:
+                        delay = _PROVIDER_RETRY_DELAYS_SECONDS[attempt - 1]
+                        logger.warning(
+                            "provider call retry scheduled run_id=%s step=%s "
+                            "provider=deepseek model=%s attempt=%d "
+                            "max_attempts=%d delay_s=%s duration_ms=%d "
+                            "status=%s request_id=%s error_code=%s "
+                            "error_message=%r",
+                            run_id,
+                            step,
+                            model or "-",
+                            attempt,
+                            max_attempts,
+                            delay,
+                            duration_ms,
+                            exc.status_code,
+                            exc.provider_request_id or "-",
+                            exc.provider_error_code or "-",
+                            str(exc),
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    logger.warning(
+                        "provider call failed run_id=%s step=%s "
+                        "provider=deepseek model=%s attempt=%d max_attempts=%d "
+                        "streamed_text=%s duration_ms=%d status=%s "
+                        "request_id=%s error_type=%s error_code=%s "
+                        "error_message=%r",
+                        run_id,
+                        step,
+                        model or "-",
+                        attempt,
+                        max_attempts,
+                        emitted,
+                        duration_ms,
+                        exc.status_code,
+                        exc.provider_request_id or "-",
+                        type(exc).__name__,
+                        exc.provider_error_code or "-",
+                        str(exc),
+                        exc_info=(type(exc), exc, exc.__traceback__),
+                    )
+                    await queue.put(("error", exc))
+                    return
+                except Exception as exc:
+                    logger.exception(
+                        "provider call failed run_id=%s step=%s "
+                        "provider=deepseek model=%s attempt=%d max_attempts=%d "
+                        "streamed_text=%s duration_ms=%d error_type=%s",
+                        run_id,
+                        step,
+                        model or "-",
+                        attempt,
+                        max_attempts,
+                        emitted,
+                        int((time.monotonic() - attempt_started) * 1000),
+                        type(exc).__name__,
+                    )
+                    await queue.put(("error", exc))
+                    return
+                logger.info(
+                    "provider call succeeded run_id=%s step=%s "
+                    "provider=deepseek model=%s attempt=%d duration_ms=%d "
+                    "finish_reason=%s text_chars=%d tool_calls=%d",
+                    run_id,
+                    step,
+                    model or "-",
+                    attempt,
+                    int((time.monotonic() - attempt_started) * 1000),
+                    result.finish_reason,
+                    len(result.text),
+                    len(result.tool_calls),
                 )
                 await queue.put(("result", result))
-            except Exception as exc:
-                await queue.put(("error", exc))
+                return
 
         task = asyncio.create_task(run())
         try:
@@ -1471,11 +1671,35 @@ class AgentService:
             detail = "No chat provider is configured."
         else:
             code = "provider_error"
-            detail = "The chat provider failed."
-        logger.warning(
-            "Agent provider failure for run %s: %s",
+            if isinstance(error, AiProviderError) and error.retryable:
+                detail = (
+                    "The chat provider is temporarily unavailable. "
+                    "Try again in a moment."
+                )
+            else:
+                detail = "The chat provider failed."
+        logger.error(
+            "agent provider failure run_id=%s conversation_id=%s step=%s "
+            "provider=%s model=%s error_type=%s retryable=%s status=%s "
+            "request_id=%s provider_error_code=%s error_message=%r",
             turn.run.id,
+            turn.conversation.id,
+            step,
+            turn.conversation.provider,
+            turn.conversation.model or "-",
             type(error).__name__ if error is not None else "unknown",
+            isinstance(error, AiProviderError) and error.retryable,
+            error.status_code if isinstance(error, AiProviderError) else None,
+            (error.provider_request_id if isinstance(error, AiProviderError) else None)
+            or "-",
+            (error.provider_error_code if isinstance(error, AiProviderError) else None)
+            or "-",
+            str(error) if error is not None else "unknown",
+            exc_info=(
+                (type(error), error, error.__traceback__)
+                if error is not None
+                else None
+            ),
         )
         entry_id = await self._append_failure_assistant(
             turn,
@@ -1542,6 +1766,14 @@ class AgentService:
         code: str,
         detail: str,
     ) -> None:
+        logger.warning(
+            "agent run failed run_id=%s conversation_id=%s code=%s detail=%r last_entry_id=%s",
+            turn.run.id,
+            turn.conversation.id,
+            code,
+            detail,
+            last_entry_id,
+        )
         await self.repository.fail_run(
             conversation_id=turn.conversation.id,
             run_id=turn.run.id,

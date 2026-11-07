@@ -14,3 +14,8 @@ def configure_logging(*, debug: bool) -> None:
     )
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger(__name__).info(
+        "logging configured level=%s debug=%s format=text",
+        logging.getLevelName(level),
+        debug,
+    )

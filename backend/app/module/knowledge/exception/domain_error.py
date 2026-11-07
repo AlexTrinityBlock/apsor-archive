@@ -125,8 +125,32 @@ class AiNotConfiguredError(KnowledgeError):
 
 
 class AiProviderError(KnowledgeError):
-    def __init__(self, detail: str) -> None:
+    """A chat or extraction provider call that did not produce a usable result.
+
+    The optional fields carry diagnostic context for logs. They never contain
+    credentials or prompt content; they describe the transport failure so an
+    operator can distinguish a temporary upstream outage from a bad key or an
+    invalid request.
+    """
+
+    def __init__(
+        self,
+        detail: str,
+        *,
+        status_code: int | None = None,
+        retryable: bool = False,
+        provider_request_id: str | None = None,
+        provider_error_code: str | None = None,
+        provider_error_type: str | None = None,
+        provider_error_message: str | None = None,
+    ) -> None:
         super().__init__(f"The AI provider failed: {detail}")
+        self.status_code = status_code
+        self.retryable = retryable
+        self.provider_request_id = provider_request_id
+        self.provider_error_code = provider_error_code
+        self.provider_error_type = provider_error_type
+        self.provider_error_message = provider_error_message
 
 
 class AiContextWindowError(AiProviderError):
