@@ -14,3 +14,19 @@ def configure_logging(*, debug: bool) -> None:
     )
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    _reenable_application_loggers()
+    logging.getLogger(__name__).info(
+        "logging configured level=%s debug=%s format=text",
+        logging.getLevelName(level),
+        debug,
+    )
+
+
+def _reenable_application_loggers() -> None:
+    """Undo ``disable_existing_loggers`` from an embedded Alembic fileConfig."""
+    for name, value in logging.Logger.manager.loggerDict.items():
+        if not isinstance(value, logging.Logger):
+            continue
+        if name == "app" or name.startswith("app."):
+            value.disabled = False
+            value.propagate = True
