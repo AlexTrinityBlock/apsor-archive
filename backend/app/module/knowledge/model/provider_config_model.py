@@ -153,7 +153,7 @@ class WebSearchProviderConfigModel(Base, ProviderConfigMixin):
     __tablename__ = "web_search_provider_config"
     __table_args__ = _provider_table_args(
         table_name="web_search_provider_config",
-        provider_check="provider IN ('tavily', 'none')",
+        provider_check="provider IN ('tavily', 'exa', 'none')",
         model_check="model IS NULL",
         model_constraint="model_null",
         dimension_check="dimension IS NULL",
@@ -166,7 +166,7 @@ class WebFetchProviderConfigModel(Base, ProviderConfigMixin):
     __tablename__ = "web_fetch_provider_config"
     __table_args__ = _provider_table_args(
         table_name="web_fetch_provider_config",
-        provider_check="provider IN ('tavily', 'none')",
+        provider_check="provider IN ('tavily', 'exa', 'none')",
         model_check="model IS NULL",
         model_constraint="model_null",
         dimension_check="dimension IS NULL",
