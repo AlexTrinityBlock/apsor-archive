@@ -54,6 +54,40 @@ def test_exa_database_row_uses_the_exa_environment_key() -> None:
     assert runtime._environment_key(CAPABILITY_WEB_SEARCH, "tavily") == "tvly-test"
 
 
+def test_exa_web_provider_row_stores_its_key_in_the_database(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/settings/providers/web_search",
+        json={
+            "provider": "exa",
+            "label": "Exa search",
+            "api_key": "exa-test-key-1234",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    group = _capability(response.json(), "web_search")
+    active = group["active"]
+    assert active["provider"] == "exa"
+    assert active["base_url"] == "https://api.exa.ai"
+    assert active["key_hint"] == "...1234"
+    assert active["key_source"] == "database"
+
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.connect() as connection:
+        assert (
+            connection.execute(
+                text(
+                    "SELECT api_key_ciphertext IS NOT NULL "
+                    "FROM web_search_provider_config WHERE provider = 'exa'"
+                )
+            ).scalar_one()
+            is True
+        )
+    engine.dispose()
+
+
 def _capability(registry: dict[str, Any], name: str) -> dict[str, Any]:
     return next(item for item in registry["capabilities"] if item["capability"] == name)
 
