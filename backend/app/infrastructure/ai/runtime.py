@@ -189,6 +189,24 @@ class AiRuntime:
         self.embedder = self.builder.build_embedder(snapshot.embedding)
         self.web_search_client = self.builder.build_web_client(snapshot.web_search)
         self.web_fetch_client = self.builder.build_web_client(snapshot.web_fetch)
+        logger.info(
+            "provider runtime loaded chat_provider=%s chat_model=%s "
+            "chat_base_url=%s chat_source=%s chat_enabled=%s chat_key=%s "
+            "embedding_provider=%s embedding_model=%s embedding_dimension=%s "
+            "embedding_source=%s web_search_provider=%s web_fetch_provider=%s",
+            snapshot.chat.provider,
+            snapshot.chat.model or "-",
+            snapshot.chat.base_url or "-",
+            snapshot.chat.source,
+            snapshot.chat.enabled,
+            "present" if snapshot.chat.api_key else "missing",
+            snapshot.embedding.provider,
+            snapshot.embedding.model or "-",
+            snapshot.embedding.dimension,
+            snapshot.embedding.source,
+            snapshot.web_search.provider,
+            snapshot.web_fetch.provider,
+        )
 
     @property
     def vector_enabled(self) -> bool:

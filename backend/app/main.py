@@ -1,9 +1,13 @@
 """FastAPI application assembly."""
 
 import asyncio
+import logging
+import re
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +51,8 @@ from app.module.web_research.exception.handler import (
 )
 from app.shared.exception.registry import ExceptionRegistry
 from app.shared.time import utcnow
+
+logger = logging.getLogger(__name__)
 
 _NOT_BUILT = """<!doctype html>
 <html lang="en">
@@ -178,6 +184,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             and "cache-control" not in response.headers
         ):
             response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.middleware("http")
+    async def request_logging(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        """Log API requests with a correlation id and a measured duration.
+
+        Static assets stay at DEBUG so the production log remains readable.
+        Query strings are never logged because they can carry user content.
+        """
+        raw_request_id = (
+            request.headers.get("cf-ray")
+            or request.headers.get("x-request-id")
+            or ""
+        )
+        request_id = (
+            re.sub(r"[^A-Za-z0-9._:-]", "", raw_request_id)[:128]
+            or uuid4().hex[:12]
+        )
+        started = time.monotonic()
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception(
+                "http request failed method=%s path=%s request_id=%s duration_ms=%d",
+                request.method,
+                request.url.path,
+                request_id,
+                int((time.monotonic() - started) * 1000),
+            )
+            raise
+        response.headers["X-Request-ID"] = request_id
+        logger.log(
+            logging.INFO if request.url.path.startswith("/api/") else logging.DEBUG,
+            "http request method=%s path=%s status=%d duration_ms=%d request_id=%s",
+            request.method,
+            request.url.path,
+            response.status_code,
+            int((time.monotonic() - started) * 1000),
+            request_id,
+        )
         return response
 
     app.include_router(auth_router, prefix="/api/v1")

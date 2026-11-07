@@ -48,11 +48,13 @@ Keep one conversation resumable and auditable across model steps and process res
 - Preserve SSE event names, payload fields, and ordering. Add new event fields compatibly; do not persist incremental assistant deltas.
 - Add tools only with a validated argument model, catalog entry, registry dispatcher, and prompt/tools version decision. Bump `PROMPT_VERSION` or `TOOLS_VERSION` when the frozen prefix changes; existing conversations must stay frozen.
 - `web_fetch` is page-based: the model sees only `url` and `page`, and the service returns one server-defined page of up to 12,000 characters packed at whole-line boundaries. `page`/`total_pages`/`page_chars`/`total_chars`/`has_more`/`next_page` and the continuation footer are part of the frozen tool contract. The legacy `offset`/`limit`/`max_chars` arguments remain accepted but are hidden from the model-facing schema (`SkipJsonSchema`) only so conversations frozen on `archive-tools-v4`/`v5` keep validating; page mode ignores `max_chars`/`limit`, and a legacy `offset` selects the containing page. It slices a cached full document without calling the provider on a cache hit. Changing these arguments, the footer, or its semantics requires a `TOOLS_VERSION` bump.
-- Fail closed on provider/tool errors. Use safe codes and bounded details; never expose raw provider bodies, keys, SQL, or stack traces.
+- Fail closed on provider/tool errors. Use safe codes and bounded details; never expose raw provider bodies, keys, SQL, or stack traces to clients.
+- Retry a transient provider failure (`5xx`, `429`, timeout, or network error) only while no text delta has reached the client. A retry after visible output would duplicate text, so leave that failure to the durable UI retry path.
+- Provider and run logs are English `key=value` lines with stable correlation fields (`request_id`, `run_id`, `step`, `call_id`, `attempt`). Log counts, status codes, latency, token usage, and the provider's bounded error code/message; never log prompt content, tool arguments, API keys, or a raw response body.
 - Enforce approval through the backend `approved` flag. Never let model arguments, route input, or UI state bypass the durable approval row.
 - Treat runtime limits as data, not constants. Read them from the immutable snapshot; do not add hidden per-module caps that contradict `agent_config`.
 - When changing API schemas or models, update the Alembic revision and regenerate the OpenAPI/Orval client together.
-- Put integration coverage in `backend/tests/test_agent.py` (plus the settings/prompt tests). Use `FakeChatGenerator` through `app.state.agent_chat_generator`; do not call a real provider.
+- Put integration coverage in `backend/tests/test_agent.py` or a focused companion module such as `test_agent_provider_retry.py`. Use `FakeChatGenerator` through `app.state.agent_chat_generator`; do not call a real provider.
 
 ## Verification
 
