@@ -132,10 +132,10 @@ class AiRuntime:
     ) -> ProviderConfig:
         key = self._decrypt_key(row)
         # The DB key wins; only when the row has no key (or decryption fails) does
-        # it fall back to the environment variable. This is the plan 4.2 fallback
-        # rule; web_search and web_fetch are each resolved independently.
+        # it fall back to the environment variable for that row's provider. This
+        # keeps an Exa row from receiving the Tavily key when both are present.
         if key is None:
-            key = self._environment_key(spec.capability)
+            key = self._environment_key(spec.capability, row.provider)
         return ProviderConfig(
             capability=spec.capability,
             provider=row.provider,
@@ -148,11 +148,19 @@ class AiRuntime:
             source="database",
         )
 
-    def _environment_key(self, capability: ProviderCapability) -> str | None:
+    def _environment_key(
+        self,
+        capability: ProviderCapability,
+        provider: str,
+    ) -> str | None:
         if capability == CAPABILITY_CHAT:
             return self.defaults.chat_api_key
         if capability == CAPABILITY_EMBEDDING:
             return self.defaults.embedding_api_key
+        if provider == "exa":
+            return self.defaults.exa_api_key
+        if provider == "tavily":
+            return self.defaults.tavily_api_key
         if capability == CAPABILITY_WEB_SEARCH:
             return self.defaults.web_search_api_key
         return self.defaults.web_fetch_api_key
