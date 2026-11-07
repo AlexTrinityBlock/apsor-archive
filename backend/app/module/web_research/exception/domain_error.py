@@ -3,7 +3,7 @@
 Error messages travel back to the caller (an agent tool or HTTP) through the
 global envelope, so the strings here **must not** contain an API key, an
 Authorization header, or a raw provider response header. The key only exists in
-server memory and in the header of the Tavily request.
+server memory and in the header of the provider request.
 """
 
 

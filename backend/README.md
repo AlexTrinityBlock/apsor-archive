@@ -1184,7 +1184,7 @@ app/
     files/                 local + R2 storage adapters, router, migration CLI
     logger/
     security/              Argon2 hashing, secret cipher, session tokens
-    web/                   Tavily search/extract client
+    web/                   Tavily and Exa search/fetch clients
   module/auth/
     domain/                username and password policy
     model/                 app_user, user_session, user_profile_card
@@ -1353,7 +1353,7 @@ result bodies concatenate to the fake full document. The web-research test uses
 an in-memory cache and fetch client to prove full-document caching, offline cache
 hits, exact page traversal, hidden legacy arguments and legacy offset mapping,
 out-of-range pages, long-line wrapping, and source-cap truncation without
-contacting Tavily. The system-prompt test covers
+contacting a live web provider. The system-prompt test covers
 the four seeded defaults as ordinary rows, create/list/reorder/update/delete/reset,
 `system_prompt:<id>` composition order, frozen old conversations, editing and
 deleting defaults, reset restoring fresh default identities, whitespace and

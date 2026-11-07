@@ -181,7 +181,7 @@ def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> Non
         web_group = _capability(initial, web_capability)
         assert web_group["active"]["provider"] == "none"
         assert web_group["active"]["configured"] is False
-        assert web_group["allowed_providers"] == ["none", "tavily"]
+        assert web_group["allowed_providers"] == ["exa", "none", "tavily"]
         assert web_group["default_base_url"] == "https://api.tavily.com"
         assert web_group["supports_model"] is False
         assert web_group["supports_dimension"] is False

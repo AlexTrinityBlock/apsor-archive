@@ -5,7 +5,7 @@ lets one repository, one service, and one runtime snapshot treat the four
 physical tables uniformly without copy-pasting CRUD code.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from app.module.knowledge.model.provider_config_model import (
@@ -48,6 +48,10 @@ class ProviderTableSpec:
     default_base_url: str | None
     supports_model: bool
     supports_dimension: bool
+    # Some capabilities have more than one provider with a different API origin.
+    # The mapping keeps the generic registry from saving Tavily's URL on an Exa
+    # row when the operator leaves the optional base URL empty.
+    default_base_urls: dict[str, str | None] = field(default_factory=dict)
 
 
 CHAT_TABLE_SPEC = ProviderTableSpec(
@@ -81,11 +85,16 @@ WEB_SEARCH_TABLE_SPEC = ProviderTableSpec(
     title="Web search",
     description="Read-only search providers used by the agent's web_search tool.",
     model=WebSearchProviderConfigModel,
-    allowed_providers=frozenset({"tavily", "none"}),
+    allowed_providers=frozenset({"tavily", "exa", "none"}),
     keyless_providers=frozenset({"none"}),
     default_base_url="https://api.tavily.com",
     supports_model=False,
     supports_dimension=False,
+    default_base_urls={
+        "tavily": "https://api.tavily.com",
+        "exa": "https://api.exa.ai",
+        "none": None,
+    },
 )
 
 WEB_FETCH_TABLE_SPEC = ProviderTableSpec(
@@ -93,11 +102,16 @@ WEB_FETCH_TABLE_SPEC = ProviderTableSpec(
     title="Web fetch",
     description="Read-only page-fetch providers used by the agent's web_fetch tool.",
     model=WebFetchProviderConfigModel,
-    allowed_providers=frozenset({"tavily", "none"}),
+    allowed_providers=frozenset({"tavily", "exa", "none"}),
     keyless_providers=frozenset({"none"}),
     default_base_url="https://api.tavily.com",
     supports_model=False,
     supports_dimension=False,
+    default_base_urls={
+        "tavily": "https://api.tavily.com",
+        "exa": "https://api.exa.ai",
+        "none": None,
+    },
 )
 
 PROVIDER_TABLE_SPECS: dict[ProviderCapability, ProviderTableSpec] = {
@@ -106,6 +120,11 @@ PROVIDER_TABLE_SPECS: dict[ProviderCapability, ProviderTableSpec] = {
     CAPABILITY_WEB_SEARCH: WEB_SEARCH_TABLE_SPEC,
     CAPABILITY_WEB_FETCH: WEB_FETCH_TABLE_SPEC,
 }
+
+
+def default_base_url_for(spec: ProviderTableSpec, provider: str) -> str | None:
+    """Return the provider-specific default, falling back to the capability one."""
+    return spec.default_base_urls.get(provider, spec.default_base_url)
 
 
 __all__ = [
@@ -118,4 +137,5 @@ __all__ = [
     "WEB_CAPABILITIES",
     "ProviderCapability",
     "ProviderTableSpec",
+    "default_base_url_for",
 ]

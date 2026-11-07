@@ -6,17 +6,21 @@ configurations and is reloaded on every provider write, so a search or fetch
 never needs a database session — important while an agent SSE stream is open.
 
 Tests replace the whole slice by setting ``app.state.web_research_service`` to a
-fake exposing the same ``search`` / ``fetch`` methods; Tavily is then never
+fake exposing the same ``search`` / ``fetch`` methods; no provider is then
 called.
 """
 
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast
 
 from fastapi import Request
 
 from app.infrastructure.config.settings import Settings
-from app.infrastructure.web.tavily_client import DEFAULT_BASE_URL, TavilyWebClient
+from app.infrastructure.web.exa_client import DEFAULT_BASE_URL as EXA_DEFAULT_BASE_URL
+from app.infrastructure.web.exa_client import ExaWebClient
+from app.infrastructure.web.tavily_client import DEFAULT_BASE_URL as TAVILY_DEFAULT_BASE_URL
+from app.infrastructure.web.tavily_client import TavilyWebClient
+from app.module.web_research.exception.domain_error import WebProviderError
 from app.module.web_research.protocol.web_cache_protocol import WebCacheProtocol
 from app.module.web_research.protocol.web_client_protocol import (
     WebClientFactoryProtocol,
@@ -25,6 +29,10 @@ from app.module.web_research.protocol.web_client_protocol import (
 )
 from app.module.web_research.protocol.web_provider_config_protocol import (
     WebProviderConfigProtocol,
+)
+from app.module.web_research.schema.web_research_schema import (
+    WebFetchResponse,
+    WebSearchResponse,
 )
 from app.module.web_research.service.web_research_service import WebResearchService
 
@@ -41,8 +49,32 @@ class _UnconfiguredWebConfig:
     source: str = "default"
 
 
-class TavilyWebClientFactory:
-    """Build Tavily clients from runtime configuration only.
+class DisabledWebClient:
+    """A provider-less client whose readiness check always fails closed."""
+
+    provider = "none"
+    configured = False
+
+    async def search(
+        self,
+        query: str,
+        *,
+        max_results: int,
+        search_depth: Literal["basic", "advanced"],
+        include_domains: list[str],
+        exclude_domains: list[str],
+        objective: str = "",
+    ) -> WebSearchResponse:
+        del query, max_results, search_depth, include_domains, exclude_domains, objective
+        raise WebProviderError("No web search provider is configured.")
+
+    async def fetch(self, url: str, *, max_chars: int) -> WebFetchResponse:
+        del url, max_chars
+        raise WebProviderError("No web fetch provider is configured.")
+
+
+class WebClientFactory:
+    """Build the selected web clients from runtime configuration only.
 
     No database access and no logging: the factory receives the plaintext key
     from the in-memory snapshot and hands it straight to the HTTP client.
@@ -52,27 +84,58 @@ class TavilyWebClientFactory:
         self._settings = settings
 
     def _base_url(self, config: WebProviderConfigProtocol) -> str:
-        # The user can override base_url in the registry; otherwise the deployment's
-        # Tavily base URL is used.
-        return config.base_url or str(
-            getattr(self._settings, "tavily_base_url", DEFAULT_BASE_URL) or DEFAULT_BASE_URL
-        )
+        # The user can override base_url in the registry. A stale default from
+        # the other provider is ignored so switching the dropdown cannot send
+        # Exa traffic to Tavily, or the reverse.
+        if config.provider == "exa":
+            base = (config.base_url or "").rstrip("/")
+            if not base or base == "https://api.tavily.com":
+                base = str(
+                    getattr(self._settings, "exa_base_url", EXA_DEFAULT_BASE_URL)
+                    or EXA_DEFAULT_BASE_URL
+                )
+            return base
+        base = (config.base_url or "").rstrip("/")
+        if not base or base == "https://api.exa.ai":
+            base = str(
+                getattr(self._settings, "tavily_base_url", TAVILY_DEFAULT_BASE_URL)
+                or TAVILY_DEFAULT_BASE_URL
+            )
+        return base
 
     def build_search(self, config: WebProviderConfigProtocol) -> WebSearchClientProtocol:
-        return TavilyWebClient(
-            api_key=config.api_key,
-            base_url=self._base_url(config),
-            timeout_seconds=float(getattr(self._settings, "web_search_timeout_seconds", 25.0)),
-            extract_depth=getattr(self._settings, "tavily_extract_depth", "advanced"),
-        )
+        timeout_seconds = float(getattr(self._settings, "web_search_timeout_seconds", 25.0))
+        if config.provider == "exa":
+            return ExaWebClient(
+                api_key=config.api_key,
+                base_url=self._base_url(config),
+                timeout_seconds=timeout_seconds,
+            )
+        if config.provider == "tavily":
+            return TavilyWebClient(
+                api_key=config.api_key,
+                base_url=self._base_url(config),
+                timeout_seconds=timeout_seconds,
+                extract_depth=getattr(self._settings, "tavily_extract_depth", "advanced"),
+            )
+        return DisabledWebClient()
 
     def build_fetch(self, config: WebProviderConfigProtocol) -> WebFetchClientProtocol:
-        return TavilyWebClient(
-            api_key=config.api_key,
-            base_url=self._base_url(config),
-            timeout_seconds=float(getattr(self._settings, "web_fetch_timeout_seconds", 45.0)),
-            extract_depth=getattr(self._settings, "tavily_extract_depth", "advanced"),
-        )
+        timeout_seconds = float(getattr(self._settings, "web_fetch_timeout_seconds", 45.0))
+        if config.provider == "exa":
+            return ExaWebClient(
+                api_key=config.api_key,
+                base_url=self._base_url(config),
+                timeout_seconds=timeout_seconds,
+            )
+        if config.provider == "tavily":
+            return TavilyWebClient(
+                api_key=config.api_key,
+                base_url=self._base_url(config),
+                timeout_seconds=timeout_seconds,
+                extract_depth=getattr(self._settings, "tavily_extract_depth", "advanced"),
+            )
+        return DisabledWebClient()
 
 
 def get_web_research_service(request: Request) -> WebResearchService:
@@ -91,7 +154,7 @@ def _build_web_research_service(request: Request) -> WebResearchService:
     # tool call already sees the new settings.
     search_config = _runtime_config(runtime, "web_search_config", "web_search")
     fetch_config = _runtime_config(runtime, "web_fetch_config", "web_fetch")
-    factory: WebClientFactoryProtocol = TavilyWebClientFactory(settings)
+    factory: WebClientFactoryProtocol = WebClientFactory(settings)
     return WebResearchService(
         search_config=search_config,
         fetch_config=fetch_config,
@@ -115,4 +178,4 @@ def _runtime_config(
     return cast(WebProviderConfigProtocol, config)
 
 
-__all__ = ["TavilyWebClientFactory", "get_web_research_service"]
+__all__ = ["WebClientFactory", "get_web_research_service"]

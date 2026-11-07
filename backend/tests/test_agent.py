@@ -61,8 +61,8 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v12"
-TOOLS_VERSION = "archive-tools-v6"
+PROMPT_VERSION = "archive-agent-v13"
+TOOLS_VERSION = "archive-tools-v7"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -105,10 +105,12 @@ class FakeWebResearchService:
         search_depth: str,
         include_domains: list[str],
         exclude_domains: list[str],
+        objective: str = "",
     ) -> WebSearchResponse:
         self.searches.append(
             {
                 "query": query,
+                "objective": objective,
                 "max_results": max_results,
                 "search_depth": search_depth,
                 "include_domains": include_domains,
@@ -2198,7 +2200,17 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         [
             tool_calls_result(
                 [
-                    ("web_search", {"query": "tavily agent search", "max_results": 2}),
+                    (
+                        "web_search",
+                        {
+                            "query": "tavily agent search",
+                            "objective": (
+                                "Find the canonical search API notes; "
+                                "prefer primary sources."
+                            ),
+                            "max_results": 2,
+                        },
+                    ),
                     (
                         "web_fetch",
                         {
@@ -2259,6 +2271,9 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert web_fake.searches == [
         {
             "query": "tavily agent search",
+            "objective": (
+                "Find the canonical search API notes; prefer primary sources."
+            ),
             "max_results": 2,
             "search_depth": "basic",
             "include_domains": [],

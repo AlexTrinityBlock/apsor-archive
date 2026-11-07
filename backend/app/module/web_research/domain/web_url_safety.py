@@ -1,9 +1,10 @@
 """URL policy for outbound web fetches.
 
-Tavily issues the actual HTTP request, not this service, so this is not the main
-SSRF boundary; it is still defense-in-depth: it keeps the agent from asking a
-third-party crawler to probe loopback, private networks, or special-use addresses,
-and keeps URLs with credentials or non-http(s) schemes out of the fetch cache.
+The configured provider (Tavily or Exa) issues the actual HTTP request, not this
+service, so this is not the main SSRF boundary; it is still defense-in-depth: it
+keeps the agent from asking a third-party crawler to probe loopback, private
+networks, or special-use addresses, and keeps URLs with credentials or
+non-http(s) schemes out of the fetch cache.
 
 Every module-level helper is defined before ``WebUrlSafety``: if a circular
 import ever appears, all the names ``WebUrlSafety`` refers to already exist by the
@@ -135,7 +136,7 @@ class WebUrlSafety:
             raise WebUrlInvalidError("URL host is a private or special-use address.")
         # Browsers and inet_aton accept legacy IPv4 spellings such as 127.1,
         # 0x7f000001, or 2130706433 that ipaddress rejects; letting them through
-        # would still let Tavily resolve to loopback.
+        # would still let the provider resolve to loopback.
         if address is None and _looks_like_legacy_ipv4(normalized_host):
             raise WebUrlInvalidError("URL host is a private or special-use address.")
 

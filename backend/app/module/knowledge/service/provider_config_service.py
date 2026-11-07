@@ -24,6 +24,7 @@ from app.module.knowledge.domain.provider_config_domain import (
     PROVIDER_TABLE_SPECS,
     ProviderCapability,
     ProviderTableSpec,
+    default_base_url_for,
 )
 from app.module.knowledge.exception.domain_error import (
     EmbeddingProviderError,
@@ -540,7 +541,7 @@ class ProviderConfigService:
                 return None
             if provider == "openai-compatible":
                 raise InvalidProviderConfigError("openai-compatible providers require a base URL.")
-            return spec.default_base_url
+            return default_base_url_for(spec, provider)
         if len(raw) > 500:
             raise InvalidProviderConfigError("base_url must be at most 500 characters.")
         if any(character.isspace() or ord(character) < 0x20 for character in raw):
