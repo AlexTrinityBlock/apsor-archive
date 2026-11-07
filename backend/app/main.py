@@ -73,13 +73,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        configure_logging(debug=resolved_settings.debug)
         resolved_settings.data_dir.mkdir(parents=True, exist_ok=True)
         if resolved_settings.run_migrations:
             await asyncio.to_thread(
                 upgrade_to_head,
                 resolved_settings.database_url,
             )
+        # Alembic's alembic.ini logging config resets the root logger to
+        # WARNING. Configure application logging after the migration so INFO
+        # request/provider/run logs survive startup.
+        configure_logging(debug=resolved_settings.debug)
         app.state.db = Database(
             resolved_settings.database_url,
             echo=resolved_settings.debug,

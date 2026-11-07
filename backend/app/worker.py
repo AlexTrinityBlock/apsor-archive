@@ -62,10 +62,13 @@ def _install_signal_handlers(stop_event: asyncio.Event) -> None:
 
 async def run_worker(settings: Settings, *, once: bool = False) -> None:
     """Own the worker's database, cache, storage, and AI runtime resources."""
-    configure_logging(debug=settings.debug)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     if settings.run_migrations:
         await asyncio.to_thread(upgrade_to_head, settings.database_url)
+    # Alembic's alembic.ini logging config resets the root logger to WARNING.
+    # Configure application logging after the migration so worker job logs
+    # remain visible.
+    configure_logging(debug=settings.debug)
 
     database = Database(settings.database_url, echo=settings.debug)
     cache = build_cache(settings.cache_url)
