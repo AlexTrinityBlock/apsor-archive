@@ -99,23 +99,27 @@ class WebResearchService:
         search_depth: Literal["basic", "advanced"],
         include_domains: list[str],
         exclude_domains: list[str],
+        objective: str = "",
     ) -> WebSearchResponse:
         """Search the web, returning a cached response when one exists."""
         normalized_query = query.strip()
         if not normalized_query:
             raise WebProviderError("search query must not be empty.")
+        normalized_objective = objective.strip()
         bounded_results = max(1, min(max_results, _MAX_SEARCH_RESULTS))
         include = _normalize_domains(include_domains)
         exclude = _normalize_domains(exclude_domains)
 
         # Only the normalized arguments go into the hash input; cache_key() applies
         # SHA-256 on top, so the raw query never appears in plain text in a Valkey
-        # key, a log line, or a metric.
+        # key, a log line, or a metric. The objective steers ranking, so it is
+        # part of the cache identity rather than a hidden post-filter.
         canonical_args = json.dumps(
             {
                 "exclude_domains": exclude,
                 "include_domains": include,
                 "max_results": bounded_results,
+                "objective": normalized_objective,
                 "query": normalized_query,
                 "search_depth": search_depth,
             },
@@ -144,6 +148,7 @@ class WebResearchService:
             search_depth=search_depth,
             include_domains=include,
             exclude_domains=exclude,
+            objective=normalized_objective,
         )
         hits: list[WebSearchHit] = []
         truncated = response.truncated

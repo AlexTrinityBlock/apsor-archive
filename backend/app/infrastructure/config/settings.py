@@ -27,6 +27,8 @@ class Settings(BaseSettings):
             "../.secrets/openai.env",
             ".secrets/r2.env",
             "../.secrets/r2.env",
+            ".secrets/exa.env",
+            "../.secrets/exa.env",
         ),
         env_file_encoding="utf-8",
         extra="ignore",
@@ -152,6 +154,13 @@ class Settings(BaseSettings):
     # more reliably. It costs two credits per five successful extractions and
     # has a longer provider timeout.
     tavily_extract_depth: Literal["basic", "advanced"] = "advanced"
+    # Exa is a separate search/fetch provider. The key can live in
+    # ``.secrets/exa.env`` as ``EXA_API_KEY`` or in the encrypted provider row.
+    exa_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("EXA_API_KEY", "APSOR_EXA_API_KEY"),
+    )
+    exa_base_url: str = "https://api.exa.ai"
     web_search_timeout_seconds: float = 25.0
     # The provider's advanced extraction may use up to 30 seconds; keep the
     # HTTP client above that so it does not time out while Tavily is finishing.

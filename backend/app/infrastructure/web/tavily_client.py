@@ -80,7 +80,11 @@ class TavilyWebClient:
         search_depth: Literal["basic", "advanced"],
         include_domains: list[str],
         exclude_domains: list[str],
+        objective: str = "",
     ) -> WebSearchResponse:
+        # Tavily has no separate objective field; the query already carries the
+        # retrieval intent and the provider adapts it server-side.
+        del objective
         if not self.configured:
             raise WebProviderError("Tavily API key is not configured.")
         payload: dict[str, Any] = {

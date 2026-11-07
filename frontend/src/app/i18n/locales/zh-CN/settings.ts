@@ -494,7 +494,7 @@ export const settings = {
     activateHint:
       "让这个数据行成为此能力唯一使用中的供应商。",
     webCredentialsNote:
-      "网络搜索与网络抓取使用各自独立的凭据。即使另一个能力使用相同的值，仍请在这里粘贴此能力的 Tavily 密钥。",
+      "网络搜索与网络抓取使用各自独立的凭据。即使另一个能力使用相同的值，仍请在这里粘贴此能力的供应商密钥。",
     errors: {
       labelMax: "标签必须为 80 个字符以内。",
       modelRequired: "这个供应商必须指定模型。",

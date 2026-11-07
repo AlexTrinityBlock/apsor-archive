@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 class NullWebClient:
-    """A disabled web client used when no Tavily key is configured."""
+    """A disabled web client used when no web provider is configured."""
 
     provider = "none"
     configured = False
@@ -48,7 +48,9 @@ class NullWebClient:
         search_depth: str,
         include_domains: list[str],
         exclude_domains: list[str],
+        objective: str = "",
     ) -> object:
+        del query, max_results, search_depth, include_domains, exclude_domains, objective
         raise RuntimeError("No web search provider is configured.")
 
     async def fetch(self, url: str, *, max_chars: int) -> object:
@@ -60,6 +62,11 @@ def provider_defaults_from_settings(settings: Settings) -> ProviderDefaults:
     tavily_key = (
         settings.tavily_api_key.get_secret_value() if settings.tavily_api_key is not None else None
     )
+    exa_key = settings.exa_api_key.get_secret_value() if settings.exa_api_key is not None else None
+    # An Exa-only deployment should work out of the box. When both keys exist,
+    # Tavily stays the default for existing deployments; the operator can switch
+    # either capability to Exa in Settings.
+    use_exa = bool(exa_key) and not tavily_key
     return ProviderDefaults(
         chat_provider="deepseek",
         chat_model=settings.deepseek_model,
@@ -78,14 +85,14 @@ def provider_defaults_from_settings(settings: Settings) -> ProviderDefaults:
             else None
         ),
         embedding_dimension=settings.embedding_dimension,
-        # A Tavily key is a shared environment fallback for both independent
-        # capabilities; an active database row still takes precedence.
-        web_search_provider="tavily" if tavily_key else "none",
-        web_search_base_url=settings.tavily_base_url,
-        web_search_api_key=tavily_key,
-        web_fetch_provider="tavily" if tavily_key else "none",
-        web_fetch_base_url=settings.tavily_base_url,
-        web_fetch_api_key=tavily_key,
+        # Environment fallbacks for the two independent web capabilities; an
+        # active database row always takes precedence.
+        web_search_provider="exa" if use_exa else "tavily" if tavily_key else "none",
+        web_search_base_url=settings.exa_base_url if use_exa else settings.tavily_base_url,
+        web_search_api_key=exa_key if use_exa else tavily_key,
+        web_fetch_provider="exa" if use_exa else "tavily" if tavily_key else "none",
+        web_fetch_base_url=settings.exa_base_url if use_exa else settings.tavily_base_url,
+        web_fetch_api_key=exa_key if use_exa else tavily_key,
     )
 
 
@@ -135,14 +142,39 @@ class ProviderFactory:
         )
 
     def build_web_client(self, config: ProviderConfig) -> WebClientProtocol:
-        """Build the Tavily client lazily so knowledge never imports web code at boot.
+        """Build a web client lazily so knowledge never imports web code at boot.
 
-        The web-research slice owns ``app/infrastructure/web``. The import is
+        The web-research slice owns ``app/infrastructure/web``. The imports are
         deferred here so knowledge can still boot while that slice does not
         exist; tests swap the real client out through the provider-tester seam,
         so no external request is made.
         """
-        if not config.enabled or config.provider != "tavily" or not config.api_key:
+        if not config.enabled or config.provider == "none" or not config.api_key:
+            return NullWebClient()
+        timeout_seconds = (
+            self.settings.web_search_timeout_seconds
+            if config.capability == CAPABILITY_WEB_SEARCH
+            else self.settings.web_fetch_timeout_seconds
+        )
+        if config.provider == "exa":
+            try:
+                from app.infrastructure.web.exa_client import ExaWebClient
+            except ImportError:  # The web slice is optional at boot time.
+                logger.warning("Exa client is unavailable; web capabilities stay disabled.")
+                return NullWebClient()
+            return cast(
+                WebClientProtocol,
+                ExaWebClient(
+                    api_key=config.api_key,
+                    base_url=_web_base_url(
+                        config,
+                        default=self.settings.exa_base_url,
+                        wrong_provider_default="https://api.tavily.com",
+                    ),
+                    timeout_seconds=timeout_seconds,
+                ),
+            )
+        if config.provider != "tavily":
             return NullWebClient()
         try:
             from app.infrastructure.web.tavily_client import TavilyWebClient
@@ -153,15 +185,28 @@ class ProviderFactory:
             WebClientProtocol,
             TavilyWebClient(
                 api_key=config.api_key,
-                base_url=config.base_url or self.settings.tavily_base_url,
-                timeout_seconds=(
-                    self.settings.web_search_timeout_seconds
-                    if config.capability == CAPABILITY_WEB_SEARCH
-                    else self.settings.web_fetch_timeout_seconds
+                base_url=_web_base_url(
+                    config,
+                    default=self.settings.tavily_base_url,
+                    wrong_provider_default="https://api.exa.ai",
                 ),
+                timeout_seconds=timeout_seconds,
                 extract_depth=self.settings.tavily_extract_depth,
             ),
         )
+
+
+def _web_base_url(
+    config: ProviderConfig,
+    *,
+    default: str,
+    wrong_provider_default: str,
+) -> str:
+    """Resolve a web provider origin, ignoring a stale other-provider default."""
+    base = (config.base_url or "").rstrip("/")
+    if not base or base == wrong_provider_default.rstrip("/"):
+        return default
+    return base
 
 
 class ProviderClientTester(ProviderTesterProtocol):
@@ -207,6 +252,7 @@ class ProviderClientTester(ProviderTesterProtocol):
                     search_depth="basic",
                     include_domains=[],
                     exclude_domains=[],
+                    objective="Verify the configured web search provider connection.",
                 )
             elif capability == CAPABILITY_WEB_FETCH:
                 client = self.factory.build_web_client(enabled_config)

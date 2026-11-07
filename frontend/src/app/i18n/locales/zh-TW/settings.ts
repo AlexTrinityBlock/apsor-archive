@@ -494,7 +494,7 @@ export const settings = {
     activateHint:
       "讓這個資料列成為此能力唯一使用中的供應商。",
     webCredentialsNote:
-      "網路搜尋與網路擷取使用各自獨立的憑證。即使另一個能力使用相同的值，仍請在這裡貼上此能力的 Tavily 金鑰。",
+      "網路搜尋與網路擷取使用各自獨立的憑證。即使另一個能力使用相同的值，仍請在這裡貼上此能力的供應商金鑰。",
     errors: {
       labelMax: "標籤必須為 80 個字元以內。",
       modelRequired: "這個供應商必須指定模型。",
