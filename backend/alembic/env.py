@@ -14,7 +14,10 @@ from app.module.prompt import model as prompt_model  # noqa: F401
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Embedded migrations must not disable application loggers that were
+    # imported before this fileConfig call. The application reconfigures the
+    # root logger immediately after the migration.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 if not config.get_main_option("sqlalchemy.url", None):
     config.set_main_option("sqlalchemy.url", get_settings().database_url)
