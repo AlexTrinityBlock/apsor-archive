@@ -39,6 +39,7 @@ from app.module.knowledge.exception.domain_error import (
 )
 from app.module.knowledge.schema.memory_schema import MemorySchema
 from app.module.knowledge.schema.timeline_schema import TimelineEventSchema
+from app.module.web_research.domain.fetch_quality import looks_structurally_incomplete
 from app.module.web_research.exception.domain_error import (
     WebFetchNotConfiguredError,
     WebResearchError,
@@ -885,7 +886,16 @@ def _web_fetch_footer(result: WebFetchResponse) -> str:
             f"More content: call web_fetch again with page={next_page}.]"
         )
     else:
-        footer = f"[web_fetch: page {result.page}/{result.total_pages}. Complete.]"
+        footer = (
+            f"[web_fetch: page {result.page}/{result.total_pages}. "
+            "End of extracted content.]"
+        )
+        if looks_structurally_incomplete(result.content):
+            footer += (
+                " A heading has no body before the next heading; the extractor "
+                "may have skipped that section. Do not treat it as empty without "
+                "another source."
+            )
     if result.source_truncated:
         footer += " The source exceeded the fetch cache cap and was truncated."
     return footer

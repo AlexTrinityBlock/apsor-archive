@@ -2,8 +2,10 @@
 
 import hashlib
 import json
+import logging
 from typing import Literal
 
+from app.module.web_research.domain.fetch_quality import looks_structurally_incomplete
 from app.module.web_research.domain.web_url_safety import WebUrlSafety
 from app.module.web_research.exception.domain_error import (
     WebFetchNotConfiguredError,
@@ -26,6 +28,8 @@ from app.module.web_research.schema.web_research_schema import (
     WebSearchHit,
     WebSearchResponse,
 )
+
+logger = logging.getLogger(__name__)
 
 # Content cap for a single search result: a provider may return a whole page of
 # text, and only the excerpt needed for the agent to judge whether the result is
@@ -234,11 +238,22 @@ class WebResearchService:
             source_truncated=source_truncated,
             page_chars=page_chars,
         )
-        await self._cache.set_json(
-            key,
-            full.model_dump(mode="json"),
-            self._fetch_ttl_seconds,
-        )
+        # A suspicious extraction must not pin the bad document for an hour.
+        # Skipping the write makes the next page request re-query the provider;
+        # the tool layer still warns the model that a section may be missing.
+        if looks_structurally_incomplete(content):
+            logger.warning(
+                "web fetch skipped cache provider=%s total_chars=%d "
+                "reason=structurally_incomplete",
+                self._fetch_config.provider,
+                len(content),
+            )
+        else:
+            await self._cache.set_json(
+                key,
+                full.model_dump(mode="json"),
+                self._fetch_ttl_seconds,
+            )
         return _slice_fetch_page(
             full,
             page=page,

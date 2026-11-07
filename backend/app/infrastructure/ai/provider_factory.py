@@ -159,6 +159,7 @@ class ProviderFactory:
                     if config.capability == CAPABILITY_WEB_SEARCH
                     else self.settings.web_fetch_timeout_seconds
                 ),
+                extract_depth=self.settings.tavily_extract_depth,
             ),
         )
 

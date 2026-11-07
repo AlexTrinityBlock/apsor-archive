@@ -9,7 +9,9 @@ Response bodies are streamed with a hard byte cap (2 MB search / 5 MB extract)
 so a compromised or misbehaving provider cannot exhaust process memory.
 """
 
+import hashlib
 import json
+import logging
 import time
 from typing import Any, Literal, cast
 from urllib.parse import urlsplit
@@ -34,6 +36,11 @@ _SEARCH_CONTENT_CHARS = 8_000
 _TITLE_CHARS = 500
 _ERROR_DETAIL_CHARS = 300
 _ERROR_BODY_LIMIT_BYTES = 4_096
+# Advanced extraction defaults to a 30-second provider timeout. Leave the
+# provider more room than its default while keeping the HTTP client above it.
+_EXTRACT_TIMEOUT_SECONDS = 40.0
+
+logger = logging.getLogger(__name__)
 
 
 class TavilyWebClient:
@@ -47,10 +54,12 @@ class TavilyWebClient:
         api_key: str | None,
         base_url: str | None = None,
         timeout_seconds: float = 25.0,
+        extract_depth: Literal["basic", "advanced"] = "advanced",
     ) -> None:
         self._api_key = (api_key or "").strip()
         self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.extract_depth = extract_depth
         self.configured = bool(self._api_key)
 
     @property
@@ -84,9 +93,25 @@ class TavilyWebClient:
             "exclude_domains": exclude_domains,
         }
         started = time.perf_counter()
+        logger.info(
+            "tavily search started depth=%s max_results=%d "
+            "include_domains=%d exclude_domains=%d",
+            search_depth,
+            max_results,
+            len(include_domains),
+            len(exclude_domains),
+        )
         body = await self._post("/search", payload, SEARCH_RESPONSE_LIMIT_BYTES)
         elapsed_ms = _elapsed_ms(started)
         results, truncated = _parse_search_results(body.get("results"), max_results)
+        logger.info(
+            "tavily search completed status=200 elapsed_ms=%d results=%d "
+            "truncated=%s request_id=%s",
+            elapsed_ms,
+            len(results),
+            truncated,
+            _request_id(body) or "-",
+        )
         return WebSearchResponse(
             provider=self.provider,
             query=query,
@@ -107,13 +132,30 @@ class TavilyWebClient:
             raise WebProviderError("Tavily API key is not configured.")
         payload: dict[str, Any] = {
             "urls": [url],
-            "extract_depth": "basic",
+            "extract_depth": self.extract_depth,
             "format": "markdown",
+            "timeout": _EXTRACT_TIMEOUT_SECONDS,
         }
         started = time.perf_counter()
+        logger.info(
+            "tavily fetch started extract_depth=%s provider_timeout_s=%s "
+            "client_timeout_s=%s url_hash=%s",
+            self.extract_depth,
+            _EXTRACT_TIMEOUT_SECONDS,
+            self.timeout_seconds,
+            _url_digest(url),
+        )
         body = await self._post("/extract", payload, EXTRACT_RESPONSE_LIMIT_BYTES)
         elapsed_ms = _elapsed_ms(started)
         content, resolved_url = _parse_extract_result(body, url)
+        logger.info(
+            "tavily fetch completed status=200 elapsed_ms=%d raw_chars=%d "
+            "request_id=%s url_hash=%s",
+            elapsed_ms,
+            len(content),
+            _request_id(body) or "-",
+            _url_digest(url),
+        )
         return WebFetchResponse(
             provider=self.provider,
             url=resolved_url,
@@ -140,26 +182,53 @@ class TavilyWebClient:
                     json=payload,
                 ) as response:
                     if response.status_code in {401, 403}:
+                        logger.warning(
+                            "tavily request failed endpoint=%s status=%d error=auth",
+                            path,
+                            response.status_code,
+                        )
                         raise WebProviderAuthenticationError(self.provider, response.status_code)
                     if response.status_code >= 400:
                         # Keep only the redacted, truncated snippet; the error envelope
                         # must never carry headers or keys.
                         body = await self._read_capped(response, _ERROR_BODY_LIMIT_BYTES)
                         detail = self._redact(body.decode("utf-8", errors="replace"))
+                        logger.warning(
+                            "tavily request failed endpoint=%s status=%d error=%r",
+                            path,
+                            response.status_code,
+                            detail or "-",
+                        )
                         raise WebProviderError(f"HTTP {response.status_code}: {detail}".strip())
                     raw = await self._read_capped(response, limit_bytes)
         except httpx.TimeoutException as exc:
+            logger.warning("tavily request failed endpoint=%s error=timeout", path)
             raise WebProviderError("request timed out") from exc
         except httpx.HTTPError as exc:
             # httpx exception strings can contain the URL or proxy details, so they
             # are always replaced with a fixed message.
+            logger.warning(
+                "tavily request failed endpoint=%s error_type=%s",
+                path,
+                type(exc).__name__,
+            )
             raise WebProviderError("network error") from exc
 
         try:
             parsed = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "tavily response invalid endpoint=%s body_bytes=%d error=malformed_json",
+                path,
+                len(raw),
+            )
             raise WebProviderError("malformed JSON response") from exc
         if not isinstance(parsed, dict):
+            logger.warning(
+                "tavily response invalid endpoint=%s body_bytes=%d error=non_object",
+                path,
+                len(raw),
+            )
             raise WebProviderError("malformed JSON response")
         return cast("dict[str, Any]", parsed)
 
@@ -269,6 +338,15 @@ def _as_score(raw: object) -> float | None:
     if isinstance(raw, bool) or not isinstance(raw, int | float):
         return None
     return float(raw)
+
+
+def _request_id(body: dict[str, Any]) -> str | None:
+    value = body.get("request_id")
+    return value if isinstance(value, str) and value else None
+
+
+def _url_digest(url: str) -> str:
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
 
 
 def _elapsed_ms(started: float) -> int:
