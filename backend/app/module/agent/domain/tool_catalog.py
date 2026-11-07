@@ -24,16 +24,17 @@ from app.module.agent.domain.tool_args import (
 
 # v12 unifies custom sections and the four seeded defaults into one ordered
 # collection: every row uses ``system_prompt:<id>`` and there is no read-time
-# built-in append. Composition changed, so the new-conversation prefix changes;
-# existing conversations keep their frozen ``pi.system`` and old version string,
-# so their KV cache lineage is untouched.
-PROMPT_VERSION = "archive-agent-v12"
-# v6 replaces web_fetch's line-offset pagination with server-defined pages; it
-# is still the same nine tools, but the frozen tool schema changed, so a new
-# conversation must use a new tools version. Existing conversations keep their
-# frozen pi.system snapshot and their hidden legacy offset/max_chars fields
-# still validate in WebFetchArgs.
-TOOLS_VERSION = "archive-tools-v6"
+# built-in append. v13 adds the Exa search-tool ``objective`` instruction.
+# Composition changed, so the new-conversation prefix changes; existing
+# conversations keep their frozen ``pi.system`` and old version string, so their
+# KV cache lineage is untouched.
+PROMPT_VERSION = "archive-agent-v13"
+# v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
+# makes ``objective`` a required web_search field in the model-facing schema
+# while keeping it optional on the validation model, so conversations frozen on
+# v6 still validate. Existing conversations keep their frozen pi.system snapshot
+# and their hidden legacy offset/max_chars fields.
+TOOLS_VERSION = "archive-tools-v7"
 
 
 @dataclass(frozen=True)
@@ -44,10 +45,21 @@ class ToolSpec:
     description: str
     args_model: type[BaseModel]
     requires_confirmation: bool = False
+    # Fields that are required in the model-facing schema for new
+    # conversations. They stay optional on the Pydantic model so a conversation
+    # frozen on an earlier tools version can still omit them.
+    required_fields: tuple[str, ...] = ()
 
     def parameters(self) -> dict[str, Any]:
         """Return a compact, deterministic JSON schema for the arguments."""
-        return _clean_schema(self.args_model.model_json_schema())
+        schema = _clean_schema(self.args_model.model_json_schema())
+        if self.required_fields:
+            required = list(schema.get("required", []))
+            for field_name in self.required_fields:
+                if field_name not in required:
+                    required.append(field_name)
+            schema["required"] = required
+        return schema
 
     def definition(self) -> dict[str, Any]:
         """Return one OpenAI-compatible function tool definition."""
@@ -131,11 +143,13 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         name="web_search",
         description=(
             "Search the public web with the configured web-search provider. "
-            "Use for current external facts not in the archive. Results include "
-            "title, URL, and an excerpt. Cite the URL. Read-only."
+            "Use for current external facts not in the archive. Provide both "
+            "query and objective. Results include title, URL, score, and an "
+            "excerpt. Cite the URL. Read-only."
         ),
         args_model=WebSearchArgs,
         requires_confirmation=False,
+        required_fields=("query", "objective"),
     ),
     ToolSpec(
         name="web_fetch",

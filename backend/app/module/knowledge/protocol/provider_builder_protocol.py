@@ -29,6 +29,7 @@ class WebClientProtocol(Protocol):
         search_depth: Literal["basic", "advanced"],
         include_domains: list[str],
         exclude_domains: list[str],
+        objective: str = "",
     ) -> Any: ...
 
     async def fetch(self, url: str, *, max_chars: int) -> Any: ...

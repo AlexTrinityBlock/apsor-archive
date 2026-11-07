@@ -504,7 +504,7 @@ export const settings = {
     activateHint:
       "Makes this row the only active provider for this capability.",
     webCredentialsNote:
-      "Web search and web fetch use separate credentials. Paste this capability's Tavily key here even if the other capability uses the same value.",
+      "Web search and web fetch use separate credentials. Paste this capability's provider key here even if the other capability uses the same value.",
     errors: {
       labelMax: "Label must be 80 characters or fewer.",
       modelRequired: "Model is required for this provider.",

@@ -123,6 +123,18 @@ class WebSearchArgs(_ToolArgs):
     # a query while keeping the model from stuffing a whole private document into
     # the URL or query string.
     query: str = Field(min_length=1, max_length=400)
+    # New conversations mark this field required in the model-facing schema
+    # (``ToolSpec.required_fields``). It stays optional here so a conversation
+    # frozen on archive-tools-v6 remains valid when it sends only ``query``.
+    objective: str = Field(
+        default="",
+        max_length=4096,
+        description=(
+            "Goal for this search turn; say which documents should rank first, "
+            "which should be excluded, and what specific facts or figures to pull "
+            "from them."
+        ),
+    )
     max_results: int = Field(default=5, ge=1, le=10)
     search_depth: Literal["basic", "advanced"] = "basic"
     include_domains: list[str] = Field(default_factory=list, max_length=10)

@@ -278,12 +278,11 @@ tables, so one capability can never overwrite another:
   endpoint. Multiple saved rows are allowed; exactly one is active.
 - **Embedding** — `embedding_provider_config`: offline `hashing`, `openai`, or
   `openai-compatible`. Multiple saved rows are allowed; exactly one is active.
-- **Web search** — `web_search_provider_config`: Tavily today, with a provider
-  adapter seam for future search APIs. Multiple saved rows are allowed; exactly
-  one is active.
-- **Web fetch** — `web_fetch_provider_config`: Tavily `extract` today. Web search
-  and web fetch are deliberately separate rows, so they can use different
-  providers or different credentials.
+- **Web search** — `web_search_provider_config`: Tavily or Exa. Multiple saved
+  rows are allowed; exactly one is active.
+- **Web fetch** — `web_fetch_provider_config`: Tavily `extract` or Exa
+  `contents`. Web search and web fetch are deliberately separate rows, so they
+  can use different providers or different credentials.
 
 Every table has a partial unique index on `is_active`; PostgreSQL enforces at
 most one active row per capability. Deleting a row does not reuse its identity
@@ -293,7 +292,9 @@ secret or a global runtime setting. The API never returns a plaintext key: the
 browser receives only a hint such as `...14f8`. `APSOR_SECRET_KEY` supplies the Fernet master key. If it is unset,
 a `0600` key file is created at `data/.secret_key` (or `/data/.secret_key` in
 Docker), so encrypted values survive restarts. `APSOR_TAVILY_API_KEY` is an
-optional environment fallback for both web capabilities.
+optional environment fallback for both web capabilities. An Exa key can live in
+the gitignored `.secrets/exa.env` as `EXA_API_KEY` (or as
+`APSOR_EXA_API_KEY`); the encrypted provider row still wins.
 
 Precedence is: **active database row → environment → built-in default**. The
 Settings page labels each provider with its source. Changing the embedding model
@@ -325,19 +326,24 @@ The agent has two read-only tools for external research:
 
 | Tool | What it does |
 |---|---|
-| `web_search` | Search the public web with the active `web_search` provider; returns title, URL, score, and a bounded excerpt. |
+| `web_search` | Search the public web with the active `web_search` provider; returns title, URL, an optional score, and a bounded excerpt. |
 | `web_fetch` | Fetch one public `http(s)` URL with the active `web_fetch` provider and return one server-defined Markdown page. |
 
-Tavily is the first adapter (`/search` and `/extract`). The provider seam is a
-protocol, so another search or fetch API can be added without changing the tool
-layer. Search results are cached for 15 minutes under the `providers` cache
-scope; provider writes invalidate them. `web_fetch` rejects non-HTTP(S),
-credentials in the URL, `localhost`/`.local`/`.internal`, and private or
-special-use IP literals.
+Tavily (`/search` and `/extract`) and Exa (`/search` and `/contents`) are the
+implemented adapters. The provider seam is a protocol, so another search or
+fetch API can be added without changing the tool layer. Search results are
+cached for 15 minutes under the `providers` cache scope; provider writes
+invalidate them. `web_fetch` rejects non-HTTP(S), credentials in the URL,
+`localhost`/`.local`/`.internal`, and private or special-use IP literals.
 
 `web_fetch` caches the complete extracted document once per URL for one hour, so
-paging never calls the provider again. Its model-facing arguments are only
-`url` and `page` (1-based, default 1). The server hard-wraps every source line
+paging never calls the provider again. A structurally suspicious extraction (a
+heading immediately followed by a same-or-higher heading, or a document ending
+on a heading) is not cached, so a later page request re-queries the provider
+instead of pinning a partial document. The final page footer says
+`End of extracted content.` and adds a warning when a heading has no body before
+the next heading. Its model-facing arguments are only `url` and `page` (1-based,
+default 1). The server hard-wraps every source line
 at 800 characters and packs whole lines into pages of up to 12,000 characters
 (or the configured `web_fetch_max_chars` when smaller, never below 801), so a
 page never exceeds its budget and always contains at least one line. There are no line numbers to count
@@ -1661,7 +1667,7 @@ backend/
     module/agent/               transcript, runtime settings, compaction, tools,
                                 saved questions, SSE
     module/prompt/              editable frequently used chat prompts
-    module/web_research/        Tavily search/fetch service, URL safety, cache
+    module/web_research/        web search/fetch service, URL safety, cache
   alembic/                      migrations
   tests/                        46 integration tests
 frontend/

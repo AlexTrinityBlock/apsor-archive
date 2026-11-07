@@ -5,9 +5,9 @@ There are two secret locations:
 - `secrets/` holds the Cloudflare Tunnel token file named by
   `docker-compose.cloudflare-tunnel.yml`.
 - `.secrets/` holds application env files that the API and worker read
-  themselves: `deepseek.env`, `openai.env`, and `r2.env`. Compose mounts
-  `.secrets/` read-only, so these values never become container environment
-  variables.
+  themselves: `deepseek.env`, `openai.env`, `r2.env`, and the optional
+  `exa.env`. Compose mounts `.secrets/` read-only, so these values never become
+  container environment variables.
 
 The contents of both directories are gitignored (this README is the tracked
 exception). Never put a secret in `environment:`, a committed `.env` file, a
@@ -66,3 +66,23 @@ not add a lifecycle expiry rule for `files/`. Back up `.secrets/r2.env`
 separately from the bucket: it is required for restores and for the storage
 migration CLI. `data/.secret_key` remains the Fernet master key for provider
 credentials and is not an R2 secret.
+
+## Exa web search/fetch (optional)
+
+Create `.secrets/exa.env` with the key from the Exa dashboard:
+
+```text
+EXA_API_KEY=...
+```
+
+The app reads it as the environment fallback for the `exa` provider. The
+Settings UI can also store an encrypted key in the database; the database row
+wins. Keep the same read permissions as the other application secret files:
+
+```bash
+sudo chgrp 10001 .secrets/exa.env
+chmod 640 .secrets/exa.env
+```
+
+Exa is pay-as-you-go; the monthly free credit is applied automatically. Do not
+put the key in `.env`, a URL, or a log line.

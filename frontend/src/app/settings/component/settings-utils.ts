@@ -19,6 +19,7 @@ const PROVIDER_LABELS: Readonly<Record<string, string>> = {
   "openai-compatible": "OpenAI-compatible",
   openai: "OpenAI",
   tavily: "Tavily",
+  exa: "Exa",
 };
 
 function settingsLabel(key: TranslationKey): string {

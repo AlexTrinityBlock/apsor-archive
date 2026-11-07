@@ -100,8 +100,9 @@ class FakeSearchClient:
         search_depth: Literal["basic", "advanced"],
         include_domains: list[str],
         exclude_domains: list[str],
+        objective: str = "",
     ) -> WebSearchResponse:
-        del query, max_results, search_depth, include_domains, exclude_domains
+        del query, max_results, search_depth, include_domains, exclude_domains, objective
         raise AssertionError("search must not be called by web fetch tests")
 
 

@@ -740,6 +740,7 @@ async def _web_search(
         search_depth=args.search_depth,
         include_domains=args.include_domains,
         exclude_domains=args.exclude_domains,
+        objective=args.objective,
     )
     retrieved_at = result.retrieved_at.isoformat()
     rendered: list[str] = []
