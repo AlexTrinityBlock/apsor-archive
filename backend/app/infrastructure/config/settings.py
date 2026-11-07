@@ -148,8 +148,14 @@ class Settings(BaseSettings):
     # active row, both resolve to TAVILY_API_KEY as specified by the plan.
     tavily_api_key: SecretStr | None = None
     tavily_base_url: str = "https://api.tavily.com"
+    # Advanced extraction handles JS-heavy pages, tables, and embedded content
+    # more reliably. It costs two credits per five successful extractions and
+    # has a longer provider timeout.
+    tavily_extract_depth: Literal["basic", "advanced"] = "advanced"
     web_search_timeout_seconds: float = 25.0
-    web_fetch_timeout_seconds: float = 30.0
+    # The provider's advanced extraction may use up to 30 seconds; keep the
+    # HTTP client above that so it does not time out while Tavily is finishing.
+    web_fetch_timeout_seconds: float = 45.0
     web_search_cache_ttl_seconds: int = 900
     web_fetch_cache_ttl_seconds: int = 3600
     web_fetch_max_chars: int = 20_000

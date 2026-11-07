@@ -12,6 +12,7 @@ from sqlalchemy import Engine, create_engine, text
 from app.infrastructure.ai.deepseek_client import DeepSeekClient, _is_context_window_error
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
+from app.module.agent.service.tool_registry import _web_fetch_footer
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
     text_result,
@@ -2278,7 +2279,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert f'total_chars="{len(DEFAULT_FETCH_DOCUMENT)}"' in fetch_xml
     assert 'has_more="false"' in fetch_xml
     assert "next_page=" not in fetch_xml
-    assert "[web_fetch: page 1/1. Complete.]" in fetch_xml
+    assert "[web_fetch: page 1/1. End of extracted content.]" in fetch_xml
     assert "Markdown body for the fetched page." in fetch_xml
     fetch_data = fetch_result["data"]
     assert fetch_data["status"] == "ok"
@@ -2521,7 +2522,7 @@ def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
     assert 'page_chars="449"' in second_xml
     assert 'has_more="false"' in second_xml
     assert "next_page=" not in second_xml
-    assert "[web_fetch: page 2/2. Complete.]" in second_xml
+    assert "[web_fetch: page 2/2. End of extracted content.]" in second_xml
     second_data = second_result["data"]
     assert second_data["page"] == 2
     assert second_data["page_chars"] == 449
@@ -2673,3 +2674,19 @@ def test_agent_chat_output_budget_is_larger_than_extraction(settings: Settings) 
     assert settings.deepseek_max_tokens == 1800
     assert client._base_payload(None, chat=True)["max_tokens"] == 8192
     assert client._base_payload(None)["max_tokens"] == 1800
+
+
+def test_web_fetch_footer_warns_about_an_empty_heading_section() -> None:
+    result = WebFetchResponse(
+        provider="tavily",
+        url="https://example.com/article",
+        content="## Career\n\n## Contact\n\nBody.",
+        elapsed_ms=10,
+        retrieved_at=datetime(2026, 10, 25, tzinfo=UTC),
+    )
+
+    footer = _web_fetch_footer(result)
+
+    assert "End of extracted content." in footer
+    assert "may have skipped that section" in footer
+    assert "Do not treat it as empty" in footer

@@ -63,13 +63,15 @@ class TavilyWebClientFactory:
             api_key=config.api_key,
             base_url=self._base_url(config),
             timeout_seconds=float(getattr(self._settings, "web_search_timeout_seconds", 25.0)),
+            extract_depth=getattr(self._settings, "tavily_extract_depth", "advanced"),
         )
 
     def build_fetch(self, config: WebProviderConfigProtocol) -> WebFetchClientProtocol:
         return TavilyWebClient(
             api_key=config.api_key,
             base_url=self._base_url(config),
-            timeout_seconds=float(getattr(self._settings, "web_fetch_timeout_seconds", 30.0)),
+            timeout_seconds=float(getattr(self._settings, "web_fetch_timeout_seconds", 45.0)),
+            extract_depth=getattr(self._settings, "tavily_extract_depth", "advanced"),
         )
 
 

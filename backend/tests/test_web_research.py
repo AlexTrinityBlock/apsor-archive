@@ -12,7 +12,9 @@ from typing import Literal
 import pytest
 from pydantic import ValidationError
 
+from app.infrastructure.web.tavily_client import TavilyWebClient
 from app.module.agent.domain.tool_args import WebFetchArgs
+from app.module.web_research.domain.fetch_quality import looks_structurally_incomplete
 from app.module.web_research.exception.domain_error import WebProviderError
 from app.module.web_research.protocol.web_cache_protocol import JsonValue
 from app.module.web_research.schema.web_research_schema import (
@@ -319,6 +321,28 @@ def test_source_cache_cap_sets_source_truncated_on_last_page(
     assert client.calls == [(URL, 12_000)]
 
 
+def test_fetch_quality_flags_empty_heading_sections() -> None:
+    assert looks_structurally_incomplete("## Career\n\n## Contact\n\nBody.")
+    assert looks_structurally_incomplete("## Career\n\nBody.\n\n## Contact")
+    assert not looks_structurally_incomplete("## Career\n\nBody.")
+    assert not looks_structurally_incomplete("## Career\n\nBody.\n\n## Contact\n\nBody.")
+    assert not looks_structurally_incomplete("## Career\n\n### Role\n\nBody.")
+    assert not looks_structurally_incomplete("```\n## Not a heading\n```\n\nBody.")
+
+
+def test_structurally_incomplete_document_is_not_cached() -> None:
+    content = "## Career\n\n## Contact\n\nBody."
+    service, cache, client = _service(content)
+
+    first = asyncio.run(service.fetch(URL, page=1))
+    second = asyncio.run(service.fetch(URL, page=1))
+
+    assert first.content == content
+    assert second.content == content
+    assert cache.values == {}
+    assert client.calls == [(URL, 2_000_000), (URL, 2_000_000)]
+
+
 def test_empty_content_raises_web_provider_error() -> None:
     for content in ("", "   ", " \n\t\r\n "):
         service, cache, _client = _service(content)
@@ -348,3 +372,28 @@ def test_cache_hit_does_not_require_a_configured_provider() -> None:
     assert second.has_more is False
     assert second.content.startswith(document.split("\n")[len(first.content.split("\n"))])
     assert len(client.calls) == 1
+
+
+def test_tavily_fetch_uses_advanced_extraction_with_provider_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TavilyWebClient(api_key="test", base_url="https://example.invalid")
+    captured: dict[str, object] = {}
+
+    async def fake_post(
+        path: str,
+        payload: dict[str, object],
+        limit_bytes: int,
+    ) -> dict[str, object]:
+        del path, limit_bytes
+        captured.update(payload)
+        return {"results": [{"url": URL, "raw_content": "# Page\n\nBody"}]}
+
+    monkeypatch.setattr(client, "_post", fake_post)
+
+    response = asyncio.run(client.fetch(URL, max_chars=1_000))
+
+    assert captured["extract_depth"] == "advanced"
+    assert captured["timeout"] == 40.0
+    assert captured["format"] == "markdown"
+    assert response.content == "# Page\n\nBody"
