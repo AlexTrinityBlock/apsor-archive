@@ -764,7 +764,7 @@ class ProviderConfigService:
     ) -> ProviderConfig:
         key = self._decrypt_key(row)
         if key is None:
-            key = self._environment_key(spec.capability)
+            key = self._environment_key(spec.capability, row.provider)
         return ProviderConfig(
             capability=spec.capability,
             provider=row.provider,
@@ -790,11 +790,19 @@ class ProviderConfigService:
             logger.debug("Secret decryption detail: %s", exc)
             return None
 
-    def _environment_key(self, capability: ProviderCapability) -> str | None:
+    def _environment_key(
+        self,
+        capability: ProviderCapability,
+        provider: str,
+    ) -> str | None:
         if capability == CAPABILITY_CHAT:
             return self.defaults.chat_api_key
         if capability == CAPABILITY_EMBEDDING:
             return self.defaults.embedding_api_key
+        if provider == "exa":
+            return self.defaults.exa_api_key
+        if provider == "tavily":
+            return self.defaults.tavily_api_key
         if capability == CAPABILITY_WEB_SEARCH:
             return self.defaults.web_search_api_key
         return self.defaults.web_fetch_api_key
