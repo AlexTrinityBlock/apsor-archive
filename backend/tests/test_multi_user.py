@@ -580,6 +580,7 @@ def test_password_change_is_forbidden_while_impersonating(
 
 def test_private_archive_isolation_between_accounts(
     user_client_factory: Callable[..., UserClient],
+    owner_engine: Engine,
 ) -> None:
     """Every archive layer filters by the authenticated owner."""
     alice = user_client_factory("alice")
@@ -686,6 +687,32 @@ def test_private_archive_isolation_between_accounts(
     assert int(bob_same_path["id"]) > file_id
     assert bob.client.get(f"/api/v1/files/{bob_same_path['id']}").status_code == 200
     assert alice.client.get(f"/api/v1/files/{file_id}").status_code == 200
+
+    with owner_engine.connect() as connection:
+        storage_rows = {
+            int(row["id"]): row
+            for row in connection.execute(
+                text(
+                    "SELECT id, user_id, storage_key FROM file "
+                    "WHERE id IN (:alice_id, :bob_id)"
+                ),
+                {
+                    "alice_id": file_id,
+                    "bob_id": int(bob_same_path["id"]),
+                },
+            ).mappings()
+        }
+    assert storage_rows[file_id]["user_id"] == alice.user_id
+    assert storage_rows[file_id]["storage_key"].startswith(
+        f"users/{alice.user_id}/files/"
+    )
+    assert storage_rows[int(bob_same_path["id"])]["user_id"] == bob.user_id
+    assert storage_rows[int(bob_same_path["id"])]["storage_key"].startswith(
+        f"users/{bob.user_id}/files/"
+    )
+    assert storage_rows[file_id]["storage_key"] != storage_rows[int(bob_same_path["id"])][
+        "storage_key"
+    ]
     assert alice.client.get("/api/v1/agent/conversations").json()["total_results"] == 1
     assert alice.client.get(PROMPTS_URL).json()["total_results"] == 1
 
