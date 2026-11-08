@@ -219,7 +219,7 @@ class IngestJobService:
         mime_type = (
             content_type or mimetypes.guess_type(normalized)[0] or "application/octet-stream"
         )
-        storage_key = self.file_service.new_storage_key(suffix)
+        storage_key = self.file_service.new_storage_key(self.user_id, suffix)
         storage_backend = self.file_service.storage_backend
         await self._store_payload(storage_key, data, storage_backend)
         job = FileIngestJobModel(
@@ -262,7 +262,10 @@ class IngestJobService:
         if len(encoded) > self.file_service.max_text_bytes:
             raise FileTooLargeError(len(encoded), self.file_service.max_text_bytes)
         mime_type = mimetypes.guess_type(normalized)[0] or "text/plain"
-        storage_key = self.file_service.new_storage_key(extension(normalized))
+        storage_key = self.file_service.new_storage_key(
+            self.user_id,
+            extension(normalized),
+        )
         storage_backend = self.file_service.storage_backend
         await self._store_payload(storage_key, encoded, storage_backend)
         job = FileIngestJobModel(
