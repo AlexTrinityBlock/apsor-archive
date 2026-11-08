@@ -337,14 +337,13 @@ class FileService:
     def _directory_schema(folder: FolderModel) -> DirectorySchema:
         return DirectorySchema(path=folder.path, name=folder.name, depth=folder.depth)
 
-    @staticmethod
-    def _new_storage_key(suffix: str) -> str:
-        return f"files/{uuid4().hex[:2]}/{uuid4().hex}{suffix}"
+    def _new_storage_key(self, suffix: str) -> str:
+        return self.new_storage_key(self.user_id, suffix)
 
     @classmethod
-    def new_storage_key(cls, suffix: str) -> str:
-        """Return an opaque key for a new stored original."""
-        return cls._new_storage_key(suffix)
+    def new_storage_key(cls, user_id: int, suffix: str) -> str:
+        """Return an opaque key under the owner's top-level storage directory."""
+        return f"users/{user_id}/files/{uuid4().hex[:2]}/{uuid4().hex}{suffix}"
 
     @staticmethod
     def _pdf_text(data: bytes) -> str:
