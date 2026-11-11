@@ -412,13 +412,15 @@ prompt text; it does not send the message. The API is
 The **Agent runtime** panel on `/settings` (root only) edits the singleton
 `agent_config` row (`id=1`). Provider and model selection stay in the AI settings
 above, so there is still one source of truth for which model answers. All
-twelve runtime values are stored in PostgreSQL, apply to new runs without a
-restart, and are shared by every account.
+fourteen runtime values are stored in PostgreSQL, apply to new runs without a
+restart, and are shared by every account. The two chat-image lifetime values are
+also read by the background cleanup loop from this row; they are not
+environment variables.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | Effective config, defaults, source, `updated_at` |
-| `PUT` | `/api/v1/agent/settings` | Full replacement; all twelve fields are required |
+| `PUT` | `/api/v1/agent/settings` | Full replacement; all fourteen fields are required |
 | `POST` | `/api/v1/agent/settings/reset` | Persist and return the built-in defaults |
 
 The generated operations are `getAgentSettings`, `updateAgentSettings`, and
@@ -443,6 +445,8 @@ fields are rejected.
 | `auto_compaction_enabled` | `true` | boolean |
 | `parallel_tools_enabled` | `true` | boolean |
 | `save_memory_requires_approval` | `true` | boolean; manual approval for `save_memory` |
+| `chat_attachment_staged_ttl_hours` | 1 | 1–168; unsent upload grace period |
+| `chat_attachment_cleanup_interval_seconds` | 900 | 60–86,400; cleanup sweep interval |
 
 Pydantic and matching PostgreSQL check constraints enforce the ranges and two
 cross-field rules: the compaction threshold must stay below the model context
@@ -775,12 +779,13 @@ The tables are:
 - `agent_approval` — one durable pending/approved/rejected/expired human decision
   for a confirmation-required tool call, including validated arguments, a safe
   preview, and the loop snapshot used to resume the waiting run.
-- `agent_chat_attachment` — temporary chat images owned by one account, with the
+- `agent_chat_attachment` — chat images owned by one account, with the
   object-storage key, sanitized metadata, and an optional link to the user entry
-  that sent them. Rows are soft-deleted; objects are removed from
-  `users/{user_id}/chat-temp/`.
+  that sent them. Unsent images live under `users/{user_id}/chat-temp/`; sending
+  promotes them to `users/{user_id}/chat-images/`. Rows are soft-deleted.
 - `agent_config` — the singleton runtime configuration (`id=1`) holding the
-  validated token, step, tool, page-context, and compaction limits.
+  validated token, step, tool, page-context, compaction, and chat-image lifetime
+  limits.
 
 The first entry is a frozen `pi.system` prompt and tool snapshot. The context
 builder replays entries deterministically: it honors `head_entry_id` and `edits`,

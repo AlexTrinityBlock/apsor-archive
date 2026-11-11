@@ -34,6 +34,8 @@ export interface AgentRuntimeValues {
   readonly auto_compaction_enabled: boolean;
   readonly parallel_tools_enabled: boolean;
   readonly save_memory_requires_approval: boolean;
+  readonly chat_attachment_staged_ttl_hours: number;
+  readonly chat_attachment_cleanup_interval_seconds: number;
 }
 
 /** Props for the presentational runtime panel; persistence stays with the page. */
@@ -137,6 +139,27 @@ const TOOL_FIELDS: readonly NumericFieldSpec[] = [
   },
 ];
 
+const ATTACHMENT_FIELDS: readonly NumericFieldSpec[] = [
+  {
+    key: "chat_attachment_staged_ttl_hours",
+    labelKey: "settings.agent.fieldStagedTtlLabel",
+    unitKey: "settings.agent.fieldStagedTtlUnit",
+    min: 1,
+    max: 168,
+    step: 1,
+    hintKey: "settings.agent.fieldStagedTtlHint",
+  },
+  {
+    key: "chat_attachment_cleanup_interval_seconds",
+    labelKey: "settings.agent.fieldCleanupIntervalLabel",
+    unitKey: "settings.agent.fieldCleanupIntervalUnit",
+    min: 60,
+    max: 86400,
+    step: 60,
+    hintKey: "settings.agent.fieldCleanupIntervalHint",
+  },
+];
+
 const COMPACTION_FIELDS: readonly NumericFieldSpec[] = [
   {
     key: "max_compaction_summary_chars",
@@ -173,6 +196,7 @@ function localizeSpec(
 const ALL_FIELD_SPECS: readonly NumericFieldSpec[] = [
   ...CONTEXT_FIELDS,
   ...TOOL_FIELDS,
+  ...ATTACHMENT_FIELDS,
   ...COMPACTION_FIELDS,
 ];
 
@@ -189,6 +213,8 @@ const VALUE_KEYS: readonly (keyof AgentRuntimeValues)[] = [
   "auto_compaction_enabled",
   "parallel_tools_enabled",
   "save_memory_requires_approval",
+  "chat_attachment_staged_ttl_hours",
+  "chat_attachment_cleanup_interval_seconds",
 ];
 
 function toDraft(values: AgentRuntimeValues): DraftValues {
@@ -205,6 +231,12 @@ function toDraft(values: AgentRuntimeValues): DraftValues {
     auto_compaction_enabled: values.auto_compaction_enabled,
     parallel_tools_enabled: values.parallel_tools_enabled,
     save_memory_requires_approval: values.save_memory_requires_approval,
+    chat_attachment_staged_ttl_hours: String(
+      values.chat_attachment_staged_ttl_hours,
+    ),
+    chat_attachment_cleanup_interval_seconds: String(
+      values.chat_attachment_cleanup_interval_seconds,
+    ),
   };
 }
 
@@ -222,6 +254,12 @@ function fromDraft(draft: DraftValues): AgentRuntimeValues {
     auto_compaction_enabled: draft.auto_compaction_enabled,
     parallel_tools_enabled: draft.parallel_tools_enabled,
     save_memory_requires_approval: draft.save_memory_requires_approval,
+    chat_attachment_staged_ttl_hours: Number(
+      draft.chat_attachment_staged_ttl_hours,
+    ),
+    chat_attachment_cleanup_interval_seconds: Number(
+      draft.chat_attachment_cleanup_interval_seconds,
+    ),
   };
 }
 
@@ -377,6 +415,9 @@ export function AgentRuntimePanel({
 
   const contextFields = CONTEXT_FIELDS.map((spec) => localizeSpec(spec, t));
   const toolFields = TOOL_FIELDS.map((spec) => localizeSpec(spec, t));
+  const attachmentFields = ATTACHMENT_FIELDS.map((spec) =>
+    localizeSpec(spec, t),
+  );
   const compactionFields = COMPACTION_FIELDS.map((spec) => localizeSpec(spec, t));
 
   const updateNumber = (field: NumericField, next: string) => {
@@ -588,6 +629,35 @@ export function AgentRuntimePanel({
               error={validation.fieldErrors.max_tool_result_chars}
               onValueChange={(next) =>
                 updateNumber("max_tool_result_chars", next)
+              }
+            />
+          </RuntimeGroup>
+
+          <RuntimeGroup
+            slot={t("settings.agent.groupAttachmentsSlot")}
+            title={t("settings.agent.groupAttachmentsTitle")}
+            description={t("settings.agent.groupAttachmentsDescription")}
+          >
+            <RuntimeNumberField
+              spec={attachmentFields[0]}
+              value={draft.chat_attachment_staged_ttl_hours}
+              defaultValue={defaults.chat_attachment_staged_ttl_hours}
+              disabled={saving}
+              error={validation.fieldErrors.chat_attachment_staged_ttl_hours}
+              onValueChange={(next) =>
+                updateNumber("chat_attachment_staged_ttl_hours", next)
+              }
+            />
+            <RuntimeNumberField
+              spec={attachmentFields[1]}
+              value={draft.chat_attachment_cleanup_interval_seconds}
+              defaultValue={defaults.chat_attachment_cleanup_interval_seconds}
+              disabled={saving}
+              error={
+                validation.fieldErrors.chat_attachment_cleanup_interval_seconds
+              }
+              onValueChange={(next) =>
+                updateNumber("chat_attachment_cleanup_interval_seconds", next)
               }
             />
           </RuntimeGroup>

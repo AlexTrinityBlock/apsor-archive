@@ -13,6 +13,8 @@ from dataclasses import dataclass
 
 from app.module.agent.domain.agent_domain import (
     AUTO_COMPACTION_ENABLED,
+    CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
+    CHAT_ATTACHMENT_STAGED_TTL_HOURS,
     COMPACTION_THRESHOLD_TOKENS,
     CONTEXT_WINDOW_TOKENS,
     MAX_COMPACTION_LAST_USER_CHARS,
@@ -43,6 +45,10 @@ class AgentRuntimeConfig:
     auto_compaction_enabled: bool = AUTO_COMPACTION_ENABLED
     parallel_tools_enabled: bool = PARALLEL_TOOLS_ENABLED
     save_memory_requires_approval: bool = SAVE_MEMORY_REQUIRES_APPROVAL
+    chat_attachment_staged_ttl_hours: int = CHAT_ATTACHMENT_STAGED_TTL_HOURS
+    chat_attachment_cleanup_interval_seconds: int = (
+        CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS
+    )
 
     def __post_init__(self) -> None:
         """Reject values the database constraints also reject."""
@@ -80,6 +86,18 @@ class AgentRuntimeConfig:
                 self.max_compaction_last_user_chars,
                 500,
                 10_000,
+            ),
+            (
+                "chat_attachment_staged_ttl_hours",
+                self.chat_attachment_staged_ttl_hours,
+                1,
+                168,
+            ),
+            (
+                "chat_attachment_cleanup_interval_seconds",
+                self.chat_attachment_cleanup_interval_seconds,
+                60,
+                86_400,
             ),
         )
         for name, value, minimum, maximum in ranges:

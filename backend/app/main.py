@@ -6,7 +6,6 @@ import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
-from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -28,6 +27,7 @@ from app.infrastructure.database.session import Database, system_session
 from app.infrastructure.files.storage_factory import build_file_storage
 from app.infrastructure.logger.logging import configure_logging
 from app.infrastructure.security.secret_cipher import SecretCipher
+from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.exception.handler import register_exceptions as register_agent_exceptions
 from app.module.agent.repository.agent_repository import AgentRepository
 from app.module.agent.router import router as agent_router
@@ -136,10 +136,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cleanup = ChatAttachmentCleanup(
                 database=app.state.db,
                 storage=app.state.storage,
-                staged_ttl=timedelta(
-                    hours=resolved_settings.chat_attachment_staged_ttl_hours
-                ),
-                interval_seconds=resolved_settings.chat_attachment_cleanup_interval_seconds,
+                config_provider=lambda: load_agent_runtime_config(app.state.db),
             )
             cleanup_task = asyncio.create_task(
                 cleanup.run_forever(),

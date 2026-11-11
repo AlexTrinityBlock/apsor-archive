@@ -85,7 +85,11 @@ export const settings = {
     groupToolsTitle: "Tool execution",
     groupToolsDescription:
       "How many tools may run, how often they may be called, and how much their results may carry.",
-    groupCompactionSlot: "Group 03",
+    groupAttachmentsSlot: "Group 03",
+    groupAttachmentsTitle: "Chat image lifetime",
+    groupAttachmentsDescription:
+      "Unsent images are discarded from the composer immediately; this TTL is the backend sweep for abandoned uploads. Sent images move to durable storage and are not swept.",
+    groupCompactionSlot: "Group 04",
     groupCompactionTitle: "Compaction detail",
     groupCompactionDescription:
       "How much material the summarizer keeps when older turns are folded away.",
@@ -114,6 +118,14 @@ export const settings = {
     fieldToolResultCharsUnit: "chars",
     fieldToolResultCharsHint:
       "Each result is clipped independently; 100k fits about 25 four-kilochar chunks.",
+    fieldStagedTtlLabel: "Staged image TTL",
+    fieldStagedTtlUnit: "hours",
+    fieldStagedTtlHint:
+      "Unsent composer images older than this are removed. Default 1 hour; maximum 168.",
+    fieldCleanupIntervalLabel: "Cleanup interval",
+    fieldCleanupIntervalUnit: "seconds",
+    fieldCleanupIntervalHint:
+      "How often the worker checks for expired staged images. Default 900 seconds.",
     fieldSummaryCharsLabel: "Summary chars",
     fieldSummaryCharsUnit: "chars",
     fieldSummaryCharsHint: "Size reserved for the folded-turn summary.",
