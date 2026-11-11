@@ -21,8 +21,10 @@ router = APIRouter(
 )
 
 _IMAGE_HEADERS = {
-    "Cache-Control": "private, max-age=3600",
+    # Temporary screenshots must not survive deletion in a shared browser cache.
+    "Cache-Control": "private, no-store",
     "Content-Security-Policy": "default-src 'none'; sandbox",
+    "Cross-Origin-Resource-Policy": "same-origin",
     "X-Content-Type-Options": "nosniff",
 }
 

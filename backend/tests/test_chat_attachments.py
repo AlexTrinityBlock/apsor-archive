@@ -74,6 +74,8 @@ def test_upload_list_content_and_delete(client: TestClient) -> None:
     assert content.status_code == 200
     assert content.headers["content-type"] == "image/png"
     assert content.headers["x-content-type-options"] == "nosniff"
+    assert content.headers["cache-control"] == "private, no-store"
+    assert content.headers["cross-origin-resource-policy"] == "same-origin"
     assert content.content.startswith(b"\x89PNG")
 
     deleted = client.delete(f"/api/v1/agent/attachments/{attachment_id}")
