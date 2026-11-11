@@ -117,12 +117,13 @@ result carries its source, chunk number, and time.
   uploaded immediately to the signed-in account's `users/{user_id}/chat-temp/`
   object-storage area, downscaled, re-encoded, and listed in a removable
   temporary-image manager. Removing an unsent image or leaving the chat discards
-  it immediately; staged images left behind by a closed tab expire after 24
-  hours, and sent images expire after 30 days by default. A cleanup task runs
-  hourly. Sending a message links the image to that user entry; the provider
-  receives it as an OpenAI-compatible `image_url` part. Deleting a temporary
-  image removes the object and leaves an honest placeholder in the transcript.
-  Chat images are not archive files and are not searchable.
+  it immediately; staged images left behind by a closed tab expire after one
+  hour, and the worker checks every fifteen minutes. Sending a message promotes
+  the object to `users/{user_id}/chat-images/` before claiming the row, so sent
+  images are durable until the owner deletes them. The provider receives an
+  OpenAI-compatible `image_url` part. Deleting a chat image removes the object
+  and leaves an honest placeholder in the transcript. Chat images are not
+  archive files and are not searchable.
 - **Images live in the File Library.** An image is a normal file record with its
   original bytes, path, and chunks. A vision-capable chat provider adds OCR,
   GitHub-Flavored Markdown tables, and a complete visual description; the OCR

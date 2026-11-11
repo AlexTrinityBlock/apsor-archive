@@ -115,7 +115,6 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
             database=database,
             storage=storage,
             staged_ttl=timedelta(hours=settings.chat_attachment_staged_ttl_hours),
-            attached_ttl=timedelta(hours=settings.chat_attachment_attached_ttl_hours),
             interval_seconds=settings.chat_attachment_cleanup_interval_seconds,
         )
         cleanup_task: asyncio.Task[None] | None = None

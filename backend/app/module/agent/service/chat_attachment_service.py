@@ -205,20 +205,78 @@ class ChatAttachmentService:
         self,
         attachment_ids: Sequence[int],
     ) -> list[ChatAttachmentImage]:
-        """Validate staged ids and return metadata for the user entry."""
+        """Validate staged ids, promote them to durable storage, and return metadata.
+
+        Promotion happens before the message transaction claims the rows. If a
+        later claim loses a race, the promoted row is still staged and the
+        short-lived staged sweep removes it; a successfully claimed image is no
+        longer touched by cleanup.
+        """
         ordered = list(dict.fromkeys(attachment_ids))
         if len(ordered) != len(attachment_ids):
             raise AgentChatAttachmentInvalidError()
         if len(ordered) > self.max_per_message:
             raise AgentChatAttachmentLimitError(self.max_per_message)
 
-        images: list[ChatAttachmentImage] = []
+        rows: list[AgentChatAttachmentModel] = []
         for attachment_id in ordered:
             row = await self.repository.get(attachment_id)
             if row is None or row.entry_id is not None or row.deleted_at is not None:
                 raise AgentChatAttachmentInvalidError()
-            images.append(_attachment_image(row))
-        return images
+            rows.append(row)
+        for row in rows:
+            await self._promote_row(row)
+        return [_attachment_image(row) for row in rows]
+
+    async def promote_attachment(self, attachment_id: int) -> None:
+        """Move one existing row out of chat-temp, including already-sent rows."""
+        row = await self._require_row(attachment_id)
+        await self._promote_row(row)
+
+    async def _promote_row(self, row: AgentChatAttachmentModel) -> None:
+        """Copy one temporary object to the durable chat-image prefix."""
+        if not _is_temporary_key(row.storage_key, self.user_id):
+            return
+        try:
+            data = await self.storage.read(
+                row.storage_key,
+                backend=row.storage_backend,
+            )
+        except (StorageError, OSError) as exc:
+            raise AgentChatAttachmentStorageError() from exc
+        if len(data) != row.size_bytes or hashlib.sha256(data).hexdigest() != row.content_hash:
+            raise AgentChatAttachmentStorageError()
+        # Reuse the server-generated temp basename so concurrent promotions of
+        # the same row write the same durable object instead of leaking copies.
+        basename = row.storage_key.rsplit("/", 1)[-1]
+        durable_key = f"users/{self.user_id}/chat-images/{basename}"
+        try:
+            await self.storage.save(
+                durable_key,
+                data,
+                backend=row.storage_backend,
+            )
+        except (StorageError, OSError) as exc:
+            raise AgentChatAttachmentStorageError() from exc
+        updated = await self.repository.update_storage(
+            row.id,
+            storage_key=durable_key,
+            storage_backend=row.storage_backend,
+        )
+        if not updated:
+            await self._delete_quietly(durable_key, row.storage_backend)
+            raise AgentChatAttachmentInvalidError()
+        try:
+            await self.storage.delete(
+                row.storage_key,
+                backend=row.storage_backend,
+            )
+        except (StorageError, OSError) as exc:
+            logger.warning(
+                "chat attachment promotion cleanup failed attachment_id=%s reason=%s",
+                row.id,
+                type(exc).__name__,
+            )
 
     async def enrich_transcript(
         self,
@@ -335,6 +393,10 @@ def _attachment_image(row: AgentChatAttachmentModel) -> ChatAttachmentImage:
         width=row.width,
         height=row.height,
     )
+
+
+def _is_temporary_key(storage_key: str, user_id: int) -> bool:
+    return storage_key.startswith(f"users/{user_id}/chat-temp/")
 
 
 def _safe_file_name(raw: str | None, suffix: str) -> str:
