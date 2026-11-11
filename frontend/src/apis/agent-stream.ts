@@ -98,6 +98,7 @@ export type AgentStreamEvent =
 export interface StreamAgentMessageOptions {
   readonly conversationId: number;
   readonly content: string;
+  readonly attachmentIds?: readonly number[];
   readonly pageContext?: AgentPageContextPayload;
   readonly requestId?: string;
   readonly signal?: AbortSignal;
@@ -536,6 +537,7 @@ function browserTimePayload(): {
 export async function streamAgentMessage({
   conversationId,
   content,
+  attachmentIds = [],
   pageContext,
   requestId,
   signal,
@@ -545,6 +547,7 @@ export async function streamAgentMessage({
     path: `/api/v1/agent/conversations/${conversationId}/messages`,
     body: {
       content,
+      attachment_ids: [...attachmentIds],
       request_id: requestId ?? createRequestId(),
       ...browserTimePayload(),
       ...(pageContext ? { page_context: pageContext } : {}),

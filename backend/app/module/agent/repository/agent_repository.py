@@ -43,6 +43,7 @@ from app.module.agent.exception.domain_error import (
     AgentApprovalNotFoundError,
     AgentApprovalNotPendingError,
     AgentApprovalOutOfOrderError,
+    AgentChatAttachmentInvalidError,
     AgentConversationArchivedError,
     AgentConversationBusyError,
     AgentConversationNotFoundError,
@@ -54,6 +55,7 @@ from app.module.agent.exception.domain_error import (
 from app.module.agent.model.agent_model import (
     AGENT_COMMIT_SEQUENCE,
     AgentApprovalModel,
+    AgentChatAttachmentModel,
     AgentConversationModel,
     AgentEntryModel,
     AgentRunModel,
@@ -87,6 +89,39 @@ class AgentRepository:
             {"name": AGENT_COMMIT_SEQUENCE.name},
         )
         return int(value.scalar_one())
+
+    @staticmethod
+    async def _claim_chat_attachments(
+        session: AsyncSession,
+        *,
+        user_id: int,
+        attachment_ids: tuple[int, ...],
+        conversation_id: int,
+        entry_id: int,
+    ) -> list[AgentChatAttachmentModel]:
+        """Atomically bind staged images to the new user entry."""
+        if not attachment_ids:
+            return []
+        if len(set(attachment_ids)) != len(attachment_ids):
+            raise AgentChatAttachmentInvalidError()
+        statement = (
+            select(AgentChatAttachmentModel)
+            .where(
+                AgentChatAttachmentModel.id.in_(attachment_ids),
+                AgentChatAttachmentModel.user_id == user_id,
+            )
+            .with_for_update()
+        )
+        rows = list((await session.execute(statement)).scalars().all())
+        if len(rows) != len(attachment_ids):
+            raise AgentChatAttachmentInvalidError()
+        for row in rows:
+            if row.deleted_at is not None or row.entry_id is not None:
+                raise AgentChatAttachmentInvalidError()
+            row.entry_id = entry_id
+            row.conversation_id = conversation_id
+        await session.flush()
+        return rows
 
     @staticmethod
     async def _lock_conversation(
@@ -467,6 +502,7 @@ class AgentRepository:
         page_context_draft: EntryDraft | None,
         page_context_key: str | None,
         request_id: str | None,
+        attachment_ids: tuple[int, ...],
         now: datetime,
     ) -> tuple[
         AgentConversationModel,
@@ -566,6 +602,13 @@ class AgentRepository:
             )
             session.add(entry)
             await session.flush()
+            await self._claim_chat_attachments(
+                session,
+                user_id=self.user_id,
+                attachment_ids=attachment_ids,
+                conversation_id=conversation_id,
+                entry_id=entry.id,
+            )
 
             run = AgentRunModel(
                 user_id=self.user_id,

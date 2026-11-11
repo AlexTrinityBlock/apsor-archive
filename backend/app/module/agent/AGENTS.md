@@ -8,7 +8,8 @@ Keep one conversation resumable and auditable across model steps and process res
 
 ## Architecture
 
-- `model/agent_model.py` defines `agent_conversation`, immutable `agent_entry`, operational `agent_run`, and durable `agent_approval`. `agent_config` stores the singleton runtime limits; `saved_question` and `system_prompt_section` live in their own modules.
+- `model/agent_model.py` defines `agent_conversation`, immutable `agent_entry`, operational `agent_run`, durable `agent_approval`, and temporary `agent_chat_attachment`. `agent_config` stores the singleton runtime limits; `saved_question` and `system_prompt_section` live in their own modules.
+- Pasted chat images live under `users/{user_id}/chat-temp/` in object storage and are tracked by `agent_chat_attachment`. A user entry stores only attachment ids and display metadata in `data`; at provider-call time the attachment service loads the bytes and materializes OpenAI-compatible `image_url` parts. Deleting a temporary image is a soft delete of the row plus object deletion, so history stays append-only and the UI can show a placeholder.
 - Entries use kinds `pi.system`, `pi.user`, `pi.assistant`, `pi.tool-result`, `pi.page-context`, `pi.compaction`, `pi.reset`, and `ui.notice`. `model` is exactly the provider-facing messages; `data` is UI/telemetry and is never sent to the provider.
 - The transcript is append-only. Corrections are new boundary entries, context `edits`, or `head_entry_id` changes on a new entry, never updates or deletes of `agent_entry`. One transaction reserves one `agent_commit_seq`, shared by all entries written together.
 - `AgentRepository` owns its own short sessions and row locks. This lets an SSE response outlive a request session. Runs move through `running`, `waiting`, `completed`, `failed`, and `cancelled`; only one `running` or `waiting` run may exist per conversation, and request ids are idempotent.
@@ -36,14 +37,16 @@ Keep one conversation resumable and auditable across model steps and process res
 - `domain/compaction_domain.py` — token estimate and deterministic summary boundaries.
 - `domain/tool_catalog.py` / `domain/tool_args.py` — frozen tool schemas and validators.
 - `service/tool_registry.py` — dispatch, error normalization, result clipping, UI previews.
-- `router/conversation_router.py` / `router/approval_router.py` — SSE/JSON transports.
+- `service/chat_attachment_service.py` — image validation/re-encoding, temporary storage, manager CRUD, and provider image materialization.
+- `router/conversation_router.py` / `router/approval_router.py` / `router/chat_attachment_router.py` — SSE/JSON transports and temporary-image management.
 - `dependencies.py` — composition root, config snapshot, short-lived tool sessions, test seams.
 - `test/fake_chat_generator.py` — deterministic test fake; this package contains no collected tests.
 
 ## Conventions
 
 - Never update or delete an entry to fix history. Append a new entry, boundary, edit, or run state change. Preserve `commit_seq` grouping.
-- Keep provider `model` and UI `data` separate. If the model should see new content, put it in `model`; if only the inspector needs it, put it in `data`.
+- Keep provider `model` and UI `data` separate. If the model should see new content, put it in `model`; if only the inspector needs it, put it in `data`. Temporary chat images are the deliberate exception: the entry keeps ids/metadata in `data` and the attachment service injects bytes into the provider payload at call time.
+- Chat images must be verified and re-encoded server-side; never trust the client MIME type or extension. The only accepted outputs are PNG, JPEG, and WebP. Never log storage keys, file names, image bytes, or data URLs.
 - Do not hold the request database session in the loop, tool execution, or stream generator. Open short sessions for appends and tool calls.
 - Preserve SSE event names, payload fields, and ordering. Add new event fields compatibly; do not persist incremental assistant deltas.
 - Add tools only with a validated argument model, catalog entry, registry dispatcher, and prompt/tools version decision. Bump `PROMPT_VERSION` or `TOOLS_VERSION` when the frozen prefix changes; existing conversations must stay frozen.
@@ -62,7 +65,7 @@ Keep one conversation resumable and auditable across model steps and process res
 cd backend
 uv run ruff check app/module/agent tests/test_agent.py
 uv run mypy app
-PYTHONUNBUFFERED=1 uv run pytest -q tests/test_agent.py
+PYTHONUNBUFFERED=1 uv run pytest -q tests/test_agent.py tests/test_chat_attachments.py
 uv run pytest -q tests/test_system_prompt.py tests/test_errors.py
 ```
 

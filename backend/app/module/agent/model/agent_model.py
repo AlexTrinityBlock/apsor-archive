@@ -194,6 +194,83 @@ class AgentEntryModel(Base):
     )
 
 
+class AgentChatAttachmentModel(Base):
+    """One temporary image pasted into the chat composer.
+
+    Bytes live in object storage under the owner's ``chat-temp`` prefix. The row
+    carries only metadata and the storage key; ``entry_id`` is set atomically
+    when the image is sent with a user entry. Deleting the row is a soft delete
+    so the transcript keeps a stable reference and the manager can explain that
+    the temporary image is gone.
+    """
+
+    __tablename__ = "agent_chat_attachment"
+    __table_args__ = (
+        UniqueConstraint(
+            "storage_key",
+            name="uq_agent_chat_attachment_storage_key",
+        ),
+        ForeignKeyConstraint(
+            ["conversation_id", "user_id"],
+            ["agent_conversation.id", "agent_conversation.user_id"],
+            name="fk_agent_chat_attachment_conversation_user",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["entry_id", "user_id"],
+            ["agent_entry.id", "agent_entry.user_id"],
+            name="fk_agent_chat_attachment_entry_user",
+            ondelete="SET NULL (entry_id)",
+        ),
+        CheckConstraint(
+            "mime_type IN ('image/png', 'image/jpeg', 'image/webp')",
+            name="mime_type_valid",
+        ),
+        CheckConstraint(
+            "storage_backend IN ('local', 'r2')",
+            name="storage_backend_valid",
+        ),
+        CheckConstraint("size_bytes > 0", name="size_positive"),
+        CheckConstraint("width > 0 AND height > 0", name="dimensions_positive"),
+        Index(
+            "ix_agent_chat_attachment_user_created",
+            "user_id",
+            "created_at",
+        ),
+        Index(
+            "ix_agent_chat_attachment_user_entry",
+            "user_id",
+            "entry_id",
+        ),
+        Index("ix_agent_chat_attachment_entry", "entry_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_agent_chat_attachment_user_id_app_user",
+        ),
+        nullable=False,
+    )
+    conversation_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    entry_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    storage_backend: Mapped[str] = mapped_column(String(16), nullable=False)
+    file_name: Mapped[str] = mapped_column(Text, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AgentApprovalModel(Base):
     """One pending human decision for a confirmation-required tool call.
 

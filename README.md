@@ -113,6 +113,13 @@ result carries its source, chunk number, and time.
   answer, ask it later, and keep the answer, its citations, the run status, and
   a link to the conversation on the same row. Editing the question clears the
   stale answer instead of leaving a mismatched pair on screen.
+- **Chat images are temporary.** A screenshot pasted into the chat composer is
+  uploaded immediately to the signed-in account's `users/{user_id}/chat-temp/`
+  object-storage area, downscaled, re-encoded, and listed in a removable
+  temporary-image manager. Sending a message links the image to that user entry;
+  the provider receives it as an OpenAI-compatible `image_url` part. Deleting a
+  temporary image removes the object and leaves an honest placeholder in the
+  transcript. Chat images are not archive files and are not searchable.
 - **Images live in the File Library.** An image is a normal file record with its
   original bytes, path, and chunks. A vision-capable chat provider adds OCR,
   GitHub-Flavored Markdown tables, and a complete visual description; the OCR
@@ -755,14 +762,19 @@ The tables are:
 - `agent_conversation` — transcript scope, provider/model identity, and metadata.
 - `agent_entry` — immutable `pi.user`, `pi.assistant`, `pi.tool-result`,
   `pi.page-context`, `pi.system`, `pi.reset`, `pi.compaction`, and `ui.notice`
-  entries. `model` is exactly the provider payload; `data` is UI/diagnostics
-  only.
+  entries. `model` is the canonical provider message text; linked temporary
+  images are materialized as `image_url` parts at provider-call time, and `data`
+  is UI/diagnostics only.
 - `agent_run` — durable state for one submission (`request_id`, status, abort,
   last entry, safe error). `agent_commit_seq` groups entries written in one
   transaction.
 - `agent_approval` — one durable pending/approved/rejected/expired human decision
   for a confirmation-required tool call, including validated arguments, a safe
   preview, and the loop snapshot used to resume the waiting run.
+- `agent_chat_attachment` — temporary chat images owned by one account, with the
+  object-storage key, sanitized metadata, and an optional link to the user entry
+  that sent them. Rows are soft-deleted; objects are removed from
+  `users/{user_id}/chat-temp/`.
 - `agent_config` — the singleton runtime configuration (`id=1`) holding the
   validated token, step, tool, page-context, and compaction limits.
 
@@ -784,6 +796,10 @@ failure never becomes an HTTP 500.
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/compact` | Append a manual compaction boundary |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | Append a reset boundary; transcript is preserved |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/fork` | Copy entries through an inclusive cutoff into a new thread |
+| `POST` | `/api/v1/agent/attachments` | Upload one temporary chat image (`multipart/form-data`) |
+| `GET` | `/api/v1/agent/attachments?status=&limit=&offset=` | List the account's temporary chat images |
+| `GET` | `/api/v1/agent/attachments/{attachment_id}/content` | Stream one live temporary image |
+| `DELETE` | `/api/v1/agent/attachments/{attachment_id}` | Delete the object and soft-delete its row (`204`) |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | Append a user entry and run the loop |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | Retry the latest failed/cancelled run |
 | `GET` | `/api/v1/agent/conversations/{conversation_id}/approvals?status=` | Durable approvals, oldest first (default `pending`) |
@@ -798,8 +814,10 @@ failure never becomes an HTTP 500.
 | `POST` | `/api/v1/agent/settings/system-prompt/reset` | Replace every section with the four seeded defaults |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` accepts
-`{content, request_id?, page_context?, client_timezone?,
-client_utc_offset_minutes?}` and `.../retry` accepts `{request_id?}`. Both stream
+`{content, attachment_ids?, request_id?, page_context?, client_timezone?,
+client_utc_offset_minutes?}` and `.../retry` accepts `{request_id?}`. Up to four
+staged chat images may be attached; text may be empty when an image is present.
+Both stream
 `text/event-stream` by default. The client timezone is stored with a
 server-rendered `<current_time>` block on each user entry; the block is appended
 after the message text exactly once. The ordered system prompt sections are
