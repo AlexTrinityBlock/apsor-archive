@@ -458,8 +458,8 @@ export function ChatPage() {
             });
           })
           .catch((error: unknown) => {
-            cancelledUploads.current.delete(item.key);
-            if (isUploadAbortError(error)) {
+            const cancelled = cancelledUploads.current.delete(item.key);
+            if (cancelled || isUploadAbortError(error)) {
               return;
             }
             const detail = describeError(error);
