@@ -130,6 +130,29 @@ class ChatAttachmentRepository:
             )
             return int(getattr(result, "rowcount", 0) or 0) > 0
 
+    async def update_storage(
+        self,
+        attachment_id: int,
+        *,
+        storage_key: str,
+        storage_backend: str,
+    ) -> bool:
+        """Point one live row at its promoted durable object."""
+        async with self._transaction() as session:
+            result = await session.execute(
+                update(AgentChatAttachmentModel)
+                .where(
+                    AgentChatAttachmentModel.id == attachment_id,
+                    AgentChatAttachmentModel.user_id == self.user_id,
+                    AgentChatAttachmentModel.deleted_at.is_(None),
+                )
+                .values(
+                    storage_key=storage_key,
+                    storage_backend=storage_backend,
+                )
+            )
+            return int(getattr(result, "rowcount", 0) or 0) > 0
+
     async def list_by_ids(
         self,
         attachment_ids: Sequence[int],

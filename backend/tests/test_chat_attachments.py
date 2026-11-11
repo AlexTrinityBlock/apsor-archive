@@ -143,6 +143,46 @@ def test_image_is_visible_to_the_provider_and_linked_to_the_user_entry(
     assert second.json()["error"] == "agent_chat_attachment_invalid"
 
 
+def test_sending_promotes_the_image_to_the_durable_prefix(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    fake = FakeChatGenerator.from_texts("Promoted.")
+    client.app.state.agent_chat_generator = fake
+    attachment = upload_image(client)
+    attachment_id = int(attachment["id"])
+    with owner_engine.connect() as connection:
+        before = connection.execute(
+            text(
+                "SELECT user_id, storage_key FROM agent_chat_attachment WHERE id = :id"
+            ),
+            {"id": attachment_id},
+        ).mappings().one()
+    assert before["storage_key"].startswith(f"users/{before['user_id']}/chat-temp/")
+
+    conversation_id = create_conversation(client)
+    send_message(
+        client,
+        conversation_id,
+        content="Promote this image.",
+        attachment_ids=[attachment_id],
+    )
+
+    with owner_engine.connect() as connection:
+        after = connection.execute(
+            text("SELECT storage_key FROM agent_chat_attachment WHERE id = :id"),
+            {"id": attachment_id},
+        ).scalar_one()
+    assert after.startswith(f"users/{before['user_id']}/chat-images/")
+    assert after != before["storage_key"]
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(client.app.state.storage.read(before["storage_key"]))
+    assert (
+        client.get(f"/api/v1/agent/attachments/{attachment_id}/content").status_code
+        == 200
+    )
+
+
 def test_image_only_message_is_allowed(client: TestClient) -> None:
     fake = FakeChatGenerator.from_texts("It is a red square.")
     client.app.state.agent_chat_generator = fake
@@ -285,11 +325,11 @@ def test_temporary_images_are_isolated_between_accounts(
     ).status_code == 200
 
 
-def test_cleanup_removes_expired_images_and_keeps_fresh_ones(
+def test_cleanup_removes_only_expired_staged_images(
     client: TestClient,
     owner_engine: Engine,
 ) -> None:
-    fake = FakeChatGenerator.from_texts("The image is old.")
+    fake = FakeChatGenerator.from_texts("The attached image is durable.")
     client.app.state.agent_chat_generator = fake
     staged = upload_image(client)
     attached = upload_image(client)
@@ -297,12 +337,13 @@ def test_cleanup_removes_expired_images_and_keeps_fresh_ones(
     send_message(
         client,
         conversation_id,
-        content="Keep this one for now.",
+        content="Keep this one forever.",
         attachment_ids=[int(attached["id"])],
     )
     fresh = upload_image(client)
 
-    old_ids = [int(staged["id"]), int(attached["id"])]
+    staged_id = int(staged["id"])
+    attached_id = int(attached["id"])
     with owner_engine.begin() as connection:
         connection.execute(
             text(
@@ -310,19 +351,12 @@ def test_cleanup_removes_expired_images_and_keeps_fresh_ones(
                 "SET created_at = now() - interval '2 days' "
                 "WHERE id IN (:staged_id, :attached_id)"
             ),
-            {"staged_id": old_ids[0], "attached_id": old_ids[1]},
+            {"staged_id": staged_id, "attached_id": attached_id},
         )
-        old_keys = (
-            connection.execute(
-                text(
-                    "SELECT storage_key FROM agent_chat_attachment "
-                    "WHERE id IN (:staged_id, :attached_id)"
-                ),
-                {"staged_id": old_ids[0], "attached_id": old_ids[1]},
-            )
-            .scalars()
-            .all()
-        )
+        staged_key = connection.execute(
+            text("SELECT storage_key FROM agent_chat_attachment WHERE id = :id"),
+            {"id": staged_id},
+        ).scalar_one()
 
     async def run_cleanup() -> int:
         database = Database(TEST_DATABASE_URL)
@@ -330,38 +364,42 @@ def test_cleanup_removes_expired_images_and_keeps_fresh_ones(
             cleanup = ChatAttachmentCleanup(
                 database=database,
                 storage=client.app.state.storage,
-                staged_ttl=timedelta(hours=24),
-                attached_ttl=timedelta(hours=24),
+                staged_ttl=timedelta(hours=1),
                 interval_seconds=1,
             )
             return await cleanup.run_once()
         finally:
             await database.dispose()
 
-    assert asyncio.run(run_cleanup()) == 2
-    assert client.get("/api/v1/agent/attachments").json()["total_results"] == 1
+    assert asyncio.run(run_cleanup()) == 1
+    assert client.get("/api/v1/agent/attachments").json()["total_results"] == 2
     assert (
-        client.get(f"/api/v1/agent/attachments/{old_ids[0]}/content").status_code
+        client.get(f"/api/v1/agent/attachments/{staged_id}/content").status_code
         == 404
     )
     assert (
-        client.get(f"/api/v1/agent/attachments/{old_ids[1]}/content").status_code
-        == 404
+        client.get(f"/api/v1/agent/attachments/{attached_id}/content").status_code
+        == 200
     )
     assert (
         client.get(f"/api/v1/agent/attachments/{fresh['id']}/content").status_code
         == 200
     )
-    for storage_key in old_keys:
-        with pytest.raises(FileNotFoundError):
-            asyncio.run(client.app.state.storage.read(storage_key))
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(client.app.state.storage.read(staged_key))
 
     with owner_engine.connect() as connection:
-        deleted = connection.execute(
+        staged_deleted = connection.execute(
             text(
-                "SELECT count(*) FROM agent_chat_attachment "
-                "WHERE id IN (:staged_id, :attached_id) AND deleted_at IS NOT NULL"
+                "SELECT deleted_at IS NOT NULL FROM agent_chat_attachment WHERE id = :id"
             ),
-            {"staged_id": old_ids[0], "attached_id": old_ids[1]},
+            {"id": staged_id},
         ).scalar_one()
-    assert int(deleted) == 2
+        attached_deleted = connection.execute(
+            text(
+                "SELECT deleted_at IS NOT NULL FROM agent_chat_attachment WHERE id = :id"
+            ),
+            {"id": attached_id},
+        ).scalar_one()
+    assert staged_deleted is True
+    assert attached_deleted is False
