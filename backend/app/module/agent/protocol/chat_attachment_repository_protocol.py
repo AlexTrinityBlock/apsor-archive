@@ -36,6 +36,14 @@ class ChatAttachmentRepositoryProtocol(Protocol):
 
     async def mark_deleted(self, attachment_id: int, *, now: datetime) -> bool: ...
 
+    async def update_storage(
+        self,
+        attachment_id: int,
+        *,
+        storage_key: str,
+        storage_backend: str,
+    ) -> bool: ...
+
     async def list_by_ids(
         self,
         attachment_ids: Sequence[int],

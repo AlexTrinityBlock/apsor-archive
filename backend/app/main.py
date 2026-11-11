@@ -139,9 +139,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 staged_ttl=timedelta(
                     hours=resolved_settings.chat_attachment_staged_ttl_hours
                 ),
-                attached_ttl=timedelta(
-                    hours=resolved_settings.chat_attachment_attached_ttl_hours
-                ),
                 interval_seconds=resolved_settings.chat_attachment_cleanup_interval_seconds,
             )
             cleanup_task = asyncio.create_task(
