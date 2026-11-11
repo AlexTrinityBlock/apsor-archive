@@ -2019,11 +2019,32 @@
   border-color: var(--accent-seal);
 }
 
+.chat-attachment-chip--uploading {
+  background: var(--mono-paper);
+}
+
 .chat-attachment-chip__state {
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--mono-muted);
+}
+
+.chat-attachment-chip__progress {
+  color: var(--mono-ink);
+  font-family: var(--mono-font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.chat-attachment-chip__bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--mono-ink);
+  transition: width 120ms linear;
 }
 
 .chat-attachment-chip__remove {

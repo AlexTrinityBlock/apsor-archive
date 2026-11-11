@@ -23,13 +23,27 @@ def png_bytes(size: tuple[int, int] = (8, 8)) -> bytes:
     return buffer.getvalue()
 
 
-def upload_image(client: TestClient, name: str = "pasted.png") -> dict[str, Any]:
+def upload_image(
+    client: TestClient,
+    name: str = "pasted.png",
+    *,
+    client_token: str | None = None,
+) -> dict[str, Any]:
+    data = {"client_token": client_token} if client_token is not None else None
     response = client.post(
         "/api/v1/agent/attachments",
         files={"file": (name, png_bytes(), "image/png")},
+        data=data,
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def cancel_upload(client: TestClient, client_token: str) -> Any:
+    return client.post(
+        "/api/v1/agent/attachments/cancel",
+        json={"client_token": client_token},
+    )
 
 
 def create_conversation(client: TestClient) -> int:
@@ -90,6 +104,130 @@ def test_upload_list_content_and_delete(client: TestClient) -> None:
         == 404
     )
     assert client.get("/api/v1/agent/attachments").json()["total_results"] == 0
+
+
+def test_upload_client_token_makes_a_retry_idempotent(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    token = "client-token-retry-0001"
+    first = upload_image(client, client_token=token)
+    second = upload_image(client, client_token=token)
+    assert second["id"] == first["id"]
+    assert client.get("/api/v1/agent/attachments").json()["total_results"] == 1
+
+    with owner_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT client_token FROM agent_chat_attachment "
+                "WHERE client_token = :token"
+            ),
+            {"token": token},
+        ).scalars().all()
+    assert rows == [token]
+
+
+def test_cancel_staged_upload_is_idempotent(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    token = "client-token-cancel-0001"
+    uploaded = upload_image(client, client_token=token)
+    attachment_id = int(uploaded["id"])
+    with owner_engine.connect() as connection:
+        storage_key = connection.execute(
+            text("SELECT storage_key FROM agent_chat_attachment WHERE id = :id"),
+            {"id": attachment_id},
+        ).scalar_one()
+
+    first = cancel_upload(client, token)
+    assert first.status_code == 204, first.text
+    second = cancel_upload(client, token)
+    assert second.status_code == 204, second.text
+
+    assert client.get("/api/v1/agent/attachments").json()["total_results"] == 0
+    assert (
+        client.get(f"/api/v1/agent/attachments/{attachment_id}/content").status_code
+        == 404
+    )
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(client.app.state.storage.read(storage_key))
+    with owner_engine.connect() as connection:
+        deleted = connection.execute(
+            text(
+                "SELECT deleted_at IS NOT NULL FROM agent_chat_attachment "
+                "WHERE id = :id"
+            ),
+            {"id": attachment_id},
+        ).scalar_one()
+    assert deleted is True
+
+
+def test_cancel_does_not_delete_a_sent_image(client: TestClient) -> None:
+    fake = FakeChatGenerator.from_texts("The image is attached.")
+    client.app.state.agent_chat_generator = fake
+    token = "client-token-attached-0001"
+    uploaded = upload_image(client, client_token=token)
+    attachment_id = int(uploaded["id"])
+    conversation_id = create_conversation(client)
+    send_message(
+        client,
+        conversation_id,
+        content="Keep this image.",
+        attachment_ids=[attachment_id],
+    )
+
+    cancelled = cancel_upload(client, token)
+    assert cancelled.status_code == 204, cancelled.text
+    assert (
+        client.get(f"/api/v1/agent/attachments/{attachment_id}/content").status_code
+        == 200
+    )
+    listed = client.get("/api/v1/agent/attachments", params={"status": "attached"})
+    assert listed.json()["total_results"] == 1
+
+
+def test_cancel_is_scoped_to_the_owner(
+    user_client_factory: Callable[..., UserClient],
+) -> None:
+    alice = user_client_factory("alice")
+    bob = user_client_factory("bob")
+    token = "client-token-owner-0001"
+    uploaded = upload_image(alice.client, client_token=token)
+    attachment_id = int(uploaded["id"])
+
+    assert cancel_upload(bob.client, token).status_code == 204
+    assert (
+        alice.client.get(
+            f"/api/v1/agent/attachments/{attachment_id}/content"
+        ).status_code
+        == 200
+    )
+
+
+def test_cancel_rejects_an_invalid_client_token(client: TestClient) -> None:
+    response = cancel_upload(client, "too-short")
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_request"
+
+
+def test_multiple_uploads_can_be_cancelled_independently(
+    client: TestClient,
+) -> None:
+    tokens = [f"client-token-multi-{index:04d}" for index in range(3)]
+    uploaded = [
+        upload_image(client, name=f"image-{index}.png", client_token=token)
+        for index, token in enumerate(tokens)
+    ]
+    assert client.get("/api/v1/agent/attachments").json()["total_results"] == 3
+
+    assert cancel_upload(client, tokens[1]).status_code == 204
+    remaining = client.get("/api/v1/agent/attachments").json()
+    assert remaining["total_results"] == 2
+    assert {int(item["id"]) for item in remaining["resources"]} == {
+        int(uploaded[0]["id"]),
+        int(uploaded[2]["id"]),
+    }
 
 
 def test_image_is_visible_to_the_provider_and_linked_to_the_user_entry(

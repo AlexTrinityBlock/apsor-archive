@@ -274,6 +274,24 @@
         "title": "AgentApprovalSchema",
         "type": "object"
       },
+      "AgentChatAttachmentCancelSchema": {
+        "additionalProperties": false,
+        "description": "Idempotently discard one staged upload by its browser token.",
+        "properties": {
+          "client_token": {
+            "maxLength": 64,
+            "minLength": 16,
+            "pattern": "^[A-Za-z0-9_-]{16,64}$",
+            "title": "Client Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_token"
+        ],
+        "title": "AgentChatAttachmentCancelSchema",
+        "type": "object"
+      },
       "AgentChatAttachmentSchema": {
         "description": "One temporary image owned by the authenticated account.",
         "properties": {
@@ -1708,6 +1726,20 @@
       },
       "Body_uploadAgentChatAttachment": {
         "properties": {
+          "client_token": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 16,
+                "pattern": "^[A-Za-z0-9_-]{16,64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Token"
+          },
           "file": {
             "contentMediaType": "application/octet-stream",
             "title": "File",
@@ -6029,6 +6061,41 @@
           }
         },
         "summary": "Upload Chat Attachment",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/attachments/cancel": {
+      "post": {
+        "description": "Idempotently discard a staged upload that may still be in flight.",
+        "operationId": "cancelAgentChatAttachment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentChatAttachmentCancelSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Chat Attachment",
         "tags": [
           "agent"
         ]
