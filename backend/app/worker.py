@@ -7,7 +7,9 @@ can drain a queue left by the other.
 
 The loop polls immediately, processes every claimable job without sleeping,
 and waits ``APSOR_INGEST_POLL_SECONDS`` (one second by default) only when the
-queue is empty. SIGINT/SIGTERM stop the loop gracefully.
+queue is empty. The same process also sweeps expired temporary chat images on
+``APSOR_CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS`` (one hour by default).
+SIGINT/SIGTERM stop both loops gracefully.
 
 At most ``APSOR_INGEST_MAX_IN_FLIGHT_JOBS`` jobs run concurrently, and their
 parsing/chunking work is capped by a shared ``ThreadPoolExecutor`` sized by
@@ -22,6 +24,8 @@ import asyncio
 import logging
 import signal
 from collections.abc import Sequence
+from contextlib import suppress
+from datetime import timedelta
 
 from starlette.datastructures import State
 
@@ -37,6 +41,7 @@ from app.infrastructure.database.session import Database, system_session
 from app.infrastructure.files.storage_factory import build_file_storage
 from app.infrastructure.logger.logging import configure_logging
 from app.infrastructure.security.secret_cipher import SecretCipher
+from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.knowledge.dependencies import (
     build_ingest_worker,
     ingest_runtime_defaults,
@@ -106,17 +111,38 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                 ingest_defaults,
             ),
         )
+        cleanup = ChatAttachmentCleanup(
+            database=database,
+            storage=storage,
+            staged_ttl=timedelta(hours=settings.chat_attachment_staged_ttl_hours),
+            attached_ttl=timedelta(hours=settings.chat_attachment_attached_ttl_hours),
+            interval_seconds=settings.chat_attachment_cleanup_interval_seconds,
+        )
+        cleanup_task: asyncio.Task[None] | None = None
         try:
             await worker.startup()
 
             stop_event = asyncio.Event()
             _install_signal_handlers(stop_event)
             if once:
+                removed = await cleanup.run_once()
                 processed = await worker.run_once()
-                logger.info("Worker --once finished; processed=%s", processed)
+                logger.info(
+                    "Worker --once finished; processed=%s attachments_removed=%s",
+                    processed,
+                    removed,
+                )
             else:
+                cleanup_task = asyncio.create_task(
+                    cleanup.run_forever(stop_event),
+                    name="chat-attachment-cleanup",
+                )
                 await worker.run_forever(stop_event)
         finally:
+            if cleanup_task is not None:
+                cleanup_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await cleanup_task
             worker.close()
     finally:
         await cache.close()

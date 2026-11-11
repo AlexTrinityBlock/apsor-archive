@@ -120,7 +120,7 @@ export const chat = {
     eyebrow: "Temporary chat images",
     title: "Your image scratch area",
     detail:
-      "Images pasted into the composer are stored under your account's temporary chat area. Deleting one removes the stored object; an existing message keeps a placeholder.",
+      "Images pasted into the composer are stored under your account's temporary chat area. Removing an unsent image or leaving the chat discards it, and anything left behind expires automatically. Deleting a sent image removes the stored object; an existing message keeps a placeholder.",
     loading: "Reading temporary images…",
     loadFailed: "Temporary images could not be read.",
     retry: "Try again",

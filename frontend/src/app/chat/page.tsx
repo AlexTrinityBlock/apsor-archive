@@ -16,6 +16,7 @@ import { Loader } from "../component/Loader";
 import { useToast } from "../component/Toast";
 import { useScrollLock } from "../hook/useScrollLock";
 import {
+  deleteAgentChatAttachment,
   getListAgentChatAttachmentsQueryKey,
   listAgentEntries,
   uploadAgentChatAttachment,
@@ -234,6 +235,8 @@ export function ChatPage() {
   const [composerAttachments, setComposerAttachments] = useState<
     ComposerAttachment[]
   >([]);
+  const composerAttachmentsRef = useRef<ComposerAttachment[]>([]);
+  const cancelledUploads = useRef<Set<string>>(new Set());
   const [attachmentManagerOpen, setAttachmentManagerOpen] = useState(false);
   const attachmentKey = useRef(0);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -250,6 +253,42 @@ export function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const extraInFlightRef = useRef(false);
   const stickToBottomRef = useRef(true);
+
+  useEffect(() => {
+    composerAttachmentsRef.current = composerAttachments;
+  }, [composerAttachments]);
+
+  const deleteStagedAttachment = useCallback((attachmentId: number) => {
+    // keepalive lets a route change or tab close still reach the delete route.
+    void deleteAgentChatAttachment(attachmentId, { keepalive: true }).catch(
+      () => {
+        // The server-side lifetime sweep removes anything this request misses.
+      },
+    );
+  }, []);
+
+  const clearComposerAttachments = useCallback(() => {
+    composerAttachmentsRef.current = [];
+    setComposerAttachments([]);
+  }, []);
+
+  const discardComposerAttachments = useCallback(() => {
+    const current = composerAttachmentsRef.current;
+    for (const attachment of current) {
+      if (attachment.status === "uploading") {
+        cancelledUploads.current.add(attachment.key);
+      } else if (attachment.attachment) {
+        deleteStagedAttachment(attachment.attachment.id);
+      }
+    }
+    composerAttachmentsRef.current = [];
+    setComposerAttachments([]);
+    if (current.some((attachment) => attachment.attachment)) {
+      void queryClient.invalidateQueries({
+        queryKey: getListAgentChatAttachmentsQueryKey(),
+      });
+    }
+  }, [deleteStagedAttachment, queryClient]);
 
   useScrollLock(narrow && drawerOpen);
 
@@ -275,9 +314,24 @@ export function ChatPage() {
     setInspectorTab("telemetry");
     setLastError(null);
     setPane("thread");
-    setComposerAttachments([]);
-  }, [conversationId]);
+    discardComposerAttachments();
+  }, [conversationId, discardComposerAttachments]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(
+    () => () => {
+      discardComposerAttachments();
+    },
+    [discardComposerAttachments],
+  );
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      discardComposerAttachments();
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [discardComposerAttachments]);
 
   const conversationsQuery = useListAgentConversations({ limit: 100 });
   const refetchConversations = conversationsQuery.refetch;
@@ -343,6 +397,13 @@ export function ChatPage() {
       for (const item of accepted) {
         void uploadAgentChatAttachment({ file: item.file })
           .then((uploaded) => {
+            if (cancelledUploads.current.delete(item.key)) {
+              deleteStagedAttachment(uploaded.id);
+              void queryClient.invalidateQueries({
+                queryKey: getListAgentChatAttachmentsQueryKey(),
+              });
+              return;
+            }
             setComposerAttachments((current) =>
               current.map((attachment) =>
                 attachment.key === item.key
@@ -359,6 +420,9 @@ export function ChatPage() {
             });
           })
           .catch((error: unknown) => {
+            if (cancelledUploads.current.delete(item.key)) {
+              return;
+            }
             const detail = describeError(error);
             setComposerAttachments((current) =>
               current.map((attachment) =>
@@ -371,14 +435,35 @@ export function ChatPage() {
           });
       }
     },
-    [composerAttachments.length, formatNumber, queryClient, t, toast],
+    [
+      composerAttachments.length,
+      deleteStagedAttachment,
+      formatNumber,
+      queryClient,
+      t,
+      toast,
+    ],
   );
 
-  const removeImage = useCallback((key: string) => {
-    setComposerAttachments((current) =>
-      current.filter((attachment) => attachment.key !== key),
-    );
-  }, []);
+  const removeImage = useCallback(
+    (key: string) => {
+      const current = composerAttachmentsRef.current;
+      const target = current.find((attachment) => attachment.key === key);
+      if (target?.status === "uploading") {
+        cancelledUploads.current.add(key);
+      }
+      if (target?.attachment) {
+        deleteStagedAttachment(target.attachment.id);
+        void queryClient.invalidateQueries({
+          queryKey: getListAgentChatAttachmentsQueryKey(),
+        });
+      }
+      const next = current.filter((attachment) => attachment.key !== key);
+      composerAttachmentsRef.current = next;
+      setComposerAttachments(next);
+    },
+    [deleteStagedAttachment, queryClient],
+  );
   const openAttachmentManager = useCallback(() => {
     setAttachmentManagerOpen(true);
   }, []);
@@ -386,11 +471,11 @@ export function ChatPage() {
     setAttachmentManagerOpen(false);
   }, []);
   const forgetDeletedAttachment = useCallback((attachmentId: number) => {
-    setComposerAttachments((current) =>
-      current.filter(
-        (attachment) => attachment.attachment?.id !== attachmentId,
-      ),
+    const next = composerAttachmentsRef.current.filter(
+      (attachment) => attachment.attachment?.id !== attachmentId,
     );
+    composerAttachmentsRef.current = next;
+    setComposerAttachments(next);
   }, []);
 
   const readyAttachments = useMemo(
@@ -443,10 +528,16 @@ export function ChatPage() {
       setLastError(null);
       setPinnedId(null);
       setDraft("");
-      setComposerAttachments([]);
+      clearComposerAttachments();
       void start(id, trimmed, undefined, readyAttachments);
     },
-    [isStreaming, readyAttachments, setDraft, start],
+    [
+      clearComposerAttachments,
+      isStreaming,
+      readyAttachments,
+      setDraft,
+      start,
+    ],
   );
 
   useEffect(() => {
@@ -468,7 +559,7 @@ export function ChatPage() {
     setLastError(null);
     setPinnedId(null);
     setDraft("");
-    setComposerAttachments([]);
+    clearComposerAttachments();
     void start(
       conversationId,
       routeDraft.content,
@@ -476,6 +567,7 @@ export function ChatPage() {
       routeDraft.attachments,
     );
   }, [
+    clearComposerAttachments,
     conversationId,
     location.pathname,
     location.state,
@@ -665,7 +757,7 @@ export function ChatPage() {
         });
         await invalidateConversationList(queryClient);
         setDraft("");
-        setComposerAttachments([]);
+        clearComposerAttachments();
         navigate(`/chat/${created.id}`, {
           replace: true,
           state: { draft: trimmed, attachments: readyAttachments },
@@ -724,6 +816,7 @@ export function ChatPage() {
 
   const startNewConversation = useCallback(() => {
     clearLastChatConversation();
+    discardComposerAttachments();
     setDraft("");
     setLastError(null);
     setPinnedId(null);
@@ -734,7 +827,13 @@ export function ChatPage() {
       setDrawerOpen(false);
     }
     navigate("/chat");
-  }, [navigate, narrow, setDraft, setDrawerOpen]);
+  }, [
+    discardComposerAttachments,
+    navigate,
+    narrow,
+    setDraft,
+    setDrawerOpen,
+  ]);
 
   const handleNavigate = useCallback(() => {
     setPane("thread");

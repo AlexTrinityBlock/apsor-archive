@@ -10,6 +10,7 @@ Keep one conversation resumable and auditable across model steps and process res
 
 - `model/agent_model.py` defines `agent_conversation`, immutable `agent_entry`, operational `agent_run`, durable `agent_approval`, and temporary `agent_chat_attachment`. `agent_config` stores the singleton runtime limits; `saved_question` and `system_prompt_section` live in their own modules.
 - Pasted chat images live under `users/{user_id}/chat-temp/` in object storage and are tracked by `agent_chat_attachment`. A user entry stores only attachment ids and display metadata in `data`; at provider-call time the attachment service loads the bytes and materializes OpenAI-compatible `image_url` parts. Deleting a temporary image is a soft delete of the row plus object deletion, so history stays append-only and the UI can show a placeholder.
+- A staged image is discarded when the composer removes it or leaves the chat. The cleanup service is the backstop: staged images expire after 24 hours and sent images after 30 days by default, swept hourly by the worker (or the API when it owns the ingestion loop). Cleanup discovers ids with a maintenance session, then claims each row in its owner's RLS context with a conditional update before deleting the object.
 - Entries use kinds `pi.system`, `pi.user`, `pi.assistant`, `pi.tool-result`, `pi.page-context`, `pi.compaction`, `pi.reset`, and `ui.notice`. `model` is exactly the provider-facing messages; `data` is UI/telemetry and is never sent to the provider.
 - The transcript is append-only. Corrections are new boundary entries, context `edits`, or `head_entry_id` changes on a new entry, never updates or deletes of `agent_entry`. One transaction reserves one `agent_commit_seq`, shared by all entries written together.
 - `AgentRepository` owns its own short sessions and row locks. This lets an SSE response outlive a request session. Runs move through `running`, `waiting`, `completed`, `failed`, and `cancelled`; only one `running` or `waiting` run may exist per conversation, and request ids are idempotent.
@@ -38,6 +39,7 @@ Keep one conversation resumable and auditable across model steps and process res
 - `domain/tool_catalog.py` / `domain/tool_args.py` — frozen tool schemas and validators.
 - `service/tool_registry.py` — dispatch, error normalization, result clipping, UI previews.
 - `service/chat_attachment_service.py` — image validation/re-encoding, temporary storage, manager CRUD, and provider image materialization.
+- `service/chat_attachment_cleanup.py` — finite-lifetime staged/attached expiry sweep with an owner-scoped conditional claim.
 - `router/conversation_router.py` / `router/approval_router.py` / `router/chat_attachment_router.py` — SSE/JSON transports and temporary-image management.
 - `dependencies.py` — composition root, config snapshot, short-lived tool sessions, test seams.
 - `test/fake_chat_generator.py` — deterministic test fake; this package contains no collected tests.
@@ -47,6 +49,7 @@ Keep one conversation resumable and auditable across model steps and process res
 - Never update or delete an entry to fix history. Append a new entry, boundary, edit, or run state change. Preserve `commit_seq` grouping.
 - Keep provider `model` and UI `data` separate. If the model should see new content, put it in `model`; if only the inspector needs it, put it in `data`. Temporary chat images are the deliberate exception: the entry keeps ids/metadata in `data` and the attachment service injects bytes into the provider payload at call time.
 - Chat images must be verified and re-encoded server-side; never trust the client MIME type or extension. The only accepted outputs are PNG, JPEG, and WebP. Never log storage keys, file names, image bytes, or data URLs.
+- The lifetime sweep must claim a due row with a conditional update before deleting its object. Never delete a staged object from a stale read; a message may be claiming the same row concurrently.
 - Do not hold the request database session in the loop, tool execution, or stream generator. Open short sessions for appends and tool calls.
 - Preserve SSE event names, payload fields, and ordering. Add new event fields compatibly; do not persist incremental assistant deltas.
 - Add tools only with a validated argument model, catalog entry, registry dispatcher, and prompt/tools version decision. Bump `PROMPT_VERSION` or `TOOLS_VERSION` when the frozen prefix changes; existing conversations must stay frozen.
