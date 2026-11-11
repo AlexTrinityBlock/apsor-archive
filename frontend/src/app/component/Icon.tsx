@@ -30,6 +30,7 @@ export type IconName =
   | "maximize"
   | "minimize"
   | "file"
+  | "image"
   | "folder"
   | "branch"
   | "leaf"
@@ -200,6 +201,13 @@ const ICONS: Record<IconName, ReactNode> = {
     <>
       <path d="M6 3.5h8l4 4V20.5H6z" />
       <path d="M14 3.5v4h4" />
+    </>
+  ),
+  image: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <circle cx="9" cy="9.5" r="1.6" />
+      <path d="m4.5 17 5-4.5 3.5 3 2.5-2.2 4 3.7" />
     </>
   ),
   folder: <path d="M3.5 6.5h6l2 2H20.5v11H3.5z" />,

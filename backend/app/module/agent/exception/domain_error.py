@@ -90,6 +90,38 @@ class AgentApprovalOutOfOrderError(AgentError):
         super().__init__("An earlier approval for this run is still pending; resolve it first.")
 
 
+class AgentChatAttachmentNotFoundError(AgentError):
+    def __init__(self, attachment_id: int) -> None:
+        super().__init__(f"Chat attachment {attachment_id} was not found.")
+
+
+class AgentChatAttachmentInvalidError(AgentError):
+    def __init__(self) -> None:
+        super().__init__(
+            "One or more chat attachments are unavailable, already sent, or deleted."
+        )
+
+
+class AgentChatAttachmentUnsupportedError(AgentError):
+    def __init__(self) -> None:
+        super().__init__("Only PNG, JPEG, and WebP chat images are supported.")
+
+
+class AgentChatAttachmentTooLargeError(AgentError):
+    def __init__(self, size: int, limit: int) -> None:
+        super().__init__(f"Chat image size {size} exceeds the {limit}-byte limit.")
+
+
+class AgentChatAttachmentLimitError(AgentError):
+    def __init__(self, limit: int) -> None:
+        super().__init__(f"A message can include at most {limit} chat images.")
+
+
+class AgentChatAttachmentStorageError(AgentError):
+    def __init__(self) -> None:
+        super().__init__("Temporary chat image storage is unavailable.")
+
+
 class SavedQuestionNotFoundError(AgentError):
     def __init__(self, question_id: int) -> None:
         super().__init__(f"Saved question {question_id} was not found.")

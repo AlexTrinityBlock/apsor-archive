@@ -28,6 +28,12 @@ from app.infrastructure.database.session import Database, get_db_session
 from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
 from app.module.agent.domain.user_profile_domain import UserProfile, UserProfileCard
 from app.module.agent.exception.domain_error import AgentNotConfiguredError
+from app.module.agent.protocol.chat_attachment_service_protocol import (
+    ChatAttachmentServiceProtocol,
+)
+from app.module.agent.protocol.chat_attachment_storage_protocol import (
+    ChatAttachmentStorageProtocol,
+)
 from app.module.agent.protocol.chat_generator_protocol import ChatGeneratorProtocol
 from app.module.agent.protocol.system_prompt_cache_protocol import (
     SystemPromptCacheProtocol,
@@ -38,10 +44,14 @@ from app.module.agent.protocol.tool_service_protocol import (
 )
 from app.module.agent.repository.agent_config_repository import AgentConfigRepository
 from app.module.agent.repository.agent_repository import AgentRepository
+from app.module.agent.repository.chat_attachment_repository import (
+    ChatAttachmentRepository,
+)
 from app.module.agent.repository.saved_question_repository import SavedQuestionRepository
 from app.module.agent.repository.system_prompt_repository import SystemPromptRepository
 from app.module.agent.service.agent_service import AgentService
 from app.module.agent.service.agent_settings_service import AgentSettingsService
+from app.module.agent.service.chat_attachment_service import ChatAttachmentService
 from app.module.agent.service.saved_question_service import SavedQuestionService
 from app.module.agent.service.system_prompt_service import SystemPromptService
 from app.module.agent.service.tool_registry import AgentToolRegistry
@@ -182,11 +192,43 @@ def get_system_prompt_admin_service(
     return service
 
 
+def get_app_settings(request: Request) -> Settings:
+    """Expose the resolved application settings to agent HTTP adapters."""
+    return cast(Settings, request.app.state.settings)
+
+
+def get_chat_attachment_service(
+    request: Request,
+    user: UserSchema = Depends(require_stateless_authenticated),
+) -> ChatAttachmentService:
+    """Build the owner-bound temporary-image service.
+
+    The repository owns short sessions, so both management routes and the SSE
+    turn loop can use the same service without holding a request transaction.
+    """
+    settings = cast(Settings, request.app.state.settings)
+    database = cast(Database, request.app.state.db)
+    storage = cast(ChatAttachmentStorageProtocol, request.app.state.storage)
+    return ChatAttachmentService(
+        repository=ChatAttachmentRepository(
+            database,
+            user_id=user.user_id,
+            role=user.role,
+        ),
+        storage=storage,
+        max_upload_bytes=settings.chat_attachment_max_bytes,
+        user_id=user.user_id,
+    )
+
+
 def get_agent_service(
     request: Request,
     user: UserSchema = Depends(require_stateless_authenticated),
     chat_generator: ChatGeneratorProtocol = Depends(get_agent_chat_generator),
     config: AgentRuntimeConfig = Depends(get_agent_runtime_config),
+    chat_attachments: ChatAttachmentServiceProtocol = Depends(
+        get_chat_attachment_service
+    ),
 ) -> AgentService:
     """Build an owner-bound agent service for one authenticated request.
 
@@ -217,6 +259,7 @@ def get_agent_service(
         default_model=model,
         config=config,
         system_prompt_service=get_system_prompt_service(request),
+        chat_attachments=chat_attachments,
         server_timezone=cast(Settings, request.app.state.settings).timezone,
     )
 
@@ -266,6 +309,8 @@ __all__ = [
     "get_agent_runtime_config",
     "get_agent_service",
     "get_agent_settings_service",
+    "get_app_settings",
+    "get_chat_attachment_service",
     "get_current_user_profile",
     "get_saved_question_ask_service",
     "get_saved_question_service",

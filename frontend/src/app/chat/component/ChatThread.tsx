@@ -9,6 +9,7 @@ import {
   readToolCalls,
   readToolResultCallId,
   readToolResultInfo,
+  readUserAttachments,
   userText,
   type CitationToken,
   type ResourceMeta,
@@ -137,6 +138,7 @@ function ThreadEntry({
       return (
         <UserMarginalia
           text={userText(entry)}
+          attachments={readUserAttachments(entry)}
           createdAt={entry.created_at}
           action={entryActions}
         />

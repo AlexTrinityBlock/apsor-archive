@@ -10,13 +10,12 @@ import type { AgentPageContextSchema } from './agentPageContextSchema';
  * Append one user entry and start a run.
  */
 export interface AgentMessageCreateSchema {
+  /** Staged temporary chat image ids; at most four per message. */
+  attachment_ids?: number[];
   client_timezone?: string | null;
   client_utc_offset_minutes?: number | null;
-  /**
-     * @minLength 1
-     * @maxLength 32000
-     */
-  content: string;
+  /** @maxLength 32000 */
+  content?: string;
   page_context?: AgentPageContextSchema | null;
   request_id?: string | null;
 }

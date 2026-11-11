@@ -24,6 +24,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AgentChatAttachmentSchema,
   AgentConversationCreateSchema,
   AgentConversationDetailSchema,
   AgentConversationForkSchema,
@@ -37,12 +38,15 @@ import type {
   AgentSettingsUpdateSchema,
   AgentToolCatalogSchema,
   AgentTurnResultSchema,
+  BodyUploadAgentChatAttachment,
   GetAgentConversationParams,
   HTTPValidationError,
   ListAgentApprovalsParams,
+  ListAgentChatAttachmentsParams,
   ListAgentConversationsParams,
   ListAgentEntriesParams,
   ListResponseSchemaAgentApprovalSchema,
+  ListResponseSchemaAgentChatAttachmentSchema,
   ListResponseSchemaAgentConversationSchema,
   ListResponseSchemaSystemPromptSectionReadSchema,
   ListSavedQuestionsParams,
@@ -225,7 +229,366 @@ export const useRejectAgentApproval = <TError = HTTPValidationError,
       > => {
       return useMutation(getRejectAgentApprovalMutationOptions(options), queryClient);
     }
-    export const getListAgentConversationsUrl = (params?: ListAgentConversationsParams,) => {
+    export const getListAgentChatAttachmentsUrl = (params?: ListAgentChatAttachmentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/agent/attachments?${stringifiedParams}` : `/api/v1/agent/attachments`
+}
+
+/**
+ * Page through temporary images, newest first.
+ * @summary List Chat Attachments
+ */
+export const listAgentChatAttachments = async (params?: ListAgentChatAttachmentsParams, options?: Parameters<typeof apiFetch>[1]): Promise<ListResponseSchemaAgentChatAttachmentSchema> => {
+
+  return apiFetch<ListResponseSchemaAgentChatAttachmentSchema>(getListAgentChatAttachmentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentChatAttachmentsQueryKey = (params?: ListAgentChatAttachmentsParams,) => {
+    return [
+    `/api/v1/agent/attachments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAgentChatAttachmentsQueryOptions = <TData = Awaited<ReturnType<typeof listAgentChatAttachments>>, TError = HTTPValidationError>(params?: ListAgentChatAttachmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentChatAttachments>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentChatAttachmentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentChatAttachments>>> = ({ signal }) => listAgentChatAttachments(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentChatAttachments>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListAgentChatAttachmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentChatAttachments>>>
+export type ListAgentChatAttachmentsQueryError = HTTPValidationError
+
+
+export function useListAgentChatAttachments<TData = Awaited<ReturnType<typeof listAgentChatAttachments>>, TError = HTTPValidationError>(
+ params: undefined |  ListAgentChatAttachmentsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentChatAttachments>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAgentChatAttachments>>,
+          TError,
+          Awaited<ReturnType<typeof listAgentChatAttachments>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAgentChatAttachments<TData = Awaited<ReturnType<typeof listAgentChatAttachments>>, TError = HTTPValidationError>(
+ params?: ListAgentChatAttachmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentChatAttachments>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAgentChatAttachments>>,
+          TError,
+          Awaited<ReturnType<typeof listAgentChatAttachments>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAgentChatAttachments<TData = Awaited<ReturnType<typeof listAgentChatAttachments>>, TError = HTTPValidationError>(
+ params?: ListAgentChatAttachmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentChatAttachments>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Chat Attachments
+ */
+
+export function useListAgentChatAttachments<TData = Awaited<ReturnType<typeof listAgentChatAttachments>>, TError = HTTPValidationError>(
+ params?: ListAgentChatAttachmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentChatAttachments>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListAgentChatAttachmentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getUploadAgentChatAttachmentUrl = () => {
+
+
+
+
+  return `/api/v1/agent/attachments`
+}
+
+/**
+ * Store one pasted image in the account's temporary chat area.
+ * @summary Upload Chat Attachment
+ */
+export const uploadAgentChatAttachment = async (bodyUploadAgentChatAttachment: BodyUploadAgentChatAttachment, options?: Parameters<typeof apiFetch>[1]): Promise<AgentChatAttachmentSchema> => {
+    const formData = new FormData();
+formData.append(`file`, bodyUploadAgentChatAttachment.file);
+
+  return apiFetch<AgentChatAttachmentSchema>(getUploadAgentChatAttachmentUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getUploadAgentChatAttachmentMutationKey = () => ['uploadAgentChatAttachment'] as const;
+
+export const getUploadAgentChatAttachmentMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadAgentChatAttachment>>, TError,UploadAgentChatAttachmentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadAgentChatAttachment>>, TError,UploadAgentChatAttachmentMutationVariables, TContext> => {
+
+const mutationKey = getUploadAgentChatAttachmentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadAgentChatAttachment>>, UploadAgentChatAttachmentMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  uploadAgentChatAttachment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadAgentChatAttachmentMutationResult = NonNullable<Awaited<ReturnType<typeof uploadAgentChatAttachment>>>
+    export type UploadAgentChatAttachmentMutationBody = BodyUploadAgentChatAttachment
+    export type UploadAgentChatAttachmentMutationError = HTTPValidationError
+    export type UploadAgentChatAttachmentMutationVariables = {data: BodyUploadAgentChatAttachment}
+
+    /**
+ * @summary Upload Chat Attachment
+ */
+export const useUploadAgentChatAttachment = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadAgentChatAttachment>>, TError,UploadAgentChatAttachmentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof uploadAgentChatAttachment>>,
+        TError,
+        UploadAgentChatAttachmentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUploadAgentChatAttachmentMutationOptions(options), queryClient);
+    }
+    export const getDeleteAgentChatAttachmentUrl = (attachmentId: number,) => {
+
+
+
+
+  return `/api/v1/agent/attachments/${attachmentId}`
+}
+
+/**
+ * Delete the stored object and soft-delete its temporary row.
+ * @summary Delete Chat Attachment
+ */
+export const deleteAgentChatAttachment = async (attachmentId: number, options?: Parameters<typeof apiFetch>[1]): Promise<void> => {
+
+  return apiFetch<void>(getDeleteAgentChatAttachmentUrl(attachmentId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAgentChatAttachmentMutationKey = () => ['deleteAgentChatAttachment'] as const;
+
+export const getDeleteAgentChatAttachmentMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentChatAttachment>>, TError,DeleteAgentChatAttachmentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAgentChatAttachment>>, TError,DeleteAgentChatAttachmentMutationVariables, TContext> => {
+
+const mutationKey = getDeleteAgentChatAttachmentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAgentChatAttachment>>, DeleteAgentChatAttachmentMutationVariables> = (props) => {
+          const {attachmentId} = props ?? {};
+
+          return  deleteAgentChatAttachment(attachmentId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAgentChatAttachmentMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAgentChatAttachment>>>
+
+    export type DeleteAgentChatAttachmentMutationError = HTTPValidationError
+    export type DeleteAgentChatAttachmentMutationVariables = {attachmentId: number}
+
+    /**
+ * @summary Delete Chat Attachment
+ */
+export const useDeleteAgentChatAttachment = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAgentChatAttachment>>, TError,DeleteAgentChatAttachmentMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAgentChatAttachment>>,
+        TError,
+        DeleteAgentChatAttachmentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteAgentChatAttachmentMutationOptions(options), queryClient);
+    }
+    export const getGetAgentChatAttachmentContentUrl = (attachmentId: number,) => {
+
+
+
+
+  return `/api/v1/agent/attachments/${attachmentId}/content`
+}
+
+/**
+ * Return one live image to its owner.
+ * @summary Get Chat Attachment Content
+ */
+export const getAgentChatAttachmentContent = async (attachmentId: number, options?: Parameters<typeof apiFetch>[1]): Promise<Blob> => {
+
+  return apiFetch<Blob>(getGetAgentChatAttachmentContentUrl(attachmentId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentChatAttachmentContentQueryKey = (attachmentId: number,) => {
+    return [
+    `/api/v1/agent/attachments/${attachmentId}/content`
+    ] as const;
+    }
+
+
+export const getGetAgentChatAttachmentContentQueryOptions = <TData = Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError = HTTPValidationError>(attachmentId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentChatAttachmentContentQueryKey(attachmentId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentChatAttachmentContent>>> = ({ signal }) => getAgentChatAttachmentContent(attachmentId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: attachmentId !== null && attachmentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAgentChatAttachmentContentQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentChatAttachmentContent>>>
+export type GetAgentChatAttachmentContentQueryError = HTTPValidationError
+
+
+export function useGetAgentChatAttachmentContent<TData = Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError = HTTPValidationError>(
+ attachmentId: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAgentChatAttachmentContent>>,
+          TError,
+          Awaited<ReturnType<typeof getAgentChatAttachmentContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAgentChatAttachmentContent<TData = Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError = HTTPValidationError>(
+ attachmentId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAgentChatAttachmentContent>>,
+          TError,
+          Awaited<ReturnType<typeof getAgentChatAttachmentContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAgentChatAttachmentContent<TData = Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError = HTTPValidationError>(
+ attachmentId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Chat Attachment Content
+ */
+
+export function useGetAgentChatAttachmentContent<TData = Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError = HTTPValidationError>(
+ attachmentId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentChatAttachmentContent>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetAgentChatAttachmentContentQueryOptions(attachmentId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListAgentConversationsUrl = (params?: ListAgentConversationsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {

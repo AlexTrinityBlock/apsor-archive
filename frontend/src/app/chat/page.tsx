@@ -16,7 +16,9 @@ import { Loader } from "../component/Loader";
 import { useToast } from "../component/Toast";
 import { useScrollLock } from "../hook/useScrollLock";
 import {
+  getListAgentChatAttachmentsQueryKey,
   listAgentEntries,
+  uploadAgentChatAttachment,
   useCreateAgentConversation,
   useForkAgentConversation,
   useGetAgentConversation,
@@ -32,7 +34,14 @@ import {
   type ResourceTarget,
 } from "../agent/trace";
 import { useMediaQuery } from "../agent/hook/useMediaQuery";
+import {
+  MAX_CHAT_IMAGES_PER_MESSAGE,
+  attachmentView,
+  nameClipboardImage,
+  type ComposerAttachment,
+} from "./attachments";
 import { ApprovalStack } from "./component/ApprovalCard";
+import { ChatAttachmentManager } from "./component/ChatAttachmentManager";
 import { ChatComposer } from "./component/ChatComposer";
 import { ChatHeader, type ChatPane } from "./component/ChatHeader";
 import { ChatInspector, type InspectorTab } from "./component/ChatInspector";
@@ -53,8 +62,11 @@ import {
 import {
   isRecord,
   mergeEntries,
+  numberValue,
   readRetryState,
+  stringValue,
   transcriptText,
+  type ChatAttachmentView,
   type CitationToken,
   type ResourceMeta,
 } from "./types";
@@ -84,13 +96,60 @@ function describeError(error: unknown): string {
   return translate(getActiveLocale(), "chat.page.errorFallback");
 }
 
-function readRouteDraft(state: unknown): string | null {
+interface RouteDraft {
+  readonly content: string;
+  readonly attachments: readonly ChatAttachmentView[];
+}
+
+function readRouteAttachments(value: unknown): ChatAttachmentView[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const attachments: ChatAttachmentView[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) {
+      continue;
+    }
+    const id = numberValue(item.id);
+    const fileName = stringValue(item.fileName);
+    const mimeType = stringValue(item.mimeType);
+    const sizeBytes = numberValue(item.sizeBytes);
+    const width = numberValue(item.width);
+    const height = numberValue(item.height);
+    const contentUrl = stringValue(item.contentUrl);
+    if (
+      id === null ||
+      fileName === null ||
+      mimeType === null ||
+      sizeBytes === null ||
+      width === null ||
+      height === null ||
+      contentUrl === null
+    ) {
+      continue;
+    }
+    attachments.push({
+      id,
+      fileName,
+      mimeType,
+      sizeBytes,
+      width,
+      height,
+      contentUrl,
+    });
+  }
+  return attachments;
+}
+
+function readRouteDraft(state: unknown): RouteDraft | null {
   if (!isRecord(state)) {
     return null;
   }
-  const draft = state.draft;
-  return typeof draft === "string" && draft.trim().length > 0
-    ? draft.trim()
+  const content =
+    typeof state.draft === "string" ? state.draft.trim() : "";
+  const attachments = readRouteAttachments(state.attachments);
+  return content.length > 0 || attachments.length > 0
+    ? { content, attachments }
     : null;
 }
 
@@ -172,6 +231,11 @@ export function ChatPage() {
     },
     [conversationId],
   );
+  const [composerAttachments, setComposerAttachments] = useState<
+    ComposerAttachment[]
+  >([]);
+  const [attachmentManagerOpen, setAttachmentManagerOpen] = useState(false);
+  const attachmentKey = useRef(0);
   const [lastError, setLastError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -211,6 +275,7 @@ export function ChatPage() {
     setInspectorTab("telemetry");
     setLastError(null);
     setPane("thread");
+    setComposerAttachments([]);
   }, [conversationId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -241,6 +306,102 @@ export function ChatPage() {
   const forkConversation = useForkAgentConversation();
   const toast = useToast();
   const [forkingEntryId, setForkingEntryId] = useState<number | null>(null);
+
+  const addImages = useCallback(
+    (files: File[]) => {
+      const available = MAX_CHAT_IMAGES_PER_MESSAGE - composerAttachments.length;
+      if (available <= 0) {
+        toast.info(
+          t("chat.attachments.limit", {
+            count: formatNumber(MAX_CHAT_IMAGES_PER_MESSAGE),
+          }),
+        );
+        return;
+      }
+      if (files.length > available) {
+        toast.info(
+          t("chat.attachments.limit", {
+            count: formatNumber(MAX_CHAT_IMAGES_PER_MESSAGE),
+          }),
+        );
+      }
+      const accepted = files.slice(0, available).map((file, index) => ({
+        file: nameClipboardImage(file, index),
+        key: `chat-upload-${Date.now()}-${attachmentKey.current++}`,
+      }));
+      if (accepted.length === 0) {
+        return;
+      }
+      const pending: ComposerAttachment[] = accepted.map((item) => ({
+        key: item.key,
+        status: "uploading",
+        fileName: item.file.name,
+        attachment: null,
+        error: null,
+      }));
+      setComposerAttachments((current) => [...current, ...pending]);
+      for (const item of accepted) {
+        void uploadAgentChatAttachment({ file: item.file })
+          .then((uploaded) => {
+            setComposerAttachments((current) =>
+              current.map((attachment) =>
+                attachment.key === item.key
+                  ? {
+                      ...attachment,
+                      status: "ready",
+                      attachment: attachmentView(uploaded),
+                    }
+                  : attachment,
+              ),
+            );
+            void queryClient.invalidateQueries({
+              queryKey: getListAgentChatAttachmentsQueryKey(),
+            });
+          })
+          .catch((error: unknown) => {
+            const detail = describeError(error);
+            setComposerAttachments((current) =>
+              current.map((attachment) =>
+                attachment.key === item.key
+                  ? { ...attachment, status: "error", error: detail }
+                  : attachment,
+              ),
+            );
+            toast.error(detail);
+          });
+      }
+    },
+    [composerAttachments.length, formatNumber, queryClient, t, toast],
+  );
+
+  const removeImage = useCallback((key: string) => {
+    setComposerAttachments((current) =>
+      current.filter((attachment) => attachment.key !== key),
+    );
+  }, []);
+  const openAttachmentManager = useCallback(() => {
+    setAttachmentManagerOpen(true);
+  }, []);
+  const closeAttachmentManager = useCallback(() => {
+    setAttachmentManagerOpen(false);
+  }, []);
+  const forgetDeletedAttachment = useCallback((attachmentId: number) => {
+    setComposerAttachments((current) =>
+      current.filter(
+        (attachment) => attachment.attachment?.id !== attachmentId,
+      ),
+    );
+  }, []);
+
+  const readyAttachments = useMemo(
+    () =>
+      composerAttachments.flatMap((attachment) =>
+        attachment.status === "ready" && attachment.attachment
+          ? [attachment.attachment]
+          : [],
+      ),
+    [composerAttachments],
+  );
 
   // Persist only the route id; the transcript itself never touches storage.
   useEffect(() => {
@@ -275,16 +436,17 @@ export function ChatPage() {
   const sendMessage = useCallback(
     (id: number, content: string) => {
       const trimmed = content.trim();
-      if (trimmed.length === 0 || isStreaming) {
+      if ((trimmed.length === 0 && readyAttachments.length === 0) || isStreaming) {
         return;
       }
       stickToBottomRef.current = true;
       setLastError(null);
       setPinnedId(null);
       setDraft("");
-      void start(id, trimmed);
+      setComposerAttachments([]);
+      void start(id, trimmed, undefined, readyAttachments);
     },
-    [isStreaming, setDraft, start],
+    [isStreaming, readyAttachments, setDraft, start],
   );
 
   useEffect(() => {
@@ -295,7 +457,9 @@ export function ChatPage() {
     if (!routeDraft) {
       return;
     }
-    const key = `${conversationId}:${routeDraft}`;
+    const key = `${conversationId}:${routeDraft.content}:${routeDraft.attachments
+      .map((attachment) => attachment.id)
+      .join(",")}`;
     if (handledRouteDraft.current === key) {
       return;
     }
@@ -304,7 +468,13 @@ export function ChatPage() {
     setLastError(null);
     setPinnedId(null);
     setDraft("");
-    void start(conversationId, routeDraft);
+    setComposerAttachments([]);
+    void start(
+      conversationId,
+      routeDraft.content,
+      undefined,
+      routeDraft.attachments,
+    );
   }, [
     conversationId,
     location.pathname,
@@ -474,7 +644,7 @@ export function ChatPage() {
 
   const submit = async (value: string) => {
     const trimmed = value.trim();
-    if (trimmed.length === 0) {
+    if (trimmed.length === 0 && readyAttachments.length === 0) {
       return;
     }
     setLastError(null);
@@ -490,14 +660,15 @@ export function ChatPage() {
           data: {
             title:
               titleFromMessage(trimmed) ||
-              t("chat.page.newConversationTitle"),
+              t("chat.attachments.imageConversationTitle"),
           },
         });
         await invalidateConversationList(queryClient);
         setDraft("");
+        setComposerAttachments([]);
         navigate(`/chat/${created.id}`, {
           replace: true,
-          state: { draft: trimmed },
+          state: { draft: trimmed, attachments: readyAttachments },
         });
       } catch (error) {
         setLastError(describeError(error));
@@ -844,6 +1015,10 @@ export function ChatPage() {
           value={draft}
           onChange={setDraft}
           onSubmit={(value) => void submit(value)}
+          attachments={composerAttachments}
+          onAddImages={addImages}
+          onRemoveAttachment={removeImage}
+          onManageAttachments={openAttachmentManager}
           pending={creating || isStreaming}
           streaming={isStreaming}
           disabled={
@@ -1043,6 +1218,11 @@ export function ChatPage() {
           ) : null}
         </div>
       </div>
+      <ChatAttachmentManager
+        open={attachmentManagerOpen}
+        onClose={closeAttachmentManager}
+        onDeleted={forgetDeletedAttachment}
+      />
     </div>
   );
 }
