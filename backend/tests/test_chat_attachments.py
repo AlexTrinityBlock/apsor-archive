@@ -1,15 +1,20 @@
 """Temporary chat image upload, provider visibility, management, and isolation."""
 
+import asyncio
 from collections.abc import Callable
+from datetime import timedelta
 from io import BytesIO
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy import Engine, text
 
+from app.infrastructure.database.session import Database
+from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.agent.test.fake_chat_generator import FakeChatGenerator
-from tests.conftest import UserClient
+from tests.conftest import TEST_DATABASE_URL, UserClient
 
 
 def png_bytes(size: tuple[int, int] = (8, 8)) -> bytes:
@@ -278,3 +283,85 @@ def test_temporary_images_are_isolated_between_accounts(
     assert alice.client.get(
         f"/api/v1/agent/attachments/{attachment_id}/content"
     ).status_code == 200
+
+
+def test_cleanup_removes_expired_images_and_keeps_fresh_ones(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    fake = FakeChatGenerator.from_texts("The image is old.")
+    client.app.state.agent_chat_generator = fake
+    staged = upload_image(client)
+    attached = upload_image(client)
+    conversation_id = create_conversation(client)
+    send_message(
+        client,
+        conversation_id,
+        content="Keep this one for now.",
+        attachment_ids=[int(attached["id"])],
+    )
+    fresh = upload_image(client)
+
+    old_ids = [int(staged["id"]), int(attached["id"])]
+    with owner_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE agent_chat_attachment "
+                "SET created_at = now() - interval '2 days' "
+                "WHERE id IN (:staged_id, :attached_id)"
+            ),
+            {"staged_id": old_ids[0], "attached_id": old_ids[1]},
+        )
+        old_keys = (
+            connection.execute(
+                text(
+                    "SELECT storage_key FROM agent_chat_attachment "
+                    "WHERE id IN (:staged_id, :attached_id)"
+                ),
+                {"staged_id": old_ids[0], "attached_id": old_ids[1]},
+            )
+            .scalars()
+            .all()
+        )
+
+    async def run_cleanup() -> int:
+        database = Database(TEST_DATABASE_URL)
+        try:
+            cleanup = ChatAttachmentCleanup(
+                database=database,
+                storage=client.app.state.storage,
+                staged_ttl=timedelta(hours=24),
+                attached_ttl=timedelta(hours=24),
+                interval_seconds=1,
+            )
+            return await cleanup.run_once()
+        finally:
+            await database.dispose()
+
+    assert asyncio.run(run_cleanup()) == 2
+    assert client.get("/api/v1/agent/attachments").json()["total_results"] == 1
+    assert (
+        client.get(f"/api/v1/agent/attachments/{old_ids[0]}/content").status_code
+        == 404
+    )
+    assert (
+        client.get(f"/api/v1/agent/attachments/{old_ids[1]}/content").status_code
+        == 404
+    )
+    assert (
+        client.get(f"/api/v1/agent/attachments/{fresh['id']}/content").status_code
+        == 200
+    )
+    for storage_key in old_keys:
+        with pytest.raises(FileNotFoundError):
+            asyncio.run(client.app.state.storage.read(storage_key))
+
+    with owner_engine.connect() as connection:
+        deleted = connection.execute(
+            text(
+                "SELECT count(*) FROM agent_chat_attachment "
+                "WHERE id IN (:staged_id, :attached_id) AND deleted_at IS NOT NULL"
+            ),
+            {"staged_id": old_ids[0], "attached_id": old_ids[1]},
+        ).scalar_one()
+    assert int(deleted) == 2
