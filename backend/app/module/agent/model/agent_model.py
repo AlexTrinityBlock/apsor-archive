@@ -210,6 +210,11 @@ class AgentChatAttachmentModel(Base):
             "storage_key",
             name="uq_agent_chat_attachment_storage_key",
         ),
+        UniqueConstraint(
+            "user_id",
+            "client_token",
+            name="uq_agent_chat_attachment_user_client_token",
+        ),
         ForeignKeyConstraint(
             ["conversation_id", "user_id"],
             ["agent_conversation.id", "agent_conversation.user_id"],
@@ -257,6 +262,10 @@ class AgentChatAttachmentModel(Base):
     )
     conversation_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     entry_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # A browser-generated idempotency key. It lets the composer cancel an
+    # upload that was aborted before its response arrived, and makes a retried
+    # upload with the same key return the row already stored.
+    client_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     storage_key: Mapped[str] = mapped_column(Text, nullable=False)
     storage_backend: Mapped[str] = mapped_column(String(16), nullable=False)
     file_name: Mapped[str] = mapped_column(Text, nullable=False)

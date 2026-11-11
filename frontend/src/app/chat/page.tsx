@@ -16,10 +16,10 @@ import { Loader } from "../component/Loader";
 import { useToast } from "../component/Toast";
 import { useScrollLock } from "../hook/useScrollLock";
 import {
+  cancelAgentChatAttachment,
   deleteAgentChatAttachment,
   getListAgentChatAttachmentsQueryKey,
   listAgentEntries,
-  uploadAgentChatAttachment,
   useCreateAgentConversation,
   useForkAgentConversation,
   useGetAgentConversation,
@@ -38,7 +38,10 @@ import { useMediaQuery } from "../agent/hook/useMediaQuery";
 import {
   MAX_CHAT_IMAGES_PER_MESSAGE,
   attachmentView,
+  createChatUploadToken,
+  isUploadAbortError,
   nameClipboardImage,
+  uploadChatAttachment,
   type ComposerAttachment,
 } from "./attachments";
 import { ApprovalStack } from "./component/ApprovalCard";
@@ -237,6 +240,7 @@ export function ChatPage() {
   >([]);
   const composerAttachmentsRef = useRef<ComposerAttachment[]>([]);
   const cancelledUploads = useRef<Set<string>>(new Set());
+  const uploadControllers = useRef<Map<string, AbortController>>(new Map());
   const [attachmentManagerOpen, setAttachmentManagerOpen] = useState(false);
   const attachmentKey = useRef(0);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -267,6 +271,16 @@ export function ChatPage() {
     );
   }, []);
 
+  const cancelStagedUpload = useCallback((clientToken: string) => {
+    // A token lets the backend discard an upload whose response never arrived.
+    void cancelAgentChatAttachment(
+      { client_token: clientToken },
+      { keepalive: true },
+    ).catch(() => {
+      // The staged TTL sweep is the final backstop for a lost abort.
+    });
+  }, []);
+
   const clearComposerAttachments = useCallback(() => {
     composerAttachmentsRef.current = [];
     setComposerAttachments([]);
@@ -275,20 +289,25 @@ export function ChatPage() {
   const discardComposerAttachments = useCallback(() => {
     const current = composerAttachmentsRef.current;
     for (const attachment of current) {
+      if (attachment.attachment) {
+        deleteStagedAttachment(attachment.attachment.id);
+        continue;
+      }
       if (attachment.status === "uploading") {
         cancelledUploads.current.add(attachment.key);
-      } else if (attachment.attachment) {
-        deleteStagedAttachment(attachment.attachment.id);
       }
+      uploadControllers.current.get(attachment.key)?.abort();
+      uploadControllers.current.delete(attachment.key);
+      cancelStagedUpload(attachment.clientToken);
     }
     composerAttachmentsRef.current = [];
     setComposerAttachments([]);
-    if (current.some((attachment) => attachment.attachment)) {
+    if (current.length > 0) {
       void queryClient.invalidateQueries({
         queryKey: getListAgentChatAttachmentsQueryKey(),
       });
     }
-  }, [deleteStagedAttachment, queryClient]);
+  }, [cancelStagedUpload, deleteStagedAttachment, queryClient]);
 
   useScrollLock(narrow && drawerOpen);
 
@@ -382,6 +401,7 @@ export function ChatPage() {
       const accepted = files.slice(0, available).map((file, index) => ({
         file: nameClipboardImage(file, index),
         key: `chat-upload-${Date.now()}-${attachmentKey.current++}`,
+        clientToken: createChatUploadToken(),
       }));
       if (accepted.length === 0) {
         return;
@@ -390,12 +410,29 @@ export function ChatPage() {
         key: item.key,
         status: "uploading",
         fileName: item.file.name,
+        clientToken: item.clientToken,
+        progress: 0,
         attachment: null,
         error: null,
       }));
       setComposerAttachments((current) => [...current, ...pending]);
       for (const item of accepted) {
-        void uploadAgentChatAttachment({ file: item.file })
+        const controller = new AbortController();
+        uploadControllers.current.set(item.key, controller);
+        void uploadChatAttachment({
+          file: item.file,
+          clientToken: item.clientToken,
+          signal: controller.signal,
+          onProgress: (percent) => {
+            setComposerAttachments((current) =>
+              current.map((attachment) =>
+                attachment.key === item.key
+                  ? { ...attachment, progress: percent }
+                  : attachment,
+              ),
+            );
+          },
+        })
           .then((uploaded) => {
             if (cancelledUploads.current.delete(item.key)) {
               deleteStagedAttachment(uploaded.id);
@@ -410,6 +447,7 @@ export function ChatPage() {
                   ? {
                       ...attachment,
                       status: "ready",
+                      progress: 100,
                       attachment: attachmentView(uploaded),
                     }
                   : attachment,
@@ -420,7 +458,8 @@ export function ChatPage() {
             });
           })
           .catch((error: unknown) => {
-            if (cancelledUploads.current.delete(item.key)) {
+            cancelledUploads.current.delete(item.key);
+            if (isUploadAbortError(error)) {
               return;
             }
             const detail = describeError(error);
@@ -431,11 +470,17 @@ export function ChatPage() {
                   : attachment,
               ),
             );
+            // A dropped response may still have stored an object server-side.
+            cancelStagedUpload(item.clientToken);
             toast.error(detail);
+          })
+          .finally(() => {
+            uploadControllers.current.delete(item.key);
           });
       }
     },
     [
+      cancelStagedUpload,
       composerAttachments.length,
       deleteStagedAttachment,
       formatNumber,
@@ -449,20 +494,26 @@ export function ChatPage() {
     (key: string) => {
       const current = composerAttachmentsRef.current;
       const target = current.find((attachment) => attachment.key === key);
-      if (target?.status === "uploading") {
-        cancelledUploads.current.add(key);
-      }
       if (target?.attachment) {
         deleteStagedAttachment(target.attachment.id);
-        void queryClient.invalidateQueries({
-          queryKey: getListAgentChatAttachmentsQueryKey(),
-        });
+      } else if (target) {
+        if (target.status === "uploading") {
+          cancelledUploads.current.add(key);
+        }
+        uploadControllers.current.get(key)?.abort();
+        uploadControllers.current.delete(key);
+        cancelStagedUpload(target.clientToken);
       }
       const next = current.filter((attachment) => attachment.key !== key);
       composerAttachmentsRef.current = next;
       setComposerAttachments(next);
+      if (target) {
+        void queryClient.invalidateQueries({
+          queryKey: getListAgentChatAttachmentsQueryKey(),
+        });
+      }
     },
-    [deleteStagedAttachment, queryClient],
+    [cancelStagedUpload, deleteStagedAttachment, queryClient],
   );
   const openAttachmentManager = useCallback(() => {
     setAttachmentManagerOpen(true);
@@ -486,6 +537,9 @@ export function ChatPage() {
           : [],
       ),
     [composerAttachments],
+  );
+  const attachmentsPending = composerAttachments.some(
+    (attachment) => attachment.status !== "ready",
   );
 
   // Persist only the route id; the transcript itself never touches storage.
@@ -736,6 +790,9 @@ export function ChatPage() {
 
   const submit = async (value: string) => {
     const trimmed = value.trim();
+    if (attachmentsPending) {
+      return;
+    }
     if (trimmed.length === 0 && readyAttachments.length === 0) {
       return;
     }
