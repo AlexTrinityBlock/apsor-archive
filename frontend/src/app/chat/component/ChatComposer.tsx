@@ -61,10 +61,12 @@ export function ChatComposer({
   const { t } = useI18n();
   const mobileComposer = useMobileComposer();
   const uploading = attachments.some((item) => item.status === "uploading");
+  const uploadFailed = attachments.some((item) => item.status === "error");
+  const attachmentsReady = attachments.every((item) => item.status === "ready");
   const readyCount = attachments.filter((item) => item.status === "ready").length;
   const canSubmit =
     (value.trim().length > 0 || readyCount > 0) &&
-    !uploading &&
+    attachmentsReady &&
     !pending &&
     !disabled;
 
@@ -129,6 +131,10 @@ export function ChatComposer({
     note = t("chat.composer.noteStreaming");
   } else if (disabled) {
     note = t("chat.composer.noteDisabled");
+  } else if (uploadFailed) {
+    note = t("chat.composer.noteAttachmentError");
+  } else if (uploading) {
+    note = t("chat.composer.noteUploading");
   }
 
   return (
@@ -151,33 +157,70 @@ export function ChatComposer({
         />
         {attachments.length > 0 ? (
           <div className="chat-composer__attachments">
-            {attachments.map((item) => (
-              <div
-                key={item.key}
-                className={`chat-attachment-chip chat-attachment-chip--${item.status}`}
-              >
-                {item.status === "ready" && item.attachment ? (
-                  <ChatImage attachment={item.attachment} compact />
-                ) : (
-                  <span className="chat-attachment-chip__state">
-                    {item.status === "uploading" ? (
-                      <Loader size={14} label={t("chat.attachments.uploading")} />
-                    ) : (
-                      <Icon name="info" size={14} />
-                    )}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="chat-attachment-chip__remove"
-                  onClick={() => onRemoveAttachment(item.key)}
-                  aria-label={t("chat.attachments.remove")}
-                  title={t("chat.attachments.remove")}
+            {attachments.map((item) => {
+              const removingLabel =
+                item.status === "uploading"
+                  ? t("chat.attachments.cancelUploadAria", {
+                      name: item.fileName,
+                    })
+                  : t("chat.attachments.remove");
+              return (
+                <div
+                  key={item.key}
+                  className={`chat-attachment-chip chat-attachment-chip--${item.status}`}
+                  title={
+                    item.status === "error" ? (item.error ?? undefined) : undefined
+                  }
                 >
-                  <Icon name="close" size={10} />
-                </button>
-              </div>
-            ))}
+                  {item.status === "ready" && item.attachment ? (
+                    <ChatImage attachment={item.attachment} compact />
+                  ) : (
+                    <span className="chat-attachment-chip__state">
+                      {item.status === "uploading" ? (
+                        <span className="chat-attachment-chip__progress">
+                          {t("chat.attachments.progress", {
+                            percent: item.progress,
+                          })}
+                        </span>
+                      ) : (
+                        <Icon name="info" size={14} />
+                      )}
+                    </span>
+                  )}
+                  {item.status === "uploading" ? (
+                    <>
+                      <span
+                        className="chat-attachment-chip__bar"
+                        style={{ width: `${item.progress}%` }}
+                        aria-hidden="true"
+                      />
+                      <span className="visually-hidden">
+                        {t("chat.attachments.progressAria", {
+                          name: item.fileName,
+                          percent: item.progress,
+                        })}
+                      </span>
+                    </>
+                  ) : null}
+                  {item.status === "error" ? (
+                    <span className="visually-hidden">
+                      {t("chat.attachments.uploadFailed", {
+                        name: item.fileName,
+                      })}
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="chat-attachment-chip__remove"
+                    onClick={() => onRemoveAttachment(item.key)}
+                    aria-label={removingLabel}
+                    title={removingLabel}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         ) : null}
         <textarea

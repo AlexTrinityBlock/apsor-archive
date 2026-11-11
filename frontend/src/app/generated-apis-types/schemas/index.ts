@@ -14,6 +14,7 @@ export * from './agentApprovalSchema';
 export * from './agentApprovalSchemaArguments';
 export * from './agentApprovalSchemaPreview';
 export * from './agentApprovalSchemaStatus';
+export * from './agentChatAttachmentCancelSchema';
 export * from './agentChatAttachmentSchema';
 export * from './agentChatAttachmentSchemaStatus';
 export * from './agentConversationCreateSchema';

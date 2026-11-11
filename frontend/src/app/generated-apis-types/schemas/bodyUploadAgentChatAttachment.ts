@@ -6,5 +6,6 @@
  */
 
 export interface BodyUploadAgentChatAttachment {
+  client_token?: string | null;
   file: Blob | File;
 }

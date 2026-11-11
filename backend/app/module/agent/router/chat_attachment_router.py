@@ -2,7 +2,16 @@
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 
 from app.dependency.auth import require_stateless_authenticated
 from app.infrastructure.config.settings import Settings
@@ -10,7 +19,11 @@ from app.module.agent.dependencies import (
     get_app_settings,
     get_chat_attachment_service,
 )
-from app.module.agent.schema.chat_attachment_schema import AgentChatAttachmentSchema
+from app.module.agent.schema.chat_attachment_schema import (
+    CLIENT_KEY_PATTERN,
+    AgentChatAttachmentCancelSchema,
+    AgentChatAttachmentSchema,
+)
 from app.module.agent.service.chat_attachment_service import ChatAttachmentService
 from app.shared.types.list_response import ListResponseSchema
 
@@ -37,6 +50,10 @@ _IMAGE_HEADERS = {
 )
 async def upload_chat_attachment(
     file: Annotated[UploadFile, File()],
+    client_token: Annotated[
+        str | None,
+        Form(min_length=16, max_length=64, pattern=CLIENT_KEY_PATTERN),
+    ] = None,
     service: ChatAttachmentService = Depends(get_chat_attachment_service),
     settings: Settings = Depends(get_app_settings),
 ) -> AgentChatAttachmentSchema:
@@ -46,7 +63,22 @@ async def upload_chat_attachment(
         data=data,
         file_name=file.filename,
         content_type=file.content_type,
+        client_token=client_token,
     )
+
+
+@router.post(
+    "/cancel",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="cancelAgentChatAttachment",
+)
+async def cancel_chat_attachment(
+    payload: AgentChatAttachmentCancelSchema,
+    service: ChatAttachmentService = Depends(get_chat_attachment_service),
+) -> Response:
+    """Idempotently discard a staged upload that may still be in flight."""
+    await service.cancel_staged(payload.client_token)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

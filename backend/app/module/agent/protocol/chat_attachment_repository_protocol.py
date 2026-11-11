@@ -22,9 +22,15 @@ class ChatAttachmentRepositoryProtocol(Protocol):
         height: int,
         content_hash: str,
         created_at: datetime,
+        client_token: str | None = None,
     ) -> AgentChatAttachmentModel: ...
 
     async def get(self, attachment_id: int) -> AgentChatAttachmentModel | None: ...
+
+    async def get_by_client_token(
+        self,
+        client_token: str,
+    ) -> AgentChatAttachmentModel | None: ...
 
     async def page(
         self,
@@ -35,6 +41,13 @@ class ChatAttachmentRepositoryProtocol(Protocol):
     ) -> tuple[list[AgentChatAttachmentModel], int]: ...
 
     async def mark_deleted(self, attachment_id: int, *, now: datetime) -> bool: ...
+
+    async def claim_staged_by_token(
+        self,
+        client_token: str,
+        *,
+        now: datetime,
+    ) -> tuple[str, str] | None: ...
 
     async def update_storage(
         self,

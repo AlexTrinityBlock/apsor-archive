@@ -114,11 +114,13 @@ result carries its source, chunk number, and time.
   a link to the conversation on the same row. Editing the question clears the
   stale answer instead of leaving a mismatched pair on screen.
 - **Chat images are temporary.** A screenshot pasted into the chat composer is
-  uploaded immediately to the signed-in account's `users/{user_id}/chat-temp/`
-  object-storage area, downscaled, re-encoded, and listed in a removable
-  temporary-image manager. Removing an unsent image or leaving the chat discards
-  it immediately; staged images left behind by a closed tab expire after one
-  hour, and the worker checks every fifteen minutes. Sending a message promotes
+  uploaded immediately, with per-image byte progress, to the signed-in account's
+  `users/{user_id}/chat-temp/` object-storage area, downscaled, re-encoded, and
+  listed in a removable temporary-image manager. Sending stays disabled until
+  every selected image is stored. Removing an unsent image or leaving the chat
+  aborts its upload and discards the staged row immediately; staged images left
+  behind by a closed tab expire after the database-configured lifetime (one hour
+  by default). Sending a message promotes
   the object to `users/{user_id}/chat-images/` before claiming the row, so sent
   images are durable until the owner deletes them. The provider receives an
   OpenAI-compatible `image_url` part. Deleting a chat image removes the object
@@ -805,7 +807,8 @@ failure never becomes an HTTP 500.
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/compact` | Append a manual compaction boundary |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | Append a reset boundary; transcript is preserved |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/fork` | Copy entries through an inclusive cutoff into a new thread |
-| `POST` | `/api/v1/agent/attachments` | Upload one temporary chat image (`multipart/form-data`) |
+| `POST` | `/api/v1/agent/attachments` | Upload one temporary chat image (`multipart/form-data`, optional `client_token`) |
+| `POST` | `/api/v1/agent/attachments/cancel` | Idempotently discard a staged upload by `client_token` (`204`) |
 | `GET` | `/api/v1/agent/attachments?status=&limit=&offset=` | List the account's temporary chat images |
 | `GET` | `/api/v1/agent/attachments/{attachment_id}/content` | Stream one live temporary image |
 | `DELETE` | `/api/v1/agent/attachments/{attachment_id}` | Delete the object and soft-delete its row (`204`) |

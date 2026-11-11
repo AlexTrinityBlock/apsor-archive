@@ -41,11 +41,13 @@ class ChatAttachmentRepository:
         height: int,
         content_hash: str,
         created_at: datetime,
+        client_token: str | None = None,
     ) -> AgentChatAttachmentModel:
         """Insert one staged image."""
         async with self._transaction() as session:
             row = AgentChatAttachmentModel(
                 user_id=self.user_id,
+                client_token=client_token,
                 storage_key=storage_key,
                 storage_backend=storage_backend,
                 file_name=file_name,
@@ -66,6 +68,19 @@ class ChatAttachmentRepository:
             statement = select(AgentChatAttachmentModel).where(
                 AgentChatAttachmentModel.id == attachment_id,
                 AgentChatAttachmentModel.user_id == self.user_id,
+                AgentChatAttachmentModel.deleted_at.is_(None),
+            )
+            return (await session.execute(statement)).scalar_one_or_none()
+
+    async def get_by_client_token(
+        self,
+        client_token: str,
+    ) -> AgentChatAttachmentModel | None:
+        """Return the live row a browser token already produced, if any."""
+        async with self._read() as session:
+            statement = select(AgentChatAttachmentModel).where(
+                AgentChatAttachmentModel.user_id == self.user_id,
+                AgentChatAttachmentModel.client_token == client_token,
                 AgentChatAttachmentModel.deleted_at.is_(None),
             )
             return (await session.execute(statement)).scalar_one_or_none()
@@ -129,6 +144,39 @@ class ChatAttachmentRepository:
                 .values(deleted_at=now)
             )
             return int(getattr(result, "rowcount", 0) or 0) > 0
+
+    async def claim_staged_by_token(
+        self,
+        client_token: str,
+        *,
+        now: datetime,
+    ) -> tuple[str, str] | None:
+        """Soft-delete one staged upload and return its object reference.
+
+        The conditional update is the race guard against a message claiming the
+        same image. An attached image never matches, so cancelling an upload is
+        a no-op once the message owns it. The caller removes the returned object
+        only after this transaction commits.
+        """
+        async with self._transaction() as session:
+            result = await session.execute(
+                update(AgentChatAttachmentModel)
+                .where(
+                    AgentChatAttachmentModel.user_id == self.user_id,
+                    AgentChatAttachmentModel.client_token == client_token,
+                    AgentChatAttachmentModel.deleted_at.is_(None),
+                    AgentChatAttachmentModel.entry_id.is_(None),
+                )
+                .values(deleted_at=now)
+                .returning(
+                    AgentChatAttachmentModel.storage_key,
+                    AgentChatAttachmentModel.storage_backend,
+                )
+            )
+            row = result.mappings().one_or_none()
+        if row is None:
+            return None
+        return str(row["storage_key"]), str(row["storage_backend"])
 
     async def update_storage(
         self,

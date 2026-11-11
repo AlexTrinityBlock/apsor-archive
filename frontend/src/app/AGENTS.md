@@ -46,7 +46,7 @@ The application layer does not define backend behavior. API shapes come from `ge
 - A new workspace gets its own directory, a `page.tsx` with a named page export, page-specific subdirectories, and a lazy route entry in `router.tsx`.
 - Do not import a page-specific component from another workspace. Promote a truly shared primitive to `app/component/` instead.
 - Use generated query hooks and generated query-key helpers. Invalidate only affected paths, stats, timeline, search, file, or conversation keys.
-- Do not add a new `fetch` call. Route JSON through `apiFetch`; the existing SSE and viewer loaders are deliberate exceptions.
+- Do not add a new `fetch` call. Route JSON through `apiFetch`; the existing SSE and viewer loaders are deliberate exceptions. The chat-image upload in `chat/attachments.ts` is the deliberate XHR exception because only `xhr.upload.onprogress` reports portable upload progress and only `xhr.abort()` cancels the request.
 - Keep browse/dialog state in the URL when it should survive refresh, and keep ephemeral UI state local. Do not mirror the same state in both.
 - Translate every string through `useI18n`; keep labels and ARIA text out of JSX literals.
 - Reuse `Button`, `Panel`, `PageHeader`, `EmptyState`, `QueryState`, `Toast`, and `ContextMenu` rather than cloning their behavior.
