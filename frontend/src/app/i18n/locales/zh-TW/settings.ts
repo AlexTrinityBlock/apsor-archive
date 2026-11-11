@@ -83,7 +83,11 @@ export const settings = {
     groupToolsTitle: "工具執行",
     groupToolsDescription:
       "可以同時執行多少工具、工具可以被呼叫幾次，以及工具結果可以承載多少內容。",
-    groupCompactionSlot: "群組 03",
+    groupAttachmentsSlot: "群組 03",
+    groupAttachmentsTitle: "對話圖片生命週期",
+    groupAttachmentsDescription:
+      "尚未送出的圖片一旦離開輸入框就會立即丟棄；這個 TTL 是後端清理遺留上傳的保險。已送出的圖片會移到耐久儲存區，不受清理影響。",
+    groupCompactionSlot: "群組 04",
     groupCompactionTitle: "壓縮細節",
     groupCompactionDescription:
       "較舊的輪次被摺疊收起時，摘要器會保留多少內容。",
@@ -112,6 +116,14 @@ export const settings = {
     fieldToolResultCharsUnit: "字元",
     fieldToolResultCharsHint:
       "每個結果會各自截斷；100k 約可容納 25 個 4 千字元的分段。",
+    fieldStagedTtlLabel: "暫存圖片 TTL",
+    fieldStagedTtlUnit: "小時",
+    fieldStagedTtlHint:
+      "超過這個時間仍未送出的輸入框圖片會被移除。預設 1 小時，最大 168。",
+    fieldCleanupIntervalLabel: "清理間隔",
+    fieldCleanupIntervalUnit: "秒",
+    fieldCleanupIntervalHint:
+      "Worker 檢查過期暫存圖片的頻率。預設 900 秒。",
     fieldSummaryCharsLabel: "摘要字元數",
     fieldSummaryCharsUnit: "字元",
     fieldSummaryCharsHint: "保留給摺疊輪次摘要的大小。",

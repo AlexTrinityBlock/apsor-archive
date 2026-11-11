@@ -8,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.infrastructure.database.base import Base
 from app.module.agent.domain.agent_domain import (
     AUTO_COMPACTION_ENABLED,
+    CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
+    CHAT_ATTACHMENT_STAGED_TTL_HOURS,
     COMPACTION_THRESHOLD_TOKENS,
     CONTEXT_WINDOW_TOKENS,
     MAX_COMPACTION_LAST_USER_CHARS,
@@ -65,6 +67,14 @@ class AgentConfigModel(Base):
         CheckConstraint(
             "max_compaction_last_user_chars BETWEEN 500 AND 10000",
             name="max_compaction_last_user_chars_range",
+        ),
+        CheckConstraint(
+            "chat_attachment_staged_ttl_hours BETWEEN 1 AND 168",
+            name="chat_attachment_staged_ttl_range",
+        ),
+        CheckConstraint(
+            "chat_attachment_cleanup_interval_seconds BETWEEN 60 AND 86400",
+            name="chat_attachment_cleanup_interval_range",
         ),
         CheckConstraint(
             "compaction_threshold_tokens < context_window_tokens",
@@ -148,6 +158,18 @@ class AgentConfigModel(Base):
         nullable=False,
         default=SAVE_MEMORY_REQUIRES_APPROVAL,
         server_default=text("true" if SAVE_MEMORY_REQUIRES_APPROVAL else "false"),
+    )
+    chat_attachment_staged_ttl_hours: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=CHAT_ATTACHMENT_STAGED_TTL_HOURS,
+        server_default=text(str(CHAT_ATTACHMENT_STAGED_TTL_HOURS)),
+    )
+    chat_attachment_cleanup_interval_seconds: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
+        server_default=text(str(CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS)),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

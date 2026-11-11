@@ -83,7 +83,11 @@ export const settings = {
     groupToolsTitle: "工具执行",
     groupToolsDescription:
       "可以同时运行多少工具、工具可以被调用几次，以及工具结果可以承载多少内容。",
-    groupCompactionSlot: "分组 03",
+    groupAttachmentsSlot: "分组 03",
+    groupAttachmentsTitle: "对话图片生命周期",
+    groupAttachmentsDescription:
+      "尚未发送的图片一旦离开输入框就会立即丢弃；这个 TTL 是后端清理遗留上传的保险。已发送的图片会移到耐久存储区，不受清理影响。",
+    groupCompactionSlot: "分组 04",
     groupCompactionTitle: "压缩细节",
     groupCompactionDescription:
       "较旧的轮次被折叠收起时，摘要器会保留多少内容。",
@@ -112,6 +116,14 @@ export const settings = {
     fieldToolResultCharsUnit: "字符",
     fieldToolResultCharsHint:
       "每个结果会各自截断；100k 约可容纳 25 个 4 千字符的分段。",
+    fieldStagedTtlLabel: "暂存图片 TTL",
+    fieldStagedTtlUnit: "小时",
+    fieldStagedTtlHint:
+      "超过这个时间仍未发送的输入框图片会被移除。默认 1 小时，最大 168。",
+    fieldCleanupIntervalLabel: "清理间隔",
+    fieldCleanupIntervalUnit: "秒",
+    fieldCleanupIntervalHint:
+      "Worker 检查过期暂存图片的频率。默认 900 秒。",
     fieldSummaryCharsLabel: "摘要字符数",
     fieldSummaryCharsUnit: "字符",
     fieldSummaryCharsHint: "保留给折叠轮次摘要的大小。",

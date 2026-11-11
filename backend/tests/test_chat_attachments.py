@@ -2,7 +2,6 @@
 
 import asyncio
 from collections.abc import Callable
-from datetime import timedelta
 from io import BytesIO
 from typing import Any
 
@@ -12,6 +11,7 @@ from PIL import Image
 from sqlalchemy import Engine, text
 
 from app.infrastructure.database.session import Database
+from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.agent.test.fake_chat_generator import FakeChatGenerator
 from tests.conftest import TEST_DATABASE_URL, UserClient
@@ -358,16 +358,20 @@ def test_cleanup_removes_only_expired_staged_images(
             {"id": staged_id},
         ).scalar_one()
 
+    config = AgentRuntimeConfig(
+        chat_attachment_staged_ttl_hours=1,
+        chat_attachment_cleanup_interval_seconds=900,
+    )
+
     async def run_cleanup() -> int:
         database = Database(TEST_DATABASE_URL)
         try:
             cleanup = ChatAttachmentCleanup(
                 database=database,
                 storage=client.app.state.storage,
-                staged_ttl=timedelta(hours=1),
-                interval_seconds=1,
+                config_provider=lambda: asyncio.sleep(0, result=config),
             )
-            return await cleanup.run_once()
+            return await cleanup.run_once(config)
         finally:
             await database.dispose()
 

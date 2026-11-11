@@ -11,6 +11,16 @@
 export interface AgentSettingsUpdateSchema {
   auto_compaction_enabled: boolean;
   /**
+     * @minimum 60
+     * @maximum 86400
+     */
+  chat_attachment_cleanup_interval_seconds: number;
+  /**
+     * @minimum 1
+     * @maximum 168
+     */
+  chat_attachment_staged_ttl_hours: number;
+  /**
      * @minimum 1000
      * @maximum 1000000
      */

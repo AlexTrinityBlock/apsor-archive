@@ -84,6 +84,11 @@ PARALLEL_TOOLS_ENABLED = True
 # approval flow lives in the approval feature; this flag only stores whether the
 # owner wants that gate enabled.
 SAVE_MEMORY_REQUIRES_APPROVAL = True
+# Unsent chat images are discarded by the composer, then swept by the backend
+# after this grace period. Images attached to a message move to durable storage
+# and are never selected by the sweep.
+CHAT_ATTACHMENT_STAGED_TTL_HOURS = 1
+CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS = 900
 
 EditAction = Literal["omit", "replace"]
 

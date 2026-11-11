@@ -101,6 +101,10 @@ def _config_from_model(row: AgentConfigModel) -> AgentRuntimeConfig:
         auto_compaction_enabled=row.auto_compaction_enabled,
         parallel_tools_enabled=row.parallel_tools_enabled,
         save_memory_requires_approval=row.save_memory_requires_approval,
+        chat_attachment_staged_ttl_hours=row.chat_attachment_staged_ttl_hours,
+        chat_attachment_cleanup_interval_seconds=(
+            row.chat_attachment_cleanup_interval_seconds
+        ),
     )
 
 
@@ -122,6 +126,10 @@ def _apply_config(
     row.auto_compaction_enabled = config.auto_compaction_enabled
     row.parallel_tools_enabled = config.parallel_tools_enabled
     row.save_memory_requires_approval = config.save_memory_requires_approval
+    row.chat_attachment_staged_ttl_hours = config.chat_attachment_staged_ttl_hours
+    row.chat_attachment_cleanup_interval_seconds = (
+        config.chat_attachment_cleanup_interval_seconds
+    )
     row.updated_at = now
 
 
@@ -139,6 +147,10 @@ def _values_schema(config: AgentRuntimeConfig) -> AgentSettingsValuesSchema:
         auto_compaction_enabled=config.auto_compaction_enabled,
         parallel_tools_enabled=config.parallel_tools_enabled,
         save_memory_requires_approval=config.save_memory_requires_approval,
+        chat_attachment_staged_ttl_hours=config.chat_attachment_staged_ttl_hours,
+        chat_attachment_cleanup_interval_seconds=(
+            config.chat_attachment_cleanup_interval_seconds
+        ),
     )
 
 
