@@ -19,7 +19,12 @@ import {
   translateApiErrorWithActiveLocale,
 } from "../../i18n";
 import { invalidateConversation } from "../query";
-import { readResource, type JsonRecord, type ResourceMeta } from "../types";
+import {
+  readResource,
+  type ChatAttachmentView,
+  type JsonRecord,
+  type ResourceMeta,
+} from "../types";
 
 export interface ChatStreamTool {
   readonly id: string;
@@ -36,6 +41,7 @@ export interface ChatStreamTool {
 export interface ChatStreamView {
   readonly conversationId: number;
   readonly userContent: string;
+  readonly userAttachments: readonly ChatAttachmentView[];
   readonly assistantText: string;
   readonly toolCalls: readonly ChatStreamTool[];
   readonly usage: Readonly<Record<string, number>>;
@@ -55,6 +61,7 @@ interface UseChatStreamResult {
     conversationId: number,
     content: string,
     pageContext?: AgentPageContextPayload,
+    attachments?: readonly ChatAttachmentView[],
   ) => Promise<void>;
   readonly retry: (conversationId: number, userContent?: string) => Promise<void>;
   readonly resolveApproval: (
@@ -209,6 +216,7 @@ export function useChatStream(
     async (
       conversationId: number,
       userContent: string,
+      userAttachments: readonly ChatAttachmentView[],
       pageContextKey: string | null,
       execute: (
         signal: AbortSignal,
@@ -226,6 +234,7 @@ export function useChatStream(
       setStream({
         conversationId,
         userContent,
+        userAttachments,
         assistantText: "",
         toolCalls: [],
         usage: {},
@@ -291,19 +300,22 @@ export function useChatStream(
       conversationId: number,
       content: string,
       pageContext?: AgentPageContextPayload,
+      attachments: readonly ChatAttachmentView[] = [],
     ) => {
       const trimmed = content.trim();
-      if (trimmed.length === 0) {
+      if (trimmed.length === 0 && attachments.length === 0) {
         return;
       }
       await runTurn(
         conversationId,
         trimmed,
+        attachments,
         pageContext?.key ?? null,
         (signal, onEvent) =>
           streamAgentMessage({
             conversationId,
             content: trimmed,
+            attachmentIds: attachments.map((attachment) => attachment.id),
             pageContext,
             signal,
             onEvent,
@@ -319,6 +331,7 @@ export function useChatStream(
       await runTurn(
         conversationId,
         content,
+        [],
         null,
         (signal, onEvent) =>
           streamAgentRetry({
@@ -344,6 +357,7 @@ export function useChatStream(
       return runTurn(
         conversationId,
         "",
+        [],
         null,
         (signal, onEvent) =>
           streamAgentApproval({

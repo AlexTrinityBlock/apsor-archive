@@ -45,6 +45,7 @@ APP_ROLE = "apsor_app"
 # and to the migration; otherwise the session fixture fails before tests run.
 PRIVATE_TABLES: tuple[str, ...] = (
     "agent_approval",
+    "agent_chat_attachment",
     "agent_conversation",
     "agent_entry",
     "agent_run",

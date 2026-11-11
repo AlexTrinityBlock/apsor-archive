@@ -2,9 +2,12 @@ import type { ReactNode } from "react";
 
 import { useAuth } from "../../auth/AuthProvider";
 import { useI18n } from "../../i18n";
+import type { ChatAttachmentView } from "../types";
+import { ChatImage } from "./ChatImage";
 
 interface UserMarginaliaProps {
   readonly text: string;
+  readonly attachments?: readonly ChatAttachmentView[];
   readonly createdAt?: string;
   readonly pending?: boolean;
   readonly action?: ReactNode;
@@ -13,6 +16,7 @@ interface UserMarginaliaProps {
 /** The keeper's turn: a compact author line and an ink speech bubble. */
 export function UserMarginalia({
   text,
+  attachments = [],
   createdAt,
   pending = false,
   action,
@@ -38,7 +42,16 @@ export function UserMarginalia({
         )}
         {action}
       </header>
-      <div className="chat-turn__bubble">{text}</div>
+      {attachments.length > 0 ? (
+        <div className="chat-turn__attachments">
+          {attachments.map((attachment) => (
+            <ChatImage key={attachment.id} attachment={attachment} />
+          ))}
+        </div>
+      ) : null}
+      {text.trim().length > 0 ? (
+        <div className="chat-turn__bubble">{text}</div>
+      ) : null}
     </article>
   );
 }

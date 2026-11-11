@@ -66,7 +66,11 @@ class AgentMessageCreateSchema(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    content: str = Field(min_length=1, max_length=32_000)
+    content: str = Field(default="", max_length=32_000)
+    attachment_ids: list[int] = Field(
+        default_factory=list,
+        description="Staged temporary chat image ids; at most four per message.",
+    )
     request_id: str | None = Field(default=None, min_length=1, max_length=128)
     page_context: AgentPageContextSchema | None = None
     client_timezone: str | None = Field(

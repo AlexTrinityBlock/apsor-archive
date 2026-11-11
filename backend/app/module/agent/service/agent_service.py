@@ -5,7 +5,7 @@ import json
 import logging
 import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
@@ -58,6 +58,9 @@ from app.module.agent.model.agent_model import (
     AgentRunModel,
 )
 from app.module.agent.protocol.agent_repository_protocol import AgentRepositoryProtocol
+from app.module.agent.protocol.chat_attachment_service_protocol import (
+    ChatAttachmentServiceProtocol,
+)
 from app.module.agent.protocol.chat_generator_protocol import (
     ChatGeneratorProtocol,
     ChatResult,
@@ -163,6 +166,7 @@ class AgentService:
         default_model: str,
         config: AgentRuntimeConfig,
         system_prompt_service: SystemPromptService,
+        chat_attachments: ChatAttachmentServiceProtocol,
         server_timezone: str = "Asia/Taipei",
     ) -> None:
         self.repository = repository
@@ -172,6 +176,7 @@ class AgentService:
         self.default_model = default_model
         self.config = config
         self.system_prompt_service = system_prompt_service
+        self.chat_attachments = chat_attachments
         self.server_timezone = server_timezone
 
     async def create_conversation(
@@ -332,8 +337,12 @@ class AgentService:
         if conversation.status != "active":
             raise AgentConversationArchivedError(conversation_id)
         content = payload.content.strip()
-        if not content:
-            raise AgentInvalidEntryError("Message content must not be empty.")
+        attachment_ids = tuple(payload.attachment_ids)
+        attachments = await self.chat_attachments.prepare_for_message(attachment_ids)
+        if not content and not attachments:
+            raise AgentInvalidEntryError(
+                "A message needs text or at least one temporary chat image."
+            )
         now = utcnow()
         time_context = current_time_block(
             now=now,
@@ -347,6 +356,8 @@ class AgentService:
             "client_utc_offset_minutes": payload.client_utc_offset_minutes,
             "time_context": time_context,
         }
+        if attachments:
+            data["attachments"] = [attachment.to_entry_data() for attachment in attachments]
         compaction_draft = await self._auto_compaction_draft(conversation_id)
         page_context_draft, page_context_key = _page_context_draft(
             payload.page_context,
@@ -369,6 +380,7 @@ class AgentService:
             page_context_draft=page_context_draft,
             page_context_key=page_context_key,
             request_id=payload.request_id,
+            attachment_ids=attachment_ids,
             now=now,
         )
         return AgentTurnState(
@@ -554,7 +566,8 @@ class AgentService:
             if compacted is not None:
                 context, last_entry_id = compacted
                 return context, last_entry_id, last_entry_id
-        return build_context(transcript), last_entry_id, last_compaction_entry_id
+        enriched = await self.chat_attachments.enrich_transcript(transcript)
+        return build_context(enriched), last_entry_id, last_compaction_entry_id
 
     async def _compact_active_context(
         self,
@@ -682,12 +695,7 @@ class AgentService:
                     step,
                     len(context.messages) + (1 if context.system_message.get("content") else 0),
                     len(context.tools),
-                    len(
-                        json.dumps(
-                            [context.system_message, *context.messages],
-                            ensure_ascii=False,
-                        )
-                    ),
+                    _context_chars([context.system_message, *context.messages]),
                     len(json.dumps(context.tools, ensure_ascii=False)),
                 )
                 yield AgentStreamEvent(
@@ -1621,7 +1629,9 @@ class AgentService:
             conversation_id,
             cutoff_entry_id=cutoff_entry_id,
         )
-        return build_context(_transcript_from_rows(rows))
+        transcript = _transcript_from_rows(rows)
+        enriched = await self.chat_attachments.enrich_transcript(transcript)
+        return build_context(enriched)
 
     async def _append_failure_assistant(
         self,
@@ -1818,6 +1828,25 @@ class AgentService:
     def _ensure_configured(self) -> None:
         if not self.chat_generator.configured:
             raise AgentNotConfiguredError()
+
+
+def _context_chars(messages: Sequence[Mapping[str, Any]]) -> int:
+    """Count provider text without serializing base64 image payloads for a log."""
+    total = 0
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if not isinstance(part, Mapping):
+                    continue
+                text = part.get("text")
+                if isinstance(text, str):
+                    total += len(text)
+                elif part.get("type") == "image_url":
+                    total += 32
+    return total
 
 
 def _transcript_from_rows(rows: list[AgentEntryModel]) -> list[TranscriptEntry]:

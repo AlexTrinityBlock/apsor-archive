@@ -95,6 +95,8 @@ class Settings(BaseSettings):
 
     max_upload_bytes: int = 10 * 1024 * 1024
     max_text_bytes: int = 2 * 1024 * 1024
+    # Pasted chat screenshots are downscaled and re-encoded before storage.
+    chat_attachment_max_bytes: int = 8 * 1024 * 1024
     max_chunks_per_file: int = 500
     vision_max_pages: int = 10
     pdf_text_threshold: int = 80

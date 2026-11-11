@@ -84,6 +84,7 @@ class AgentRepositoryProtocol(Protocol):
         page_context_draft: EntryDraft | None,
         page_context_key: str | None,
         request_id: str | None,
+        attachment_ids: tuple[int, ...],
         now: datetime,
     ) -> tuple[
         AgentConversationModel,

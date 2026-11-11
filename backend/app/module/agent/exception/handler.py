@@ -4,6 +4,12 @@ from app.module.agent.exception.domain_error import (
     AgentApprovalNotFoundError,
     AgentApprovalNotPendingError,
     AgentApprovalOutOfOrderError,
+    AgentChatAttachmentInvalidError,
+    AgentChatAttachmentLimitError,
+    AgentChatAttachmentNotFoundError,
+    AgentChatAttachmentStorageError,
+    AgentChatAttachmentTooLargeError,
+    AgentChatAttachmentUnsupportedError,
     AgentConversationArchivedError,
     AgentConversationBusyError,
     AgentConversationNotFoundError,
@@ -25,6 +31,36 @@ from app.shared.exception.registry import ExceptionRegistry
 
 def register_exceptions() -> None:
     """Map each agent error to an HTTP status and a stable error code."""
+    ExceptionRegistry.register(
+        AgentChatAttachmentNotFoundError,
+        404,
+        "agent_chat_attachment_not_found",
+    )
+    ExceptionRegistry.register(
+        AgentChatAttachmentInvalidError,
+        422,
+        "agent_chat_attachment_invalid",
+    )
+    ExceptionRegistry.register(
+        AgentChatAttachmentUnsupportedError,
+        422,
+        "agent_chat_attachment_unsupported",
+    )
+    ExceptionRegistry.register(
+        AgentChatAttachmentTooLargeError,
+        413,
+        "agent_chat_attachment_too_large",
+    )
+    ExceptionRegistry.register(
+        AgentChatAttachmentLimitError,
+        422,
+        "agent_chat_attachment_limit",
+    )
+    ExceptionRegistry.register(
+        AgentChatAttachmentStorageError,
+        503,
+        "agent_chat_attachment_storage_unavailable",
+    )
     ExceptionRegistry.register(AgentConversationNotFoundError, 404, "agent_conversation_not_found")
     ExceptionRegistry.register(AgentConversationArchivedError, 409, "agent_conversation_archived")
     ExceptionRegistry.register(AgentConversationBusyError, 409, "agent_conversation_busy")

@@ -19,6 +19,16 @@ export interface CitationToken {
   readonly chunk: number | null;
 }
 
+export interface ChatAttachmentView {
+  readonly id: number;
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly width: number;
+  readonly height: number;
+  readonly contentUrl: string;
+}
+
 export interface ResourceMeta {
   readonly resourceType: "file" | "memory";
   readonly resourceId: number | null;
@@ -128,6 +138,52 @@ function assistantMessage(entry: AgentEntrySchema): JsonRecord | null {
 export function userText(entry: AgentEntrySchema): string {
   const message = entry.model?.find((item) => item.role === "user");
   return typeof message?.content === "string" ? message.content : "";
+}
+
+/** Temporary images linked to one user entry; never raw storage keys. */
+export function readUserAttachments(
+  entry: AgentEntrySchema,
+): ChatAttachmentView[] {
+  const data = asRecord(entry.data);
+  const raw = data?.attachments;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const attachments: ChatAttachmentView[] = [];
+  for (const item of raw) {
+    const record = asRecord(item);
+    const id = numberValue(record?.id);
+    const fileName = stringValue(record?.file_name);
+    const mimeType = stringValue(record?.mime_type);
+    const sizeBytes = numberValue(record?.size_bytes);
+    const width = numberValue(record?.width);
+    const height = numberValue(record?.height);
+    if (
+      id === null ||
+      fileName === null ||
+      mimeType === null ||
+      sizeBytes === null ||
+      width === null ||
+      height === null
+    ) {
+      continue;
+    }
+    attachments.push({
+      id,
+      fileName,
+      mimeType,
+      sizeBytes,
+      width,
+      height,
+      contentUrl: chatAttachmentContentUrl(id),
+    });
+  }
+  return attachments;
+}
+
+/** Same-origin URL for one authenticated temporary image. */
+export function chatAttachmentContentUrl(attachmentId: number): string {
+  return `/api/v1/agent/attachments/${attachmentId}/content`;
 }
 
 export function assistantText(entry: AgentEntrySchema): string {

@@ -105,8 +105,12 @@ export const StreamingTurn = memo(function StreamingTurn({
 
   return (
     <div className="chat-live-turn" aria-busy={stream.status === "running"}>
-      {stream.userContent.length > 0 ? (
-        <UserMarginalia text={stream.userContent} pending />
+      {stream.userContent.length > 0 || stream.userAttachments.length > 0 ? (
+        <UserMarginalia
+          text={stream.userContent}
+          attachments={stream.userAttachments}
+          pending
+        />
       ) : null}
 
       <article className="chat-turn chat-turn--agent is-live">
