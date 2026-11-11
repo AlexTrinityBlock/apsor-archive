@@ -29,6 +29,8 @@ class AgentSettingsValuesSchema(BaseModel):
     auto_compaction_enabled: bool
     parallel_tools_enabled: bool
     save_memory_requires_approval: bool
+    chat_attachment_staged_ttl_hours: int = Field(ge=1, le=168)
+    chat_attachment_cleanup_interval_seconds: int = Field(ge=60, le=86_400)
 
     @model_validator(mode="after")
     def _cross_field_ranges(self) -> Self:

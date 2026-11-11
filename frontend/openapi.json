@@ -1238,6 +1238,18 @@
             "title": "Auto Compaction Enabled",
             "type": "boolean"
           },
+          "chat_attachment_cleanup_interval_seconds": {
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Chat Attachment Cleanup Interval Seconds",
+            "type": "integer"
+          },
+          "chat_attachment_staged_ttl_hours": {
+            "maximum": 168.0,
+            "minimum": 1.0,
+            "title": "Chat Attachment Staged Ttl Hours",
+            "type": "integer"
+          },
           "compaction_threshold_tokens": {
             "maximum": 1000000.0,
             "minimum": 1000.0,
@@ -1313,7 +1325,9 @@
           "max_compaction_last_user_chars",
           "auto_compaction_enabled",
           "parallel_tools_enabled",
-          "save_memory_requires_approval"
+          "save_memory_requires_approval",
+          "chat_attachment_staged_ttl_hours",
+          "chat_attachment_cleanup_interval_seconds"
         ],
         "title": "AgentSettingsUpdateSchema",
         "type": "object"
@@ -1326,6 +1340,18 @@
             "title": "Auto Compaction Enabled",
             "type": "boolean"
           },
+          "chat_attachment_cleanup_interval_seconds": {
+            "maximum": 86400.0,
+            "minimum": 60.0,
+            "title": "Chat Attachment Cleanup Interval Seconds",
+            "type": "integer"
+          },
+          "chat_attachment_staged_ttl_hours": {
+            "maximum": 168.0,
+            "minimum": 1.0,
+            "title": "Chat Attachment Staged Ttl Hours",
+            "type": "integer"
+          },
           "compaction_threshold_tokens": {
             "maximum": 1000000.0,
             "minimum": 1000.0,
@@ -1401,7 +1427,9 @@
           "max_compaction_last_user_chars",
           "auto_compaction_enabled",
           "parallel_tools_enabled",
-          "save_memory_requires_approval"
+          "save_memory_requires_approval",
+          "chat_attachment_staged_ttl_hours",
+          "chat_attachment_cleanup_interval_seconds"
         ],
         "title": "AgentSettingsValuesSchema",
         "type": "object"

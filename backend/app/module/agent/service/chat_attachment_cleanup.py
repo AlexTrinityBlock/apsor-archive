@@ -8,12 +8,17 @@ Images attached to a message are durable and are never selected here.
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
 
 from sqlalchemy import text
 
 from app.infrastructure.database.session import Database
 from app.infrastructure.files.storage_errors import StorageError
+from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
+from app.module.agent.domain.agent_domain import (
+    CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
+)
 from app.module.agent.protocol.chat_attachment_storage_protocol import (
     ChatAttachmentStorageProtocol,
 )
@@ -30,22 +35,22 @@ class ChatAttachmentCleanup:
         *,
         database: Database,
         storage: ChatAttachmentStorageProtocol,
-        staged_ttl: timedelta,
-        interval_seconds: int,
+        config_provider: Callable[[], Awaitable[AgentRuntimeConfig]],
         batch_size: int = 200,
     ) -> None:
         self.database = database
         self.storage = storage
-        self.staged_ttl = staged_ttl
-        self.interval_seconds = max(1, interval_seconds)
+        self.config_provider = config_provider
         self.batch_size = max(1, batch_size)
 
-    async def run_once(self) -> int:
+    async def run_once(self, config: AgentRuntimeConfig | None = None) -> int:
         """Remove every currently due staged attachment, up to the batch size."""
+        active = config or await self.config_provider()
+        staged_ttl = timedelta(hours=active.chat_attachment_staged_ttl_hours)
         deleted = 0
         while True:
             now = utcnow()
-            staged_before = now - self.staged_ttl
+            staged_before = now - staged_ttl
             refs = await self._expired_refs(
                 staged_before=staged_before,
                 limit=self.batch_size,
@@ -94,21 +99,33 @@ class ChatAttachmentCleanup:
 
     async def run_forever(self, stop_event: asyncio.Event | None = None) -> None:
         """Run immediately, then once per interval until stopped or cancelled."""
-        logger.info(
-            "chat attachment cleanup started staged_ttl_hours=%s interval_seconds=%d",
-            int(self.staged_ttl.total_seconds() // 3600),
-            self.interval_seconds,
-        )
+        logger.info("chat attachment cleanup started")
+        last_signature: tuple[int, int] | None = None
         while stop_event is None or not stop_event.is_set():
+            interval_seconds = CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS
             try:
-                await self.run_once()
+                config = await self.config_provider()
+                interval_seconds = config.chat_attachment_cleanup_interval_seconds
+                signature = (
+                    config.chat_attachment_staged_ttl_hours,
+                    interval_seconds,
+                )
+                if signature != last_signature:
+                    logger.info(
+                        "chat attachment cleanup config staged_ttl_hours=%d "
+                        "interval_seconds=%d",
+                        signature[0],
+                        signature[1],
+                    )
+                    last_signature = signature
+                await self.run_once(config)
             except Exception:
                 logger.exception("chat attachment cleanup failed")
             if stop_event is None:
-                await asyncio.sleep(self.interval_seconds)
+                await asyncio.sleep(interval_seconds)
                 continue
             try:
-                await asyncio.wait_for(stop_event.wait(), timeout=self.interval_seconds)
+                await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
             except TimeoutError:
                 pass
 

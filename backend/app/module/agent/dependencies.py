@@ -152,19 +152,27 @@ class _ToolServiceScope:
             yield services
 
 
-async def get_agent_runtime_config(request: Request) -> AgentRuntimeConfig:
+async def load_agent_runtime_config(database: Database) -> AgentRuntimeConfig:
     """Load one immutable global config snapshot in a short-lived session.
+
+    The configuration table is global, so the read uses the system scope rather
+    than an owner scope. Both HTTP dependencies and the background cleanup loop
+    use this loader.
+    """
+    async with database.system_session() as session:
+        service = AgentSettingsService(AgentConfigRepository(session))
+        return await service.get_runtime_config()
+
+
+async def get_agent_runtime_config(request: Request) -> AgentRuntimeConfig:
+    """Load one immutable global config snapshot before a request proceeds.
 
     This dependency deliberately does not use the request-scoped session: the
     snapshot is read and committed before an SSE response starts, so no database
-    connection is held for the lifetime of the stream. The configuration table is
-    global, so the read uses the system scope rather than an owner scope.
+    connection is held for the lifetime of the stream.
     """
     database = cast(Database, request.app.state.db)
-    async with database.system_session() as session:
-        service = AgentSettingsService(AgentConfigRepository(session))
-        config = await service.get_runtime_config()
-    return config
+    return await load_agent_runtime_config(database)
 
 
 def get_system_prompt_service(request: Request) -> SystemPromptService:
@@ -315,4 +323,5 @@ __all__ = [
     "get_saved_question_ask_service",
     "get_saved_question_service",
     "get_system_prompt_admin_service",
+    "load_agent_runtime_config",
 ]

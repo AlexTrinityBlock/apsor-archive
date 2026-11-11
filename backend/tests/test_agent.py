@@ -272,6 +272,8 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "auto_compaction_enabled": True,
         "parallel_tools_enabled": True,
         "save_memory_requires_approval": True,
+        "chat_attachment_staged_ttl_hours": 1,
+        "chat_attachment_cleanup_interval_seconds": 900,
     }
 
     invalid_threshold = client.put(
@@ -304,6 +306,15 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     )
     assert invalid_parallel.status_code == 400
     assert invalid_parallel.json()["error"] == "invalid_request"
+    invalid_attachment_ttl = client.put(
+        "/api/v1/agent/settings",
+        json={
+            **defaults,
+            "chat_attachment_staged_ttl_hours": 0,
+        },
+    )
+    assert invalid_attachment_ttl.status_code == 400
+    assert invalid_attachment_ttl.json()["error"] == "invalid_request"
 
     for invalid_context_window in (7_999, 2_000_001):
         invalid_context = client.put(
@@ -328,6 +339,8 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "max_compaction_summary_chars": 5_000,
         "max_compaction_last_user_chars": 3_000,
         "save_memory_requires_approval": False,
+        "chat_attachment_staged_ttl_hours": 2,
+        "chat_attachment_cleanup_interval_seconds": 600,
     }
     stored_settings = client.put(
         "/api/v1/agent/settings",

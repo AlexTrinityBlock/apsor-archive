@@ -7,9 +7,9 @@ can drain a queue left by the other.
 
 The loop polls immediately, processes every claimable job without sleeping,
 and waits ``APSOR_INGEST_POLL_SECONDS`` (one second by default) only when the
-queue is empty. The same process also sweeps expired temporary chat images on
-``APSOR_CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS`` (one hour by default).
-SIGINT/SIGTERM stop both loops gracefully.
+queue is empty. The same process also sweeps expired unsent chat images using
+the database-backed ``agent_config`` lifetime and interval, refreshed each
+cycle. SIGINT/SIGTERM stop both loops gracefully.
 
 At most ``APSOR_INGEST_MAX_IN_FLIGHT_JOBS`` jobs run concurrently, and their
 parsing/chunking work is capped by a shared ``ThreadPoolExecutor`` sized by
@@ -25,7 +25,6 @@ import logging
 import signal
 from collections.abc import Sequence
 from contextlib import suppress
-from datetime import timedelta
 
 from starlette.datastructures import State
 
@@ -41,6 +40,7 @@ from app.infrastructure.database.session import Database, system_session
 from app.infrastructure.files.storage_factory import build_file_storage
 from app.infrastructure.logger.logging import configure_logging
 from app.infrastructure.security.secret_cipher import SecretCipher
+from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.knowledge.dependencies import (
     build_ingest_worker,
@@ -114,8 +114,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
         cleanup = ChatAttachmentCleanup(
             database=database,
             storage=storage,
-            staged_ttl=timedelta(hours=settings.chat_attachment_staged_ttl_hours),
-            interval_seconds=settings.chat_attachment_cleanup_interval_seconds,
+            config_provider=lambda: load_agent_runtime_config(database),
         )
         cleanup_task: asyncio.Task[None] | None = None
         try:
