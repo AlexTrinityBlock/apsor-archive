@@ -177,7 +177,17 @@ export function ChatComposer({
                   ) : (
                     <span className="chat-attachment-chip__state">
                       {item.status === "uploading" ? (
-                        <span className="chat-attachment-chip__progress">
+                        <span
+                          className="chat-attachment-chip__progress"
+                          role="progressbar"
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={item.progress}
+                          aria-label={t("chat.attachments.progressAria", {
+                            name: item.fileName,
+                            percent: item.progress,
+                          })}
+                        >
                           {t("chat.attachments.progress", {
                             percent: item.progress,
                           })}
@@ -188,19 +198,11 @@ export function ChatComposer({
                     </span>
                   )}
                   {item.status === "uploading" ? (
-                    <>
-                      <span
-                        className="chat-attachment-chip__bar"
-                        style={{ width: `${item.progress}%` }}
-                        aria-hidden="true"
-                      />
-                      <span className="visually-hidden">
-                        {t("chat.attachments.progressAria", {
-                          name: item.fileName,
-                          percent: item.progress,
-                        })}
-                      </span>
-                    </>
+                    <span
+                      className="chat-attachment-chip__bar"
+                      style={{ width: `${item.progress}%` }}
+                      aria-hidden="true"
+                    />
                   ) : null}
                   {item.status === "error" ? (
                     <span className="visually-hidden">
