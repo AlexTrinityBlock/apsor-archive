@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     max_text_bytes: int = 2 * 1024 * 1024
     # Pasted chat screenshots are downscaled and re-encoded before storage.
     chat_attachment_max_bytes: int = 8 * 1024 * 1024
+    # Abandoned composer uploads are removed after one day; images already sent
+    # with a message keep a finite thirty-day lifetime. The worker (or the API
+    # when it owns the ingestion loop) sweeps expired rows hourly.
+    chat_attachment_staged_ttl_hours: int = 24
+    chat_attachment_attached_ttl_hours: int = 30 * 24
+    chat_attachment_cleanup_interval_seconds: int = 3600
     max_chunks_per_file: int = 500
     vision_max_pages: int = 10
     pdf_text_threshold: int = 80

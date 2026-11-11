@@ -6,6 +6,7 @@ import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -30,6 +31,7 @@ from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.agent.exception.handler import register_exceptions as register_agent_exceptions
 from app.module.agent.repository.agent_repository import AgentRepository
 from app.module.agent.router import router as agent_router
+from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.auth.exception.handler import register_exceptions as register_auth_exceptions
 from app.module.auth.router.account_router import router as account_router
 from app.module.auth.router.auth_router import router as auth_router
@@ -124,15 +126,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
         )
         worker_task: asyncio.Task[None] | None = None
+        cleanup_task: asyncio.Task[None] | None = None
         if resolved_settings.ingest_worker_enabled:
             await app.state.ingest_worker.startup()
             worker_task = asyncio.create_task(
                 app.state.ingest_worker.run_forever(),
                 name="ingest-worker",
             )
+            cleanup = ChatAttachmentCleanup(
+                database=app.state.db,
+                storage=app.state.storage,
+                staged_ttl=timedelta(
+                    hours=resolved_settings.chat_attachment_staged_ttl_hours
+                ),
+                attached_ttl=timedelta(
+                    hours=resolved_settings.chat_attachment_attached_ttl_hours
+                ),
+                interval_seconds=resolved_settings.chat_attachment_cleanup_interval_seconds,
+            )
+            cleanup_task = asyncio.create_task(
+                cleanup.run_forever(),
+                name="chat-attachment-cleanup",
+            )
         try:
             yield
         finally:
+            if cleanup_task is not None:
+                cleanup_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await cleanup_task
             if worker_task is not None:
                 worker_task.cancel()
                 with suppress(asyncio.CancelledError):
