@@ -2643,6 +2643,74 @@
         "title": "HealthSchema",
         "type": "object"
       },
+      "HistorySearchResultSchema": {
+        "description": "One 256-character window from a past conversation message.\n\n``entry_id`` is the stable id used by the agent's ``history_message`` tool.\nThe window is raw text; the XML envelope and id are applied at tool render\ntime so the index itself contains no markup.",
+        "properties": {
+          "chunk": {
+            "title": "Chunk",
+            "type": "integer"
+          },
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "integer"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "integer"
+          },
+          "matched_by": {
+            "items": {
+              "enum": [
+                "text",
+                "vector"
+              ],
+              "type": "string"
+            },
+            "title": "Matched By",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "text_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Score"
+          },
+          "vector_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Score"
+          }
+        },
+        "required": [
+          "entry_id",
+          "chunk_id",
+          "chunk",
+          "content",
+          "score",
+          "matched_by"
+        ],
+        "title": "HistorySearchResultSchema",
+        "type": "object"
+      },
       "ImpersonationSchema": {
         "description": "The root account acting through an impersonation session.",
         "properties": {
@@ -4433,6 +4501,13 @@
             "title": "File Results",
             "type": "array"
           },
+          "history_results": {
+            "items": {
+              "$ref": "#/components/schemas/HistorySearchResultSchema"
+            },
+            "title": "History Results",
+            "type": "array"
+          },
           "include_history": {
             "title": "Include History",
             "type": "boolean"
@@ -4485,6 +4560,16 @@
           },
           "deduplicated": {
             "title": "Deduplicated",
+            "type": "integer"
+          },
+          "history_selected": {
+            "default": 0,
+            "title": "History Selected",
+            "type": "integer"
+          },
+          "history_vector_candidates": {
+            "default": 0,
+            "title": "History Vector Candidates",
             "type": "integer"
           },
           "merged": {

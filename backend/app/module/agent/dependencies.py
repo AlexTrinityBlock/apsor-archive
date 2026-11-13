@@ -52,6 +52,7 @@ from app.module.agent.repository.system_prompt_repository import SystemPromptRep
 from app.module.agent.service.agent_service import AgentService
 from app.module.agent.service.agent_settings_service import AgentSettingsService
 from app.module.agent.service.chat_attachment_service import ChatAttachmentService
+from app.module.agent.service.history_message_service import AgentHistoryMessageService
 from app.module.agent.service.saved_question_service import SavedQuestionService
 from app.module.agent.service.system_prompt_service import SystemPromptService
 from app.module.agent.service.tool_registry import AgentToolRegistry
@@ -141,6 +142,11 @@ class _ToolServiceScope:
                     state,
                     session,
                     user_id=self.user_id,
+                ),
+                history_service=AgentHistoryMessageService(
+                    database=self.database,
+                    user_id=self.user_id,
+                    role=self.role,
                 ),
                 # Cross-module dependencies are only allowed in this assembly
                 # root: the agent tool layer only sees

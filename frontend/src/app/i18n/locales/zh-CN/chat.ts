@@ -519,7 +519,7 @@ export const chat = {
       emptyDetail: "已采样这个范围，但其中没有任何记忆、摘要或文件事件。",
     },
     search: {
-      liveDetail: "正在搜索文件、记忆与摘要。",
+      liveDetail: "正在搜索文件、记忆、摘要与过往对话。",
       errorTitle: "搜索没有返回",
       noPreviewTitle: "没有结构化搜索预览",
       noPreviewDetail:
@@ -529,10 +529,14 @@ export const chat = {
       fileLeaves: "文件叶",
       memoryLeaves: "记忆叶",
       seasonSummaries: "季节摘要",
+      historyMessages: "对话窗格",
       fileEmpty: "这一轮没有文件叶。",
       memoryEmpty: "这一轮没有记忆叶。",
       summaryEmpty: "这一轮没有季节摘要。",
+      historyEmpty: "这一轮没有过往对话窗格。",
       summaryFallback: "摘要",
+      historyFallback: "历史",
+      historyWindow: "窗格 #{chunk}",
       noExcerpt: "这个结果没有记录内嵌摘录。",
       viewResult: "查看结果",
     },

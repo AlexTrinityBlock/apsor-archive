@@ -8,19 +8,19 @@ export const insights = {
       eyebrow: "Search · Hybrid Retrieval Engine",
       title: "Search the grain.",
       description:
-        "One query, two lanes. BM25 lexical hits and dense vector candidates are fused with reciprocal rank fusion, then capped per source kind so files, memories, and summaries each receive a balanced hearing.",
+        "One query, two lanes. BM25 lexical hits and dense vector candidates are fused with reciprocal rank fusion, then capped per source kind so files, memories, and summaries each receive a balanced hearing. Past conversation windows run a separate 128-window recall and RRF rerank, and are always included.",
       fusionBadge: "BM25 + cosine fusion",
       rrfTag: "RRF · k = 60",
     },
     controls: {
       aria: "Search controls",
-      inputLabel: "Search files, memories, and summaries",
+      inputLabel: "Search files, memories, summaries, and past conversations",
       placeholder: "Search a phrase, a path, or a half-remembered detail…",
       clear: "Clear query",
       submit: "Search",
       resultsPerKind: "Results per kind",
       perKindValue: "N = {count}",
-      includeHistory: "Include history",
+      includeHistory: "Include superseded",
       includeHistoryHint: "Superseded files and deprecated memories",
       suggested: "Suggested queries",
       suggestions: {
@@ -48,15 +48,17 @@ export const insights = {
       eyebrow: "Retrieved passages",
       titleOne: "{count} passage for “{query}”",
       titleOther: "{count} passages for “{query}”",
-      perKind: "N = {count} per kind",
+      perKind: "N = {count} per archive kind",
       updating: "Updating…",
       updatingAria: "Updating results",
       fileChunks: "File chunks",
       memoryCrystals: "Memories",
       summaries: "Summaries",
+      conversationHistory: "Conversation history",
       emptyFiles: "No file chunks matched this query.",
       emptyMemories: "No memories matched this query.",
       emptySummaries: "No summaries matched this query.",
+      emptyHistory: "No past conversation windows matched this query.",
     },
     card: {
       matchedBy: "Matched by",
@@ -67,7 +69,9 @@ export const insights = {
       fused: "Fused",
       rank: "Rank",
       chunk: "Chunk #{chunk}",
+      window: "Window #{chunk}",
       history: "history",
+      historyMessage: "History message #{id}",
       statusActive: "Active",
       statusDeprecated: "Deprecated",
       updated: "Updated",
@@ -85,16 +89,17 @@ export const insights = {
       eyebrow: "The archive is ready",
       title: "Nothing is retrieved until you ask.",
       description:
-        "One query runs through a text lane and a vector lane. The fused candidates return as file chunks, memories, and summaries, each with a real score and the lanes that matched it.",
+        "One query runs through a text lane and a vector lane. The fused candidates return as file chunks, memories, summaries, and past conversation windows, each with a real score and the lanes that matched it.",
       kindsAria: "Searchable source kinds",
       fileChunks: "File chunks",
       memoryCrystals: "Memories",
       summaries: "Summaries",
+      conversationHistory: "Conversation history",
     },
     loading: {
       aria: "Searching the archive",
       eyebrow: "Both lanes are running",
-      copy: "BM25 and vector candidates are being merged, deduplicated, and fused.",
+      copy: "BM25 and vector candidates are being merged, deduplicated, and fused; conversation windows run their own recall and rerank.",
     },
     noResults: {
       eyebrow: "No matching grain",
@@ -102,10 +107,10 @@ export const insights = {
       descriptionBase:
         "Try a shorter phrase or split the query into two concrete words.",
       historyIncluded:
-        "History is already included, so superseded files and deprecated memories were searched too.",
+        "Superseded files and deprecated memories were searched too. Past conversation windows are always included.",
       historyExcluded:
-        "Include history to search superseded files and deprecated memories.",
-      includeHistory: "Include history",
+        "Include superseded versions to search older files and deprecated memories. Past conversation windows are always included.",
+      includeHistory: "Include superseded",
       clearQuery: "Clear query",
     },
     error: {
@@ -135,6 +140,10 @@ export const insights = {
       deduplicatedNote: "Duplicate hits collapsed",
       chunksScanned: "Chunks scanned",
       chunksScannedNote: "Current corpus",
+      historyWindows: "History windows",
+      historyWindowsNote: "Top 15 after RRF",
+      historyNote:
+        "Conversation history runs a separate 128-window cosine recall, BM25 scoring, and RRF rerank, so it is not part of the two-lane bar above.",
       elapsed: "Elapsed",
       elapsedNote: "Server reported",
       note:

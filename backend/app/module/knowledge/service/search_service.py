@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from app.module.knowledge.exception.domain_error import EmbeddingProviderError, InvalidQueryError
 from app.module.knowledge.model.chunk_model import (
     SOURCE_FILE,
+    SOURCE_HISTORY,
     SOURCE_MEMORY,
     SOURCE_SUMMARY,
     ChunkModel,
@@ -25,6 +26,7 @@ from app.module.knowledge.protocol.memory_repository_protocol import MemoryRepos
 from app.module.knowledge.protocol.summary_repository_protocol import SummaryRepositoryProtocol
 from app.module.knowledge.schema.search_schema import (
     FileSearchResultSchema,
+    HistorySearchResultSchema,
     MatchSource,
     MemorySearchResultSchema,
     SearchResponseSchema,
@@ -32,6 +34,11 @@ from app.module.knowledge.schema.search_schema import (
     SummarySearchResultSchema,
 )
 from app.module.knowledge.service.cache_keys import user_cache_key, user_version_scope
+from app.shared.retrieval import (
+    HISTORY_RESULT_LIMIT,
+    HISTORY_RRF_K,
+    HISTORY_VECTOR_RECALL_LIMIT,
+)
 from app.shared.text.ngram import (
     fallback_unigrams,
     unique_query_terms,
@@ -41,6 +48,11 @@ logger = logging.getLogger(__name__)
 
 RRF_K = 60.0
 SOURCE_ORDER = (SOURCE_FILE, SOURCE_MEMORY, SOURCE_SUMMARY)
+KNOWLEDGE_SOURCE_KINDS = (SOURCE_FILE, SOURCE_MEMORY, SOURCE_SUMMARY)
+HISTORY_SOURCE_KINDS = (SOURCE_HISTORY,)
+# The history lane adds a new response field. A namespace bump retires cached
+# knowledge-only payloads immediately instead of waiting for their TTL.
+SEARCH_CACHE_NAMESPACE = "search_v2"
 Candidate = tuple[int, str, float]
 
 
@@ -72,26 +84,33 @@ class SearchService:
         self.candidate_limit = candidate_limit
         self.vector_scan_limit = vector_scan_limit
 
-    async def _vector_hits(
-        self,
-        query: str,
-        *,
-        include_history: bool,
-    ) -> list[VectorCandidate]:
+    async def _query_embedding(self, query: str) -> list[float] | None:
+        """Embed one query once for both the knowledge and history lanes."""
         if self.embedder.dimension <= 0:
-            return []
+            return None
         try:
             vectors = await self.embedder.embed([query])
         except EmbeddingProviderError as exc:
             logger.warning("Vector recall skipped: %s", exc)
-            return []
+            return None
         if not vectors or not vectors[0]:
+            return None
+        return vectors[0]
+
+    async def _vector_hits(
+        self,
+        embedding: list[float] | None,
+        *,
+        include_history: bool,
+    ) -> list[VectorCandidate]:
+        if embedding is None:
             return []
         return await self.chunk_repository.vector_candidates(
-            vectors[0],
+            embedding,
             limit=self.candidate_limit,
             scan_limit=self.vector_scan_limit,
             include_history=include_history,
+            source_kinds=KNOWLEDGE_SOURCE_KINDS,
         )
 
     @staticmethod
@@ -105,6 +124,156 @@ class SearchService:
             ranked = sorted(grouped[source_kind], key=lambda item: item[2], reverse=True)
             selected.extend(ranked[:result_number])
         return selected
+
+    async def _history_hits(
+        self,
+        embedding: list[float] | None,
+        terms: list[str],
+    ) -> tuple[list[HistorySearchResultSchema], int]:
+        """Recall 128 history windows, BM25-score them, then RRF-rerank to 15.
+
+        The first stage is cosine similarity over the conversation-history
+        subset. BM25 scores every recalled window against the same query using
+        corpus-wide history statistics. Reciprocal rank fusion then combines
+        the cosine order and the BM25 order, so a semantic-only hit keeps its
+        vector rank and a lexical-only hit keeps its text rank. Deleted
+        conversations are excluded because their chunks are marked non-current.
+        """
+        vector_candidates = (
+            await self.chunk_repository.vector_candidates(
+                embedding,
+                limit=HISTORY_VECTOR_RECALL_LIMIT,
+                scan_limit=self.vector_scan_limit,
+                include_history=False,
+                source_kinds=HISTORY_SOURCE_KINDS,
+            )
+            if embedding is not None
+            else []
+        )
+
+        if vector_candidates:
+            candidate_ids = [candidate.chunk_id for candidate in vector_candidates]
+            vector_scores = {
+                candidate.chunk_id: candidate.score for candidate in vector_candidates
+            }
+            text_candidates = await self.chunk_repository.bm25_for_chunk_ids(
+                candidate_ids,
+                terms,
+                include_history=False,
+                source_kinds=HISTORY_SOURCE_KINDS,
+            )
+            text_scores = {
+                candidate.chunk_id: candidate.score for candidate in text_candidates
+            }
+            vector_order = [
+                candidate.chunk_id
+                for candidate in sorted(
+                    vector_candidates,
+                    key=lambda candidate: (-candidate.score, candidate.chunk_id),
+                )
+            ]
+            text_order = sorted(
+                vector_scores,
+                key=lambda chunk_id: (
+                    -text_scores.get(chunk_id, 0.0),
+                    -vector_scores.get(chunk_id, 0.0),
+                    chunk_id,
+                ),
+            )
+            fused: dict[int, float] = {}
+            for rank, chunk_id in enumerate(vector_order, start=1):
+                fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (HISTORY_RRF_K + rank)
+            for rank, chunk_id in enumerate(text_order, start=1):
+                fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (HISTORY_RRF_K + rank)
+            selected_ids = sorted(
+                fused,
+                key=lambda chunk_id: (-fused[chunk_id], chunk_id),
+            )[:HISTORY_RESULT_LIMIT]
+            results = await self._hydrate_history_results(
+                selected_ids,
+                fused=fused,
+                vector_scores=vector_scores,
+                text_scores=text_scores,
+            )
+            if results:
+                return results, len(vector_candidates)
+
+        # No vector lane (embeddings disabled or unavailable): fall back to a
+        # BM25-only recall over the whole history index.
+        text_candidates = await self.chunk_repository.text_candidates(
+            terms,
+            candidate_limit=HISTORY_VECTOR_RECALL_LIMIT,
+            include_history=False,
+            source_kinds=HISTORY_SOURCE_KINDS,
+        )
+        if not text_candidates:
+            return [], 0
+        rescored = await self.chunk_repository.bm25_for_chunk_ids(
+            [candidate.chunk_id for candidate in text_candidates],
+            terms,
+            include_history=False,
+            source_kinds=HISTORY_SOURCE_KINDS,
+        )
+        selected = sorted(
+            rescored,
+            key=lambda candidate: (-candidate.score, candidate.chunk_id),
+        )[:HISTORY_RESULT_LIMIT]
+        selected_ids = [candidate.chunk_id for candidate in selected]
+        text_scores = {candidate.chunk_id: candidate.score for candidate in selected}
+        fused = {
+            chunk_id: 1.0 / (HISTORY_RRF_K + rank)
+            for rank, chunk_id in enumerate(selected_ids, start=1)
+        }
+        results = await self._hydrate_history_results(
+            selected_ids,
+            fused=fused,
+            vector_scores={},
+            text_scores=text_scores,
+        )
+        return results, 0
+
+    async def _hydrate_history_results(
+        self,
+        selected_ids: list[int],
+        *,
+        fused: dict[int, float],
+        vector_scores: dict[int, float],
+        text_scores: dict[int, float],
+    ) -> list[HistorySearchResultSchema]:
+        chunks = await self.chunk_repository.get_by_ids(selected_ids)
+        chunks_by_id = {chunk.id: chunk for chunk in chunks}
+        results: list[HistorySearchResultSchema] = []
+        for chunk_id in selected_ids:
+            chunk = chunks_by_id.get(chunk_id)
+            if chunk is None or chunk.source_kind != SOURCE_HISTORY:
+                continue
+            text_score = text_scores.get(chunk_id)
+            matched: list[MatchSource] = []
+            if text_score is not None and text_score > 0:
+                matched.append("text")
+            if chunk_id in vector_scores:
+                matched.append("vector")
+            if not matched:
+                matched.append("text")
+            results.append(
+                HistorySearchResultSchema(
+                    entry_id=chunk.source_id,
+                    chunk_id=chunk.id,
+                    chunk=chunk.chunk_index,
+                    content=chunk.content,
+                    score=round(fused.get(chunk_id, 0.0), 6),
+                    matched_by=matched,
+                    vector_score=(
+                        round(vector_scores[chunk_id], 6)
+                        if chunk_id in vector_scores
+                        else None
+                    ),
+                    text_score=(
+                        round(text_score, 6) if text_score is not None else None
+                    ),
+                )
+            )
+        return results
 
     async def search(
         self,
@@ -124,7 +293,7 @@ class SearchService:
         key = user_cache_key(
             self.user_id,
             version,
-            "search",
+            SEARCH_CACHE_NAMESPACE,
             cleaned,
             str(result_number),
             str(include_history),
@@ -144,6 +313,7 @@ class SearchService:
             terms,
             candidate_limit=self.candidate_limit,
             include_history=include_history,
+            source_kinds=KNOWLEDGE_SOURCE_KINDS,
         )
         used_terms = terms
         if not raw_text:
@@ -154,6 +324,7 @@ class SearchService:
                     unigrams,
                     candidate_limit=self.candidate_limit,
                     include_history=include_history,
+                    source_kinds=KNOWLEDGE_SOURCE_KINDS,
                 )
         text_selected = self._select_per_kind(
             [
@@ -163,13 +334,22 @@ class SearchService:
             result_number,
         )
 
-        raw_vector = await self._vector_hits(cleaned, include_history=include_history)
+        embedding = await self._query_embedding(cleaned)
+        raw_vector = await self._vector_hits(
+            embedding,
+            include_history=include_history,
+        )
         vector_selected = self._select_per_kind(
             [
                 (candidate.chunk_id, candidate.source_kind, candidate.score)
                 for candidate in raw_vector
             ],
             result_number,
+        )
+
+        history_results, history_vector_candidates = await self._history_hits(
+            embedding,
+            used_terms,
         )
 
         text_ranking = {
@@ -301,10 +481,13 @@ class SearchService:
                 deduplicated=len(text_selected) + len(vector_selected) - len(union_ids),
                 chunks_scanned=chunks_scanned,
                 terms=used_terms,
+                history_vector_candidates=history_vector_candidates,
+                history_selected=len(history_results),
             ),
             file_results=file_results,
             memory_results=memory_results,
             summary_results=summary_results,
+            history_results=history_results,
         )
         await self.cache.set_json(
             key,

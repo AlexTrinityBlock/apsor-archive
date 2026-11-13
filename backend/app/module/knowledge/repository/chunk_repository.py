@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 from sqlalchemy import delete, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.module.knowledge.model.chunk_model import SOURCE_FILE, ChunkModel
 from app.module.knowledge.model.ngram_model import ChunkNgramModel
@@ -111,6 +112,26 @@ class ChunkRepository:
                 ChunkModel.source_id == source_id,
             )
         )
+
+    async def source_ids_present(
+        self,
+        source_kind: str,
+        source_ids: Sequence[int],
+    ) -> set[int]:
+        """Return which source ids already have at least one chunk row.
+
+        Both current and non-current rows count: a deleted conversation is
+        marked non-current instead of being re-indexed on the next pass.
+        """
+        unique_ids = list(dict.fromkeys(int(source_id) for source_id in source_ids))
+        if not unique_ids:
+            return set()
+        statement = select(ChunkModel.source_id).where(
+            ChunkModel.user_id == self.user_id,
+            ChunkModel.source_kind == source_kind,
+            ChunkModel.source_id.in_(unique_ids),
+        )
+        return {int(source_id) for source_id in (await self.session.execute(statement)).scalars()}
 
     async def get_source_chunks(self, source_kind: str, source_id: int) -> list[ChunkModel]:
         statement = (
@@ -266,34 +287,47 @@ class ChunkRepository:
             .values(embedding=embedding, embedding_model=model, updated_at=func.now())
         )
 
-    async def _count_chunks(self, include_history: bool) -> int:
+    @staticmethod
+    def _source_filters(
+        source_kinds: Sequence[str] | None,
+    ) -> list[ColumnElement[bool]]:
+        """Return the optional source-kind predicate for one retrieval lane."""
+        if not source_kinds:
+            return []
+        return [ChunkModel.source_kind.in_(tuple(source_kinds))]
+
+    async def _count_chunks(
+        self,
+        include_history: bool,
+        source_kinds: Sequence[str] | None = None,
+    ) -> int:
         statement = select(func.count(ChunkModel.id)).where(
             ChunkModel.user_id == self.user_id,
+            *self._source_filters(source_kinds),
         )
         if not include_history:
             statement = statement.where(ChunkModel.is_current.is_(True))
         return int((await self.session.execute(statement)).scalar_one())
 
-    async def text_candidates(
+    async def _bm25_corpus_stats(
         self,
-        terms: Sequence[str],
+        unique_terms: Sequence[str],
         *,
-        candidate_limit: int,
-        include_history: bool = False,
-    ) -> list[TextCandidate]:
-        unique_terms = list(dict.fromkeys(terms))
-        if not unique_terms or candidate_limit <= 0:
-            return []
-
-        total_chunks = await self._count_chunks(include_history)
+        include_history: bool,
+        source_kinds: Sequence[str] | None,
+    ) -> tuple[int, float, dict[str, int]]:
+        """Return corpus size, average length, and term document frequencies."""
+        total_chunks = await self._count_chunks(include_history, source_kinds)
         if total_chunks == 0:
-            return []
+            return 0, 1.0, {}
 
         current_filter = [] if include_history else [ChunkModel.is_current.is_(True)]
+        source_filter = self._source_filters(source_kinds)
         average_length_row = await self.session.execute(
             select(func.coalesce(func.avg(ChunkModel.token_count), 0.0)).where(
                 ChunkModel.user_id == self.user_id,
                 *current_filter,
+                *source_filter,
             )
         )
         average_length = float(average_length_row.scalar_one()) or 1.0
@@ -308,32 +342,65 @@ class ChunkRepository:
                 ChunkModel.user_id == self.user_id,
                 ChunkNgramModel.user_id == self.user_id,
                 *current_filter,
+                *source_filter,
                 ChunkNgramModel.gram.in_(unique_terms),
             )
             .group_by(ChunkNgramModel.gram)
         )
         document_frequency = {str(gram): int(count) for gram, count in frequency_rows.all()}
+        return total_chunks, average_length, document_frequency
 
-        candidate_rows = await self.session.execute(
-            select(ChunkNgramModel.chunk_id, ChunkModel.source_kind)
-            .join(ChunkModel, ChunkNgramModel.chunk_id == ChunkModel.id)
-            .where(
-                ChunkModel.user_id == self.user_id,
-                ChunkNgramModel.user_id == self.user_id,
-                *current_filter,
-                ChunkNgramModel.gram.in_(unique_terms),
-            )
-            .group_by(ChunkNgramModel.chunk_id, ChunkModel.source_kind)
-            .order_by(func.sum(ChunkNgramModel.term_frequency).desc())
-            .limit(candidate_limit)
-        )
-        candidate_kinds: dict[int, str] = {}
-        for chunk_id, source_kind in candidate_rows.all():
-            candidate_kinds[int(chunk_id)] = str(source_kind)
-        candidate_ids = list(candidate_kinds)
-        if not candidate_ids:
-            return []
+    @staticmethod
+    def _bm25_scores(
+        *,
+        total_chunks: int,
+        average_length: float,
+        document_frequency: dict[str, int],
+        terms_by_chunk: dict[int, dict[str, int]],
+        lengths: dict[int, int],
+        candidate_kinds: dict[int, str],
+        include_zero: bool,
+    ) -> list[TextCandidate]:
+        """Score known candidates with BM25, optionally retaining zero scores.
 
+        RRF needs a rank for every vector candidate, including candidates whose
+        text has no query term. The ordinary text lane keeps only positive
+        scores so its result set stays meaningful.
+        """
+        k1 = 1.2
+        b = 0.75
+        scored: list[TextCandidate] = []
+        for chunk_id, source_kind in candidate_kinds.items():
+            frequencies = terms_by_chunk.get(chunk_id, {})
+            document_length = lengths.get(chunk_id, 0)
+            score = 0.0
+            for gram, term_frequency in frequencies.items():
+                doc_frequency = document_frequency.get(gram, 0)
+                if doc_frequency == 0:
+                    continue
+                idf = math.log(
+                    1.0 + (total_chunks - doc_frequency + 0.5) / (doc_frequency + 0.5)
+                )
+                denominator = term_frequency + k1 * (
+                    1.0 - b + b * document_length / average_length
+                )
+                score += idf * (term_frequency * (k1 + 1.0) / denominator)
+            if include_zero or score > 0:
+                scored.append(
+                    TextCandidate(
+                        chunk_id=chunk_id,
+                        source_kind=source_kind,
+                        score=score,
+                    )
+                )
+        scored.sort(key=lambda candidate: (-candidate.score, candidate.chunk_id))
+        return scored
+
+    async def _candidate_terms(
+        self,
+        candidate_ids: Sequence[int],
+        unique_terms: Sequence[str],
+    ) -> dict[int, dict[str, int]]:
         term_rows = await self.session.execute(
             select(
                 ChunkNgramModel.chunk_id,
@@ -348,38 +415,129 @@ class ChunkRepository:
         terms_by_chunk: dict[int, dict[str, int]] = {}
         for chunk_id, gram, frequency in term_rows.all():
             terms_by_chunk.setdefault(int(chunk_id), {})[str(gram)] = int(frequency)
+        return terms_by_chunk
 
+    async def _candidate_lengths(
+        self,
+        candidate_ids: Sequence[int],
+    ) -> dict[int, int]:
         length_rows = await self.session.execute(
             select(ChunkModel.id, ChunkModel.token_count).where(
                 ChunkModel.user_id == self.user_id,
                 ChunkModel.id.in_(candidate_ids),
             )
         )
-        lengths = {int(chunk_id): int(length) for chunk_id, length in length_rows.all()}
+        return {int(chunk_id): int(length) for chunk_id, length in length_rows.all()}
 
-        k1 = 1.2
-        b = 0.75
-        scored: list[TextCandidate] = []
-        for chunk_id, frequencies in terms_by_chunk.items():
-            document_length = lengths.get(chunk_id, 0)
-            score = 0.0
-            for gram, term_frequency in frequencies.items():
-                doc_frequency = document_frequency.get(gram, 0)
-                if doc_frequency == 0:
-                    continue
-                idf = math.log(1.0 + (total_chunks - doc_frequency + 0.5) / (doc_frequency + 0.5))
-                denominator = term_frequency + k1 * (1.0 - b + b * document_length / average_length)
-                score += idf * (term_frequency * (k1 + 1.0) / denominator)
-            if score > 0:
-                scored.append(
-                    TextCandidate(
-                        chunk_id=chunk_id,
-                        source_kind=candidate_kinds[chunk_id],
-                        score=score,
-                    )
-                )
-        scored.sort(key=lambda candidate: candidate.score, reverse=True)
-        return scored[:candidate_limit]
+    async def text_candidates(
+        self,
+        terms: Sequence[str],
+        *,
+        candidate_limit: int,
+        include_history: bool = False,
+        source_kinds: Sequence[str] | None = None,
+    ) -> list[TextCandidate]:
+        unique_terms = list(dict.fromkeys(terms))
+        if not unique_terms or candidate_limit <= 0:
+            return []
+
+        total_chunks, average_length, document_frequency = await self._bm25_corpus_stats(
+            unique_terms,
+            include_history=include_history,
+            source_kinds=source_kinds,
+        )
+        if total_chunks == 0:
+            return []
+
+        current_filter = [] if include_history else [ChunkModel.is_current.is_(True)]
+        candidate_rows = await self.session.execute(
+            select(ChunkNgramModel.chunk_id, ChunkModel.source_kind)
+            .join(ChunkModel, ChunkNgramModel.chunk_id == ChunkModel.id)
+            .where(
+                ChunkModel.user_id == self.user_id,
+                ChunkNgramModel.user_id == self.user_id,
+                *current_filter,
+                *self._source_filters(source_kinds),
+                ChunkNgramModel.gram.in_(unique_terms),
+            )
+            .group_by(ChunkNgramModel.chunk_id, ChunkModel.source_kind)
+            .order_by(func.sum(ChunkNgramModel.term_frequency).desc())
+            .limit(candidate_limit)
+        )
+        candidate_kinds: dict[int, str] = {}
+        for chunk_id, source_kind in candidate_rows.all():
+            candidate_kinds[int(chunk_id)] = str(source_kind)
+        candidate_ids = list(candidate_kinds)
+        if not candidate_ids:
+            return []
+
+        terms_by_chunk = await self._candidate_terms(candidate_ids, unique_terms)
+        lengths = await self._candidate_lengths(candidate_ids)
+        return self._bm25_scores(
+            total_chunks=total_chunks,
+            average_length=average_length,
+            document_frequency=document_frequency,
+            terms_by_chunk=terms_by_chunk,
+            lengths=lengths,
+            candidate_kinds=candidate_kinds,
+            include_zero=False,
+        )[:candidate_limit]
+
+    async def bm25_for_chunk_ids(
+        self,
+        chunk_ids: Sequence[int],
+        terms: Sequence[str],
+        *,
+        include_history: bool = False,
+        source_kinds: Sequence[str] | None = None,
+    ) -> list[TextCandidate]:
+        """Score an explicit candidate set with corpus-wide BM25 statistics.
+
+        The conversation-history lane uses this after vector recall: cosine
+        chooses the recall set, BM25 scores every pair in that set, and RRF
+        fuses the two rankings. Zero scores are retained so a semantic-only
+        match still has a BM25 rank.
+        """
+        unique_ids = list(dict.fromkeys(int(chunk_id) for chunk_id in chunk_ids))
+        unique_terms = list(dict.fromkeys(terms))
+        if not unique_ids or not unique_terms:
+            return []
+
+        total_chunks, average_length, document_frequency = await self._bm25_corpus_stats(
+            unique_terms,
+            include_history=include_history,
+            source_kinds=source_kinds,
+        )
+        if total_chunks == 0:
+            return []
+
+        current_filter = [] if include_history else [ChunkModel.is_current.is_(True)]
+        candidate_rows = await self.session.execute(
+            select(ChunkModel.id, ChunkModel.source_kind).where(
+                ChunkModel.user_id == self.user_id,
+                ChunkModel.id.in_(unique_ids),
+                *current_filter,
+                *self._source_filters(source_kinds),
+            )
+        )
+        candidate_kinds = {
+            int(chunk_id): str(source_kind)
+            for chunk_id, source_kind in candidate_rows.all()
+        }
+        if not candidate_kinds:
+            return []
+
+        terms_by_chunk = await self._candidate_terms(list(candidate_kinds), unique_terms)
+        lengths = await self._candidate_lengths(list(candidate_kinds))
+        return self._bm25_scores(
+            total_chunks=total_chunks,
+            average_length=average_length,
+            document_frequency=document_frequency,
+            terms_by_chunk=terms_by_chunk,
+            lengths=lengths,
+            candidate_kinds=candidate_kinds,
+            include_zero=True,
+        )
 
     async def vector_candidates(
         self,
@@ -388,6 +546,7 @@ class ChunkRepository:
         limit: int,
         scan_limit: int,
         include_history: bool = False,
+        source_kinds: Sequence[str] | None = None,
     ) -> list[VectorCandidate]:
         if not embedding or limit <= 0:
             return []
@@ -398,6 +557,7 @@ class ChunkRepository:
         ).where(
             ChunkModel.user_id == self.user_id,
             ChunkModel.embedding.is_not(None),
+            *self._source_filters(source_kinds),
         )
         if not include_history:
             statement = statement.where(ChunkModel.is_current.is_(True))

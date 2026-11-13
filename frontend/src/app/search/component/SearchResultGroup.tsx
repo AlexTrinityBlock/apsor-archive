@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 
-type ResultGroupTone = "files" | "memories" | "summaries";
+type ResultGroupTone = "files" | "memories" | "summaries" | "histories";
 
 interface SearchResultGroupProps {
   readonly index: string;

@@ -42,7 +42,9 @@ from app.infrastructure.logger.logging import configure_logging
 from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
+from app.module.agent.service.history_indexer import AgentHistoryIndexer
 from app.module.knowledge.dependencies import (
+    build_history_chunk_store,
     build_ingest_worker,
     ingest_runtime_defaults,
     load_ingest_runtime_config,
@@ -116,7 +118,17 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
             storage=storage,
             config_provider=lambda: load_agent_runtime_config(database),
         )
+        history_indexer = AgentHistoryIndexer(
+            database=database,
+            store_factory=lambda session, user_id: build_history_chunk_store(
+                state,
+                session,
+                user_id=user_id,
+            ),
+            cache=cache,
+        )
         cleanup_task: asyncio.Task[None] | None = None
+        history_task: asyncio.Task[None] | None = None
         try:
             await worker.startup()
 
@@ -124,16 +136,24 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
             _install_signal_handlers(stop_event)
             if once:
                 removed = await cleanup.run_once()
+                history_batch = await history_indexer.run_once()
                 processed = await worker.run_once()
                 logger.info(
-                    "Worker --once finished; processed=%s attachments_removed=%s",
+                    "Worker --once finished; processed=%s attachments_removed=%s "
+                    "history_examined=%s history_indexed=%s",
                     processed,
                     removed,
+                    history_batch.examined,
+                    history_batch.indexed,
                 )
             else:
                 cleanup_task = asyncio.create_task(
                     cleanup.run_forever(stop_event),
                     name="chat-attachment-cleanup",
+                )
+                history_task = asyncio.create_task(
+                    history_indexer.run_forever(stop_event),
+                    name="conversation-history-indexer",
                 )
                 await worker.run_forever(stop_event)
         finally:
@@ -141,6 +161,10 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                 cleanup_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await cleanup_task
+            if history_task is not None:
+                history_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await history_task
             worker.close()
     finally:
         await cache.close()

@@ -65,6 +65,7 @@ from app.module.knowledge.repository.stats_repository import StatsRepository
 from app.module.knowledge.repository.summary_repository import SummaryRepository
 from app.module.knowledge.service.ai_service import AiService
 from app.module.knowledge.service.file_service import CpuRunner, FileService
+from app.module.knowledge.service.history_chunk_store import HistoryChunkStore
 from app.module.knowledge.service.indexer_service import IndexerService
 from app.module.knowledge.service.ingest_job_service import IngestJobService, IngestWorker
 from app.module.knowledge.service.ingest_settings_service import IngestSettingsService
@@ -259,6 +260,26 @@ def build_file_service(
         vision_max_pages=settings.vision_max_pages,
         pdf_text_threshold=settings.pdf_text_threshold,
         cpu_runner=cpu_runner,
+    )
+
+
+def build_history_chunk_store(
+    state: State,
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> HistoryChunkStore:
+    """Compose the knowledge-side write adapter for conversation history.
+
+    The agent history indexer supplies fixed 256-character drafts and this
+    builder reuses the shared ``IndexerService``, so history chunks follow the
+    same n-gram and embedding path as every other source kind.
+    """
+    chunk_repository, indexer = _build_indexer(state, session, user_id=user_id)
+    return HistoryChunkStore(
+        user_id=user_id,
+        chunk_repository=chunk_repository,
+        indexer=indexer,
     )
 
 

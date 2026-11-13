@@ -45,6 +45,12 @@ class ChunkRepositoryProtocol(Protocol):
 
     async def delete_source(self, source_kind: str, source_id: int) -> None: ...
 
+    async def source_ids_present(
+        self,
+        source_kind: str,
+        source_ids: Sequence[int],
+    ) -> set[int]: ...
+
     async def get_source_chunks(self, source_kind: str, source_id: int) -> list[ChunkModel]: ...
 
     async def clone_current_source(
@@ -72,6 +78,16 @@ class ChunkRepositoryProtocol(Protocol):
         *,
         candidate_limit: int,
         include_history: bool = False,
+        source_kinds: Sequence[str] | None = None,
+    ) -> list[TextCandidate]: ...
+
+    async def bm25_for_chunk_ids(
+        self,
+        chunk_ids: Sequence[int],
+        terms: Sequence[str],
+        *,
+        include_history: bool = False,
+        source_kinds: Sequence[str] | None = None,
     ) -> list[TextCandidate]: ...
 
     async def vector_candidates(
@@ -81,6 +97,7 @@ class ChunkRepositoryProtocol(Protocol):
         limit: int,
         scan_limit: int,
         include_history: bool = False,
+        source_kinds: Sequence[str] | None = None,
     ) -> list[VectorCandidate]: ...
 
     async def count_current(self) -> int: ...

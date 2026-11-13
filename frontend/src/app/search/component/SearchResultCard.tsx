@@ -8,6 +8,7 @@ import { Button, ButtonLink } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import type {
   FileSearchResultSchema,
+  HistorySearchResultSchema,
   MemorySearchResultSchema,
   SummarySearchResultSchema,
 } from "../../generated-apis-types/schemas";
@@ -16,7 +17,7 @@ import { useI18n, type Translate } from "../../i18n";
 const SNIPPET_LIMIT = 380;
 
 type MatchSource = FileSearchResultSchema["matched_by"][number];
-type ResultTone = "file" | "memory" | "summary";
+type ResultTone = "file" | "memory" | "summary" | "history";
 
 interface CardProps<T> {
   readonly result: T;
@@ -195,6 +196,49 @@ export function MemoryResultCard({ result, query, rank }: CardProps<MemorySearch
           <Icon name="arrow-right" size={14} />
         </ButtonLink>
       </div>
+    </CardFrame>
+  );
+}
+
+/**
+ * One raw conversation window. The stable entry id is enough for the agent to
+ * expand the message with its `history_message` tool; the human search page
+ * deliberately shows only the bounded excerpt.
+ */
+export function HistoryResultCard({
+  result,
+  query,
+  rank,
+}: CardProps<HistorySearchResultSchema>) {
+  const { t } = useI18n();
+
+  return (
+    <CardFrame tone="history" rank={rank}>
+      <div className="search-result__top">
+        <div className="search-result__identity">
+          <span className="search-result__label">
+            <Icon name="history" size={15} className="search-result__kind-icon" />
+            <span className="search-result__path search-result__path--static">
+              {t("insights.search.card.historyMessage", {
+                id: String(result.entry_id),
+              })}
+            </span>
+            <Badge>
+              {t("insights.search.card.window", {
+                chunk: String(result.chunk),
+              })}
+            </Badge>
+          </span>
+        </div>
+        <div className="search-result__side">
+          <MatchedByBadges matchedBy={result.matched_by} />
+          <FusedScore value={result.score} />
+        </div>
+      </div>
+
+      <p className="search-result__snippet">
+        {highlightTerms(snippetAround(result.content, query, SNIPPET_LIMIT), query)}
+      </p>
     </CardFrame>
   );
 }
