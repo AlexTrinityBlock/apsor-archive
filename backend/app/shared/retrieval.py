@@ -17,9 +17,14 @@ HISTORY_RRF_K = 60.0
 # otherwise the cosine score must clear this baseline. Without it, an unrelated
 # query still fills all 15 slots with short transcript fragments.
 HISTORY_MIN_VECTOR_SIMILARITY = 0.4
+# Ultra-short acknowledgements ("OK", "1", "~") have a high cosine baseline in
+# some embedding models. A vector-only match must also carry at least this much
+# text; a BM25-positive match is not length-filtered.
+HISTORY_MIN_VECTOR_CONTENT_CHARS = 8
 
 
 __all__ = [
+    "HISTORY_MIN_VECTOR_CONTENT_CHARS",
     "HISTORY_MIN_VECTOR_SIMILARITY",
     "HISTORY_RESULT_LIMIT",
     "HISTORY_RRF_K",
