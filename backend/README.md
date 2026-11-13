@@ -298,6 +298,14 @@ a mutable chat log:
   written in the same transaction. A database trigger rolls the counters up into
   `app_user`, which keeps the root-only account directory independent of private
   archive reads.
+- The conversation-history index is not a separate table: user and assistant
+  messages are written to the shared `chunk` table as `source_kind='history'`,
+  with `source_id` set to the immutable entry id. The windows are 256 characters
+  with a 32-character overlap (stride 224). The history indexer backfills from
+  entry id 0 at process start and skips rows that already exist, so a restart is
+  safe. A history hit is rendered as `<history_message id="...">`; the
+  `history_message` tool reads the full message from `agent_entry` and returns
+  bounded neighbours.
 - `agent_approval` stores a pending human decision for a confirmation-required
   tool call: validated arguments, safe preview, and the loop snapshot used to
   resume the waiting run.
@@ -689,11 +697,12 @@ entries, 50 timeline events).
 
 | Tool | Preview fields |
 |---|---|
-| `search_knowledge` | `file_results[].excerpt/viewer_url`, `memory_results[].title/excerpt/viewer_url`, `summary_results[].excerpt` |
+| `search_knowledge` | `file_results[].excerpt/viewer_url`, `memory_results[].title/excerpt/viewer_url`, `summary_results[].excerpt`, `history_results[].entry_id/chunk/excerpt` |
 | `read_file` | `viewer_url`, `chunks[].excerpt` |
 | `read_timeline` | `events[].content`, `events[].summary_id`, nullable `events[].viewer_url` |
 | `read_path` | `directories[]`, `files[].viewer_url` |
 | `read_memory` | `target` preview, `neighbors[]` previews, plus the id lists |
+| `history_message` | `message_id`, `conversation_id/title`, `role`, `content`, `before_ids`/`after_ids`, `neighbors[]` previews |
 | `save_memory` | `mode` (`save`/`deprecate`), `memory` preview, `supersedes[]`, or `memory_ids[]` + `deprecated[]` + `reason` for a direct deprecation |
 | `present_resource` | `resource` descriptor |
 | `web_search` | `results[].title/url/excerpt/score`, `retrieved_at`, `cached`, `truncated` |
@@ -709,7 +718,8 @@ transcript refetch. Provider-facing tool content remains the separate XML
 payload in `model`.
 
 Tool names: `search_knowledge`, `read_file`, `read_timeline`, `read_path`,
-`read_memory`, `save_memory`, `present_resource`, `web_search`, `web_fetch`.
+`read_memory`, `history_message`, `save_memory`, `present_resource`,
+`web_search`, `web_fetch`.
 The two web tools are read-only. They call the active `web_search` / `web_fetch`
 provider, cite the URL and retrieval time, and never send archive-private
 content or keys to the provider. `search_knowledge` summary sources and

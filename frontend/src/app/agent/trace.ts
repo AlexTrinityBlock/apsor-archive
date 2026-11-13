@@ -83,6 +83,7 @@ const TOOL_PHASES: Readonly<Record<string, WorkPhase>> = {
   read_timeline: "reading",
   read_path: "reading",
   read_memory: "comparing",
+  history_message: "reading",
   save_memory: "saving",
   present_resource: "composing",
 };

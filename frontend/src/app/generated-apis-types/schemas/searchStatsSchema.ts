@@ -11,6 +11,8 @@
 export interface SearchStatsSchema {
   chunks_scanned: number;
   deduplicated: number;
+  history_selected?: number;
+  history_vector_candidates?: number;
   merged: number;
   terms: string[];
   text_candidates: number;

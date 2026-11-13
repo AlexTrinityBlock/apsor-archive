@@ -361,6 +361,10 @@
   --group-accent: var(--accent-ochre);
 }
 
+.search-group--histories {
+  --group-accent: var(--mono-ink);
+}
+
 .search-group__head {
   display: flex;
   align-items: center;
@@ -479,6 +483,10 @@
 
 .search-result--summary .search-result__kind-icon {
   color: var(--accent-ochre);
+}
+
+.search-result--history .search-result__kind-icon {
+  color: var(--mono-ink);
 }
 
 .search-result__path {

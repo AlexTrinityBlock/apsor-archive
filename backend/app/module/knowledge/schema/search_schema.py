@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 MatchSource = Literal["text", "vector"]
 
@@ -19,6 +19,10 @@ class SearchStatsSchema(BaseModel):
     deduplicated: int
     chunks_scanned: int
     terms: list[str]
+    # Conversation-history diagnostics. They default to zero so a cached
+    # payload written before the history lane existed still validates.
+    history_vector_candidates: int = 0
+    history_selected: int = 0
 
 
 class FileSearchResultSchema(BaseModel):
@@ -65,6 +69,26 @@ class SummarySearchResultSchema(BaseModel):
     matched_by: list[MatchSource]
 
 
+class HistorySearchResultSchema(BaseModel):
+    """One 256-character window from a past conversation message.
+
+    ``entry_id`` is the stable id used by the agent's ``history_message`` tool.
+    The window is raw text; the XML envelope and id are applied at tool render
+    time so the index itself contains no markup.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    entry_id: int
+    chunk_id: int
+    chunk: int
+    content: str
+    score: float
+    matched_by: list[MatchSource]
+    vector_score: float | None = None
+    text_score: float | None = None
+
+
 class SearchResponseSchema(BaseModel):
     """The search_knowledge tool result."""
 
@@ -78,3 +102,4 @@ class SearchResponseSchema(BaseModel):
     file_results: list[FileSearchResultSchema]
     memory_results: list[MemorySearchResultSchema]
     summary_results: list[SummarySearchResultSchema]
+    history_results: list[HistorySearchResultSchema] = Field(default_factory=list)

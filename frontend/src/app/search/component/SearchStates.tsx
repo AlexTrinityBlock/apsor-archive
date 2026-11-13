@@ -31,6 +31,9 @@ export function SearchWelcome() {
         <span className="badge badge--ochre">
           {t("insights.search.welcome.summaries")}
         </span>
+        <span className="badge badge--neutral">
+          {t("insights.search.welcome.conversationHistory")}
+        </span>
       </div>
     </section>
   );

@@ -32,10 +32,12 @@ from app.module.agent.exception.handler import register_exceptions as register_a
 from app.module.agent.repository.agent_repository import AgentRepository
 from app.module.agent.router import router as agent_router
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
+from app.module.agent.service.history_indexer import AgentHistoryIndexer
 from app.module.auth.exception.handler import register_exceptions as register_auth_exceptions
 from app.module.auth.router.account_router import router as account_router
 from app.module.auth.router.auth_router import router as auth_router
 from app.module.knowledge.dependencies import (
+    build_history_chunk_store,
     build_ingest_worker,
     ingest_runtime_defaults,
     load_ingest_runtime_config,
@@ -127,6 +129,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         worker_task: asyncio.Task[None] | None = None
         cleanup_task: asyncio.Task[None] | None = None
+        history_task: asyncio.Task[None] | None = None
         if resolved_settings.ingest_worker_enabled:
             await app.state.ingest_worker.startup()
             worker_task = asyncio.create_task(
@@ -142,6 +145,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 cleanup.run_forever(),
                 name="chat-attachment-cleanup",
             )
+            history_indexer = AgentHistoryIndexer(
+                database=app.state.db,
+                store_factory=lambda session, user_id: build_history_chunk_store(
+                    app.state,
+                    session,
+                    user_id=user_id,
+                ),
+                cache=app.state.cache,
+            )
+            history_task = asyncio.create_task(
+                history_indexer.run_forever(),
+                name="conversation-history-indexer",
+            )
         try:
             yield
         finally:
@@ -149,6 +165,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 cleanup_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await cleanup_task
+            if history_task is not None:
+                history_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await history_task
             if worker_task is not None:
                 worker_task.cancel()
                 with suppress(asyncio.CancelledError):

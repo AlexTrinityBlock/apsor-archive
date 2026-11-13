@@ -101,7 +101,10 @@ result carries its source, chunk number, and time.
 - **Memories are linear and traceable.** A new belief can supersede an old one.
   The old memory leaves the search surface but stays readable through its chain.
 - **Search is hybrid.** BM25 over CJK bigrams and Latin tokens runs beside vector
-  recall. Results are de-duplicated and fused, with the reason recorded.
+  recall. Results are de-duplicated and fused, with the reason recorded. Past
+  conversation messages are also indexed as raw 256-character windows; a
+  separate cosine → BM25 → RRF lane returns the best 15 windows, and the agent
+  can expand any hit by its stable message id.
 - **Time is sampled honestly.** The agent's timeline tool returns up to five
   anchors per event kind and reports exactly how many events were skipped. The
   human Timeline page requests the complete selected window (`complete=true`)
@@ -636,7 +639,7 @@ for an LLM to use in sequence.
 
 | Tool | Endpoint | What it returns |
 |---|---|---|
-| `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | Top results per source kind from BM25 + vector, fused with RRF and deduplicated |
+| `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | Top results per archive source kind from BM25 + vector, fused with RRF; plus the top 15 past-conversation windows |
 | `read_file` | `GET /api/v1/files/{file_id}/chunks/{chunk}?chunk_range=1` | A 1-based chunk window |
 | `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | Sparse by default: up to five sampled events per kind, density, and skip counts; `complete=true` returns the whole window |
 | `read_path` | `GET /api/v1/paths?path=/history&path_depth=1&fuzzy_search=` | Directories and files, or fuzzy path matches |
@@ -650,14 +653,19 @@ previous window when you scroll. Complete responses report `mode="complete"`,
 `anchor=null` on every event. The page excludes its event spine from the page
 context, so the complete list is never sent to the agent as context.
 
-The persistent archive agent exposes nine model tools: the six above plus
-`present_resource`, `web_search`, and `web_fetch`. The HTTP examples use
-explicit parameters; the HTTP server defaults are `result_number=2`,
-`chunk_range=1`, `day_range=1`, `path_depth=1`, and `memory_range=0`. Text is chunked at about 4,000 characters with a 500-character overlap; existing files keep their original chunk boundaries until re-ingested. The agent's
-tool schemas choose their own defaults, such as `result_number=8` and
-`day_range=7`. For external LLM callers, the separate `/api/v1/tools/*` facade
-renders the same services as compact XML; the persistent agent calls the
-services directly through its own registry.
+The persistent archive agent exposes ten model tools: the six above plus
+`present_resource`, `web_search`, `web_fetch`, and `history_message`. The HTTP
+examples use explicit parameters; the HTTP server defaults are
+`result_number=2`, `chunk_range=1`, `day_range=1`, `path_depth=1`, and
+`memory_range=0`. File text is chunked at about 4,000 characters with a
+500-character overlap; existing files keep their original chunk boundaries until
+re-ingested. Past conversation messages use a separate fixed window: 256
+characters with a 32-character overlap (stride 224). The agent's tool schemas
+choose their own defaults, such as `result_number=8` and `day_range=7`.
+`history_message` takes the `id` shown on a `<history_message>` search hit and
+returns the full message plus bounded neighbours. For external LLM callers, the
+separate `/api/v1/tools/*` facade renders the same services as compact XML; the
+persistent agent calls the services directly through its own registry.
 
 `present_resource` returns a resource URL such as `/viewer/file/{id}?chunk={n}`
 or `/viewer/memory/{id}` and never fetches the resource. The client redirects
@@ -788,6 +796,13 @@ The tables are:
 - `agent_config` — the singleton runtime configuration (`id=1`) holding the
   validated token, step, tool, page-context, compaction, and chat-image lifetime
   limits.
+
+User and assistant entries are also copied into the shared flat chunk index as
+`source_kind='history'`, with one row per 256-character window. The background
+history indexer backfills existing conversations, skips empty tool-call-only
+assistant entries, and marks a soft-deleted conversation's windows non-current.
+The agent sees each hit as `<history_message id="...">` and calls
+`history_message` to read the full immutable entry and its neighbours.
 
 The first entry is a frozen `pi.system` prompt and tool snapshot. The context
 builder replays entries deterministically: it honors `head_entry_id` and `edits`,
@@ -1386,9 +1401,18 @@ corpus.
 4. **Vector recall** uses a 384-dimensional signed feature-hashing embedder by
    default, so it works offline. Set `APSOR_EMBEDDING_PROVIDER=openai` and the
    matching base URL/model to use a hosted embedding model instead.
-5. **Fuse** with reciprocal rank fusion. Each source kind keeps its own top
-   `result_number`, so a summary cannot be crowded out by file chunks.
+5. **Fuse** with reciprocal rank fusion. Each archive source kind keeps its own
+   top `result_number`, so a summary cannot be crowded out by file chunks.
 6. **Deduplicate** by chunk id, then hydrate the file, memory, or summary row.
+7. **Conversation history** runs a separate flat-index lane. Every user or
+   assistant message longer than 256 characters is cut into 256-character
+   windows with a 32-character overlap (stride 224). The query embedding takes
+   the top 128 windows by cosine similarity; BM25 scores every recalled window;
+   reciprocal rank fusion reranks the union and keeps the top 15. History
+   windows are always included, regardless of the archive-history switch. Each
+   hit carries the stable `agent_entry` id, which the agent expands with
+   `history_message`. Deleted conversations are marked non-current and disappear
+   from this lane.
 
 If vector recall is unavailable, search still returns BM25 results. Synchronous
 ingestion keeps a chunk text-only when its embedding call fails within the
@@ -1458,7 +1482,8 @@ exactly one owner.
 file ─────────────┐
 folder ───────────┤
 memory ───────────┼──> chunk ──> chunk_ngram
-memory_summary ───┘
+memory_summary ───┤
+agent_entry ──────┘  (source_kind = history)
 ```
 
 The private archive tables below carry `user_id bigint NOT NULL`. The exceptions
@@ -1481,6 +1506,9 @@ user context exists; global config tables are read-all/root-write.
   Empty folders and folder identity survive independently of files. Uniqueness
   is per account: `(user_id, path)`.
 - `chunk`: `(source_kind, source_id, chunk_index)` with an optional JSONB vector.
+  `source_kind` is `file`, `memory`, `summary`, or `history`; a history chunk's
+  `source_id` is the immutable `agent_entry` id and its content is one raw
+  256-character window.
 - `chunk_ngram`: the inverted index used by BM25.
 - `memory`: linear timeline with an auto-generated `title`, `supersedes_ids`,
   `superseded_by_id`, `status=active|deprecated`, and the direct-retirement
