@@ -152,6 +152,7 @@ class AgentHistoryIndexer:
                 return 0
             store = self.store_factory(session, user_id)
             present = await store.existing_source_ids([entry.id for entry in entries])
+            pending: list[tuple[int, list[ChunkDraft]]] = []
             for entry in entries:
                 if entry.id in present:
                     continue
@@ -169,8 +170,10 @@ class AgentHistoryIndexer:
                     # Empty assistant messages are valid transcript entries
                     # (tool-call-only turns). They have no searchable text.
                     continue
-                await store.replace_source(entry.id, drafts)
-                indexed += 1
+                pending.append((entry.id, drafts))
+            if pending:
+                await store.replace_many(pending)
+                indexed += len(pending)
         if indexed:
             await self._bump(user_id)
         return indexed

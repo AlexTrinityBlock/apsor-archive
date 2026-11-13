@@ -1,8 +1,8 @@
-"""Shared chunk indexing for files, memories, and summaries."""
+"""Shared chunk indexing for files, memories, summaries, and history."""
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 
 from app.module.knowledge.domain.chunking_domain import ChunkDraft
 from app.module.knowledge.exception.domain_error import EmbeddingProviderError
@@ -157,6 +157,83 @@ class IndexerService:
                         await checkpoint()
                     if progress is not None:
                         await progress(processed, total)
+        except BaseException:
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+            raise
+        return total
+
+    async def index_many_sources(
+        self,
+        sources: Sequence[tuple[str, int, Sequence[ChunkDraft]]],
+        *,
+        is_current: bool = True,
+    ) -> int:
+        """Embed windows from several sources in shared batches.
+
+        Conversation-history backfill produces many short-lived one-window
+        entries. Embedding each entry separately would turn a batch of messages
+        into one provider call per message. This method flattens the windows
+        across sources into the same bounded embedding batches used by file
+        ingestion, then persists each row against its own source key. It keeps
+        the single chunk/n-gram/embedding path while avoiding the backfill's
+        per-message round trip.
+        """
+        items = [
+            (source_kind, source_id, draft)
+            for source_kind, source_id, drafts in sources
+            for draft in drafts
+        ]
+        total = len(items)
+        if total == 0:
+            return 0
+
+        batches = [
+            items[start : start + self.embedding_batch_size]
+            for start in range(0, total, self.embedding_batch_size)
+        ]
+        tasks = {
+            asyncio.create_task(
+                self._embeddings([draft.content for _kind, _id, draft in batch])
+            ): batch
+            for batch in batches
+        }
+        pending = set(tasks)
+        try:
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in done:
+                    batch = tasks[task]
+                    embeddings = task.result()
+                    for (source_kind, source_id, draft), embedding in zip(
+                        batch,
+                        embeddings,
+                        strict=True,
+                    ):
+                        chunk = ChunkModel(
+                            user_id=self.user_id,
+                            source_kind=source_kind,
+                            source_id=source_id,
+                            chunk_index=draft.index,
+                            content=draft.content,
+                            char_count=draft.char_count,
+                            token_count=draft.token_count,
+                            embedding=embedding,
+                            embedding_model=(
+                                self.embedder.model_name if embedding is not None else None
+                            ),
+                            is_current=is_current,
+                        )
+                        await self.chunk_repository.add(chunk)
+                        await self.chunk_repository.add_ngrams(
+                            chunk.id,
+                            dict(term_frequencies(draft.content)),
+                        )
         except BaseException:
             for task in pending:
                 task.cancel()
