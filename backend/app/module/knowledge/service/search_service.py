@@ -35,6 +35,7 @@ from app.module.knowledge.schema.search_schema import (
 )
 from app.module.knowledge.service.cache_keys import user_cache_key, user_version_scope
 from app.shared.retrieval import (
+    HISTORY_MIN_VECTOR_SIMILARITY,
     HISTORY_RESULT_LIMIT,
     HISTORY_RRF_K,
     HISTORY_VECTOR_RECALL_LIMIT,
@@ -136,8 +137,11 @@ class SearchService:
         subset. BM25 scores every recalled window against the same query using
         corpus-wide history statistics. Reciprocal rank fusion then combines
         the cosine order and the BM25 order, so a semantic-only hit keeps its
-        vector rank and a lexical-only hit keeps its text rank. Deleted
-        conversations are excluded because their chunks are marked non-current.
+        vector rank and a lexical-only hit keeps its text rank. A result must
+        have a positive BM25 score or clear
+        ``HISTORY_MIN_VECTOR_SIMILARITY``; otherwise an unrelated query would
+        fill all 15 slots with transcript fragments. Deleted conversations are
+        excluded because their chunks are marked non-current.
         """
         vector_candidates = (
             await self.chunk_repository.vector_candidates(
@@ -185,10 +189,16 @@ class SearchService:
                 fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (HISTORY_RRF_K + rank)
             for rank, chunk_id in enumerate(text_order, start=1):
                 fused[chunk_id] = fused.get(chunk_id, 0.0) + 1.0 / (HISTORY_RRF_K + rank)
-            selected_ids = sorted(
+            ranked_ids = sorted(
                 fused,
                 key=lambda chunk_id: (-fused[chunk_id], chunk_id),
-            )[:HISTORY_RESULT_LIMIT]
+            )
+            selected_ids = [
+                chunk_id
+                for chunk_id in ranked_ids
+                if text_scores.get(chunk_id, 0.0) > 0
+                or vector_scores.get(chunk_id, 0.0) >= HISTORY_MIN_VECTOR_SIMILARITY
+            ][:HISTORY_RESULT_LIMIT]
             results = await self._hydrate_history_results(
                 selected_ids,
                 fused=fused,
