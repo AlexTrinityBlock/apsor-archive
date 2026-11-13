@@ -103,6 +103,34 @@ function summaryResults(
   });
 }
 
+function historyResults(
+  data: Record<string, unknown> | null,
+  t: Translate,
+): ResultTarget[] {
+  return recordList(data?.history_results).map((record) => {
+    const id = recordId(record, "entry_id");
+    const chunk = numberField(record, "chunk");
+    return {
+      record,
+      id,
+      chunk,
+      title:
+        id === null
+          ? t("chat.panels.search.historyFallback")
+          : `history:${id}`,
+      detail:
+        chunk === null
+          ? null
+          : t("chat.panels.search.historyWindow", {
+              chunk: String(chunk),
+            }),
+      excerpt: excerptOf(record, ["excerpt", "content"]),
+      score: numberField(record, "score"),
+      target: null,
+    };
+  });
+}
+
 function resultKey(kind: string, result: ResultTarget, index: number): string {
   const identity = result.id === null ? `title:${result.title}` : String(result.id);
   const chunk = result.chunk === null ? "no-chunk" : `chunk-${result.chunk}`;
@@ -222,11 +250,17 @@ function ConstellationBody({ item }: PanelProps): ReactNode {
         empty={t("chat.panels.search.summaryEmpty")}
         results={summaryResults(data, t)}
       />
+      <ResultGroup
+        kind="history"
+        label={t("chat.panels.search.historyMessages")}
+        empty={t("chat.panels.search.historyEmpty")}
+        results={historyResults(data, t)}
+      />
     </div>
   );
 }
 
-/** `search_knowledge`: a three-layer result constellation with excerpts. */
+/** `search_knowledge`: a four-layer result constellation with excerpts. */
 export function SearchKnowledgePanel({ item }: PanelProps) {
   const { t } = useI18n();
   if (item.live || item.status.toLowerCase() === "running") {

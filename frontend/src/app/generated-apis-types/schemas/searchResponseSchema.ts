@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { FileSearchResultSchema } from './fileSearchResultSchema';
+import type { HistorySearchResultSchema } from './historySearchResultSchema';
 import type { MemorySearchResultSchema } from './memorySearchResultSchema';
 import type { SearchStatsSchema } from './searchStatsSchema';
 import type { SummarySearchResultSchema } from './summarySearchResultSchema';
@@ -15,6 +16,7 @@ import type { SummarySearchResultSchema } from './summarySearchResultSchema';
 export interface SearchResponseSchema {
   elapsed_ms: number;
   file_results: FileSearchResultSchema[];
+  history_results?: HistorySearchResultSchema[];
   include_history: boolean;
   memory_results: MemorySearchResultSchema[];
   query: string;

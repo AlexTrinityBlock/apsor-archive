@@ -88,6 +88,12 @@ export function SearchStats({ stats, elapsedMs }: SearchStatsProps) {
           accent="ink"
         />
         <StatCard
+          label={t("insights.search.stats.historyWindows")}
+          value={formatNumber(stats.history_selected ?? 0)}
+          note={t("insights.search.stats.historyWindowsNote")}
+          accent="ink"
+        />
+        <StatCard
           label={t("insights.search.stats.elapsed")}
           value={`${formatNumber(elapsedMs)} ms`}
           note={t("insights.search.stats.elapsedNote")}
@@ -96,7 +102,7 @@ export function SearchStats({ stats, elapsedMs }: SearchStatsProps) {
       </div>
 
       <p className="search-diagnostics__note">
-        {t("insights.search.stats.note")}
+        {t("insights.search.stats.note")} {t("insights.search.stats.historyNote")}
       </p>
 
       {stats.terms.length > 0 ? (

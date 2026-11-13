@@ -55,6 +55,13 @@ class ReadMemoryArgs(_ToolArgs):
     trace_history: bool = True
 
 
+class HistoryMessageArgs(_ToolArgs):
+    """Arguments for expanding one past conversation window by entry id."""
+
+    message_id: int = Field(gt=0)
+    message_range: int = Field(default=1, ge=0, le=5)
+
+
 class SaveMemoryArgs(_ToolArgs):
     """Arguments for a memory write or a direct, replacement-free deprecation."""
 

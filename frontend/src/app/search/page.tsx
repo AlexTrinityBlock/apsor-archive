@@ -17,6 +17,7 @@ import { useI18n } from "../i18n";
 import { SearchControls } from "./component/SearchControls";
 import {
   FileResultCard,
+  HistoryResultCard,
   MemoryResultCard,
   SummaryResultCard,
 } from "./component/SearchResultCard";
@@ -175,8 +176,12 @@ export function SearchPage() {
   });
 
   const data = search.data;
+  const historyResults = data?.history_results ?? [];
   const totalResults = data
-    ? data.file_results.length + data.memory_results.length + data.summary_results.length
+    ? data.file_results.length +
+      data.memory_results.length +
+      data.summary_results.length +
+      historyResults.length
     : 0;
   const searchSettling = query.length > 0 && search.isPending;
 
@@ -322,6 +327,23 @@ export function SearchPage() {
                 {data.summary_results.map((result, index) => (
                   <SummaryResultCard
                     key={result.memory_summary_id}
+                    result={result}
+                    query={data.query}
+                    rank={index + 1}
+                  />
+                ))}
+              </SearchResultGroup>
+
+              <SearchResultGroup
+                index="04"
+                title={t("insights.search.results.conversationHistory")}
+                tone="histories"
+                count={historyResults.length}
+                emptyLabel={t("insights.search.results.emptyHistory")}
+              >
+                {historyResults.map((result, index) => (
+                  <HistoryResultCard
+                    key={`${result.entry_id}-${result.chunk_id}`}
                     result={result}
                     query={data.query}
                     rank={index + 1}

@@ -3,6 +3,7 @@
 from app.module.knowledge.model.base import Base
 from app.module.knowledge.model.chunk_model import (
     SOURCE_FILE,
+    SOURCE_HISTORY,
     SOURCE_KINDS,
     SOURCE_MEMORY,
     SOURCE_SUMMARY,
@@ -69,6 +70,7 @@ __all__ = [
     "MEMORY_SOURCE_MANUAL",
     "MEMORY_STATUSES",
     "SOURCE_FILE",
+    "SOURCE_HISTORY",
     "SOURCE_KINDS",
     "SOURCE_MEMORY",
     "SOURCE_SUMMARY",

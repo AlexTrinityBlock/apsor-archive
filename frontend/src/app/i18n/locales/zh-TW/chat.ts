@@ -529,7 +529,7 @@ export const chat = {
         "已取樣這個範圍，但其中沒有任何記憶、摘要或檔案事件。",
     },
     search: {
-      liveDetail: "正在搜尋檔案、記憶與摘要。",
+      liveDetail: "正在搜尋檔案、記憶、摘要與過往對話。",
       errorTitle: "搜尋沒有回傳",
       noPreviewTitle: "沒有結構化搜尋預覽",
       noPreviewDetail:
@@ -539,10 +539,14 @@ export const chat = {
       fileLeaves: "檔案葉",
       memoryLeaves: "記憶葉",
       seasonSummaries: "季節摘要",
+      historyMessages: "對話窗格",
       fileEmpty: "這一輪沒有檔案葉。",
       memoryEmpty: "這一輪沒有記憶葉。",
       summaryEmpty: "這一輪沒有季節摘要。",
+      historyEmpty: "這一輪沒有過往對話窗格。",
       summaryFallback: "摘要",
+      historyFallback: "歷史",
+      historyWindow: "窗格 #{chunk}",
       noExcerpt: "這個結果沒有記錄內嵌摘錄。",
       viewResult: "檢視結果",
     },

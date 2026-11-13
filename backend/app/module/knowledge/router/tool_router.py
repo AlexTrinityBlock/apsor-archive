@@ -59,7 +59,8 @@ async def search_knowledge_tool(
             f'text_candidates="{result.stats.text_candidates}" '
             f'vector_candidates="{result.stats.vector_candidates}" '
             f'merged="{result.stats.merged}" '
-            f'deduplicated="{result.stats.deduplicated}">'
+            f'deduplicated="{result.stats.deduplicated}" '
+            f'history_selected="{result.stats.history_selected}">'
         )
     ]
     for file_result in result.file_results:
@@ -88,6 +89,14 @@ async def search_knowledge_tool(
             f'score="{summary_result.score}" '
             f'matched_by="{",".join(summary_result.matched_by)}">'
             f"{_escape(summary_result.content)}</memory_summary_result>"
+        )
+    for history_result in result.history_results:
+        lines.append(
+            f'<history_message id="{history_result.entry_id}" '
+            f'chunk="{history_result.chunk}" '
+            f'score="{history_result.score}" '
+            f'matched_by="{",".join(history_result.matched_by)}">'
+            f"{_escape(history_result.content)}</history_message>"
         )
     lines.append("</search_result>")
     return _response(lines)

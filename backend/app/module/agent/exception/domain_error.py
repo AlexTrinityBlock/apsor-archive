@@ -122,6 +122,13 @@ class AgentChatAttachmentStorageError(AgentError):
         super().__init__("Temporary chat image storage is unavailable.")
 
 
+class AgentHistoryMessageNotFoundError(AgentError):
+    def __init__(self, entry_id: int) -> None:
+        super().__init__(
+            f"Conversation message {entry_id} was not found in the active transcript."
+        )
+
+
 class SavedQuestionNotFoundError(AgentError):
     def __init__(self, question_id: int) -> None:
         super().__init__(f"Saved question {question_id} was not found.")

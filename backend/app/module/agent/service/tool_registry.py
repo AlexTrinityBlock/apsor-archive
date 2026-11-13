@@ -14,7 +14,13 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from app.module.agent.domain.agent_domain import ToolOutcome
+from app.module.agent.domain.history_domain import (
+    HISTORY_MESSAGE_MAX_CHARS,
+    HistoryMessage,
+    HistoryMessageRead,
+)
 from app.module.agent.domain.tool_args import (
+    HistoryMessageArgs,
     PresentResourceArgs,
     ReadFileArgs,
     ReadMemoryArgs,
@@ -238,6 +244,8 @@ async def _dispatch(
         return await _read_path(args, services)
     if name == "read_memory" and isinstance(args, ReadMemoryArgs):
         return await _read_memory(args, services)
+    if name == "history_message" and isinstance(args, HistoryMessageArgs):
+        return await _history_message(args, services)
     if name == "save_memory" and isinstance(args, SaveMemoryArgs):
         return await _save_memory(args, services)
     if name == "present_resource" and isinstance(args, PresentResourceArgs):
@@ -261,7 +269,8 @@ async def _search_knowledge(
     content: list[str] = [
         f"<summary>files={len(result.file_results)} "
         f"memories={len(result.memory_results)} "
-        f"summaries={len(result.summary_results)}</summary>"
+        f"summaries={len(result.summary_results)} "
+        f"history={len(result.history_results)}</summary>"
     ]
     for file_result in result.file_results:
         content.append(
@@ -291,6 +300,19 @@ async def _search_knowledge(
             )
             + xml_text(clip(memory_result.content, SOURCE_EXCERPT_LIMIT))
             + _close("source")
+        )
+    for history_result in result.history_results:
+        content.append(
+            _open(
+                "history_message",
+                {
+                    "id": history_result.entry_id,
+                    "chunk": history_result.chunk,
+                    "score": history_result.score,
+                },
+            )
+            + xml_text(history_result.content)
+            + _close("history_message")
         )
     for summary_result in result.summary_results:
         # A summary is a compressed view, not the original text. The XML itself
@@ -354,6 +376,19 @@ async def _search_knowledge(
                 "period_end": item.period_end.isoformat(),
             }
             for item in result.summary_results
+        ],
+        "history_results": [
+            {
+                "entry_id": item.entry_id,
+                "chunk": item.chunk,
+                "chunk_id": item.chunk_id,
+                "score": item.score,
+                "vector_score": item.vector_score,
+                "text_score": item.text_score,
+                "matched_by": item.matched_by,
+                "excerpt": _excerpt(item.content),
+            }
+            for item in result.history_results
         ],
     }
     return "".join(content), data, None
@@ -609,6 +644,92 @@ async def _read_memory(
             result.superseded_by.memory_id if result.superseded_by is not None else None
         ),
         "chain": [item.memory_id for item in result.chain],
+    }
+    return content, data, None
+
+
+HISTORY_NEIGHBOR_EXCERPT_LIMIT = 2_000
+
+
+def _history_element(
+    message: HistoryMessage,
+    *,
+    focus: bool,
+    relation: str | None,
+    limit: int,
+) -> str:
+    attributes: dict[str, object] = {
+        "id": message.entry_id,
+        "role": message.role,
+        "conversation_id": message.conversation_id,
+        "title": message.conversation_title,
+        "time": message.created_at.isoformat(),
+    }
+    if focus:
+        attributes["focus"] = "true"
+    if relation is not None:
+        attributes["relation"] = relation
+    return (
+        _open("history_message", attributes)
+        + xml_text(clip(message.content, limit))
+        + _close("history_message")
+    )
+
+
+async def _history_message(
+    args: HistoryMessageArgs,
+    services: AgentToolServices,
+) -> tuple[str, dict[str, Any], None]:
+    """Expand one search hit into the full immutable message and neighbours."""
+    result: HistoryMessageRead = await services.history_service.read_message(
+        args.message_id,
+        message_range=args.message_range,
+    )
+    target = result.target
+    content = _open("history", {"focus_id": target.entry_id}) + _history_element(
+        target,
+        focus=True,
+        relation=None,
+        limit=HISTORY_MESSAGE_MAX_CHARS,
+    )
+    content += "".join(
+        _history_element(
+            message,
+            focus=False,
+            relation="before",
+            limit=HISTORY_NEIGHBOR_EXCERPT_LIMIT,
+        )
+        for message in result.before
+    )
+    content += "".join(
+        _history_element(
+            message,
+            focus=False,
+            relation="after",
+            limit=HISTORY_NEIGHBOR_EXCERPT_LIMIT,
+        )
+        for message in result.after
+    )
+    content += _close("history")
+    data = {
+        "message_id": target.entry_id,
+        "conversation_id": target.conversation_id,
+        "conversation_title": target.conversation_title,
+        "role": target.role,
+        "time": target.created_at.isoformat(),
+        "content_truncated": len(target.content) > HISTORY_MESSAGE_MAX_CHARS,
+        "content": clip(target.content, HISTORY_MESSAGE_MAX_CHARS),
+        "before_ids": [message.entry_id for message in result.before],
+        "after_ids": [message.entry_id for message in result.after],
+        "neighbors": [
+            {
+                "entry_id": message.entry_id,
+                "role": message.role,
+                "time": message.created_at.isoformat(),
+                "content": clip(message.content, HISTORY_NEIGHBOR_EXCERPT_LIMIT),
+            }
+            for message in [*result.before, *result.after]
+        ],
     }
     return content, data, None
 

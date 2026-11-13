@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
+from app.module.agent.domain.history_domain import HistoryMessageRead
 from app.module.knowledge.schema.file_schema import FileChunksSchema, FileSchema, PathListingSchema
 from app.module.knowledge.schema.memory_schema import (
     MemoryReadSchema,
@@ -76,6 +77,15 @@ class MemoryToolServiceProtocol(Protocol):
     ) -> list[MemorySchema]: ...
 
 
+class HistoryToolServiceProtocol(Protocol):
+    async def read_message(
+        self,
+        message_id: int,
+        *,
+        message_range: int = 1,
+    ) -> HistoryMessageRead: ...
+
+
 class TimelineToolServiceProtocol(Protocol):
     async def get_timeline(
         self,
@@ -127,6 +137,7 @@ class AgentToolServices:
     file_service: FileToolServiceProtocol
     memory_service: MemoryToolServiceProtocol
     timeline_service: TimelineToolServiceProtocol
+    history_service: HistoryToolServiceProtocol
     web_research_service: WebResearchServiceProtocol
 
 

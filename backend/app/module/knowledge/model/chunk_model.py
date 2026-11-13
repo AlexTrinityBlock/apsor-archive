@@ -25,7 +25,12 @@ from app.shared.time import utcnow
 SOURCE_FILE = "file"
 SOURCE_MEMORY = "memory"
 SOURCE_SUMMARY = "summary"
-SOURCE_KINDS = (SOURCE_FILE, SOURCE_MEMORY, SOURCE_SUMMARY)
+# A past conversation message. ``source_id`` is the immutable ``agent_entry``
+# id, and the content is one 256-character raw window. Conversation history
+# shares this flat table deliberately: it gets the same owner-scoped index,
+# BM25/vector recall, and embedding reindex as every other knowledge source.
+SOURCE_HISTORY = "history"
+SOURCE_KINDS = (SOURCE_FILE, SOURCE_MEMORY, SOURCE_SUMMARY, SOURCE_HISTORY)
 
 
 class ChunkModel(Base):
@@ -52,7 +57,10 @@ class ChunkModel(Base):
         Index("ix_chunk_current", "is_current"),
         Index("ix_chunk_user_id_source", "user_id", "source_kind", "source_id"),
         Index("ix_chunk_user_id_current", "user_id", "is_current"),
-        CheckConstraint("source_kind IN ('file', 'memory', 'summary')", name="source_kind_valid"),
+        CheckConstraint(
+            "source_kind IN ('file', 'memory', 'summary', 'history')",
+            name="source_kind_valid",
+        ),
         CheckConstraint("chunk_index >= 1", name="chunk_index_positive"),
         CheckConstraint("char_count >= 0", name="char_count_non_negative"),
         CheckConstraint("token_count >= 0", name="token_count_non_negative"),

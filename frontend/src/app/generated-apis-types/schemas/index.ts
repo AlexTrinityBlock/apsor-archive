@@ -78,6 +78,8 @@ export * from './frequentlyUsedPromptReorderSchema';
 export * from './frequentlyUsedPromptUpdateSchema';
 export * from './getAgentConversationParams';
 export * from './healthSchema';
+export * from './historySearchResultSchema';
+export * from './historySearchResultSchemaMatchedByItem';
 export * from './hTTPValidationError';
 export * from './impersonationSchema';
 export * from './ingestJobListSchema';

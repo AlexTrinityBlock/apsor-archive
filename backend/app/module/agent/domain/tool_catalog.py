@@ -11,6 +11,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.module.agent.domain.tool_args import (
+    HistoryMessageArgs,
     PresentResourceArgs,
     ReadFileArgs,
     ReadMemoryArgs,
@@ -32,9 +33,10 @@ PROMPT_VERSION = "archive-agent-v13"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
-# v6 still validate. Existing conversations keep their frozen pi.system snapshot
-# and their hidden legacy offset/max_chars fields.
-TOOLS_VERSION = "archive-tools-v7"
+# v6 still validate. v8 adds the conversation-history lane to search_knowledge
+# and the read-only history_message tool. Existing conversations keep their
+# frozen pi.system snapshot.
+TOOLS_VERSION = "archive-tools-v8"
 
 
 @dataclass(frozen=True)
@@ -77,9 +79,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="search_knowledge",
         description=(
-            "Search the archive for files, memories, and periodic summaries. "
-            "Use this before making factual claims. Results carry source labels "
-            "such as [file:10#2] and [memory:7]."
+            "Search the archive for files, memories, periodic summaries, and "
+            "past conversation windows. Use this before making factual claims. "
+            "Results carry source labels such as [file:10#2], [memory:7], and "
+            "[history:123]. A history hit is a raw 256-character window; use "
+            "history_message with its id when the excerpt is not enough."
         ),
         args_model=SearchKnowledgeArgs,
     ),
@@ -114,6 +118,16 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "and deprecation history. Cite it as [memory:id]."
         ),
         args_model=ReadMemoryArgs,
+    ),
+    ToolSpec(
+        name="history_message",
+        description=(
+            "Read one past conversation message by its stable entry id, with "
+            "optional neighbouring messages. search_knowledge returns history "
+            "windows as <history_message id=\"...\">; use that id here when the "
+            "window is not enough. Cite the message as [history:id]."
+        ),
+        args_model=HistoryMessageArgs,
     ),
     ToolSpec(
         name="save_memory",

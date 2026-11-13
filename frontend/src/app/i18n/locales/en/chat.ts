@@ -553,7 +553,7 @@ export const chat = {
         "The range was sampled, but no memory, summary, or file event fell inside it.",
     },
     search: {
-      liveDetail: "Searching files, memories, and summaries.",
+      liveDetail: "Searching files, memories, summaries, and past conversations.",
       errorTitle: "The search did not return",
       noPreviewTitle: "No structured search preview",
       noPreviewDetail:
@@ -563,10 +563,14 @@ export const chat = {
       fileLeaves: "File leaves",
       memoryLeaves: "Memory leaves",
       seasonSummaries: "Season summaries",
+      historyMessages: "Conversation windows",
       fileEmpty: "No file leaves in this pass.",
       memoryEmpty: "No memory leaves in this pass.",
       summaryEmpty: "No season summaries in this pass.",
+      historyEmpty: "No past conversation windows in this pass.",
       summaryFallback: "summary",
+      historyFallback: "history",
+      historyWindow: "Window #{chunk}",
       noExcerpt: "No inline excerpt was recorded for this result.",
       viewResult: "View result",
     },
