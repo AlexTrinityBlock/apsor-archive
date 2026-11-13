@@ -323,6 +323,24 @@ def test_deleted_conversation_is_retired_from_history_search(
     assert after.json()["history_results"] == []
 
 
+def test_unrelated_query_does_not_fill_history_slots(client: TestClient) -> None:
+    conversation_id = create_conversation(client)
+    client.app.state.agent_chat_generator = FakeChatGenerator.from_texts("Noted.")
+    send_turn(
+        client,
+        conversation_id,
+        "The archive notes describe local weather and a brass orrery.",
+    )
+    index_all(client)
+
+    response = client.get(
+        "/api/v1/search",
+        params={"query": "qwertyuiop", "result_number": 2},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["history_results"] == []
+
+
 def test_history_message_rejects_unknown_entry(client: TestClient) -> None:
     conversation_id = create_conversation(client)
     client.app.state.agent_chat_generator = FakeChatGenerator(

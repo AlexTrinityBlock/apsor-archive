@@ -13,9 +13,14 @@ HISTORY_WINDOW_STRIDE_CHARS = HISTORY_WINDOW_CHARS - HISTORY_WINDOW_OVERLAP_CHAR
 HISTORY_VECTOR_RECALL_LIMIT = 128
 HISTORY_RESULT_LIMIT = 15
 HISTORY_RRF_K = 60.0
+# A final relevance floor for the history lane. BM25-positive hits always pass;
+# otherwise the cosine score must clear this baseline. Without it, an unrelated
+# query still fills all 15 slots with short transcript fragments.
+HISTORY_MIN_VECTOR_SIMILARITY = 0.4
 
 
 __all__ = [
+    "HISTORY_MIN_VECTOR_SIMILARITY",
     "HISTORY_RESULT_LIMIT",
     "HISTORY_RRF_K",
     "HISTORY_VECTOR_RECALL_LIMIT",
