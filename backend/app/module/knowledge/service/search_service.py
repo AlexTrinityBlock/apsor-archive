@@ -35,6 +35,7 @@ from app.module.knowledge.schema.search_schema import (
 )
 from app.module.knowledge.service.cache_keys import user_cache_key, user_version_scope
 from app.shared.retrieval import (
+    HISTORY_MIN_VECTOR_CONTENT_CHARS,
     HISTORY_MIN_VECTOR_SIMILARITY,
     HISTORY_RESULT_LIMIT,
     HISTORY_RRF_K,
@@ -258,8 +259,16 @@ class SearchService:
             if chunk is None or chunk.source_kind != SOURCE_HISTORY:
                 continue
             text_score = text_scores.get(chunk_id)
+            has_text_match = text_score is not None and text_score > 0
+            if (
+                not has_text_match
+                and len(chunk.content.strip()) < HISTORY_MIN_VECTOR_CONTENT_CHARS
+            ):
+                # A short acknowledgement is not useful conversation memory,
+                # even when its embedding baseline clears the cosine floor.
+                continue
             matched: list[MatchSource] = []
-            if text_score is not None and text_score > 0:
+            if has_text_match:
                 matched.append("text")
             if chunk_id in vector_scores:
                 matched.append("vector")
