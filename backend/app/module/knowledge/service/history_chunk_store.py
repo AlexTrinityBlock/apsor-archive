@@ -44,15 +44,23 @@ class HistoryChunkStore:
         drafts: Sequence[ChunkDraft],
     ) -> int:
         """Replace every stored window for one immutable entry id."""
-        await self.chunk_repository.delete_source(SOURCE_HISTORY, source_id)
-        if not drafts:
+        return await self.replace_many([(source_id, drafts)])
+
+    async def replace_many(
+        self,
+        sources: Sequence[tuple[int, Sequence[ChunkDraft]]],
+    ) -> int:
+        """Replace windows for several entries, sharing embedding batches."""
+        for source_id, _drafts in sources:
+            await self.chunk_repository.delete_source(SOURCE_HISTORY, source_id)
+        prepared = [
+            (SOURCE_HISTORY, source_id, drafts)
+            for source_id, drafts in sources
+            if drafts
+        ]
+        if not prepared:
             return 0
-        return await self.indexer.index_chunks(
-            source_kind=SOURCE_HISTORY,
-            source_id=source_id,
-            drafts=list(drafts),
-            is_current=True,
-        )
+        return await self.indexer.index_many_sources(prepared, is_current=True)
 
     async def mark_sources_not_current(self, source_ids: Sequence[int]) -> None:
         """Hide history windows whose conversation was deleted."""

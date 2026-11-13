@@ -23,6 +23,11 @@ class HistoryChunkStoreProtocol(Protocol):
         drafts: Sequence[ChunkDraft],
     ) -> int: ...
 
+    async def replace_many(
+        self,
+        sources: Sequence[tuple[int, Sequence[ChunkDraft]]],
+    ) -> int: ...
+
     async def mark_sources_not_current(self, source_ids: Sequence[int]) -> None: ...
 
 
