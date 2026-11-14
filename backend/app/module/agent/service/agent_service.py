@@ -96,7 +96,9 @@ from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
 
-CITATION_PATTERN = re.compile(r"\[(?:file|memory|summary):\d+(?:#\d+)?\]")
+CITATION_PATTERN = re.compile(
+    r"\[(?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+)\]"
+)
 _PAGE_CONTEXT_LINE_WS = re.compile(r"[ \t\f\v]+")
 _PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")
 LIMIT_CODES = frozenset(

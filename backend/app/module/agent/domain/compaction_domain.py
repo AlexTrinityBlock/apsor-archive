@@ -35,7 +35,9 @@ MAX_SUMMARY_ITEM_CHARS = 280
 MAX_COMPACTION_CARRY_CHARS = 1_200
 MAX_SUMMARY_ITEMS = 40
 CHARS_PER_ESTIMATED_TOKEN = 3
-_CITATION_PATTERN = re.compile(r"\[(?:file|memory|summary):\d+(?:#\d+)?\]")
+_CITATION_PATTERN = re.compile(
+    r"\[(?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+)\]"
+)
 
 
 def active_context_entries(
