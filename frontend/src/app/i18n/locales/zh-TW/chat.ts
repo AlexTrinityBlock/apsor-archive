@@ -305,6 +305,8 @@ export const chat = {
     fileId: "檔案：#{id}",
     memoryTitle: "記憶：{title}",
     memoryId: "記憶：#{id}",
+    historyExcerpt: "對話記憶：{excerpt}",
+    historyId: "對話記憶：#{id}",
     archiveCitation: "檔案館引用 {label}",
   },
   resource: {

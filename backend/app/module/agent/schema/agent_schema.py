@@ -20,6 +20,7 @@ AgentEntryKind = Literal[
 ]
 AgentRunStatus = Literal["running", "waiting", "completed", "failed", "cancelled"]
 AgentApprovalStatus = Literal["pending", "approved", "rejected", "expired"]
+AgentHistoryRole = Literal["user", "assistant"]
 
 
 class AgentConversationCreateSchema(BaseModel):
@@ -147,6 +148,24 @@ class AgentConversationDetailSchema(AgentConversationSchema):
     entries_next_after_id: int | None
     entries_has_more: bool
     last_page_context_key: str | None = None
+
+
+class AgentHistoryMessageSchema(BaseModel):
+    """One cited past message, deliberately without its neighbours.
+
+    The browser needs only enough context to label a ``[history:id]`` citation
+    and link to the source conversation. It never receives a transcript window
+    from this endpoint.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    entry_id: int
+    conversation_id: int
+    conversation_title: str
+    role: AgentHistoryRole
+    created_at: datetime
+    content: str
 
 
 class AgentRunSchema(BaseModel):

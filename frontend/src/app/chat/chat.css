@@ -795,6 +795,13 @@
 
 .chat-entry {
   min-width: 0;
+  scroll-margin-block: 24px;
+}
+
+.chat-entry.is-highlighted {
+  border-radius: 6px;
+  outline: 1.5px solid color-mix(in srgb, var(--accent-moss) 55%, transparent);
+  outline-offset: 6px;
 }
 
 .chat-entry__actions {

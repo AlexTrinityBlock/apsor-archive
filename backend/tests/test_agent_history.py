@@ -377,3 +377,110 @@ def test_history_indexer_is_idempotent(client: TestClient, owner_engine: Engine)
             text("SELECT count(*) FROM chunk WHERE source_kind = 'history'")
         ).scalar_one()
     assert int(count) >= 2
+
+
+def read_history_message(client: TestClient, entry_id: int) -> dict[str, Any]:
+    response = client.get(f"/api/v1/agent/history/{entry_id}")
+    assert response.status_code == 200, response.text
+    return dict(response.json())
+
+
+def test_history_message_endpoint_returns_one_owner_message(
+    client: TestClient,
+) -> None:
+    conversation_id = create_conversation(client, "Cited history")
+    client.app.state.agent_chat_generator = FakeChatGenerator.from_texts(
+        "You prefer orange cats."
+    )
+    send_turn(client, conversation_id, "I like orange cats, no memory.")
+
+    user_entry = entry_of_kind(client, conversation_id, "pi.user")
+    assistant_entry = entry_of_kind(client, conversation_id, "pi.assistant")
+
+    user_message = read_history_message(client, int(user_entry["id"]))
+    assert set(user_message) == {
+        "entry_id",
+        "conversation_id",
+        "conversation_title",
+        "role",
+        "created_at",
+        "content",
+    }
+    assert user_message["entry_id"] == int(user_entry["id"])
+    assert user_message["conversation_id"] == conversation_id
+    assert user_message["conversation_title"] == "Cited history"
+    assert user_message["role"] == "user"
+    assert user_message["content"] == "I like orange cats, no memory."
+    assert user_message["created_at"]
+
+    assistant_message = read_history_message(client, int(assistant_entry["id"]))
+    assert assistant_message["entry_id"] == int(assistant_entry["id"])
+    assert assistant_message["conversation_id"] == conversation_id
+    assert assistant_message["role"] == "assistant"
+    assert assistant_message["content"] == "You prefer orange cats."
+
+
+def test_history_message_endpoint_is_owner_scoped(
+    user_client_factory: Callable[..., UserClient],
+) -> None:
+    alice = user_client_factory("alice")
+    bob = user_client_factory("bob")
+    conversation_id = create_conversation(alice.client, "Alice history")
+    alice.client.app.state.agent_chat_generator = FakeChatGenerator.from_texts("Noted.")
+    send_turn(alice.client, conversation_id, "alicecobalt private note")
+    alice_entry = entry_of_kind(alice.client, conversation_id, "pi.user")
+
+    forbidden = bob.client.get(f"/api/v1/agent/history/{alice_entry['id']}")
+    assert forbidden.status_code == 404, forbidden.text
+    assert forbidden.json()["error"] == "agent_history_message_not_found"
+
+    own = read_history_message(alice.client, int(alice_entry["id"]))
+    assert own["conversation_id"] == conversation_id
+
+
+def test_history_message_endpoint_rejects_unknown_and_invalid_ids(
+    client: TestClient,
+) -> None:
+    missing = client.get("/api/v1/agent/history/999999")
+    assert missing.status_code == 404, missing.text
+    assert missing.json()["error"] == "agent_history_message_not_found"
+
+    invalid = client.get("/api/v1/agent/history/0")
+    assert invalid.status_code == 400, invalid.text
+    assert invalid.json()["error"] == "invalid_request"
+
+
+def test_history_message_endpoint_hides_soft_deleted_conversation(
+    client: TestClient,
+) -> None:
+    conversation_id = create_conversation(client, "Soon deleted")
+    client.app.state.agent_chat_generator = FakeChatGenerator.from_texts("Noted.")
+    send_turn(client, conversation_id, "This message will be retired.")
+    user_entry = entry_of_kind(client, conversation_id, "pi.user")
+
+    deleted = client.delete(f"/api/v1/agent/conversations/{conversation_id}")
+    assert deleted.status_code == 204, deleted.text
+
+    response = client.get(f"/api/v1/agent/history/{user_entry['id']}")
+    assert response.status_code == 404, response.text
+    assert response.json()["error"] == "agent_history_message_not_found"
+
+
+def test_history_citation_is_recorded_in_assistant_metadata(
+    client: TestClient,
+) -> None:
+    earlier_conversation = create_conversation(client, "Earlier conversation")
+    client.app.state.agent_chat_generator = FakeChatGenerator.from_texts("Noted.")
+    send_turn(client, earlier_conversation, "I like orange cats, no memory.")
+    cited_entry = entry_of_kind(client, earlier_conversation, "pi.user")
+
+    token = f"[history:{cited_entry['id']}]"
+    asking_conversation = create_conversation(client, "Follow-up")
+    client.app.state.agent_chat_generator = FakeChatGenerator.from_texts(
+        f'This came from an earlier conversation: "I like orange cats, no memory."{token}'
+    )
+    turn = send_turn(client, asking_conversation, "Where did that come from?")
+
+    assistant_entry = turn["assistant_entry"]
+    assert assistant_entry is not None
+    assert token in assistant_entry["data"]["citations"]

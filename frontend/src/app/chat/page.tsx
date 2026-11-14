@@ -81,6 +81,8 @@ import "../agent/agent.css";
 const PAGE_SIZE = 200;
 const NO_ENTRIES: readonly AgentEntrySchema[] = [];
 const NARROW_QUERY = "(max-width: 899px)";
+const ENTRY_HASH = /^#entry-(\d+)$/;
+const ENTRY_HIGHLIGHT_MS = 2_000;
 
 function parseConversationId(value: string | undefined): number | null {
   if (!value || !/^\d+$/.test(value)) {
@@ -224,6 +226,9 @@ export function ChatPage() {
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("telemetry");
   const [previewTarget, setPreviewTarget] = useState<ResourceTarget | null>(null);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const [highlightedEntryId, setHighlightedEntryId] = useState<number | null>(
+    null,
+  );
   const [draftState, setDraftState] = useState<{
     readonly id: number | null;
     readonly value: string;
@@ -254,6 +259,8 @@ export function ChatPage() {
   const [extraLoading, setExtraLoading] = useState(false);
   const [extraError, setExtraError] = useState<string | null>(null);
   const handledRouteDraft = useRef<string | null>(null);
+  const handledEntryHash = useRef<string | null>(null);
+  const entryHighlightTimer = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const extraInFlightRef = useRef(false);
   const stickToBottomRef = useRef(true);
@@ -788,6 +795,58 @@ export function ChatPage() {
     streamToolCount,
   ]);
 
+  // A history citation deep-links to one message. The target may arrive with
+  // the first conversation page, so `entries` is a dependency; the handled key
+  // then prevents later streaming updates from scrolling the reader away.
+  // Entries outside the loaded page are not fetched here: the reader can use
+  // the existing "load more" control and the hash stays in the URL.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const match = ENTRY_HASH.exec(location.hash);
+    const parsedId = match ? Number(match[1]) : NaN;
+    const targetId =
+      Number.isSafeInteger(parsedId) && parsedId > 0 ? parsedId : null;
+    if (targetId === null) {
+      handledEntryHash.current = null;
+      setHighlightedEntryId(null);
+      return;
+    }
+    const key = `${conversationId ?? 0}:${location.hash}`;
+    if (handledEntryHash.current === key) {
+      return;
+    }
+    // Wait until the entry is actually in the rendered page before scrolling.
+    if (!entries.some((entry) => entry.id === targetId)) {
+      return;
+    }
+    const target = document.getElementById(`entry-${targetId}`);
+    if (!target) {
+      return;
+    }
+    handledEntryHash.current = key;
+    stickToBottomRef.current = false;
+    target.scrollIntoView({ block: "center" });
+    setHighlightedEntryId(targetId);
+    if (entryHighlightTimer.current !== null) {
+      window.clearTimeout(entryHighlightTimer.current);
+    }
+    entryHighlightTimer.current = window.setTimeout(() => {
+      setHighlightedEntryId(null);
+      entryHighlightTimer.current = null;
+    }, ENTRY_HIGHLIGHT_MS);
+  }, [conversationId, entries, location.hash]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(
+    () => () => {
+      if (entryHighlightTimer.current !== null) {
+        window.clearTimeout(entryHighlightTimer.current);
+        entryHighlightTimer.current = null;
+      }
+    },
+    [],
+  );
+
   const submit = async (value: string) => {
     const trimmed = value.trim();
     if (attachmentsPending) {
@@ -1077,6 +1136,7 @@ export function ChatPage() {
           onSelectTrace={handleSelectTrace}
           onOpenCitation={handleOpenCitation}
           onOpenResource={handleOpenResource}
+          highlightedEntryId={highlightedEntryId}
         />
         <ApprovalStack
           approvals={pendingApprovals}

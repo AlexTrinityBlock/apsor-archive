@@ -1025,6 +1025,10 @@
   border-left: 2.5px solid var(--accent-ochre);
 }
 
+.citation-chip.history {
+  border-left: 2.5px solid var(--accent-moss);
+}
+
 .citation-chip.media {
   border-left: 2.5px solid var(--accent-moss);
 }
@@ -1259,7 +1263,8 @@
   white-space: nowrap;
 }
 
-.citation-chip.memory .citation-chip__label {
+.citation-chip.memory .citation-chip__label,
+.citation-chip.history .citation-chip__label {
   font-weight: 500;
 }
 
