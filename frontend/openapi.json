@@ -934,6 +934,50 @@
         "title": "AgentEntrySchema",
         "type": "object"
       },
+      "AgentHistoryMessageSchema": {
+        "description": "One cited past message, deliberately without its neighbours.\n\nThe browser needs only enough context to label a ``[history:id]`` citation\nand link to the source conversation. It never receives a transcript window\nfrom this endpoint.",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "integer"
+          },
+          "conversation_title": {
+            "title": "Conversation Title",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "entry_id": {
+            "title": "Entry Id",
+            "type": "integer"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "conversation_id",
+          "conversation_title",
+          "role",
+          "created_at",
+          "content"
+        ],
+        "title": "AgentHistoryMessageSchema",
+        "type": "object"
+      },
       "AgentMessageCreateSchema": {
         "additionalProperties": false,
         "description": "Append one user entry and start a run.",
@@ -6962,6 +7006,50 @@
           }
         },
         "summary": "Retry Run",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/history/{entry_id}": {
+      "get": {
+        "description": "Return one user/assistant message for a ``[history:id]`` citation.\n\nMissing, deleted, and another account's entries all use the same 404\ncontract, and the endpoint deliberately returns no neighbouring messages.",
+        "operationId": "getAgentHistoryMessage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Entry Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentHistoryMessageSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get History Message",
         "tags": [
           "agent"
         ]

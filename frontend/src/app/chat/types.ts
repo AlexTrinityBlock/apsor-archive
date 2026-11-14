@@ -14,7 +14,7 @@ import { getActiveLocale, translate, type Locale } from "../i18n";
 export type JsonRecord = Record<string, unknown>;
 
 export interface CitationToken {
-  readonly kind: "file" | "memory" | "summary";
+  readonly kind: "file" | "memory" | "summary" | "history";
   readonly id: number;
   readonly chunk: number | null;
 }
@@ -534,7 +534,7 @@ export function safeViewerPath(value: unknown): string | null {
 // The alternatives are literal and each digit run is anchored, so this is
 // linear in the label length; the security plugin flags it heuristically.
 // eslint-disable-next-line security/detect-unsafe-regex
-const CITATION_LABEL = /^\[(file|memory|summary):(\d+)(?:#(\d+))?\]$/;
+const CITATION_LABEL = /^\[(file|memory|summary|history):(\d+)(?:#(\d+))?\]$/;
 
 export function parseCitationLabel(value: string): CitationToken | null {
   const match = CITATION_LABEL.exec(value.trim());
@@ -545,9 +545,14 @@ export function parseCitationLabel(value: string): CitationToken | null {
   const id = Number(match[2]);
   const chunk = match[3] ? Number(match[3]) : null;
   if (
-    (kind !== "file" && kind !== "memory" && kind !== "summary") ||
+    (kind !== "file" &&
+      kind !== "memory" &&
+      kind !== "summary" &&
+      kind !== "history") ||
     !Number.isSafeInteger(id) ||
     id <= 0 ||
+    // A history token addresses one immutable message, never a chunk.
+    (kind === "history" && chunk !== null) ||
     (chunk !== null && (!Number.isSafeInteger(chunk) || chunk <= 0))
   ) {
     return null;
@@ -567,6 +572,8 @@ export function citationHref(token: CitationToken): string | null {
   if (token.kind === "memory") {
     return `/memory/${token.id}`;
   }
+  // History chips resolve their conversation URL after fetching the message;
+  // summary chips have no standalone destination either.
   return null;
 }
 

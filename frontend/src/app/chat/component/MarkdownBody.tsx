@@ -9,6 +9,7 @@ import { useI18n, type Translate } from "../../i18n";
 import type { CitationToken } from "../types";
 
 const SUMMARY_HREF = /^#citation-summary-(\d+)$/;
+const HISTORY_HREF = /^#citation-history-(\d+)$/;
 const MEMORY_HREF = /^\/memory\/(\d+)\/?$/;
 const VIEWER_HREF = /^\/viewer\/(file|memory)\/(\d+)\/?$/;
 const LIBRARY_FILE_HREF = /^\/library\/(?:media\/)?files\/(\d+)\/?$/;
@@ -22,6 +23,12 @@ function positiveId(value: string | null): number | null {
 }
 
 function citationFromHref(href: string): CitationToken | null {
+  const history = HISTORY_HREF.exec(href);
+  if (history) {
+    const id = positiveId(history[1]);
+    return id === null ? null : { kind: "history", id, chunk: null };
+  }
+
   const summary = SUMMARY_HREF.exec(href);
   if (summary) {
     const id = positiveId(summary[1]);

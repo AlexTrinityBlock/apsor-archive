@@ -304,6 +304,8 @@ export const chat = {
     fileId: "文件：#{id}",
     memoryTitle: "记忆：{title}",
     memoryId: "记忆：#{id}",
+    historyExcerpt: "对话记忆：{excerpt}",
+    historyId: "对话记忆：#{id}",
     archiveCitation: "档案馆引用 {label}",
   },
   resource: {

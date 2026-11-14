@@ -35,6 +35,7 @@ interface ChatThreadProps {
   readonly onSelectTrace?: (traceId: string) => void;
   readonly onOpenCitation?: (token: CitationToken) => void;
   readonly onOpenResource?: (resource: ResourceMeta) => void;
+  readonly highlightedEntryId?: number | null;
 }
 
 function ForkEntryAction({
@@ -180,6 +181,7 @@ export const ChatThread = memo(function ChatThread({
   onSelectTrace,
   onOpenCitation,
   onOpenResource,
+  highlightedEntryId = null,
 }: ChatThreadProps) {
   const toolResults = useMemo(() => {
     const result = new Map<string, ToolResultInfo>();
@@ -227,7 +229,15 @@ export const ChatThread = memo(function ChatThread({
     <div className="chat-thread">
       <div className="chat-thread__list">
         {visible.map((entry) => (
-          <div className="chat-entry" key={entry.id}>
+          <div
+            className={
+              entry.id === highlightedEntryId
+                ? "chat-entry is-highlighted"
+                : "chat-entry"
+            }
+            id={`entry-${entry.id}`}
+            key={entry.id}
+          >
             <ThreadEntry
               entry={entry}
               toolResults={toolResults}

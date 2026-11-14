@@ -1,7 +1,7 @@
 /**
- * Turns `[file:10#2]`, `[memory:7]`, and `[summary:4]` text into ordinary
- * Markdown link nodes before rendering. Code, existing links, and images are
- * left untouched, so the transform cannot create nested links.
+ * Turns `[file:10#2]`, `[memory:7]`, `[summary:4]`, and `[history:123]` text
+ * into ordinary Markdown link nodes before rendering. Code, existing links, and
+ * images are left untouched, so the transform cannot create nested links.
  */
 import type { Parent, PhrasingContent, Root, RootContent, Text } from "mdast";
 
@@ -10,7 +10,7 @@ import { getActiveLocale, translate } from "../../i18n";
 
 // Literal alternatives plus one digit run: linear, but flagged heuristically.
 // eslint-disable-next-line security/detect-unsafe-regex
-const CITATION = /\[(?:file|memory|summary):\d+(?:#\d+)?\]/g;
+const CITATION = /\[(?:file|memory|summary|history):\d+(?:#\d+)?\]/g;
 const SKIP = new Set([
   "link",
   "linkReference",
@@ -40,7 +40,11 @@ function splitText(node: Text): PhrasingContent[] {
     }
     pieces.push({
       type: "link",
-      url: citationHref(token) ?? `#citation-summary-${token.id}`,
+      url:
+        citationHref(token) ??
+        (token.kind === "history"
+          ? `#citation-history-${token.id}`
+          : `#citation-summary-${token.id}`),
       title: translate(
         getActiveLocale(),
         "chat.citation.archiveCitation",

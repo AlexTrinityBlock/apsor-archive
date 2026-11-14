@@ -235,6 +235,22 @@ def get_chat_attachment_service(
     )
 
 
+def get_history_message_service(
+    request: Request,
+    user: UserSchema = Depends(require_authenticated),
+) -> AgentHistoryMessageService:
+    """Build an owner-bound read-only service for one cited message.
+
+    The service opens its own short owner-scoped session, so the HTTP route does
+    not need the request-scoped database transaction.
+    """
+    return AgentHistoryMessageService(
+        database=cast(Database, request.app.state.db),
+        user_id=user.user_id,
+        role=user.role,
+    )
+
+
 def get_agent_service(
     request: Request,
     user: UserSchema = Depends(require_stateless_authenticated),
@@ -326,6 +342,7 @@ __all__ = [
     "get_app_settings",
     "get_chat_attachment_service",
     "get_current_user_profile",
+    "get_history_message_service",
     "get_saved_question_ask_service",
     "get_saved_question_service",
     "get_system_prompt_admin_service",

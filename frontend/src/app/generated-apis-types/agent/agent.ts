@@ -33,6 +33,7 @@ import type {
   AgentConversationSchema,
   AgentEntryPageSchema,
   AgentEntrySchema,
+  AgentHistoryMessageSchema,
   AgentMessageCreateSchema,
   AgentRetrySchema,
   AgentSettingsReadSchema,
@@ -1805,7 +1806,111 @@ export const useRetryAgentRun = <TError = HTTPValidationError,
       > => {
       return useMutation(getRetryAgentRunMutationOptions(options), queryClient);
     }
-    export const getListSavedQuestionsUrl = (params?: ListSavedQuestionsParams,) => {
+    export const getGetAgentHistoryMessageUrl = (entryId: number,) => {
+
+
+
+
+  return `/api/v1/agent/history/${entryId}`
+}
+
+/**
+ * Return one user/assistant message for a ``[history:id]`` citation.
+ *
+ * Missing, deleted, and another account's entries all use the same 404
+ * contract, and the endpoint deliberately returns no neighbouring messages.
+ * @summary Get History Message
+ */
+export const getAgentHistoryMessage = async (entryId: number, options?: Parameters<typeof apiFetch>[1]): Promise<AgentHistoryMessageSchema> => {
+
+  return apiFetch<AgentHistoryMessageSchema>(getGetAgentHistoryMessageUrl(entryId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAgentHistoryMessageQueryKey = (entryId: number,) => {
+    return [
+    `/api/v1/agent/history/${entryId}`
+    ] as const;
+    }
+
+
+export const getGetAgentHistoryMessageQueryOptions = <TData = Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError = HTTPValidationError>(entryId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAgentHistoryMessageQueryKey(entryId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAgentHistoryMessage>>> = ({ signal }) => getAgentHistoryMessage(entryId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: entryId !== null && entryId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAgentHistoryMessageQueryResult = NonNullable<Awaited<ReturnType<typeof getAgentHistoryMessage>>>
+export type GetAgentHistoryMessageQueryError = HTTPValidationError
+
+
+export function useGetAgentHistoryMessage<TData = Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError = HTTPValidationError>(
+ entryId: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAgentHistoryMessage>>,
+          TError,
+          Awaited<ReturnType<typeof getAgentHistoryMessage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAgentHistoryMessage<TData = Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError = HTTPValidationError>(
+ entryId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAgentHistoryMessage>>,
+          TError,
+          Awaited<ReturnType<typeof getAgentHistoryMessage>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAgentHistoryMessage<TData = Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError = HTTPValidationError>(
+ entryId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get History Message
+ */
+
+export function useGetAgentHistoryMessage<TData = Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError = HTTPValidationError>(
+ entryId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAgentHistoryMessage>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetAgentHistoryMessageQueryOptions(entryId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListSavedQuestionsUrl = (params?: ListSavedQuestionsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {

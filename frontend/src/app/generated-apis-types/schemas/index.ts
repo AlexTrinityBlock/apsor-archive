@@ -32,6 +32,8 @@ export * from './agentEntrySchemaData';
 export * from './agentEntrySchemaEdits';
 export * from './agentEntrySchemaKind';
 export * from './agentEntrySchemaModel';
+export * from './agentHistoryMessageSchema';
+export * from './agentHistoryMessageSchemaRole';
 export * from './agentMessageCreateSchema';
 export * from './agentPageContextSchema';
 export * from './agentRetrySchema';

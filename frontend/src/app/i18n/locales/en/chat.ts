@@ -319,6 +319,8 @@ export const chat = {
     fileId: "File: #{id}",
     memoryTitle: "Memory: {title}",
     memoryId: "Memory: #{id}",
+    historyExcerpt: "Conversation: {excerpt}",
+    historyId: "Conversation: #{id}",
     archiveCitation: "Archive citation {label}",
   },
   resource: {
