@@ -567,9 +567,9 @@ export function PdfView({ fileUrl, fileName, downloadUrl }: PdfViewProps) {
   return (
     <div
       ref={viewerRef}
-      className={
-        fullscreenActive ? "viewer-pdf viewer-pdf--fullscreen" : "viewer-pdf"
-      }
+      className={`viewer-pdf${fullscreenActive ? " viewer-pdf--fullscreen" : ""}${
+        numPages === 0 ? " viewer-pdf--loading" : ""
+      }`}
       role={fullscreenActive ? "dialog" : undefined}
       aria-modal={fullscreenActive ? true : undefined}
       aria-label={fullscreenActive ? fileName : undefined}

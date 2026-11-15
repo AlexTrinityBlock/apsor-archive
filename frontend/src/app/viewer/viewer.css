@@ -647,6 +647,20 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Before the document reports a page count, the loading message is the only
+   content in the surface. Hold a stable frame so the footer sits at the bottom
+   instead of floating directly under the short message. */
+.viewer-pdf--loading {
+  min-height: min(68dvh, 760px);
+}
+
+.viewer-pdf--loading .viewer-pdf__scroll {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-items: center;
+}
+
 /* Use block layout so the document grows to the page's real width. A flex item
    here can collapse to the scroll container width while the page itself stays
    wider, clipping the left edge and making it unreachable on mobile. */
