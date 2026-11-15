@@ -519,9 +519,8 @@ export const library = {
       openRaw: "開啟原始內容",
     },
     pdf: {
-      previousPage: "上一頁",
-      nextPage: "下一頁",
-      pageNumber: "頁碼",
+      scrollHint: "捲動閱讀",
+      pageOf: "第 {page} 頁，共 {total} 頁",
       fitWidth: "符合寬度",
       resetZoom: "重設為 100%",
       resetZoomLabel: "重設為 100%（目前 {value}%）",
@@ -529,7 +528,7 @@ export const library = {
       exitFullscreen: "結束全螢幕",
       errorOriginal: "無法讀取 PDF 原始檔",
       errorLayout: "PDF.js 無法排版這份文件",
-      foot: "PDF.js {version} · 已啟用文字層 · 已停用指令碼評估",
+      foot: "PDF.js {version} · 已啟用文字層 · 頁面隨捲動載入 · 已停用指令碼評估",
     },
     docx: {
       frameUnavailable: "無法使用沙箱預覽框架。",

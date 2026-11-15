@@ -82,7 +82,7 @@ function rendererFor(file: FileSchema): ReactNode {
     case "pdf":
       return (
         <PdfView
-          fileId={file.id}
+          key={file.id}
           fileUrl={contentUrl}
           fileName={file.file_name}
           downloadUrl={fileDownloadUrl(file.id)}

@@ -95,7 +95,7 @@ export async function fetchViewerText(url: string, signal?: AbortSignal): Promis
   return response.text();
 }
 
-/** Fetch an original binary for DOCX or PDF rendering. */
+/** Fetch a stored original for DOCX rendering. */
 export async function fetchViewerBinary(
   url: string,
   signal?: AbortSignal,

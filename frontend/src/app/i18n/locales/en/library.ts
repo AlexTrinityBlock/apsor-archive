@@ -527,9 +527,8 @@ export const library = {
       openRaw: "Open raw content",
     },
     pdf: {
-      previousPage: "Previous page",
-      nextPage: "Next page",
-      pageNumber: "Page number",
+      scrollHint: "Scroll to read",
+      pageOf: "Page {page} of {total}",
       fitWidth: "Fit width",
       resetZoom: "Reset to 100%",
       resetZoomLabel: "Reset to 100% · currently {value}%",
@@ -537,7 +536,7 @@ export const library = {
       exitFullscreen: "Exit full screen",
       errorOriginal: "The PDF original could not be read",
       errorLayout: "PDF.js could not lay out this document",
-      foot: "PDF.js {version} · text layer enabled · script evaluation disabled",
+      foot: "PDF.js {version} · text layer enabled · pages load as you scroll · script evaluation disabled",
     },
     docx: {
       frameUnavailable: "The sandboxed preview frame was not available.",

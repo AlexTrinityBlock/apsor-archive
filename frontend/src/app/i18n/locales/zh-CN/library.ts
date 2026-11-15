@@ -519,9 +519,8 @@ export const library = {
       openRaw: "打开原始内容",
     },
     pdf: {
-      previousPage: "上一页",
-      nextPage: "下一页",
-      pageNumber: "页码",
+      scrollHint: "滚动阅读",
+      pageOf: "第 {page} 页，共 {total} 页",
       fitWidth: "适应宽度",
       resetZoom: "重置为 100%",
       resetZoomLabel: "重置为 100%（当前 {value}%）",
@@ -529,7 +528,7 @@ export const library = {
       exitFullscreen: "退出全屏",
       errorOriginal: "无法读取 PDF 原始文件",
       errorLayout: "PDF.js 无法排版此文档",
-      foot: "PDF.js {version} · 已启用文本层 · 已禁用脚本求值",
+      foot: "PDF.js {version} · 已启用文本层 · 页面随滚动加载 · 已禁用脚本求值",
     },
     docx: {
       frameUnavailable: "无法使用沙箱预览框架。",

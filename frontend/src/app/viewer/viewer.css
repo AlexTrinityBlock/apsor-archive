@@ -3,10 +3,6 @@
    No standalone viewer shell: these surfaces live inside the app.
    ========================================================================== */
 
-.viewer-back-icon {
-  transform: rotate(180deg);
-}
-
 /* --------------------------------------------------------------------------
    Loading and error states
    -------------------------------------------------------------------------- */
@@ -565,6 +561,9 @@
    -------------------------------------------------------------------------- */
 
 .viewer-pdf {
+  /* Matches the canvas background passed to each react-pdf page. */
+  --viewer-pdf-paper: #fdfaf3;
+
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -574,7 +573,8 @@
   border-radius: 5px;
 }
 
-/* Keep page navigation reachable while the modal body scrolls a tall page. */
+/* Keep the page indicator and zoom controls reachable while the modal body
+   scrolls the continuous page stream. */
 .viewer-pdf__bar {
   position: sticky;
   top: 0;
@@ -595,30 +595,28 @@
   gap: 1px;
 }
 
-.viewer-pdf__page-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
+.viewer-pdf__page-status {
+  gap: 6px;
   color: var(--mono-muted);
   font-family: var(--mono-font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.viewer-pdf__page-field input {
-  width: 48px;
-  height: 27px;
-  padding: 0 3px;
+.viewer-pdf__scroll-icon {
+  color: var(--mono-faint);
+}
+
+.viewer-pdf__scroll-hint {
+  color: var(--mono-muted);
+}
+
+.viewer-pdf__page-count {
   color: var(--mono-ink);
-  background: var(--mono-card-bg);
-  border: 0.7px solid var(--mono-grid);
-  border-radius: 3px;
-  font-family: var(--mono-font-mono);
-  font-size: 10.5px;
-  text-align: center;
-}
-
-.viewer-pdf__page-field input:focus-visible {
-  border-color: var(--accent-seal);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
 }
 
 .viewer-pdf__zoom {
@@ -659,24 +657,56 @@
   margin-inline: auto;
 }
 
-.viewer-pdf__scroll .react-pdf__Page {
-  /* Shrink the page frame to the rendered canvas so a narrow page centers in
-     the viewer instead of leaving the canvas pinned to the left of a
-     full-width block. */
-  width: max-content;
-  max-width: none;
+/* Every page has a slot, so the scrollbar reflects the whole document even
+   while most slots hold only a placeholder. */
+.viewer-pdf__pages {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 100%;
+}
+
+.viewer-pdf__page-shell {
+  flex: none;
   margin-inline: auto;
-  background: #fdfaf3;
+  background: var(--viewer-pdf-paper);
   box-shadow:
     0 0 0 0.7px rgba(28, 28, 26, 0.14),
     0 16px 38px -30px rgba(28, 28, 26, 0.5);
+}
+
+.viewer-pdf__page-placeholder {
+  display: grid;
+  width: 100%;
+  place-items: center;
+  background: var(--viewer-pdf-paper);
+}
+
+.viewer-pdf__page-note {
+  color: var(--mono-faint);
+  font-family: var(--mono-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.viewer-pdf__scroll .react-pdf__Page {
+  /* Shrink the page frame to the rendered canvas so a narrow page centers in
+     the viewer instead of leaving the canvas pinned to the left of a
+     full-width block. The shell owns the paper background and shadow, so the
+     frame stays transparent before the canvas paints. */
+  width: max-content;
+  max-width: none;
+  margin-inline: auto;
+  background: transparent;
+  box-shadow: none;
 }
 
 .viewer-pdf__scroll .react-pdf__Page__textContent {
   user-select: text;
 }
 
-.viewer-pdf__scroll .react-pdf__message {
+.viewer-pdf__scroll .react-pdf__message,
+.viewer-pdf__message {
   padding: 16px;
   color: var(--mono-muted);
   font-family: var(--mono-font-mono);
@@ -929,6 +959,13 @@
 @media (max-width: 720px) {
   .viewer-pdf__bar {
     align-items: flex-start;
+  }
+
+  /* The passive counter stays; the explanatory hint would crowd the wrapped
+     toolbar on phones. */
+  .viewer-pdf__scroll-icon,
+  .viewer-pdf__scroll-hint {
+    display: none;
   }
 
   .viewer-pdf__foot {
