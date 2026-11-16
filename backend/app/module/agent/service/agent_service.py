@@ -127,7 +127,13 @@ DUPLICATE_PLOT_STOP_TEXT = (
 _PROVIDER_RETRY_DELAYS_SECONDS = (1.0, 3.0)
 # Two rejected tool calls in a row get an actionable retry notice; a third one
 # switches the next provider call to text-only so the run cannot burn its whole
-# step budget on the same invalid arguments.
+# step budget on the same invalid arguments. A copied redaction placeholder is
+# the same failure: the model ignored the targeted correction, so it counts
+# toward the breaker instead of resetting it. Any other tool outcome resets the
+# streak.
+_INVALID_ARGUMENT_ERROR_CODES = frozenset(
+    {"invalid_tool_arguments", "plot_figure_required"}
+)
 _INVALID_ARGUMENTS_NOTICE_THRESHOLD = 2
 _INVALID_ARGUMENTS_TEXT_ONLY_THRESHOLD = 3
 
@@ -1314,7 +1320,7 @@ class AgentService:
                     )
 
                 for _call, outcome in outcomes:
-                    if outcome.error_code == "invalid_tool_arguments":
+                    if outcome.error_code in _INVALID_ARGUMENT_ERROR_CODES:
                         invalid_arguments_streak += 1
                     else:
                         invalid_arguments_streak = 0
