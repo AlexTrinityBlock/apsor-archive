@@ -31,10 +31,14 @@ from app.module.agent.domain.xml_domain import attributes
 # Replaces one historical render_plot call in the provider projection. The
 # stored arguments are the redaction shape (title, caption, figure_summary);
 # replaying that shape teaches the model to copy it, so the call is removed and
-# only this note remains.
+# only one truthful note remains.
 _PLOT_HISTORY_NOTE = (
     "[Rendered a chart in an earlier step; the figure is omitted from history "
     "to save context.]"
+)
+_PLOT_HISTORY_FAILURE_NOTE = (
+    "[A render_plot call in an earlier step failed with {error_code}; its "
+    "figure and arguments are omitted from history.]"
 )
 
 
@@ -208,6 +212,9 @@ def _contributions(
     contributions: list[tuple[TranscriptEntry, list[dict[str, Any]]]] = []
     tool_results: dict[str, dict[str, Any]] = {}
     source_entry_ids: list[int] = []
+    # The plot projection needs the outcome before it reaches the assistant
+    # message that declared the call, so collect statuses up front.
+    result_statuses = _tool_result_statuses(entries)
 
     for entry in entries:
         if entry.kind == KIND_SYSTEM:
@@ -238,7 +245,7 @@ def _contributions(
         for message in messages:
             if message.get("role") == "system":
                 continue
-            _drop_redacted_plot_calls(message)
+            _drop_redacted_plot_calls(message, result_statuses)
             normal.append(message)
         if normal:
             if entry.kind == KIND_USER and isinstance(entry.data, dict):
@@ -254,32 +261,84 @@ def _contributions(
     return contributions, tool_results, source_entry_ids
 
 
-def _drop_redacted_plot_calls(message: dict[str, Any]) -> None:
+def _tool_result_statuses(
+    entries: Sequence[TranscriptEntry],
+) -> dict[str, tuple[str, str | None]]:
+    """Map every tool call id to its result's status and error code."""
+    statuses: dict[str, tuple[str, str | None]] = {}
+    for entry in entries:
+        if entry.kind != KIND_TOOL_RESULT:
+            continue
+        data = entry.data if isinstance(entry.data, dict) else {}
+        raw_status = data.get("status")
+        raw_error = data.get("error_code")
+        status = raw_status if isinstance(raw_status, str) else ""
+        error_code = raw_error if isinstance(raw_error, str) and raw_error else None
+        for message in entry.messages:
+            call_id = message.get("tool_call_id")
+            if message.get("role") == "tool" and isinstance(call_id, str):
+                statuses.setdefault(call_id, (status, error_code))
+    return statuses
+
+
+def _drop_redacted_plot_calls(
+    message: dict[str, Any],
+    result_statuses: Mapping[str, tuple[str, str | None]],
+) -> None:
     """Remove historical render_plot calls that only carry the redaction shape.
 
     Storage keeps a compact ``figure_summary`` in the assistant call instead of
     the full figure. Replaying that placeholder invites the model to copy it, so
     the provider projection drops the call. A message with no calls left keeps
-    its text and gains one short note; its orphaned result is dropped by
-    ``_assemble_messages``. Unparseable arguments are left untouched.
+    its text and gains one note that reflects the recorded outcome; its orphaned
+    result is dropped by ``_assemble_messages``. Unparseable arguments are left
+    untouched.
     """
     if message.get("role") != "assistant":
         return
     raw_calls = message.get("tool_calls")
     if not isinstance(raw_calls, list):
         return
-    kept = [call for call in raw_calls if not _is_redacted_plot_call(call)]
-    if len(kept) == len(raw_calls):
+    removed: list[dict[str, Any]] = []
+    kept: list[dict[str, Any]] = []
+    for call in raw_calls:
+        if _is_redacted_plot_call(call):
+            removed.append(call)
+        else:
+            kept.append(call)
+    if not removed:
         return
     if kept:
         message["tool_calls"] = kept
         return
     message.pop("tool_calls", None)
+    note = _plot_history_note(removed, result_statuses)
     content = message.get("content")
     if isinstance(content, str) and content.strip():
-        message["content"] = f"{content}\n\n{_PLOT_HISTORY_NOTE}"
+        message["content"] = f"{content}\n\n{note}"
     else:
-        message["content"] = _PLOT_HISTORY_NOTE
+        message["content"] = note
+
+
+def _plot_history_note(
+    calls: Sequence[Mapping[str, Any]],
+    result_statuses: Mapping[str, tuple[str, str | None]],
+) -> str:
+    """Return one honest note for every plot call removed from one message."""
+    failure_code: str | None = None
+    for call in calls:
+        call_id = call.get("id")
+        result = result_statuses.get(call_id) if isinstance(call_id, str) else None
+        if result is None:
+            if failure_code is None:
+                failure_code = "tool_result_missing"
+            continue
+        status, error_code = result
+        if status != "ok" and failure_code is None:
+            failure_code = error_code or "unknown_error"
+    if failure_code is not None:
+        return _PLOT_HISTORY_FAILURE_NOTE.format(error_code=failure_code)
+    return _PLOT_HISTORY_NOTE
 
 
 def _is_redacted_plot_call(call: object) -> bool:
