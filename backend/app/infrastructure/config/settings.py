@@ -145,7 +145,7 @@ class Settings(BaseSettings):
     # they use a separate, larger output budget. Zero disables the chat cap:
     # the chat payload omits max_tokens and the provider applies its own limit.
     deepseek_max_tokens: int = 1800
-    deepseek_chat_max_tokens: int = 100_000
+    deepseek_chat_max_tokens: int = 20_000
     deepseek_temperature: float = 0.2
 
     # Tavily is the environment fallback for the two independent web
