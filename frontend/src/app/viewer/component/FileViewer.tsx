@@ -23,6 +23,9 @@ const DocxView = lazy(() =>
 const ImageView = lazy(() =>
   import("./ImageView").then((module) => ({ default: module.ImageView })),
 );
+const XlsxView = lazy(() =>
+  import("./XlsxView").then((module) => ({ default: module.XlsxView })),
+);
 
 function UnsupportedViewer({ file }: { readonly file: FileSchema }) {
   const { t, formatNumber } = useI18n();
@@ -106,6 +109,16 @@ function rendererFor(file: FileSchema): ReactNode {
           downloadName={file.file_name}
         />
       );
+    case "spreadsheet":
+      return (
+        <XlsxView
+          key={file.id}
+          fileId={file.id}
+          fileUrl={contentUrl}
+          fileName={file.file_name}
+          totalChunks={file.total_chunks}
+        />
+      );
     case "markdown":
     case "json":
     case "csv":
@@ -124,7 +137,7 @@ interface FileRendererProps {
 /**
  * The reusable body of a file preview: cited chunk plus the actual renderer.
  * Both the Library preview modal and the Chat inspector use this component, so
- * PDF/DOCX/image/text behavior has one implementation.
+ * PDF/DOCX/spreadsheet/image/text behavior has one implementation.
  */
 export function FileRenderer({ file, chunk = null }: FileRendererProps) {
   const { t } = useI18n();

@@ -2,12 +2,16 @@
 
 import asyncio
 import base64
+import datetime
+import io
+import zipfile
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from botocore.exceptions import ClientError
 from fastapi.testclient import TestClient
+from openpyxl import Workbook
 from pydantic import SecretStr
 
 from app.infrastructure.files import r2_storage
@@ -16,12 +20,19 @@ from app.infrastructure.files.storage_errors import (
     StorageObjectMissingError,
     StorageUnavailableError,
 )
+from app.module.knowledge.domain.spreadsheet_domain import (
+    SpreadsheetSheet,
+    render_spreadsheet,
+)
+from app.module.knowledge.service.spreadsheet_extractor import extract_spreadsheet_text
 from tests.helpers import create_text
 
 # A 1x1 blue PNG; enough to exercise the image extension and original storage.
 BLUE_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 )
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+ODS_MIME = "application/vnd.oasis.opendocument.spreadsheet"
 
 
 def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
@@ -882,3 +893,323 @@ def test_r2_storage_adapter_roundtrip_and_error_safety(
             await storage.save("../escape.txt", b"not allowed")
 
     asyncio.run(scenario())
+
+
+def test_spreadsheet_upload_extracts_searchable_sheets(client: TestClient) -> None:
+    """A real xlsx upload indexes visible and hidden sheets and keeps its bytes."""
+    workbook = Workbook()
+    ledger = workbook.active
+    ledger.title = "收支"
+    ledger.merge_cells("A1:C1")
+    ledger["A1"] = "2026 年度收支表"
+    ledger["A2"] = "日期"
+    ledger["B2"] = "項目"
+    ledger["C2"] = "金額"
+    ledger["A3"] = datetime.date(2026, 1, 1)
+    ledger["B3"] = "房租"
+    ledger["C3"] = 12000
+    ledger["A4"] = datetime.date(2026, 2, 1)
+    ledger["B4"] = "水電"
+    ledger["C4"] = 2500.5
+    ledger["A5"] = "合計"
+    ledger["C5"] = "=SUM(C4:C5)"
+    notes = workbook.create_sheet("Notes")
+    notes["A1"] = "隱藏備註：貓咪預算"
+    notes.sheet_state = "hidden"
+    payload_buffer = io.BytesIO()
+    workbook.save(payload_buffer)
+    payload = payload_buffer.getvalue()
+
+    uploaded = client.post(
+        "/api/v1/files",
+        data={"path": "/finance/2026-budget.xlsx"},
+        files={"file": ("2026-budget.xlsx", payload, XLSX_MIME)},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    file = uploaded.json()
+    file_id = int(file["id"])
+    assert file["extension"] == ".xlsx"
+    assert file["mime_type"] == XLSX_MIME
+    assert file["document_type"] == "spreadsheet"
+    assert file["extraction_method"] == "text"
+    assert int(file["total_chunks"]) >= 1
+    assert file["has_original"] is True
+
+    chunk_window = client.get(
+        f"/api/v1/files/{file_id}/chunks/1",
+        params={"chunk_range": 25},
+    )
+    assert chunk_window.status_code == 200, chunk_window.text
+    window = chunk_window.json()
+    assert window["chunk_start"] == 1
+    assert window["chunk_end"] == int(file["total_chunks"])
+    extracted_text = "\n".join(chunk["content"] for chunk in window["chunks"])
+    for expected in (
+        "## Sheet: 收支",
+        "## Sheet: Notes (hidden)",
+        "2026 年度收支表",
+        "2026-01-01",
+        "12000",
+        "2500.5",
+        "=SUM(C4:C5)",
+        "隱藏備註：貓咪預算",
+    ):
+        assert expected in extracted_text, expected
+    assert extracted_text.count("2026 年度收支表") >= 3
+
+    search = client.get(
+        "/api/v1/search",
+        params={"query": "房租", "result_number": 5},
+    )
+    assert search.status_code == 200, search.text
+    assert file_id in {item["file_id"] for item in search.json()["file_results"]}
+
+    original = client.get(f"/api/v1/files/{file_id}/content")
+    assert original.status_code == 200
+    assert original.content == payload
+    assert original.headers["content-type"] == XLSX_MIME
+
+
+def test_spreadsheet_formula_fallback_and_limits() -> None:
+    """Formula recovery is per-sheet, and the row/column caps stay visible."""
+    formula_workbook = Workbook()
+    first = formula_workbook.active
+    first.title = "First"
+    first["A1"] = "=1+1"
+    first["B1"] = "=2+2"
+    second = formula_workbook.create_sheet("Second")
+    second["A1"] = "=3+3"
+    second["B1"] = "=4+4"
+    formula_buffer = io.BytesIO()
+    formula_workbook.save(formula_buffer)
+    formula_text = extract_spreadsheet_text(formula_buffer.getvalue(), ".xlsx")
+
+    first_section, separator, second_section = formula_text.partition("## Sheet: Second")
+    assert separator
+    assert "## Sheet: First" in first_section
+    assert "=1+1" in first_section
+    assert "=2+2" in first_section
+    assert "=3+3" not in first_section
+    assert "=4+4" not in first_section
+    assert "=3+3" in second_section
+    assert "=4+4" in second_section
+    assert "=1+1" not in second_section
+    assert "=2+2" not in second_section
+
+    # A used range that starts at column C must still map the recovered formula
+    # onto the cropped calamine row. This guards the start-column offset bug.
+    offset_workbook = Workbook()
+    offset_sheet = offset_workbook.active
+    offset_sheet.title = "Offset"
+    offset_sheet["C3"] = "項目"
+    offset_sheet["D3"] = "金額"
+    offset_sheet["C4"] = "房租"
+    offset_sheet["D4"] = "=C4*2"
+    offset_buffer = io.BytesIO()
+    offset_workbook.save(offset_buffer)
+    offset_text = extract_spreadsheet_text(offset_buffer.getvalue(), ".xlsx")
+    assert "=C4*2" in offset_text
+
+    # A formula above and left of calamine's used-range start must survive too.
+    above_workbook = Workbook()
+    above_sheet = above_workbook.active
+    above_sheet.title = "Above"
+    above_sheet["A1"] = "=1+1"
+    above_sheet["C6"] = "static"
+    above_buffer = io.BytesIO()
+    above_workbook.save(above_buffer)
+    above_text = extract_spreadsheet_text(above_buffer.getvalue(), ".xlsx")
+    assert "=1+1" in above_text
+
+    # The renderer reserves its budget for the visible truncation notice.
+    capped_text = render_spreadsheet(
+        [SpreadsheetSheet(name="Long", hidden=False, rows=(("x" * 200,),))],
+        max_chars=80,
+    )
+    assert "_Workbook text truncated at 80 characters._" in capped_text
+
+    row_workbook = Workbook(write_only=True)
+    row_sheet = row_workbook.create_sheet("Rows")
+    for index in range(1, 10_002):
+        row_sheet.append([f"row{index}"])
+    row_buffer = io.BytesIO()
+    row_workbook.save(row_buffer)
+    row_text = extract_spreadsheet_text(row_buffer.getvalue(), ".xlsx")
+    assert "row10000" in row_text
+    assert "row10001" not in row_text
+    assert "_Sheet truncated after 10,000 rows._" in row_text
+
+    column_workbook = Workbook()
+    column_sheet = column_workbook.active
+    column_sheet.title = "Columns"
+    column_sheet.append([f"col{index}" for index in range(1, 102)])
+    column_buffer = io.BytesIO()
+    column_workbook.save(column_buffer)
+    column_text = extract_spreadsheet_text(column_buffer.getvalue(), ".xlsx")
+    assert "col100" in column_text
+    assert "col101" not in column_text
+    assert "_Sheet truncated after 100 columns._" in column_text
+
+
+def test_spreadsheet_ods_upload_extracts_table(client: TestClient) -> None:
+    """A minimal ODS archive uploads, extracts its table, and becomes searchable."""
+    content_xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<office:document-content '
+        'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+        'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
+        'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+        'office:version="1.2">'
+        "<office:body><office:spreadsheet>"
+        '<table:table table:name="預算">'
+        "<table:table-row>"
+        '<table:table-cell office:value-type="string"><text:p>項目</text:p></table:table-cell>'
+        '<table:table-cell office:value-type="string"><text:p>金額</text:p></table:table-cell>'
+        "</table:table-row>"
+        "<table:table-row>"
+        '<table:table-cell office:value-type="string">'
+        "<text:p>貓咪點心獨特值</text:p></table:table-cell>"
+        '<table:table-cell office:value-type="float" office:value="8800">'
+        "<text:p>8800</text:p></table:table-cell>"
+        "</table:table-row>"
+        "</table:table>"
+        "</office:spreadsheet></office:body>"
+        "</office:document-content>"
+    ).encode()
+    manifest_xml = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<manifest:manifest '
+        b'xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" '
+        b'manifest:version="1.2">'
+        b'<manifest:file-entry manifest:full-path="/" '
+        b'manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>'
+        b'<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
+        b"</manifest:manifest>"
+    )
+
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        mimetype_info = zipfile.ZipInfo("mimetype")
+        mimetype_info.compress_type = zipfile.ZIP_STORED
+        archive.writestr(mimetype_info, ODS_MIME)
+        archive.writestr("META-INF/manifest.xml", manifest_xml)
+        archive.writestr("content.xml", content_xml)
+    payload = archive_buffer.getvalue()
+
+    uploaded = client.post(
+        "/api/v1/files",
+        data={"path": "/finance/2026-budget.ods"},
+        files={"file": ("2026-budget.ods", payload, ODS_MIME)},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    file = uploaded.json()
+    file_id = int(file["id"])
+    assert file["extension"] == ".ods"
+    assert file["mime_type"] == ODS_MIME
+    assert file["document_type"] == "spreadsheet"
+    assert file["extraction_method"] == "text"
+    assert int(file["total_chunks"]) >= 1
+
+    chunk_window = client.get(
+        f"/api/v1/files/{file_id}/chunks/1",
+        params={"chunk_range": 25},
+    )
+    assert chunk_window.status_code == 200, chunk_window.text
+    extracted_text = "\n".join(
+        chunk["content"] for chunk in chunk_window.json()["chunks"]
+    )
+    assert "## Sheet: 預算" in extracted_text
+    assert "貓咪點心獨特值" in extracted_text
+
+    search = client.get(
+        "/api/v1/search",
+        params={"query": "貓咪點心獨特值", "result_number": 5},
+    )
+    assert search.status_code == 200, search.text
+    assert file_id in {item["file_id"] for item in search.json()["file_results"]}
+
+
+def test_spreadsheet_rejects_unsafe_or_unsupported_files(client: TestClient) -> None:
+    """Corrupt, unsupported, and oversized archives keep the stable error envelope."""
+    corrupt = client.post(
+        "/api/v1/files",
+        data={"path": "/finance/corrupt.xlsx"},
+        files={"file": ("corrupt.xlsx", b"this is not an ooxml workbook", XLSX_MIME)},
+    )
+    assert corrupt.status_code == 422, corrupt.text
+    assert corrupt.json()["error"] == "empty_content"
+
+    unsupported = client.post(
+        "/api/v1/files",
+        data={"path": "/finance/budget.numbers"},
+        files={"file": ("budget.numbers", b"not a supported workbook", "application/octet-stream")},
+    )
+    assert unsupported.status_code == 422, unsupported.text
+    assert unsupported.json()["error"] == "unsupported_file_type"
+
+    bomb_buffer = io.BytesIO()
+    with zipfile.ZipFile(bomb_buffer, "w", zipfile.ZIP_STORED) as archive:
+        for index in range(10_001):
+            archive.writestr(f"entry{index}.xml", b"")
+    bomb_payload = bomb_buffer.getvalue()
+
+    bomb = client.post(
+        "/api/v1/files",
+        data={"path": "/finance/archive-bomb.xlsx"},
+        files={"file": ("archive-bomb.xlsx", bomb_payload, XLSX_MIME)},
+    )
+    assert bomb.status_code == 413, bomb.text
+    assert bomb.json()["error"] == "spreadsheet_archive_too_large"
+
+    # ODS repeated rows are the pre-parse memory bomb: calamine must never see
+    # this archive. The guard rejects the declared grid before allocation.
+    repeated_content = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<office:document-content '
+        b'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+        b'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
+        b'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+        b'office:version="1.2">'
+        b"<office:body><office:spreadsheet>"
+        b'<table:table table:name="Bomb">'
+        b'<table:table-row table:number-rows-repeated="1048576">'
+        b'<table:table-cell office:value-type="string"><text:p>x</text:p>'
+        b"</table:table-cell></table:table-row>"
+        b"</table:table></office:spreadsheet></office:body>"
+        b"</office:document-content>"
+    )
+    repeated_buffer = io.BytesIO()
+    with zipfile.ZipFile(repeated_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        mimetype_info = zipfile.ZipInfo("mimetype")
+        mimetype_info.compress_type = zipfile.ZIP_STORED
+        archive.writestr(mimetype_info, ODS_MIME)
+        archive.writestr("content.xml", repeated_content)
+    repeated = client.post(
+        "/api/v1/files",
+        data={"path": "/finance/repeated-rows.ods"},
+        files={"file": ("repeated-rows.ods", repeated_buffer.getvalue(), ODS_MIME)},
+    )
+    assert repeated.status_code == 413, repeated.text
+    assert repeated.json()["error"] == "spreadsheet_archive_too_large"
+
+    # A forged XLSX dimension is rejected before calamine materializes it.
+    dimension_buffer = io.BytesIO()
+    with zipfile.ZipFile(dimension_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "xl/worksheets/sheet1.xml",
+            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            '<dimension ref="A1:XFD1048576"/></worksheet>',
+        )
+    dimension = client.post(
+        "/api/v1/files",
+        data={"path": "/finance/forged-dimension.xlsx"},
+        files={"file": ("forged-dimension.xlsx", dimension_buffer.getvalue(), XLSX_MIME)},
+    )
+    assert dimension.status_code == 413, dimension.text
+    assert dimension.json()["error"] == "spreadsheet_archive_too_large"
+
+    for response in (corrupt, unsupported, bomb, repeated, dimension):
+        body = response.json()
+        assert body["status"] == response.status_code
+        assert body["error"] != "internal_error"
+        assert body["detail"]

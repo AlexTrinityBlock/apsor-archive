@@ -207,10 +207,11 @@ export const library = {
     pathHint: "完整路径，包括文件名。缺少的文件夹会自动创建。",
     fileLabel: "文件",
     fileHint:
-      "一次一个文件 · 上限 10 MB · .md、.txt、.csv、.json、.log、.pdf、.docx、.jpg、.jpeg、.png、.webp",
+      "一次一个文件 · 上限 10 MB · .md、.txt、.csv、.json、.log、.pdf、.docx、.xlsx、.xls、.xlsm、.ods、.jpg、.jpeg、.png、.webp",
     contentLabel: "内容",
     textHint: "纯 UTF-8 文本 · 上限 2 MB · {characters} 个字符 · {size}",
-    errorType: "请选择 Markdown、文本、CSV、JSON、日志、PDF、DOCX 或图片文件。",
+    errorType:
+      "请选择 Markdown、文本、CSV、JSON、日志、PDF、DOCX、电子表格或图片文件。",
     errorTooLarge: "此文件超过 10 MB 的上传上限。",
     errorPath: "请输入完整的档案馆路径，包括文件名。",
     errorFile: "请选择要上传的文件。",
@@ -504,6 +505,7 @@ export const library = {
       markdown: "Markdown",
       json: "JSON",
       csv: "CSV 工作表",
+      spreadsheet: "电子表格",
       text: "文本",
       unsupported: "原始文件",
     },
@@ -512,7 +514,7 @@ export const library = {
       title: "此原始文件可以安全下载，但无法在此渲染。",
       descriptionBefore: "存储的类型是 ",
       descriptionAfter:
-        "。查看器刻意只渲染 PDF、DOCX、图片和文本类格式；其他二进制文件永远不会在档案馆中执行。",
+        "。查看器刻意只渲染 PDF、DOCX、电子表格、图片和文本类格式；其他二进制文件永远不会在档案馆中执行。",
       fileName: "文件名",
       size: "大小",
       indexedChunks: "已索引分段",
@@ -560,6 +562,8 @@ export const library = {
       pdfPage: "正在渲染第 {page} 页",
       docxOriginal: "正在获取 DOCX 原始文件",
       docxLayout: "正在排版 Word 文档",
+      xlsxOriginal: "正在获取电子表格原始文件",
+      xlsxLayout: "正在排版电子表格",
       markdown: "正在排版 Markdown",
       storedText: "正在读取存储的文本",
       reassembling: "正在重组已索引分段",
@@ -586,6 +590,21 @@ export const library = {
       rows: "显示 {shown} / {total} 行。",
       truncated: "显示 {shown} / {total} 行（受限预览）。",
       note: "会保留引号内的逗号和换行。",
+    },
+    xlsx: {
+      sheetTabs: "工作表",
+      column: "第 {index} 列",
+      empty: "此工作表没有可预览的单元格。",
+      emptyWorkbook: "此工作簿没有工作表。",
+      hidden: "隐藏",
+      rows: "显示 {shown} / {total} 行。",
+      truncated: "显示 {shown} / {total} 行（受限预览）。",
+      columns: "{count} 列。",
+      truncatedColumns: "显示 {shown} / {total} 列（受限预览）。",
+      note: "会跳过空白行；单元格按存储值显示，公式不会重新计算。",
+      parseFallback: "无法解析电子表格版面（{reason}）。",
+      errorOriginal: "无法读取电子表格原始文件",
+      errorParse: "无法解析此电子表格",
     },
     fallback: {
       errorTitle: "没有可阅读的表示内容",
@@ -737,5 +756,7 @@ export const library = {
     generic: "档案馆无法完成该请求。",
     folderCopyTooLarge:
       "此文件夹太大，无法一次复制。请拆分为较小的文件夹后重试。",
+    spreadsheetArchiveTooLarge:
+      "此工作簿展开后的行、列或单元格过多，无法安全索引。请拆分成较小的工作簿，或移除重复的行与列。",
   },
 };

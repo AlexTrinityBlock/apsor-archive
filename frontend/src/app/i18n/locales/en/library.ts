@@ -209,10 +209,11 @@ export const library = {
     pathHint: "Full path, including the file name. Missing folders are created.",
     fileLabel: "File",
     fileHint:
-      "One file · up to 10 MB · .md, .txt, .csv, .json, .log, .pdf, .docx, .jpg, .jpeg, .png, .webp",
+      "One file · up to 10 MB · .md, .txt, .csv, .json, .log, .pdf, .docx, .xlsx, .xls, .xlsm, .ods, .jpg, .jpeg, .png, .webp",
     contentLabel: "Content",
     textHint: "Plain UTF-8 text · up to 2 MB · {characters} characters · {size}",
-    errorType: "Choose a Markdown, text, CSV, JSON, log, PDF, DOCX, or image file.",
+    errorType:
+      "Choose a Markdown, text, CSV, JSON, log, PDF, DOCX, spreadsheet, or image file.",
     errorTooLarge: "This file is larger than the 10 MB upload limit.",
     errorPath: "Enter the full archive path, including the file name.",
     errorFile: "Choose a file to upload.",
@@ -512,6 +513,7 @@ export const library = {
       markdown: "Markdown",
       json: "JSON",
       csv: "CSV sheet",
+      spreadsheet: "Spreadsheet",
       text: "Text",
       unsupported: "Original file",
     },
@@ -520,7 +522,7 @@ export const library = {
       title: "This original is safe to download, but not to render here.",
       descriptionBefore: "The stored type is ",
       descriptionAfter:
-        ". The viewer deliberately renders only PDF, DOCX, images, and text-like formats; other binaries never execute in the archive.",
+        ". The viewer deliberately renders only PDF, DOCX, spreadsheets, images, and text-like formats; other binaries never execute in the archive.",
       fileName: "File name",
       size: "Size",
       indexedChunks: "Indexed chunks",
@@ -569,6 +571,8 @@ export const library = {
       pdfPage: "Rendering page {page}",
       docxOriginal: "Fetching the DOCX original",
       docxLayout: "Laying out the Word document",
+      xlsxOriginal: "Fetching the spreadsheet original",
+      xlsxLayout: "Laying out the spreadsheet",
       markdown: "Typesetting the Markdown",
       storedText: "Reading the stored text",
       reassembling: "Reassembling the indexed chunks",
@@ -596,6 +600,21 @@ export const library = {
       rows: "{shown} of {total} rows.",
       truncated: "{shown} of {total} rows (bounded preview).",
       note: "Quoted commas and line breaks are preserved.",
+    },
+    xlsx: {
+      sheetTabs: "Sheets",
+      column: "Column {index}",
+      empty: "This sheet has no cells to preview.",
+      emptyWorkbook: "This workbook has no sheets.",
+      hidden: "Hidden",
+      rows: "{shown} of {total} rows.",
+      truncated: "{shown} of {total} rows (bounded preview).",
+      columns: "{count} columns.",
+      truncatedColumns: "{shown} of {total} columns (bounded preview).",
+      note: "Blank rows are skipped; cells show the stored values and formulas are not recalculated.",
+      parseFallback: "The spreadsheet layout could not be parsed ({reason}).",
+      errorOriginal: "The spreadsheet original could not be read",
+      errorParse: "The spreadsheet could not be parsed",
     },
     fallback: {
       errorTitle: "No readable representation is available",
@@ -757,5 +776,7 @@ export const library = {
     generic: "The archive could not complete that request.",
     folderCopyTooLarge:
       "This folder is too large to copy in one request. Split it into smaller folders and try again.",
+    spreadsheetArchiveTooLarge:
+      "This workbook expands into too many rows, columns, or cells to index safely. Split it into smaller workbooks or remove repeated rows and columns.",
   },
 };

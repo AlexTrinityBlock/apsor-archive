@@ -66,6 +66,11 @@ class FileTooLargeError(KnowledgeError):
         super().__init__(f"File size {size} exceeds the {limit}-byte limit.")
 
 
+class SpreadsheetArchiveTooLargeError(KnowledgeError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+
+
 class FileVersionConflictError(KnowledgeError):
     def __init__(self, file_id: int, expected_version: int, actual_version: int) -> None:
         super().__init__(

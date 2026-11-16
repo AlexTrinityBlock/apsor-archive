@@ -494,6 +494,195 @@
   line-height: 1.5;
 }
 
+/* XLSX / XLS / XLSM / ODS sheet */
+
+.viewer-xlsx {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.viewer-xlsx__bar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 5px 7px;
+  background: var(--mono-paper);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 4px;
+}
+
+.viewer-xlsx__tabs {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
+  gap: 3px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.viewer-xlsx__tab {
+  display: inline-flex;
+  max-width: 220px;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  color: var(--mono-muted);
+  background: transparent;
+  border: 0.7px solid transparent;
+  border-radius: 3px;
+  font-family: var(--mono-font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.03em;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.viewer-xlsx__tab:hover {
+  color: var(--mono-ink);
+  background: var(--mono-card-warm);
+}
+
+.viewer-xlsx__tab[aria-selected="true"] {
+  color: var(--mono-ink);
+  background: var(--mono-card-bg);
+  border-color: var(--mono-grid);
+  box-shadow: inset 0 -2px 0 var(--accent-moss);
+}
+
+.viewer-xlsx__tab:focus-visible {
+  outline: 2px solid var(--accent-seal);
+  outline-offset: 1px;
+}
+
+.viewer-xlsx__tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewer-xlsx__hidden {
+  flex: none;
+  padding: 1px 4px;
+  color: var(--accent-ochre);
+  background: rgba(180, 83, 9, 0.07);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 3px;
+  font-size: 8.5px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.viewer-xlsx__grid {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 4px;
+}
+
+.viewer-xlsx__scroll {
+  max-width: 100%;
+  max-height: 54dvh;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  outline: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.viewer-xlsx__scroll:focus-visible {
+  outline: 2px solid var(--accent-seal);
+  outline-offset: -2px;
+}
+
+.viewer-xlsx__table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  color: var(--mono-l2);
+  font-family: var(--mono-font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.viewer-xlsx__table th,
+.viewer-xlsx__table td {
+  max-width: 40ch;
+  padding: 6px 9px;
+  overflow: hidden;
+  border-right: 0.7px solid var(--mono-subtle);
+  border-bottom: 0.7px solid var(--mono-subtle);
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.viewer-xlsx__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  color: var(--mono-ink);
+  background: var(--mono-paper);
+  border-bottom: 0.7px solid var(--mono-grid);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+}
+
+.viewer-xlsx__table tbody tr:nth-child(even) {
+  background: var(--mono-card-warm);
+}
+
+.viewer-xlsx__table tbody tr:hover {
+  background: rgba(46, 75, 62, 0.06);
+}
+
+.viewer-xlsx__index {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 44px;
+  color: var(--mono-faint) !important;
+  background: var(--mono-paper) !important;
+  font-size: 9px !important;
+  text-align: right !important;
+}
+
+/* The corner cell stays above both sticky axes. */
+.viewer-xlsx__table thead .viewer-xlsx__index {
+  z-index: 3;
+}
+
+.viewer-xlsx__note {
+  padding: 7px 10px;
+  color: var(--mono-muted);
+  background: var(--mono-card-warm);
+  border-top: 0.7px solid var(--mono-grid);
+  font-family: var(--mono-font-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.viewer-xlsx__empty {
+  padding: 18px;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 4px;
+  outline: none;
+}
+
+.viewer-xlsx__empty:focus-visible {
+  outline: 2px solid var(--accent-seal);
+  outline-offset: -2px;
+}
+
 /* --------------------------------------------------------------------------
    Cited passage
    -------------------------------------------------------------------------- */
@@ -1006,6 +1195,19 @@
   .viewer-csv__table th,
   .viewer-csv__table td {
     max-width: 34ch;
+  }
+
+  .viewer-xlsx__table th,
+  .viewer-xlsx__table td {
+    max-width: 30ch;
+  }
+
+  .viewer-xlsx__tab {
+    max-width: 150px;
+  }
+
+  .viewer-xlsx__scroll {
+    max-height: 50dvh;
   }
 
   .viewer-docx__frame {

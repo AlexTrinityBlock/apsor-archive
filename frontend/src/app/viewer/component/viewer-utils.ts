@@ -20,6 +20,7 @@ export type ViewerKind =
   | "markdown"
   | "json"
   | "csv"
+  | "spreadsheet"
   | "text"
   | "unsupported";
 
@@ -136,6 +137,14 @@ export function classifyFile(
   if (extension === ".csv" || mime.includes("csv")) {
     return "csv";
   }
+  if (
+    mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    mime === "application/vnd.ms-excel" ||
+    mime === "application/vnd.oasis.opendocument.spreadsheet" ||
+    [".xlsx", ".xls", ".xlsm", ".ods"].includes(extension)
+  ) {
+    return "spreadsheet";
+  }
   if (extension === ".md" || extension === ".markdown" || mime === "text/markdown") {
     return "markdown";
   }
@@ -160,6 +169,8 @@ export function kindLabel(kind: ViewerKind, t: Translate): string {
       return t("library.viewer.kind.json");
     case "csv":
       return t("library.viewer.kind.csv");
+    case "spreadsheet":
+      return t("library.viewer.kind.spreadsheet");
     case "text":
       return t("library.viewer.kind.text");
     default:
