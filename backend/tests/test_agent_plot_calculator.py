@@ -48,6 +48,14 @@ PLOT_ARGUMENTS_SUMMARY = {
 }
 
 
+def _grid(rows: int, columns: int) -> list[list[int]]:
+    """Build a rectangular row-major grid for surface and heatmap traces."""
+    return [
+        [row * columns + column for column in range(columns)]
+        for row in range(rows)
+    ]
+
+
 def _create_conversation(client: TestClient, title: str) -> int:
     """Create one conversation and return its id."""
     created = client.post("/api/v1/agent/conversations", json={"title": title})
@@ -355,6 +363,101 @@ def test_render_plot_rejects_unsafe_or_oversized_figure(client: TestClient) -> N
 
     with pytest.raises(PlotSpecError):
         sanitize_plot_figure({"data": thirteen_traces})
+
+
+def test_plot_point_count_counts_grid_cells() -> None:
+    """2D surface and heatmap arrays count cells, not rows."""
+    surface = sanitize_plot_figure(
+        {
+            "data": [
+                {
+                    "type": "surface",
+                    "x": _grid(7, 9),
+                    "y": _grid(7, 9),
+                    "z": _grid(7, 9),
+                }
+            ]
+        }
+    )
+    assert surface.point_count == 63
+    assert (surface.grid_rows, surface.grid_columns) == (7, 9)
+
+    heatmap = sanitize_plot_figure(
+        {"data": [{"type": "heatmap", "z": _grid(2, 3)}]}
+    )
+    assert heatmap.point_count == 6
+    assert (heatmap.grid_rows, heatmap.grid_columns) == (2, 3)
+
+
+def test_plot_point_count_keeps_flat_and_ragged_semantics() -> None:
+    """A flat array counts its length; ragged rows sum their cells."""
+    scatter = sanitize_plot_figure(
+        {
+            "data": [
+                {
+                    "type": "scatter",
+                    "x": list(range(10)),
+                    "y": list(range(10)),
+                }
+            ]
+        }
+    )
+    assert scatter.point_count == 10
+    assert scatter.grid_rows is None
+    assert scatter.grid_columns is None
+
+    ragged = sanitize_plot_figure(
+        {"data": [{"type": "heatmap", "z": [[1, 2, 3], [4, 5]]}]}
+    )
+    assert ragged.point_count == 5
+    assert ragged.grid_rows is None
+
+
+def test_surface_grid_enforces_the_real_cell_cap() -> None:
+    """A 60 x 60 surface is 3,600 points and exceeds the flat-array cap."""
+    with pytest.raises(PlotSpecError, match="too many data points"):
+        sanitize_plot_figure(
+            {"data": [{"type": "surface", "z": _grid(60, 60)}]}
+        )
+
+
+def test_surface_receipt_reports_grid_cells(client: TestClient) -> None:
+    """The provider receipt states the real cell count and the grid shape."""
+    figure = {
+        "data": [
+            {
+                "type": "surface",
+                "x": _grid(7, 9),
+                "y": _grid(7, 9),
+                "z": _grid(7, 9),
+            }
+        ]
+    }
+    fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "render_plot",
+                {"title": "3D surface", "figure": figure},
+                call_id="call_surface_grid",
+            ),
+            text_result("The surface shows a complete 7 by 9 grid."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Surface grid receipt")
+
+    body = _send_message(client, conversation_id, "Draw a 7 by 9 surface.")
+
+    results = _tool_results(body["entries"])
+    assert len(results) == 1
+    data = results[0]["data"]
+    assert data["plot"]["stats"]["point_count"] == 63
+    content = results[0]["model"][0]["content"]
+    assert 'points="63"' in content
+    assert 'rows="7"' in content
+    assert 'cols="9"' in content
+    assert "grid of 63 cells" in content
+    assert "points counts every cell, not one row" in content
 
 
 def test_render_plot_redaction_placeholder_returns_corrective_error() -> None:
