@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.module.agent.domain.plot_spec_domain import PlotSpecError, sanitize_plot_figure
+from app.module.agent.protocol.chat_generator_protocol import ChatResult, ChatToolCall
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
     text_result,
@@ -306,7 +307,7 @@ def test_render_plot_rejects_unsafe_or_oversized_figure(client: TestClient) -> N
             "call_plot_points",
             {
                 "title": "Too many points",
-                "figure": {"data": [{"type": "scatter", "y": list(range(20_001))}]},
+                "figure": {"data": [{"type": "scatter", "y": list(range(2_001))}]},
             },
         ),
         (
@@ -359,7 +360,7 @@ def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     assert response.status_code == 200, response.text
     catalog = response.json()
     assert catalog["prompt_version"] == "archive-agent-v13"
-    assert catalog["tools_version"] == "archive-tools-v9"
+    assert catalog["tools_version"] == "archive-tools-v10"
 
     tools = {tool["name"]: tool for tool in catalog["tools"]}
     names = [tool["name"] for tool in catalog["tools"]]
@@ -425,3 +426,73 @@ def test_plot_tool_result_content_is_small(client: TestClient) -> None:
     assert "figure" not in content
     assert '"data"' not in content
     assert len(content) < 400
+
+
+def test_output_limit_is_reported_with_actionable_detail(client: TestClient) -> None:
+    """Report a truncated finish_reason=length as an actionable output-limit failure."""
+    truncated_call = ChatToolCall(
+        call_id="call_plot_truncated",
+        name="render_plot",
+        arguments={},
+        raw_arguments='{"title":"Random 3D plot","figure":{"data":[{"type":"scatter3d","x":[1,2',
+        parse_error="Unterminated JSON string",
+    )
+    fake = FakeChatGenerator(
+        [
+            ChatResult(
+                text="",
+                tool_calls=[truncated_call],
+                finish_reason="length",
+                model="fake-chat",
+                usage={
+                    "prompt_tokens": 3998,
+                    "completion_tokens": 8192,
+                    "total_tokens": 12190,
+                    "prompt_cache_hit_tokens": 0,
+                    "prompt_cache_miss_tokens": 3998,
+                },
+            )
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Output limit")
+
+    response = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/messages",
+        json={"content": "Draw a random 3D plot."},
+        headers={"Accept": "application/json"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["status"] == "failed"
+    assert body["error_code"] == "output_limit"
+    detail = body["error_detail"]
+    assert detail is not None
+    assert "output token limit" in detail
+    assert "smaller or simpler" in detail
+
+    assistant_entry = body["assistant_entry"]
+    assert assistant_entry is not None
+    assert assistant_entry["data"]["finish_reason"] == "error"
+    assert assistant_entry["data"]["error"] == {
+        "code": "output_limit",
+        "detail": detail,
+    }
+
+    # The truncated tool call must never be dispatched.
+    assert _tool_results(body["entries"]) == []
+
+    reloaded = _reload_entries(client, conversation_id)
+    assert _tool_results(reloaded) == []
+    reloaded_assistant = [
+        entry
+        for entry in reloaded
+        if entry["kind"] == "pi.assistant" and (entry["data"] or {}).get("error")
+    ]
+    assert len(reloaded_assistant) == 1
+    assert reloaded_assistant[0]["data"]["error"] == {
+        "code": "output_limit",
+        "detail": detail,
+    }
+    assert reloaded_assistant[0]["data"]["finish_reason"] == "error"

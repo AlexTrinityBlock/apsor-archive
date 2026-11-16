@@ -438,10 +438,14 @@ export const chat = {
     },
     error: {
       eyebrow: "修复台 · 工具错误",
+      runEyebrow: "执行中断 · 供应商响应",
       detailFallback: "工具没有返回结构化的错误详情。",
+      runDetailFallback: "这次执行没有记录结构化的错误详情。",
       nextStep: "建议的下一步",
       argumentsReceived: "收到的参数",
       note: "模型看到的是一段有界的 XML 错误值；这个面板只是界面上的诊断视图。",
+      runNote:
+        "这次执行在工具调用完成前停止。助手错误已保留；没有写入不完整的工具结果。",
       suggestionInvalidArguments:
         "请以必要的标量参数重新发出调用；数组与对象必须符合工具目录。",
       suggestionConfirmation: "馆长必须明确确认记忆文字，才能压进档案馆。",
@@ -453,6 +457,8 @@ export const chat = {
       suggestionMemoryMissing:
         "请检查记忆 ID；已淘汰的叶片仍可阅读，已移除的则不行。",
       suggestionChunkWindow: "请选择文件已记录范围内的分段，然后重试读取。",
+      suggestionOutputLimit:
+        "模型输出达到 token 上限。请要求更小或更简单的结果（例如减少图表数据点），然后重试。",
       suggestionNoCode: "没有记录结构化错误码。请阅读详情与参数，决定下一步。",
       suggestionGeneric: "工具拒绝了这次调用。请调整参数，或要求范围更窄的操作。",
     },
