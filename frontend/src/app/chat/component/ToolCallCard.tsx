@@ -2,6 +2,7 @@ import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
 import { truncate } from "../../../lib/format";
 import { formatArgumentValue } from "../format";
+import { readCalculationResult } from "../plot";
 import type { ToolCallMeta, ToolResultMeta } from "../types";
 import { toolStatusLabel } from "./status";
 
@@ -53,6 +54,8 @@ export function ToolCallCard({
   );
   const duration = formatDuration(result?.durationMs);
   const isError = status?.toLowerCase() === "error";
+  const calculation =
+    call.name === "calculate" ? readCalculationResult(result?.data) : null;
 
   const className = [
     "tool-step-chip",
@@ -81,6 +84,13 @@ export function ToolCallCard({
         </span>
       </span>
       <span className="tool-step-chip__right">
+        {calculation ? (
+          <span className="tool-step-chip__calc">
+            {t("chat.tool.calculationResult", {
+              result: calculation.formatted,
+            })}
+          </span>
+        ) : null}
         {duration ? <span>{duration}</span> : null}
         <span
           className={

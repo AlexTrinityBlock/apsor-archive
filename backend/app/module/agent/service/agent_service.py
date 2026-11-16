@@ -38,7 +38,11 @@ from app.module.agent.domain.compaction_domain import (
     estimate_context_tokens,
 )
 from app.module.agent.domain.context_domain import build_context, render_tool_result
-from app.module.agent.domain.tool_catalog import PROMPT_VERSION, TOOLS_VERSION
+from app.module.agent.domain.tool_catalog import (
+    PROMPT_VERSION,
+    TOOLS_VERSION,
+    model_arguments_for_storage,
+)
 from app.module.agent.domain.user_profile_domain import UserProfile
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
 from app.module.agent.exception.domain_error import (
@@ -945,7 +949,7 @@ class AgentService:
                             "entry_id": None,
                             "tool_call_id": call.call_id,
                             "name": call.name,
-                            "arguments": call.arguments,
+                            "arguments": model_arguments_for_storage(call.name, call.arguments),
                             "parallel": parallel,
                             "batch_size": batch_size,
                             "parallel_index": index,
@@ -1738,7 +1742,7 @@ class AgentService:
                     "entry_id": None,
                     "tool_call_id": call.call_id,
                     "name": call.name,
-                    "arguments": call.arguments,
+                    "arguments": model_arguments_for_storage(call.name, call.arguments),
                 },
             )
             for call in calls
@@ -1978,7 +1982,7 @@ def _arguments_json(call: ChatToolCall) -> str:
     if call.parse_error is not None and call.raw_arguments:
         return call.raw_arguments
     return json.dumps(
-        call.arguments,
+        model_arguments_for_storage(call.name, call.arguments),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -2122,7 +2126,7 @@ def _tool_result_draft(call: ChatToolCall, outcome: ToolOutcome) -> EntryDraft:
             "status": outcome.status,
             "error_code": outcome.error_code,
             "duration_ms": outcome.data.get("duration_ms"),
-            "arguments": call.arguments,
+            "arguments": model_arguments_for_storage(call.name, call.arguments),
             "resource": outcome.resource,
         },
     )

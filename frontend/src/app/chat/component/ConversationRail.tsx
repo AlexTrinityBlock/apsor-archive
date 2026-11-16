@@ -529,7 +529,7 @@ export const ConversationRail = memo(function ConversationRail({
               aria-label={t("chat.rail.collapse")}
               title={t("chat.rail.collapse")}
             >
-              <Icon name="chevron-right" size={13} />
+              <Icon name="panel-left-close" size={13} />
             </button>
           </div>
           <Button

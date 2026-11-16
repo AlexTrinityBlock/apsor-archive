@@ -1181,6 +1181,11 @@
   color: var(--accent-seal-deep);
 }
 
+.tool-step-chip__calc {
+  color: var(--accent-moss);
+  font-weight: 600;
+}
+
 /* Markdown ---------------------------------------------------------------- */
 
 .chat-markdown {
@@ -1661,6 +1666,174 @@
   font-family: var(--mono-font-mono);
   font-size: 9px;
   overflow-wrap: anywhere;
+}
+
+/* Inline plots ------------------------------------------------------------ */
+
+.chat-plot {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 2px;
+  padding: 10px 12px;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: var(--radius-sm);
+}
+
+.chat-plot__caption {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-plot__head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chat-plot__title {
+  min-width: 0;
+  color: var(--mono-ink);
+  font-family: var(--mono-font);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.chat-plot__note {
+  margin: 0;
+  color: var(--mono-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.chat-plot__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-plot__download {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  color: var(--mono-muted);
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.chat-plot__download:hover:not(:disabled) {
+  color: var(--mono-ink);
+  border-color: var(--mono-ink);
+}
+
+.chat-plot__download:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.chat-plot__canvas {
+  position: relative;
+  width: 100%;
+  height: clamp(280px, 40vh, 420px);
+  overflow: hidden;
+}
+
+.chat-plot__target {
+  position: absolute;
+  inset: 0;
+}
+
+.chat-plot__state,
+.chat-plot__error {
+  margin: 0;
+}
+
+.chat-plot__state {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 9.5px;
+}
+
+.chat-plot__error {
+  color: var(--accent-seal-deep);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.chat-plot__canvas > .chat-plot__state,
+.chat-plot__canvas > .chat-plot__error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  text-align: center;
+}
+
+.chat-plot__data {
+  padding-top: 5px;
+  border-top: 0.7px dashed var(--mono-grid);
+}
+
+.chat-plot__data summary {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.chat-plot__table {
+  width: 100%;
+  margin-top: 5px;
+  border-collapse: collapse;
+  font-family: var(--mono-font-mono);
+  font-size: 9px;
+}
+
+.chat-plot__table th,
+.chat-plot__table td {
+  padding: 3px 6px;
+  border-bottom: 0.5px solid var(--mono-grid);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.chat-plot__table th {
+  color: var(--mono-muted);
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.chat-plot__table td {
+  color: var(--mono-l2);
+}
+
+.chat-plot__empty,
+.chat-plot__truncated {
+  margin: 4px 0 0;
+  color: var(--mono-muted);
+  font-size: 9px;
+  line-height: 1.45;
 }
 
 .chat-resource {
@@ -2760,6 +2933,19 @@
 
   .chat-turn__meta {
     display: none;
+  }
+
+  .chat-plot {
+    padding: 8px 9px;
+  }
+
+  .chat-plot__head {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .chat-plot__actions {
+    align-self: flex-start;
   }
 
   .chat-resource {

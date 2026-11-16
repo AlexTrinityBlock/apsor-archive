@@ -96,7 +96,10 @@ export function ChatHeader({
               : t("chat.header.showConversations")
           }
         >
-          <Icon name="menu" size={14} />
+          <Icon
+            name={drawerOpen ? "panel-left-close" : "panel-left-open"}
+            size={14}
+          />
           <span>{t("chat.header.chats")}</span>
         </button>
 

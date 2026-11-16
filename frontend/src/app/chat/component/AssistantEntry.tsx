@@ -4,6 +4,7 @@ import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
 import { useI18n, type TranslationKey } from "../../i18n";
+import { readPlotSpec } from "../plot";
 import {
   assistantText,
   parseCitationLabel,
@@ -14,6 +15,7 @@ import {
 } from "../types";
 import { CitationChip } from "./CitationChip";
 import { MarkdownBody } from "./MarkdownBody";
+import { PlotBlock } from "./PlotBlock";
 import { ToolCallCard } from "./ToolCallCard";
 import { finishReasonTone } from "./status";
 
@@ -79,6 +81,14 @@ export function AssistantEntry({
     citations.push(token);
   }
   const usage = usageRows(meta.usage);
+  const plots = calls.flatMap((call) => {
+    const plotData = toolResults.get(call.id)?.meta.data;
+    return plotData !== null &&
+      plotData !== undefined &&
+      readPlotSpec(plotData) !== null
+      ? [{ id: call.id, data: plotData }]
+      : [];
+  });
 
   let body: ReactNode = null;
   if (text.length > 0) {
@@ -137,6 +147,10 @@ export function AssistantEntry({
       ) : null}
 
       {body}
+
+      {plots.map((plot) => (
+        <PlotBlock key={plot.id} data={plot.data} />
+      ))}
 
       {meta.error ? (
         <div className="chat-turn__error" role="status">

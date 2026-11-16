@@ -13,7 +13,9 @@ import type {
   ToolCallMeta,
   ToolResultMeta,
 } from "../types";
+import { readPlotSpec } from "../plot";
 import { MarkdownBody } from "./MarkdownBody";
+import { PlotBlock } from "./PlotBlock";
 import { ResourceCard } from "./ResourceCard";
 import { ToolCallCard } from "./ToolCallCard";
 import { UserMarginalia } from "./UserMarginalia";
@@ -147,6 +149,9 @@ export const StreamingTurn = memo(function StreamingTurn({
                     resource={tool.resource}
                     onOpen={onOpenResource}
                   />
+                ) : null}
+                {readPlotSpec(tool.data) ? (
+                  <PlotBlock data={tool.data} />
                 ) : null}
               </div>
             ))}

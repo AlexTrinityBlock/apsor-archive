@@ -3,11 +3,13 @@ import { Icon } from "../../component/Icon";
 import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
 import { useI18n } from "../../i18n";
 import { formatArgumentValue } from "../format";
+import { readPlotSpec } from "../plot";
 import {
   readToolResultCallId,
   readToolResultMeta,
   type ResourceMeta,
 } from "../types";
+import { PlotBlock } from "./PlotBlock";
 import { ResourceCard } from "./ResourceCard";
 import { toolStatusLabel, toolStatusTone } from "./status";
 
@@ -23,6 +25,7 @@ export function ToolResultCard({
   const meta = readToolResultMeta(entry);
   const callId = readToolResultCallId(entry);
   const argumentsList = meta.arguments ? Object.entries(meta.arguments) : [];
+  const hasPlot = readPlotSpec(meta.data) !== null;
 
   return (
     <article className="chat-result">
@@ -56,9 +59,13 @@ export function ToolResultCard({
 
       {meta.resource ? (
         <ResourceCard resource={meta.resource} onOpen={onOpenResource} />
-      ) : (
+      ) : null}
+
+      {hasPlot ? <PlotBlock data={meta.data} /> : null}
+
+      {!hasPlot && !meta.resource ? (
         <p className="chat-result__note">{t("chat.tool.resultNote")}</p>
-      )}
+      ) : null}
 
       {argumentsList.length > 0 ? (
         <details className="chat-result__args">
