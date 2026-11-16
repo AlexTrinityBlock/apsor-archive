@@ -1,9 +1,9 @@
 """Validated argument models for every agent tool."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 
@@ -119,6 +119,38 @@ class PresentResourceArgs(_ToolArgs):
     resource_type: Literal["file", "memory"]
     resource_id: int = Field(gt=0)
     chunk: int | None = Field(default=None, ge=1)
+
+
+class CalculateArgs(_ToolArgs):
+    """Arguments for one arithmetic expression."""
+
+    expression: str = Field(min_length=1, max_length=300)
+
+
+class PlotFigureArgs(BaseModel):
+    """One or more Plotly trace objects plus an optional layout object."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data: list[dict[str, Any]] = Field(min_length=1, max_length=12)
+    layout: dict[str, Any] | None = None
+
+
+class RenderPlotArgs(_ToolArgs):
+    """Arguments for one inline Plotly chart."""
+
+    title: str = Field(min_length=1, max_length=200)
+    caption: str | None = Field(default=None, max_length=500)
+    figure: PlotFigureArgs
+
+    @field_validator("title")
+    @classmethod
+    def _validate_title(cls, value: str) -> str:
+        """Reject a whitespace-only title; the chat UI needs a non-empty label."""
+        title = value.strip()
+        if not title:
+            raise ValueError("title must not be blank.")
+        return title
 
 
 class WebSearchArgs(_ToolArgs):

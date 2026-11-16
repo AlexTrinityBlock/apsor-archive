@@ -299,6 +299,7 @@ export const chat = {
     resultNote: "完整的工具結果仍記錄在對話紀錄中。",
     argumentsUsed: "使用的參數",
     entry: "條目 #{id}",
+    calculationResult: "= {result}",
   },
   citation: {
     fileTitle: "檔案：{title}",
@@ -323,6 +324,15 @@ export const chat = {
     imageOmitted: "對話紀錄中省略了圖片",
     imageOmittedAlt: "對話紀錄中省略了圖片：{alt}",
     tableAria: "表格，可水平捲動以閱讀所有欄位",
+  },
+  plot: {
+    title: "圖表",
+    loading: "正在繪製圖表…",
+    error: "無法繪製這張圖表。",
+    download: "下載 PNG",
+    dataTable: "圖表資料",
+    dataTableEmpty: "這張圖表沒有可顯示的表格資料。",
+    truncated: "顯示前 {shown} 個資料點，共 {total} 個。",
   },
   retry: {
     aria: "重試上一次執行",

@@ -313,6 +313,7 @@ export const chat = {
     resultNote: "The full tool result remains recorded in the transcript.",
     argumentsUsed: "Arguments used",
     entry: "entry #{id}",
+    calculationResult: "= {result}",
   },
   citation: {
     fileTitle: "File: {title}",
@@ -337,6 +338,15 @@ export const chat = {
     imageOmitted: "Image omitted from the transcript",
     imageOmittedAlt: "Image omitted from the transcript: {alt}",
     tableAria: "Table, scroll horizontally to read all columns",
+  },
+  plot: {
+    title: "Chart",
+    loading: "Drawing the chart…",
+    error: "This chart could not be drawn.",
+    download: "Download PNG",
+    dataTable: "Chart data",
+    dataTableEmpty: "No tabular data is available for this chart.",
+    truncated: "Showing the first {shown} of {total} points.",
   },
   retry: {
     aria: "Retry the last run",
