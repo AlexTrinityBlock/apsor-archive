@@ -48,6 +48,16 @@ Keep one conversation resumable and auditable across model steps and process res
 - `dependencies.py` — composition root, config snapshot, short-lived tool sessions, test seams.
 - `test/fake_chat_generator.py` — deterministic test fake; this package contains no collected tests.
 
+## Agent status block
+
+`domain/agent_status_domain.py` renders the one trailing status message each provider call receives; `_provider_messages` places it.
+
+- The chat loop appends one `<agent_status>` message as the **final** `system` message of every provider call: `[frozen system] + context.messages + [agent_status]`.
+- It contains only the runtime limits the model may need (`max_expression_chars`, `max_page_context_chars`, `max_tool_result_chars`, and `output_limit_tokens` unless the cap is disabled), plus an optional `<retry_notice>`.
+- Attributes are rendered in sorted order; identical inputs must produce byte-identical output.
+- The block is provider-only: it is never persisted and never enters `cache_prefix_hash`, and the frozen prompt/tool prefix must not change because of it.
+- Do not add user/account ids, titles, archive content, paths, usage counters, or any other mutable telemetry back into the block; the minimal shape is intentional.
+
 ## Conventions
 
 - Never update or delete an entry to fix history. Append a new entry, boundary, edit, or run state change. Preserve `commit_seq` grouping.

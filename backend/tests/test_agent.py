@@ -3004,7 +3004,7 @@ def test_context_window_error_body_is_classified() -> None:
     assert not _is_context_window_error(b'{"error":{"message":"invalid api key"}}')
 
 
-def test_agent_chat_output_budget_defaults_to_100k(settings: Settings) -> None:
+def test_agent_chat_output_budget_defaults_to_20k(settings: Settings) -> None:
     """Long tool arguments get the chat budget, not the summary cap."""
     client = DeepSeekClient(
         api_key="test-key",
@@ -3016,10 +3016,10 @@ def test_agent_chat_output_budget_defaults_to_100k(settings: Settings) -> None:
         temperature=0.0,
     )
 
-    assert settings.deepseek_chat_max_tokens == 100_000
+    assert settings.deepseek_chat_max_tokens == 20_000
     assert settings.deepseek_max_tokens == 1800
-    assert client.max_output_tokens == 100_000
-    assert client._base_payload(None, chat=True)["max_tokens"] == 100_000
+    assert client.max_output_tokens == 20_000
+    assert client._base_payload(None, chat=True)["max_tokens"] == 20_000
     assert client._base_payload(None)["max_tokens"] == 1800
 
 
