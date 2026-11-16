@@ -494,7 +494,7 @@ def test_output_limit_retries_with_smaller_output_notice(client: TestClient) -> 
     assert len(fake.requests) == 2
     retry_block = fake.requests[1].messages[-1]
     assert retry_block["role"] == "system"
-    assert retry_block["content"].startswith("<agent_self>")
+    assert retry_block["content"].startswith("<agent_status")
     assert '<retry_notice reason="output_limit">' in retry_block["content"]
     assert "smaller result" in retry_block["content"]
 
