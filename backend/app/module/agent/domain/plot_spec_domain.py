@@ -87,6 +87,10 @@ class SanitizedPlot:
     trace_count: int
     point_count: int
     byte_size: int
+    # Present only for one trace whose 2D point arrays share one rectangular
+    # shape. The tool receipt uses it to show that a grid was not truncated.
+    grid_rows: int | None = None
+    grid_columns: int | None = None
 
 
 def sanitize_plot_figure(figure: dict[str, Any]) -> SanitizedPlot:
@@ -115,6 +119,9 @@ def sanitize_plot_figure(figure: dict[str, Any]) -> SanitizedPlot:
 
     _validate_tree(figure)
     point_count = _count_points(raw_data)
+    grid_shape = _grid_shape(raw_data)
+    if grid_shape is not None and grid_shape[0] * grid_shape[1] != point_count:
+        grid_shape = None
     clean: dict[str, Any] = {"data": _copy(raw_data)}
     if raw_layout is not None:
         clean["layout"] = _copy(raw_layout)
@@ -124,6 +131,8 @@ def sanitize_plot_figure(figure: dict[str, Any]) -> SanitizedPlot:
         trace_count=len(raw_data),
         point_count=point_count,
         byte_size=len(encoded),
+        grid_rows=grid_shape[0] if grid_shape is not None else None,
+        grid_columns=grid_shape[1] if grid_shape is not None else None,
     )
 
 
@@ -175,17 +184,66 @@ def _validate_string(value: str) -> None:
 
 
 def _count_points(traces: list[dict[str, Any]]) -> int:
-    """Sum each trace's longest data array and enforce the global point cap."""
+    """Sum each trace's largest cell count and enforce the global point cap.
+
+    A 2D coordinate array is one point per cell, not one point per row: a
+    ``surface`` or ``heatmap`` with a 7 x 9 ``z`` array carries 63 points. Flat
+    arrays count their length, and ragged rows are summed cell by cell.
+    """
     total = 0
     for trace in traces:
-        lengths = [
-            len(trace[key]) for key in _POINT_KEYS if isinstance(trace.get(key), list)
+        counts = [
+            _count_array_cells(trace[key])
+            for key in _POINT_KEYS
+            if isinstance(trace.get(key), list)
         ]
-        if lengths:
-            total += max(lengths)
+        if counts:
+            total += max(counts)
     if total > MAX_PLOT_POINTS:
         raise PlotSpecError("The plot figure has too many data points.")
     return total
+
+
+def _count_array_cells(values: list[Any]) -> int:
+    """Count leaf cells in one point array, summing every ragged row."""
+    cells = 0
+    for value in values:
+        if isinstance(value, list):
+            cells += _count_array_cells(value)
+        else:
+            cells += 1
+    return cells
+
+
+def _grid_shape(traces: list[dict[str, Any]]) -> tuple[int, int] | None:
+    """Return one unambiguous rectangular 2D shape for a single-trace figure.
+
+    The receipt only reports rows and columns when the whole figure is one grid
+    with one shape. Mixed, ragged, or multi-trace figures keep the correct cell
+    count without claiming a shape that could mislead the model.
+    """
+    if len(traces) != 1:
+        return None
+    trace = traces[0]
+    shape: tuple[int, int] | None = None
+    for key in _POINT_KEYS:
+        value = trace.get(key)
+        if not isinstance(value, list) or not value:
+            continue
+        if not all(isinstance(row, list) for row in value):
+            continue
+        rows = [row for row in value if isinstance(row, list)]
+        columns = len(rows[0])
+        if columns == 0 or any(len(row) != columns for row in rows):
+            return None
+        if any(isinstance(cell, list) for row in rows for cell in row):
+            return None
+        candidate = (len(rows), columns)
+        if shape is None:
+            shape = candidate
+        elif shape != candidate:
+            return None
+    return shape
 
 
 def _serialize(figure: dict[str, Any]) -> bytes:
