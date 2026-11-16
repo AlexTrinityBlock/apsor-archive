@@ -20,6 +20,8 @@ export type IconName =
   | "sun"
   | "moon"
   | "menu"
+  | "panel-left-open"
+  | "panel-left-close"
   | "close"
   | "arrow-right"
   | "arrow-up"
@@ -154,6 +156,21 @@ const ICONS: Record<IconName, ReactNode> = {
   ),
   moon: <path d="M20 14.4A8.3 8.3 0 1 1 9.6 4a6.7 6.7 0 0 0 10.4 10.4Z" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+  // Lucide panel-left-open/close geometry, kept in the archive line set.
+  "panel-left-open": (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 3v18" />
+      <path d="m14 9 3 3-3 3" />
+    </>
+  ),
+  "panel-left-close": (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 3v18" />
+      <path d="m16 15-3-3 3-3" />
+    </>
+  ),
   close: <path d="m6 6 12 12M18 6 6 18" />,
   "arrow-right": (
     <>
@@ -348,6 +365,7 @@ export function Icon({ name, size = 20, className, ...rest }: IconProps) {
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
+      data-icon={name}
       className={className ? `icon ${className}` : "icon"}
       {...rest}
     >
