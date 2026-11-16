@@ -5,18 +5,21 @@ description or parameter schema therefore only affects new conversations, which
 keeps the provider cache prefix honest.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from pydantic import BaseModel
 
 from app.module.agent.domain.tool_args import (
+    CalculateArgs,
     HistoryMessageArgs,
     PresentResourceArgs,
     ReadFileArgs,
     ReadMemoryArgs,
     ReadPathArgs,
     ReadTimelineArgs,
+    RenderPlotArgs,
     SaveMemoryArgs,
     SearchKnowledgeArgs,
     WebFetchArgs,
@@ -34,9 +37,11 @@ PROMPT_VERSION = "archive-agent-v13"
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
 # v6 still validate. v8 adds the conversation-history lane to search_knowledge
-# and the read-only history_message tool. Existing conversations keep their
-# frozen pi.system snapshot.
-TOOLS_VERSION = "archive-tools-v8"
+# and the read-only history_message tool. v9 adds calculate and render_plot.
+# Existing conversations keep their frozen pi.system snapshot.
+TOOLS_VERSION = "archive-tools-v9"
+
+PLOT_TOOL_NAME = "render_plot"
 
 
 @dataclass(frozen=True)
@@ -54,7 +59,7 @@ class ToolSpec:
 
     def parameters(self) -> dict[str, Any]:
         """Return a compact, deterministic JSON schema for the arguments."""
-        schema = _clean_schema(self.args_model.model_json_schema())
+        schema = _inline_refs(_clean_schema(self.args_model.model_json_schema()))
         if self.required_fields:
             required = list(schema.get("required", []))
             for field_name in self.required_fields:
@@ -154,6 +159,42 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         args_model=PresentResourceArgs,
     ),
     ToolSpec(
+        name="calculate",
+        description=(
+            "Evaluate an arithmetic expression with a precise calculator. Use "
+            "this tool for every arithmetic step instead of doing mental math: "
+            "totals, percentages, ratios, averages, compound expressions, and "
+            "multi-step calculations. Pass one expression per call. Supports "
+            "+ - * / // % **, parentheses, and functions: abs, round, min, max, "
+            "sum, avg, mean, sqrt, exp, log, log10, log2, sin, cos, tan, asin, "
+            "acos, atan, atan2, floor, ceil, trunc, radians, degrees, hypot, "
+            "fabs; constants pi, e, tau. `%` is modulo, not percent; write 15% "
+            "as 15/100. Do not use variables, strings, attributes, or symbolic "
+            "algebra. If a calculation has several steps, call the tool once "
+            "per step or combine them with parentheses."
+        ),
+        args_model=CalculateArgs,
+    ),
+    ToolSpec(
+        name="render_plot",
+        description=(
+            "Render a Plotly chart inline in the chat. Use this whenever a "
+            "visual makes numeric or comparative information easier to "
+            "understand. Pass figure.data as an array of Plotly trace objects "
+            "and figure.layout as a layout object. Common traces include bar, "
+            'scatter with mode "lines", pie, histogram, box, violin, and '
+            "heatmap. Keep the figure small: at most 12 traces and 20,000 data "
+            "points. Put the chart title in `title`, not layout.title. Use "
+            "clear axis labels and units; use a small color palette and do not "
+            "rely on color alone. All data must be inline. Do not use "
+            "layout.images, layout.mapbox, layout.geo, layout.map, "
+            "layout.updatemenus, layout.sliders, layout.template, external "
+            "URLs, or map/geo traces. After the tool returns, explain the chart "
+            "in one or two sentences; do not repeat the whole figure."
+        ),
+        args_model=RenderPlotArgs,
+    ),
+    ToolSpec(
         name="web_search",
         description=(
             "Search the public web with the configured web-search provider. "
@@ -197,10 +238,87 @@ def tool_catalog() -> list[dict[str, Any]]:
     ]
 
 
-def _clean_schema(value: object) -> Any:
-    """Drop Pydantic title noise while preserving property order."""
+def model_arguments_for_storage(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """Remove display-only payloads before an argument reaches the provider context.
+
+    A figure is UI state, not reasoning state. Persisting it verbatim in the
+    assistant tool call would put the whole figure back into every later
+    provider request, so only the title, caption, and a trace count survive.
+    The complete figure is stored once, in ``agent_entry.data.plot.figure``.
+    """
+    if name != PLOT_TOOL_NAME:
+        return arguments
+    figure = arguments.get("figure")
+    raw_data = figure.get("data") if isinstance(figure, dict) else None
+    trace_count = len(raw_data) if isinstance(raw_data, list) else 0
+    return {
+        "title": arguments.get("title"),
+        "caption": arguments.get("caption"),
+        "figure_summary": {"traces": trace_count},
+    }
+
+
+def _clean_schema(value: object, *, keep_keys: bool = False) -> Any:
+    """Drop Pydantic title noise while preserving property order.
+
+    ``keep_keys`` is set while cleaning a ``properties`` mapping: there a key is
+    an argument name, so a tool that really has a ``title`` argument keeps it.
+    The generated ``title`` annotation inside each property schema is still
+    removed.
+    """
     if isinstance(value, dict):
-        return {key: _clean_schema(item) for key, item in value.items() if key != "title"}
+        cleaned: dict[str, Any] = {}
+        for key, item in value.items():
+            if key == "title" and not keep_keys:
+                continue
+            cleaned[key] = _clean_schema(item, keep_keys=key == "properties")
+        return cleaned
     if isinstance(value, list):
-        return [_clean_schema(item) for item in value]
+        return [_clean_schema(item, keep_keys=keep_keys) for item in value]
+    return value
+
+
+def _inline_refs(schema: dict[str, Any]) -> dict[str, Any]:
+    """Inline Pydantic ``$defs`` so the model-facing schema is self-contained.
+
+    Function-calling providers accept only a subset of JSON Schema, and a
+    top-level ``$defs`` map with ``$ref`` pointers is its least portable part.
+    The definitions are local, so resolving them here yields one flat schema
+    that describes exactly the same contract without exposing an internal model
+    name to the provider.
+    """
+    definitions = schema.pop("$defs", None)
+    if not isinstance(definitions, dict):
+        return schema
+    resolved_defs = {
+        name: _inline_refs(definition)
+        for name, definition in definitions.items()
+        if isinstance(definition, dict)
+    }
+    return cast(dict[str, Any], _resolve_refs(schema, resolved_defs, depth=0))
+
+
+def _resolve_refs(value: Any, definitions: Mapping[str, Any], *, depth: int) -> Any:
+    """Replace local ``$ref`` objects with their definition, with a depth cap."""
+    if depth > 10:
+        return value
+    if isinstance(value, dict):
+        ref = value.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/$defs/"):
+            target = definitions.get(ref.removeprefix("#/$defs/"))
+            if isinstance(target, dict):
+                resolved = _resolve_refs(target, definitions, depth=depth + 1)
+                siblings = {key: item for key, item in value.items() if key != "$ref"}
+                if siblings and isinstance(resolved, dict):
+                    return {
+                        **resolved,
+                        **_resolve_refs(siblings, definitions, depth=depth + 1),
+                    }
+                return resolved
+        return {
+            key: _resolve_refs(item, definitions, depth=depth + 1)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_resolve_refs(item, definitions, depth=depth + 1) for item in value]
     return value

@@ -14,18 +14,22 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from app.module.agent.domain.agent_domain import ToolOutcome
+from app.module.agent.domain.calculation_domain import evaluate_expression
 from app.module.agent.domain.history_domain import (
     HISTORY_MESSAGE_MAX_CHARS,
     HistoryMessage,
     HistoryMessageRead,
 )
+from app.module.agent.domain.plot_spec_domain import sanitize_plot_figure
 from app.module.agent.domain.tool_args import (
+    CalculateArgs,
     HistoryMessageArgs,
     PresentResourceArgs,
     ReadFileArgs,
     ReadMemoryArgs,
     ReadPathArgs,
     ReadTimelineArgs,
+    RenderPlotArgs,
     SaveMemoryArgs,
     SearchKnowledgeArgs,
     WebFetchArgs,
@@ -250,6 +254,10 @@ async def _dispatch(
         return await _save_memory(args, services)
     if name == "present_resource" and isinstance(args, PresentResourceArgs):
         return await _present_resource(args, services)
+    if name == "calculate" and isinstance(args, CalculateArgs):
+        return await _calculate(args)
+    if name == "render_plot" and isinstance(args, RenderPlotArgs):
+        return await _render_plot(args)
     if name == "web_search" and isinstance(args, WebSearchArgs):
         return await _web_search(args, services)
     if name == "web_fetch" and isinstance(args, WebFetchArgs):
@@ -840,6 +848,53 @@ async def _present_resource(
         },
     )
     return content, {"resource": resource}, resource
+
+
+async def _calculate(args: CalculateArgs) -> tuple[str, dict[str, Any], None]:
+    """Evaluate one expression; the calculator touches no service or database."""
+    result = evaluate_expression(args.expression)
+    content = _empty(
+        "calculation",
+        {"expression": result.expression, "result": result.formatted},
+    )
+    data = {
+        "expression": result.expression,
+        "result": result.result,
+        "formatted": result.formatted,
+    }
+    return content, data, None
+
+
+async def _render_plot(args: RenderPlotArgs) -> tuple[str, dict[str, Any], None]:
+    """Sanitize one figure and keep the full plot out of the provider content.
+
+    The provider only sees a one-line confirmation. The complete figure travels
+    in ``data.plot.figure``, which the UI renders and the provider never reads.
+    """
+    sanitized = sanitize_plot_figure(args.figure.model_dump(exclude_none=True))
+    content = _empty(
+        "plot_rendered",
+        {
+            "title": args.title,
+            "traces": sanitized.trace_count,
+            "points": sanitized.point_count,
+        },
+    )
+    data = {
+        "plot": {
+            "version": 1,
+            "format": "plotly",
+            "title": args.title,
+            "caption": args.caption,
+            "figure": sanitized.figure,
+            "stats": {
+                "trace_count": sanitized.trace_count,
+                "point_count": sanitized.point_count,
+                "byte_size": sanitized.byte_size,
+            },
+        }
+    }
+    return content, data, None
 
 
 async def _web_search(
