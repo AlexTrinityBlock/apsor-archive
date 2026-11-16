@@ -36,6 +36,7 @@ from app.module.agent.domain.agent_status_domain import (
     AgentStatus,
     render_agent_status,
     render_context_overflow_notice,
+    render_invalid_arguments_notice,
     render_output_limit_notice,
 )
 from app.module.agent.domain.compaction_domain import (
@@ -124,6 +125,11 @@ DUPLICATE_PLOT_STOP_TEXT = (
 # client yet. Delays are deliberately short: the durable run is still
 # retryable from the UI after these automatic attempts are exhausted.
 _PROVIDER_RETRY_DELAYS_SECONDS = (1.0, 3.0)
+# Two rejected tool calls in a row get an actionable retry notice; a third one
+# switches the next provider call to text-only so the run cannot burn its whole
+# step budget on the same invalid arguments.
+_INVALID_ARGUMENTS_NOTICE_THRESHOLD = 2
+_INVALID_ARGUMENTS_TEXT_ONLY_THRESHOLD = 3
 
 
 @dataclass(frozen=True)
@@ -685,6 +691,7 @@ class AgentService:
             context_overflow_retried = False
             rendered_plot_titles: set[str] = set()
             duplicate_plot_count = 0
+            invalid_arguments_streak = 0
             pending_retry_notice: str | None = None
 
             for step in range(start_step, self.config.max_steps + 1):
@@ -1306,6 +1313,47 @@ class AgentService:
                         parallel_index=index,
                     )
 
+                for _call, outcome in outcomes:
+                    if outcome.error_code == "invalid_tool_arguments":
+                        invalid_arguments_streak += 1
+                    else:
+                        invalid_arguments_streak = 0
+
+                if invalid_arguments_streak >= _INVALID_ARGUMENTS_TEXT_ONLY_THRESHOLD:
+                    # The same invalid call survived the retry notice, so offer
+                    # no tools for one call and let the model answer in text.
+                    # Rebuild the context first so the final call sees the tool
+                    # results appended above, not the pre-step snapshot.
+                    try:
+                        (
+                            context,
+                            last_entry_id,
+                            last_compaction_entry_id,
+                        ) = await self._context_for_step(
+                            conversation_id,
+                            run_id,
+                            last_entry_id,
+                            last_compaction_entry_id,
+                        )
+                    except AgentRunNotActiveError:
+                        terminal = True
+                        yield AgentStreamEvent(
+                            "run_end",
+                            {"run_id": run_id, "status": RUN_CANCELLED},
+                        )
+                        return
+                    async for event in self._stream_text_only_answer(
+                        turn,
+                        context,
+                        last_entry_id,
+                        step=step,
+                    ):
+                        yield event
+                    terminal = True
+                    return
+                if invalid_arguments_streak >= _INVALID_ARGUMENTS_NOTICE_THRESHOLD:
+                    pending_retry_notice = render_invalid_arguments_notice()
+
                 if duplicate_plot_count >= 2:
                     # Loop breaker: the model received one duplicate notice and
                     # still repeated the call, so answer in text and stop.
@@ -1631,13 +1679,16 @@ class AgentService:
         run_id: int,
         step: int,
         agent_status: str,
+        tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Run one provider call and yield transport-only text deltas.
 
         ``agent_status`` is the provider-only status feedback block. It is
         always the single last message, after the frozen system prefix and every
         replayed context message, so the cached prefix and the tool-call
-        adjacency stay byte-identical.
+        adjacency stay byte-identical. ``tools`` overrides the context's tool
+        list for the bounded text-only loop breaker; ``None`` sends the normal
+        snapshot.
 
         A retryable upstream failure is retried automatically only while no
         text delta has reached the client. Once a token has been streamed, a
@@ -1646,6 +1697,7 @@ class AgentService:
         """
         queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
         provider_messages = _provider_messages(context, agent_status)
+        provider_tools = context.tools if tools is None else tools
         max_attempts = len(_PROVIDER_RETRY_DELAYS_SECONDS) + 1
 
         async def run() -> None:
@@ -1661,7 +1713,7 @@ class AgentService:
                 try:
                     result = await self.chat_generator.complete_chat(
                         provider_messages,
-                        context.tools,
+                        provider_tools,
                         model=model,
                         stream=True,
                         on_text_delta=on_delta,
@@ -1859,6 +1911,133 @@ class AgentService:
             run_id,
             conversation_id,
             step,
+            entry.id,
+        )
+        yield AgentStreamEvent(
+            "run_end",
+            {"run_id": run_id, "status": RUN_COMPLETED},
+        )
+
+    async def _stream_text_only_answer(
+        self,
+        turn: AgentTurnState,
+        context: ProviderContext,
+        last_entry_id: int,
+        *,
+        step: int,
+    ) -> AsyncIterator[AgentStreamEvent]:
+        """Run one provider call with no tools and complete the run with its text.
+
+        This is the bounded loop breaker for three consecutive rejected tool
+        calls. A provider offered no tools can only answer in text, so the user
+        receives a normal explanation instead of a failed run or another
+        invalid call. Only a real provider failure on this final call uses the
+        ordinary error path.
+        """
+        run_id = turn.run.id
+        conversation_id = turn.conversation.id
+        yield AgentStreamEvent(
+            "message_start",
+            {"entry_id": None, "kind": KIND_ASSISTANT, "role": "assistant"},
+        )
+        completion = _CompletionOutcome()
+        async for event in self._completion_events(
+            context,
+            turn.conversation.model,
+            completion,
+            run_id=run_id,
+            step=step,
+            agent_status=self._agent_status_message(
+                retry_notice=render_invalid_arguments_notice()
+            ),
+            tools=[],
+        ):
+            yield event
+
+        result = completion.result
+        if result is not None and result.tool_calls:
+            # No tools were offered, so a stray call cannot run. Keep whatever
+            # text the completion produced and finish as a normal answer.
+            result = replace(result, tool_calls=[], finish_reason="stop")
+        finish_reason = _normalize_finish(result) if result is not None else None
+        if result is None or finish_reason is None:
+            error = completion.error or RuntimeError("empty text-only completion")
+            (
+                last_entry_id,
+                provider_code,
+                provider_detail,
+            ) = await self._append_provider_failure(
+                turn,
+                last_entry_id,
+                error,
+                step,
+            )
+            await self._fail_run(
+                turn,
+                last_entry_id,
+                provider_code,
+                provider_detail,
+            )
+            yield AgentStreamEvent(
+                "message_end",
+                {"entry_id": last_entry_id, "usage": {}, "finish_reason": "error"},
+            )
+            yield AgentStreamEvent(
+                "error",
+                {"code": provider_code, "detail": provider_detail},
+            )
+            yield AgentStreamEvent(
+                "run_end",
+                {"run_id": run_id, "status": RUN_FAILED},
+            )
+            return
+
+        try:
+            entry = await self.repository.append_assistant(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                draft=EntryDraft(
+                    kind=KIND_ASSISTANT,
+                    messages=[_assistant_message(result)],
+                    data=_assistant_data(
+                        result,
+                        turn,
+                        step,
+                        finish_reason,
+                        context.cache_prefix_hash,
+                    ),
+                ),
+                now=utcnow(),
+                usage=result.usage,
+            )
+        except AgentRunNotActiveError:
+            await self._best_effort_cancel(turn, last_entry_id)
+            yield AgentStreamEvent(
+                "run_end",
+                {"run_id": run_id, "status": RUN_CANCELLED},
+            )
+            return
+        yield AgentStreamEvent(
+            "message_end",
+            {
+                "entry_id": entry.id,
+                "usage": dict(result.usage),
+                "finish_reason": finish_reason,
+            },
+        )
+        await self.repository.complete_run(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            last_entry_id=entry.id,
+            now=utcnow(),
+        )
+        logger.info(
+            "agent run completed run_id=%s conversation_id=%s step=%s "
+            "finish_reason=%s last_entry_id=%s reason=invalid_arguments_text_only",
+            run_id,
+            conversation_id,
+            step,
+            finish_reason,
             entry.id,
         )
         yield AgentStreamEvent(

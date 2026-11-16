@@ -11,7 +11,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.infrastructure.ai import deepseek_client as deepseek_client_module
-from app.infrastructure.ai.deepseek_client import DeepSeekClient, _http_error
+from app.infrastructure.ai.deepseek_client import (
+    DeepSeekClient,
+    _http_error,
+    _parse_arguments,
+)
 from app.module.agent.protocol.chat_generator_protocol import (
     ChatResult,
     TextDeltaCallback,
@@ -439,3 +443,29 @@ def test_other_400_responses_are_not_retried(
     assert len(requests) == 1
     assert "max_tokens" in requests[0]
     assert client.max_output_tokens == 20_000
+
+
+def test_tool_arguments_accept_only_trailing_closing_brackets() -> None:
+    """A complete object plus extra closing brackets parses; junk does not."""
+    obj = {"title": "3D sphere", "figure": {"data": [{"type": "surface"}]}}
+    raw = json.dumps(obj, separators=(",", ":"))
+    accepted = {
+        "one brace": "}",
+        "five braces": "}}}}}",
+        "bracket": "]",
+        "mixed whitespace": " \n}\n] ",
+    }
+    for label, suffix in accepted.items():
+        parsed, error = _parse_arguments(raw + suffix)
+        assert error is None, label
+        assert parsed == obj, label
+
+    rejected = {
+        "trailing words": '{"title":"sphere"} trailing',
+        "truncated object": '{"title":"sphere"',
+        "non-object prefix": '"sphere"}}',
+    }
+    for label, value in rejected.items():
+        parsed, error = _parse_arguments(value)
+        assert parsed == {}, label
+        assert error == "Tool arguments are not valid JSON.", label
