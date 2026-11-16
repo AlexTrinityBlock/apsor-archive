@@ -64,6 +64,7 @@ def build_context(
     system_content = system_override if system_override is not None else _render_sections(sections)
     system_message = {"role": "system", "content": system_content}
     tools_list = list(tools.values())
+    prompt_version, tools_version = _system_versions(system_entries)
 
     contributions, tool_results, source_entry_ids = _contributions(active, edits)
     messages = _assemble_messages(contributions, tool_results)
@@ -74,6 +75,8 @@ def build_context(
         messages=messages,
         source_entry_ids=list(dict.fromkeys(source_entry_ids)),
         cache_prefix_hash=_prefix_hash(system_message, tools_list),
+        prompt_version=prompt_version,
+        tools_version=tools_version,
     )
 
 
@@ -171,6 +174,17 @@ def _system_snapshot(
                 override = fallback
 
     return sections, tools, override
+
+
+def _system_versions(entries: Sequence[TranscriptEntry]) -> tuple[str, str]:
+    """Return the prompt/tools versions frozen into the newest system entry."""
+    for entry in reversed(entries):
+        data = entry.data if isinstance(entry.data, dict) else {}
+        prompt_version = data.get("prompt_version")
+        tools_version = data.get("tools_version")
+        if isinstance(prompt_version, str) and isinstance(tools_version, str):
+            return prompt_version, tools_version
+    return "", ""
 
 
 def _contributions(

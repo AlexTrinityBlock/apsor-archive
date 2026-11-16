@@ -65,6 +65,7 @@ from app.module.knowledge.dependencies import (
     build_search_service,
     build_timeline_service,
 )
+from app.module.knowledge.protocol.provider_config import ProviderConfig
 from app.module.web_research.dependencies import get_web_research_service
 
 
@@ -291,7 +292,17 @@ def get_agent_service(
         system_prompt_service=get_system_prompt_service(request),
         chat_attachments=chat_attachments,
         server_timezone=cast(Settings, request.app.state.settings).timezone,
+        active_provider=runtime.chat_config.provider,
+        web_search_provider=_available_web_provider(runtime.web_search_config),
+        web_fetch_provider=_available_web_provider(runtime.web_fetch_config),
     )
+
+
+def _available_web_provider(config: ProviderConfig) -> str:
+    """Return a web provider only when it is active and has a usable key."""
+    if config.enabled and config.api_key and config.provider in {"tavily", "exa"}:
+        return config.provider
+    return "none"
 
 
 def get_agent_settings_service(

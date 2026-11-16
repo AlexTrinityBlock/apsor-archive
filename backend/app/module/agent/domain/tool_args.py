@@ -13,6 +13,11 @@ class _ToolArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# The calculator's model-facing argument cap. The runtime-limits block reports
+# the same value so the model never has to guess it.
+MAX_EXPRESSION_CHARS = 300
+
+
 class SearchKnowledgeArgs(_ToolArgs):
     """Arguments for hybrid archive search."""
 
@@ -124,7 +129,7 @@ class PresentResourceArgs(_ToolArgs):
 class CalculateArgs(_ToolArgs):
     """Arguments for one arithmetic expression."""
 
-    expression: str = Field(min_length=1, max_length=300)
+    expression: str = Field(min_length=1, max_length=MAX_EXPRESSION_CHARS)
 
 
 class PlotFigureArgs(BaseModel):

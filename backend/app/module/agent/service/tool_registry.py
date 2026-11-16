@@ -868,17 +868,28 @@ async def _calculate(args: CalculateArgs) -> tuple[str, dict[str, Any], None]:
 async def _render_plot(args: RenderPlotArgs) -> tuple[str, dict[str, Any], None]:
     """Sanitize one figure and keep the full plot out of the provider content.
 
-    The provider only sees a one-line confirmation. The complete figure travels
-    in ``data.plot.figure``, which the UI renders and the provider never reads.
+    The provider only sees a short receipt that states the chart is already
+    visible and explains why historical calls are summarized. The complete figure
+    travels in ``data.plot.figure``, which the UI renders and the provider never
+    reads.
     """
     sanitized = sanitize_plot_figure(args.figure.model_dump(exclude_none=True))
-    content = _empty(
-        "plot_rendered",
-        {
-            "title": args.title,
-            "traces": sanitized.trace_count,
-            "points": sanitized.point_count,
-        },
+    content = (
+        _open(
+            "plot_rendered",
+            {
+                "title": args.title,
+                "traces": sanitized.trace_count,
+                "points": sanitized.point_count,
+                "visible": "true",
+            },
+        )
+        + "The chart is already rendered and visible to the user. Do not call "
+        "render_plot again for this request. Historical render_plot calls are "
+        "stored with a compact summary instead of the full figure to save context; "
+        "this is intentional, not an omission. Never send figure_summary as an "
+        "argument. Reply with a one- or two-sentence explanation of the chart."
+        + _close("plot_rendered")
     )
     data = {
         "plot": {

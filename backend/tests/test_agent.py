@@ -12,6 +12,8 @@ from sqlalchemy import Engine, create_engine, text
 from app.infrastructure.ai.deepseek_client import DeepSeekClient, _is_context_window_error
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
+from app.module.agent.domain.agent_domain import ProviderContext
+from app.module.agent.domain.compaction_domain import estimate_provider_context_tokens
 from app.module.agent.service.tool_registry import _web_fetch_footer
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
@@ -62,7 +64,7 @@ READ_USAGE = {
     "prompt_cache_miss_tokens": 7,
 }
 PROMPT_VERSION = "archive-agent-v13"
-TOOLS_VERSION = "archive-tools-v10"
+TOOLS_VERSION = "archive-tools-v11"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -89,6 +91,16 @@ DEFAULT_FETCH_DOCUMENT = "# Extracted page\n\nMarkdown body for the fetched page
 # Smaller than the service default (12,000) so the two-call agent test can walk
 # two pages over a compact fake document.
 FAKE_FETCH_PAGE_CHARS = 3_600
+
+
+def _context_messages(request: Any) -> list[dict[str, Any]]:
+    """Return provider messages without the trailing agent-self system block."""
+    messages = list(request.messages)
+    if messages and messages[-1].get("role") == "system":
+        content = messages[-1].get("content")
+        if isinstance(content, str) and content.startswith("<agent_self>"):
+            messages.pop()
+    return messages
 
 
 class FakeWebResearchService:
@@ -550,7 +562,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     }
 
     first_request = fake.requests[0]
-    assert [message["role"] for message in first_request.messages] == [
+    assert [message["role"] for message in _context_messages(first_request)] == [
         "system",
         "user",
         "user",
@@ -740,7 +752,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     final_request = fake.requests[-1]
     assert first_request.messages[0] == final_request.messages[0]
     assert first_request.tools == final_request.tools
-    assert [message["role"] for message in final_request.messages] == [
+    assert [message["role"] for message in _context_messages(final_request)] == [
         "system",
         "user",
         "user",
@@ -917,7 +929,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         and message["content"].startswith(first_question)
         for message in fork_request.messages
     )
-    assert fork_request.messages[-1]["content"].startswith("Continue in the fork.")
+    assert _context_messages(fork_request)[-1]["content"].startswith("Continue in the fork.")
 
     source_after = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     assert source_after["entries"] == source_entries
@@ -1074,7 +1086,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert retried_body["run"]["status"] == "completed"
     assert retried_body["user_entry"]["id"] == failed_body["user_entry"]["id"]
     assert retried_body["answer"] == "The retried answer [file:1#1]."
-    assert [message["role"] for message in retry_fake.requests[0].messages] == [
+    assert [message["role"] for message in _context_messages(retry_fake.requests[0])] == [
         "system",
         "user",
     ]
@@ -1295,7 +1307,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert "Assistant:" in auto_content
 
     auto_request = compact_fake.requests[1]
-    assert [message["role"] for message in auto_request.messages] == [
+    assert [message["role"] for message in _context_messages(auto_request)] == [
         "system",
         "user",
         "user",
@@ -1395,7 +1407,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert fourth_compact_body["entries"][0]["id"] > clear_entry["id"]
     assert fourth_compact_body["entries"][0]["data"]["page_key"] == PAGE_KEY
     after_clear_request = compact_fake.requests[3]
-    assert [message["role"] for message in after_clear_request.messages] == [
+    assert [message["role"] for message in _context_messages(after_clear_request)] == [
         "system",
         "user",
         "user",
@@ -1570,7 +1582,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         entry for entry in asked_conversation_entries if entry["kind"] == "pi.user"
     ]
     assert [entry["model"][0]["content"] for entry in asked_user_entries] == [saved_first_question]
-    assert saved_fake.requests[0].messages[-1]["content"].startswith(saved_first_question)
+    assert _context_messages(saved_fake.requests[0])[-1]["content"].startswith(saved_first_question)
 
     after_ask_library = client.get(
         "/api/v1/agent/questions",
@@ -2581,6 +2593,7 @@ class ContextOverflowChatGenerator:
 
     configured = True
     model_name = "fake-chat"
+    max_output_tokens = 10_000
 
     def __init__(self) -> None:
         self.requests: list[list[dict[str, Any]]] = []
@@ -2669,6 +2682,12 @@ def test_agent_compacts_and_retries_after_provider_context_overflow(
     assert body["run"]["status"] == "completed"
     assert body["answer"] == "Recovered after compaction."
     assert len(fake.requests) == 2
+    retry_messages = fake.requests[1]
+    retry_system = [
+        message for message in retry_messages if message.get("role") == "system"
+    ]
+    assert len(retry_system) == 2
+    assert '<retry_notice reason="context_window">' in retry_system[-1]["content"]
     assert any(
         isinstance(message.get("content"), str)
         and message["content"].startswith("<compaction>")
@@ -2679,6 +2698,149 @@ def test_agent_compacts_and_retries_after_provider_context_overflow(
     ]
     assert len(compactions) == 1
     assert compactions[0]["data"]["reason"] == "provider_context_overflow"
+
+
+def test_agent_self_system_message_exposes_runtime_facts(client: TestClient) -> None:
+    """The trailing system block reports safe runtime facts, never private data."""
+    conversation_title = "RUNTIME-AGENT-SELF-PRIVATE-TITLE"
+    private_token = "RUNTIME-AGENT-SELF-PRIVATE-TOKEN"
+    fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "calculate",
+                {"expression": "1 + 1"},
+                call_id="call_self_1",
+            ),
+            text_result("The answer is 2."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": conversation_title},
+    ).json()
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation['id']}/messages",
+        json={"content": f"Add one and one. {private_token}"},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    assert body["answer"] == "The answer is 2."
+
+    first_block = fake.requests[0].messages[-1]
+    assert first_block["role"] == "system"
+    first_content = first_block["content"]
+    assert first_content.startswith("<agent_self>")
+    assert first_content.endswith("</agent_self>")
+    assert 'name="Apsor Archive Agent"' in first_content
+    assert 'role="persistent archive research agent"' in first_content
+    assert 'transcript="append_only"' in first_content
+    assert f'conversation_id="{conversation["id"]}"' in first_content
+    assert f'run_id="{body["run"]["id"]}"' in first_content
+    assert 'provider="deepseek"' in first_content
+    assert 'active_provider="deepseek"' in first_content
+    assert 'step="1"' in first_content
+    assert 'max_steps="24"' in first_content
+    assert 'remaining_steps="23"' in first_content
+    assert 'approval_resume="false"' in first_content
+    assert 'new_page_context="none"' in first_content
+    assert 'active_context_entries="1"' in first_content
+    assert f'tool_count="{len(TOOL_NAMES)}"' in first_content
+    assert 'web_search="none"' in first_content
+    assert 'web_fetch="none"' in first_content
+    for name in TOOL_NAMES:
+        assert name in first_content
+    assert 'prompt_version="archive-agent-v13"' in first_content
+    assert 'tools_version="archive-tools-v11"' in first_content
+    assert 'output_limit_tokens="10000"' in first_content
+    assert 'context_window_tokens="1000000"' in first_content
+    assert 'compaction_threshold_tokens="75000"' in first_content
+    assert 'max_tool_calls_per_turn="20"' in first_content
+    assert 'max_parallel_tools="6"' in first_content
+    assert 'max_tool_result_chars="100000"' in first_content
+    assert 'max_page_context_chars="6000"' in first_content
+    assert 'max_plot_traces="12"' in first_content
+    assert 'max_plot_points="2000"' in first_content
+    assert 'max_plot_bytes="200000"' in first_content
+    assert 'max_expression_chars="300"' in first_content
+    assert 'parallel_tools_enabled="true"' in first_content
+    assert 'auto_compaction_enabled="true"' in first_content
+    assert 'save_memory_requires_approval="true"' in first_content
+    assert (
+        '<usage prompt_tokens="0" completion_tokens="0" total_tokens="0" />'
+        in first_content
+    )
+    assert "cached_tokens" not in first_content
+    assert "These are your own runtime facts" in first_content
+
+    second_block = fake.requests[1].messages[-1]
+    assert second_block["role"] == "system"
+    second_content = second_block["content"]
+    assert 'step="2"' in second_content
+    assert 'remaining_steps="22"' in second_content
+    assert 'tool_calls_used="1"' in second_content
+    assert 'remaining_tool_calls="19"' in second_content
+    assert 'active_context_entries="3"' in second_content
+    assert (
+        '<usage prompt_tokens="12" completion_tokens="6" total_tokens="18" '
+        'cached_tokens="8" />' in second_content
+    )
+
+    # The frozen system message is unchanged and remains first.
+    frozen_system = fake.requests[0].messages[0]
+    assert frozen_system is not first_block
+    assert frozen_system["role"] == "system"
+    assert not frozen_system["content"].startswith("<agent_self>")
+    assert "You are Apsor Archive" in frozen_system["content"]
+    system_entry = client.get(
+        f"/api/v1/agent/conversations/{conversation['id']}/entries",
+        params={"limit": 2},
+    ).json()["entries"][0]
+    assert system_entry["kind"] == "pi.system"
+    assert frozen_system["content"] == system_entry["model"][0]["content"]
+
+    # No private or credential data enters the provider-only block.
+    assert conversation_title not in first_content
+    assert private_token not in first_content
+    assert "user_id" not in first_content
+    assert "api_key" not in first_content
+    assert "base_url" not in first_content
+    assert "request_id" not in first_content
+
+
+def test_context_estimate_ignores_inline_image_data_urls() -> None:
+    """The self-block estimate must not count a base64 chat image as context."""
+    image_data_url = "data:image/png;base64," + "A" * 200_000
+    context = ProviderContext(
+        system_message={"role": "system", "content": "You are Apsor Archive."},
+        tools=[],
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is in this image?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_data_url},
+                    },
+                ],
+            }
+        ],
+        source_entry_ids=[1],
+        cache_prefix_hash="hash",
+    )
+
+    full_estimate = estimate_provider_context_tokens(context)
+    stripped_estimate = estimate_provider_context_tokens(
+        context,
+        strip_image_data=True,
+    )
+
+    assert full_estimate > 50_000
+    assert stripped_estimate < 500
+    assert stripped_estimate < full_estimate
 
 
 def test_context_window_error_body_is_classified() -> None:
@@ -2701,9 +2863,9 @@ def test_agent_chat_output_budget_is_larger_than_extraction(settings: Settings) 
         temperature=0.0,
     )
 
-    assert settings.deepseek_chat_max_tokens == 8192
+    assert settings.deepseek_chat_max_tokens == 10_000
     assert settings.deepseek_max_tokens == 1800
-    assert client._base_payload(None, chat=True)["max_tokens"] == 8192
+    assert client._base_payload(None, chat=True)["max_tokens"] == 10_000
     assert client._base_payload(None)["max_tokens"] == 1800
 
 

@@ -144,7 +144,7 @@ class Settings(BaseSettings):
     # legitimately emit large tool arguments (for example a long memory), so
     # they use a separate, larger output budget.
     deepseek_max_tokens: int = 1800
-    deepseek_chat_max_tokens: int = 8192
+    deepseek_chat_max_tokens: int = 10_000
     deepseek_temperature: float = 0.2
 
     # Tavily is the environment fallback for the two independent web

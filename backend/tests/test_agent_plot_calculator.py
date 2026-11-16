@@ -258,7 +258,8 @@ def test_render_plot_persists_figure_and_redacts_provider_context(
     assert len(replayed_tool_results) == 1
     assert replayed_tool_results[0]["content"] == result_entry["model"][0]["content"]
     assert "Jan" not in replayed_tool_results[0]["content"]
-    assert "figure" not in replayed_tool_results[0]["content"]
+    assert '"data"' not in replayed_tool_results[0]["content"]
+    assert "[3,5]" not in replayed_tool_results[0]["content"]
 
     reloaded_results = _tool_results(_reload_entries(client, conversation_id))
     assert len(reloaded_results) == 1
@@ -360,7 +361,7 @@ def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     assert response.status_code == 200, response.text
     catalog = response.json()
     assert catalog["prompt_version"] == "archive-agent-v13"
-    assert catalog["tools_version"] == "archive-tools-v10"
+    assert catalog["tools_version"] == "archive-tools-v11"
 
     tools = {tool["name"]: tool for tool in catalog["tools"]}
     names = [tool["name"] for tool in catalog["tools"]]
@@ -392,7 +393,7 @@ def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
 
 
 def test_plot_tool_result_content_is_small(client: TestClient) -> None:
-    """Keep the provider-facing plot result a short XML confirmation."""
+    """Keep the provider-facing plot result a short, unambiguous receipt."""
     fake = FakeChatGenerator(
         [
             tool_call_result(
@@ -422,77 +423,231 @@ def test_plot_tool_result_content_is_small(client: TestClient) -> None:
     assert f'title="{PLOT_TITLE}"' in content
     assert 'traces="1"' in content
     assert 'points="2"' in content
-    assert "Jan" not in content
-    assert "figure" not in content
-    assert '"data"' not in content
-    assert len(content) < 400
-
-
-def test_output_limit_is_reported_with_actionable_detail(client: TestClient) -> None:
-    """Report a truncated finish_reason=length as an actionable output-limit failure."""
-    truncated_call = ChatToolCall(
-        call_id="call_plot_truncated",
-        name="render_plot",
-        arguments={},
-        raw_arguments='{"title":"Random 3D plot","figure":{"data":[{"type":"scatter3d","x":[1,2',
-        parse_error="Unterminated JSON string",
+    assert 'visible="true"' in content
+    assert "The chart is already rendered and visible to the user" in content
+    assert "Do not call render_plot again for this request" in content
+    assert (
+        "Historical render_plot calls are stored with a compact summary "
+        "instead of the full figure to save context" in content
     )
+    assert "Never send figure_summary as an argument" in content
+    assert "Jan" not in content
+    assert '"data"' not in content
+    assert "[3,5]" not in content
+    assert len(content) < 700
+
+
+TRUNCATED_USAGE = {
+    "prompt_tokens": 3998,
+    "completion_tokens": 10000,
+    "total_tokens": 13998,
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 3998,
+}
+
+
+def _truncated_plot_result(call_id: str) -> ChatResult:
+    """Build a completion cut off at the output cap with no visible text."""
+    return ChatResult(
+        text="",
+        tool_calls=[
+            ChatToolCall(
+                call_id=call_id,
+                name="render_plot",
+                arguments={},
+                raw_arguments=(
+                    '{"title":"Random 3D plot","figure":{"data":'
+                    '[{"type":"scatter3d","x":[1,2'
+                ),
+                parse_error="Unterminated JSON string",
+            )
+        ],
+        finish_reason="length",
+        model="fake-chat",
+        usage=dict(TRUNCATED_USAGE),
+    )
+
+
+def test_output_limit_retries_with_smaller_output_notice(client: TestClient) -> None:
+    """Retry the same step once after a truncated completion with no text."""
     fake = FakeChatGenerator(
         [
-            ChatResult(
-                text="",
-                tool_calls=[truncated_call],
-                finish_reason="length",
-                model="fake-chat",
+            _truncated_plot_result("call_plot_truncated"),
+            text_result(
+                "I kept the chart request smaller.",
                 usage={
-                    "prompt_tokens": 3998,
-                    "completion_tokens": 8192,
-                    "total_tokens": 12190,
-                    "prompt_cache_hit_tokens": 0,
-                    "prompt_cache_miss_tokens": 3998,
+                    "prompt_tokens": 4000,
+                    "completion_tokens": 50,
+                    "total_tokens": 4050,
+                    "prompt_cache_hit_tokens": 3000,
+                    "prompt_cache_miss_tokens": 1000,
                 },
-            )
+            ),
         ]
     )
     client.app.state.agent_chat_generator = fake
-    conversation_id = _create_conversation(client, "Output limit")
+    conversation_id = _create_conversation(client, "Output limit retry")
 
-    response = client.post(
-        f"/api/v1/agent/conversations/{conversation_id}/messages",
-        json={"content": "Draw a random 3D plot."},
-        headers={"Accept": "application/json"},
-    )
+    body = _send_message(client, conversation_id, "Draw a random 3D plot.")
 
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["run"]["status"] == "failed"
-    assert body["error_code"] == "output_limit"
-    detail = body["error_detail"]
-    assert detail is not None
-    assert "output token limit" in detail
-    assert "smaller or simpler" in detail
+    assert body["answer"] == "I kept the chart request smaller."
+    assert len(fake.requests) == 2
+    retry_block = fake.requests[1].messages[-1]
+    assert retry_block["role"] == "system"
+    assert retry_block["content"].startswith("<agent_self>")
+    assert '<retry_notice reason="output_limit">' in retry_block["content"]
+    assert "smaller result" in retry_block["content"]
 
-    assistant_entry = body["assistant_entry"]
-    assert assistant_entry is not None
-    assert assistant_entry["data"]["finish_reason"] == "error"
-    assert assistant_entry["data"]["error"] == {
-        "code": "output_limit",
-        "detail": detail,
-    }
-
-    # The truncated tool call must never be dispatched.
+    # The truncated call never ran and the retry did not emit a tool result.
     assert _tool_results(body["entries"]) == []
+    assistant_entries = [
+        entry for entry in body["entries"] if entry["kind"] == "pi.assistant"
+    ]
+    assert len(assistant_entries) == 1
+    assert assistant_entries[0]["data"]["finish_reason"] == "stop"
+    assert "error" not in assistant_entries[0]["data"]
+    assert assistant_entries[0]["data"]["usage"] == {
+        "prompt_tokens": 7998,
+        "completion_tokens": 10050,
+        "total_tokens": 18048,
+        "prompt_cache_hit_tokens": 3000,
+        "prompt_cache_miss_tokens": 4998,
+    }
+    assert body["run"]["prompt_tokens"] == 7998
+    assert body["run"]["completion_tokens"] == 10050
+    assert body["run"]["total_tokens"] == 18048
+
+
+def test_output_limit_retry_exhausted_returns_graceful_text(
+    client: TestClient,
+) -> None:
+    """Two truncated completions become a normal answer, not a failed run."""
+    fake = FakeChatGenerator(
+        [
+            _truncated_plot_result("call_plot_truncated_1"),
+            _truncated_plot_result("call_plot_truncated_2"),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Output limit exhausted")
+
+    body = _send_message(client, conversation_id, "Draw a random 3D plot.")
+
+    assert len(fake.requests) == 2
+    assert body["answer"] is not None
+    assert "output budget" in body["answer"]
+    assert "smaller or simpler" in body["answer"]
+    assert _tool_results(body["entries"]) == []
+
+    assistant_entries = [
+        entry for entry in body["entries"] if entry["kind"] == "pi.assistant"
+    ]
+    assert len(assistant_entries) == 1
+    assert assistant_entries[0]["data"]["finish_reason"] == "stop"
+    assert "error" not in assistant_entries[0]["data"]
+    assert assistant_entries[0]["data"]["usage"]["completion_tokens"] == 20000
+    assert body["run"]["completion_tokens"] == 20000
 
     reloaded = _reload_entries(client, conversation_id)
     assert _tool_results(reloaded) == []
     reloaded_assistant = [
-        entry
-        for entry in reloaded
-        if entry["kind"] == "pi.assistant" and (entry["data"] or {}).get("error")
+        entry for entry in reloaded if entry["kind"] == "pi.assistant"
     ]
     assert len(reloaded_assistant) == 1
-    assert reloaded_assistant[0]["data"]["error"] == {
-        "code": "output_limit",
-        "detail": detail,
+    assert reloaded_assistant[0]["data"]["finish_reason"] == "stop"
+    assert "error" not in reloaded_assistant[0]["data"]
+
+
+def test_duplicate_render_plot_is_not_executed(client: TestClient) -> None:
+    """A later render_plot with the same title returns a notice, not a chart."""
+    duplicate_arguments = {
+        "title": f"  {PLOT_TITLE.upper()}  ",
+        "caption": PLOT_CAPTION,
+        "figure": PLOT_FIGURE,
     }
-    assert reloaded_assistant[0]["data"]["finish_reason"] == "error"
+    fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "render_plot",
+                {
+                    "title": PLOT_TITLE,
+                    "caption": PLOT_CAPTION,
+                    "figure": PLOT_FIGURE,
+                },
+                call_id="call_plot_first",
+            ),
+            tool_call_result(
+                "render_plot",
+                duplicate_arguments,
+                call_id="call_plot_duplicate",
+            ),
+            text_result("The chart is shown above."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Duplicate plot")
+
+    body = _send_message(client, conversation_id, "Draw this chart twice.")
+
+    assert body["answer"] == "The chart is shown above."
+    results = _tool_results(body["entries"])
+    assert len(results) == 2
+    assert sum(1 for entry in results if "plot" in entry["data"]) == 1
+    duplicate = results[1]
+    assert duplicate["data"]["status"] == "ok"
+    assert duplicate["data"]["duplicate"] is True
+    assert "plot" not in duplicate["data"]
+    duplicate_content = duplicate["model"][0]["content"]
+    assert "<plot_already_rendered" in duplicate_content
+    assert "already visible in the chat" in duplicate_content
+    assert "Do not call render_plot again" in duplicate_content
+
+    # The second provider request sees the success receipt; the third sees the
+    # duplicate notice instead of a second figure.
+    second_tools = [
+        message for message in fake.requests[1].messages if message.get("role") == "tool"
+    ]
+    assert any("already rendered and visible" in message["content"] for message in second_tools)
+    third_tools = [
+        message for message in fake.requests[2].messages if message.get("role") == "tool"
+    ]
+    assert any("<plot_already_rendered" in message["content"] for message in third_tools)
+
+    reloaded = _reload_entries(client, conversation_id)
+    assert sum(1 for entry in _tool_results(reloaded) if "plot" in entry["data"]) == 1
+
+
+def test_duplicate_render_plot_loop_breaker(client: TestClient) -> None:
+    """Stop after the second duplicate notice and answer in normal text."""
+    arguments = {
+        "title": PLOT_TITLE,
+        "caption": PLOT_CAPTION,
+        "figure": PLOT_FIGURE,
+    }
+    fake = FakeChatGenerator(
+        [
+            tool_call_result("render_plot", arguments, call_id="call_plot_1"),
+            tool_call_result("render_plot", arguments, call_id="call_plot_2"),
+            tool_call_result("render_plot", arguments, call_id="call_plot_3"),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Duplicate plot loop")
+
+    body = _send_message(client, conversation_id, "Keep drawing the same chart.")
+
+    # The loop breaker completes after the second duplicate, so the third
+    # scripted completion is never consumed and no fourth request is made.
+    assert len(fake.requests) == 3
+    assert fake.remaining == 0
+    assert body["answer"] is not None
+    assert body["answer"].startswith("The chart is already visible in the chat")
+
+    results = _tool_results(body["entries"])
+    assert len(results) == 3
+    assert sum(1 for entry in results if "plot" in entry["data"]) == 1
+    assistant_entries = [
+        entry for entry in body["entries"] if entry["kind"] == "pi.assistant"
+    ]
+    assert assistant_entries[-1]["data"]["finish_reason"] == "stop"
+    assert "error" not in assistant_entries[-1]["data"]

@@ -124,6 +124,10 @@ class ProviderContext:
     messages: list[dict[str, Any]]
     source_entry_ids: list[int]
     cache_prefix_hash: str
+    # The versions frozen into this conversation's ``pi.system`` entry. Empty
+    # when the transcript has no system snapshot (for example an empty context).
+    prompt_version: str = ""
+    tools_version: str = ""
 
 
 @dataclass(frozen=True)
