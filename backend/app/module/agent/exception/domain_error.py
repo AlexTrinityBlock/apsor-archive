@@ -60,6 +60,15 @@ class AgentProviderError(AgentError):
         super().__init__("The chat provider failed.")
 
 
+class AgentOutputLimitError(AgentError):
+    """The provider completed with finish_reason=length before a tool call closed."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The model reached its output token limit while generating the response."
+        )
+
+
 class AgentInvalidEntryError(AgentError):
     def __init__(self, detail: str) -> None:
         super().__init__(detail)

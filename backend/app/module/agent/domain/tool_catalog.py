@@ -38,8 +38,9 @@ PROMPT_VERSION = "archive-agent-v13"
 # while keeping it optional on the validation model, so conversations frozen on
 # v6 still validate. v8 adds the conversation-history lane to search_knowledge
 # and the read-only history_message tool. v9 adds calculate and render_plot.
+# v10 tightens render_plot's point guidance after a truncated output-limit call.
 # Existing conversations keep their frozen pi.system snapshot.
-TOOLS_VERSION = "archive-tools-v9"
+TOOLS_VERSION = "archive-tools-v10"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -183,8 +184,10 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "understand. Pass figure.data as an array of Plotly trace objects "
             "and figure.layout as a layout object. Common traces include bar, "
             'scatter with mode "lines", pie, histogram, box, violin, and '
-            "heatmap. Keep the figure small: at most 12 traces and 20,000 data "
-            "points. Put the chart title in `title`, not layout.title. Use "
+            "heatmap. Keep the figure small: at most 12 traces and 2,000 data "
+            "points. For generated or random data, prefer 50-200 points; never "
+            "emit thousands of points. Put the chart title in `title`, not "
+            "layout.title. Use "
             "clear axis labels and units; use a small color palette and do not "
             "rely on color alone. All data must be inline. Do not use "
             "layout.images, layout.mapbox, layout.geo, layout.map, "

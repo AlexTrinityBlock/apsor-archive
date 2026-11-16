@@ -51,6 +51,7 @@ from app.module.agent.exception.domain_error import (
     AgentConversationNotFoundError,
     AgentInvalidEntryError,
     AgentNotConfiguredError,
+    AgentOutputLimitError,
     AgentRunNotActiveError,
     AgentRunNotFoundError,
     AgentRunNotRetryableError,
@@ -781,6 +782,22 @@ class AgentService:
 
                 finish_reason = _normalize_finish(result)
                 if finish_reason is None:
+                    logger.warning(
+                        "agent completion unusable run_id=%s conversation_id=%s "
+                        "step=%d finish_reason=%s completion_tokens=%d "
+                        "text_chars=%d tool_calls=%d",
+                        run_id,
+                        conversation_id,
+                        step,
+                        result.finish_reason or "-",
+                        result.usage.get("completion_tokens", 0),
+                        len(result.text),
+                        len(result.tool_calls),
+                    )
+                    if (result.finish_reason or "").lower() == "length":
+                        completion_error: Exception = AgentOutputLimitError()
+                    else:
+                        completion_error = RuntimeError("truncated or malformed completion")
                     (
                         last_entry_id,
                         provider_code,
@@ -788,7 +805,7 @@ class AgentService:
                     ) = await self._append_provider_failure(
                         turn,
                         last_entry_id,
-                        RuntimeError("truncated or malformed completion"),
+                        completion_error,
                         step,
                         usage=result.usage,
                     )
@@ -1685,6 +1702,13 @@ class AgentService:
         if isinstance(error, AiNotConfiguredError):
             code = "not_configured"
             detail = "No chat provider is configured."
+        elif isinstance(error, AgentOutputLimitError):
+            code = "output_limit"
+            detail = (
+                "The model reached its output token limit while generating the response. "
+                "Ask for a smaller or simpler result (for example, fewer plot points), "
+                "then retry."
+            )
         else:
             code = "provider_error"
             if isinstance(error, AiProviderError) and error.retryable:

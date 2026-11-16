@@ -12,6 +12,7 @@ const SUGGESTION_KEYS: Readonly<Record<string, TranslationKey>> = {
   file_not_found: "chat.panels.error.suggestionFileMissing",
   memory_not_found: "chat.panels.error.suggestionMemoryMissing",
   invalid_chunk_window: "chat.panels.error.suggestionChunkWindow",
+  output_limit: "chat.panels.error.suggestionOutputLimit",
 };
 
 function suggestionFor(code: string | null, t: (key: TranslationKey) => string): string {
@@ -28,12 +29,18 @@ function suggestionFor(code: string | null, t: (key: TranslationKey) => string):
 /** A repair bench for any failed or unstructured tool result. */
 export function ToolErrorPanel({ item }: PanelProps) {
   const { t } = useI18n();
+  // An assistant failure has no tool; a tool failure always carries one.
+  const isRunFailure = item.kind === "error" && item.tool === null;
   const code = item.errorCode ?? textField(item.data, "code");
   const detail =
     item.detail ??
     textField(item.data, "detail") ??
     textField(item.data, "message") ??
-    t("chat.panels.error.detailFallback");
+    t(
+      isRunFailure
+        ? "chat.panels.error.runDetailFallback"
+        : "chat.panels.error.detailFallback",
+    );
   const argumentEntries = item.arguments ? Object.entries(item.arguments) : [];
 
   return (
@@ -46,7 +53,13 @@ export function ToolErrorPanel({ item }: PanelProps) {
           <Icon name="info" size={18} />
         </span>
         <div>
-          <p className="eyebrow">{t("chat.panels.error.eyebrow")}</p>
+          <p className="eyebrow">
+            {t(
+              isRunFailure
+                ? "chat.panels.error.runEyebrow"
+                : "chat.panels.error.eyebrow",
+            )}
+          </p>
           <strong>{code ?? "unstructured_error"}</strong>
         </div>
       </header>
@@ -72,7 +85,11 @@ export function ToolErrorPanel({ item }: PanelProps) {
         </section>
       ) : null}
 
-      <p className="pi-repair__note">{t("chat.panels.error.note")}</p>
+      <p className="pi-repair__note">
+        {t(
+          isRunFailure ? "chat.panels.error.runNote" : "chat.panels.error.note",
+        )}
+      </p>
     </div>
   );
 }
