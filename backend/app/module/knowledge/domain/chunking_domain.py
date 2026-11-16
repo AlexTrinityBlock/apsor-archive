@@ -6,7 +6,9 @@ from pydantic import BaseModel, ConfigDict
 
 from app.shared.text.ngram import count_terms
 
-_SENTENCE_BREAK = re.compile(r"(?<=[.!?;])|(?<=[\u3002\uff01\uff1f\uff1b])|(?<=[\n])")
+_SENTENCE_BREAK = re.compile(
+    r"(?<=[.!?;])(?=\s|$)|(?<=[\u3002\uff01\uff1f\uff1b])|(?<=[\n])"
+)
 _PARAGRAPH_BREAK = re.compile(r"\n\s*\n+")
 
 

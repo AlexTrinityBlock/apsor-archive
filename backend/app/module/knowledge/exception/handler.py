@@ -27,6 +27,7 @@ from app.module.knowledge.exception.domain_error import (
     MemorySupersedeTargetError,
     PathNotFoundError,
     ProviderNotFoundError,
+    SpreadsheetArchiveTooLargeError,
     SummaryNotEnoughMemoriesError,
     SummaryNotFoundError,
     TooManyChunksError,
@@ -50,6 +51,9 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(FileStorageUnavailableError, 503, "storage_unavailable")
     ExceptionRegistry.register(UnsupportedFileTypeError, 422, "unsupported_file_type")
     ExceptionRegistry.register(FileTooLargeError, 413, "file_too_large")
+    ExceptionRegistry.register(
+        SpreadsheetArchiveTooLargeError, 413, "spreadsheet_archive_too_large"
+    )
     ExceptionRegistry.register(FileVersionConflictError, 409, "file_version_conflict")
     ExceptionRegistry.register(EmptyContentError, 422, "empty_content")
     ExceptionRegistry.register(VisionExtractionError, 502, "vision_extraction_failed")

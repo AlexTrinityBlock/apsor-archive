@@ -35,6 +35,10 @@ from app.module.knowledge.domain.path_domain import (
     parent_directory,
     path_segments,
 )
+from app.module.knowledge.domain.spreadsheet_domain import (
+    SPREADSHEET_EXTENSIONS,
+    SPREADSHEET_MAX_TEXT_CHARS,
+)
 from app.module.knowledge.domain.vision_prompt_domain import (
     RenderedVisionPrompt,
     VisionPromptMode,
@@ -86,6 +90,7 @@ from app.module.knowledge.schema.file_schema import (
 )
 from app.module.knowledge.service.cache_keys import user_version_scope
 from app.module.knowledge.service.indexer_service import IndexerService
+from app.module.knowledge.service.spreadsheet_extractor import extract_spreadsheet_text
 from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -95,7 +100,7 @@ CpuRunner = Callable[..., Awaitable[Any]]
 T = TypeVar("T")
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-DOCUMENT_EXTENSIONS = {".pdf", ".docx"}
+DOCUMENT_EXTENSIONS = {".pdf", ".docx"} | set(SPREADSHEET_EXTENSIONS)
 MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".csv", ".json", ".log"}
 ALLOWED_EXTENSIONS = TEXT_EXTENSIONS | DOCUMENT_EXTENSIONS | IMAGE_EXTENSIONS
@@ -107,11 +112,12 @@ DOCUMENT_ANALYSIS_PROMPT = (
     "You analyze a document before it enters a personal knowledge library. "
     "Return JSON with the keys: has_meaningful_text (boolean), use_vision "
     "(boolean), document_type (short string such as pdf, docx, text, json, "
-    "image, scanned_pdf), title (short string), summary (1 to 2 sentences), tags "
-    "(3 to 6 short strings), and language. Set use_vision to true only when the "
-    "extracted text is empty, garbled, or clearly not the document's main content "
-    "and a vision pass over its pages or images could recover it. For plain text "
-    "files use_vision must be false. Do not invent content."
+    "spreadsheet, image, scanned_pdf), title (short string), summary (1 to 2 "
+    "sentences), tags (3 to 6 short strings), and language. Set use_vision to "
+    "true only when the extracted text is empty, garbled, or clearly not the "
+    "document's main content and a vision pass over its pages or images could "
+    "recover it. For plain text files and spreadsheets use_vision must be false. "
+    "Do not invent content."
 )
 
 
@@ -619,6 +625,38 @@ class FileService:
             return ExtractedDocument(
                 text=text,
                 document_type=analysis.document_type,
+                extraction_method="text",
+                ai_summary=analysis.summary or None,
+                ai_tags=analysis.tags,
+            )
+        if suffix in SPREADSHEET_EXTENSIONS:
+            # Keep the extractor's output below the per-file chunk ceiling so a
+            # large workbook is visibly truncated instead of failing after a
+            # full extraction with too_many_chunks.
+            spreadsheet_max_chars = max(
+                1,
+                min(
+                    SPREADSHEET_MAX_TEXT_CHARS,
+                    (max(1, self.max_chunks) - 1)
+                    * max(1, self.target_chars - self.overlap_chars),
+                ),
+            )
+            text = await self._run_cpu(
+                extract_spreadsheet_text,
+                data,
+                suffix,
+                spreadsheet_max_chars,
+            )
+            if not text.strip():
+                raise EmptyContentError()
+            analysis = await self._analyze_text(
+                text,
+                file_name_value=file_name_value,
+                document_type="spreadsheet",
+            )
+            return ExtractedDocument(
+                text=text,
+                document_type=analysis.document_type or "spreadsheet",
                 extraction_method="text",
                 ai_summary=analysis.summary or None,
                 ai_tags=analysis.tags,
