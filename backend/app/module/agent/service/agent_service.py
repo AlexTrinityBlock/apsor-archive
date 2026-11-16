@@ -45,6 +45,7 @@ from app.module.agent.domain.compaction_domain import (
     estimate_context_tokens,
 )
 from app.module.agent.domain.context_domain import build_context, render_tool_result
+from app.module.agent.domain.plot_spec_domain import PlotLimits
 from app.module.agent.domain.tool_args import MAX_EXPRESSION_CHARS
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
@@ -1510,6 +1511,7 @@ class AgentService:
                 call_id=call.call_id,
                 max_chars=self.config.max_tool_result_chars,
                 approved=True,
+                plot_limits=self._plot_limits(),
             )
         else:
             outcome = _rejection_outcome(call.name, approval_id)
@@ -1601,6 +1603,14 @@ class AgentService:
             pass
         return await self.collect_turn(approval_turn.turn)
 
+    def _plot_limits(self) -> PlotLimits:
+        """Return the snapshot's render_plot budgets for one tool call."""
+        return PlotLimits(
+            max_points=self.config.max_plot_points,
+            max_bytes=self.config.max_plot_bytes,
+            max_nodes=self.config.max_plot_nodes,
+        )
+
     async def _execute_tool(
         self,
         call: ChatToolCall,
@@ -1633,6 +1643,7 @@ class AgentService:
                 max_chars=self.config.max_tool_result_chars,
                 parse_error=call.parse_error,
                 approved=approved,
+                plot_limits=self._plot_limits(),
             )
         except Exception:
             logger.exception(

@@ -1348,6 +1348,24 @@
             "title": "Max Parallel Tools",
             "type": "integer"
           },
+          "max_plot_bytes": {
+            "maximum": 2000000.0,
+            "minimum": 10000.0,
+            "title": "Max Plot Bytes",
+            "type": "integer"
+          },
+          "max_plot_nodes": {
+            "maximum": 500000.0,
+            "minimum": 1000.0,
+            "title": "Max Plot Nodes",
+            "type": "integer"
+          },
+          "max_plot_points": {
+            "maximum": 50000.0,
+            "minimum": 100.0,
+            "title": "Max Plot Points",
+            "type": "integer"
+          },
           "max_steps": {
             "maximum": 32.0,
             "minimum": 1.0,
@@ -1389,7 +1407,10 @@
           "parallel_tools_enabled",
           "save_memory_requires_approval",
           "chat_attachment_staged_ttl_hours",
-          "chat_attachment_cleanup_interval_seconds"
+          "chat_attachment_cleanup_interval_seconds",
+          "max_plot_points",
+          "max_plot_bytes",
+          "max_plot_nodes"
         ],
         "title": "AgentSettingsUpdateSchema",
         "type": "object"
@@ -1450,6 +1471,24 @@
             "title": "Max Parallel Tools",
             "type": "integer"
           },
+          "max_plot_bytes": {
+            "maximum": 2000000.0,
+            "minimum": 10000.0,
+            "title": "Max Plot Bytes",
+            "type": "integer"
+          },
+          "max_plot_nodes": {
+            "maximum": 500000.0,
+            "minimum": 1000.0,
+            "title": "Max Plot Nodes",
+            "type": "integer"
+          },
+          "max_plot_points": {
+            "maximum": 50000.0,
+            "minimum": 100.0,
+            "title": "Max Plot Points",
+            "type": "integer"
+          },
           "max_steps": {
             "maximum": 32.0,
             "minimum": 1.0,
@@ -1491,7 +1530,10 @@
           "parallel_tools_enabled",
           "save_memory_requires_approval",
           "chat_attachment_staged_ttl_hours",
-          "chat_attachment_cleanup_interval_seconds"
+          "chat_attachment_cleanup_interval_seconds",
+          "max_plot_points",
+          "max_plot_bytes",
+          "max_plot_nodes"
         ],
         "title": "AgentSettingsValuesSchema",
         "type": "object"

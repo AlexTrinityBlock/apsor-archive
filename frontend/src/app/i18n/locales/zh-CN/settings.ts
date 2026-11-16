@@ -60,6 +60,7 @@ export const settings = {
       maxLength: "最多只能输入 {max} 个字符。",
       thresholdBelowContext: "必须低于模型上下文窗口（{context}）。",
       parallelWithinCalls: "不得超过每轮工具调用数（{calls}）。",
+      plotNodesAtLeastPoints: "必须至少等于数据点上限（{points}）。",
       overlapBelowTarget: "必须低于目标字符数（{target}）。",
     },
   },
@@ -116,6 +117,18 @@ export const settings = {
     fieldToolResultCharsUnit: "字符",
     fieldToolResultCharsHint:
       "每个结果会各自截断；100k 约可容纳 25 个 4 千字符的分段。",
+    fieldPlotPointsLabel: "图表数据点",
+    fieldPlotPointsUnit: "点",
+    fieldPlotPointsHint:
+      "单个图表最多可包含的数据点；每条 trace 最大的数据数组会计入点数。默认 10,000。",
+    fieldPlotBytesLabel: "图表 JSON 字节",
+    fieldPlotBytesUnit: "字节",
+    fieldPlotBytesHint:
+      "单个图表序列化后的最大大小。默认 600,000 字节。",
+    fieldPlotNodesLabel: "图表 JSON 节点",
+    fieldPlotNodesUnit: "个节点",
+    fieldPlotNodesHint:
+      "单个图表可遍历的最大 JSON 节点数；必须至少等于数据点上限。默认 100,000。",
     fieldStagedTtlLabel: "暂存图片 TTL",
     fieldStagedTtlUnit: "小时",
     fieldStagedTtlHint:

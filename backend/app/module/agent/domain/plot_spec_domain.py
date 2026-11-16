@@ -14,12 +14,14 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
+from app.module.agent.domain.agent_domain import (
+    MAX_PLOT_BYTES,
+    MAX_PLOT_NODES,
+    MAX_PLOT_POINTS,
+)
 from app.module.agent.exception.domain_error import AgentError
 
-MAX_PLOT_BYTES = 600_000
 MAX_PLOT_TRACES = 12
-MAX_PLOT_POINTS = 10_000
-MAX_PLOT_NODES = 100_000
 MAX_PLOT_DEPTH = 20
 
 # Only ``data`` and ``layout`` describe a chart. ``frames`` (animation) and any
@@ -80,6 +82,22 @@ class PlotSpecError(AgentError):
 
 
 @dataclass(frozen=True)
+class PlotLimits:
+    """The runtime plot budgets one tool call applies.
+
+    The defaults match ``AgentRuntimeConfig``; a caller that has a runtime
+    snapshot passes its stored values instead of relying on these fallbacks.
+    """
+
+    max_points: int = MAX_PLOT_POINTS
+    max_bytes: int = MAX_PLOT_BYTES
+    max_nodes: int = MAX_PLOT_NODES
+
+
+DEFAULT_PLOT_LIMITS = PlotLimits()
+
+
+@dataclass(frozen=True)
 class SanitizedPlot:
     """A validated, deep-copied figure plus the statistics the UI reports."""
 
@@ -93,12 +111,19 @@ class SanitizedPlot:
     grid_columns: int | None = None
 
 
-def sanitize_plot_figure(figure: dict[str, Any]) -> SanitizedPlot:
+def sanitize_plot_figure(
+    figure: dict[str, Any],
+    *,
+    max_points: int = MAX_PLOT_POINTS,
+    max_bytes: int = MAX_PLOT_BYTES,
+    max_nodes: int = MAX_PLOT_NODES,
+) -> SanitizedPlot:
     """Validate one Plotly figure and return a deep-copied sanitized figure.
 
     The caller's dict is never mutated. Every rejection raises
     ``PlotSpecError`` with a short fixed message; the figure and the underlying
-    exception are deliberately kept out of the error.
+    exception are deliberately kept out of the error. The three budgets default
+    to the module constants and are overridden by the stored runtime config.
     """
     if not isinstance(figure, dict):
         raise PlotSpecError("The plot figure must be an object.")
@@ -117,15 +142,15 @@ def sanitize_plot_figure(figure: dict[str, Any]) -> SanitizedPlot:
     if raw_layout is not None and not isinstance(raw_layout, dict):
         raise PlotSpecError("The plot layout must be an object.")
 
-    _validate_tree(figure)
-    point_count = _count_points(raw_data)
+    _validate_tree(figure, max_nodes=max_nodes)
+    point_count = _count_points(raw_data, max_points=max_points)
     grid_shape = _grid_shape(raw_data)
     if grid_shape is not None and grid_shape[0] * grid_shape[1] != point_count:
         grid_shape = None
     clean: dict[str, Any] = {"data": _copy(raw_data)}
     if raw_layout is not None:
         clean["layout"] = _copy(raw_layout)
-    encoded = _serialize(clean)
+    encoded = _serialize(clean, max_bytes=max_bytes)
     return SanitizedPlot(
         figure=clean,
         trace_count=len(raw_data),
@@ -136,15 +161,18 @@ def sanitize_plot_figure(figure: dict[str, Any]) -> SanitizedPlot:
     )
 
 
-def _validate_tree(figure: dict[str, Any]) -> None:
+def _validate_tree(figure: dict[str, Any], *, max_nodes: int) -> None:
     """Walk the figure iteratively, rejecting unsafe keys, types, and strings."""
     stack: list[tuple[object, int]] = [(figure, 0)]
     visited = 0
     while stack:
         node, depth = stack.pop()
         visited += 1
-        if visited > MAX_PLOT_NODES:
-            raise PlotSpecError("The plot figure is too complex.")
+        if visited > max_nodes:
+            raise PlotSpecError(
+                f"The plot figure has more than {max_nodes:,} JSON nodes; "
+                f"the limit is {max_nodes:,}."
+            )
         if depth > MAX_PLOT_DEPTH:
             raise PlotSpecError("The plot figure is nested too deeply.")
         if isinstance(node, dict):
@@ -183,7 +211,7 @@ def _validate_string(value: str) -> None:
         raise PlotSpecError("The plot figure links to script or external content.")
 
 
-def _count_points(traces: list[dict[str, Any]]) -> int:
+def _count_points(traces: list[dict[str, Any]], *, max_points: int) -> int:
     """Sum each trace's largest cell count and enforce the global point cap.
 
     A 2D coordinate array is one point per cell, not one point per row: a
@@ -199,8 +227,10 @@ def _count_points(traces: list[dict[str, Any]]) -> int:
         ]
         if counts:
             total += max(counts)
-    if total > MAX_PLOT_POINTS:
-        raise PlotSpecError("The plot figure has too many data points.")
+    if total > max_points:
+        raise PlotSpecError(
+            f"The plot figure has {total:,} data points; the limit is {max_points:,}."
+        )
     return total
 
 
@@ -246,7 +276,7 @@ def _grid_shape(traces: list[dict[str, Any]]) -> tuple[int, int] | None:
     return shape
 
 
-def _serialize(figure: dict[str, Any]) -> bytes:
+def _serialize(figure: dict[str, Any], *, max_bytes: int) -> bytes:
     """Serialize canonically and reject NaN/Infinity or an oversized payload."""
     try:
         encoded = json.dumps(
@@ -257,8 +287,10 @@ def _serialize(figure: dict[str, Any]) -> bytes:
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise PlotSpecError("The plot figure is not valid JSON.") from exc
-    if len(encoded) > MAX_PLOT_BYTES:
-        raise PlotSpecError("The plot figure is too large.")
+    if len(encoded) > max_bytes:
+        raise PlotSpecError(
+            f"The plot figure is {len(encoded):,} bytes; the limit is {max_bytes:,}."
+        )
     return encoded
 
 
