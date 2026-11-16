@@ -57,8 +57,14 @@ class DeepSeekClient:
         self.timeout_seconds = timeout_seconds
         self.max_tokens = max_tokens
         # Chat turns may need to emit long tool arguments, while summaries and
-        # JSON extraction should keep the smaller extraction budget.
-        self.chat_max_tokens = chat_max_tokens if chat_max_tokens is not None else max_tokens
+        # JSON extraction should keep the smaller extraction budget. A chat cap
+        # of 0 or None means unlimited: the payload omits max_tokens entirely.
+        self.chat_max_tokens = chat_max_tokens or 0
+        # Some OpenAI-compatible providers reject a max_tokens value above their
+        # own limit. Once a retry without the field succeeds, every later chat
+        # call in this process omits it.
+        self._chat_cap_rejected = False
+        self._chat_cap_warning_logged = False
         self.temperature = temperature
         self.supports_thinking = supports_thinking
 
@@ -71,18 +77,46 @@ class DeepSeekClient:
 
     @property
     def max_output_tokens(self) -> int:
-        """The completion-token cap for one agent chat call."""
+        """The completion-token cap for one agent chat call; 0 means unlimited."""
+        if self._chat_cap_rejected:
+            return 0
         return self.chat_max_tokens
 
     def _base_payload(self, model: str | None, *, chat: bool = False) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model or self.model_name,
             "temperature": self.temperature,
-            "max_tokens": self.chat_max_tokens if chat else self.max_tokens,
         }
+        max_tokens = self.chat_max_tokens if chat else self.max_tokens
+        if max_tokens and not (chat and self._chat_cap_rejected):
+            payload["max_tokens"] = max_tokens
         if self.supports_thinking:
             payload["thinking"] = {"type": "disabled"}
         return payload
+
+    def _chat_cap_rejection(
+        self,
+        payload: dict[str, Any],
+        status_code: int,
+        body: bytes,
+    ) -> bool:
+        """Return whether a 400 rejected the chat output cap, not something else."""
+        return (
+            status_code == 400
+            and "max_tokens" in payload
+            and b"max_tokens" in body.lower()
+        )
+
+    def _note_chat_cap_fallback(self, model: str) -> None:
+        """Log the one fallback warning without the request body or credentials."""
+        if self._chat_cap_warning_logged:
+            return
+        self._chat_cap_warning_logged = True
+        logger.warning(
+            "provider rejected chat max_tokens; retrying once without the cap "
+            "provider=deepseek model=%s status=400",
+            model or "-",
+        )
 
     async def _complete(
         self,
@@ -110,7 +144,7 @@ class DeepSeekClient:
             stream=False,
             messages=2,
             tools=0,
-            max_tokens=int(payload["max_tokens"]),
+            max_tokens=payload.get("max_tokens"),
             temperature=self.temperature,
             timeout_seconds=self.timeout_seconds,
         )
@@ -256,10 +290,11 @@ class DeepSeekClient:
             stream=stream,
             messages=len(payload.get("messages") or []),
             tools=len(payload.get("tools") or []),
-            max_tokens=int(payload.get("max_tokens") or self.chat_max_tokens),
+            max_tokens=payload.get("max_tokens"),
             temperature=self.temperature,
             timeout_seconds=self.timeout_seconds,
         )
+        fallback_used = False
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                 response = await client.post(
@@ -267,6 +302,19 @@ class DeepSeekClient:
                     headers=self._headers,
                     json=payload,
                 )
+                if self._chat_cap_rejection(
+                    payload,
+                    response.status_code,
+                    response.content,
+                ):
+                    fallback_used = True
+                    self._note_chat_cap_fallback(model)
+                    payload = _payload_without_max_tokens(payload)
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=self._headers,
+                        json=payload,
+                    )
         except httpx.HTTPError as exc:
             raise _network_error(
                 exc,
@@ -288,6 +336,8 @@ class DeepSeekClient:
                 body=response.content,
                 started=started,
             )
+        if fallback_used:
+            self._chat_cap_rejected = True
         try:
             body = response.json()
             choice = body["choices"][0]
@@ -415,77 +465,90 @@ class DeepSeekClient:
             stream=True,
             messages=len(payload.get("messages") or []),
             tools=len(payload.get("tools") or []),
-            max_tokens=int(payload.get("max_tokens") or self.chat_max_tokens),
+            max_tokens=payload.get("max_tokens"),
             temperature=self.temperature,
             timeout_seconds=self.timeout_seconds,
         )
 
+        fallback_used = False
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                async with client.stream(
-                    "POST",
-                    f"{self.base_url}/chat/completions",
-                    headers=self._headers,
-                    json=payload,
-                ) as response:
-                    response_status = response.status_code
-                    response_request_id = _response_request_id(response)
-                    response_content_type = response.headers.get("content-type")
-                    if response.status_code >= 400:
-                        raise _http_error(
-                            operation=operation,
-                            call_id=call_id,
-                            model=request_model,
-                            stream=True,
-                            status_code=response.status_code,
-                            request_id=response_request_id,
-                            body=await response.aread(),
-                            started=started,
-                        )
-                    async for raw_line in response.aiter_lines():
-                        line = raw_line.strip()
-                        if not line or line.startswith(":"):
-                            continue
-                        if not line.startswith("data:"):
-                            continue
-                        data = line[5:].strip()
-                        if data == "[DONE]":
-                            break
-                        try:
-                            chunk = json.loads(data)
-                        except json.JSONDecodeError:
-                            continue
-                        if not isinstance(chunk, dict):
-                            continue
-                        chunk_count += 1
-                        if first_chunk_ms is None:
-                            first_chunk_ms = _elapsed_ms(started)
-                        chunk_usage = chunk.get("usage")
-                        if isinstance(chunk_usage, dict):
-                            usage = _normalize_usage(chunk_usage)
-                        chunk_model = chunk.get("model")
-                        if isinstance(chunk_model, str) and chunk_model:
-                            model_name = chunk_model
-                        choices = chunk.get("choices")
-                        if not isinstance(choices, list) or not choices:
-                            continue
-                        choice = choices[0]
-                        if not isinstance(choice, dict):
-                            continue
-                        delta = choice.get("delta")
-                        if not isinstance(delta, dict):
-                            delta = {}
-                        piece = delta.get("content")
-                        if isinstance(piece, str) and piece:
-                            content_parts.append(piece)
-                            if on_text_delta is not None:
-                                await on_text_delta(piece)
-                        raw_calls = delta.get("tool_calls")
-                        if isinstance(raw_calls, list):
-                            _accumulate_tool_calls(call_slots, raw_calls)
-                        reason = choice.get("finish_reason")
-                        if isinstance(reason, str) and reason:
-                            finish_reason = reason
+                while True:
+                    async with client.stream(
+                        "POST",
+                        f"{self.base_url}/chat/completions",
+                        headers=self._headers,
+                        json=payload,
+                    ) as response:
+                        response_status = response.status_code
+                        response_request_id = _response_request_id(response)
+                        response_content_type = response.headers.get("content-type")
+                        if response.status_code >= 400:
+                            body = await response.aread()
+                            if self._chat_cap_rejection(
+                                payload,
+                                response.status_code,
+                                body,
+                            ):
+                                fallback_used = True
+                                self._note_chat_cap_fallback(request_model)
+                                payload = _payload_without_max_tokens(payload)
+                                continue
+                            raise _http_error(
+                                operation=operation,
+                                call_id=call_id,
+                                model=request_model,
+                                stream=True,
+                                status_code=response.status_code,
+                                request_id=response_request_id,
+                                body=body,
+                                started=started,
+                            )
+                        async for raw_line in response.aiter_lines():
+                            line = raw_line.strip()
+                            if not line or line.startswith(":"):
+                                continue
+                            if not line.startswith("data:"):
+                                continue
+                            data = line[5:].strip()
+                            if data == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data)
+                            except json.JSONDecodeError:
+                                continue
+                            if not isinstance(chunk, dict):
+                                continue
+                            chunk_count += 1
+                            if first_chunk_ms is None:
+                                first_chunk_ms = _elapsed_ms(started)
+                            chunk_usage = chunk.get("usage")
+                            if isinstance(chunk_usage, dict):
+                                usage = _normalize_usage(chunk_usage)
+                            chunk_model = chunk.get("model")
+                            if isinstance(chunk_model, str) and chunk_model:
+                                model_name = chunk_model
+                            choices = chunk.get("choices")
+                            if not isinstance(choices, list) or not choices:
+                                continue
+                            choice = choices[0]
+                            if not isinstance(choice, dict):
+                                continue
+                            delta = choice.get("delta")
+                            if not isinstance(delta, dict):
+                                delta = {}
+                            piece = delta.get("content")
+                            if isinstance(piece, str) and piece:
+                                content_parts.append(piece)
+                                if on_text_delta is not None:
+                                    await on_text_delta(piece)
+                            raw_calls = delta.get("tool_calls")
+                            if isinstance(raw_calls, list):
+                                _accumulate_tool_calls(call_slots, raw_calls)
+                            reason = choice.get("finish_reason")
+                            if isinstance(reason, str) and reason:
+                                finish_reason = reason
+                        break
         except httpx.HTTPError as exc:
             raise _network_error(
                 exc,
@@ -495,6 +558,8 @@ class DeepSeekClient:
                 stream=True,
                 started=started,
             ) from exc
+        if fallback_used:
+            self._chat_cap_rejected = True
 
         text = "".join(content_parts)
         tool_calls = _build_streamed_tool_calls(call_slots)
@@ -592,13 +657,13 @@ def _log_request_started(
     stream: bool,
     messages: int,
     tools: int,
-    max_tokens: int,
+    max_tokens: int | None,
     temperature: float,
     timeout_seconds: float,
 ) -> None:
     logger.info(
         "provider request started provider=deepseek operation=%s call_id=%s "
-        "model=%s stream=%s messages=%d tools=%d max_tokens=%d "
+        "model=%s stream=%s messages=%d tools=%d max_tokens=%s "
         "temperature=%s timeout_s=%s",
         operation,
         call_id,
@@ -606,7 +671,7 @@ def _log_request_started(
         stream,
         messages,
         tools,
-        max_tokens,
+        max_tokens if max_tokens is not None else "-",
         temperature,
         timeout_seconds,
     )
@@ -825,6 +890,12 @@ def _is_retryable_status(status_code: int) -> bool:
 def _is_context_window_error(body: bytes) -> bool:
     text = body[:8192].decode("utf-8", "ignore").lower()
     return any(marker in text for marker in _CONTEXT_ERROR_MARKERS)
+
+
+def _payload_without_max_tokens(payload: dict[str, Any]) -> dict[str, Any]:
+    trimmed = dict(payload)
+    trimmed.pop("max_tokens", None)
+    return trimmed
 
 
 def _normalize_usage(raw: object) -> dict[str, int]:

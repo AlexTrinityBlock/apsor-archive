@@ -1,5 +1,7 @@
 """Provider outage behavior: bounded automatic retry and safe logging."""
 
+import asyncio
+import json
 import logging
 import time
 from collections.abc import Sequence
@@ -8,7 +10,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from app.infrastructure.ai.deepseek_client import _http_error
+from app.infrastructure.ai import deepseek_client as deepseek_client_module
+from app.infrastructure.ai.deepseek_client import DeepSeekClient, _http_error
 from app.module.agent.protocol.chat_generator_protocol import (
     ChatResult,
     TextDeltaCallback,
@@ -206,3 +209,233 @@ def test_provider_http_error_classification_and_safe_logging(
         started=time.monotonic(),
     )
     assert isinstance(overflow, AiContextWindowError)
+
+
+class _FakeResponse:
+    """Minimal httpx non-streaming response for one scripted reply."""
+
+    def __init__(self, status_code: int, payload: dict[str, Any]) -> None:
+        self.status_code = status_code
+        self._payload = payload
+        self.headers: dict[str, str] = {}
+        self.content = json.dumps(payload).encode("utf-8")
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
+
+
+class _FakeStreamResponse:
+    """Minimal streaming response; errors expose a body, success yields SSE lines."""
+
+    def __init__(
+        self,
+        status_code: int,
+        body: bytes,
+        *,
+        lines: Sequence[str] = (),
+        content_type: str = "application/json",
+    ) -> None:
+        self.status_code = status_code
+        self._body = body
+        self._lines = lines
+        self.headers = {"content-type": content_type}
+
+    async def aread(self) -> bytes:
+        return self._body
+
+    async def aiter_lines(self) -> Any:
+        for line in self._lines:
+            yield line
+
+
+class _FakeStreamContext:
+    def __init__(self, response: _FakeStreamResponse) -> None:
+        self._response = response
+
+    async def __aenter__(self) -> _FakeStreamResponse:
+        return self._response
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+
+class _FakeAsyncClient:
+    """Return scripted responses and record every JSON payload sent."""
+
+    def __init__(
+        self,
+        responses: list[_FakeResponse | _FakeStreamResponse],
+        requests: list[dict[str, Any]],
+    ) -> None:
+        self._responses = responses
+        self._requests = requests
+
+    async def __aenter__(self) -> "_FakeAsyncClient":
+        return self
+
+    async def __aexit__(self, *exc: object) -> bool:
+        return False
+
+    async def post(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, Any],
+    ) -> _FakeResponse:
+        del url, headers
+        self._requests.append(dict(json))
+        response = self._responses.pop(0)
+        assert isinstance(response, _FakeResponse)
+        return response
+
+    def stream(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: dict[str, Any],
+    ) -> _FakeStreamContext:
+        del method, url, headers
+        self._requests.append(dict(json))
+        response = self._responses.pop(0)
+        assert isinstance(response, _FakeStreamResponse)
+        return _FakeStreamContext(response)
+
+
+def _chat_client(*, chat_max_tokens: int) -> DeepSeekClient:
+    return DeepSeekClient(
+        api_key="secret-api-key",
+        base_url="https://example.invalid",
+        model="deepseek-flash",
+        timeout_seconds=1.0,
+        max_tokens=1_800,
+        chat_max_tokens=chat_max_tokens,
+        temperature=0.0,
+        supports_thinking=False,
+    )
+
+
+def _chat_completion(text: str) -> dict[str, Any]:
+    return {
+        "model": "deepseek-flash",
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": text},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+    }
+
+
+def _install_fake_client(
+    monkeypatch: pytest.MonkeyPatch,
+    responses: list[_FakeResponse | _FakeStreamResponse],
+    requests: list[dict[str, Any]],
+) -> None:
+    monkeypatch.setattr(
+        deepseek_client_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: _FakeAsyncClient(responses, requests),
+    )
+
+
+def test_chat_400_max_tokens_retries_once_without_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A provider cap rejection drops max_tokens and is remembered."""
+    caplog.set_level(logging.WARNING)
+    requests: list[dict[str, Any]] = []
+    responses: list[_FakeResponse | _FakeStreamResponse] = [
+        _FakeResponse(
+            400,
+            {"error": {"message": "max_tokens must be less than 8192"}},
+        ),
+        _FakeResponse(200, _chat_completion("First answer.")),
+        _FakeResponse(200, _chat_completion("Second answer.")),
+    ]
+    _install_fake_client(monkeypatch, responses, requests)
+    client = _chat_client(chat_max_tokens=100_000)
+
+    first = asyncio.run(
+        client.complete_chat([{"role": "user", "content": "First"}], [])
+    )
+    assert first.text == "First answer."
+    assert "max_tokens" in requests[0]
+    assert "max_tokens" not in requests[1]
+    assert client.max_output_tokens == 0
+
+    second = asyncio.run(
+        client.complete_chat([{"role": "user", "content": "Second"}], [])
+    )
+    assert second.text == "Second answer."
+    assert len(requests) == 3
+    assert "max_tokens" not in requests[2]
+
+    assert caplog.text.count("provider rejected chat max_tokens") == 1
+    assert "secret-api-key" not in caplog.text
+    assert "less than 8192" not in caplog.text
+
+
+def test_streaming_chat_400_max_tokens_retries_once_without_the_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The streaming path applies the same one-shot cap fallback."""
+    requests: list[dict[str, Any]] = []
+    success_lines = (
+        'data: {"model":"deepseek-flash","choices":[{"delta":{"content":"ok"},'
+        '"finish_reason":"stop"}]}',
+        "data: [DONE]",
+    )
+    responses: list[_FakeResponse | _FakeStreamResponse] = [
+        _FakeStreamResponse(
+            400,
+            b'{"error":{"message":"max_tokens exceeds the model limit"}}',
+        ),
+        _FakeStreamResponse(
+            200,
+            b"",
+            lines=success_lines,
+            content_type="text/event-stream",
+        ),
+    ]
+    _install_fake_client(monkeypatch, responses, requests)
+    client = _chat_client(chat_max_tokens=100_000)
+
+    result = asyncio.run(
+        client.complete_chat(
+            [{"role": "user", "content": "Stream this"}],
+            [],
+            stream=True,
+        )
+    )
+
+    assert result.text == "ok"
+    assert "max_tokens" in requests[0]
+    assert "max_tokens" not in requests[1]
+    assert client.max_output_tokens == 0
+
+
+def test_other_400_responses_are_not_retried(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only a body that names max_tokens triggers the fallback."""
+    requests: list[dict[str, Any]] = []
+    responses: list[_FakeResponse | _FakeStreamResponse] = [
+        _FakeResponse(400, {"error": {"message": "invalid request format"}}),
+    ]
+    _install_fake_client(monkeypatch, responses, requests)
+    client = _chat_client(chat_max_tokens=100_000)
+
+    with pytest.raises(AiProviderError) as raised:
+        asyncio.run(
+            client.complete_chat([{"role": "user", "content": "Fail"}], [])
+        )
+
+    assert raised.value.status_code == 400
+    assert len(requests) == 1
+    assert "max_tokens" in requests[0]
+    assert client.max_output_tokens == 100_000
