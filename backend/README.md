@@ -47,12 +47,15 @@ default model is `deepseek-flash`. Without a configured provider:
 - agent messages return `503 agent_not_configured`.
 
 Agent chat uses a larger output budget than summaries: the default
-`APSOR_DEEPSEEK_CHAT_MAX_TOKENS` is 10,000, while short summary and extraction
-calls keep the 1800-token `APSOR_DEEPSEEK_MAX_TOKENS` cap. The chat budget must
-leave room for long tool arguments such as a detailed `save_memory` payload; a
-completion truncated at the cap is retried once with a smaller-output notice,
-and a second truncation ends the turn with a normal explanation instead of an
-error.
+`APSOR_DEEPSEEK_CHAT_MAX_TOKENS` is 100,000, while short summary and extraction
+calls keep the 1800-token `APSOR_DEEPSEEK_MAX_TOKENS` cap. Set the chat cap to
+`0` to disable it: the chat payload then omits `max_tokens` and the provider
+applies its own limit. The chat budget must leave room for long tool arguments
+such as a detailed `save_memory` payload; a completion truncated at the cap is
+retried once with a smaller-output notice, and a second truncation ends the
+turn with a normal explanation instead of an error. If a provider rejects the
+configured cap with HTTP 400 mentioning `max_tokens`, the client retries once
+without the field and omits it for the rest of that process.
 
 Only the root account can edit the global provider registry. Normal accounts can
 read AI availability but never receive provider secrets or runtime settings.

@@ -2287,6 +2287,12 @@ def _normalize_finish(result: ChatResult) -> str | None:
 
 def _output_limit_text(max_output_tokens: int) -> str:
     """Explain a truncated turn without turning it into a failed run."""
+    if max_output_tokens <= 0:
+        return (
+            "The response reached the provider's output limit before it could "
+            "finish, so I could not complete that request. Please ask again for a "
+            "smaller or simpler result, for example a chart with fewer points."
+        )
     return (
         "The response reached this turn's output budget of "
         f"{max_output_tokens:,} tokens before it could finish, so I could not "

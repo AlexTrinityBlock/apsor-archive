@@ -20,6 +20,7 @@ from app.module.agent.domain.agent_status_domain import (
 )
 from app.module.agent.domain.compaction_domain import estimate_provider_context_tokens
 from app.module.agent.domain.context_domain import _prefix_hash
+from app.module.agent.service.agent_service import _output_limit_text
 from app.module.agent.service.tool_registry import _web_fetch_footer
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
@@ -2821,6 +2822,26 @@ def test_agent_status_block_is_deterministic() -> None:
     )
 
 
+def test_agent_status_block_omits_output_limit_when_unlimited() -> None:
+    """An unlimited output cap drops the attribute instead of rendering zero."""
+    unlimited = render_agent_status(
+        AgentStatus(
+            max_tool_result_chars=100_000,
+            max_page_context_chars=6_000,
+            max_expression_chars=300,
+            output_limit_tokens=0,
+        )
+    )
+
+    assert "output_limit_tokens" not in unlimited
+    assert unlimited == (
+        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
+        'max_tool_result_chars="100000" />'
+    )
+    keys = re.findall(r' ([a-z_]+)="', unlimited)
+    assert keys == sorted(keys)
+
+
 def test_provider_message_order_is_absolute(client: TestClient) -> None:
     """The frozen system message is first and the status block is exactly last."""
     fake = FakeChatGenerator(
@@ -2983,7 +3004,7 @@ def test_context_window_error_body_is_classified() -> None:
     assert not _is_context_window_error(b'{"error":{"message":"invalid api key"}}')
 
 
-def test_agent_chat_output_budget_is_larger_than_extraction(settings: Settings) -> None:
+def test_agent_chat_output_budget_defaults_to_100k(settings: Settings) -> None:
     """Long tool arguments get the chat budget, not the summary cap."""
     client = DeepSeekClient(
         api_key="test-key",
@@ -2995,10 +3016,47 @@ def test_agent_chat_output_budget_is_larger_than_extraction(settings: Settings) 
         temperature=0.0,
     )
 
-    assert settings.deepseek_chat_max_tokens == 10_000
+    assert settings.deepseek_chat_max_tokens == 100_000
     assert settings.deepseek_max_tokens == 1800
-    assert client._base_payload(None, chat=True)["max_tokens"] == 10_000
+    assert client.max_output_tokens == 100_000
+    assert client._base_payload(None, chat=True)["max_tokens"] == 100_000
     assert client._base_payload(None)["max_tokens"] == 1800
+
+
+def test_agent_chat_output_budget_can_be_disabled(settings: Settings) -> None:
+    """A zero chat cap omits max_tokens so the provider decides the limit."""
+    client = DeepSeekClient(
+        api_key="test-key",
+        base_url="https://example.invalid",
+        model=settings.deepseek_model,
+        timeout_seconds=1.0,
+        max_tokens=settings.deepseek_max_tokens,
+        chat_max_tokens=0,
+        temperature=0.0,
+    )
+    omitted = DeepSeekClient(
+        api_key="test-key",
+        base_url="https://example.invalid",
+        model=settings.deepseek_model,
+        timeout_seconds=1.0,
+        max_tokens=settings.deepseek_max_tokens,
+        temperature=0.0,
+    )
+
+    assert client.max_output_tokens == 0
+    assert omitted.max_output_tokens == 0
+    assert "max_tokens" not in client._base_payload(None, chat=True)
+    assert "max_tokens" not in omitted._base_payload(None, chat=True)
+    assert client._base_payload(None)["max_tokens"] == 1800
+
+
+def test_output_limit_text_never_renders_zero_tokens() -> None:
+    """An unlimited cap is described as the provider limit, never as 0 tokens."""
+    unlimited = _output_limit_text(0)
+
+    assert "0 tokens" not in unlimited
+    assert "provider's output limit" in unlimited
+    assert "10,000 tokens" in _output_limit_text(10_000)
 
 
 def test_web_fetch_footer_warns_about_an_empty_heading_section() -> None:
