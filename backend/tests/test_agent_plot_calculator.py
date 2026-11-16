@@ -7,6 +7,7 @@ the complete plot figure is persisted for reload while the provider context only
 ever sees a redacted summary, and the frozen catalog exposes both tools.
 """
 
+import asyncio
 import json
 from typing import Any
 
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from app.module.agent.domain.plot_spec_domain import PlotSpecError, sanitize_plot_figure
 from app.module.agent.protocol.chat_generator_protocol import ChatResult, ChatToolCall
+from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
     text_result,
@@ -355,6 +357,36 @@ def test_render_plot_rejects_unsafe_or_oversized_figure(client: TestClient) -> N
         sanitize_plot_figure({"data": thirteen_traces})
 
 
+def test_render_plot_redaction_placeholder_returns_corrective_error() -> None:
+    """A copied figure_summary gets a targeted correction, not a schema dump."""
+
+    def unused_scope() -> Any:
+        raise AssertionError("placeholder validation must not open the tool scope")
+
+    registry = AgentToolRegistry(unused_scope)
+    placeholders = [
+        {"caption": None, "figure_summary": {"traces": 0}, "title": None},
+        {"arguments": {"title": "Sphere"}, "title": "Sphere"},
+    ]
+    for arguments in placeholders:
+        outcome = asyncio.run(
+            registry.execute(
+                "render_plot",
+                arguments,
+                call_id="call_redacted_placeholder",
+                max_chars=4_000,
+            )
+        )
+        assert outcome.status == "error"
+        assert outcome.error_code == "plot_figure_required"
+        assert outcome.data["error_code"] == "plot_figure_required"
+        assert '<error code="plot_figure_required">' in outcome.content
+        assert "redaction placeholder" in outcome.content
+        assert "figure_summary is never a valid render_plot argument" in outcome.content
+        assert "answer in text without a chart" in outcome.content
+        assert "Field required" not in outcome.data["detail"]
+
+
 def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     """Expose both tools with flat, model-facing schemas and guidance."""
     response = client.get("/api/v1/agent/tools")
@@ -649,5 +681,94 @@ def test_duplicate_render_plot_loop_breaker(client: TestClient) -> None:
     assistant_entries = [
         entry for entry in body["entries"] if entry["kind"] == "pi.assistant"
     ]
+    assert assistant_entries[-1]["data"]["finish_reason"] == "stop"
+    assert "error" not in assistant_entries[-1]["data"]
+
+
+def _invalid_plot_call(call_id: str) -> ChatResult:
+    """Request render_plot without the required figure."""
+    return tool_call_result(
+        "render_plot",
+        {"title": "3D sphere"},
+        call_id=call_id,
+    )
+
+
+def test_repeated_invalid_arguments_add_retry_notice(client: TestClient) -> None:
+    """Two rejected calls make the next provider request carry the notice."""
+    fake = FakeChatGenerator(
+        [
+            _invalid_plot_call("call_invalid_1"),
+            _invalid_plot_call("call_invalid_2"),
+            text_result("I need a complete figure before I can draw that chart."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Invalid arguments notice")
+
+    body = _send_message(client, conversation_id, "Draw a 3D sphere.")
+
+    assert len(fake.requests) == 3
+    status_block = fake.requests[2].messages[-1]
+    assert status_block["role"] == "system"
+    assert status_block["content"].startswith("<agent_status")
+    assert '<retry_notice reason="tool_arguments">' in status_block["content"]
+    assert "complete figure object" in status_block["content"]
+    assert "answer the user in text without a chart" in status_block["content"]
+
+    results = _tool_results(body["entries"])
+    assert [entry["data"]["error_code"] for entry in results] == [
+        "invalid_tool_arguments",
+        "invalid_tool_arguments",
+    ]
+    assert body["error_code"] is None
+
+
+def test_invalid_arguments_loop_breaker_answers_without_tools(
+    client: TestClient,
+) -> None:
+    """A third failure runs one text-only call, completes, and emits no error."""
+    final_answer = "I cannot draw that chart because the figure was incomplete."
+    fake = FakeChatGenerator(
+        [
+            _invalid_plot_call("call_invalid_1"),
+            _invalid_plot_call("call_invalid_2"),
+            _invalid_plot_call("call_invalid_3"),
+            text_result(final_answer),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Invalid arguments loop")
+
+    response = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/messages",
+        json={"content": "Draw a 3D sphere."},
+    )
+    assert response.status_code == 200, response.text
+
+    # The run ends normally: the final text-only answer is the last event and
+    # no error event is emitted.
+    assert "event: error" not in response.text
+    assert "event: run_end" in response.text
+    assert '"status":"completed"' in response.text
+
+    assert len(fake.requests) == 4
+    assert fake.requests[3].tools == []
+    final_tool_messages = [
+        message
+        for message in fake.requests[3].messages
+        if message.get("role") == "tool"
+    ]
+    assert len(final_tool_messages) == 3
+
+    entries = _reload_entries(client, conversation_id)
+    results = _tool_results(entries)
+    assert [entry["data"]["error_code"] for entry in results] == [
+        "invalid_tool_arguments",
+        "invalid_tool_arguments",
+        "invalid_tool_arguments",
+    ]
+    assistant_entries = [entry for entry in entries if entry["kind"] == "pi.assistant"]
+    assert assistant_entries[-1]["model"][0]["content"] == final_answer
     assert assistant_entries[-1]["data"]["finish_reason"] == "stop"
     assert "error" not in assistant_entries[-1]["data"]

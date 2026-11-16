@@ -68,9 +68,21 @@ def render_context_overflow_notice() -> str:
     )
 
 
+def render_invalid_arguments_notice() -> str:
+    """Notice for two consecutive rejected tool-argument calls."""
+    return (
+        '<retry_notice reason="tool_arguments">The previous tool call had invalid '
+        "arguments and was not executed. Do not resend the same arguments. If a "
+        "chart is still needed, call render_plot once with a complete figure object; "
+        "otherwise answer the user in text without a chart."
+        "</retry_notice>"
+    )
+
+
 __all__ = [
     "AgentStatus",
     "render_agent_status",
     "render_context_overflow_notice",
+    "render_invalid_arguments_notice",
     "render_output_limit_notice",
 ]
