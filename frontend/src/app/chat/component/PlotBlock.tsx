@@ -35,10 +35,7 @@ interface PlotlyRuntime {
 
 type PlotStatus = "loading" | "ready" | "error";
 
-/**
- * Plotly traces that always live in a 3D scene.
- * 一律位於 3D scene 的 Plotly trace 型別。
- */
+/** Plotly traces that always live in a 3D scene. */
 const SCENE_TRACE_TYPES = new Set([
   "scatter3d",
   "surface",
@@ -49,10 +46,7 @@ const SCENE_TRACE_TYPES = new Set([
   "cone",
 ]);
 
-/**
- * A figure is 3D when it declares a scene or uses a scene-only trace type.
- * 圖形宣告 scene 或使用僅限 3D 的 trace 型別時，即視為 3D。
- */
+/** A figure is 3D when it declares a scene or uses a scene-only trace type. */
 function isThreeDimensional(spec: PlotSpec): boolean {
   if (isRecord(spec.figure.layout?.scene)) {
     return true;
@@ -65,13 +59,10 @@ function isThreeDimensional(spec: PlotSpec): boolean {
 
 /**
  * Build the Plotly config for this render.
- * 為這一次繪製建立 Plotly config。
  *
  * 2D keeps the transcript's scroll position: no wheel zoom and no modebar.
  * 3D may capture the wheel for camera zoom and exposes a hover modebar without
  * the image/cloud/external-editor buttons the card already replaces.
- * 2D 保留對話串的捲動：不攔截滾輪、不顯示模式列。3D 允許滾輪縮放相機，
- * 並在游標移入時顯示不含下載、雲端與外部編輯按鈕的模式列。
  */
 function plotConfig(is3d: boolean): Partial<Config> {
   return {
@@ -86,7 +77,6 @@ function plotConfig(is3d: boolean): Partial<Config> {
           "toImage",
           "sendDataToCloud",
           // Plotly honors this name at runtime; @types/plotly.js omits it.
-          // Plotly 執行時接受這個名稱；@types/plotly.js 未列出。
           "editInChartStudio",
         ] as unknown as ModeBarDefaultButtons[])
       : undefined,
@@ -233,7 +223,6 @@ function buildPlotTable(spec: PlotSpec): PlotTable | null {
   }
   const trace = spec.figure.data[0];
   // A 3D trace has a z channel; an x/y-only table would misrepresent it.
-  // 3D trace 有 z 軸；只列 x/y 會誤導，因此不提供表格替代。
   const traceType = typeof trace.type === "string" ? trace.type.toLowerCase() : "";
   if (trace.z !== undefined || SCENE_TRACE_TYPES.has(traceType)) {
     return null;

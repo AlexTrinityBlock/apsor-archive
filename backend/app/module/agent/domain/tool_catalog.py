@@ -39,8 +39,9 @@ PROMPT_VERSION = "archive-agent-v13"
 # v6 still validate. v8 adds the conversation-history lane to search_knowledge
 # and the read-only history_message tool. v9 adds calculate and render_plot.
 # v10 tightens render_plot's point guidance after a truncated output-limit call.
-# Existing conversations keep their frozen pi.system snapshot.
-TOOLS_VERSION = "archive-tools-v10"
+# v11 makes render_plot a once-per-turn action and states that the success receipt
+# is authoritative. Existing conversations keep their frozen pi.system snapshot.
+TOOLS_VERSION = "archive-tools-v11"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -192,8 +193,9 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "rely on color alone. All data must be inline. Do not use "
             "layout.images, layout.mapbox, layout.geo, layout.map, "
             "layout.updatemenus, layout.sliders, layout.template, external "
-            "URLs, or map/geo traces. After the tool returns, explain the chart "
-            "in one or two sentences; do not repeat the whole figure."
+            "URLs, or map/geo traces. Call render_plot at most once per assistant "
+            "turn. After it succeeds, explain the chart in text; do not call it "
+            "again for the same request."
         ),
         args_model=RenderPlotArgs,
     ),

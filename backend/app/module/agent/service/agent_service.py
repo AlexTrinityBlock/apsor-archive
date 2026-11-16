@@ -7,7 +7,7 @@ import re
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 from uuid import uuid4
 
@@ -33,11 +33,26 @@ from app.module.agent.domain.agent_domain import (
     parse_edits,
 )
 from app.module.agent.domain.compaction_domain import (
+    CHARS_PER_ESTIMATED_TOKEN,
     build_compaction_draft,
     compactable_context_entries,
     estimate_context_tokens,
+    estimate_provider_context_tokens,
 )
 from app.module.agent.domain.context_domain import build_context, render_tool_result
+from app.module.agent.domain.plot_spec_domain import (
+    MAX_PLOT_BYTES,
+    MAX_PLOT_POINTS,
+    MAX_PLOT_TRACES,
+)
+from app.module.agent.domain.runtime_limits_domain import (
+    AgentSelf,
+    RuntimeLimits,
+    render_agent_self,
+    render_context_overflow_notice,
+    render_output_limit_notice,
+)
+from app.module.agent.domain.tool_args import MAX_EXPRESSION_CHARS
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
     TOOLS_VERSION,
@@ -109,6 +124,10 @@ _PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")
 LIMIT_CODES = frozenset(
     {"step_limit", "tool_call_limit", "tool_result_budget_exhausted"}
 )
+DUPLICATE_PLOT_STOP_TEXT = (
+    "The chart is already visible in the chat, so I did not render another copy. "
+    "If you want a different chart, describe it in your next message."
+)
 # A transient upstream outage is retried only when no text has reached the
 # client yet. Delays are deliberately short: the durable run is still
 # retryable from the UI after these automatic attempts are exhausted.
@@ -175,6 +194,9 @@ class AgentService:
         system_prompt_service: SystemPromptService,
         chat_attachments: ChatAttachmentServiceProtocol,
         server_timezone: str = "Asia/Taipei",
+        active_provider: str = "",
+        web_search_provider: str = "none",
+        web_fetch_provider: str = "none",
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -185,6 +207,12 @@ class AgentService:
         self.system_prompt_service = system_prompt_service
         self.chat_attachments = chat_attachments
         self.server_timezone = server_timezone
+        # Provider availability is resolved by the composition root from the
+        # active AiRuntime. They are safe names only; keys and base URLs never
+        # reach the agent service.
+        self.active_provider = active_provider or default_provider or "none"
+        self.web_search_provider = _web_provider_name(web_search_provider)
+        self.web_fetch_provider = _web_provider_name(web_fetch_provider)
 
     async def create_conversation(
         self,
@@ -663,6 +691,9 @@ class AgentService:
                 )
             last_compaction_entry_id: int | None = None
             context_overflow_retried = False
+            rendered_plot_titles: set[str] = set()
+            duplicate_plot_count = 0
+            pending_retry_notice: str | None = None
 
             for step in range(start_step, self.config.max_steps + 1):
                 if await self.repository.is_abort_requested(conversation_id, run_id):
@@ -709,79 +740,105 @@ class AgentService:
                     "message_start",
                     {"entry_id": None, "kind": KIND_ASSISTANT, "role": "assistant"},
                 )
-                completion = _CompletionOutcome()
-                async for event in self._completion_events(
-                    context,
-                    turn.conversation.model,
-                    completion,
-                    run_id=run_id,
-                    step=step,
-                ):
-                    yield event
-                result = completion.result
-                provider_error = completion.error
-                if result is None:
-                    if (
-                        isinstance(provider_error, AiContextWindowError)
-                        and self.config.auto_compaction_enabled
-                        and not context_overflow_retried
+                output_limit_retries = 0
+                retry_usage: dict[str, int] = {}
+                retry_next_step = False
+                while True:
+                    message_usage = dict(total_usage)
+                    _merge_usage(message_usage, retry_usage)
+                    agent_self = self._agent_self_message(
+                        context,
+                        turn,
+                        step=step,
+                        resumed=resumed,
+                        tool_calls_used=tool_calls_used,
+                        usage=message_usage,
+                        retry_notice=pending_retry_notice,
+                    )
+                    pending_retry_notice = None
+                    completion = _CompletionOutcome()
+                    async for event in self._completion_events(
+                        context,
+                        turn.conversation.model,
+                        completion,
+                        run_id=run_id,
+                        step=step,
+                        extra_system=agent_self,
                     ):
-                        try:
-                            compacted = await self._compact_active_context(
-                                conversation_id,
-                                run_id,
-                                last_entry_id,
-                                reason="provider_context_overflow",
-                            )
-                        except AgentRunNotActiveError:
-                            terminal = True
-                            yield AgentStreamEvent(
-                                "run_end",
-                                {"run_id": run_id, "status": RUN_CANCELLED},
-                            )
-                            return
-                        if compacted is not None:
-                            context_overflow_retried = True
-                            context, last_entry_id = compacted
-                            last_compaction_entry_id = last_entry_id
-                            continue
-                    (
-                        last_entry_id,
-                        provider_code,
-                        provider_detail,
-                    ) = await self._append_provider_failure(
-                        turn,
-                        last_entry_id,
-                        provider_error,
-                        step,
-                    )
-                    await self._fail_run(
-                        turn,
-                        last_entry_id,
-                        provider_code,
-                        provider_detail,
-                    )
-                    terminal = True
-                    yield AgentStreamEvent(
-                        "message_end",
-                        {
-                            "entry_id": last_entry_id,
-                            "usage": {},
-                            "finish_reason": "error",
-                        },
-                    )
-                    yield AgentStreamEvent(
-                        "error",
-                        {"code": provider_code, "detail": provider_detail},
-                    )
-                    yield AgentStreamEvent(
-                        "run_end",
-                        {"run_id": run_id, "status": RUN_FAILED},
-                    )
-                    return
+                        yield event
+                    result = completion.result
+                    provider_error = completion.error
+                    if result is None:
+                        if (
+                            isinstance(provider_error, AiContextWindowError)
+                            and self.config.auto_compaction_enabled
+                            and not context_overflow_retried
+                        ):
+                            try:
+                                compacted = await self._compact_active_context(
+                                    conversation_id,
+                                    run_id,
+                                    last_entry_id,
+                                    reason="provider_context_overflow",
+                                )
+                            except AgentRunNotActiveError:
+                                terminal = True
+                                yield AgentStreamEvent(
+                                    "run_end",
+                                    {"run_id": run_id, "status": RUN_CANCELLED},
+                                )
+                                return
+                            if compacted is not None:
+                                context_overflow_retried = True
+                                context, last_entry_id = compacted
+                                last_compaction_entry_id = last_entry_id
+                                pending_retry_notice = render_context_overflow_notice()
+                                retry_next_step = True
+                                break
+                        (
+                            last_entry_id,
+                            provider_code,
+                            provider_detail,
+                        ) = await self._append_provider_failure(
+                            turn,
+                            last_entry_id,
+                            provider_error,
+                            step,
+                        )
+                        await self._fail_run(
+                            turn,
+                            last_entry_id,
+                            provider_code,
+                            provider_detail,
+                        )
+                        terminal = True
+                        yield AgentStreamEvent(
+                            "message_end",
+                            {
+                                "entry_id": last_entry_id,
+                                "usage": {},
+                                "finish_reason": "error",
+                            },
+                        )
+                        yield AgentStreamEvent(
+                            "error",
+                            {"code": provider_code, "detail": provider_detail},
+                        )
+                        yield AgentStreamEvent(
+                            "run_end",
+                            {"run_id": run_id, "status": RUN_FAILED},
+                        )
+                        return
 
-                finish_reason = _normalize_finish(result)
-                if finish_reason is None:
+                    finish_reason = _normalize_finish(result)
+                    if finish_reason is not None:
+                        if retry_usage:
+                            merged_usage = dict(retry_usage)
+                            _merge_usage(merged_usage, result.usage)
+                            result = replace(result, usage=merged_usage)
+                            retry_usage = {}
+                        break
+
                     logger.warning(
                         "agent completion unusable run_id=%s conversation_id=%s "
                         "step=%d finish_reason=%s completion_tokens=%d "
@@ -794,10 +851,41 @@ class AgentService:
                         len(result.text),
                         len(result.tool_calls),
                     )
+                    if (
+                        (result.finish_reason or "").lower() == "length"
+                        and not result.text.strip()
+                    ):
+                        # A completion cut off at the output cap produced no
+                        # visible text, so the same step can be retried once.
+                        _merge_usage(retry_usage, result.usage)
+                        if output_limit_retries < 1:
+                            output_limit_retries += 1
+                            pending_retry_notice = render_output_limit_notice()
+                            continue
+                        async for event in self._stream_assistant_text(
+                            turn,
+                            last_entry_id,
+                            text=_output_limit_text(
+                                self.chat_generator.max_output_tokens
+                            ),
+                            step=step,
+                            usage=retry_usage,
+                            cache_prefix_hash=context.cache_prefix_hash,
+                            emit_message_start=True,
+                        ):
+                            yield event
+                        terminal = True
+                        return
+
+                    completion_error: Exception
                     if (result.finish_reason or "").lower() == "length":
-                        completion_error: Exception = AgentOutputLimitError()
+                        # Non-recoverable truncation (for example visible text was
+                        # already emitted) keeps the actionable output_limit code.
+                        completion_error = AgentOutputLimitError()
                     else:
-                        completion_error = RuntimeError("truncated or malformed completion")
+                        completion_error = RuntimeError(
+                            "truncated or malformed completion"
+                        )
                     (
                         last_entry_id,
                         provider_code,
@@ -833,6 +921,11 @@ class AgentService:
                         {"run_id": run_id, "status": RUN_FAILED},
                     )
                     return
+
+                if retry_next_step:
+                    continue
+                assert result is not None
+                assert finish_reason is not None
 
                 completed_steps += 1
                 logger.info(
@@ -959,6 +1052,7 @@ class AgentService:
                 eligible_indices: list[int] = []
                 approval_specs: list[tuple[int, ChatToolCall, dict[str, Any]]] = []
                 backend_approved_indices: set[int] = set()
+                batch_plot_titles: set[str] = set()
                 for index, call in enumerate(calls):
                     yield AgentStreamEvent(
                         "tool_start",
@@ -983,6 +1077,25 @@ class AgentService:
                         )
                         continue
                     tool_calls_used += 1
+                    plot_title = (
+                        _plot_title_key(call.arguments)
+                        if call.name == "render_plot"
+                        else None
+                    )
+                    if plot_title is not None and (
+                        plot_title in rendered_plot_titles
+                        or plot_title in batch_plot_titles
+                    ):
+                        # The same title already rendered in this run. Suppress
+                        # the call so the UI cannot show a second identical chart.
+                        duplicate_plot_count += 1
+                        planned[index] = (
+                            call,
+                            _duplicate_plot_outcome(call.arguments.get("title")),
+                        )
+                        continue
+                    if plot_title is not None:
+                        batch_plot_titles.add(plot_title)
                     if self.tool_registry.requires_confirmation(call.name):
                         if self.config.save_memory_requires_approval:
                             validated, validation_error = self.tool_registry.validate_arguments(
@@ -1023,6 +1136,16 @@ class AgentService:
                         strict=True,
                     ):
                         planned[index] = (calls[index], outcome)
+
+                for planned_outcome in planned:
+                    if planned_outcome is None:
+                        continue
+                    planned_call, planned_result = planned_outcome
+                    if planned_call.name != "render_plot":
+                        continue
+                    plot_title = _plot_title_key(planned_call.arguments)
+                    if plot_title is not None and _is_rendered_plot(planned_result):
+                        rendered_plot_titles.add(plot_title)
 
                 # Hard turn limits end the run; pending writes must not outlive a
                 # failed run, so confirmation calls receive the same limit result.
@@ -1198,6 +1321,22 @@ class AgentService:
                         batch_size=batch_size,
                         parallel_index=index,
                     )
+
+                if duplicate_plot_count >= 2:
+                    # Loop breaker: the model received one duplicate notice and
+                    # still repeated the call, so answer in text and stop.
+                    async for event in self._stream_assistant_text(
+                        turn,
+                        last_entry_id,
+                        text=DUPLICATE_PLOT_STOP_TEXT,
+                        step=step,
+                        usage={},
+                        cache_prefix_hash=context.cache_prefix_hash,
+                        emit_message_start=True,
+                    ):
+                        yield event
+                    terminal = True
+                    return
 
             last_entry_id = await self._append_failure_assistant(
                 turn,
@@ -1507,8 +1646,13 @@ class AgentService:
         *,
         run_id: int,
         step: int,
+        extra_system: str | None = None,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Run one provider call and yield transport-only text deltas.
+
+        ``extra_system`` is the provider-only agent-self block. It is appended
+        after every context message so the frozen system prefix and its KV-cache
+        lineage stay untouched.
 
         A retryable upstream failure is retried automatically only while no
         text delta has reached the client. Once a token has been streamed, a
@@ -1520,6 +1664,8 @@ class AgentService:
         if context.system_message.get("content"):
             provider_messages.append(context.system_message)
         provider_messages.extend(context.messages)
+        if extra_system:
+            provider_messages.append({"role": "system", "content": extra_system})
         max_attempts = len(_PROVIDER_RETRY_DELAYS_SECONDS) + 1
 
         async def run() -> None:
@@ -1642,6 +1788,200 @@ class AgentService:
                 task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+
+    def _agent_self_message(
+        self,
+        context: ProviderContext,
+        turn: AgentTurnState,
+        *,
+        step: int,
+        resumed: bool,
+        tool_calls_used: int,
+        usage: Mapping[str, int],
+        retry_notice: str | None,
+    ) -> str:
+        """Render the provider-only agent-self system message.
+
+        The block is rendered twice so its own approximate token cost can be
+        included in the context estimate. The estimate stays approximate by
+        design and never changes the frozen prompt or tool snapshot.
+        """
+        base_estimate = estimate_provider_context_tokens(
+            context,
+            strip_image_data=True,
+        )
+        limits = self._runtime_limits(
+            step=step,
+            tool_calls_used=tool_calls_used,
+            estimated_context_tokens=base_estimate,
+            retry_notice=retry_notice,
+        )
+        prompt_tokens = _usage_value(usage, "prompt_tokens")
+        completion_tokens = _usage_value(usage, "completion_tokens")
+        total_tokens = _usage_value(usage, "total_tokens") or (
+            prompt_tokens + completion_tokens
+        )
+        cached_tokens = (
+            _usage_value(usage, "prompt_cache_hit_tokens")
+            if "prompt_cache_hit_tokens" in usage
+            else None
+        )
+        agent_self = AgentSelf(
+            provider=turn.conversation.provider,
+            active_provider=self.active_provider,
+            model=turn.conversation.model or self.default_model or "-",
+            prompt_version=context.prompt_version or PROMPT_VERSION,
+            tools_version=context.tools_version or TOOLS_VERSION,
+            conversation_id=turn.conversation.id,
+            run_id=turn.run.id,
+            approval_resume=resumed,
+            new_page_context=turn.page_context_entry_id is not None,
+            active_context_entries=len(context.source_entry_ids),
+            tool_names=_tool_names(context.tools),
+            web_search=self.web_search_provider,
+            web_fetch=self.web_fetch_provider,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            cached_tokens=cached_tokens,
+            limits=limits,
+        )
+        block = render_agent_self(agent_self)
+        block_tokens = _estimate_text_tokens(block)
+        if block_tokens <= 0:
+            return block
+        adjusted = base_estimate + block_tokens
+        adjusted_limits = replace(
+            limits,
+            estimated_context_tokens=adjusted,
+            remaining_context_tokens=max(
+                0, self.config.context_window_tokens - adjusted
+            ),
+        )
+        return render_agent_self(replace(agent_self, limits=adjusted_limits))
+
+    def _runtime_limits(
+        self,
+        *,
+        step: int,
+        tool_calls_used: int,
+        estimated_context_tokens: int,
+        retry_notice: str | None,
+    ) -> RuntimeLimits:
+        """Build the current immutable limit snapshot for one provider call."""
+        return RuntimeLimits(
+            context_window_tokens=self.config.context_window_tokens,
+            estimated_context_tokens=estimated_context_tokens,
+            remaining_context_tokens=max(
+                0, self.config.context_window_tokens - estimated_context_tokens
+            ),
+            compaction_threshold_tokens=self.config.compaction_threshold_tokens,
+            output_limit_tokens=self.chat_generator.max_output_tokens,
+            step=step,
+            max_steps=self.config.max_steps,
+            remaining_steps=max(0, self.config.max_steps - step),
+            tool_calls_used=tool_calls_used,
+            max_tool_calls_per_turn=self.config.max_tool_calls_per_turn,
+            remaining_tool_calls=max(
+                0, self.config.max_tool_calls_per_turn - tool_calls_used
+            ),
+            max_parallel_tools=self.config.max_parallel_tools,
+            max_tool_result_chars=self.config.max_tool_result_chars,
+            max_page_context_chars=self.config.max_page_context_chars,
+            max_plot_traces=MAX_PLOT_TRACES,
+            max_plot_points=MAX_PLOT_POINTS,
+            max_plot_bytes=MAX_PLOT_BYTES,
+            max_expression_chars=MAX_EXPRESSION_CHARS,
+            parallel_tools_enabled=self.config.parallel_tools_enabled,
+            auto_compaction_enabled=self.config.auto_compaction_enabled,
+            save_memory_requires_approval=self.config.save_memory_requires_approval,
+            retry_notice=retry_notice,
+        )
+
+    async def _stream_assistant_text(
+        self,
+        turn: AgentTurnState,
+        last_entry_id: int,
+        *,
+        text: str,
+        step: int,
+        usage: dict[str, int],
+        cache_prefix_hash: str,
+        emit_message_start: bool,
+    ) -> AsyncIterator[AgentStreamEvent]:
+        """Persist a normal assistant answer and complete the run.
+
+        Recoverable limit outcomes use this path: the user receives an
+        explanation, the run completes normally, and no error entry is written.
+        """
+        run_id = turn.run.id
+        conversation_id = turn.conversation.id
+        if emit_message_start:
+            yield AgentStreamEvent(
+                "message_start",
+                {"entry_id": None, "kind": KIND_ASSISTANT, "role": "assistant"},
+            )
+        yield AgentStreamEvent(
+            "message_delta",
+            {"entry_id": None, "delta": text},
+        )
+        result = ChatResult(
+            text=text,
+            finish_reason="stop",
+            model=turn.conversation.model,
+            usage=dict(usage),
+        )
+        try:
+            entry = await self.repository.append_assistant(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                draft=EntryDraft(
+                    kind=KIND_ASSISTANT,
+                    messages=[_assistant_message(result)],
+                    data=_assistant_data(
+                        result,
+                        turn,
+                        step,
+                        "stop",
+                        cache_prefix_hash,
+                    ),
+                ),
+                now=utcnow(),
+                usage=usage or None,
+            )
+        except AgentRunNotActiveError:
+            await self._best_effort_cancel(turn, last_entry_id)
+            yield AgentStreamEvent(
+                "run_end",
+                {"run_id": run_id, "status": RUN_CANCELLED},
+            )
+            return
+        yield AgentStreamEvent(
+            "message_end",
+            {
+                "entry_id": entry.id,
+                "usage": dict(usage),
+                "finish_reason": "stop",
+            },
+        )
+        await self.repository.complete_run(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            last_entry_id=entry.id,
+            now=utcnow(),
+        )
+        logger.info(
+            "agent run completed run_id=%s conversation_id=%s step=%d "
+            "finish_reason=stop last_entry_id=%s",
+            run_id,
+            conversation_id,
+            step,
+            entry.id,
+        )
+        yield AgentStreamEvent(
+            "run_end",
+            {"run_id": run_id, "status": RUN_COMPLETED},
+        )
 
     async def _context(
         self,
@@ -2042,6 +2382,80 @@ def _normalize_finish(result: ChatResult) -> str | None:
     if finish in {"", "stop", "length"}:
         return finish or "stop"
     return None
+
+
+def _output_limit_text(max_output_tokens: int) -> str:
+    """Explain a truncated turn without turning it into a failed run."""
+    return (
+        "The response reached this turn's output budget of "
+        f"{max_output_tokens:,} tokens before it could finish, so I could not "
+        "complete that request. Please ask again for a smaller or simpler result, "
+        "for example a chart with fewer points."
+    )
+
+
+def _tool_names(tools: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """Read tool names from the frozen provider tool snapshot."""
+    names: list[str] = []
+    for tool in tools:
+        function = tool.get("function")
+        if not isinstance(function, Mapping):
+            continue
+        name = function.get("name")
+        if isinstance(name, str) and name:
+            names.append(name)
+    return tuple(names)
+
+
+def _web_provider_name(value: str) -> str:
+    """Keep only an available web provider name in the self block."""
+    return value if value in {"tavily", "exa"} else "none"
+
+
+def _plot_title_key(arguments: Mapping[str, Any]) -> str | None:
+    """Return the case-folded title used by the duplicate-plot guard."""
+    title = arguments.get("title")
+    if not isinstance(title, str):
+        return None
+    normalized = title.strip().casefold()
+    return normalized or None
+
+
+def _is_rendered_plot(outcome: ToolOutcome) -> bool:
+    """Return whether a plot outcome actually carries a renderable figure."""
+    return outcome.error_code is None and isinstance(outcome.data.get("plot"), dict)
+
+
+def _duplicate_plot_outcome(title: object) -> ToolOutcome:
+    """Build the provider-visible duplicate notice without plot data."""
+    safe_title = title if isinstance(title, str) else ""
+    content = (
+        f"<plot_already_rendered{attributes({'title': safe_title})}>"
+        "A chart with this title is already visible in the chat. Do not call "
+        "render_plot again; reply in text. If the user wants a different chart, "
+        "wait for their next request."
+        "</plot_already_rendered>"
+    )
+    return ToolOutcome(
+        content=content,
+        data={
+            "tool": "render_plot",
+            "status": "ok",
+            "title": safe_title,
+            "duplicate": True,
+        },
+    )
+
+
+def _usage_value(usage: Mapping[str, int], key: str) -> int:
+    value = usage.get(key)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    return 0
+
+
+def _estimate_text_tokens(text: str) -> int:
+    return (len(text) + CHARS_PER_ESTIMATED_TOKEN - 1) // CHARS_PER_ESTIMATED_TOKEN
 
 
 def _planned_outcomes(

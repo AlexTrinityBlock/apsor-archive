@@ -23,6 +23,7 @@ from app.module.agent.domain.agent_domain import (
     MAX_COMPACTION_LAST_USER_CHARS,
     MAX_COMPACTION_SUMMARY_CHARS,
     EntryDraft,
+    ProviderContext,
     TranscriptEntry,
 )
 from app.module.agent.domain.context_domain import (
@@ -69,19 +70,7 @@ def estimate_context_tokens(entries: Sequence[TranscriptEntry]) -> int:
     ordered = sorted(entries, key=lambda entry: entry.id)
     if not ordered:
         return 0
-    context = build_context(ordered)
-    serialized = json.dumps(
-        {
-            "system": context.system_message,
-            "tools": context.tools,
-            "messages": context.messages,
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
-    char_estimate = (len(serialized) + CHARS_PER_ESTIMATED_TOKEN - 1) // CHARS_PER_ESTIMATED_TOKEN
+    char_estimate = estimate_provider_context_tokens(build_context(ordered))
 
     start = active_start_entry_id(ordered)
     usage_estimate = 0
@@ -104,6 +93,58 @@ def estimate_context_tokens(entries: Sequence[TranscriptEntry]) -> int:
         if prompt_tokens > 0:
             usage_estimate = prompt_tokens + completion_tokens
     return max(char_estimate, usage_estimate)
+
+
+def estimate_provider_context_tokens(
+    context: ProviderContext,
+    *,
+    strip_image_data: bool = False,
+) -> int:
+    """Estimate tokens for an already-built system/tools/messages request.
+
+    ``strip_image_data`` replaces inline base64 image URLs with a short
+    placeholder before serializing. Compression estimates use the default, so
+    their behavior is unchanged; the provider-only self block opts in because it
+    runs after chat-image enrichment.
+    """
+    messages = (
+        _strip_image_data_urls(context.messages)
+        if strip_image_data
+        else context.messages
+    )
+    serialized = json.dumps(
+        {
+            "system": context.system_message,
+            "tools": context.tools,
+            "messages": messages,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return (len(serialized) + CHARS_PER_ESTIMATED_TOKEN - 1) // CHARS_PER_ESTIMATED_TOKEN
+
+
+IMAGE_DATA_PLACEHOLDER = "[image-data-url]"
+
+
+def _strip_image_data_urls(value: Any) -> Any:
+    """Return a copy with data-URL image payloads replaced by a placeholder."""
+    if isinstance(value, dict):
+        return {
+            key: (
+                IMAGE_DATA_PLACEHOLDER
+                if key == "url"
+                and isinstance(item, str)
+                and item.startswith("data:")
+                else _strip_image_data_urls(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_strip_image_data_urls(item) for item in value]
+    return value
 
 
 def build_compaction_draft(
@@ -231,4 +272,5 @@ __all__ = [
     "build_compaction_draft",
     "compactable_context_entries",
     "estimate_context_tokens",
+    "estimate_provider_context_tokens",
 ]

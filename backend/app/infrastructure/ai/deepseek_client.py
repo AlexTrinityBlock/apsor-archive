@@ -69,6 +69,11 @@ class DeepSeekClient:
             "Content-Type": "application/json",
         }
 
+    @property
+    def max_output_tokens(self) -> int:
+        """The completion-token cap for one agent chat call."""
+        return self.chat_max_tokens
+
     def _base_payload(self, model: str | None, *, chat: bool = False) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model or self.model_name,
@@ -547,6 +552,7 @@ class NullTextGenerator:
 
     configured = False
     model_name = "unconfigured"
+    max_output_tokens = 0
 
     async def complete_text(self, system_prompt: str, user_prompt: str) -> AiCompletion:
         raise AiNotConfiguredError()
