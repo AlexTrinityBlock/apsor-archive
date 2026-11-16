@@ -944,16 +944,43 @@ def _parse_tool_calls(raw: object) -> list[ChatToolCall]:
     return calls
 
 
+_TRAILING_STRUCTURE_CHARS = frozenset("}] \t\r\n\f\v")
+
+
 def _parse_arguments(raw: str) -> tuple[dict[str, Any], str | None]:
+    """Parse one tool-call argument string.
+
+    Some providers emit a complete JSON object followed by extra closing
+    braces. That is not truncation: the object is whole and only the tail is
+    junk, so a bounded prefix parse is safe. The leftover may contain nothing
+    but whitespace and closing brackets, and the prefix must itself be a JSON
+    object. Every other failure, including truncated JSON, stays an error.
+    """
     if not raw.strip():
         return {}, None
     try:
         parsed = json.loads(raw)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as error:
+        if error.msg == "Extra data":
+            repaired = _parse_object_before_trailing_junk(raw, error.pos)
+            if repaired is not None:
+                return repaired, None
         return {}, "Tool arguments are not valid JSON."
     if not isinstance(parsed, dict):
         return {}, "Tool arguments must be a JSON object."
     return parsed, None
+
+
+def _parse_object_before_trailing_junk(raw: str, position: int) -> dict[str, Any] | None:
+    """Return the complete object before provider-appended closing brackets."""
+    remainder = raw[position:]
+    if any(character not in _TRAILING_STRUCTURE_CHARS for character in remainder):
+        return None
+    try:
+        parsed = json.loads(raw[:position])
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _accumulate_tool_calls(
