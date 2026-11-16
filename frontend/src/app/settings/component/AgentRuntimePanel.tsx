@@ -36,6 +36,9 @@ export interface AgentRuntimeValues {
   readonly save_memory_requires_approval: boolean;
   readonly chat_attachment_staged_ttl_hours: number;
   readonly chat_attachment_cleanup_interval_seconds: number;
+  readonly max_plot_points: number;
+  readonly max_plot_bytes: number;
+  readonly max_plot_nodes: number;
 }
 
 /** Props for the presentational runtime panel; persistence stays with the page. */
@@ -137,6 +140,33 @@ const TOOL_FIELDS: readonly NumericFieldSpec[] = [
     step: 5000,
     hintKey: "settings.agent.fieldToolResultCharsHint",
   },
+  {
+    key: "max_plot_points",
+    labelKey: "settings.agent.fieldPlotPointsLabel",
+    unitKey: "settings.agent.fieldPlotPointsUnit",
+    min: 100,
+    max: 50000,
+    step: 100,
+    hintKey: "settings.agent.fieldPlotPointsHint",
+  },
+  {
+    key: "max_plot_bytes",
+    labelKey: "settings.agent.fieldPlotBytesLabel",
+    unitKey: "settings.agent.fieldPlotBytesUnit",
+    min: 10000,
+    max: 2000000,
+    step: 10000,
+    hintKey: "settings.agent.fieldPlotBytesHint",
+  },
+  {
+    key: "max_plot_nodes",
+    labelKey: "settings.agent.fieldPlotNodesLabel",
+    unitKey: "settings.agent.fieldPlotNodesUnit",
+    min: 1000,
+    max: 500000,
+    step: 1000,
+    hintKey: "settings.agent.fieldPlotNodesHint",
+  },
 ];
 
 const ATTACHMENT_FIELDS: readonly NumericFieldSpec[] = [
@@ -215,6 +245,9 @@ const VALUE_KEYS: readonly (keyof AgentRuntimeValues)[] = [
   "save_memory_requires_approval",
   "chat_attachment_staged_ttl_hours",
   "chat_attachment_cleanup_interval_seconds",
+  "max_plot_points",
+  "max_plot_bytes",
+  "max_plot_nodes",
 ];
 
 function toDraft(values: AgentRuntimeValues): DraftValues {
@@ -237,6 +270,9 @@ function toDraft(values: AgentRuntimeValues): DraftValues {
     chat_attachment_cleanup_interval_seconds: String(
       values.chat_attachment_cleanup_interval_seconds,
     ),
+    max_plot_points: String(values.max_plot_points),
+    max_plot_bytes: String(values.max_plot_bytes),
+    max_plot_nodes: String(values.max_plot_nodes),
   };
 }
 
@@ -260,6 +296,9 @@ function fromDraft(draft: DraftValues): AgentRuntimeValues {
     chat_attachment_cleanup_interval_seconds: Number(
       draft.chat_attachment_cleanup_interval_seconds,
     ),
+    max_plot_points: Number(draft.max_plot_points),
+    max_plot_bytes: Number(draft.max_plot_bytes),
+    max_plot_nodes: Number(draft.max_plot_nodes),
   };
 }
 
@@ -343,6 +382,20 @@ function validateDraft(
     fieldErrors.max_parallel_tools = t(
       "settings.runtime.errors.parallelWithinCalls",
       { calls: formatNumber(toolCalls) },
+    );
+  }
+
+  const plotPoints = numbers.max_plot_points;
+  const plotNodes = numbers.max_plot_nodes;
+  if (
+    plotPoints !== undefined &&
+    plotNodes !== undefined &&
+    plotNodes < plotPoints &&
+    fieldErrors.max_plot_nodes === undefined
+  ) {
+    fieldErrors.max_plot_nodes = t(
+      "settings.runtime.errors.plotNodesAtLeastPoints",
+      { points: formatNumber(plotPoints) },
     );
   }
 
@@ -630,6 +683,30 @@ export function AgentRuntimePanel({
               onValueChange={(next) =>
                 updateNumber("max_tool_result_chars", next)
               }
+            />
+            <RuntimeNumberField
+              spec={toolFields[3]}
+              value={draft.max_plot_points}
+              defaultValue={defaults.max_plot_points}
+              disabled={saving}
+              error={validation.fieldErrors.max_plot_points}
+              onValueChange={(next) => updateNumber("max_plot_points", next)}
+            />
+            <RuntimeNumberField
+              spec={toolFields[4]}
+              value={draft.max_plot_bytes}
+              defaultValue={defaults.max_plot_bytes}
+              disabled={saving}
+              error={validation.fieldErrors.max_plot_bytes}
+              onValueChange={(next) => updateNumber("max_plot_bytes", next)}
+            />
+            <RuntimeNumberField
+              spec={toolFields[5]}
+              value={draft.max_plot_nodes}
+              defaultValue={defaults.max_plot_nodes}
+              disabled={saving}
+              error={validation.fieldErrors.max_plot_nodes}
+              onValueChange={(next) => updateNumber("max_plot_nodes", next)}
             />
           </RuntimeGroup>
 

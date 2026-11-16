@@ -472,7 +472,7 @@ account. The read body is:
 
 `source` is `default` only when the service had to create or repair the row from
 the built-in defaults; a normal read of the stored row returns `database`.
-`PUT` requires all twelve fields and uses `extra=forbid`, so it is a full
+`PUT` requires all seventeen fields and uses `extra=forbid`, so it is a full
 replacement rather than a patch.
 
 | Field | Default | Constraint |
@@ -489,13 +489,17 @@ replacement rather than a patch.
 | `auto_compaction_enabled` | `true` | boolean |
 | `parallel_tools_enabled` | `true` | boolean |
 | `save_memory_requires_approval` | `true` | boolean; waits for user approval before `save_memory` writes |
+| `max_plot_points` | 10,000 | 100–50,000; `render_plot` data points |
+| `max_plot_bytes` | 600,000 | 10,000–2,000,000; `render_plot` serialized size |
+| `max_plot_nodes` | 100,000 | 1,000–500,000; `>= max_plot_points` |
 
 Pydantic validates the request and `AgentRuntimeConfig` repeats the same
-cross-field checks; PostgreSQL check constraints enforce the ranges and both
-cross-field rules. The compaction threshold must stay below the model
+cross-field checks; PostgreSQL check constraints enforce the ranges and all
+three cross-field rules. The compaction threshold must stay below the model
 context window, so a long conversation folds before the provider capacity is
-exhausted. The global validation handler maps request validation
-failures to `400 invalid_request`, not 422.
+exhausted, the parallel width must not exceed tool calls per turn, and
+`max_plot_nodes` must be at least `max_plot_points`. The global validation
+handler maps request validation failures to `400 invalid_request`, not 422.
 
 `get_agent_runtime_config` loads one snapshot in a short-lived system session
 and returns a frozen dataclass. The dependency runs before an SSE response

@@ -21,6 +21,9 @@ from app.module.agent.domain.agent_domain import (
     MAX_COMPACTION_SUMMARY_CHARS,
     MAX_PAGE_CONTEXT_CHARS,
     MAX_PARALLEL_TOOLS,
+    MAX_PLOT_BYTES,
+    MAX_PLOT_NODES,
+    MAX_PLOT_POINTS,
     MAX_STEPS,
     MAX_TOOL_CALLS_PER_TURN,
     MAX_TOOL_RESULT_CHARS,
@@ -49,6 +52,9 @@ class AgentRuntimeConfig:
     chat_attachment_cleanup_interval_seconds: int = (
         CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS
     )
+    max_plot_points: int = MAX_PLOT_POINTS
+    max_plot_bytes: int = MAX_PLOT_BYTES
+    max_plot_nodes: int = MAX_PLOT_NODES
 
     def __post_init__(self) -> None:
         """Reject values the database constraints also reject."""
@@ -99,6 +105,9 @@ class AgentRuntimeConfig:
                 60,
                 86_400,
             ),
+            ("max_plot_points", self.max_plot_points, 100, 50_000),
+            ("max_plot_bytes", self.max_plot_bytes, 10_000, 2_000_000),
+            ("max_plot_nodes", self.max_plot_nodes, 1_000, 500_000),
         )
         for name, value, minimum, maximum in ranges:
             if not isinstance(value, int) or isinstance(value, bool):
@@ -111,6 +120,8 @@ class AgentRuntimeConfig:
             )
         if self.max_parallel_tools > self.max_tool_calls_per_turn:
             raise ValueError("max_parallel_tools must not exceed max_tool_calls_per_turn.")
+        if self.max_plot_nodes < self.max_plot_points:
+            raise ValueError("max_plot_nodes must be greater than or equal to max_plot_points.")
 
 
 __all__ = ["AgentRuntimeConfig"]

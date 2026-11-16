@@ -60,6 +60,7 @@ export const settings = {
       maxLength: "最多只能輸入 {max} 個字元。",
       thresholdBelowContext: "必須低於模型上下文視窗（{context}）。",
       parallelWithinCalls: "不得超過每輪工具呼叫數（{calls}）。",
+      plotNodesAtLeastPoints: "必須至少等於資料點上限（{points}）。",
       overlapBelowTarget: "必須低於目標字元數（{target}）。",
     },
   },
@@ -116,6 +117,18 @@ export const settings = {
     fieldToolResultCharsUnit: "字元",
     fieldToolResultCharsHint:
       "每個結果會各自截斷；100k 約可容納 25 個 4 千字元的分段。",
+    fieldPlotPointsLabel: "圖表資料點",
+    fieldPlotPointsUnit: "點",
+    fieldPlotPointsHint:
+      "單一圖表最多可包含的資料點；每條 trace 最大的資料陣列會計入點數。預設 10,000。",
+    fieldPlotBytesLabel: "圖表 JSON 位元組",
+    fieldPlotBytesUnit: "位元組",
+    fieldPlotBytesHint:
+      "單一圖表序列化後的最大大小。預設 600,000 位元組。",
+    fieldPlotNodesLabel: "圖表 JSON 節點",
+    fieldPlotNodesUnit: "個節點",
+    fieldPlotNodesHint:
+      "單一圖表可走訪的最大 JSON 節點數；必須至少等於資料點上限。預設 100,000。",
     fieldStagedTtlLabel: "暫存圖片 TTL",
     fieldStagedTtlUnit: "小時",
     fieldStagedTtlHint:

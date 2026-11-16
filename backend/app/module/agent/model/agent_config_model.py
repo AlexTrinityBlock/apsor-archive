@@ -16,6 +16,9 @@ from app.module.agent.domain.agent_domain import (
     MAX_COMPACTION_SUMMARY_CHARS,
     MAX_PAGE_CONTEXT_CHARS,
     MAX_PARALLEL_TOOLS,
+    MAX_PLOT_BYTES,
+    MAX_PLOT_NODES,
+    MAX_PLOT_POINTS,
     MAX_STEPS,
     MAX_TOOL_CALLS_PER_TURN,
     MAX_TOOL_RESULT_CHARS,
@@ -75,6 +78,22 @@ class AgentConfigModel(Base):
         CheckConstraint(
             "chat_attachment_cleanup_interval_seconds BETWEEN 60 AND 86400",
             name="chat_attachment_cleanup_interval_range",
+        ),
+        CheckConstraint(
+            "max_plot_points BETWEEN 100 AND 50000",
+            name="max_plot_points_range",
+        ),
+        CheckConstraint(
+            "max_plot_bytes BETWEEN 10000 AND 2000000",
+            name="max_plot_bytes_range",
+        ),
+        CheckConstraint(
+            "max_plot_nodes BETWEEN 1000 AND 500000",
+            name="max_plot_nodes_range",
+        ),
+        CheckConstraint(
+            "max_plot_nodes >= max_plot_points",
+            name="plot_nodes_at_least_points",
         ),
         CheckConstraint(
             "compaction_threshold_tokens < context_window_tokens",
@@ -170,6 +189,24 @@ class AgentConfigModel(Base):
         nullable=False,
         default=CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
         server_default=text(str(CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS)),
+    )
+    max_plot_points: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=MAX_PLOT_POINTS,
+        server_default=text(str(MAX_PLOT_POINTS)),
+    )
+    max_plot_bytes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=MAX_PLOT_BYTES,
+        server_default=text(str(MAX_PLOT_BYTES)),
+    )
+    max_plot_nodes: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=MAX_PLOT_NODES,
+        server_default=text(str(MAX_PLOT_NODES)),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
