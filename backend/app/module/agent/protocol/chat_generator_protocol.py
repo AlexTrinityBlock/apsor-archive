@@ -41,6 +41,9 @@ class ChatGeneratorProtocol(Protocol):
     configured: bool
     model_name: str
 
+    @property
+    def max_output_tokens(self) -> int: ...
+
     async def complete_chat(
         self,
         messages: list[dict[str, Any]],

@@ -3,7 +3,7 @@ import { useI18n } from "../../../i18n";
 import { numberField, textField } from "../../trace";
 import { LivePanel, PanelEmpty, type PanelProps } from "./common";
 
-/** 以毫秒或秒呈現經過時間。 / Render an elapsed duration in milliseconds or seconds. */
+/** Render an elapsed duration in milliseconds or seconds. */
 function elapsedLabel(
   value: number,
   formatNumber: (value: number) => string,
@@ -15,10 +15,8 @@ function elapsedLabel(
 }
 
 /**
- * `calculate`：算式收據，只顯示後端已算好的結果。
  * `calculate`: an arithmetic receipt that only shows the backend's result.
  *
- * 面板不解析或執行 expression；它只是把已記錄的字串與數值排成收據。
  * The panel never parses or evaluates the expression; it only sets the
  * recorded string and number as a receipt.
  */

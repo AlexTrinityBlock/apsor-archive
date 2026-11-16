@@ -1769,8 +1769,7 @@
   inset: 0;
 }
 
-/* Let the 3D scene own touch gestures so the page does not pan instead.
-   讓 3D 場景接管觸控手勢，避免頁面被平移。 */
+/* Let the 3D scene own touch gestures so the page does not pan instead. */
 .chat-plot__target--3d {
   touch-action: none;
 }

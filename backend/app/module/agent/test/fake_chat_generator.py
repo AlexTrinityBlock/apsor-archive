@@ -33,6 +33,7 @@ class FakeChatGenerator:
 
     configured = True
     model_name = "fake-chat"
+    max_output_tokens = 10_000
 
     def __init__(
         self,
