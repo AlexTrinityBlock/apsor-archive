@@ -47,7 +47,7 @@ default model is `deepseek-flash`. Without a configured provider:
 - agent messages return `503 agent_not_configured`.
 
 Agent chat uses a larger output budget than summaries: the default
-`APSOR_DEEPSEEK_CHAT_MAX_TOKENS` is 100,000, while short summary and extraction
+`APSOR_DEEPSEEK_CHAT_MAX_TOKENS` is 20,000, while short summary and extraction
 calls keep the 1800-token `APSOR_DEEPSEEK_MAX_TOKENS` cap. Set the chat cap to
 `0` to disable it: the chat payload then omits `max_tokens` and the provider
 applies its own limit. The chat budget must leave room for long tool arguments

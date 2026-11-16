@@ -358,7 +358,7 @@ def test_chat_400_max_tokens_retries_once_without_the_cap(
         _FakeResponse(200, _chat_completion("Second answer.")),
     ]
     _install_fake_client(monkeypatch, responses, requests)
-    client = _chat_client(chat_max_tokens=100_000)
+    client = _chat_client(chat_max_tokens=20_000)
 
     first = asyncio.run(
         client.complete_chat([{"role": "user", "content": "First"}], [])
@@ -403,7 +403,7 @@ def test_streaming_chat_400_max_tokens_retries_once_without_the_cap(
         ),
     ]
     _install_fake_client(monkeypatch, responses, requests)
-    client = _chat_client(chat_max_tokens=100_000)
+    client = _chat_client(chat_max_tokens=20_000)
 
     result = asyncio.run(
         client.complete_chat(
@@ -428,7 +428,7 @@ def test_other_400_responses_are_not_retried(
         _FakeResponse(400, {"error": {"message": "invalid request format"}}),
     ]
     _install_fake_client(monkeypatch, responses, requests)
-    client = _chat_client(chat_max_tokens=100_000)
+    client = _chat_client(chat_max_tokens=20_000)
 
     with pytest.raises(AiProviderError) as raised:
         asyncio.run(
@@ -438,4 +438,4 @@ def test_other_400_responses_are_not_retried(
     assert raised.value.status_code == 400
     assert len(requests) == 1
     assert "max_tokens" in requests[0]
-    assert client.max_output_tokens == 100_000
+    assert client.max_output_tokens == 20_000
