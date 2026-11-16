@@ -29,18 +29,14 @@ class AgentStatus:
 
 def render_agent_status(status: AgentStatus) -> str:
     """Render the one trailing system message with the current runtime limits."""
-    opening = (
-        "<agent_status"
-        + attributes(
-            {
-                "max_tool_result_chars": status.max_tool_result_chars,
-                "max_page_context_chars": status.max_page_context_chars,
-                "max_expression_chars": status.max_expression_chars,
-                "output_limit_tokens": status.output_limit_tokens,
-            },
-            sort_keys=True,
-        )
-    )
+    values: dict[str, int] = {
+        "max_tool_result_chars": status.max_tool_result_chars,
+        "max_page_context_chars": status.max_page_context_chars,
+        "max_expression_chars": status.max_expression_chars,
+    }
+    if status.output_limit_tokens:
+        values["output_limit_tokens"] = status.output_limit_tokens
+    opening = "<agent_status" + attributes(values, sort_keys=True)
     if not status.retry_notice:
         return f"{opening} />"
     return "\n".join(
