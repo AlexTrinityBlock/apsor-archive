@@ -1,3 +1,4 @@
+import { CalculatePanel } from "./CalculatePanel";
 import { ToolErrorPanel } from "./ErrorPanel";
 import { ReadMemoryPanel, SaveMemoryPanel } from "./MemoryPanels";
 import { PresentResourcePanel } from "./PresentResourcePanel";
@@ -32,6 +33,8 @@ export function InspectorPanel({ item }: PanelProps) {
     return <ToolErrorPanel item={item} />;
   }
   switch (item.tool) {
+    case "calculate":
+      return <CalculatePanel item={item} />;
     case "search_knowledge":
       return <SearchKnowledgePanel item={item} />;
     case "read_file":
