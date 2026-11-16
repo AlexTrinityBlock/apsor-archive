@@ -207,10 +207,11 @@ export const library = {
     pathHint: "完整路徑，包含檔名。缺少的資料夾會自動建立。",
     fileLabel: "檔案",
     fileHint:
-      "一次一個檔案 · 上限 10 MB · .md、.txt、.csv、.json、.log、.pdf、.docx、.jpg、.jpeg、.png、.webp",
+      "一次一個檔案 · 上限 10 MB · .md、.txt、.csv、.json、.log、.pdf、.docx、.xlsx、.xls、.xlsm、.ods、.jpg、.jpeg、.png、.webp",
     contentLabel: "內容",
     textHint: "純 UTF-8 文字 · 上限 2 MB · {characters} 個字元 · {size}",
-    errorType: "請選擇 Markdown、文字、CSV、JSON、記錄檔、PDF、DOCX 或圖片檔案。",
+    errorType:
+      "請選擇 Markdown、文字、CSV、JSON、記錄檔、PDF、DOCX、試算表或圖片檔案。",
     errorTooLarge: "這個檔案超過 10 MB 的上傳上限。",
     errorPath: "請輸入完整的檔案館路徑，包含檔名。",
     errorFile: "請選擇要上傳的檔案。",
@@ -504,6 +505,7 @@ export const library = {
       markdown: "Markdown",
       json: "JSON",
       csv: "CSV 工作表",
+      spreadsheet: "試算表",
       text: "文字",
       unsupported: "原始檔案",
     },
@@ -512,7 +514,7 @@ export const library = {
       title: "這個原始檔可以安全下載，但無法在此渲染。",
       descriptionBefore: "儲存的類型是 ",
       descriptionAfter:
-        "。檢視器刻意只渲染 PDF、DOCX、圖片與文字類格式；其他二進位檔永遠不會在檔案館中執行。",
+        "。檢視器刻意只渲染 PDF、DOCX、試算表、圖片與文字類格式；其他二進位檔永遠不會在檔案館中執行。",
       fileName: "檔名",
       size: "大小",
       indexedChunks: "已索引分段",
@@ -560,6 +562,8 @@ export const library = {
       pdfPage: "正在渲染第 {page} 頁",
       docxOriginal: "正在取得 DOCX 原始檔",
       docxLayout: "正在排版 Word 文件",
+      xlsxOriginal: "正在取得試算表原始檔",
+      xlsxLayout: "正在排版試算表",
       markdown: "正在排版 Markdown",
       storedText: "正在讀取儲存的文字",
       reassembling: "正在重組已索引分段",
@@ -586,6 +590,21 @@ export const library = {
       rows: "顯示 {shown} / {total} 列。",
       truncated: "顯示 {shown} / {total} 列（受限預覽）。",
       note: "會保留引號內的逗號與換行。",
+    },
+    xlsx: {
+      sheetTabs: "工作表",
+      column: "第 {index} 欄",
+      empty: "這張工作表沒有可預覽的儲存格。",
+      emptyWorkbook: "這個活頁簿沒有工作表。",
+      hidden: "隱藏",
+      rows: "顯示 {shown} / {total} 列。",
+      truncated: "顯示 {shown} / {total} 列（受限預覽）。",
+      columns: "{count} 欄。",
+      truncatedColumns: "顯示 {shown} / {total} 欄（受限預覽）。",
+      note: "會略過空白列；儲存格依儲存值顯示，公式不會重新計算。",
+      parseFallback: "無法解析試算表版面（{reason}）。",
+      errorOriginal: "無法讀取試算表原始檔",
+      errorParse: "無法解析這份試算表",
     },
     fallback: {
       errorTitle: "沒有可閱讀的表示內容",
@@ -738,5 +757,7 @@ export const library = {
     generic: "檔案館無法完成這個請求。",
     folderCopyTooLarge:
       "這個資料夾太大，無法一次複製。請拆成較小的資料夾後再試。",
+    spreadsheetArchiveTooLarge:
+      "這份活頁簿展開後的列、欄或儲存格過多，無法安全索引。請拆成較小的活頁簿，或移除重複的列與欄。",
   },
 };

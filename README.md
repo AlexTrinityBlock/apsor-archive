@@ -73,8 +73,8 @@ result carries its source, chunk number, and time.
 > Status: v0.1.0 — file/memory archive, root plus per-user accounts, persistent
 > Pi-shaped agent with database-backed runtime limits, compaction, parallel
 > tools, SSE chat, a saved-question Q&A library, durable async ingestion,
-> dedicated PDF/DOCX/image/text preview engines, a folder workspace, and a
-> three-panel chat workspace.
+> dedicated PDF/DOCX/spreadsheet/image/text preview engines, a folder workspace,
+> and a three-panel chat workspace.
 
 ## Highlights
 
@@ -144,7 +144,10 @@ result carries its source, chunk number, and time.
   re-ingest creates a new file version.
 - **Documents choose their extractor.** PDFs try text first and fall back to
   vision for scanned pages. DOCX, TXT, JSON, CSV, and logs use text, with AI
-  structured metadata; images use vision or the filename fallback.
+  structured metadata; images use vision or the filename fallback. XLSX, XLS,
+  XLSM, and ODS workbooks are read sheet by sheet into Markdown tables, including
+  dates, numbers, merged headers, hidden sheets, and formula fallbacks; they
+  never enter the vision path.
 - **The interface speaks three languages.** English, Traditional Chinese, and
   Simplified Chinese can be switched from the Settings page. The choice is
   stored per browser and applies to the whole interface, never to archive
@@ -740,8 +743,9 @@ browsing, and it is the fallback layout on narrow screens.
   the current folder surface. The upload uses the same intake path, extension
   allowlist, and server limits as the upload dialog: 10 MB per uploaded file
   and `.md`, `.markdown`, `.txt`, `.csv`, `.json`, `.log`, `.pdf`, `.docx`,
-  `.jpg`, `.jpeg`, `.png`, or `.webp`. The dialog also supports a 2 MB
-  plain-text creation. Dropped files are never opened or executed.
+  `.xlsx`, `.xls`, `.xlsm`, `.ods`, `.jpg`, `.jpeg`, `.png`, or `.webp`. The
+  dialog also supports a 2 MB plain-text creation. Dropped files are never
+  opened or executed.
 - **Move versus copy** is explicit. A normal drag onto a folder moves the file;
   holding Alt/Option while dropping copies it. Touch and keyboard users get
   separate **Move** and **Copy** actions instead of drag.
@@ -1196,6 +1200,7 @@ those surfaces, so old citations and bookmarks keep working.
 |---|---|
 | PDF | `react-pdf` 11 + bundled `pdfjs-dist` 6, page navigation, zoom, fit width, text layer |
 | DOCX | `docx-preview` inside a script-disabled sandbox |
+| Spreadsheet (XLSX/XLS/XLSM/ODS) | lazy SheetJS grid with sheet tabs, hidden-sheet markers, sticky headers and a bounded 500 × 50 preview |
 | Image | native image with the standard file content endpoint |
 | Text / JSON / Markdown / CSV | archive sheet with wrap/copy/download, pretty JSON, GFM Markdown |
 | Memory | pressed-record memory leaf with lineage and trace link |
@@ -1307,6 +1312,16 @@ Document intake (`POST /api/v1/files`) supports:
   and run document-page vision: OCR, tables, and a brief layout note.
 - **DOCX** — python-docx paragraphs and tables; embedded images can provide a
   vision fallback with full image-mode descriptions and tables.
+- **XLSX / XLS / XLSM / ODS** — python-calamine reads worksheets in order,
+  including hidden sheets and merged cells, and renders each sheet as a
+  GitHub-Flavored Markdown table. Cached formula values are preferred; for OOXML
+  workbooks, openpyxl recovers formula text when a generated file has no cached
+  result. Extraction keeps at most 10,000 rows per sheet and 100 columns, with
+  an explicit truncation marker; the workbook text budget is 4,000,000
+  characters and is lowered automatically to keep the output below the existing
+  500-chunk-per-file ceiling. Raw values are indexed; cell display formats such
+  as currency symbols, percent signs, and leading zeros are not reproduced.
+  Spreadsheet extraction is text-only and never uses vision.
 - **TXT / MD / CSV / JSON / LOG** — direct text plus AI structured metadata
   (title, summary, tags, document_type).
 

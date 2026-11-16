@@ -102,6 +102,35 @@ data-directory backup. If `APSOR_R2_BUCKET` is absent from the host shell, pass
 
 ## File ingestion
 
+### Supported file types
+
+The upload allowlist covers Markdown, plain text, CSV, JSON, log, PDF, DOCX,
+spreadsheet, and image files. The spreadsheet formats are `.xlsx`, `.xls`,
+`.xlsm`, and `.ods`.
+
+Spreadsheets are extracted as text, never through the vision provider. Each
+worksheet becomes a GitHub-Flavored Markdown table under a
+`## Sheet: <name>` heading; hidden sheets keep their text and are marked
+`(hidden)`. The first non-empty row is the Markdown header row, and a merged
+cell repeats its value in every covered cell.
+
+- calamine reads all four formats. A formula cell whose cached value is missing
+  is recovered with openpyxl for `.xlsx` and `.xlsm`; legacy `.xls` and
+  OpenDocument `.ods` files rely on cached values only.
+- Extraction is capped at 10,000 rows per sheet, 100 columns, 4,000 characters
+  per cell, and 4,000,000 characters per workbook. The workbook budget is
+  lowered further to keep the output below the existing 500-chunk-per-file
+  ceiling, so truncation is visible instead of a late `too_many_chunks` failure.
+- The archive guard rejects `.xlsx`, `.xlsm`, and `.ods` payloads with more than
+  10,000 zip entries, a single entry declaring more than 32 MiB, or more than
+  64 MiB of declared uncompressed data as `413 spreadsheet_archive_too_large`.
+  It also rejects a declared grid above 200,000 rows, 1,024 columns, or 2,000,000
+  cells before calamine allocates it; this covers ODS repeated rows/columns and
+  forged XLSX dimensions. An unreadable or empty workbook is `422 empty_content`.
+- Charts, images, comments, and cell styles are not extracted.
+- Re-ingest remains vision-only, so a spreadsheet must be uploaded again to pick
+  up a future extraction change.
+
 Uploads and direct text can be queued as durable `file_ingest_job` rows owned by
 the signed-in account. The synchronous `POST /api/v1/files` and
 `POST /api/v1/files/text` endpoints remain for clients that want a fully indexed

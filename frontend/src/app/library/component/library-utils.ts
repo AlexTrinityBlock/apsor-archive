@@ -318,7 +318,7 @@ export async function waitForIngestedFile(
 }
 
 export const ACCEPTED_FILE_TYPES =
-  ".md,.markdown,.txt,.csv,.json,.log,.pdf,.docx,.jpg,.jpeg,.png,.webp";
+  ".md,.markdown,.txt,.csv,.json,.log,.pdf,.docx,.xlsx,.xls,.xlsm,.ods,.jpg,.jpeg,.png,.webp";
 
 const ALLOWED_EXTENSIONS = [
   ".md",
@@ -329,6 +329,10 @@ const ALLOWED_EXTENSIONS = [
   ".log",
   ".pdf",
   ".docx",
+  ".xlsx",
+  ".xls",
+  ".xlsm",
+  ".ods",
   ".jpg",
   ".jpeg",
   ".png",
@@ -495,7 +499,7 @@ export function remapArchivePath(
 
 /** The allowed-type hint shared by the intake dialog and the drag-and-drop tray. */
 export const ACCEPTED_FILE_HINT =
-  ".md, .markdown, .txt, .csv, .json, .log, .pdf, .docx, .jpg, .jpeg, .png, .webp";
+  ".md, .markdown, .txt, .csv, .json, .log, .pdf, .docx, .xlsx, .xls, .xlsm, .ods, .jpg, .jpeg, .png, .webp";
 
 /** The compact type pill shown on file cards. */
 export function fileKindLabel(rawPath: string): string {
