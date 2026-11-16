@@ -724,6 +724,97 @@ def test_repeated_invalid_arguments_add_retry_notice(client: TestClient) -> None
     assert body["error_code"] is None
 
 
+def _redacted_plot_call(call_id: str) -> ChatResult:
+    """Copy the stored redaction shape as a fresh render_plot argument."""
+    return tool_call_result(
+        "render_plot",
+        {"caption": None, "figure_summary": {"traces": 0}, "title": None},
+        call_id=call_id,
+    )
+
+
+def test_redaction_placeholder_counts_toward_the_loop_breaker(
+    client: TestClient,
+) -> None:
+    """Three copied placeholders reach the text-only step and complete cleanly."""
+    final_answer = "I cannot draw that chart because the figure is not available."
+    fake = FakeChatGenerator(
+        [
+            _redacted_plot_call("call_redacted_1"),
+            _redacted_plot_call("call_redacted_2"),
+            _redacted_plot_call("call_redacted_3"),
+            text_result(final_answer),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Redaction placeholder loop")
+
+    response = client.post(
+        f"/api/v1/agent/conversations/{conversation_id}/messages",
+        json={"content": "Draw a 3D sphere."},
+    )
+    assert response.status_code == 200, response.text
+    assert "event: error" not in response.text
+    assert "event: run_end" in response.text
+    assert '"status":"completed"' in response.text
+
+    assert len(fake.requests) == 4
+    # The second failure already carries the notice; the third removes tools.
+    assert '<retry_notice reason="tool_arguments">' in fake.requests[2].messages[-1][
+        "content"
+    ]
+    assert fake.requests[3].tools == []
+
+    entries = _reload_entries(client, conversation_id)
+    results = _tool_results(entries)
+    assert [entry["data"]["error_code"] for entry in results] == [
+        "plot_figure_required",
+        "plot_figure_required",
+        "plot_figure_required",
+    ]
+    assistant_entries = [entry for entry in entries if entry["kind"] == "pi.assistant"]
+    assert assistant_entries[-1]["model"][0]["content"] == final_answer
+    assert assistant_entries[-1]["data"]["finish_reason"] == "stop"
+    assert "error" not in assistant_entries[-1]["data"]
+
+
+def test_successful_tool_call_resets_the_invalid_argument_streak(
+    client: TestClient,
+) -> None:
+    """A successful call between failures restarts the consecutive count."""
+    fake = FakeChatGenerator(
+        [
+            _redacted_plot_call("call_redacted_1"),
+            tool_call_result(
+                "calculate",
+                {"expression": "1 + 1"},
+                call_id="call_good",
+            ),
+            _redacted_plot_call("call_redacted_2"),
+            text_result("The calculation ran; I still cannot draw that chart."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Reset invalid arguments")
+
+    body = _send_message(client, conversation_id, "Calculate and draw.")
+
+    assert len(fake.requests) == 4
+    for request in fake.requests:
+        assert '<retry_notice reason="tool_arguments">' not in request.messages[-1].get(
+            "content", ""
+        )
+
+    results = _tool_results(body["entries"])
+    assert [entry["data"]["error_code"] for entry in results] == [
+        "plot_figure_required",
+        None,
+        "plot_figure_required",
+    ]
+    assert [entry["data"]["status"] for entry in results] == ["error", "ok", "error"]
+    assert body["error_code"] is None
+
+
 def test_invalid_arguments_loop_breaker_answers_without_tools(
     client: TestClient,
 ) -> None:
