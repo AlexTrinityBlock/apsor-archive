@@ -965,10 +965,42 @@ def _parse_arguments(raw: str) -> tuple[dict[str, Any], str | None]:
             repaired = _parse_object_before_trailing_junk(raw, error.pos)
             if repaired is not None:
                 return repaired, None
-        return {}, "Tool arguments are not valid JSON."
+        return {}, _invalid_json_detail(error)
     if not isinstance(parsed, dict):
-        return {}, "Tool arguments must be a JSON object."
+        return {}, _json_type_detail(parsed)
     return parsed, None
+
+
+def _invalid_json_detail(error: json.JSONDecodeError) -> str:
+    """Describe a JSON failure without echoing the offending argument text."""
+    return _bounded_argument_detail(
+        f"Tool arguments are not valid JSON: {error.msg} at line "
+        f"{error.lineno} column {error.colno}."
+    )
+
+
+def _json_type_detail(value: object) -> str:
+    """Name the observed JSON type of a non-object argument document."""
+    if value is None:
+        kind = "null"
+    elif isinstance(value, bool):
+        kind = "boolean"
+    elif isinstance(value, list):
+        kind = "array"
+    elif isinstance(value, str):
+        kind = "string"
+    elif isinstance(value, (int, float)):
+        kind = "number"
+    else:
+        kind = type(value).__name__
+    return _bounded_argument_detail(
+        f"Tool arguments must be a JSON object, got {kind}."
+    )
+
+
+def _bounded_argument_detail(detail: str) -> str:
+    """Collapse whitespace and cap one model-facing parse error at 300 chars."""
+    return " ".join(detail.split())[:300]
 
 
 def _parse_object_before_trailing_junk(raw: str, position: int) -> dict[str, Any] | None:

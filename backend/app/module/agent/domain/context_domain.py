@@ -25,7 +25,17 @@ from app.module.agent.domain.agent_domain import (
     ProviderContext,
     TranscriptEntry,
 )
+from app.module.agent.domain.tool_catalog import PLOT_TOOL_NAME
 from app.module.agent.domain.xml_domain import attributes
+
+# Replaces one historical render_plot call in the provider projection. The
+# stored arguments are the redaction shape (title, caption, figure_summary);
+# replaying that shape teaches the model to copy it, so the call is removed and
+# only this note remains.
+_PLOT_HISTORY_NOTE = (
+    "[Rendered a chart in an earlier step; the figure is omitted from history "
+    "to save context.]"
+)
 
 
 def build_context(
@@ -228,6 +238,7 @@ def _contributions(
         for message in messages:
             if message.get("role") == "system":
                 continue
+            _drop_redacted_plot_calls(message)
             normal.append(message)
         if normal:
             if entry.kind == KIND_USER and isinstance(entry.data, dict):
@@ -241,6 +252,54 @@ def _contributions(
             source_entry_ids.append(entry.id)
 
     return contributions, tool_results, source_entry_ids
+
+
+def _drop_redacted_plot_calls(message: dict[str, Any]) -> None:
+    """Remove historical render_plot calls that only carry the redaction shape.
+
+    Storage keeps a compact ``figure_summary`` in the assistant call instead of
+    the full figure. Replaying that placeholder invites the model to copy it, so
+    the provider projection drops the call. A message with no calls left keeps
+    its text and gains one short note; its orphaned result is dropped by
+    ``_assemble_messages``. Unparseable arguments are left untouched.
+    """
+    if message.get("role") != "assistant":
+        return
+    raw_calls = message.get("tool_calls")
+    if not isinstance(raw_calls, list):
+        return
+    kept = [call for call in raw_calls if not _is_redacted_plot_call(call)]
+    if len(kept) == len(raw_calls):
+        return
+    if kept:
+        message["tool_calls"] = kept
+        return
+    message.pop("tool_calls", None)
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        message["content"] = f"{content}\n\n{_PLOT_HISTORY_NOTE}"
+    else:
+        message["content"] = _PLOT_HISTORY_NOTE
+
+
+def _is_redacted_plot_call(call: object) -> bool:
+    """Return whether one call is a render_plot carrying ``figure_summary``."""
+    if not isinstance(call, dict) or _call_name(call) != PLOT_TOOL_NAME:
+        return False
+    function = call.get("function")
+    if not isinstance(function, dict):
+        return False
+    arguments = function.get("arguments")
+    if isinstance(arguments, str):
+        try:
+            parsed = json.loads(arguments)
+        except json.JSONDecodeError:
+            return False
+    elif isinstance(arguments, dict):
+        parsed = arguments
+    else:
+        return False
+    return isinstance(parsed, dict) and "figure_summary" in parsed
 
 
 def _assemble_messages(

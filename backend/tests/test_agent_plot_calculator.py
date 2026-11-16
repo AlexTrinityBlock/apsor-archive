@@ -14,6 +14,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from app.module.agent.domain.agent_domain import (
+    KIND_ASSISTANT,
+    KIND_TOOL_RESULT,
+    KIND_USER,
+    TranscriptEntry,
+)
+from app.module.agent.domain.context_domain import build_context
 from app.module.agent.domain.plot_spec_domain import PlotSpecError, sanitize_plot_figure
 from app.module.agent.protocol.chat_generator_protocol import ChatResult, ChatToolCall
 from app.module.agent.service.tool_registry import AgentToolRegistry
@@ -248,33 +255,224 @@ def test_render_plot_persists_figure_and_redacts_provider_context(
     assert "Jan" not in raw_arguments
     assert "figure" not in json.loads(raw_arguments)
 
-    # The provider's second request replays the persisted assistant message and
-    # the tool envelope. Neither may carry the figure or its data arrays.
+    # The provider's second request drops the redacted render_plot call and its
+    # orphaned result, replacing the call with one short historical note.
     assert len(fake.requests) == 2
     second_messages = fake.requests[1].messages
     provider_payload = json.dumps(second_messages, ensure_ascii=False)
     assert "Jan" not in provider_payload
     assert "[3,5]" not in provider_payload
+    assert "figure_summary" not in provider_payload
+    assert "render_plot" not in provider_payload
     replayed_assistant = [
         message for message in second_messages if message.get("role") == "assistant"
     ]
     assert len(replayed_assistant) == 1
-    replayed_call = replayed_assistant[0]["tool_calls"][0]
-    assert replayed_call["function"]["name"] == "render_plot"
-    assert json.loads(replayed_call["function"]["arguments"]) == PLOT_ARGUMENTS_SUMMARY
+    assert "tool_calls" not in replayed_assistant[0]
+    assert replayed_assistant[0]["content"] == (
+        "[Rendered a chart in an earlier step; the figure is omitted from "
+        "history to save context.]"
+    )
+    assert provider_payload.count("Rendered a chart in an earlier step") == 1
     replayed_tool_results = [
         message for message in second_messages if message.get("role") == "tool"
     ]
-    assert len(replayed_tool_results) == 1
-    assert replayed_tool_results[0]["content"] == result_entry["model"][0]["content"]
-    assert "Jan" not in replayed_tool_results[0]["content"]
-    assert '"data"' not in replayed_tool_results[0]["content"]
-    assert "[3,5]" not in replayed_tool_results[0]["content"]
+    assert replayed_tool_results == []
 
     reloaded_results = _tool_results(_reload_entries(client, conversation_id))
     assert len(reloaded_results) == 1
     assert reloaded_results[0]["data"] == data
     assert reloaded_results[0]["data"]["plot"]["figure"] == PLOT_FIGURE
+
+
+def _call(call_id: str, name: str, arguments: str) -> dict[str, Any]:
+    """Build one persisted assistant function call."""
+    return {
+        "id": call_id,
+        "type": "function",
+        "function": {"name": name, "arguments": arguments},
+    }
+
+
+def test_redacted_plot_history_is_removed_and_noted_once() -> None:
+    """A stored plot placeholder never reaches the provider; one note replaces it."""
+    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
+    entries = (
+        TranscriptEntry(
+            id=1,
+            kind=KIND_USER,
+            messages=({"role": "user", "content": "Chart it."},),
+        ),
+        TranscriptEntry(
+            id=2,
+            kind=KIND_ASSISTANT,
+            messages=(
+                {
+                    "role": "assistant",
+                    "content": "Here is the chart.",
+                    "tool_calls": [
+                        _call("call_plot_a", "render_plot", redacted),
+                        _call("call_plot_b", "render_plot", redacted),
+                    ],
+                },
+            ),
+        ),
+        TranscriptEntry(
+            id=3,
+            kind=KIND_TOOL_RESULT,
+            messages=(
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_plot_a",
+                    "name": "render_plot",
+                    "content": "<tool_result>first plot</tool_result>",
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_plot_b",
+                    "name": "render_plot",
+                    "content": "<tool_result>second plot</tool_result>",
+                },
+            ),
+        ),
+    )
+
+    context = build_context(entries)
+
+    assert [message["role"] for message in context.messages] == ["user", "assistant"]
+    assistant = context.messages[1]
+    assert "tool_calls" not in assistant
+    assert assistant["content"] == (
+        "Here is the chart.\n\n"
+        "[Rendered a chart in an earlier step; the figure is omitted from "
+        "history to save context.]"
+    )
+    payload = json.dumps(context.messages, ensure_ascii=False)
+    assert "figure_summary" not in payload
+    assert "call_plot_a" not in payload
+    assert "call_plot_b" not in payload
+    assert payload.count("[Rendered a chart in an earlier step") == 1
+
+
+def test_mixed_tool_batch_keeps_other_calls_and_results() -> None:
+    """Only the redacted plot call is dropped; sibling calls stay intact."""
+    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
+    calculate = json.dumps({"expression": "1 + 1"})
+    read_file = json.dumps({"path": "/library"})
+    entries = (
+        TranscriptEntry(
+            id=1,
+            kind=KIND_USER,
+            messages=({"role": "user", "content": "Chart and check."},),
+        ),
+        TranscriptEntry(
+            id=2,
+            kind=KIND_ASSISTANT,
+            messages=(
+                {
+                    "role": "assistant",
+                    "content": "Checking both.",
+                    "tool_calls": [
+                        _call("call_plot_mixed", "render_plot", redacted),
+                        _call("call_calc_mixed", "calculate", calculate),
+                        _call("call_read_mixed", "read_file", read_file),
+                    ],
+                },
+            ),
+        ),
+        TranscriptEntry(
+            id=3,
+            kind=KIND_TOOL_RESULT,
+            messages=(
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_plot_mixed",
+                    "name": "render_plot",
+                    "content": "<tool_result>plot</tool_result>",
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_calc_mixed",
+                    "name": "calculate",
+                    "content": "<tool_result>2</tool_result>",
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_read_mixed",
+                    "name": "read_file",
+                    "content": "<tool_result>files</tool_result>",
+                },
+            ),
+        ),
+    )
+
+    context = build_context(entries)
+
+    assert [message["role"] for message in context.messages] == [
+        "user",
+        "assistant",
+        "tool",
+        "tool",
+    ]
+    assistant = context.messages[1]
+    assert assistant["content"] == "Checking both."
+    assert [call["id"] for call in assistant["tool_calls"]] == [
+        "call_calc_mixed",
+        "call_read_mixed",
+    ]
+    assert [message["tool_call_id"] for message in context.messages[2:]] == [
+        "call_calc_mixed",
+        "call_read_mixed",
+    ]
+    payload = json.dumps(context.messages, ensure_ascii=False)
+    assert "figure_summary" not in payload
+    assert "call_plot_mixed" not in payload
+    assert "Rendered a chart in an earlier step" not in payload
+
+
+def test_unparseable_plot_history_call_is_left_untouched() -> None:
+    """Arguments that are not JSON keep the original call and its result."""
+    broken = '{"title": "broken"'
+    entries = (
+        TranscriptEntry(
+            id=1,
+            kind=KIND_USER,
+            messages=({"role": "user", "content": "Chart it."},),
+        ),
+        TranscriptEntry(
+            id=2,
+            kind=KIND_ASSISTANT,
+            messages=(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [_call("call_broken", "render_plot", broken)],
+                },
+            ),
+        ),
+        TranscriptEntry(
+            id=3,
+            kind=KIND_TOOL_RESULT,
+            messages=(
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_broken",
+                    "name": "render_plot",
+                    "content": "<tool_result>broken</tool_result>",
+                },
+            ),
+        ),
+    )
+
+    context = build_context(entries)
+
+    assert [message["role"] for message in context.messages] == [
+        "user",
+        "assistant",
+        "tool",
+    ]
+    assert context.messages[1]["tool_calls"][0]["function"]["arguments"] == broken
+    assert context.messages[2]["tool_call_id"] == "call_broken"
 
 
 def test_render_plot_rejects_unsafe_or_oversized_figure(client: TestClient) -> None:
@@ -318,7 +516,7 @@ def test_render_plot_rejects_unsafe_or_oversized_figure(client: TestClient) -> N
             "call_plot_points",
             {
                 "title": "Too many points",
-                "figure": {"data": [{"type": "scatter", "y": list(range(2_001))}]},
+                "figure": {"data": [{"type": "scatter", "y": list(range(10_001))}]},
             },
         ),
         (
@@ -414,11 +612,30 @@ def test_plot_point_count_keeps_flat_and_ragged_semantics() -> None:
 
 
 def test_surface_grid_enforces_the_real_cell_cap() -> None:
-    """A 60 x 60 surface is 3,600 points and exceeds the flat-array cap."""
+    """A 60 x 60 surface fits; a 101 x 101 grid exceeds 10,000 cells."""
+    accepted = sanitize_plot_figure(
+        {"data": [{"type": "surface", "z": _grid(60, 60)}]}
+    )
+    assert accepted.point_count == 3_600
+    assert (accepted.grid_rows, accepted.grid_columns) == (60, 60)
+
     with pytest.raises(PlotSpecError, match="too many data points"):
         sanitize_plot_figure(
-            {"data": [{"type": "surface", "z": _grid(60, 60)}]}
+            {"data": [{"type": "surface", "z": _grid(101, 101)}]}
         )
+
+
+def test_plot_node_cap_rejects_a_wide_figure() -> None:
+    """A layout above 100,000 JSON nodes is rejected even when points fit."""
+    figure = {
+        "data": [{"type": "bar", "x": ["a"], "y": [1]}],
+        "layout": {
+            "a": [None] * 50_000,
+            "b": [None] * 50_000,
+        },
+    }
+    with pytest.raises(PlotSpecError, match="too complex"):
+        sanitize_plot_figure(figure)
 
 
 def test_surface_receipt_reports_grid_cells(client: TestClient) -> None:
@@ -496,7 +713,7 @@ def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     assert response.status_code == 200, response.text
     catalog = response.json()
     assert catalog["prompt_version"] == "archive-agent-v13"
-    assert catalog["tools_version"] == "archive-tools-v11"
+    assert catalog["tools_version"] == "archive-tools-v12"
 
     tools = {tool["name"]: tool for tool in catalog["tools"]}
     names = [tool["name"] for tool in catalog["tools"]]
@@ -521,6 +738,11 @@ def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     description = render_plot["description"]
     assert "Render a Plotly chart inline in the chat" in description
     assert "explain the chart" in description
+    assert "10,000 data points" in description
+    assert "100,000 JSON nodes" in description
+    assert "600 KB" in description
+    assert "30x30 to 60x60 grid (900-3,600 cells)" in description
+    assert "never summarize it with a placeholder" in description
 
     serialized = json.dumps(render_plot["parameters"])
     assert "$ref" not in serialized
@@ -737,16 +959,23 @@ def test_duplicate_render_plot_is_not_executed(client: TestClient) -> None:
     assert "already visible in the chat" in duplicate_content
     assert "Do not call render_plot again" in duplicate_content
 
-    # The second provider request sees the success receipt; the third sees the
-    # duplicate notice instead of a second figure.
-    second_tools = [
-        message for message in fake.requests[1].messages if message.get("role") == "tool"
-    ]
-    assert any("already rendered and visible" in message["content"] for message in second_tools)
-    third_tools = [
-        message for message in fake.requests[2].messages if message.get("role") == "tool"
-    ]
-    assert any("<plot_already_rendered" in message["content"] for message in third_tools)
+    # Both historical render_plot calls are omitted from the provider context,
+    # so the success receipt and the duplicate notice never replay; one note
+    # stands in for each call.
+    note = (
+        "[Rendered a chart in an earlier step; the figure is omitted from "
+        "history to save context.]"
+    )
+    for index, request in enumerate(fake.requests[1:], start=1):
+        assert not [
+            message for message in request.messages if message.get("role") == "tool"
+        ]
+        notes = [
+            message
+            for message in request.messages
+            if message.get("role") == "assistant" and message.get("content") == note
+        ]
+        assert len(notes) == index
 
     reloaded = _reload_entries(client, conversation_id)
     assert sum(1 for entry in _tool_results(reloaded) if "plot" in entry["data"]) == 1
@@ -948,12 +1177,23 @@ def test_invalid_arguments_loop_breaker_answers_without_tools(
 
     assert len(fake.requests) == 4
     assert fake.requests[3].tools == []
-    final_tool_messages = [
+    # Every historical render_plot call is omitted from the provider context,
+    # so the final text-only call sees one note per failed attempt and no tool
+    # envelope for the dropped results.
+    final_notes = [
         message
         for message in fake.requests[3].messages
-        if message.get("role") == "tool"
+        if message.get("role") == "assistant"
+        and message.get("content")
+        == (
+            "[Rendered a chart in an earlier step; the figure is omitted from "
+            "history to save context.]"
+        )
     ]
-    assert len(final_tool_messages) == 3
+    assert len(final_notes) == 3
+    assert not [
+        message for message in fake.requests[3].messages if message.get("role") == "tool"
+    ]
 
     entries = _reload_entries(client, conversation_id)
     results = _tool_results(entries)

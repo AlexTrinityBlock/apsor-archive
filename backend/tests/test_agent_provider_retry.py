@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from app.infrastructure.ai import deepseek_client as deepseek_client_module
 from app.infrastructure.ai.deepseek_client import (
     DeepSeekClient,
+    _bounded_argument_detail,
     _http_error,
     _parse_arguments,
 )
@@ -461,11 +462,47 @@ def test_tool_arguments_accept_only_trailing_closing_brackets() -> None:
         assert parsed == obj, label
 
     rejected = {
-        "trailing words": '{"title":"sphere"} trailing',
-        "truncated object": '{"title":"sphere"',
-        "non-object prefix": '"sphere"}}',
+        "trailing words": (
+            '{"title":"sphere"} trailing',
+            "Tool arguments are not valid JSON: Extra data at line 1 column 20.",
+        ),
+        "truncated object": (
+            '{"title":"sphere"',
+            "Tool arguments are not valid JSON: Expecting ',' delimiter at line 1 "
+            "column 18.",
+        ),
+        "non-object prefix": (
+            '"sphere"}}',
+            "Tool arguments are not valid JSON: Extra data at line 1 column 9.",
+        ),
     }
-    for label, value in rejected.items():
+    for label, (value, expected) in rejected.items():
         parsed, error = _parse_arguments(value)
         assert parsed == {}, label
-        assert error == "Tool arguments are not valid JSON.", label
+        assert error == expected, label
+
+
+def test_tool_argument_errors_are_specific_and_bounded() -> None:
+    """JSON syntax and non-object failures name the problem, not the payload."""
+    parsed, error = _parse_arguments('{"title": "sphere", "figure": }')
+    assert parsed == {}
+    assert error == (
+        "Tool arguments are not valid JSON: Expecting value at line 1 column 31."
+    )
+    assert "sphere" not in error
+
+    non_objects = {
+        "[]": "array",
+        '"sphere"': "string",
+        "1": "number",
+        "true": "boolean",
+        "null": "null",
+    }
+    for raw, kind in non_objects.items():
+        parsed, error = _parse_arguments(raw)
+        assert parsed == {}, raw
+        assert error == f"Tool arguments must be a JSON object, got {kind}.", raw
+
+    collapsed = _bounded_argument_detail("a\n\tb" + "c" * 400)
+    assert collapsed == "a b" + "c" * 297
+    assert len(collapsed) == 300

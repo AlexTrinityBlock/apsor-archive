@@ -16,10 +16,10 @@ from typing import Any
 
 from app.module.agent.exception.domain_error import AgentError
 
-MAX_PLOT_BYTES = 200_000
+MAX_PLOT_BYTES = 600_000
 MAX_PLOT_TRACES = 12
-MAX_PLOT_POINTS = 2_000
-MAX_PLOT_NODES = 50_000
+MAX_PLOT_POINTS = 10_000
+MAX_PLOT_NODES = 100_000
 MAX_PLOT_DEPTH = 20
 
 # Only ``data`` and ``layout`` describe a chart. ``frames`` (animation) and any
