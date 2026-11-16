@@ -1,6 +1,7 @@
 """Pi-shaped agent transcript, tool loop, cache usage, and lifecycle."""
 
 import json
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -13,7 +14,12 @@ from app.infrastructure.ai.deepseek_client import DeepSeekClient, _is_context_wi
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
 from app.module.agent.domain.agent_domain import ProviderContext
+from app.module.agent.domain.agent_status_domain import (
+    AgentStatus,
+    render_agent_status,
+)
 from app.module.agent.domain.compaction_domain import estimate_provider_context_tokens
+from app.module.agent.domain.context_domain import _prefix_hash
 from app.module.agent.service.tool_registry import _web_fetch_footer
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
@@ -94,13 +100,24 @@ FAKE_FETCH_PAGE_CHARS = 3_600
 
 
 def _context_messages(request: Any) -> list[dict[str, Any]]:
-    """Return provider messages without the trailing agent-self system block."""
+    """Return provider messages without the trailing agent status system block."""
     messages = list(request.messages)
     if messages and messages[-1].get("role") == "system":
         content = messages[-1].get("content")
-        if isinstance(content, str) and content.startswith("<agent_self>"):
+        if isinstance(content, str) and content.startswith("<agent_status"):
             messages.pop()
     return messages
+
+
+def _agent_status_snapshot(*, retry_notice: str | None = None) -> AgentStatus:
+    """Build a fixed status snapshot so two renders can be compared byte for byte."""
+    return AgentStatus(
+        max_tool_result_chars=100_000,
+        max_page_context_chars=6_000,
+        max_expression_chars=300,
+        output_limit_tokens=10_000,
+        retry_notice=retry_notice,
+    )
 
 
 class FakeWebResearchService:
@@ -2700,16 +2717,18 @@ def test_agent_compacts_and_retries_after_provider_context_overflow(
     assert compactions[0]["data"]["reason"] == "provider_context_overflow"
 
 
-def test_agent_self_system_message_exposes_runtime_facts(client: TestClient) -> None:
-    """The trailing system block reports safe runtime facts, never private data."""
-    conversation_title = "RUNTIME-AGENT-SELF-PRIVATE-TITLE"
-    private_token = "RUNTIME-AGENT-SELF-PRIVATE-TOKEN"
+def test_agent_status_system_message_exposes_runtime_limits(
+    client: TestClient,
+) -> None:
+    """The trailing system block carries only the model-actionable limits."""
+    conversation_title = "RUNTIME-AGENT-STATUS-PRIVATE-TITLE"
+    private_token = "RUNTIME-AGENT-STATUS-PRIVATE-TOKEN"
     fake = FakeChatGenerator(
         [
             tool_call_result(
                 "calculate",
                 {"expression": "1 + 1"},
-                call_id="call_self_1",
+                call_id="call_status_1",
             ),
             text_result("The answer is 2."),
         ]
@@ -2732,67 +2751,33 @@ def test_agent_self_system_message_exposes_runtime_facts(client: TestClient) -> 
     first_block = fake.requests[0].messages[-1]
     assert first_block["role"] == "system"
     first_content = first_block["content"]
-    assert first_content.startswith("<agent_self>")
-    assert first_content.endswith("</agent_self>")
-    assert 'name="Apsor Archive Agent"' in first_content
-    assert 'role="persistent archive research agent"' in first_content
-    assert 'transcript="append_only"' in first_content
-    assert f'conversation_id="{conversation["id"]}"' in first_content
-    assert f'run_id="{body["run"]["id"]}"' in first_content
-    assert 'provider="deepseek"' in first_content
-    assert 'active_provider="deepseek"' in first_content
-    assert 'step="1"' in first_content
-    assert 'max_steps="24"' in first_content
-    assert 'remaining_steps="23"' in first_content
-    assert 'approval_resume="false"' in first_content
-    assert 'new_page_context="none"' in first_content
-    assert 'active_context_entries="1"' in first_content
-    assert f'tool_count="{len(TOOL_NAMES)}"' in first_content
-    assert 'web_search="none"' in first_content
-    assert 'web_fetch="none"' in first_content
-    for name in TOOL_NAMES:
-        assert name in first_content
-    assert 'prompt_version="archive-agent-v13"' in first_content
-    assert 'tools_version="archive-tools-v11"' in first_content
-    assert 'output_limit_tokens="10000"' in first_content
-    assert 'context_window_tokens="1000000"' in first_content
-    assert 'compaction_threshold_tokens="75000"' in first_content
-    assert 'max_tool_calls_per_turn="20"' in first_content
-    assert 'max_parallel_tools="6"' in first_content
-    assert 'max_tool_result_chars="100000"' in first_content
-    assert 'max_page_context_chars="6000"' in first_content
-    assert 'max_plot_traces="12"' in first_content
-    assert 'max_plot_points="2000"' in first_content
-    assert 'max_plot_bytes="200000"' in first_content
-    assert 'max_expression_chars="300"' in first_content
-    assert 'parallel_tools_enabled="true"' in first_content
-    assert 'auto_compaction_enabled="true"' in first_content
-    assert 'save_memory_requires_approval="true"' in first_content
-    assert (
-        '<usage prompt_tokens="0" completion_tokens="0" total_tokens="0" />'
-        in first_content
+    expected_block = (
+        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
+        'max_tool_result_chars="100000" output_limit_tokens="10000" />'
     )
-    assert "cached_tokens" not in first_content
-    assert "These are your own runtime facts" in first_content
+    assert first_content == expected_block
+    assert "active_provider" not in first_content
+    assert "conversation_id" not in first_content
+    assert "run_id" not in first_content
+    assert "tool_count" not in first_content
+    assert "web_search" not in first_content
+    assert "prompt_version" not in first_content
+    assert "tools_version" not in first_content
+    assert "context_window_tokens" not in first_content
+    assert "max_parallel_tools" not in first_content
+    assert "max_plot_traces" not in first_content
+    assert "usage" not in first_content
 
+    # A step without a retry notice renders the same minimal block.
     second_block = fake.requests[1].messages[-1]
     assert second_block["role"] == "system"
-    second_content = second_block["content"]
-    assert 'step="2"' in second_content
-    assert 'remaining_steps="22"' in second_content
-    assert 'tool_calls_used="1"' in second_content
-    assert 'remaining_tool_calls="19"' in second_content
-    assert 'active_context_entries="3"' in second_content
-    assert (
-        '<usage prompt_tokens="12" completion_tokens="6" total_tokens="18" '
-        'cached_tokens="8" />' in second_content
-    )
+    assert second_block["content"] == expected_block
 
     # The frozen system message is unchanged and remains first.
     frozen_system = fake.requests[0].messages[0]
     assert frozen_system is not first_block
     assert frozen_system["role"] == "system"
-    assert not frozen_system["content"].startswith("<agent_self>")
+    assert not frozen_system["content"].startswith("<agent_status")
     assert "You are Apsor Archive" in frozen_system["content"]
     system_entry = client.get(
         f"/api/v1/agent/conversations/{conversation['id']}/entries",
@@ -2810,8 +2795,155 @@ def test_agent_self_system_message_exposes_runtime_facts(client: TestClient) -> 
     assert "request_id" not in first_content
 
 
+def test_agent_status_block_is_deterministic() -> None:
+    """Identical inputs render byte-identical provider status blocks."""
+    first = render_agent_status(_agent_status_snapshot())
+    second = render_agent_status(_agent_status_snapshot())
+
+    assert first == second
+    assert first == (
+        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
+        'max_tool_result_chars="100000" output_limit_tokens="10000" />'
+    )
+    keys = re.findall(r' ([a-z_]+)="', first)
+    assert keys == sorted(keys)
+
+    notice = '<retry_notice reason="output_limit">Retry with less data.</retry_notice>'
+    with_notice = render_agent_status(_agent_status_snapshot(retry_notice=notice))
+    assert with_notice == render_agent_status(
+        _agent_status_snapshot(retry_notice=notice)
+    )
+    assert with_notice == (
+        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
+        'max_tool_result_chars="100000" output_limit_tokens="10000">\n'
+        f"  {notice}\n"
+        "</agent_status>"
+    )
+
+
+def test_provider_message_order_is_absolute(client: TestClient) -> None:
+    """The frozen system message is first and the status block is exactly last."""
+    fake = FakeChatGenerator(
+        [
+            tool_calls_result(
+                [
+                    ("calculate", {"expression": "1 + 1"}),
+                    ("calculate", {"expression": "2 + 2"}),
+                ],
+                call_ids=["call_order_a", "call_order_b"],
+            ),
+            text_result("Both answers are ready."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Provider message order"},
+    ).json()
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation['id']}/messages",
+        json={"content": "Add one and one, then two and two."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+
+    assert len(fake.requests) == 2
+    for request in fake.requests:
+        assert request.messages[0]["role"] == "system"
+        assert "You are Apsor Archive" in request.messages[0]["content"]
+        assert request.messages[0]["content"].startswith("# Identity")
+        assert request.messages[-1]["role"] == "system"
+        assert request.messages[-1]["content"].startswith("<agent_status")
+        status_blocks = [
+            message
+            for message in request.messages
+            if isinstance(message.get("content"), str)
+            and message["content"].startswith("<agent_status")
+        ]
+        assert len(status_blocks) == 1
+        system_messages = [
+            message for message in request.messages if message["role"] == "system"
+        ]
+        assert len(system_messages) == 2
+
+    first_context = _context_messages(fake.requests[0])
+    second_context = _context_messages(fake.requests[1])
+    assert [message["role"] for message in second_context] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "tool",
+    ]
+    # Earlier context messages keep their exact position and content.
+    assert second_context[: len(first_context)] == first_context
+    call_ids = [call["id"] for call in second_context[2].get("tool_calls", [])]
+    assert call_ids == ["call_order_a", "call_order_b"]
+    assert [message["tool_call_id"] for message in second_context[3:]] == call_ids
+
+    # The provider-only block is never persisted in the transcript.
+    entries = client.get(
+        f"/api/v1/agent/conversations/{conversation['id']}/entries"
+    ).json()["entries"]
+    assert body["answer"] == "Both answers are ready."
+    assert "<agent_status" not in json.dumps(entries)
+
+
+def test_agent_status_block_does_not_change_cache_prefix_hash(
+    client: TestClient,
+) -> None:
+    """The persisted frozen-prefix hash never includes the trailing status block."""
+    fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "calculate",
+                {"expression": "1 + 1"},
+                call_id="call_hash_1",
+            ),
+            text_result("The answer is 2."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Status cache prefix"},
+    ).json()
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation['id']}/messages",
+        json={"content": "Add one and one."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+
+    assistant_entries = [
+        entry for entry in body["entries"] if entry["kind"] == "pi.assistant"
+    ]
+    assert len(assistant_entries) == 2
+    persisted_hashes = {
+        entry["data"]["cache_prefix_hash"] for entry in assistant_entries
+    }
+    assert len(persisted_hashes) == 1
+    persisted = persisted_hashes.pop()
+
+    assert len(fake.requests) == 2
+    for request in fake.requests:
+        frozen_system = request.messages[0]
+        status_block = request.messages[-1]
+        assert status_block["content"].startswith("<agent_status")
+        assert _prefix_hash(frozen_system, request.tools) == persisted
+        # Folding the block into the prefix would change the hash, which proves
+        # the persisted value describes the frozen prefix alone.
+        folded_system = {
+            "role": "system",
+            "content": frozen_system["content"] + status_block["content"],
+        }
+        assert _prefix_hash(folded_system, request.tools) != persisted
+
+
 def test_context_estimate_ignores_inline_image_data_urls() -> None:
-    """The self-block estimate must not count a base64 chat image as context."""
+    """The status-block estimate must not count a base64 chat image as context."""
     image_data_url = "data:image/png;base64," + "A" * 200_000
     context = ProviderContext(
         system_message={"role": "system", "content": "You are Apsor Archive."},

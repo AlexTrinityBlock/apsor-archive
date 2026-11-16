@@ -32,26 +32,18 @@ from app.module.agent.domain.agent_domain import (
     TranscriptEntry,
     parse_edits,
 )
-from app.module.agent.domain.compaction_domain import (
-    CHARS_PER_ESTIMATED_TOKEN,
-    build_compaction_draft,
-    compactable_context_entries,
-    estimate_context_tokens,
-    estimate_provider_context_tokens,
-)
-from app.module.agent.domain.context_domain import build_context, render_tool_result
-from app.module.agent.domain.plot_spec_domain import (
-    MAX_PLOT_BYTES,
-    MAX_PLOT_POINTS,
-    MAX_PLOT_TRACES,
-)
-from app.module.agent.domain.runtime_limits_domain import (
-    AgentSelf,
-    RuntimeLimits,
-    render_agent_self,
+from app.module.agent.domain.agent_status_domain import (
+    AgentStatus,
+    render_agent_status,
     render_context_overflow_notice,
     render_output_limit_notice,
 )
+from app.module.agent.domain.compaction_domain import (
+    build_compaction_draft,
+    compactable_context_entries,
+    estimate_context_tokens,
+)
+from app.module.agent.domain.context_domain import build_context, render_tool_result
 from app.module.agent.domain.tool_args import MAX_EXPRESSION_CHARS
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
@@ -744,16 +736,8 @@ class AgentService:
                 retry_usage: dict[str, int] = {}
                 retry_next_step = False
                 while True:
-                    message_usage = dict(total_usage)
-                    _merge_usage(message_usage, retry_usage)
-                    agent_self = self._agent_self_message(
-                        context,
-                        turn,
-                        step=step,
-                        resumed=resumed,
-                        tool_calls_used=tool_calls_used,
-                        usage=message_usage,
-                        retry_notice=pending_retry_notice,
+                    agent_status = self._agent_status_message(
+                        retry_notice=pending_retry_notice
                     )
                     pending_retry_notice = None
                     completion = _CompletionOutcome()
@@ -763,7 +747,7 @@ class AgentService:
                         completion,
                         run_id=run_id,
                         step=step,
-                        extra_system=agent_self,
+                        agent_status=agent_status,
                     ):
                         yield event
                     result = completion.result
@@ -1646,13 +1630,14 @@ class AgentService:
         *,
         run_id: int,
         step: int,
-        extra_system: str | None = None,
+        agent_status: str,
     ) -> AsyncIterator[AgentStreamEvent]:
         """Run one provider call and yield transport-only text deltas.
 
-        ``extra_system`` is the provider-only agent-self block. It is appended
-        after every context message so the frozen system prefix and its KV-cache
-        lineage stay untouched.
+        ``agent_status`` is the provider-only status feedback block. It is
+        always the single last message, after the frozen system prefix and every
+        replayed context message, so the cached prefix and the tool-call
+        adjacency stay byte-identical.
 
         A retryable upstream failure is retried automatically only while no
         text delta has reached the client. Once a token has been streamed, a
@@ -1660,12 +1645,7 @@ class AgentService:
         the normal durable retry path takes over.
         """
         queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
-        provider_messages: list[dict[str, Any]] = []
-        if context.system_message.get("content"):
-            provider_messages.append(context.system_message)
-        provider_messages.extend(context.messages)
-        if extra_system:
-            provider_messages.append({"role": "system", "content": extra_system})
+        provider_messages = _provider_messages(context, agent_status)
         max_attempts = len(_PROVIDER_RETRY_DELAYS_SECONDS) + 1
 
         async def run() -> None:
@@ -1789,113 +1769,16 @@ class AgentService:
             with suppress(asyncio.CancelledError):
                 await task
 
-    def _agent_self_message(
-        self,
-        context: ProviderContext,
-        turn: AgentTurnState,
-        *,
-        step: int,
-        resumed: bool,
-        tool_calls_used: int,
-        usage: Mapping[str, int],
-        retry_notice: str | None,
-    ) -> str:
-        """Render the provider-only agent-self system message.
-
-        The block is rendered twice so its own approximate token cost can be
-        included in the context estimate. The estimate stays approximate by
-        design and never changes the frozen prompt or tool snapshot.
-        """
-        base_estimate = estimate_provider_context_tokens(
-            context,
-            strip_image_data=True,
-        )
-        limits = self._runtime_limits(
-            step=step,
-            tool_calls_used=tool_calls_used,
-            estimated_context_tokens=base_estimate,
-            retry_notice=retry_notice,
-        )
-        prompt_tokens = _usage_value(usage, "prompt_tokens")
-        completion_tokens = _usage_value(usage, "completion_tokens")
-        total_tokens = _usage_value(usage, "total_tokens") or (
-            prompt_tokens + completion_tokens
-        )
-        cached_tokens = (
-            _usage_value(usage, "prompt_cache_hit_tokens")
-            if "prompt_cache_hit_tokens" in usage
-            else None
-        )
-        agent_self = AgentSelf(
-            provider=turn.conversation.provider,
-            active_provider=self.active_provider,
-            model=turn.conversation.model or self.default_model or "-",
-            prompt_version=context.prompt_version or PROMPT_VERSION,
-            tools_version=context.tools_version or TOOLS_VERSION,
-            conversation_id=turn.conversation.id,
-            run_id=turn.run.id,
-            approval_resume=resumed,
-            new_page_context=turn.page_context_entry_id is not None,
-            active_context_entries=len(context.source_entry_ids),
-            tool_names=_tool_names(context.tools),
-            web_search=self.web_search_provider,
-            web_fetch=self.web_fetch_provider,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-            cached_tokens=cached_tokens,
-            limits=limits,
-        )
-        block = render_agent_self(agent_self)
-        block_tokens = _estimate_text_tokens(block)
-        if block_tokens <= 0:
-            return block
-        adjusted = base_estimate + block_tokens
-        adjusted_limits = replace(
-            limits,
-            estimated_context_tokens=adjusted,
-            remaining_context_tokens=max(
-                0, self.config.context_window_tokens - adjusted
-            ),
-        )
-        return render_agent_self(replace(agent_self, limits=adjusted_limits))
-
-    def _runtime_limits(
-        self,
-        *,
-        step: int,
-        tool_calls_used: int,
-        estimated_context_tokens: int,
-        retry_notice: str | None,
-    ) -> RuntimeLimits:
-        """Build the current immutable limit snapshot for one provider call."""
-        return RuntimeLimits(
-            context_window_tokens=self.config.context_window_tokens,
-            estimated_context_tokens=estimated_context_tokens,
-            remaining_context_tokens=max(
-                0, self.config.context_window_tokens - estimated_context_tokens
-            ),
-            compaction_threshold_tokens=self.config.compaction_threshold_tokens,
-            output_limit_tokens=self.chat_generator.max_output_tokens,
-            step=step,
-            max_steps=self.config.max_steps,
-            remaining_steps=max(0, self.config.max_steps - step),
-            tool_calls_used=tool_calls_used,
-            max_tool_calls_per_turn=self.config.max_tool_calls_per_turn,
-            remaining_tool_calls=max(
-                0, self.config.max_tool_calls_per_turn - tool_calls_used
-            ),
-            max_parallel_tools=self.config.max_parallel_tools,
-            max_tool_result_chars=self.config.max_tool_result_chars,
-            max_page_context_chars=self.config.max_page_context_chars,
-            max_plot_traces=MAX_PLOT_TRACES,
-            max_plot_points=MAX_PLOT_POINTS,
-            max_plot_bytes=MAX_PLOT_BYTES,
-            max_expression_chars=MAX_EXPRESSION_CHARS,
-            parallel_tools_enabled=self.config.parallel_tools_enabled,
-            auto_compaction_enabled=self.config.auto_compaction_enabled,
-            save_memory_requires_approval=self.config.save_memory_requires_approval,
-            retry_notice=retry_notice,
+    def _agent_status_message(self, *, retry_notice: str | None) -> str:
+        """Render the provider-only agent status system message."""
+        return render_agent_status(
+            AgentStatus(
+                max_tool_result_chars=self.config.max_tool_result_chars,
+                max_page_context_chars=self.config.max_page_context_chars,
+                max_expression_chars=MAX_EXPRESSION_CHARS,
+                output_limit_tokens=self.chat_generator.max_output_tokens,
+                retry_notice=retry_notice,
+            )
         )
 
     async def _stream_assistant_text(
@@ -2200,6 +2083,24 @@ class AgentService:
             raise AgentNotConfiguredError()
 
 
+def _provider_messages(
+    context: ProviderContext,
+    agent_status: str,
+) -> list[dict[str, Any]]:
+    """Return the exact provider message list for one agent step.
+
+    The order is absolute: the frozen system prompt first, then the replayed
+    context messages without reordering, then exactly one trailing agent status
+    message. The status block is provider-only input and is never persisted.
+    """
+    messages: list[dict[str, Any]] = []
+    if context.system_message.get("content"):
+        messages.append(context.system_message)
+    messages.extend(context.messages)
+    messages.append({"role": "system", "content": agent_status})
+    return messages
+
+
 def _context_chars(messages: Sequence[Mapping[str, Any]]) -> int:
     """Count provider text without serializing base64 image payloads for a log."""
     total = 0
@@ -2394,21 +2295,8 @@ def _output_limit_text(max_output_tokens: int) -> str:
     )
 
 
-def _tool_names(tools: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
-    """Read tool names from the frozen provider tool snapshot."""
-    names: list[str] = []
-    for tool in tools:
-        function = tool.get("function")
-        if not isinstance(function, Mapping):
-            continue
-        name = function.get("name")
-        if isinstance(name, str) and name:
-            names.append(name)
-    return tuple(names)
-
-
 def _web_provider_name(value: str) -> str:
-    """Keep only an available web provider name in the self block."""
+    """Keep only an available web provider name in the status block."""
     return value if value in {"tavily", "exa"} else "none"
 
 
@@ -2445,17 +2333,6 @@ def _duplicate_plot_outcome(title: object) -> ToolOutcome:
             "duplicate": True,
         },
     )
-
-
-def _usage_value(usage: Mapping[str, int], key: str) -> int:
-    value = usage.get(key)
-    if isinstance(value, int) and not isinstance(value, bool):
-        return value
-    return 0
-
-
-def _estimate_text_tokens(text: str) -> int:
-    return (len(text) + CHARS_PER_ESTIMATED_TOKEN - 1) // CHARS_PER_ESTIMATED_TOKEN
 
 
 def _planned_outcomes(
