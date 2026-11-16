@@ -89,6 +89,12 @@ SAVE_MEMORY_REQUIRES_APPROVAL = True
 # and are never selected by the sweep.
 CHAT_ATTACHMENT_STAGED_TTL_HOURS = 1
 CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS = 900
+# render_plot budgets. The trace and nesting caps stay code constants because
+# they protect the renderer itself; point, byte, and node budgets are runtime
+# data so a deployment can trade chart detail for its own storage and bandwidth.
+MAX_PLOT_POINTS = 10_000
+MAX_PLOT_BYTES = 600_000
+MAX_PLOT_NODES = 100_000
 
 EditAction = Literal["omit", "replace"]
 

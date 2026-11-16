@@ -420,7 +420,7 @@ prompt text; it does not send the message. The API is
 The **Agent runtime** panel on `/settings` (root only) edits the singleton
 `agent_config` row (`id=1`). Provider and model selection stay in the AI settings
 above, so there is still one source of truth for which model answers. All
-fourteen runtime values are stored in PostgreSQL, apply to new runs without a
+seventeen runtime values are stored in PostgreSQL, apply to new runs without a
 restart, and are shared by every account. The two chat-image lifetime values are
 also read by the background cleanup loop from this row; they are not
 environment variables.
@@ -428,7 +428,7 @@ environment variables.
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | Effective config, defaults, source, `updated_at` |
-| `PUT` | `/api/v1/agent/settings` | Full replacement; all fourteen fields are required |
+| `PUT` | `/api/v1/agent/settings` | Full replacement; all seventeen fields are required |
 | `POST` | `/api/v1/agent/settings/reset` | Persist and return the built-in defaults |
 
 The generated operations are `getAgentSettings`, `updateAgentSettings`, and
@@ -455,12 +455,16 @@ fields are rejected.
 | `save_memory_requires_approval` | `true` | boolean; manual approval for `save_memory` |
 | `chat_attachment_staged_ttl_hours` | 1 | 1–168; unsent upload grace period |
 | `chat_attachment_cleanup_interval_seconds` | 900 | 60–86,400; cleanup sweep interval |
+| `max_plot_points` | 10,000 | 100–50,000; data points per rendered figure |
+| `max_plot_bytes` | 600,000 | 10,000–2,000,000; serialized figure size |
+| `max_plot_nodes` | 100,000 | 1,000–500,000; JSON nodes per figure |
 
-Pydantic and matching PostgreSQL check constraints enforce the ranges and two
+Pydantic and matching PostgreSQL check constraints enforce the ranges and three
 cross-field rules: the compaction threshold must stay below the model context
-window, and the parallel width must not exceed tool calls per turn. The app's
-global validation envelope maps request validation failures to `400
-invalid_request` rather than 422.
+window, the parallel width must not exceed tool calls per turn, and
+`max_plot_nodes` must be at least `max_plot_points`. The plot budgets apply to
+`render_plot` for every account. The app's global validation envelope maps
+request validation failures to `400 invalid_request` rather than 422.
 
 A request loads one immutable runtime snapshot in a short-lived database session.
 An active SSE run keeps the snapshot it started with; later runs use changed

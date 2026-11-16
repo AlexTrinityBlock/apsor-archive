@@ -31,6 +31,9 @@ class AgentSettingsValuesSchema(BaseModel):
     save_memory_requires_approval: bool
     chat_attachment_staged_ttl_hours: int = Field(ge=1, le=168)
     chat_attachment_cleanup_interval_seconds: int = Field(ge=60, le=86_400)
+    max_plot_points: int = Field(ge=100, le=50_000)
+    max_plot_bytes: int = Field(ge=10_000, le=2_000_000)
+    max_plot_nodes: int = Field(ge=1_000, le=500_000)
 
     @model_validator(mode="after")
     def _cross_field_ranges(self) -> Self:
@@ -41,6 +44,10 @@ class AgentSettingsValuesSchema(BaseModel):
             )
         if self.max_parallel_tools > self.max_tool_calls_per_turn:
             raise ValueError("max_parallel_tools must not exceed max_tool_calls_per_turn.")
+        if self.max_plot_nodes < self.max_plot_points:
+            raise ValueError(
+                "max_plot_nodes must be greater than or equal to max_plot_points."
+            )
         return self
 
 

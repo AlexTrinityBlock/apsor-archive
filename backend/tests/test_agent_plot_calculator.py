@@ -765,7 +765,7 @@ def test_surface_grid_enforces_the_real_cell_cap() -> None:
     assert accepted.point_count == 3_600
     assert (accepted.grid_rows, accepted.grid_columns) == (60, 60)
 
-    with pytest.raises(PlotSpecError, match="too many data points"):
+    with pytest.raises(PlotSpecError, match="data points; the limit is 10,000"):
         sanitize_plot_figure(
             {"data": [{"type": "surface", "z": _grid(101, 101)}]}
         )
@@ -780,8 +780,101 @@ def test_plot_node_cap_rejects_a_wide_figure() -> None:
             "b": [None] * 50_000,
         },
     }
-    with pytest.raises(PlotSpecError, match="too complex"):
+    with pytest.raises(PlotSpecError, match="JSON nodes; the limit is 100,000"):
         sanitize_plot_figure(figure)
+
+
+def test_sanitize_plot_figure_honors_custom_limits() -> None:
+    """The sanitizer reports the configured budget, not the module default."""
+    ten_points = {
+        "data": [
+            {
+                "type": "scatter",
+                "x": list(range(10)),
+                "y": list(range(10)),
+            }
+        ]
+    }
+    accepted = sanitize_plot_figure(
+        ten_points,
+        max_points=10,
+        max_bytes=10_000,
+        max_nodes=1_000,
+    )
+    assert accepted.point_count == 10
+
+    with pytest.raises(PlotSpecError, match="10 data points; the limit is 5"):
+        sanitize_plot_figure(
+            ten_points,
+            max_points=5,
+            max_bytes=10_000,
+            max_nodes=1_000,
+        )
+
+    padded = {
+        "data": [{"type": "bar", "y": [1]}],
+        "layout": {"title": {"text": "x" * 200}},
+    }
+    with pytest.raises(PlotSpecError, match="bytes; the limit is 100"):
+        sanitize_plot_figure(
+            padded,
+            max_points=10_000,
+            max_bytes=100,
+            max_nodes=1_000,
+        )
+
+    with pytest.raises(PlotSpecError, match="JSON nodes; the limit is 5"):
+        sanitize_plot_figure(
+            {"data": [{"type": "bar", "x": ["a"], "y": [1]}]},
+            max_points=10_000,
+            max_bytes=10_000,
+            max_nodes=5,
+        )
+
+
+def test_render_plot_uses_the_runtime_point_budget(client: TestClient) -> None:
+    """A stored low point cap rejects a figure that the defaults would accept."""
+    defaults = client.get("/api/v1/agent/settings").json()["defaults"]
+    updated = client.put(
+        "/api/v1/agent/settings",
+        json={
+            **defaults,
+            "max_plot_points": 100,
+            "max_plot_nodes": 1_000,
+        },
+    )
+    assert updated.status_code == 200, updated.text
+
+    figure = {
+        "data": [
+            {
+                "type": "scatter",
+                "x": list(range(101)),
+                "y": list(range(101)),
+            }
+        ]
+    }
+    fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "render_plot",
+                {"title": "Too many points", "figure": figure},
+                call_id="call_runtime_point_budget",
+            ),
+            text_result("The chart exceeded the configured point budget."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation_id = _create_conversation(client, "Runtime plot budget")
+
+    body = _send_message(client, conversation_id, "Draw every point.")
+
+    results = _tool_results(body["entries"])
+    assert len(results) == 1
+    assert results[0]["data"]["error_code"] == "plot_spec_error"
+    assert "101 data points; the limit is 100" in results[0]["data"]["detail"]
+    reset = client.post("/api/v1/agent/settings/reset")
+    assert reset.status_code == 200, reset.text
 
 
 def test_surface_receipt_reports_grid_cells(client: TestClient) -> None:
@@ -859,7 +952,7 @@ def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     assert response.status_code == 200, response.text
     catalog = response.json()
     assert catalog["prompt_version"] == "archive-agent-v13"
-    assert catalog["tools_version"] == "archive-tools-v12"
+    assert catalog["tools_version"] == "archive-tools-v13"
 
     tools = {tool["name"]: tool for tool in catalog["tools"]}
     names = [tool["name"] for tool in catalog["tools"]]
@@ -884,9 +977,9 @@ def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     description = render_plot["description"]
     assert "Render a Plotly chart inline in the chat" in description
     assert "explain the chart" in description
-    assert "10,000 data points" in description
-    assert "100,000 JSON nodes" in description
-    assert "600 KB" in description
+    assert "current point, byte, and node budgets are enforced by the tool" in description
+    assert "10,000 data points" not in description
+    assert "600 KB" not in description
     assert "30x30 to 60x60 grid (900-3,600 cells)" in description
     assert "never summarize it with a placeholder" in description
 

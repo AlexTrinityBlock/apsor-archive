@@ -51,6 +51,21 @@ export interface AgentSettingsUpdateSchema {
      */
   max_parallel_tools: number;
   /**
+     * @minimum 10000
+     * @maximum 2000000
+     */
+  max_plot_bytes: number;
+  /**
+     * @minimum 1000
+     * @maximum 500000
+     */
+  max_plot_nodes: number;
+  /**
+     * @minimum 100
+     * @maximum 50000
+     */
+  max_plot_points: number;
+  /**
      * @minimum 1
      * @maximum 32
      */

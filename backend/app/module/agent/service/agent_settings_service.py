@@ -105,6 +105,9 @@ def _config_from_model(row: AgentConfigModel) -> AgentRuntimeConfig:
         chat_attachment_cleanup_interval_seconds=(
             row.chat_attachment_cleanup_interval_seconds
         ),
+        max_plot_points=row.max_plot_points,
+        max_plot_bytes=row.max_plot_bytes,
+        max_plot_nodes=row.max_plot_nodes,
     )
 
 
@@ -130,6 +133,9 @@ def _apply_config(
     row.chat_attachment_cleanup_interval_seconds = (
         config.chat_attachment_cleanup_interval_seconds
     )
+    row.max_plot_points = config.max_plot_points
+    row.max_plot_bytes = config.max_plot_bytes
+    row.max_plot_nodes = config.max_plot_nodes
     row.updated_at = now
 
 
@@ -151,6 +157,9 @@ def _values_schema(config: AgentRuntimeConfig) -> AgentSettingsValuesSchema:
         chat_attachment_cleanup_interval_seconds=(
             config.chat_attachment_cleanup_interval_seconds
         ),
+        max_plot_points=config.max_plot_points,
+        max_plot_bytes=config.max_plot_bytes,
+        max_plot_nodes=config.max_plot_nodes,
     )
 
 

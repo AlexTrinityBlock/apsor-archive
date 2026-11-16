@@ -62,6 +62,7 @@ export const settings = {
       thresholdBelowContext: "Must be lower than the model context window ({context}).",
       parallelWithinCalls:
         "Must not exceed tool calls per turn ({calls}).",
+      plotNodesAtLeastPoints: "Must be at least the data point limit ({points}).",
       overlapBelowTarget: "Must be lower than target chars ({target}).",
     },
   },
@@ -118,6 +119,18 @@ export const settings = {
     fieldToolResultCharsUnit: "chars",
     fieldToolResultCharsHint:
       "Each result is clipped independently; 100k fits about 25 four-kilochar chunks.",
+    fieldPlotPointsLabel: "Plot data points",
+    fieldPlotPointsUnit: "points",
+    fieldPlotPointsHint:
+      "Maximum data points in one rendered figure; each trace's largest point array counts. Default 10,000.",
+    fieldPlotBytesLabel: "Plot JSON bytes",
+    fieldPlotBytesUnit: "bytes",
+    fieldPlotBytesHint:
+      "Maximum serialized size of one figure. Default 600,000 bytes.",
+    fieldPlotNodesLabel: "Plot JSON nodes",
+    fieldPlotNodesUnit: "nodes",
+    fieldPlotNodesHint:
+      "Maximum JSON nodes walked in one figure; must be at least the data point limit. Default 100,000.",
     fieldStagedTtlLabel: "Staged image TTL",
     fieldStagedTtlUnit: "hours",
     fieldStagedTtlHint:

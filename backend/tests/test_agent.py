@@ -71,7 +71,7 @@ READ_USAGE = {
     "prompt_cache_miss_tokens": 7,
 }
 PROMPT_VERSION = "archive-agent-v13"
-TOOLS_VERSION = "archive-tools-v12"
+TOOLS_VERSION = "archive-tools-v13"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -307,6 +307,9 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "save_memory_requires_approval": True,
         "chat_attachment_staged_ttl_hours": 1,
         "chat_attachment_cleanup_interval_seconds": 900,
+        "max_plot_points": 10_000,
+        "max_plot_bytes": 600_000,
+        "max_plot_nodes": 100_000,
     }
 
     invalid_threshold = client.put(
@@ -349,6 +352,37 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert invalid_attachment_ttl.status_code == 400
     assert invalid_attachment_ttl.json()["error"] == "invalid_request"
 
+    for plot_field, invalid_value in (
+        ("max_plot_points", 99),
+        ("max_plot_points", 50_001),
+        ("max_plot_bytes", 9_999),
+        ("max_plot_bytes", 2_000_001),
+        ("max_plot_nodes", 999),
+        ("max_plot_nodes", 500_001),
+    ):
+        invalid_plot_budget = client.put(
+            "/api/v1/agent/settings",
+            json={**defaults, plot_field: invalid_value},
+        )
+        assert invalid_plot_budget.status_code == 400
+        assert invalid_plot_budget.json()["error"] == "invalid_request"
+        assert plot_field in invalid_plot_budget.json()["detail"]
+
+    invalid_plot_relation = client.put(
+        "/api/v1/agent/settings",
+        json={
+            **defaults,
+            "max_plot_points": 5_000,
+            "max_plot_nodes": 1_000,
+        },
+    )
+    assert invalid_plot_relation.status_code == 400
+    assert invalid_plot_relation.json()["error"] == "invalid_request"
+    assert (
+        "max_plot_nodes must be greater than or equal to max_plot_points"
+        in invalid_plot_relation.json()["detail"]
+    )
+
     for invalid_context_window in (7_999, 2_000_001):
         invalid_context = client.put(
             "/api/v1/agent/settings",
@@ -374,6 +408,9 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "save_memory_requires_approval": False,
         "chat_attachment_staged_ttl_hours": 2,
         "chat_attachment_cleanup_interval_seconds": 600,
+        "max_plot_points": 2_000,
+        "max_plot_bytes": 400_000,
+        "max_plot_nodes": 20_000,
     }
     stored_settings = client.put(
         "/api/v1/agent/settings",

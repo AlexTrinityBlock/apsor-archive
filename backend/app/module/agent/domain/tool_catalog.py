@@ -41,9 +41,11 @@ PROMPT_VERSION = "archive-agent-v13"
 # v10 tightens render_plot's point guidance after a truncated output-limit call.
 # v11 makes render_plot a once-per-turn action and states that the success receipt
 # is authoritative. v12 raises render_plot's density caps for 3D grids and tells
-# the model to pass a complete figure instead of a placeholder. Existing
-# conversations keep their frozen pi.system snapshot.
-TOOLS_VERSION = "archive-tools-v12"
+# the model to pass a complete figure instead of a placeholder. v13 removes the
+# fixed point/byte/node numbers from render_plot's description because those
+# budgets now come from the deployer-editable agent_config row; the tool still
+# enforces them. Existing conversations keep their frozen pi.system snapshot.
+TOOLS_VERSION = "archive-tools-v13"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -187,11 +189,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "understand. Pass figure.data as an array of Plotly trace objects "
             "and figure.layout as a layout object. Common traces include bar, "
             'scatter with mode "lines", pie, histogram, box, violin, and '
-            "heatmap. Keep the figure small: at most 12 traces, 10,000 data "
-            "points, 100,000 JSON nodes, and 600 KB of JSON. For generated or "
-            "random data, prefer 50-200 points. For a 3D surface, use a 30x30 "
-            "to 60x60 grid (900-3,600 cells). Put the chart title in `title`, "
-            "not layout.title. Use "
+            "heatmap. Keep the figure small: at most 12 traces, and the "
+            "current point, byte, and node budgets are enforced by the tool. "
+            "For generated or random data, prefer 50-200 points. For a 3D "
+            "surface, use a 30x30 to 60x60 grid (900-3,600 cells). Put the "
+            "chart title in `title`, not layout.title. Use "
             "clear axis labels and units; use a small color palette and do not "
             "rely on color alone. All data must be inline. Do not use "
             "layout.images, layout.mapbox, layout.geo, layout.map, "

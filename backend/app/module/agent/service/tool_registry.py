@@ -20,7 +20,11 @@ from app.module.agent.domain.history_domain import (
     HistoryMessage,
     HistoryMessageRead,
 )
-from app.module.agent.domain.plot_spec_domain import sanitize_plot_figure
+from app.module.agent.domain.plot_spec_domain import (
+    DEFAULT_PLOT_LIMITS,
+    PlotLimits,
+    sanitize_plot_figure,
+)
 from app.module.agent.domain.tool_args import (
     CalculateArgs,
     HistoryMessageArgs,
@@ -163,11 +167,14 @@ class AgentToolRegistry:
         max_chars: int,
         parse_error: str | None = None,
         approved: bool = False,
+        plot_limits: PlotLimits = DEFAULT_PLOT_LIMITS,
     ) -> ToolOutcome:
         """Execute one tool call and never raise for an expected failure.
 
         ``approved`` is set only by the backend after a human resolves a durable
         approval. Model-supplied ``user_confirmed`` never authorizes a write.
+        ``plot_limits`` carries the stored render_plot budgets; its default keeps
+        direct callers on the module defaults.
         """
         started = time.perf_counter()
         spec = _SPECS.get(name)
@@ -211,7 +218,12 @@ class AgentToolRegistry:
 
         try:
             async with self.service_scope() as services:
-                content, data, resource = await _dispatch(name, parsed, services)
+                content, data, resource = await _dispatch(
+                    name,
+                    parsed,
+                    services,
+                    plot_limits,
+                )
         except WebResearchError as exc:
             # A failure from the external web provider is a "tool failure", not a
             # stream failure: return a tool result with a stable code so the SSE
@@ -283,6 +295,7 @@ async def _dispatch(
     name: str,
     args: BaseModel,
     services: AgentToolServices,
+    plot_limits: PlotLimits,
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
     if name == "search_knowledge" and isinstance(args, SearchKnowledgeArgs):
         return await _search_knowledge(args, services)
@@ -303,7 +316,7 @@ async def _dispatch(
     if name == "calculate" and isinstance(args, CalculateArgs):
         return await _calculate(args)
     if name == "render_plot" and isinstance(args, RenderPlotArgs):
-        return await _render_plot(args)
+        return await _render_plot(args, plot_limits)
     if name == "web_search" and isinstance(args, WebSearchArgs):
         return await _web_search(args, services)
     if name == "web_fetch" and isinstance(args, WebFetchArgs):
@@ -911,15 +924,24 @@ async def _calculate(args: CalculateArgs) -> tuple[str, dict[str, Any], None]:
     return content, data, None
 
 
-async def _render_plot(args: RenderPlotArgs) -> tuple[str, dict[str, Any], None]:
+async def _render_plot(
+    args: RenderPlotArgs,
+    plot_limits: PlotLimits,
+) -> tuple[str, dict[str, Any], None]:
     """Sanitize one figure and keep the full plot out of the provider content.
 
     The provider only sees a short receipt that states the chart is already
     visible and explains why historical calls are summarized. The complete figure
     travels in ``data.plot.figure``, which the UI renders and the provider never
-    reads.
+    reads. ``plot_limits`` comes from the runtime snapshot, so the budgets can
+    change without editing code.
     """
-    sanitized = sanitize_plot_figure(args.figure.model_dump(exclude_none=True))
+    sanitized = sanitize_plot_figure(
+        args.figure.model_dump(exclude_none=True),
+        max_points=plot_limits.max_points,
+        max_bytes=plot_limits.max_bytes,
+        max_nodes=plot_limits.max_nodes,
+    )
     receipt_values: dict[str, object] = {
         "title": args.title,
         "traces": sanitized.trace_count,
