@@ -1715,6 +1715,16 @@
   line-height: 1.45;
 }
 
+.chat-plot__hint {
+  margin: 0;
+  color: var(--mono-faint);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  line-height: 1.45;
+  text-transform: uppercase;
+}
+
 .chat-plot__actions {
   display: flex;
   flex: none;
@@ -1757,6 +1767,12 @@
 .chat-plot__target {
   position: absolute;
   inset: 0;
+}
+
+/* Let the 3D scene own touch gestures so the page does not pan instead.
+   讓 3D 場景接管觸控手勢，避免頁面被平移。 */
+.chat-plot__target--3d {
+  touch-action: none;
 }
 
 .chat-plot__state,

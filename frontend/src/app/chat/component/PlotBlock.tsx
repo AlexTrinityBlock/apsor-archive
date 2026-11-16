@@ -1,5 +1,10 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import type { Config, Data, Layout } from "plotly.js";
+import type {
+  Config,
+  Data,
+  Layout,
+  ModeBarDefaultButtons,
+} from "plotly.js";
 
 import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
@@ -30,15 +35,64 @@ interface PlotlyRuntime {
 
 type PlotStatus = "loading" | "ready" | "error";
 
-const PLOT_CONFIG: Partial<Config> = {
-  responsive: true,
-  displaylogo: false,
-  displayModeBar: false,
-  showSendToCloud: false,
-  showEditInChartStudio: false,
-  scrollZoom: false,
-  doubleClick: "reset",
-};
+/**
+ * Plotly traces that always live in a 3D scene.
+ * 一律位於 3D scene 的 Plotly trace 型別。
+ */
+const SCENE_TRACE_TYPES = new Set([
+  "scatter3d",
+  "surface",
+  "mesh3d",
+  "isosurface",
+  "volume",
+  "streamtube",
+  "cone",
+]);
+
+/**
+ * A figure is 3D when it declares a scene or uses a scene-only trace type.
+ * 圖形宣告 scene 或使用僅限 3D 的 trace 型別時，即視為 3D。
+ */
+function isThreeDimensional(spec: PlotSpec): boolean {
+  if (isRecord(spec.figure.layout?.scene)) {
+    return true;
+  }
+  return spec.figure.data.some((trace) => {
+    const type = trace.type;
+    return typeof type === "string" && SCENE_TRACE_TYPES.has(type.toLowerCase());
+  });
+}
+
+/**
+ * Build the Plotly config for this render.
+ * 為這一次繪製建立 Plotly config。
+ *
+ * 2D keeps the transcript's scroll position: no wheel zoom and no modebar.
+ * 3D may capture the wheel for camera zoom and exposes a hover modebar without
+ * the image/cloud/external-editor buttons the card already replaces.
+ * 2D 保留對話串的捲動：不攔截滾輪、不顯示模式列。3D 允許滾輪縮放相機，
+ * 並在游標移入時顯示不含下載、雲端與外部編輯按鈕的模式列。
+ */
+function plotConfig(is3d: boolean): Partial<Config> {
+  return {
+    responsive: true,
+    displaylogo: false,
+    displayModeBar: is3d ? "hover" : false,
+    showSendToCloud: false,
+    showEditInChartStudio: false,
+    scrollZoom: is3d,
+    modeBarButtonsToRemove: is3d
+      ? ([
+          "toImage",
+          "sendDataToCloud",
+          // Plotly honors this name at runtime; @types/plotly.js omits it.
+          // Plotly 執行時接受這個名稱；@types/plotly.js 未列出。
+          "editInChartStudio",
+        ] as unknown as ModeBarDefaultButtons[])
+      : undefined,
+    doubleClick: "reset",
+  };
+}
 
 const MAX_TABLE_ROWS = 30;
 
@@ -178,6 +232,12 @@ function buildPlotTable(spec: PlotSpec): PlotTable | null {
     return null;
   }
   const trace = spec.figure.data[0];
+  // A 3D trace has a z channel; an x/y-only table would misrepresent it.
+  // 3D trace 有 z 軸；只列 x/y 會誤導，因此不提供表格替代。
+  const traceType = typeof trace.type === "string" ? trace.type.toLowerCase() : "";
+  if (trace.z !== undefined || SCENE_TRACE_TYPES.has(traceType)) {
+    return null;
+  }
   const x = scalarColumn(trace.x);
   const y = scalarColumn(trace.y);
   if (x && y) {
@@ -230,6 +290,8 @@ interface PlotBlockProps {
 export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
   const { t, formatNumber } = useI18n();
   const spec = useMemo(() => readPlotSpec(data), [data]);
+  const is3d = useMemo(() => (spec ? isThreeDimensional(spec) : false), [spec]);
+  const config = useMemo(() => plotConfig(is3d), [is3d]);
   const table = useMemo(() => (spec ? buildPlotTable(spec) : null), [spec]);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const plotlyRef = useRef<PlotlyRuntime | null>(null);
@@ -260,7 +322,7 @@ export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
           element,
           spec.figure.data as unknown as Data[],
           themedLayout(spec.figure.layout),
-          PLOT_CONFIG,
+          config,
         );
         if (cancelled) {
           return;
@@ -295,7 +357,7 @@ export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
         }
       }
     };
-  }, [spec]);
+  }, [spec, is3d, config]);
 
   if (!spec) {
     return null;
@@ -364,10 +426,19 @@ export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
         {spec.caption ? (
           <p className="chat-plot__note">{spec.caption}</p>
         ) : null}
+        {is3d ? (
+          <p className="chat-plot__hint">{t("chat.plot.zoomHint")}</p>
+        ) : null}
       </figcaption>
 
       <div className="chat-plot__canvas">
-        <div ref={canvasRef} className="chat-plot__target" aria-hidden="true" />
+        <div
+          ref={canvasRef}
+          className={
+            is3d ? "chat-plot__target chat-plot__target--3d" : "chat-plot__target"
+          }
+          aria-hidden="true"
+        />
         {status === "loading" ? (
           <p className="chat-plot__state" role="status">
             {t("chat.plot.loading")}

@@ -1992,6 +1992,146 @@
   color: var(--mono-muted);
 }
 
+/* calculate --------------------------------------------------------------- */
+
+.pi-calc {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: var(--radius-xs);
+}
+
+.pi-calc__head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.pi-calc__equation {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 4px;
+  padding: 10px 12px;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-left: 2px solid var(--accent-seal);
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+}
+
+.pi-calc__expression {
+  min-width: 0;
+  color: var(--mono-ink);
+  font-family: var(--mono-font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.pi-calc__equal {
+  color: var(--mono-faint);
+  font-family: var(--mono-font-mono);
+  font-size: 12px;
+}
+
+.pi-calc__result {
+  min-width: 0;
+  color: var(--accent-seal-deep);
+  font-family: var(--mono-font-mono);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.pi-calc__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pi-calc__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+}
+
+.pi-calc__meta > div {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.pi-calc__meta dt {
+  color: var(--mono-faint);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pi-calc__meta dd {
+  margin: 0;
+  color: var(--mono-l2);
+}
+
+.pi-calc__meta code,
+.pi-calc__raw code {
+  font-family: var(--mono-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.pi-calc__raw {
+  padding-top: 8px;
+  border-top: 0.7px dashed var(--mono-grid);
+}
+
+.pi-calc__raw summary {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  list-style: none;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.pi-calc__raw summary::-webkit-details-marker {
+  display: none;
+}
+
+.pi-calc__raw code {
+  display: block;
+  margin-top: 6px;
+  padding: 7px 8px;
+  color: var(--mono-l2);
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.pi-calc__empty {
+  margin: 0;
+  color: var(--mono-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
 /* Web research panels ---------------------------------------------------- */
 
 .pi-web {

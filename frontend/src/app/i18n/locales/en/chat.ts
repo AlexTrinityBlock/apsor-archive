@@ -347,6 +347,7 @@ export const chat = {
     dataTable: "Chart data",
     dataTableEmpty: "No tabular data is available for this chart.",
     truncated: "Showing the first {shown} of {total} points.",
+    zoomHint: "Scroll to zoom · drag to rotate",
   },
   retry: {
     aria: "Retry the last run",
@@ -439,6 +440,21 @@ export const chat = {
       unknownEyebrow: "Recorded tool",
       unknownDetail:
         "This tool has no dedicated inspector panel. Its arguments, status, and structured preview remain visible below.",
+    },
+    calculate: {
+      eyebrow: "Arithmetic receipt",
+      expression: "Expression",
+      result: "Result",
+      copyExpression: "Copy expression",
+      copyResult: "Copy result",
+      liveDetail: "Evaluating the recorded expression.",
+      noResult: "No numeric result was recorded for this expression.",
+      unavailableTitle: "No expression recorded",
+      unavailableDetail:
+        "This calculator result does not include the expression that produced it.",
+      elapsed: "Elapsed",
+      storedValue: "Stored value",
+      rawExpression: "Raw expression",
     },
     error: {
       eyebrow: "Repair bench · tool error",

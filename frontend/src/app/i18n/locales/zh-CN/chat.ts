@@ -332,6 +332,7 @@ export const chat = {
     dataTable: "图表数据",
     dataTableEmpty: "这张图表没有可显示的表格数据。",
     truncated: "显示前 {shown} 个数据点，共 {total} 个。",
+    zoomHint: "滚动以缩放 · 拖拽以旋转",
   },
   retry: {
     aria: "重试上一次运行",
@@ -420,6 +421,20 @@ export const chat = {
       unknownEyebrow: "已记录工具",
       unknownDetail:
         "这个工具没有专属的检查器面板。它的参数、状态与结构化预览仍会显示在下方。",
+    },
+    calculate: {
+      eyebrow: "算术收据",
+      expression: "算式",
+      result: "结果",
+      copyExpression: "复制算式",
+      copyResult: "复制结果",
+      liveDetail: "正在计算已记录的算式。",
+      noResult: "这个算式没有记录到数值结果。",
+      unavailableTitle: "没有记录算式",
+      unavailableDetail: "这个计算结果没有包含产生它的算式。",
+      elapsed: "耗时",
+      storedValue: "存储值",
+      rawExpression: "原始算式",
     },
     error: {
       eyebrow: "修复台 · 工具错误",
