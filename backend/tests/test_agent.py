@@ -71,7 +71,7 @@ READ_USAGE = {
     "prompt_cache_miss_tokens": 7,
 }
 PROMPT_VERSION = "archive-agent-v13"
-TOOLS_VERSION = "archive-tools-v11"
+TOOLS_VERSION = "archive-tools-v12"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
