@@ -920,23 +920,30 @@ async def _render_plot(args: RenderPlotArgs) -> tuple[str, dict[str, Any], None]
     reads.
     """
     sanitized = sanitize_plot_figure(args.figure.model_dump(exclude_none=True))
+    receipt_values: dict[str, object] = {
+        "title": args.title,
+        "traces": sanitized.trace_count,
+        "points": sanitized.point_count,
+    }
+    if sanitized.grid_rows is not None and sanitized.grid_columns is not None:
+        receipt_values["rows"] = sanitized.grid_rows
+        receipt_values["cols"] = sanitized.grid_columns
+    receipt_values["visible"] = "true"
     content = (
-        _open(
-            "plot_rendered",
-            {
-                "title": args.title,
-                "traces": sanitized.trace_count,
-                "points": sanitized.point_count,
-                "visible": "true",
-            },
-        )
+        _open("plot_rendered", receipt_values)
         + "The chart is already rendered and visible to the user. Do not call "
         "render_plot again for this request. Historical render_plot calls are "
         "stored with a compact summary instead of the full figure to save context; "
         "this is intentional, not an omission. Never send figure_summary as an "
         "argument. Reply with a one- or two-sentence explanation of the chart."
-        + _close("plot_rendered")
     )
+    if sanitized.grid_rows is not None and sanitized.grid_columns is not None:
+        content += (
+            f" This is a complete {sanitized.grid_rows} x "
+            f"{sanitized.grid_columns} grid of {sanitized.point_count} cells; "
+            "points counts every cell, not one row."
+        )
+    content += _close("plot_rendered")
     data = {
         "plot": {
             "version": 1,
