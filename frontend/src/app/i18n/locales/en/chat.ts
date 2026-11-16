@@ -458,11 +458,15 @@ export const chat = {
     },
     error: {
       eyebrow: "Repair bench · tool error",
+      runEyebrow: "Run interruption · provider response",
       detailFallback: "The tool did not return a structured error detail.",
+      runDetailFallback: "The run did not record a structured error detail.",
       nextStep: "Suggested next step",
       argumentsReceived: "Arguments received",
       note:
         "The model sees a bounded XML error value; this panel is a UI-only diagnostic view.",
+      runNote:
+        "The run stopped before a tool call completed. The assistant error is persisted; no partial tool result was written.",
       suggestionInvalidArguments:
         "Re-issue the call with the required scalar arguments; arrays and objects must match the tool catalog.",
       suggestionConfirmation:
@@ -477,6 +481,8 @@ export const chat = {
         "Check the memory id; deprecated leaves remain readable, removed ones do not.",
       suggestionChunkWindow:
         "Choose a chunk inside the file's recorded range, then retry the read.",
+      suggestionOutputLimit:
+        "The model output hit its token limit. Ask for a smaller or simpler result (for example, fewer plot points), then retry.",
       suggestionNoCode:
         "No structured error code was recorded. Read the detail and arguments to decide the next step.",
       suggestionGeneric:

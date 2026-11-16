@@ -439,10 +439,14 @@ export const chat = {
     },
     error: {
       eyebrow: "修復臺 · 工具錯誤",
+      runEyebrow: "執行中斷 · 供應商回應",
       detailFallback: "工具沒有回傳結構化的錯誤細節。",
+      runDetailFallback: "這次執行沒有記錄結構化的錯誤細節。",
       nextStep: "建議的下一步",
       argumentsReceived: "收到的參數",
       note: "模型看到的是一段有界的 XML 錯誤值；這個面板只是介面上的診斷檢視。",
+      runNote:
+        "這次執行在工具呼叫完成前停止。助理錯誤已保留；沒有寫入不完整的工具結果。",
       suggestionInvalidArguments:
         "請以必要的純量參數重新發出呼叫；陣列與物件必須符合工具目錄。",
       suggestionConfirmation:
@@ -457,6 +461,8 @@ export const chat = {
         "請檢查記憶 ID；已淘汰的葉片仍可閱讀，已移除的則不行。",
       suggestionChunkWindow:
         "請選擇檔案已記錄範圍內的分段，然後重試讀取。",
+      suggestionOutputLimit:
+        "模型輸出達到 token 上限。請要求更小或更簡單的結果（例如減少圖表資料點），然後重試。",
       suggestionNoCode:
         "沒有記錄結構化錯誤碼。請閱讀細節與參數，決定下一步。",
       suggestionGeneric:
