@@ -14,6 +14,7 @@ import { ChangePasswordDialog } from "../auth/component/ChangePasswordDialog";
 import { ImpersonateUserDialog } from "../auth/component/ImpersonateUserDialog";
 import { StopImpersonationDialog } from "../auth/component/StopImpersonationDialog";
 import { useScrollLock } from "../hook/useScrollLock";
+import { useDrawerAccessibility } from "./useDrawerAccessibility";
 import {
   localizeStatus,
   useI18n,
@@ -288,6 +289,11 @@ function ImpersonationBanner({
   );
 }
 
+/** Expose the mobile drawer as a dialog only while it is acting as one. */
+function drawerDialogAttributes(open: boolean) {
+  return open ? { role: "dialog" as const, "aria-modal": true } : {};
+}
+
 /**
  * The fixed archive shell: a collapsible mono rail on desktop, a drawer on
  * mobile, and a single main canvas. The global command palette and floating
@@ -302,6 +308,8 @@ export function AppShell() {
   const [impersonateDialogOpen, setImpersonateDialogOpen] = useState(false);
   const [stopDialog, setStopDialog] = useState<StopDialogContext | null>(null);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const railCloseButtonRef = useRef<HTMLButtonElement>(null);
+  const returnFocusToMenuRef = useRef(false);
   const location = useLocation();
   const [drawer, setDrawer] = useState({
     open: false,
@@ -344,28 +352,24 @@ export function AppShell() {
     }
   }, [railCollapsed]);
 
-  useEffect(() => {
-    if (!drawerOpen) {
-      return;
-    }
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setDrawer((current) => ({ ...current, open: false }));
-      }
-    };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, [drawerOpen]);
+  const openDrawer = useCallback(() => {
+    returnFocusToMenuRef.current = false;
+    setDrawer({ open: true, path: window.location.pathname });
+  }, []);
+  const closeDrawer = useCallback(() => {
+    setDrawer((current) => ({ ...current, open: false }));
+  }, []);
 
-  const openDrawer = useCallback(
-    () => setDrawer({ open: true, path: window.location.pathname }),
-    [],
-  );
-  const closeDrawer = useCallback(
-    () => setDrawer((current) => ({ ...current, open: false })),
-    [],
-  );
+  useDrawerAccessibility({
+    open: drawerOpen,
+    closeButtonRef: railCloseButtonRef,
+    menuButtonRef: mobileMenuButtonRef,
+    returnFocusRef: returnFocusToMenuRef,
+    onClose: closeDrawer,
+  });
+
   const openImpersonateDialog = useCallback(() => {
+    returnFocusToMenuRef.current = false;
     closeDrawer();
     setImpersonateDialogOpen(true);
   }, [closeDrawer]);
@@ -433,11 +437,11 @@ export function AppShell() {
 
   return (
     <div className={railCollapsed ? "app-shell rail-collapsed" : "app-shell"}>
-      <a className="skip-link" href="#main-content">
+      <a className="skip-link" href="#main-content" inert={drawerOpen}>
         {t("core.nav.skipToArchive")}
       </a>
 
-      <header className="mobile-bar">
+      <header className="mobile-bar" inert={drawerOpen}>
         <button
           ref={mobileMenuButtonRef}
           type="button"
@@ -447,7 +451,7 @@ export function AppShell() {
           aria-controls="archive-navigation"
           aria-label={t("core.nav.openNavigation")}
         >
-          <Icon name="menu" size={20} />
+          <Icon name="panel-left-open" size={20} />
         </button>
         <NavLink to="/" className="mobile-bar__brand" end>
           <TreeMark size={26} />
@@ -459,7 +463,10 @@ export function AppShell() {
         <button
           type="button"
           className="rail-scrim"
-          onClick={closeDrawer}
+          onClick={() => {
+            returnFocusToMenuRef.current = true;
+            closeDrawer();
+          }}
           aria-label={t("core.nav.closeNavigation")}
         />
       ) : null}
@@ -468,12 +475,16 @@ export function AppShell() {
         id="archive-navigation"
         className={drawerOpen ? "nav-rail is-open" : "nav-rail"}
         aria-label={t("core.nav.ariaArchive")}
+        {...drawerDialogAttributes(drawerOpen)}
       >
         <div className="rail-header">
           <NavLink
             to="/"
             className="brand-cluster"
-            onClick={closeDrawer}
+            onClick={() => {
+              returnFocusToMenuRef.current = false;
+              closeDrawer();
+            }}
             title={t("core.app.name")}
           >
             <span className="brand-seal" aria-hidden="true">
@@ -499,15 +510,22 @@ export function AppShell() {
                 : t("core.nav.collapseRail")
             }
           >
-            <Icon name={railCollapsed ? "chevron-right" : "chevron-down"} size={12} />
+            <Icon
+              name={railCollapsed ? "panel-left-open" : "panel-left-close"}
+              size={14}
+            />
           </button>
           <button
+            ref={railCloseButtonRef}
             type="button"
             className="rail-close-btn"
-            onClick={closeDrawer}
+            onClick={() => {
+              returnFocusToMenuRef.current = true;
+              closeDrawer();
+            }}
             aria-label={t("core.nav.closeNavigation")}
           >
-            <Icon name="close" size={18} />
+            <Icon name="panel-left-close" size={18} />
           </button>
         </div>
 
@@ -541,6 +559,7 @@ export function AppShell() {
                       type="button"
                       className="rail-item rail-item--action"
                       onClick={() => {
+                        returnFocusToMenuRef.current = false;
                         closeDrawer();
                         if (isLogout) {
                           void logout();
@@ -561,7 +580,10 @@ export function AppShell() {
                     key={item.to}
                     to={item.to}
                     end={item.end}
-                    onClick={closeDrawer}
+                    onClick={() => {
+                      returnFocusToMenuRef.current = false;
+                      closeDrawer();
+                    }}
                     data-tooltip={`${label} (${item.index})`}
                     className={({ isActive }) =>
                       isActive ? "rail-item active" : "rail-item"
@@ -612,7 +634,7 @@ export function AppShell() {
         </div>
       </aside>
 
-      <main id="main-content" className="app-main" tabIndex={-1}>
+      <main id="main-content" className="app-main" tabIndex={-1} inert={drawerOpen}>
         {isImpersonating ? (
           <ImpersonationBanner
             targetName={displayName}
