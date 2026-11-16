@@ -320,6 +320,7 @@ def test_redacted_plot_history_is_removed_and_noted_once() -> None:
         TranscriptEntry(
             id=3,
             kind=KIND_TOOL_RESULT,
+            data={"status": "ok", "error_code": None},
             messages=(
                 {
                     "role": "tool",
@@ -352,6 +353,151 @@ def test_redacted_plot_history_is_removed_and_noted_once() -> None:
     assert "call_plot_a" not in payload
     assert "call_plot_b" not in payload
     assert payload.count("[Rendered a chart in an earlier step") == 1
+
+
+def test_redacted_failed_plot_history_uses_failure_note() -> None:
+    """A failed plot call is never described as a rendered chart."""
+    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
+    entries = (
+        TranscriptEntry(
+            id=1,
+            kind=KIND_USER,
+            messages=({"role": "user", "content": "Chart it."},),
+        ),
+        TranscriptEntry(
+            id=2,
+            kind=KIND_ASSISTANT,
+            messages=(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [_call("call_plot_failed", "render_plot", redacted)],
+                },
+            ),
+        ),
+        TranscriptEntry(
+            id=3,
+            kind=KIND_TOOL_RESULT,
+            data={"status": "error", "error_code": "plot_figure_required"},
+            messages=(
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_plot_failed",
+                    "name": "render_plot",
+                    "content": "<tool_result>failed</tool_result>",
+                },
+            ),
+        ),
+    )
+
+    context = build_context(entries)
+
+    expected = (
+        "[A render_plot call in an earlier step failed with plot_figure_required; "
+        "its figure and arguments are omitted from history.]"
+    )
+    assert [message["role"] for message in context.messages] == ["user", "assistant"]
+    assert context.messages[1]["content"] == expected
+    payload = json.dumps(context.messages, ensure_ascii=False)
+    assert "Rendered a chart" not in payload
+    assert "figure_summary" not in payload
+    assert payload.count("[A render_plot call") == 1
+
+
+def test_redacted_mixed_status_history_uses_one_failure_note() -> None:
+    """A success plus a failure yields one note and never claims success."""
+    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
+    entries = (
+        TranscriptEntry(
+            id=1,
+            kind=KIND_USER,
+            messages=({"role": "user", "content": "Chart twice."},),
+        ),
+        TranscriptEntry(
+            id=2,
+            kind=KIND_ASSISTANT,
+            messages=(
+                {
+                    "role": "assistant",
+                    "content": "Two charts.",
+                    "tool_calls": [
+                        _call("call_plot_ok", "render_plot", redacted),
+                        _call("call_plot_error", "render_plot", redacted),
+                    ],
+                },
+            ),
+        ),
+        TranscriptEntry(
+            id=3,
+            kind=KIND_TOOL_RESULT,
+            data={"status": "ok", "error_code": None},
+            messages=(
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_plot_ok",
+                    "name": "render_plot",
+                    "content": "<tool_result>rendered</tool_result>",
+                },
+            ),
+        ),
+        TranscriptEntry(
+            id=4,
+            kind=KIND_TOOL_RESULT,
+            data={"status": "error", "error_code": "plot_spec_error"},
+            messages=(
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_plot_error",
+                    "name": "render_plot",
+                    "content": "<tool_result>failed</tool_result>",
+                },
+            ),
+        ),
+    )
+
+    context = build_context(entries)
+
+    expected = (
+        "[A render_plot call in an earlier step failed with plot_spec_error; "
+        "its figure and arguments are omitted from history.]"
+    )
+    assert [message["role"] for message in context.messages] == ["user", "assistant"]
+    assert context.messages[1]["content"] == f"Two charts.\n\n{expected}"
+    payload = json.dumps(context.messages, ensure_ascii=False)
+    assert "Rendered a chart" not in payload
+    assert payload.count("[A render_plot call") == 1
+
+
+def test_redacted_plot_without_result_uses_missing_note() -> None:
+    """A plot call with no stored result reports tool_result_missing."""
+    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
+    entries = (
+        TranscriptEntry(
+            id=1,
+            kind=KIND_USER,
+            messages=({"role": "user", "content": "Chart it."},),
+        ),
+        TranscriptEntry(
+            id=2,
+            kind=KIND_ASSISTANT,
+            messages=(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [_call("call_plot_missing", "render_plot", redacted)],
+                },
+            ),
+        ),
+    )
+
+    context = build_context(entries)
+
+    assert context.messages[1]["content"] == (
+        "[A render_plot call in an earlier step failed with tool_result_missing; "
+        "its figure and arguments are omitted from history.]"
+    )
+    assert len(context.messages) == 2
+    assert "Rendered a chart" not in json.dumps(context.messages)
 
 
 def test_mixed_tool_batch_keeps_other_calls_and_results() -> None:
@@ -1178,22 +1324,24 @@ def test_invalid_arguments_loop_breaker_answers_without_tools(
     assert len(fake.requests) == 4
     assert fake.requests[3].tools == []
     # Every historical render_plot call is omitted from the provider context,
-    # so the final text-only call sees one note per failed attempt and no tool
-    # envelope for the dropped results.
+    # so the final text-only call sees one honest failure note per attempt and
+    # no tool envelope for the dropped results.
     final_notes = [
         message
         for message in fake.requests[3].messages
         if message.get("role") == "assistant"
         and message.get("content")
         == (
-            "[Rendered a chart in an earlier step; the figure is omitted from "
-            "history to save context.]"
+            "[A render_plot call in an earlier step failed with "
+            "invalid_tool_arguments; its figure and arguments are omitted from "
+            "history.]"
         )
     ]
     assert len(final_notes) == 3
     assert not [
         message for message in fake.requests[3].messages if message.get("role") == "tool"
     ]
+    assert "Rendered a chart" not in json.dumps(fake.requests[3].messages)
 
     entries = _reload_entries(client, conversation_id)
     results = _tool_results(entries)
