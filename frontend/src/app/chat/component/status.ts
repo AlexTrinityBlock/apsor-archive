@@ -29,6 +29,18 @@ export function toolStatusLabel(
   return key ? t(key) : status;
 }
 
+const SUCCESS_STATUSES = new Set(["ok", "success", "completed"]);
+const ACTIVE_STATUSES = new Set(["running", "pending", "awaiting result"]);
+
+/** A settled tool result that should stay out of the primary reading flow. */
+export function isToolFailure(status: string | null | undefined): boolean {
+  const normalized = status?.toLowerCase() ?? "";
+  if (normalized.length === 0) {
+    return false;
+  }
+  return !SUCCESS_STATUSES.has(normalized) && !ACTIVE_STATUSES.has(normalized);
+}
+
 /** Shared badge tones for tool outcomes and assistant finish reasons. */
 export function toolStatusTone(status: string | null): BadgeTone {
   const normalized = status?.toLowerCase() ?? "";

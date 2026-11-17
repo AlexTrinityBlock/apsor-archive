@@ -10,8 +10,9 @@ import {
   type ResourceMeta,
 } from "../types";
 import { PlotBlock } from "./PlotBlock";
+import { PlotSummary } from "./PlotSummary";
 import { ResourceCard } from "./ResourceCard";
-import { toolStatusLabel, toolStatusTone } from "./status";
+import { isToolFailure, toolStatusLabel, toolStatusTone } from "./status";
 
 /** A result card built from structured data, never the model-facing XML. */
 export function ToolResultCard({
@@ -26,8 +27,9 @@ export function ToolResultCard({
   const callId = readToolResultCallId(entry);
   const argumentsList = meta.arguments ? Object.entries(meta.arguments) : [];
   const hasPlot = readPlotSpec(meta.data) !== null;
+  const failed = isToolFailure(meta.status);
 
-  return (
+  const card = (
     <article className="chat-result">
       <header className="chat-result__head">
         <span className="chat-result__mark" aria-hidden="true">
@@ -67,7 +69,13 @@ export function ToolResultCard({
         <p className="chat-result__note">{t("chat.tool.resultNote")}</p>
       ) : null}
 
-      {argumentsList.length > 0 ? (
+      {meta.tool === "render_plot" ? (
+        <details className="chat-result__args">
+          <summary>{t("chat.tool.argumentsUsed")}</summary>
+          <PlotSummary arguments={meta.arguments} data={meta.data} />
+        </details>
+      ) : null}
+      {meta.tool !== "render_plot" && argumentsList.length > 0 ? (
         <details className="chat-result__args">
           <summary>{t("chat.tool.argumentsUsed")}</summary>
           <dl>
@@ -81,5 +89,15 @@ export function ToolResultCard({
         </details>
       ) : null}
     </article>
+  );
+
+  if (!failed) {
+    return card;
+  }
+  return (
+    <details className="chat-diagnostics chat-diagnostics--result">
+      <summary>{t("chat.tool.diagnostics", { count: 1 })}</summary>
+      {card}
+    </details>
   );
 }

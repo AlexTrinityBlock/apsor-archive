@@ -3,11 +3,10 @@
 These tests drive a real conversation turn through ``TestClient`` with the
 deterministic provider fake. They prove four things the UI depends on: the
 calculator returns exact numbers, a rejected expression never fails the stream,
-the complete plot figure is persisted for reload while the provider context only
-ever sees a redacted summary, and the frozen catalog exposes both tools.
+the complete plot figure is persisted for reload while later runs drop the plot
+call silently, and the frozen catalog exposes both tools.
 """
 
-import asyncio
 import json
 from typing import Any
 
@@ -23,7 +22,6 @@ from app.module.agent.domain.agent_domain import (
 from app.module.agent.domain.context_domain import build_context
 from app.module.agent.domain.plot_spec_domain import PlotSpecError, sanitize_plot_figure
 from app.module.agent.protocol.chat_generator_protocol import ChatResult, ChatToolCall
-from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
     text_result,
@@ -48,10 +46,9 @@ PLOT_FIGURE: dict[str, Any] = {
         "yaxis": {"title": {"text": "Memories"}},
     },
 }
-PLOT_ARGUMENTS_SUMMARY = {
+PLOT_ARGUMENTS_DISPLAY = {
     "title": PLOT_TITLE,
     "caption": PLOT_CAPTION,
-    "figure_summary": {"traces": 1},
 }
 
 
@@ -205,10 +202,10 @@ def test_calculator_rejects_unsafe_expression(client: TestClient) -> None:
     ] * len(unsafe_expressions)
 
 
-def test_render_plot_persists_figure_and_redacts_provider_context(
+def test_render_plot_persists_figure_and_hides_historical_calls(
     client: TestClient,
 ) -> None:
-    """Keep the full figure in UI data and only a summary in provider messages."""
+    """Keep the real call in the run and drop it silently in later runs."""
     fake = FakeChatGenerator(
         [
             tool_call_result(
@@ -221,6 +218,7 @@ def test_render_plot_persists_figure_and_redacts_provider_context(
                 call_id="call_plot_1",
             ),
             text_result("The chart shows more memories in the second month."),
+            text_result("The chart stays available above."),
         ]
     )
     client.app.state.agent_chat_generator = fake
@@ -245,39 +243,40 @@ def test_render_plot_persists_figure_and_redacts_provider_context(
     assert plot["stats"]["trace_count"] == 1
     assert plot["stats"]["point_count"] == 2
     assert plot["stats"]["byte_size"] > 0
-    assert data["arguments"] == PLOT_ARGUMENTS_SUMMARY
+    # Tool-result and tool_start payloads carry the display form only.
+    assert data["arguments"] == PLOT_ARGUMENTS_DISPLAY
 
-    # The persisted assistant call arguments are the redacted summary, not the
-    # figure that the model originally supplied.
+    # The persisted assistant call keeps the real provider arguments.
     assistant_entry = _assistant_tool_call_entry(body["entries"], "render_plot")
     raw_arguments = assistant_entry["model"][0]["tool_calls"][0]["function"]["arguments"]
-    assert json.loads(raw_arguments) == PLOT_ARGUMENTS_SUMMARY
-    assert "Jan" not in raw_arguments
-    assert "figure" not in json.loads(raw_arguments)
+    assert json.loads(raw_arguments) == {
+        "title": PLOT_TITLE,
+        "caption": PLOT_CAPTION,
+        "figure": PLOT_FIGURE,
+    }
+    assert "Jan" in raw_arguments
 
-    # The provider's second request drops the redacted render_plot call and its
-    # orphaned result, replacing the call with one short historical note.
+    # The current run still sees the chart call and its result.
     assert len(fake.requests) == 2
-    second_messages = fake.requests[1].messages
-    provider_payload = json.dumps(second_messages, ensure_ascii=False)
-    assert "Jan" not in provider_payload
-    assert "[3,5]" not in provider_payload
-    assert "figure_summary" not in provider_payload
-    assert "render_plot" not in provider_payload
-    replayed_assistant = [
-        message for message in second_messages if message.get("role") == "assistant"
+    current_payload = json.dumps(fake.requests[1].messages, ensure_ascii=False)
+    assert "render_plot" in current_payload
+    assert "call_plot_1" in current_payload
+    assert "Jan" in current_payload
+    assert "Rendered a chart in an earlier step" not in current_payload
+
+    # The next run drops the historical call and its orphaned result silently.
+    second_body = _send_message(client, conversation_id, "Thanks, what changed?")
+    assert second_body["answer"] == "The chart stays available above."
+    assert len(fake.requests) == 3
+    next_payload = json.dumps(fake.requests[2].messages, ensure_ascii=False)
+    assert "render_plot" not in next_payload
+    assert "call_plot_1" not in next_payload
+    assert "Jan" not in next_payload
+    assert "Rendered a chart" not in next_payload
+    assert "The chart shows more memories in the second month." in next_payload
+    assert not [
+        message for message in fake.requests[2].messages if message.get("role") == "tool"
     ]
-    assert len(replayed_assistant) == 1
-    assert "tool_calls" not in replayed_assistant[0]
-    assert replayed_assistant[0]["content"] == (
-        "[Rendered a chart in an earlier step; the figure is omitted from "
-        "history to save context.]"
-    )
-    assert provider_payload.count("Rendered a chart in an earlier step") == 1
-    replayed_tool_results = [
-        message for message in second_messages if message.get("role") == "tool"
-    ]
-    assert replayed_tool_results == []
 
     reloaded_results = _tool_results(_reload_entries(client, conversation_id))
     assert len(reloaded_results) == 1
@@ -294,10 +293,16 @@ def _call(call_id: str, name: str, arguments: str) -> dict[str, Any]:
     }
 
 
-def test_redacted_plot_history_is_removed_and_noted_once() -> None:
-    """A stored plot placeholder never reaches the provider; one note replaces it."""
-    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
-    entries = (
+def _plot_call_entries(
+    *,
+    content: str,
+    plot_arguments: str,
+    by_run_id: int | None,
+    with_result: bool = True,
+    result_status: str = "ok",
+) -> tuple[TranscriptEntry, ...]:
+    """Build one user turn plus a render_plot call and optional result."""
+    entries: list[TranscriptEntry] = [
         TranscriptEntry(
             id=1,
             kind=KIND_USER,
@@ -306,203 +311,142 @@ def test_redacted_plot_history_is_removed_and_noted_once() -> None:
         TranscriptEntry(
             id=2,
             kind=KIND_ASSISTANT,
+            by_run_id=by_run_id,
             messages=(
                 {
                     "role": "assistant",
-                    "content": "Here is the chart.",
+                    "content": content,
                     "tool_calls": [
-                        _call("call_plot_a", "render_plot", redacted),
-                        _call("call_plot_b", "render_plot", redacted),
+                        _call("call_plot_history", "render_plot", plot_arguments)
                     ],
                 },
             ),
         ),
-        TranscriptEntry(
-            id=3,
-            kind=KIND_TOOL_RESULT,
-            data={"status": "ok", "error_code": None},
-            messages=(
-                {
-                    "role": "tool",
-                    "tool_call_id": "call_plot_a",
-                    "name": "render_plot",
-                    "content": "<tool_result>first plot</tool_result>",
-                },
-                {
-                    "role": "tool",
-                    "tool_call_id": "call_plot_b",
-                    "name": "render_plot",
-                    "content": "<tool_result>second plot</tool_result>",
-                },
-            ),
-        ),
+    ]
+    if with_result:
+        entries.append(
+            TranscriptEntry(
+                id=3,
+                kind=KIND_TOOL_RESULT,
+                by_run_id=by_run_id,
+                data={"status": result_status, "error_code": None},
+                messages=(
+                    {
+                        "role": "tool",
+                        "tool_call_id": "call_plot_history",
+                        "name": "render_plot",
+                        "content": "<tool_result>rendered</tool_result>",
+                    },
+                ),
+            )
+        )
+    return tuple(entries)
+
+
+def test_historical_plot_call_is_removed_without_a_note() -> None:
+    """A plot from an earlier run leaves only the message's own text."""
+    arguments = json.dumps(
+        {
+            "title": PLOT_TITLE,
+            "caption": PLOT_CAPTION,
+            "figure": PLOT_FIGURE,
+        },
+        sort_keys=True,
+    )
+    entries = _plot_call_entries(
+        content="Here is the chart.",
+        plot_arguments=arguments,
+        by_run_id=1,
     )
 
-    context = build_context(entries)
+    context = build_context(entries, keep_plot_run_id=2)
 
     assert [message["role"] for message in context.messages] == ["user", "assistant"]
     assistant = context.messages[1]
     assert "tool_calls" not in assistant
-    assert assistant["content"] == (
-        "Here is the chart.\n\n"
-        "[Rendered a chart in an earlier step; the figure is omitted from "
-        "history to save context.]"
-    )
+    assert assistant["content"] == "Here is the chart."
     payload = json.dumps(context.messages, ensure_ascii=False)
-    assert "figure_summary" not in payload
-    assert "call_plot_a" not in payload
-    assert "call_plot_b" not in payload
-    assert payload.count("[Rendered a chart in an earlier step") == 1
+    assert "render_plot" not in payload
+    assert "call_plot_history" not in payload
+    assert "Rendered a chart" not in payload
+    assert "earlier step" not in payload
+    assert "omitted from history" not in payload
 
 
-def test_redacted_failed_plot_history_uses_failure_note() -> None:
-    """A failed plot call is never described as a rendered chart."""
-    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
-    entries = (
-        TranscriptEntry(
-            id=1,
-            kind=KIND_USER,
-            messages=({"role": "user", "content": "Chart it."},),
-        ),
-        TranscriptEntry(
-            id=2,
-            kind=KIND_ASSISTANT,
-            messages=(
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [_call("call_plot_failed", "render_plot", redacted)],
-                },
-            ),
-        ),
-        TranscriptEntry(
-            id=3,
-            kind=KIND_TOOL_RESULT,
-            data={"status": "error", "error_code": "plot_figure_required"},
-            messages=(
-                {
-                    "role": "tool",
-                    "tool_call_id": "call_plot_failed",
-                    "name": "render_plot",
-                    "content": "<tool_result>failed</tool_result>",
-                },
-            ),
-        ),
+def test_current_run_plot_call_and_result_are_kept() -> None:
+    """The run that rendered the chart still sees its call and result."""
+    arguments = json.dumps(
+        {
+            "title": PLOT_TITLE,
+            "caption": PLOT_CAPTION,
+            "figure": PLOT_FIGURE,
+        },
+        sort_keys=True,
+    )
+    entries = _plot_call_entries(
+        content="Here is the chart.",
+        plot_arguments=arguments,
+        by_run_id=7,
     )
 
-    context = build_context(entries)
+    context = build_context(entries, keep_plot_run_id=7)
 
-    expected = (
-        "[A render_plot call in an earlier step failed with plot_figure_required; "
-        "its figure and arguments are omitted from history.]"
-    )
-    assert [message["role"] for message in context.messages] == ["user", "assistant"]
-    assert context.messages[1]["content"] == expected
+    assert [message["role"] for message in context.messages] == [
+        "user",
+        "assistant",
+        "tool",
+    ]
+    assistant = context.messages[1]
+    assert assistant["content"] == "Here is the chart."
+    assert [call["id"] for call in assistant["tool_calls"]] == ["call_plot_history"]
+    assert context.messages[2]["tool_call_id"] == "call_plot_history"
     payload = json.dumps(context.messages, ensure_ascii=False)
     assert "Rendered a chart" not in payload
-    assert "figure_summary" not in payload
-    assert payload.count("[A render_plot call") == 1
 
 
-def test_redacted_mixed_status_history_uses_one_failure_note() -> None:
-    """A success plus a failure yields one note and never claims success."""
-    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
-    entries = (
-        TranscriptEntry(
-            id=1,
-            kind=KIND_USER,
-            messages=({"role": "user", "content": "Chart twice."},),
-        ),
-        TranscriptEntry(
-            id=2,
-            kind=KIND_ASSISTANT,
-            messages=(
-                {
-                    "role": "assistant",
-                    "content": "Two charts.",
-                    "tool_calls": [
-                        _call("call_plot_ok", "render_plot", redacted),
-                        _call("call_plot_error", "render_plot", redacted),
-                    ],
-                },
-            ),
-        ),
-        TranscriptEntry(
-            id=3,
-            kind=KIND_TOOL_RESULT,
-            data={"status": "ok", "error_code": None},
-            messages=(
-                {
-                    "role": "tool",
-                    "tool_call_id": "call_plot_ok",
-                    "name": "render_plot",
-                    "content": "<tool_result>rendered</tool_result>",
-                },
-            ),
-        ),
-        TranscriptEntry(
-            id=4,
-            kind=KIND_TOOL_RESULT,
-            data={"status": "error", "error_code": "plot_spec_error"},
-            messages=(
-                {
-                    "role": "tool",
-                    "tool_call_id": "call_plot_error",
-                    "name": "render_plot",
-                    "content": "<tool_result>failed</tool_result>",
-                },
-            ),
-        ),
+def test_plot_only_message_is_dropped_when_historical() -> None:
+    """A message with only a historical plot call disappears entirely."""
+    entries = _plot_call_entries(
+        content="",
+        plot_arguments=json.dumps({"title": PLOT_TITLE}),
+        by_run_id=1,
+        with_result=False,
     )
 
-    context = build_context(entries)
+    context = build_context(entries, keep_plot_run_id=2)
 
-    expected = (
-        "[A render_plot call in an earlier step failed with plot_spec_error; "
-        "its figure and arguments are omitted from history.]"
-    )
-    assert [message["role"] for message in context.messages] == ["user", "assistant"]
-    assert context.messages[1]["content"] == f"Two charts.\n\n{expected}"
+    assert [message["role"] for message in context.messages] == ["user"]
     payload = json.dumps(context.messages, ensure_ascii=False)
+    assert "render_plot" not in payload
+    assert "tool_result_missing" not in payload
     assert "Rendered a chart" not in payload
-    assert payload.count("[A render_plot call") == 1
 
 
-def test_redacted_plot_without_result_uses_missing_note() -> None:
-    """A plot call with no stored result reports tool_result_missing."""
-    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
-    entries = (
-        TranscriptEntry(
-            id=1,
-            kind=KIND_USER,
-            messages=({"role": "user", "content": "Chart it."},),
-        ),
-        TranscriptEntry(
-            id=2,
-            kind=KIND_ASSISTANT,
-            messages=(
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [_call("call_plot_missing", "render_plot", redacted)],
-                },
-            ),
-        ),
+def test_failed_historical_plot_is_removed_silently() -> None:
+    """A failed plot call is removed without a diagnostic note."""
+    entries = _plot_call_entries(
+        content="The chart failed.",
+        plot_arguments=json.dumps({"title": PLOT_TITLE}),
+        by_run_id=1,
+        result_status="error",
     )
 
-    context = build_context(entries)
+    context = build_context(entries, keep_plot_run_id=2)
 
-    assert context.messages[1]["content"] == (
-        "[A render_plot call in an earlier step failed with tool_result_missing; "
-        "its figure and arguments are omitted from history.]"
-    )
-    assert len(context.messages) == 2
-    assert "Rendered a chart" not in json.dumps(context.messages)
+    assert [message["role"] for message in context.messages] == ["user", "assistant"]
+    assert context.messages[1]["content"] == "The chart failed."
+    assert "tool_calls" not in context.messages[1]
+    payload = json.dumps(context.messages, ensure_ascii=False)
+    assert "render_plot" not in payload
+    assert "failed with" not in payload
+    assert "omitted from history" not in payload
 
 
 def test_mixed_tool_batch_keeps_other_calls_and_results() -> None:
-    """Only the redacted plot call is dropped; sibling calls stay intact."""
-    redacted = json.dumps(PLOT_ARGUMENTS_SUMMARY, sort_keys=True)
+    """Only the historical plot call is dropped; sibling calls stay intact."""
+    plot_arguments = json.dumps(
+        {"title": PLOT_TITLE, "figure": PLOT_FIGURE}, sort_keys=True
+    )
     calculate = json.dumps({"expression": "1 + 1"})
     read_file = json.dumps({"path": "/library"})
     entries = (
@@ -514,12 +458,13 @@ def test_mixed_tool_batch_keeps_other_calls_and_results() -> None:
         TranscriptEntry(
             id=2,
             kind=KIND_ASSISTANT,
+            by_run_id=1,
             messages=(
                 {
                     "role": "assistant",
                     "content": "Checking both.",
                     "tool_calls": [
-                        _call("call_plot_mixed", "render_plot", redacted),
+                        _call("call_plot_mixed", "render_plot", plot_arguments),
                         _call("call_calc_mixed", "calculate", calculate),
                         _call("call_read_mixed", "read_file", read_file),
                     ],
@@ -529,6 +474,7 @@ def test_mixed_tool_batch_keeps_other_calls_and_results() -> None:
         TranscriptEntry(
             id=3,
             kind=KIND_TOOL_RESULT,
+            by_run_id=1,
             messages=(
                 {
                     "role": "tool",
@@ -552,7 +498,7 @@ def test_mixed_tool_batch_keeps_other_calls_and_results() -> None:
         ),
     )
 
-    context = build_context(entries)
+    context = build_context(entries, keep_plot_run_id=2)
 
     assert [message["role"] for message in context.messages] == [
         "user",
@@ -571,54 +517,25 @@ def test_mixed_tool_batch_keeps_other_calls_and_results() -> None:
         "call_read_mixed",
     ]
     payload = json.dumps(context.messages, ensure_ascii=False)
-    assert "figure_summary" not in payload
     assert "call_plot_mixed" not in payload
     assert "Rendered a chart in an earlier step" not in payload
 
 
-def test_unparseable_plot_history_call_is_left_untouched() -> None:
-    """Arguments that are not JSON keep the original call and its result."""
+def test_unparseable_historical_plot_call_is_removed() -> None:
+    """Run ownership, not JSON shape, decides whether a plot call is replayed."""
     broken = '{"title": "broken"'
-    entries = (
-        TranscriptEntry(
-            id=1,
-            kind=KIND_USER,
-            messages=({"role": "user", "content": "Chart it."},),
-        ),
-        TranscriptEntry(
-            id=2,
-            kind=KIND_ASSISTANT,
-            messages=(
-                {
-                    "role": "assistant",
-                    "content": "",
-                    "tool_calls": [_call("call_broken", "render_plot", broken)],
-                },
-            ),
-        ),
-        TranscriptEntry(
-            id=3,
-            kind=KIND_TOOL_RESULT,
-            messages=(
-                {
-                    "role": "tool",
-                    "tool_call_id": "call_broken",
-                    "name": "render_plot",
-                    "content": "<tool_result>broken</tool_result>",
-                },
-            ),
-        ),
+    entries = _plot_call_entries(
+        content="Here is the chart.",
+        plot_arguments=broken,
+        by_run_id=1,
     )
 
-    context = build_context(entries)
+    context = build_context(entries, keep_plot_run_id=2)
 
-    assert [message["role"] for message in context.messages] == [
-        "user",
-        "assistant",
-        "tool",
-    ]
-    assert context.messages[1]["tool_calls"][0]["function"]["arguments"] == broken
-    assert context.messages[2]["tool_call_id"] == "call_broken"
+    assert [message["role"] for message in context.messages] == ["user", "assistant"]
+    assert context.messages[1]["content"] == "Here is the chart."
+    assert "tool_calls" not in context.messages[1]
+    assert "call_plot_history" not in json.dumps(context.messages)
 
 
 def test_render_plot_rejects_unsafe_or_oversized_figure(client: TestClient) -> None:
@@ -916,36 +833,6 @@ def test_surface_receipt_reports_grid_cells(client: TestClient) -> None:
     assert "points counts every cell, not one row" in content
 
 
-def test_render_plot_redaction_placeholder_returns_corrective_error() -> None:
-    """A copied figure_summary gets a targeted correction, not a schema dump."""
-
-    def unused_scope() -> Any:
-        raise AssertionError("placeholder validation must not open the tool scope")
-
-    registry = AgentToolRegistry(unused_scope)
-    placeholders = [
-        {"caption": None, "figure_summary": {"traces": 0}, "title": None},
-        {"arguments": {"title": "Sphere"}, "title": "Sphere"},
-    ]
-    for arguments in placeholders:
-        outcome = asyncio.run(
-            registry.execute(
-                "render_plot",
-                arguments,
-                call_id="call_redacted_placeholder",
-                max_chars=4_000,
-            )
-        )
-        assert outcome.status == "error"
-        assert outcome.error_code == "plot_figure_required"
-        assert outcome.data["error_code"] == "plot_figure_required"
-        assert '<error code="plot_figure_required">' in outcome.content
-        assert "redaction placeholder" in outcome.content
-        assert "figure_summary is never a valid render_plot argument" in outcome.content
-        assert "answer in text without a chart" in outcome.content
-        assert "Field required" not in outcome.data["detail"]
-
-
 def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     """Expose both tools with flat, model-facing schemas and guidance."""
     response = client.get("/api/v1/agent/tools")
@@ -981,7 +868,7 @@ def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     assert "10,000 data points" not in description
     assert "600 KB" not in description
     assert "30x30 to 60x60 grid (900-3,600 cells)" in description
-    assert "never summarize it with a placeholder" in description
+    assert "Always pass a complete figure" in description
 
     serialized = json.dumps(render_plot["parameters"])
     assert "$ref" not in serialized
@@ -1022,11 +909,7 @@ def test_plot_tool_result_content_is_small(client: TestClient) -> None:
     assert 'visible="true"' in content
     assert "The chart is already rendered and visible to the user" in content
     assert "Do not call render_plot again for this request" in content
-    assert (
-        "Historical render_plot calls are stored with a compact summary "
-        "instead of the full figure to save context" in content
-    )
-    assert "Never send figure_summary as an argument" in content
+    assert "Reply with a one- or two-sentence explanation" in content
     assert "Jan" not in content
     assert '"data"' not in content
     assert "[3,5]" not in content
@@ -1198,23 +1081,18 @@ def test_duplicate_render_plot_is_not_executed(client: TestClient) -> None:
     assert "already visible in the chat" in duplicate_content
     assert "Do not call render_plot again" in duplicate_content
 
-    # Both historical render_plot calls are omitted from the provider context,
-    # so the success receipt and the duplicate notice never replay; one note
-    # stands in for each call.
-    note = (
-        "[Rendered a chart in an earlier step; the figure is omitted from "
-        "history to save context.]"
-    )
+    # Both calls belong to the current run, so the provider replay keeps them
+    # and adds no synthetic note.
     for index, request in enumerate(fake.requests[1:], start=1):
-        assert not [
+        payload = json.dumps(request.messages, ensure_ascii=False)
+        assert "render_plot" in payload
+        assert "call_plot_first" in payload
+        assert "Rendered a chart" not in payload
+        assert "omitted from history" not in payload
+        tools = [
             message for message in request.messages if message.get("role") == "tool"
         ]
-        notes = [
-            message
-            for message in request.messages
-            if message.get("role") == "assistant" and message.get("content") == note
-        ]
-        assert len(notes) == index
+        assert len(tools) == index
 
     reloaded = _reload_entries(client, conversation_id)
     assert sum(1 for entry in _tool_results(reloaded) if "plot" in entry["data"]) == 1
@@ -1295,73 +1173,19 @@ def test_repeated_invalid_arguments_add_retry_notice(client: TestClient) -> None
     assert body["error_code"] is None
 
 
-def _redacted_plot_call(call_id: str) -> ChatResult:
-    """Copy the stored redaction shape as a fresh render_plot argument."""
-    return tool_call_result(
-        "render_plot",
-        {"caption": None, "figure_summary": {"traces": 0}, "title": None},
-        call_id=call_id,
-    )
-
-
-def test_redaction_placeholder_counts_toward_the_loop_breaker(
-    client: TestClient,
-) -> None:
-    """Three copied placeholders reach the text-only step and complete cleanly."""
-    final_answer = "I cannot draw that chart because the figure is not available."
-    fake = FakeChatGenerator(
-        [
-            _redacted_plot_call("call_redacted_1"),
-            _redacted_plot_call("call_redacted_2"),
-            _redacted_plot_call("call_redacted_3"),
-            text_result(final_answer),
-        ]
-    )
-    client.app.state.agent_chat_generator = fake
-    conversation_id = _create_conversation(client, "Redaction placeholder loop")
-
-    response = client.post(
-        f"/api/v1/agent/conversations/{conversation_id}/messages",
-        json={"content": "Draw a 3D sphere."},
-    )
-    assert response.status_code == 200, response.text
-    assert "event: error" not in response.text
-    assert "event: run_end" in response.text
-    assert '"status":"completed"' in response.text
-
-    assert len(fake.requests) == 4
-    # The second failure already carries the notice; the third removes tools.
-    assert '<retry_notice reason="tool_arguments">' in fake.requests[2].messages[-1][
-        "content"
-    ]
-    assert fake.requests[3].tools == []
-
-    entries = _reload_entries(client, conversation_id)
-    results = _tool_results(entries)
-    assert [entry["data"]["error_code"] for entry in results] == [
-        "plot_figure_required",
-        "plot_figure_required",
-        "plot_figure_required",
-    ]
-    assistant_entries = [entry for entry in entries if entry["kind"] == "pi.assistant"]
-    assert assistant_entries[-1]["model"][0]["content"] == final_answer
-    assert assistant_entries[-1]["data"]["finish_reason"] == "stop"
-    assert "error" not in assistant_entries[-1]["data"]
-
-
 def test_successful_tool_call_resets_the_invalid_argument_streak(
     client: TestClient,
 ) -> None:
     """A successful call between failures restarts the consecutive count."""
     fake = FakeChatGenerator(
         [
-            _redacted_plot_call("call_redacted_1"),
+            _invalid_plot_call("call_invalid_1"),
             tool_call_result(
                 "calculate",
                 {"expression": "1 + 1"},
                 call_id="call_good",
             ),
-            _redacted_plot_call("call_redacted_2"),
+            _invalid_plot_call("call_invalid_2"),
             text_result("The calculation ran; I still cannot draw that chart."),
         ]
     )
@@ -1378,9 +1202,9 @@ def test_successful_tool_call_resets_the_invalid_argument_streak(
 
     results = _tool_results(body["entries"])
     assert [entry["data"]["error_code"] for entry in results] == [
-        "plot_figure_required",
+        "invalid_tool_arguments",
         None,
-        "plot_figure_required",
+        "invalid_tool_arguments",
     ]
     assert [entry["data"]["status"] for entry in results] == ["error", "ok", "error"]
     assert body["error_code"] is None
@@ -1416,25 +1240,17 @@ def test_invalid_arguments_loop_breaker_answers_without_tools(
 
     assert len(fake.requests) == 4
     assert fake.requests[3].tools == []
-    # Every historical render_plot call is omitted from the provider context,
-    # so the final text-only call sees one honest failure note per attempt and
-    # no tool envelope for the dropped results.
-    final_notes = [
-        message
-        for message in fake.requests[3].messages
-        if message.get("role") == "assistant"
-        and message.get("content")
-        == (
-            "[A render_plot call in an earlier step failed with "
-            "invalid_tool_arguments; its figure and arguments are omitted from "
-            "history.]"
-        )
-    ]
-    assert len(final_notes) == 3
-    assert not [
+    # Failures remain transparent inside the run: no synthetic note is added,
+    # and every recorded call and result is still visible to the model.
+    final_payload = json.dumps(fake.requests[3].messages, ensure_ascii=False)
+    assert "render_plot" in final_payload
+    assert "invalid_tool_arguments" in final_payload
+    assert "Rendered a chart" not in final_payload
+    assert "omitted from history" not in final_payload
+    final_tools = [
         message for message in fake.requests[3].messages if message.get("role") == "tool"
     ]
-    assert "Rendered a chart" not in json.dumps(fake.requests[3].messages)
+    assert len(final_tools) == 3
 
     entries = _reload_entries(client, conversation_id)
     results = _tool_results(entries)

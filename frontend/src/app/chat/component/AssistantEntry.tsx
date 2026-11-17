@@ -17,7 +17,8 @@ import { CitationChip } from "./CitationChip";
 import { MarkdownBody } from "./MarkdownBody";
 import { PlotBlock } from "./PlotBlock";
 import { ToolCallCard } from "./ToolCallCard";
-import { finishReasonTone } from "./status";
+import { ToolDiagnostics, type ToolDiagnosticItem } from "./ToolDiagnostics";
+import { finishReasonTone, isToolFailure } from "./status";
 
 interface AssistantEntryProps {
   readonly entry: AgentEntrySchema;
@@ -81,7 +82,22 @@ export function AssistantEntry({
     citations.push(token);
   }
   const usage = usageRows(meta.usage);
-  const plots = calls.flatMap((call) => {
+  const failures: ToolDiagnosticItem[] = [];
+  const visibleCalls = calls.filter((call) => {
+    const result = toolResults.get(call.id)?.meta ?? null;
+    if (!isToolFailure(result?.status)) {
+      return true;
+    }
+    failures.push({
+      id: call.id,
+      name: call.name,
+      status: result?.status ?? null,
+      errorCode: result?.errorCode ?? null,
+      detail: result?.detail ?? null,
+    });
+    return false;
+  });
+  const plots = visibleCalls.flatMap((call) => {
     const plotData = toolResults.get(call.id)?.meta.data;
     return plotData !== null &&
       plotData !== undefined &&
@@ -101,7 +117,7 @@ export function AssistantEntry({
         />
       </div>
     );
-  } else if (calls.length === 0 && !meta.error) {
+  } else if (visibleCalls.length === 0 && failures.length === 0 && !meta.error) {
     body = (
       <p className="chat-turn__silent">{t("chat.assistant.silent")}</p>
     );
@@ -131,9 +147,9 @@ export function AssistantEntry({
         {action}
       </header>
 
-      {calls.length > 0 ? (
+      {visibleCalls.length > 0 ? (
         <div className="chat-tool-flow">
-          {calls.map((call, index) => (
+          {visibleCalls.map((call, index) => (
             <ToolCallCard
               key={call.id}
               call={call}
@@ -151,6 +167,8 @@ export function AssistantEntry({
       {plots.map((plot) => (
         <PlotBlock key={plot.id} data={plot.data} />
       ))}
+
+      <ToolDiagnostics items={failures} />
 
       {meta.error ? (
         <div className="chat-turn__error" role="status">
