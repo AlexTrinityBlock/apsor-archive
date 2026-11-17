@@ -1186,6 +1186,107 @@
   font-weight: 600;
 }
 
+/* Collapsed tool diagnostics ---------------------------------------------- */
+
+.chat-diagnostics {
+  margin-top: 4px;
+  color: var(--mono-muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.chat-diagnostics > summary {
+  width: fit-content;
+  padding: 3px 0;
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.chat-diagnostics__list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 4px 0 0;
+  padding: 6px 9px;
+  background: var(--mono-paper);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 4px;
+}
+
+.chat-diagnostics__list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  align-items: baseline;
+  list-style: none;
+}
+
+.chat-diagnostics__list code {
+  color: var(--mono-ink);
+  font-family: var(--mono-font-mono);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.chat-diagnostics__status {
+  color: var(--accent-seal-deep);
+  font-family: var(--mono-font-mono);
+  font-size: 8.5px;
+}
+
+.chat-diagnostics__detail {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--mono-muted);
+  font-size: 9.5px;
+  overflow-wrap: anywhere;
+}
+
+.chat-diagnostics--result > summary {
+  padding-left: 10px;
+}
+
+/* Plot receipt summary ---------------------------------------------------- */
+
+.plot-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.plot-summary > div {
+  display: grid;
+  grid-template-columns: minmax(64px, 96px) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.plot-summary dt {
+  color: var(--mono-muted);
+  font-family: var(--mono-font-mono);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.plot-summary dd {
+  min-width: 0;
+  color: var(--mono-l2);
+  font-family: var(--mono-font-mono);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.plot-summary__link {
+  align-self: flex-start;
+  color: var(--accent-seal-deep);
+  font-family: var(--mono-font-mono);
+  font-size: 9px;
+  text-decoration: underline;
+}
+
 /* Markdown ---------------------------------------------------------------- */
 
 .chat-markdown {

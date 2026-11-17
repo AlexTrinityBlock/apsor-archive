@@ -50,7 +50,7 @@ from app.module.agent.domain.tool_args import MAX_EXPRESSION_CHARS
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
     TOOLS_VERSION,
-    model_arguments_for_storage,
+    display_arguments,
 )
 from app.module.agent.domain.user_profile_domain import UserProfile
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
@@ -128,13 +128,9 @@ DUPLICATE_PLOT_STOP_TEXT = (
 _PROVIDER_RETRY_DELAYS_SECONDS = (1.0, 3.0)
 # Two rejected tool calls in a row get an actionable retry notice; a third one
 # switches the next provider call to text-only so the run cannot burn its whole
-# step budget on the same invalid arguments. A copied redaction placeholder is
-# the same failure: the model ignored the targeted correction, so it counts
-# toward the breaker instead of resetting it. Any other tool outcome resets the
+# step budget on the same invalid arguments. Any other tool outcome resets the
 # streak.
-_INVALID_ARGUMENT_ERROR_CODES = frozenset(
-    {"invalid_tool_arguments", "plot_figure_required"}
-)
+_INVALID_ARGUMENT_ERROR_CODES = frozenset({"invalid_tool_arguments"})
 _INVALID_ARGUMENTS_NOTICE_THRESHOLD = 2
 _INVALID_ARGUMENTS_TEXT_ONLY_THRESHOLD = 3
 
@@ -569,7 +565,11 @@ class AgentService:
         """
         if not self.config.auto_compaction_enabled:
             return (
-                await self._context(conversation_id, last_entry_id),
+                await self._context(
+                    conversation_id,
+                    last_entry_id,
+                    keep_plot_run_id=run_id,
+                ),
                 last_entry_id,
                 last_compaction_entry_id,
             )
@@ -607,7 +607,11 @@ class AgentService:
                 context, last_entry_id = compacted
                 return context, last_entry_id, last_entry_id
         enriched = await self.chat_attachments.enrich_transcript(transcript)
-        return build_context(enriched), last_entry_id, last_compaction_entry_id
+        return (
+            build_context(enriched, keep_plot_run_id=run_id),
+            last_entry_id,
+            last_compaction_entry_id,
+        )
 
     async def _compact_active_context(
         self,
@@ -638,7 +642,14 @@ class AgentService:
             draft=draft,
             now=utcnow(),
         )
-        return await self._context(conversation_id, entry.id), entry.id
+        return (
+            await self._context(
+                conversation_id,
+                entry.id,
+                keep_plot_run_id=run_id,
+            ),
+            entry.id,
+        )
 
     async def stream_turn(self, turn: AgentTurnState) -> AsyncIterator[AgentStreamEvent]:
         """Run the model/tool loop and yield transport-only events."""
@@ -1058,7 +1069,7 @@ class AgentService:
                             "entry_id": None,
                             "tool_call_id": call.call_id,
                             "name": call.name,
-                            "arguments": model_arguments_for_storage(call.name, call.arguments),
+                            "arguments": display_arguments(call.name, call.arguments),
                             "parallel": parallel,
                             "batch_size": batch_size,
                             "parallel_index": index,
@@ -2066,6 +2077,8 @@ class AgentService:
         self,
         conversation_id: int,
         cutoff_entry_id: int | None,
+        *,
+        keep_plot_run_id: int | None = None,
     ) -> ProviderContext:
         rows = await self.repository.load_context_entries(
             conversation_id,
@@ -2073,7 +2086,7 @@ class AgentService:
         )
         transcript = _transcript_from_rows(rows)
         enriched = await self.chat_attachments.enrich_transcript(transcript)
-        return build_context(enriched)
+        return build_context(enriched, keep_plot_run_id=keep_plot_run_id)
 
     async def _append_failure_assistant(
         self,
@@ -2185,7 +2198,7 @@ class AgentService:
                     "entry_id": None,
                     "tool_call_id": call.call_id,
                     "name": call.name,
-                    "arguments": model_arguments_for_storage(call.name, call.arguments),
+                    "arguments": display_arguments(call.name, call.arguments),
                 },
             )
             for call in calls
@@ -2443,7 +2456,7 @@ def _arguments_json(call: ChatToolCall) -> str:
     if call.parse_error is not None and call.raw_arguments:
         return call.raw_arguments
     return json.dumps(
-        model_arguments_for_storage(call.name, call.arguments),
+        call.arguments,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -2643,7 +2656,7 @@ def _tool_result_draft(call: ChatToolCall, outcome: ToolOutcome) -> EntryDraft:
             "status": outcome.status,
             "error_code": outcome.error_code,
             "duration_ms": outcome.data.get("duration_ms"),
-            "arguments": model_arguments_for_storage(call.name, call.arguments),
+            "arguments": display_arguments(call.name, call.arguments),
             "resource": outcome.resource,
         },
     )

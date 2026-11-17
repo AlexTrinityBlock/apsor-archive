@@ -6,6 +6,7 @@ import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
 import { formatArgumentValue } from "../../chat/format";
 import { MarkdownBody } from "../../chat/component/MarkdownBody";
+import { PlotSummary } from "../../chat/component/PlotSummary";
 import { toolStatusLabel, toolStatusTone } from "../../chat/component/status";
 import {
   currentTraceIndex,
@@ -130,7 +131,19 @@ function TraceMeta({ item }: { readonly item: TraceItem }) {
         ) : null}
       </div>
 
-      {argumentsList.length > 0 ? (
+      {item.tool === "render_plot" ? (
+        <details className="pi-inspector__args">
+          <summary>{t("chat.workbench.toolArguments")}</summary>
+          <PlotSummary
+            arguments={item.arguments}
+            data={item.data}
+            chartHref={
+              item.entryId === null ? null : `#entry-${item.entryId}`
+            }
+          />
+        </details>
+      ) : null}
+      {item.tool !== "render_plot" && argumentsList.length > 0 ? (
         <details className="pi-inspector__args">
           <summary>{t("chat.workbench.toolArguments")}</summary>
           <dl>

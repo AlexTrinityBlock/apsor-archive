@@ -28,7 +28,11 @@ describe("readPlotSpec", () => {
     expect(spec?.title).toBe("Memories per month");
     expect(spec?.caption).toBe("Counts from the archive timeline.");
     expect(spec?.figure.data).toHaveLength(1);
-    expect(spec?.stats).toEqual({ traceCount: 1, pointCount: 2 });
+    expect(spec?.stats).toEqual({
+      traceCount: 1,
+      pointCount: 2,
+      byteSize: 156,
+    });
   });
 
   test("accepts a bare plot spec and ignores blank captions", () => {

@@ -7,19 +7,21 @@ import type {
   ChatStreamTool,
   ChatStreamView,
 } from "../hook/useChatStream";
-import type {
-  CitationToken,
-  ResourceMeta,
-  ToolCallMeta,
-  ToolResultMeta,
+import {
+  stringValue,
+  type CitationToken,
+  type ResourceMeta,
+  type ToolCallMeta,
+  type ToolResultMeta,
 } from "../types";
 import { readPlotSpec } from "../plot";
 import { MarkdownBody } from "./MarkdownBody";
 import { PlotBlock } from "./PlotBlock";
 import { ResourceCard } from "./ResourceCard";
 import { ToolCallCard } from "./ToolCallCard";
+import { ToolDiagnostics, type ToolDiagnosticItem } from "./ToolDiagnostics";
 import { UserMarginalia } from "./UserMarginalia";
-import { finishReasonTone } from "./status";
+import { finishReasonTone, isToolFailure } from "./status";
 
 interface StreamingTurnProps {
   readonly stream: ChatStreamView;
@@ -75,6 +77,20 @@ export const StreamingTurn = memo(function StreamingTurn({
 }: StreamingTurnProps) {
   const { t, formatNumber } = useI18n();
   const total = stream.usage.total_tokens;
+  const failures: ToolDiagnosticItem[] = [];
+  const visibleTools = stream.toolCalls.filter((tool) => {
+    if (!isToolFailure(tool.status)) {
+      return true;
+    }
+    failures.push({
+      id: tool.id,
+      name: tool.name,
+      status: tool.status,
+      errorCode: tool.errorCode,
+      detail: stringValue(tool.data?.detail),
+    });
+    return false;
+  });
 
   let liveBody: ReactNode = null;
   if (stream.status === "waiting") {
@@ -133,9 +149,9 @@ export const StreamingTurn = memo(function StreamingTurn({
           ) : null}
         </header>
 
-        {stream.toolCalls.length > 0 ? (
+        {visibleTools.length > 0 ? (
           <div className="chat-tool-flow">
-            {stream.toolCalls.map((tool, index) => (
+            {visibleTools.map((tool, index) => (
               <div className="chat-stream-tool" key={tool.id}>
                 <ToolCallCard
                   call={asCall(tool)}
@@ -159,6 +175,8 @@ export const StreamingTurn = memo(function StreamingTurn({
         ) : null}
 
         {liveBody}
+
+        <ToolDiagnostics items={failures} />
 
         {stream.pageContextKey !== null && stream.runId !== null ? (
           <p className="chat-context-live">

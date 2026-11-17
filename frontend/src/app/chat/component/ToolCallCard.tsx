@@ -15,6 +15,17 @@ interface ToolCallCardProps {
 }
 
 function argumentSummary(call: ToolCallMeta, noArguments: string): string {
+  if (call.name === "render_plot") {
+    const title = call.arguments?.title;
+    const caption = call.arguments?.caption;
+    if (typeof title === "string" && title.trim().length > 0) {
+      return title.trim();
+    }
+    if (typeof caption === "string" && caption.trim().length > 0) {
+      return caption.trim();
+    }
+    return noArguments;
+  }
   if (call.arguments) {
     const first = Object.entries(call.arguments)[0];
     if (first) {

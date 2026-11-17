@@ -200,8 +200,7 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "layout.updatemenus, layout.sliders, layout.template, external "
             "URLs, or map/geo traces. Call render_plot at most once per assistant "
             "turn. After it succeeds, explain the chart in text; do not call it "
-            "again for the same request. Always pass a complete figure; never "
-            "summarize it with a placeholder such as figure_summary."
+            "again for the same request. Always pass a complete figure."
         ),
         args_model=RenderPlotArgs,
     ),
@@ -249,23 +248,19 @@ def tool_catalog() -> list[dict[str, Any]]:
     ]
 
 
-def model_arguments_for_storage(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    """Remove display-only payloads before an argument reaches the provider context.
+def display_arguments(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """Return the human-readable argument form shown by the UI.
 
-    A figure is UI state, not reasoning state. Persisting it verbatim in the
-    assistant tool call would put the whole figure back into every later
-    provider request, so only the title, caption, and a trace count survive.
-    The complete figure is stored once, in ``agent_entry.data.plot.figure``.
+    A figure is UI state, not reasoning state. The complete figure travels in
+    the tool result's ``plot.figure``; the tool-call and tool-result display
+    payloads only need the title and caption. Other tools keep their arguments
+    unchanged.
     """
     if name != PLOT_TOOL_NAME:
         return arguments
-    figure = arguments.get("figure")
-    raw_data = figure.get("data") if isinstance(figure, dict) else None
-    trace_count = len(raw_data) if isinstance(raw_data, list) else 0
     return {
         "title": arguments.get("title"),
         "caption": arguments.get("caption"),
-        "figure_summary": {"traces": trace_count},
     }
 
 
