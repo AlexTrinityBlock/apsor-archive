@@ -28,6 +28,12 @@ from app.module.agent.domain.agent_domain import (
 from app.module.agent.domain.tool_catalog import PLOT_TOOL_NAME
 from app.module.agent.domain.xml_domain import attributes
 
+# A kept render_plot call replays its figure only up to this encoded size. This
+# is a provider-context budget, not a storage limit: a larger figure would cost
+# roughly 10k+ tokens on every request of the run and can trigger compaction, so
+# the display form alone is replayed instead.
+PLOT_CONTEXT_MAX_BYTES = 32_768
+
 
 def build_context(
     entries: Sequence[TranscriptEntry],
@@ -204,6 +210,7 @@ def _contributions(
     contributions: list[tuple[TranscriptEntry, list[dict[str, Any]]]] = []
     tool_results: dict[str, dict[str, Any]] = {}
     source_entry_ids: list[int] = []
+    plot_figures = _plot_figures(entries)
 
     for entry in entries:
         if entry.kind == KIND_SYSTEM:
@@ -239,6 +246,7 @@ def _contributions(
                 entry_run_id=entry.by_run_id,
                 keep_plot_run_id=keep_plot_run_id,
             )
+            _restore_plot_figure(message, plot_figures)
             if _is_empty_assistant(message):
                 continue
             normal.append(message)
@@ -288,6 +296,98 @@ def _drop_historical_plot_calls(
         message["tool_calls"] = kept
     else:
         message.pop("tool_calls", None)
+
+
+def _plot_figures(entries: Sequence[TranscriptEntry]) -> dict[str, dict[str, Any]]:
+    """Map each successful render_plot call id to its stored figure.
+
+    The tool result is the only place a figure is persisted. Historical calls
+    are removed before this map is used, so only the active run can replay one.
+    """
+    figures: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if entry.kind != KIND_TOOL_RESULT:
+            continue
+        data = entry.data if isinstance(entry.data, dict) else {}
+        if data.get("status") != "ok":
+            continue
+        plot = data.get("plot")
+        if not isinstance(plot, dict):
+            continue
+        figure = plot.get("figure")
+        if not isinstance(figure, dict):
+            continue
+        for message in entry.messages:
+            call_id = message.get("tool_call_id")
+            if message.get("role") == "tool" and isinstance(call_id, str):
+                figures.setdefault(call_id, figure)
+    return figures
+
+
+def _restore_plot_figure(
+    message: dict[str, Any],
+    figures: Mapping[str, dict[str, Any]],
+) -> None:
+    """Normalize a kept render_plot call and rehydrate its stored figure.
+
+    The persisted assistant call holds only title and caption, so the provider
+    would otherwise see no figure for the run that rendered it. Rows written
+    before that rule are normalized here as well. Oversized or missing figures
+    stay display-only; no placeholder is invented.
+    """
+    if message.get("role") != "assistant":
+        return
+    for call in _tool_calls(message):
+        if _call_name(call) != PLOT_TOOL_NAME:
+            continue
+        call_id = call.get("id")
+        if not isinstance(call_id, str):
+            continue
+        function = call.get("function")
+        if not isinstance(function, dict):
+            continue
+        arguments = _parsed_arguments(function.get("arguments"))
+        if arguments is None:
+            continue
+        display: dict[str, Any] = {
+            "title": arguments.get("title"),
+            "caption": arguments.get("caption"),
+        }
+        figure = figures.get(call_id)
+        if figure is not None:
+            size = _encoded_size(figure)
+            if size is not None and size <= PLOT_CONTEXT_MAX_BYTES:
+                display["figure"] = figure
+        function["arguments"] = json.dumps(
+            display,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+
+def _encoded_size(figure: Mapping[str, Any]) -> int | None:
+    """Return the UTF-8 size of the figure's canonical JSON, or None."""
+    try:
+        encoded = json.dumps(
+            figure, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    except (TypeError, ValueError):
+        return None
+    return len(encoded)
+
+
+def _parsed_arguments(raw: object) -> dict[str, Any] | None:
+    """Return tool-call arguments as an object, or None when unparseable."""
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str):
+        return None
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _is_empty_assistant(message: Mapping[str, Any]) -> bool:

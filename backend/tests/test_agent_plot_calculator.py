@@ -19,7 +19,7 @@ from app.module.agent.domain.agent_domain import (
     KIND_USER,
     TranscriptEntry,
 )
-from app.module.agent.domain.context_domain import build_context
+from app.module.agent.domain.context_domain import PLOT_CONTEXT_MAX_BYTES, build_context
 from app.module.agent.domain.plot_spec_domain import PlotSpecError, sanitize_plot_figure
 from app.module.agent.protocol.chat_generator_protocol import ChatResult, ChatToolCall
 from app.module.agent.test.fake_chat_generator import (
@@ -246,15 +246,18 @@ def test_render_plot_persists_figure_and_hides_historical_calls(
     # Tool-result and tool_start payloads carry the display form only.
     assert data["arguments"] == PLOT_ARGUMENTS_DISPLAY
 
-    # The persisted assistant call keeps the real provider arguments.
+    # The persisted assistant call keeps display arguments only; the figure is
+    # stored once, in the tool result row.
     assistant_entry = _assistant_tool_call_entry(body["entries"], "render_plot")
     raw_arguments = assistant_entry["model"][0]["tool_calls"][0]["function"]["arguments"]
     assert json.loads(raw_arguments) == {
         "title": PLOT_TITLE,
         "caption": PLOT_CAPTION,
-        "figure": PLOT_FIGURE,
     }
-    assert "Jan" in raw_arguments
+    assert "Jan" not in raw_arguments
+    persisted_model = json.dumps(assistant_entry["model"], ensure_ascii=False)
+    assert '"figure"' not in persisted_model
+    assert '"figure_summary"' not in persisted_model
 
     # The current run still sees the chart call and its result.
     assert len(fake.requests) == 2
@@ -300,6 +303,7 @@ def _plot_call_entries(
     by_run_id: int | None,
     with_result: bool = True,
     result_status: str = "ok",
+    figure: dict[str, Any] | None = None,
 ) -> tuple[TranscriptEntry, ...]:
     """Build one user turn plus a render_plot call and optional result."""
     entries: list[TranscriptEntry] = [
@@ -324,12 +328,15 @@ def _plot_call_entries(
         ),
     ]
     if with_result:
+        result_data: dict[str, Any] = {"status": result_status, "error_code": None}
+        if figure is not None:
+            result_data["plot"] = {"figure": figure}
         entries.append(
             TranscriptEntry(
                 id=3,
                 kind=KIND_TOOL_RESULT,
                 by_run_id=by_run_id,
-                data={"status": result_status, "error_code": None},
+                data=result_data,
                 messages=(
                     {
                         "role": "tool",
@@ -345,18 +352,11 @@ def _plot_call_entries(
 
 def test_historical_plot_call_is_removed_without_a_note() -> None:
     """A plot from an earlier run leaves only the message's own text."""
-    arguments = json.dumps(
-        {
-            "title": PLOT_TITLE,
-            "caption": PLOT_CAPTION,
-            "figure": PLOT_FIGURE,
-        },
-        sort_keys=True,
-    )
     entries = _plot_call_entries(
         content="Here is the chart.",
-        plot_arguments=arguments,
+        plot_arguments=json.dumps(PLOT_ARGUMENTS_DISPLAY, sort_keys=True),
         by_run_id=1,
+        figure=PLOT_FIGURE,
     )
 
     context = build_context(entries, keep_plot_run_id=2)
@@ -368,25 +368,20 @@ def test_historical_plot_call_is_removed_without_a_note() -> None:
     payload = json.dumps(context.messages, ensure_ascii=False)
     assert "render_plot" not in payload
     assert "call_plot_history" not in payload
+    assert PLOT_TITLE not in payload
+    assert "Jan" not in payload
     assert "Rendered a chart" not in payload
     assert "earlier step" not in payload
     assert "omitted from history" not in payload
 
 
 def test_current_run_plot_call_and_result_are_kept() -> None:
-    """The run that rendered the chart still sees its call and result."""
-    arguments = json.dumps(
-        {
-            "title": PLOT_TITLE,
-            "caption": PLOT_CAPTION,
-            "figure": PLOT_FIGURE,
-        },
-        sort_keys=True,
-    )
+    """The run that rendered the chart still sees its call, figure, and result."""
     entries = _plot_call_entries(
         content="Here is the chart.",
-        plot_arguments=arguments,
+        plot_arguments=json.dumps(PLOT_ARGUMENTS_DISPLAY, sort_keys=True),
         by_run_id=7,
+        figure=PLOT_FIGURE,
     )
 
     context = build_context(entries, keep_plot_run_id=7)
@@ -399,9 +394,135 @@ def test_current_run_plot_call_and_result_are_kept() -> None:
     assistant = context.messages[1]
     assert assistant["content"] == "Here is the chart."
     assert [call["id"] for call in assistant["tool_calls"]] == ["call_plot_history"]
+    raw_arguments = assistant["tool_calls"][0]["function"]["arguments"]
+    arguments = json.loads(raw_arguments)
+    assert arguments == {**PLOT_ARGUMENTS_DISPLAY, "figure": PLOT_FIGURE}
+    assert arguments["figure"] == PLOT_FIGURE
+    # The provider string is deterministic so the cache prefix stays stable.
+    assert raw_arguments == json.dumps(
+        arguments,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     assert context.messages[2]["tool_call_id"] == "call_plot_history"
     payload = json.dumps(context.messages, ensure_ascii=False)
     assert "Rendered a chart" not in payload
+
+
+def _figure_of_bytes(size: int) -> dict[str, Any]:
+    """Build a figure whose canonical JSON encoding is exactly ``size`` bytes."""
+    base = {"data": [{"type": "bar", "name": ""}]}
+    base_size = len(
+        json.dumps(base, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    )
+    figure = {"data": [{"type": "bar", "name": "x" * (size - base_size)}]}
+    encoded = json.dumps(
+        figure, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    assert len(encoded) == size
+    return figure
+
+
+@pytest.mark.parametrize(
+    ("size", "rehydrated"),
+    [
+        (PLOT_CONTEXT_MAX_BYTES, True),
+        (PLOT_CONTEXT_MAX_BYTES + 1, False),
+    ],
+)
+def test_plot_context_budget_boundary(size: int, rehydrated: bool) -> None:
+    """The figure is replayed at the byte cap and dropped just above it."""
+    figure = _figure_of_bytes(size)
+    entries = _plot_call_entries(
+        content="Here is the chart.",
+        plot_arguments=json.dumps(PLOT_ARGUMENTS_DISPLAY, sort_keys=True),
+        by_run_id=3,
+        figure=figure,
+    )
+
+    context = build_context(entries, keep_plot_run_id=3)
+
+    assert [message["role"] for message in context.messages] == [
+        "user",
+        "assistant",
+        "tool",
+    ]
+    assistant = context.messages[1]
+    assert [call["id"] for call in assistant["tool_calls"]] == ["call_plot_history"]
+    arguments = json.loads(assistant["tool_calls"][0]["function"]["arguments"])
+    if rehydrated:
+        assert arguments["figure"] == figure
+    else:
+        # Oversized figures keep the display form. No error and no note.
+        assert arguments == PLOT_ARGUMENTS_DISPLAY
+        assert "figure" not in arguments
+    payload = json.dumps(context.messages, ensure_ascii=False)
+    assert "omitted" not in payload
+    assert "too large" not in payload
+
+
+@pytest.mark.parametrize(
+    ("with_result", "result_status", "figure"),
+    [
+        pytest.param(False, "ok", None, id="missing-result"),
+        pytest.param(True, "error", None, id="failed-result"),
+        pytest.param(True, "ok", None, id="missing-figure"),
+    ],
+)
+def test_plot_call_without_a_stored_figure_keeps_display_arguments(
+    with_result: bool,
+    result_status: str,
+    figure: dict[str, Any] | None,
+) -> None:
+    """A missing or failed figure leaves the display form, with no placeholder."""
+    entries = _plot_call_entries(
+        content="Here is the chart.",
+        plot_arguments=json.dumps(PLOT_ARGUMENTS_DISPLAY, sort_keys=True),
+        by_run_id=5,
+        with_result=with_result,
+        result_status=result_status,
+        figure=figure,
+    )
+
+    context = build_context(entries, keep_plot_run_id=5)
+
+    assistant = context.messages[1]
+    assert [call["id"] for call in assistant["tool_calls"]] == ["call_plot_history"]
+    arguments = json.loads(assistant["tool_calls"][0]["function"]["arguments"])
+    assert arguments == PLOT_ARGUMENTS_DISPLAY
+    assert "figure" not in arguments
+    assert "figure_summary" not in arguments
+
+
+def test_active_plot_call_ignores_a_non_object_figure() -> None:
+    """A figure that is not an object is not rehydrated into the call."""
+    entries = _plot_call_entries(
+        content="Here is the chart.",
+        plot_arguments=json.dumps(PLOT_ARGUMENTS_DISPLAY, sort_keys=True),
+        by_run_id=5,
+        figure=None,
+    )
+    entries = (
+        entries[0],
+        entries[1],
+        TranscriptEntry(
+            id=3,
+            kind=KIND_TOOL_RESULT,
+            by_run_id=5,
+            data={"status": "ok", "plot": {"figure": ["not", "a", "dict"]}},
+            messages=entries[2].messages,
+        ),
+    )
+
+    context = build_context(entries, keep_plot_run_id=5)
+
+    arguments = json.loads(
+        context.messages[1]["tool_calls"][0]["function"]["arguments"]
+    )
+    assert arguments == PLOT_ARGUMENTS_DISPLAY
 
 
 def test_plot_only_message_is_dropped_when_historical() -> None:
@@ -519,6 +640,77 @@ def test_mixed_tool_batch_keeps_other_calls_and_results() -> None:
     payload = json.dumps(context.messages, ensure_ascii=False)
     assert "call_plot_mixed" not in payload
     assert "Rendered a chart in an earlier step" not in payload
+
+
+def test_active_mixed_batch_keeps_siblings_and_rehydrates_the_plot() -> None:
+    """Keeping the plot call leaves sibling calls and results untouched."""
+    plot_arguments = json.dumps(PLOT_ARGUMENTS_DISPLAY, sort_keys=True)
+    calculate = json.dumps({"expression": "1 + 1"})
+    entries = (
+        TranscriptEntry(
+            id=1,
+            kind=KIND_USER,
+            messages=({"role": "user", "content": "Chart and check."},),
+        ),
+        TranscriptEntry(
+            id=2,
+            kind=KIND_ASSISTANT,
+            by_run_id=9,
+            messages=(
+                {
+                    "role": "assistant",
+                    "content": "Checking both.",
+                    "tool_calls": [
+                        _call("call_plot_active_mixed", "render_plot", plot_arguments),
+                        _call("call_calc_active_mixed", "calculate", calculate),
+                    ],
+                },
+            ),
+        ),
+        TranscriptEntry(
+            id=3,
+            kind=KIND_TOOL_RESULT,
+            by_run_id=9,
+            data={"status": "ok", "plot": {"figure": PLOT_FIGURE}},
+            messages=(
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_plot_active_mixed",
+                    "name": "render_plot",
+                    "content": "<tool_result>plot</tool_result>",
+                },
+            ),
+        ),
+        TranscriptEntry(
+            id=4,
+            kind=KIND_TOOL_RESULT,
+            by_run_id=9,
+            data={"status": "ok"},
+            messages=(
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_calc_active_mixed",
+                    "name": "calculate",
+                    "content": "<tool_result>2</tool_result>",
+                },
+            ),
+        ),
+    )
+
+    context = build_context(entries, keep_plot_run_id=9)
+
+    assistant = context.messages[1]
+    calls = {call["id"]: call for call in assistant["tool_calls"]}
+    assert set(calls) == {"call_plot_active_mixed", "call_calc_active_mixed"}
+    plot_call = json.loads(calls["call_plot_active_mixed"]["function"]["arguments"])
+    assert plot_call["figure"] == PLOT_FIGURE
+    assert json.loads(calls["call_calc_active_mixed"]["function"]["arguments"]) == {
+        "expression": "1 + 1"
+    }
+    assert [message["tool_call_id"] for message in context.messages[2:]] == [
+        "call_plot_active_mixed",
+        "call_calc_active_mixed",
+    ]
 
 
 def test_unparseable_historical_plot_call_is_removed() -> None:
