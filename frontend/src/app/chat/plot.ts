@@ -19,6 +19,7 @@ export interface PlotSpec {
   readonly stats: {
     readonly traceCount: number;
     readonly pointCount: number;
+    readonly byteSize: number | null;
   } | null;
 }
 
@@ -64,7 +65,9 @@ function readStats(value: unknown): PlotSpec["stats"] {
   if (traceCount === null || pointCount === null) {
     return null;
   }
-  return { traceCount, pointCount };
+  const byteSize =
+    finiteNumber(record.byte_size) ?? finiteNumber(record.byteSize);
+  return { traceCount, pointCount, byteSize };
 }
 
 function readFigure(value: unknown): PlotSpec["figure"] | null {

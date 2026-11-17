@@ -40,7 +40,6 @@ from app.module.agent.domain.tool_args import (
     WebSearchArgs,
 )
 from app.module.agent.domain.tool_catalog import (
-    PLOT_TOOL_NAME,
     TOOL_SPECS,
     ToolSpec,
     tool_catalog,
@@ -84,13 +83,6 @@ WEB_RESULT_CONTENT_LIMIT = 2_000
 
 WEB_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
 COMPRESSED_VIEW = "compressed"
-PLOT_FIGURE_REQUIRED_DETAIL = (
-    "This call is a redaction placeholder copied from an earlier turn, not a "
-    "chart request. figure_summary is never a valid render_plot argument, and "
-    "the original figure is not available here. Call render_plot once with a "
-    "complete figure object (figure.data and optional figure.layout), or answer "
-    "in text without a chart."
-)
 
 _SPECS: dict[str, ToolSpec] = {spec.name: spec for spec in TOOL_SPECS}
 
@@ -140,13 +132,6 @@ class AgentToolRegistry:
                 parse_error,
                 _elapsed_ms(started),
             )
-        if _is_plot_redaction_placeholder(name, arguments):
-            return None, _error(
-                name,
-                "plot_figure_required",
-                PLOT_FIGURE_REQUIRED_DETAIL,
-                _elapsed_ms(started),
-            )
         try:
             parsed = spec.args_model.model_validate(arguments)
         except ValidationError as exc:
@@ -190,13 +175,6 @@ class AgentToolRegistry:
                 name,
                 "invalid_tool_arguments",
                 parse_error,
-                _elapsed_ms(started),
-            )
-        if _is_plot_redaction_placeholder(name, arguments):
-            return _error(
-                name,
-                "plot_figure_required",
-                PLOT_FIGURE_REQUIRED_DETAIL,
                 _elapsed_ms(started),
             )
         try:
@@ -269,26 +247,6 @@ class AgentToolRegistry:
         else:
             payload["truncated"] = tool_truncated
         return ToolOutcome(content=bounded, data=payload, resource=resource)
-
-
-def _is_plot_redaction_placeholder(
-    name: str,
-    arguments: Mapping[str, Any],
-) -> bool:
-    """Return whether a render_plot call only carries the stored redaction shape.
-
-    The assistant message replayed to the provider deliberately replaces a past
-    figure with ``figure_summary``. A model can copy that shape into a fresh
-    call, so the registry answers it with a targeted correction instead of the
-    generic Pydantic dump. A real, non-empty figure still goes to validation,
-    even if a stray summary key is present.
-    """
-    if name != PLOT_TOOL_NAME:
-        return False
-    if "figure_summary" not in arguments and "arguments" not in arguments:
-        return False
-    figure = arguments.get("figure")
-    return not (isinstance(figure, dict) and figure)
 
 
 async def _dispatch(
@@ -931,10 +889,9 @@ async def _render_plot(
     """Sanitize one figure and keep the full plot out of the provider content.
 
     The provider only sees a short receipt that states the chart is already
-    visible and explains why historical calls are summarized. The complete figure
-    travels in ``data.plot.figure``, which the UI renders and the provider never
-    reads. ``plot_limits`` comes from the runtime snapshot, so the budgets can
-    change without editing code.
+    visible. The complete figure travels in ``data.plot.figure``, which the UI
+    renders and the provider never reads. ``plot_limits`` comes from the runtime
+    snapshot, so the budgets can change without editing code.
     """
     sanitized = sanitize_plot_figure(
         args.figure.model_dump(exclude_none=True),
@@ -954,10 +911,8 @@ async def _render_plot(
     content = (
         _open("plot_rendered", receipt_values)
         + "The chart is already rendered and visible to the user. Do not call "
-        "render_plot again for this request. Historical render_plot calls are "
-        "stored with a compact summary instead of the full figure to save context; "
-        "this is intentional, not an omission. Never send figure_summary as an "
-        "argument. Reply with a one- or two-sentence explanation of the chart."
+        "render_plot again for this request. Reply with a one- or two-sentence "
+        "explanation of the chart."
     )
     if sanitized.grid_rows is not None and sanitized.grid_columns is not None:
         content += (
