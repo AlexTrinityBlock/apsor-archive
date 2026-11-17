@@ -2453,10 +2453,17 @@ def _assistant_message(result: ChatResult) -> dict[str, Any]:
 
 
 def _arguments_json(call: ChatToolCall) -> str:
+    """Serialize one persisted assistant call with display-only arguments.
+
+    A render_plot figure is stored once, in the tool result's
+    ``data.plot.figure``. The assistant message keeps only the title and
+    caption, and the provider projection restores the figure for the run that
+    rendered it. Other tools persist their full arguments.
+    """
     if call.parse_error is not None and call.raw_arguments:
         return call.raw_arguments
     return json.dumps(
-        call.arguments,
+        display_arguments(call.name, call.arguments),
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
