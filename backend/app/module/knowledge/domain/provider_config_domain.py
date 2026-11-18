@@ -85,7 +85,7 @@ WEB_SEARCH_TABLE_SPEC = ProviderTableSpec(
     title="Web search",
     description="Read-only search providers used by the agent's web_search tool.",
     model=WebSearchProviderConfigModel,
-    allowed_providers=frozenset({"tavily", "exa", "none"}),
+    allowed_providers=frozenset({"tavily", "exa", "deepseek", "none"}),
     keyless_providers=frozenset({"none"}),
     default_base_url="https://api.tavily.com",
     supports_model=False,
@@ -93,6 +93,7 @@ WEB_SEARCH_TABLE_SPEC = ProviderTableSpec(
     default_base_urls={
         "tavily": "https://api.tavily.com",
         "exa": "https://api.exa.ai",
+        "deepseek": "https://api.deepseek.com",
         "none": None,
     },
 )
@@ -102,7 +103,7 @@ WEB_FETCH_TABLE_SPEC = ProviderTableSpec(
     title="Web fetch",
     description="Read-only page-fetch providers used by the agent's web_fetch tool.",
     model=WebFetchProviderConfigModel,
-    allowed_providers=frozenset({"tavily", "exa", "none"}),
+    allowed_providers=frozenset({"tavily", "exa", "deepseek", "none"}),
     keyless_providers=frozenset({"none"}),
     default_base_url="https://api.tavily.com",
     supports_model=False,
@@ -110,6 +111,7 @@ WEB_FETCH_TABLE_SPEC = ProviderTableSpec(
     default_base_urls={
         "tavily": "https://api.tavily.com",
         "exa": "https://api.exa.ai",
+        "deepseek": "https://api.deepseek.com",
         "none": None,
     },
 )

@@ -300,7 +300,7 @@ def get_agent_service(
 
 def _available_web_provider(config: ProviderConfig) -> str:
     """Return a web provider only when it is active and has a usable key."""
-    if config.enabled and config.api_key and config.provider in {"tavily", "exa"}:
+    if config.enabled and config.api_key and config.provider in {"tavily", "exa", "deepseek"}:
         return config.provider
     return "none"
 

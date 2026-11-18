@@ -2519,7 +2519,7 @@ def _output_limit_text(max_output_tokens: int) -> str:
 
 def _web_provider_name(value: str) -> str:
     """Keep only an available web provider name in the status block."""
-    return value if value in {"tavily", "exa"} else "none"
+    return value if value in {"tavily", "exa", "deepseek"} else "none"
 
 
 def _plot_title_key(arguments: Mapping[str, Any]) -> str | None:
