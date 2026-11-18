@@ -11,6 +11,7 @@ from app.module.web_research.exception.domain_error import (
     WebFetchNotConfiguredError,
     WebProviderError,
     WebSearchNotConfiguredError,
+    WebUsageLimitExceededError,
 )
 from app.module.web_research.protocol.web_cache_protocol import (
     JsonValue,
@@ -23,6 +24,7 @@ from app.module.web_research.protocol.web_client_protocol import (
 from app.module.web_research.protocol.web_provider_config_protocol import (
     WebProviderConfigProtocol,
 )
+from app.module.web_research.protocol.web_quota_protocol import WebQuotaProtocol
 from app.module.web_research.schema.web_research_schema import (
     WebFetchResponse,
     WebSearchHit,
@@ -78,12 +80,14 @@ class WebResearchService:
         search_ttl_seconds: int = 900,
         fetch_ttl_seconds: int = 3_600,
         fetch_max_chars: int = _DEFAULT_FETCH_MAX_CHARS,
+        quota: WebQuotaProtocol | None = None,
     ) -> None:
         self._search_config = search_config
         self._fetch_config = fetch_config
         self._search_client = search_client
         self._fetch_client = fetch_client
         self._cache = cache
+        self._quota = quota
         self._search_ttl_seconds = search_ttl_seconds
         self._fetch_ttl_seconds = fetch_ttl_seconds
         # A page must always be able to hold one wrapped line. The default
@@ -141,6 +145,8 @@ class WebResearchService:
         # be returned even if no key is configured at the moment.
         if not _is_ready(self._search_config, self._search_client):
             raise WebSearchNotConfiguredError()
+        if self._quota is not None and not await self._quota.web_search_allowed():
+            raise WebUsageLimitExceededError("web search")
 
         response = await self._search_client.search(
             normalized_query,
@@ -150,6 +156,10 @@ class WebResearchService:
             exclude_domains=exclude,
             objective=normalized_objective,
         )
+        if self._quota is not None:
+            # The provider was called (even if it returned zero results), so it
+            # consumed one allowance unit. Cache hits returned above are free.
+            await self._quota.record_web_search()
         hits: list[WebSearchHit] = []
         truncated = response.truncated
         for hit in response.results:
@@ -222,6 +232,8 @@ class WebResearchService:
 
         if not _is_ready(self._fetch_config, self._fetch_client):
             raise WebFetchNotConfiguredError()
+        if self._quota is not None and not await self._quota.web_fetch_allowed():
+            raise WebUsageLimitExceededError("web fetch")
 
         # Fetch the complete content from the provider only once; the client's
         # max_chars is a hint for the full-text limit, and the actual paging is done
@@ -233,6 +245,11 @@ class WebResearchService:
         content = _normalize_fetch_text(response.content)
         if not content.strip():
             raise WebProviderError("the page produced no extractable text")
+        if self._quota is not None:
+            # Only a provider call that produced text consumes one unit; an
+            # empty extraction records nothing and is reported as a provider
+            # error. A cache hit returned above never reaches this point.
+            await self._quota.record_web_fetch()
         source_truncated = response.truncated
         if len(content) > _MAX_FETCH_CACHE_CHARS:
             content = content[:_MAX_FETCH_CACHE_CHARS]

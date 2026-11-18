@@ -184,6 +184,18 @@ class EmbeddingProviderError(KnowledgeError):
         self.status_code = status_code
 
 
+class EmbeddingUsageLimitExceededError(KnowledgeError):
+    """Strict ingestion cannot embed because the account allowance is spent."""
+
+    DETAIL = (
+        "The account has reached its embedding token allowance. "
+        "Ask the administrator to top it up or reset it."
+    )
+
+    def __init__(self) -> None:
+        super().__init__(self.DETAIL)
+
+
 class TreePathConflictError(KnowledgeError):
     def __init__(self, path: str) -> None:
         super().__init__(f"Path {path} is already occupied by a different node kind.")

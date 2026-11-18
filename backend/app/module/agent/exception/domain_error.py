@@ -69,6 +69,18 @@ class AgentOutputLimitError(AgentError):
         )
 
 
+class AgentUsageLimitExceededError(AgentError):
+    """The account's chat token allowance is disabled or fully consumed."""
+
+    DETAIL = (
+        "The account has reached its chat token allowance. "
+        "Ask the administrator to top it up or reset it."
+    )
+
+    def __init__(self) -> None:
+        super().__init__(self.DETAIL)
+
+
 class AgentInvalidEntryError(AgentError):
     def __init__(self, detail: str) -> None:
         super().__init__(detail)

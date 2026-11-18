@@ -1,6 +1,10 @@
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
-import type { AccountSchema } from "../../generated-apis-types/schemas";
+import type {
+  AccountQuotaSchema,
+  AccountSchema,
+} from "../../generated-apis-types/schemas";
+import type { TranslationKey } from "../../i18n";
 import { useI18n } from "../../i18n";
 import type { AccountAction } from "./ConfirmAccountActionDialog";
 import "../accounts.css";
@@ -9,7 +13,15 @@ interface AccountCardProps {
   readonly account: AccountSchema;
   readonly currentUserId: number | null;
   readonly onAction: (action: AccountAction, account: AccountSchema) => void;
+  readonly onManageQuotas: (account: AccountSchema) => void;
 }
+
+const QUOTA_LABEL_KEYS = {
+  chat: "core.accounts.quotaChat",
+  embedding: "core.accounts.quotaEmbedding",
+  web_search: "core.accounts.quotaWebSearch",
+  web_fetch: "core.accounts.quotaWebFetch",
+} as const satisfies Record<string, TranslationKey>;
 
 function initialsFor(name: string): string {
   return Array.from(name.trim()).slice(0, 2).join("").toUpperCase() || "?";
@@ -24,6 +36,7 @@ export function AccountCard({
   account,
   currentUserId,
   onAction,
+  onManageQuotas,
 }: AccountCardProps) {
   const { t, formatDateTime, formatNumber } = useI18n();
   const isCurrent = account.user_id === currentUserId;
@@ -179,6 +192,30 @@ export function AccountCard({
         </p>
       </section>
 
+      <section
+        className="account-card__quotas"
+        aria-label={t("core.accounts.quotasTitle")}
+      >
+        <div className="account-card__quotas-head">
+          <h3 className="account-card__quotas-title">
+            {t("core.accounts.quotasTitle")}
+          </h3>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => onManageQuotas(account)}
+          >
+            {t("core.accounts.quotasManage")}
+          </Button>
+        </div>
+        <ul className="account-card__quota-list">
+          {account.quotas.map((quota) => (
+            <QuotaRow key={quota.category} quota={quota} />
+          ))}
+        </ul>
+      </section>
+
       {isCurrent || isRoot ? null : (
         <div className="account-card__actions">
           {canImpersonate ? (
@@ -221,5 +258,69 @@ export function AccountCard({
         </div>
       )}
     </article>
+  );
+}
+
+interface QuotaRowProps {
+  readonly quota: AccountQuotaSchema;
+}
+
+/** One allowance category: switch state, current/granted usage, and base. */
+function QuotaRow({ quota }: QuotaRowProps) {
+  const { t, formatNumber } = useI18n();
+  const granted = quota.granted;
+  const unlimited = granted === null;
+  let percent = 0;
+  if (granted !== null) {
+    if (granted === 0) {
+      percent = quota.used > 0 ? 100 : 0;
+    } else {
+      percent = Math.min(100, (quota.used / granted) * 100);
+    }
+  }
+  const grantedLabel = unlimited
+    ? t("core.accounts.quotaUnlimited")
+    : formatNumber(granted);
+  const label = t(QUOTA_LABEL_KEYS[quota.category]);
+
+  return (
+    <li className="account-card__quota">
+      <div className="account-card__quota-head">
+        <span className="account-card__quota-name">{label}</span>
+        <Badge tone={quota.enabled ? "moss" : "neutral"} dot>
+          {quota.enabled
+            ? t("core.accounts.quotaAllowed")
+            : t("core.accounts.quotaBlocked")}
+        </Badge>
+        <span className="account-card__quota-value">
+          {formatNumber(quota.used)} / {grantedLabel}
+        </span>
+      </div>
+      <div
+        className="account-card__quota-track"
+        role="img"
+        aria-label={t("core.accounts.quotaUsageAria", {
+          category: label,
+          used: formatNumber(quota.used),
+          granted: grantedLabel,
+        })}
+      >
+        <span
+          className={[
+            "account-card__quota-fill",
+            quota.enabled ? null : "is-blocked",
+            unlimited ? "is-unlimited" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="account-card__quota-base">
+        {t("core.accounts.quotaBeforeReset", {
+          value: formatNumber(quota.used_before_reset),
+        })}
+      </p>
+    </li>
   );
 }

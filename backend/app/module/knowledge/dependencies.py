@@ -35,6 +35,7 @@ from app.infrastructure.database.session import (
     system_session,
 )
 from app.module.auth.schema.auth_schema import UserSchema
+from app.module.auth.service.quota_service import AccountQuotaService
 from app.module.knowledge.domain.ingest_config_domain import (
     IngestRuntimeConfig,
     normalize_vision_description_language,
@@ -242,6 +243,7 @@ def build_file_service(
         embedding_retry_seconds=settings.ingest_embedding_retry_seconds,
         fail_on_embedding_error=fail_on_embedding_error,
         embedding_refresh=embedding_refresh,
+        quota=AccountQuotaService(cast(Database, state.db), user_id),
     )
     return FileService(
         user_id=user_id,

@@ -25,6 +25,7 @@ from app.module.agent.exception.domain_error import (
     AgentRunNotFoundError,
     AgentRunNotRetryableError,
     AgentSystemPromptNotFoundError,
+    AgentUsageLimitExceededError,
     SavedQuestionNotFoundError,
 )
 from app.shared.exception.registry import ExceptionRegistry
@@ -76,6 +77,11 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(AgentRunNotRetryableError, 409, "agent_run_not_retryable")
     ExceptionRegistry.register(AgentRunNotActiveError, 409, "agent_run_not_active")
     ExceptionRegistry.register(AgentNotConfiguredError, 503, "agent_not_configured")
+    ExceptionRegistry.register(
+        AgentUsageLimitExceededError,
+        429,
+        "usage_limit_exceeded",
+    )
     ExceptionRegistry.register(AgentProviderError, 502, "agent_provider_error")
     ExceptionRegistry.register(AgentInvalidEntryError, 422, "agent_invalid_entry")
     ExceptionRegistry.register(

@@ -337,6 +337,10 @@ const RETRY_LIMIT_CODES = new Set([
   "tool_result_budget_exhausted",
 ]);
 
+// A usage allowance cannot be fixed by retrying the same turn; an
+// administrator must top up or reset it first.
+const NON_RETRYABLE_ASSISTANT_CODES = new Set(["usage_limit_exceeded"]);
+
 function latestUserEntry(entries: readonly AgentEntrySchema[]): {
   readonly index: number;
   readonly text: string;
@@ -383,6 +387,12 @@ function assistantRetryState(
   const meta = readAssistantMeta(entry);
   const finishReason = meta.finishReason?.toLowerCase() ?? "";
   if (!RETRY_FINISH_REASONS.has(finishReason)) {
+    return null;
+  }
+  if (
+    meta.error?.code !== undefined &&
+    NON_RETRYABLE_ASSISTANT_CODES.has(meta.error.code.toLowerCase())
+  ) {
     return null;
   }
   return {

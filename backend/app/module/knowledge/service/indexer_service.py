@@ -2,13 +2,20 @@
 
 import asyncio
 import logging
+import math
 from collections.abc import Awaitable, Callable, Sequence
 
 from app.module.knowledge.domain.chunking_domain import ChunkDraft
-from app.module.knowledge.exception.domain_error import EmbeddingProviderError
+from app.module.knowledge.exception.domain_error import (
+    EmbeddingProviderError,
+    EmbeddingUsageLimitExceededError,
+)
 from app.module.knowledge.model.chunk_model import ChunkModel
 from app.module.knowledge.protocol.chunk_repository_protocol import ChunkRepositoryProtocol
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
+from app.module.knowledge.protocol.embedding_quota_protocol import (
+    EmbeddingQuotaProtocol,
+)
 from app.shared.text.ngram import term_frequencies
 
 logger = logging.getLogger(__name__)
@@ -20,6 +27,21 @@ EmbeddingRefresh = Callable[[], Awaitable[EmbedderProtocol]]
 # Only an authentication failure can be fixed by reloading the provider
 # configuration; every other status keeps the ordinary bounded retry.
 _AUTH_STATUS_CODES = frozenset({401, 403})
+
+
+def estimate_embedding_units(drafts: Sequence[ChunkDraft]) -> int:
+    """Conservatively estimate the provider tokens one batch will consume.
+
+    The estimate is deliberately not provider billing: it takes the larger of
+    the chunker's token count and ``ceil(characters / 4)`` per draft, then sums
+    the call. Four characters per token is a common conservative heuristic for
+    mixed Latin/CJK text; an actual provider tokenizer may differ by a small
+    margin.
+    """
+    return sum(
+        max(draft.token_count, math.ceil(draft.char_count / 4))
+        for draft in drafts
+    )
 
 
 class IndexerService:
@@ -51,6 +73,7 @@ class IndexerService:
         embedding_retry_seconds: float = 0.25,
         fail_on_embedding_error: bool = False,
         embedding_refresh: EmbeddingRefresh | None = None,
+        quota: EmbeddingQuotaProtocol | None = None,
     ) -> None:
         self.chunk_repository = chunk_repository
         self.embedder = embedder
@@ -62,6 +85,7 @@ class IndexerService:
         self.embedding_retry_seconds = max(0.0, embedding_retry_seconds)
         self.fail_on_embedding_error = fail_on_embedding_error
         self.embedding_refresh = embedding_refresh
+        self.quota = quota
         self._embedding_refresh_lock = asyncio.Lock()
         # Concurrent embedding batches within one job share this flag: the
         # first 401/403 reloads the provider once, and every later batch reuses
@@ -72,6 +96,44 @@ class IndexerService:
         if self.fail_on_embedding_error:
             raise exc
         logger.warning("Embedding provider failed; indexing text only: %s", exc)
+
+    async def _embeddings_allowed(self, drafts: Sequence[ChunkDraft]) -> bool:
+        """Ask the account allowance before any provider call is scheduled.
+
+        Strict callers (durable ingestion) fail the whole job before staging
+        any row. Foreground callers keep the archive usable by persisting
+        text-only chunks; keyword/BM25 search still works.
+        """
+        if self.quota is None:
+            return True
+        units = estimate_embedding_units(drafts)
+        if await self.quota.embedding_allowed(units):
+            return True
+        if self.fail_on_embedding_error:
+            raise EmbeddingUsageLimitExceededError()
+        logger.warning(
+            "Embedding usage allowance exhausted; indexing text only user_id=%s "
+            "estimated_units=%d",
+            self.user_id,
+            units,
+        )
+        return False
+
+    async def _no_embeddings(self, count: int) -> list[list[float] | None]:
+        """Stand in for a provider batch when the allowance denies vectors."""
+        return [None for _index in range(count)]
+
+    async def _record_embedding_usage(
+        self,
+        drafts: Sequence[ChunkDraft],
+        embeddings: Sequence[list[float] | None],
+    ) -> None:
+        """Record a successful provider batch against the lifetime counter."""
+        if self.quota is None:
+            return
+        if not any(embedding is not None for embedding in embeddings):
+            return
+        await self.quota.record_embedding(estimate_embedding_units(drafts))
 
     async def _refresh_after_auth_error(self, exc: EmbeddingProviderError) -> bool:
         """Reload the provider once and adopt only a same-shape embedder.
@@ -183,12 +245,17 @@ class IndexerService:
         if total == 0:
             return 0
 
+        embeddings_allowed = await self._embeddings_allowed(drafts)
         batches = [
             drafts[start : start + self.embedding_batch_size]
             for start in range(0, total, self.embedding_batch_size)
         ]
         tasks = {
-            asyncio.create_task(self._embeddings([draft.content for draft in batch])): batch
+            asyncio.create_task(
+                self._embeddings([draft.content for draft in batch])
+                if embeddings_allowed
+                else self._no_embeddings(len(batch))
+            ): batch
             for batch in batches
         }
         pending = set(tasks)
@@ -202,6 +269,7 @@ class IndexerService:
                 for task in done:
                     batch = tasks[task]
                     embeddings = task.result()
+                    await self._record_embedding_usage(batch, embeddings)
                     for draft, embedding in zip(batch, embeddings, strict=True):
                         chunk = ChunkModel(
                             user_id=self.user_id,
@@ -260,6 +328,9 @@ class IndexerService:
         if total == 0:
             return 0
 
+        embeddings_allowed = await self._embeddings_allowed(
+            [draft for _kind, _id, draft in items]
+        )
         batches = [
             items[start : start + self.embedding_batch_size]
             for start in range(0, total, self.embedding_batch_size)
@@ -267,6 +338,8 @@ class IndexerService:
         tasks = {
             asyncio.create_task(
                 self._embeddings([draft.content for _kind, _id, draft in batch])
+                if embeddings_allowed
+                else self._no_embeddings(len(batch))
             ): batch
             for batch in batches
         }
@@ -280,6 +353,10 @@ class IndexerService:
                 for task in done:
                     batch = tasks[task]
                     embeddings = task.result()
+                    await self._record_embedding_usage(
+                        [draft for _kind, _id, draft in batch],
+                        embeddings,
+                    )
                     for (source_kind, source_id, draft), embedding in zip(
                         batch,
                         embeddings,

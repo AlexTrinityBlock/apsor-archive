@@ -16,12 +16,14 @@ from typing import Literal, cast
 from fastapi import Request
 
 from app.infrastructure.config.settings import Settings
+from app.infrastructure.database.session import Database
 from app.infrastructure.web.deepseek_client import DEFAULT_BASE_URL as DEEPSEEK_DEFAULT_BASE_URL
 from app.infrastructure.web.deepseek_client import DeepSeekWebClient
 from app.infrastructure.web.exa_client import DEFAULT_BASE_URL as EXA_DEFAULT_BASE_URL
 from app.infrastructure.web.exa_client import ExaWebClient
 from app.infrastructure.web.tavily_client import DEFAULT_BASE_URL as TAVILY_DEFAULT_BASE_URL
 from app.infrastructure.web.tavily_client import TavilyWebClient
+from app.module.auth.service.quota_service import AccountQuotaService
 from app.module.web_research.exception.domain_error import WebProviderError
 from app.module.web_research.protocol.web_cache_protocol import WebCacheProtocol
 from app.module.web_research.protocol.web_client_protocol import (
@@ -160,15 +162,28 @@ class WebClientFactory:
         return DisabledWebClient()
 
 
-def get_web_research_service(request: Request) -> WebResearchService:
-    """Resolve the web research service, honouring a test/runtime override."""
+def get_web_research_service(
+    request: Request,
+    *,
+    user_id: int | None = None,
+) -> WebResearchService:
+    """Resolve the web research service, honouring a test/runtime override.
+
+    ``user_id`` is supplied by the agent tool scope so the service can enforce
+    and record the captured account's web allowance. Callers without an account
+    (and the test override) get no quota policy.
+    """
     override = getattr(request.app.state, "web_research_service", None)
     if override is not None:
         return cast(WebResearchService, override)
-    return _build_web_research_service(request)
+    return _build_web_research_service(request, user_id=user_id)
 
 
-def _build_web_research_service(request: Request) -> WebResearchService:
+def _build_web_research_service(
+    request: Request,
+    *,
+    user_id: int | None = None,
+) -> WebResearchService:
     settings = cast(Settings, request.app.state.settings)
     runtime = request.app.state.ai_runtime
     # Provider settings are only read from the runtime snapshot: no DB session is
@@ -177,6 +192,11 @@ def _build_web_research_service(request: Request) -> WebResearchService:
     search_config = _runtime_config(runtime, "web_search_config", "web_search")
     fetch_config = _runtime_config(runtime, "web_fetch_config", "web_fetch")
     factory: WebClientFactoryProtocol = WebClientFactory(settings)
+    quota = (
+        AccountQuotaService(cast(Database, request.app.state.db), user_id)
+        if user_id is not None
+        else None
+    )
     return WebResearchService(
         search_config=search_config,
         fetch_config=fetch_config,
@@ -186,6 +206,7 @@ def _build_web_research_service(request: Request) -> WebResearchService:
         search_ttl_seconds=int(getattr(settings, "web_search_cache_ttl_seconds", 900)),
         fetch_ttl_seconds=int(getattr(settings, "web_fetch_cache_ttl_seconds", 3_600)),
         fetch_max_chars=int(getattr(settings, "web_fetch_max_chars", 20_000)),
+        quota=quota,
     )
 
 

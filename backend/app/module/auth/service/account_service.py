@@ -5,11 +5,23 @@ import string
 from typing import cast
 
 from app.module.auth.domain.auth_domain import AuthDomain
+from app.module.auth.domain.quota_domain import (
+    QUOTA_CATEGORIES,
+    QuotaCategory,
+    parse_quota_category,
+    quota_base,
+    quota_enabled,
+    quota_granted,
+    quota_lifetime,
+    quota_remaining,
+    quota_used,
+)
 from app.module.auth.exception.domain_error import (
     AccountNotFoundError,
     CannotDisableRootError,
     ForbiddenError,
     InvalidProfileError,
+    InvalidUsageQuotaError,
     InvalidUsernameError,
     LastRootProtectedError,
     UsernameTakenError,
@@ -23,6 +35,8 @@ from app.module.auth.protocol.security_protocol import PasswordHasherProtocol
 from app.module.auth.schema.account_schema import (
     AccountCreateSchema,
     AccountListSchema,
+    AccountQuotaSchema,
+    AccountQuotaUpdateSchema,
     AccountSchema,
     AccountTemporaryPasswordSchema,
     AccountUsageSchema,
@@ -31,6 +45,7 @@ from app.module.auth.schema.auth_schema import UserRole
 from app.shared.time import utcnow
 
 _TEMPORARY_PASSWORD_LENGTH = 20
+_QUOTA_TOP_UP_MAX = 10**12
 _TEMPORARY_PASSWORD_GROUPS = (
     string.ascii_lowercase,
     string.ascii_uppercase,
@@ -91,7 +106,40 @@ class AccountService:
                 turns=user.agent_turns,
                 last_activity_at=user.last_agent_activity_at,
             ),
+            quotas=[
+                AccountQuotaSchema(
+                    category=category,
+                    enabled=quota_enabled(user, category),
+                    granted=quota_granted(user, category),
+                    used=quota_used(user, category),
+                    used_before_reset=quota_base(user, category),
+                    lifetime=quota_lifetime(user, category),
+                    remaining=quota_remaining(user, category),
+                )
+                for category in QUOTA_CATEGORIES
+            ],
         )
+
+    @staticmethod
+    def _quota_category(value: str) -> QuotaCategory:
+        try:
+            return parse_quota_category(value)
+        except ValueError as exc:
+            raise InvalidUsageQuotaError(str(exc)) from exc
+
+    @staticmethod
+    def _validate_grant(granted: int | None) -> None:
+        if granted is not None and granted < 0:
+            raise InvalidUsageQuotaError("The grant must be zero or greater.")
+
+    @staticmethod
+    def _validate_amount(amount: int) -> None:
+        if amount <= 0:
+            raise InvalidUsageQuotaError("The top-up amount must be greater than zero.")
+        if amount > _QUOTA_TOP_UP_MAX:
+            raise InvalidUsageQuotaError(
+                f"The top-up amount must be at most {_QUOTA_TOP_UP_MAX}."
+            )
 
     async def _require_account(self, user_id: int) -> AppUserModel:
         user = await self.user_repository.get_by_id(user_id)
@@ -185,3 +233,65 @@ class AccountService:
             user=self._to_schema(user),
             temporary_password=temporary_password,
         )
+
+    async def update_quota(
+        self,
+        *,
+        user_id: int,
+        category: str,
+        payload: AccountQuotaUpdateSchema,
+    ) -> AccountSchema:
+        """Set one category's enabled switch and finite grant."""
+        self._validate_grant(payload.granted)
+        resolved = self._quota_category(category)
+        user = await self._require_account(user_id)
+        user = await self.user_repository.update_quota(
+            user,
+            category=resolved,
+            enabled=payload.enabled,
+            granted=payload.granted,
+            now=utcnow(),
+        )
+        return self._to_schema(user)
+
+    async def top_up_quota(
+        self,
+        *,
+        user_id: int,
+        category: str,
+        amount: int,
+    ) -> AccountSchema:
+        """Increase a finite grant; an unlimited grant has nothing to top up."""
+        self._validate_amount(amount)
+        resolved = self._quota_category(category)
+        user = await self._require_account(user_id)
+        updated = await self.user_repository.top_up_quota(
+            user,
+            category=resolved,
+            amount=amount,
+            now=utcnow(),
+        )
+        if not updated:
+            raise InvalidUsageQuotaError(
+                "This allowance is unlimited; there is no finite grant to top up."
+            )
+        return self._to_schema(user)
+
+    async def reset_quota(
+        self,
+        *,
+        user_id: int,
+        category: str,
+        granted: int | None,
+    ) -> AccountSchema:
+        """Start a new cycle while preserving the prior cumulative usage."""
+        self._validate_grant(granted)
+        resolved = self._quota_category(category)
+        user = await self._require_account(user_id)
+        user = await self.user_repository.reset_quota_usage(
+            user,
+            category=resolved,
+            granted=granted,
+            now=utcnow(),
+        )
+        return self._to_schema(user)

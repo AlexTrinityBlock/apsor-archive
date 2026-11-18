@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Protocol
 
+from app.module.auth.domain.quota_domain import QuotaCategory
 from app.module.auth.model.auth_model import (
     AppUserModel,
     UserProfileCardModel,
@@ -58,6 +59,34 @@ class UserRepositoryProtocol(Protocol):
         user: AppUserModel,
         *,
         display_name: str,
+        now: datetime,
+    ) -> AppUserModel: ...
+
+    async def update_quota(
+        self,
+        user: AppUserModel,
+        *,
+        category: QuotaCategory,
+        enabled: bool,
+        granted: int | None,
+        now: datetime,
+    ) -> AppUserModel: ...
+
+    async def top_up_quota(
+        self,
+        user: AppUserModel,
+        *,
+        category: QuotaCategory,
+        amount: int,
+        now: datetime,
+    ) -> bool: ...
+
+    async def reset_quota_usage(
+        self,
+        user: AppUserModel,
+        *,
+        category: QuotaCategory,
+        granted: int | None,
         now: datetime,
     ) -> AppUserModel: ...
 

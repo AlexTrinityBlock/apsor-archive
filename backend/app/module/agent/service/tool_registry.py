@@ -63,6 +63,7 @@ from app.module.web_research.exception.domain_error import (
     WebResearchError,
     WebSearchNotConfiguredError,
     WebUrlInvalidError,
+    WebUsageLimitExceededError,
 )
 from app.module.web_research.schema.web_research_schema import WebFetchResponse
 
@@ -1241,7 +1242,7 @@ _WEB_DEFAULT_CODES = {
 
 
 def _web_error_code(exc: WebResearchError, tool_name: str) -> str:
-    """Map a web-research failure to one of the five stable tool error codes.
+    """Map a web-research failure to one of the six stable tool error codes.
 
     Classification always uses ``isinstance`` because ``web_research`` already
     defines the leaf exceptions as a stable domain contract; an unknown leaf falls
@@ -1261,6 +1262,8 @@ def _web_error_code(exc: WebResearchError, tool_name: str) -> str:
         return "web_search_not_configured"
     if isinstance(exc, WebFetchNotConfiguredError):
         return "web_fetch_not_configured"
+    if isinstance(exc, WebUsageLimitExceededError):
+        return "web_usage_limit_exceeded"
     return _WEB_DEFAULT_CODES.get(tool_name, "web_provider_error")
 
 
