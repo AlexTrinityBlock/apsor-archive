@@ -27,6 +27,7 @@ from app.module.knowledge.exception.domain_error import (
     MemorySupersedeTargetError,
     PathNotFoundError,
     ProviderNotFoundError,
+    ProviderNoticeNotFoundError,
     SpreadsheetArchiveTooLargeError,
     SummaryNotEnoughMemoriesError,
     SummaryNotFoundError,
@@ -46,6 +47,11 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(InvalidPathError, 422, "invalid_path")
     ExceptionRegistry.register(InvalidProviderConfigError, 422, "invalid_provider_config")
     ExceptionRegistry.register(ProviderNotFoundError, 404, "provider_not_found")
+    ExceptionRegistry.register(
+        ProviderNoticeNotFoundError,
+        404,
+        "provider_notice_not_found",
+    )
     ExceptionRegistry.register(PathNotFoundError, 404, "path_not_found")
     ExceptionRegistry.register(FileContentUnavailableError, 404, "file_content_unavailable")
     ExceptionRegistry.register(FileStorageUnavailableError, 503, "storage_unavailable")

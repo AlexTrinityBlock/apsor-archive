@@ -20,6 +20,11 @@ class ProviderConfigRepositoryProtocol(Protocol):
 
     async def get_active(self, spec: ProviderTableSpec) -> ProviderConfigMixin | None: ...
 
+    async def list_active_chain(
+        self,
+        spec: ProviderTableSpec,
+    ) -> Sequence[ProviderConfigMixin]: ...
+
     async def list_all(self, spec: ProviderTableSpec) -> Sequence[ProviderConfigMixin]: ...
 
     async def list_active(self) -> Sequence[ProviderConfigMixin]: ...
@@ -30,11 +35,12 @@ class ProviderConfigRepositoryProtocol(Protocol):
 
     async def deactivate_all(self, spec: ProviderTableSpec) -> None: ...
 
-    async def deactivate_others(
+    async def deactivate_row(self, row: ProviderConfigMixin) -> None: ...
+
+    async def replace_chain(
         self,
         spec: ProviderTableSpec,
-        *,
-        keep_id: int,
+        rows: Sequence[ProviderConfigMixin],
     ) -> None: ...
 
 
