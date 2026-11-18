@@ -21,6 +21,9 @@ from app.module.knowledge.protocol.chunk_repository_protocol import (
     VectorCandidate,
 )
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
+from app.module.knowledge.protocol.embedding_quota_protocol import (
+    EmbeddingQuotaProtocol,
+)
 from app.module.knowledge.protocol.file_repository_protocol import FileRepositoryProtocol
 from app.module.knowledge.protocol.memory_repository_protocol import MemoryRepositoryProtocol
 from app.module.knowledge.protocol.summary_repository_protocol import SummaryRepositoryProtocol
@@ -34,6 +37,7 @@ from app.module.knowledge.schema.search_schema import (
     SummarySearchResultSchema,
 )
 from app.module.knowledge.service.cache_keys import user_cache_key, user_version_scope
+from app.module.knowledge.service.indexer_service import estimate_text_units
 from app.shared.retrieval import (
     HISTORY_MIN_VECTOR_CONTENT_CHARS,
     HISTORY_MIN_VECTOR_SIMILARITY,
@@ -74,6 +78,7 @@ class SearchService:
         cache_ttl_seconds: int,
         candidate_limit: int,
         vector_scan_limit: int,
+        quota: EmbeddingQuotaProtocol | None = None,
     ) -> None:
         self.user_id = user_id
         self.chunk_repository = chunk_repository
@@ -85,10 +90,25 @@ class SearchService:
         self.cache_ttl_seconds = cache_ttl_seconds
         self.candidate_limit = candidate_limit
         self.vector_scan_limit = vector_scan_limit
+        self.quota = quota
 
     async def _query_embedding(self, query: str) -> list[float] | None:
-        """Embed one query once for both the knowledge and history lanes."""
+        """Embed one query once for both the knowledge and history lanes.
+
+        A denied embedding allowance skips vector recall and leaves BM25/keyword
+        search intact. Only a provider call that returns a usable vector records
+        usage; a provider failure keeps the existing text-only fallback.
+        """
         if self.embedder.dimension <= 0:
+            return None
+        units = estimate_text_units(query)
+        if self.quota is not None and not await self.quota.embedding_allowed(units):
+            logger.warning(
+                "Vector recall skipped: embedding usage allowance exhausted "
+                "user_id=%s estimated_units=%d",
+                self.user_id,
+                units,
+            )
             return None
         try:
             vectors = await self.embedder.embed([query])
@@ -97,6 +117,8 @@ class SearchService:
             return None
         if not vectors or not vectors[0]:
             return None
+        if self.quota is not None:
+            await self.quota.record_embedding(units)
         return vectors[0]
 
     async def _vector_hits(
