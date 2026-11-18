@@ -42,6 +42,134 @@
         "title": "AccountListSchema",
         "type": "object"
       },
+      "AccountQuotaResetSchema": {
+        "additionalProperties": false,
+        "description": "Start a new cycle for one category.\n\n``granted`` is required and nullable: null keeps the category unlimited,\nwhile an integer sets the new finite allowance. Send the current grant to\nkeep it unchanged. The prior cumulative usage is preserved in\n``used_before_reset``; a reset is not a history wipe.",
+        "properties": {
+          "granted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted"
+          }
+        },
+        "required": [
+          "granted"
+        ],
+        "title": "AccountQuotaResetSchema",
+        "type": "object"
+      },
+      "AccountQuotaSchema": {
+        "description": "One allowance category as the root console projects it.\n\n``used`` is the current cycle (``lifetime - used_before_reset``), while\n``lifetime`` stays the monotonic counter. ``remaining`` is null only when\nthe grant is unlimited.",
+        "properties": {
+          "category": {
+            "enum": [
+              "chat",
+              "embedding",
+              "web_search",
+              "web_fetch"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "granted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted"
+          },
+          "lifetime": {
+            "title": "Lifetime",
+            "type": "integer"
+          },
+          "remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          },
+          "used_before_reset": {
+            "title": "Used Before Reset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "enabled",
+          "granted",
+          "used",
+          "used_before_reset",
+          "lifetime",
+          "remaining"
+        ],
+        "title": "AccountQuotaSchema",
+        "type": "object"
+      },
+      "AccountQuotaTopUpSchema": {
+        "additionalProperties": false,
+        "description": "Increase a finite grant atomically.\n\n``amount`` must be positive and is bounded by the service; topping up an\nunlimited grant is rejected because there is no finite number to increase.",
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "amount"
+        ],
+        "title": "AccountQuotaTopUpSchema",
+        "type": "object"
+      },
+      "AccountQuotaUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace one category's enabled switch and finite grant.\n\nBoth fields are required. ``granted`` is null for unlimited and must be a\nnon-negative integer otherwise; the service validates the bound so an\ninvalid mutation returns the stable ``invalid_usage_quota`` domain error.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "granted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Granted"
+          }
+        },
+        "required": [
+          "enabled",
+          "granted"
+        ],
+        "title": "AccountQuotaUpdateSchema",
+        "type": "object"
+      },
       "AccountSchema": {
         "description": "One account row without any credential material.",
         "properties": {
@@ -81,6 +209,13 @@
             "title": "Must Change Password",
             "type": "boolean"
           },
+          "quotas": {
+            "items": {
+              "$ref": "#/components/schemas/AccountQuotaSchema"
+            },
+            "title": "Quotas",
+            "type": "array"
+          },
           "role": {
             "$ref": "#/components/schemas/UserRole"
           },
@@ -105,7 +240,8 @@
           "must_change_password",
           "created_at",
           "last_login_at",
-          "usage"
+          "usage",
+          "quotas"
         ],
         "title": "AccountSchema",
         "type": "object"
@@ -6132,6 +6268,192 @@
           }
         },
         "summary": "Impersonate Account",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/{user_id}/quotas/{category}": {
+      "put": {
+        "description": "Set one category's enabled switch and finite grant.",
+        "operationId": "updateAccountQuota",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "category",
+            "required": true,
+            "schema": {
+              "title": "Category",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountQuotaUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Account Quota",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/{user_id}/quotas/{category}/reset": {
+      "post": {
+        "description": "Start a new cycle while preserving the prior cumulative usage.",
+        "operationId": "resetAccountQuota",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "category",
+            "required": true,
+            "schema": {
+              "title": "Category",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountQuotaResetSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Account Quota",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/v1/accounts/{user_id}/quotas/{category}/top-up": {
+      "post": {
+        "description": "Increase one category's finite grant atomically.",
+        "operationId": "topUpAccountQuota",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "category",
+            "required": true,
+            "schema": {
+              "title": "Category",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountQuotaTopUpSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Top Up Account Quota",
         "tags": [
           "accounts"
         ]

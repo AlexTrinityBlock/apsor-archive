@@ -6,6 +6,7 @@ from app.module.web_research.exception.domain_error import (
     WebProviderError,
     WebSearchNotConfiguredError,
     WebUrlInvalidError,
+    WebUsageLimitExceededError,
 )
 from app.shared.exception.registry import ExceptionRegistry
 
@@ -15,6 +16,7 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(WebSearchNotConfiguredError, 503, "web_search_not_configured")
     ExceptionRegistry.register(WebFetchNotConfiguredError, 503, "web_fetch_not_configured")
     ExceptionRegistry.register(WebUrlInvalidError, 422, "web_url_invalid")
+    ExceptionRegistry.register(WebUsageLimitExceededError, 429, "web_usage_limit_exceeded")
     ExceptionRegistry.register(
         WebProviderAuthenticationError,
         502,

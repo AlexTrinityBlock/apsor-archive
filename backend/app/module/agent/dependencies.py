@@ -59,6 +59,7 @@ from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.auth.dependencies import get_auth_service
 from app.module.auth.schema.auth_schema import UserSchema
 from app.module.auth.service.auth_service import AuthService
+from app.module.auth.service.quota_service import AccountQuotaService
 from app.module.knowledge.dependencies import (
     build_file_service,
     build_memory_service,
@@ -154,7 +155,10 @@ class _ToolServiceScope:
                 # WebResearchServiceProtocol, and the web_research slice builds
                 # the concrete implementation from app.state.ai_runtime (it opens
                 # no database session).
-                web_research_service=get_web_research_service(self.request),
+                web_research_service=get_web_research_service(
+                    self.request,
+                    user_id=self.user_id,
+                ),
             )
             yield services
 
@@ -301,6 +305,7 @@ def get_agent_service(
             runtime.web_fetch_config,
             runtime.web_fetch_client,
         ),
+        quota=AccountQuotaService(database, user.user_id),
     )
 
 

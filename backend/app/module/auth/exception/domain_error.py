@@ -116,3 +116,10 @@ class ImpersonationPasswordChangeForbiddenError(AuthError):
 class ImpersonationPasswordInvalidError(AuthError):
     def __init__(self) -> None:
         super().__init__("The root password is invalid.")
+
+
+class InvalidUsageQuotaError(AuthError):
+    """An admin quota mutation that cannot be applied."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)

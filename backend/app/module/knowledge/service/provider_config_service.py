@@ -750,6 +750,12 @@ class ProviderConfigService:
         A model change rebuilds historical chunks too because they remain
         reachable by ``include_history`` searches.
 
+        This root-only maintenance path calls the embedder directly instead of
+        going through ``IndexerService``. It is therefore exempt from account
+        usage allowances and does not record embedding usage: an operator's
+        provider migration must not be blocked by a per-account grant, and the
+        reindex is not a user action.
+
         A failed owner is logged with its id and the exception type (never chunk
         or provider content), its stale search cache is still invalidated, and
         the remaining owners are processed. The response therefore reports every

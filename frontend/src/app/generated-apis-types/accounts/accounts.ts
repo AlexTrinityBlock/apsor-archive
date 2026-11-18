@@ -26,6 +26,9 @@ import type {
 import type {
   AccountCreateSchema,
   AccountListSchema,
+  AccountQuotaResetSchema,
+  AccountQuotaTopUpSchema,
+  AccountQuotaUpdateSchema,
   AccountSchema,
   AccountTemporaryPasswordSchema,
   AuthResponseSchema,
@@ -464,6 +467,279 @@ export const useImpersonateAccount = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getImpersonateAccountMutationOptions(options), queryClient);
+    }
+    export const getUpdateAccountQuotaUrl = (userId: number,
+    category: string,) => {
+
+
+
+
+  return `/api/v1/accounts/${userId}/quotas/${category}`
+}
+
+/**
+ * Set one category's enabled switch and finite grant.
+ * @summary Update Account Quota
+ */
+export const updateAccountQuota = async (userId: number,
+    category: string,
+    accountQuotaUpdateSchema: AccountQuotaUpdateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<AccountSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AccountSchema>(getUpdateAccountQuotaUrl(userId,category),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(accountQuotaUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateAccountQuotaMutationKey = () => ['updateAccountQuota'] as const;
+
+export const getUpdateAccountQuotaMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccountQuota>>, TError,UpdateAccountQuotaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAccountQuota>>, TError,UpdateAccountQuotaMutationVariables, TContext> => {
+
+const mutationKey = getUpdateAccountQuotaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAccountQuota>>, UpdateAccountQuotaMutationVariables> = (props) => {
+          const {userId,category,data} = props ?? {};
+
+          return  updateAccountQuota(userId,category,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAccountQuotaMutationResult = NonNullable<Awaited<ReturnType<typeof updateAccountQuota>>>
+    export type UpdateAccountQuotaMutationBody = AccountQuotaUpdateSchema
+    export type UpdateAccountQuotaMutationError = HTTPValidationError
+    export type UpdateAccountQuotaMutationVariables = {userId: number;category: string;data: AccountQuotaUpdateSchema}
+
+    /**
+ * @summary Update Account Quota
+ */
+export const useUpdateAccountQuota = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAccountQuota>>, TError,UpdateAccountQuotaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateAccountQuota>>,
+        TError,
+        UpdateAccountQuotaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateAccountQuotaMutationOptions(options), queryClient);
+    }
+    export const getResetAccountQuotaUrl = (userId: number,
+    category: string,) => {
+
+
+
+
+  return `/api/v1/accounts/${userId}/quotas/${category}/reset`
+}
+
+/**
+ * Start a new cycle while preserving the prior cumulative usage.
+ * @summary Reset Account Quota
+ */
+export const resetAccountQuota = async (userId: number,
+    category: string,
+    accountQuotaResetSchema: AccountQuotaResetSchema, options?: Parameters<typeof apiFetch>[1]): Promise<AccountSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AccountSchema>(getResetAccountQuotaUrl(userId,category),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(accountQuotaResetSchema)
+  }
+);}
+
+
+
+
+
+export const getResetAccountQuotaMutationKey = () => ['resetAccountQuota'] as const;
+
+export const getResetAccountQuotaMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetAccountQuota>>, TError,ResetAccountQuotaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetAccountQuota>>, TError,ResetAccountQuotaMutationVariables, TContext> => {
+
+const mutationKey = getResetAccountQuotaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetAccountQuota>>, ResetAccountQuotaMutationVariables> = (props) => {
+          const {userId,category,data} = props ?? {};
+
+          return  resetAccountQuota(userId,category,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetAccountQuotaMutationResult = NonNullable<Awaited<ReturnType<typeof resetAccountQuota>>>
+    export type ResetAccountQuotaMutationBody = AccountQuotaResetSchema
+    export type ResetAccountQuotaMutationError = HTTPValidationError
+    export type ResetAccountQuotaMutationVariables = {userId: number;category: string;data: AccountQuotaResetSchema}
+
+    /**
+ * @summary Reset Account Quota
+ */
+export const useResetAccountQuota = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetAccountQuota>>, TError,ResetAccountQuotaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resetAccountQuota>>,
+        TError,
+        ResetAccountQuotaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getResetAccountQuotaMutationOptions(options), queryClient);
+    }
+    export const getTopUpAccountQuotaUrl = (userId: number,
+    category: string,) => {
+
+
+
+
+  return `/api/v1/accounts/${userId}/quotas/${category}/top-up`
+}
+
+/**
+ * Increase one category's finite grant atomically.
+ * @summary Top Up Account Quota
+ */
+export const topUpAccountQuota = async (userId: number,
+    category: string,
+    accountQuotaTopUpSchema: AccountQuotaTopUpSchema, options?: Parameters<typeof apiFetch>[1]): Promise<AccountSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AccountSchema>(getTopUpAccountQuotaUrl(userId,category),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(accountQuotaTopUpSchema)
+  }
+);}
+
+
+
+
+
+export const getTopUpAccountQuotaMutationKey = () => ['topUpAccountQuota'] as const;
+
+export const getTopUpAccountQuotaMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof topUpAccountQuota>>, TError,TopUpAccountQuotaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof topUpAccountQuota>>, TError,TopUpAccountQuotaMutationVariables, TContext> => {
+
+const mutationKey = getTopUpAccountQuotaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof topUpAccountQuota>>, TopUpAccountQuotaMutationVariables> = (props) => {
+          const {userId,category,data} = props ?? {};
+
+          return  topUpAccountQuota(userId,category,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type TopUpAccountQuotaMutationResult = NonNullable<Awaited<ReturnType<typeof topUpAccountQuota>>>
+    export type TopUpAccountQuotaMutationBody = AccountQuotaTopUpSchema
+    export type TopUpAccountQuotaMutationError = HTTPValidationError
+    export type TopUpAccountQuotaMutationVariables = {userId: number;category: string;data: AccountQuotaTopUpSchema}
+
+    /**
+ * @summary Top Up Account Quota
+ */
+export const useTopUpAccountQuota = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof topUpAccountQuota>>, TError,TopUpAccountQuotaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof topUpAccountQuota>>,
+        TError,
+        TopUpAccountQuotaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getTopUpAccountQuotaMutationOptions(options), queryClient);
     }
     export const getResetAccountPasswordUrl = (userId: number,) => {
 
