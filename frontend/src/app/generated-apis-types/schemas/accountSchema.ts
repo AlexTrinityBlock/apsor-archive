@@ -4,6 +4,7 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
+import type { AccountQuotaSchema } from './accountQuotaSchema';
 import type { AccountUsageSchema } from './accountUsageSchema';
 import type { UserRole } from './userRole';
 
@@ -16,6 +17,7 @@ export interface AccountSchema {
   is_active: boolean;
   last_login_at: string | null;
   must_change_password: boolean;
+  quotas: AccountQuotaSchema[];
   role: UserRole;
   usage: AccountUsageSchema;
   user_id: number;

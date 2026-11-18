@@ -378,6 +378,7 @@ def test_worker_picks_up_a_provider_change_on_the_next_run_once(
     assert runtime.embedding_config.dimension == settings.embedding_dimension
 
     state = State()
+    state.db = client.app.state.db
     state.settings = settings
     state.cache = client.app.state.cache
     state.storage = client.app.state.storage

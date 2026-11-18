@@ -13,6 +13,9 @@ from app.module.auth.router.session_cookie import set_session_cookie
 from app.module.auth.schema.account_schema import (
     AccountCreateSchema,
     AccountListSchema,
+    AccountQuotaResetSchema,
+    AccountQuotaTopUpSchema,
+    AccountQuotaUpdateSchema,
     AccountSchema,
     AccountTemporaryPasswordSchema,
 )
@@ -113,3 +116,59 @@ async def reset_account_password(
     """Replace another user's password with a one-time temporary password."""
     response.headers["Cache-Control"] = "no-store"
     return await service.reset_account_password(actor_user_id=root.user_id, user_id=user_id)
+
+
+@router.put(
+    "/{user_id}/quotas/{category}",
+    response_model=AccountSchema,
+    operation_id="updateAccountQuota",
+)
+async def update_account_quota(
+    user_id: int,
+    category: str,
+    payload: AccountQuotaUpdateSchema,
+    _root: UserSchema = Depends(require_root),
+    service: AccountService = Depends(get_account_service),
+) -> AccountSchema:
+    """Set one category's enabled switch and finite grant."""
+    return await service.update_quota(user_id=user_id, category=category, payload=payload)
+
+
+@router.post(
+    "/{user_id}/quotas/{category}/top-up",
+    response_model=AccountSchema,
+    operation_id="topUpAccountQuota",
+)
+async def top_up_account_quota(
+    user_id: int,
+    category: str,
+    payload: AccountQuotaTopUpSchema,
+    _root: UserSchema = Depends(require_root),
+    service: AccountService = Depends(get_account_service),
+) -> AccountSchema:
+    """Increase one category's finite grant atomically."""
+    return await service.top_up_quota(
+        user_id=user_id,
+        category=category,
+        amount=payload.amount,
+    )
+
+
+@router.post(
+    "/{user_id}/quotas/{category}/reset",
+    response_model=AccountSchema,
+    operation_id="resetAccountQuota",
+)
+async def reset_account_quota(
+    user_id: int,
+    category: str,
+    payload: AccountQuotaResetSchema,
+    _root: UserSchema = Depends(require_root),
+    service: AccountService = Depends(get_account_service),
+) -> AccountSchema:
+    """Start a new cycle while preserving the prior cumulative usage."""
+    return await service.reset_quota(
+        user_id=user_id,
+        category=category,
+        granted=payload.granted,
+    )

@@ -64,6 +64,7 @@ from app.module.agent.exception.domain_error import (
     AgentRunNotActiveError,
     AgentRunNotFoundError,
     AgentRunNotRetryableError,
+    AgentUsageLimitExceededError,
 )
 from app.module.agent.model.agent_model import (
     AgentApprovalModel,
@@ -80,6 +81,7 @@ from app.module.agent.protocol.chat_generator_protocol import (
     ChatResult,
     ChatToolCall,
 )
+from app.module.agent.protocol.usage_quota_protocol import AgentQuotaProtocol
 from app.module.agent.schema.agent_schema import (
     AgentApprovalSchema,
     AgentConversationCreateSchema,
@@ -198,6 +200,7 @@ class AgentService:
         active_provider: str = "",
         web_search_provider: str = "none",
         web_fetch_provider: str = "none",
+        quota: AgentQuotaProtocol | None = None,
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -214,6 +217,14 @@ class AgentService:
         self.active_provider = active_provider or default_provider or "none"
         self.web_search_provider = _web_provider_name(web_search_provider)
         self.web_fetch_provider = _web_provider_name(web_fetch_provider)
+        # The composition root passes the captured account's allowance. It is
+        # optional so isolated tests that exercise conversation mechanics keep
+        # working with no quota policy.
+        self.quota = quota
+
+    async def _ensure_chat_allowed(self) -> None:
+        if self.quota is not None and not await self.quota.chat_allowed():
+            raise AgentUsageLimitExceededError()
 
     async def create_conversation(
         self,
@@ -379,6 +390,7 @@ class AgentService:
             raise AgentInvalidEntryError(
                 "A message needs text or at least one temporary chat image."
             )
+        await self._ensure_chat_allowed()
         now = utcnow()
         time_context = current_time_block(
             now=now,
@@ -449,6 +461,7 @@ class AgentService:
         user_entry = await self.repository.get_entry(latest.user_entry_id)
         if user_entry is None:
             raise AgentRunNotFoundError(latest.id)
+        await self._ensure_chat_allowed()
         last_entry_id = await self.repository.latest_entry_id(conversation_id)
         cutoff_entry_id = last_entry_id or user_entry.id
         run = await self.repository.create_run(
@@ -719,6 +732,44 @@ class AgentService:
                     yield AgentStreamEvent(
                         "run_end",
                         {"run_id": run_id, "status": RUN_CANCELLED},
+                    )
+                    return
+
+                if self.quota is not None and not await self.quota.chat_allowed():
+                    # The account may have exhausted its grant in an earlier
+                    # step of this same run. Stop before the provider call and
+                    # persist the same failure shape as a provider error so the
+                    # transcript and UI stay auditable.
+                    detail = AgentUsageLimitExceededError.DETAIL
+                    last_entry_id = await self._append_failure_assistant(
+                        turn,
+                        last_entry_id,
+                        "usage_limit_exceeded",
+                        detail,
+                        step,
+                    )
+                    await self._fail_run(
+                        turn,
+                        last_entry_id,
+                        "usage_limit_exceeded",
+                        detail,
+                    )
+                    terminal = True
+                    yield AgentStreamEvent(
+                        "message_end",
+                        {
+                            "entry_id": last_entry_id,
+                            "usage": {},
+                            "finish_reason": "error",
+                        },
+                    )
+                    yield AgentStreamEvent(
+                        "error",
+                        {"code": "usage_limit_exceeded", "detail": detail},
+                    )
+                    yield AgentStreamEvent(
+                        "run_end",
+                        {"run_id": run_id, "status": RUN_FAILED},
                     )
                     return
 

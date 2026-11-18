@@ -17,9 +17,13 @@ import {
   useEnableAccount,
   useListAccounts,
   useResetAccountPassword,
+  useResetAccountQuota,
+  useTopUpAccountQuota,
+  useUpdateAccountQuota,
 } from "../generated-apis-types";
 import type {
   AccountCreateSchema,
+  AccountQuotaSchemaCategory,
   AccountSchema,
 } from "../generated-apis-types/schemas";
 import { useApiErrorMessage, useI18n } from "../i18n";
@@ -29,6 +33,7 @@ import {
   type AccountAction,
 } from "./component/ConfirmAccountActionDialog";
 import { CreateAccountDialog } from "./component/CreateAccountDialog";
+import { QuotaDialog } from "./component/QuotaDialog";
 import { SystemNoticesPanel } from "./component/SystemNoticesPanel";
 import { TemporaryPasswordDialog } from "./component/TemporaryPasswordDialog";
 import "./accounts.css";
@@ -45,6 +50,7 @@ type DialogState =
       readonly account: AccountSchema;
       readonly password: string;
     }
+  | { readonly kind: "quota"; readonly account: AccountSchema }
   | null;
 
 function rootFirst(items: readonly AccountSchema[]): AccountSchema[] {
@@ -76,6 +82,9 @@ export function AccountsPage() {
   const disableMutation = useDisableAccount();
   const enableMutation = useEnableAccount();
   const resetMutation = useResetAccountPassword();
+  const updateQuotaMutation = useUpdateAccountQuota();
+  const topUpQuotaMutation = useTopUpAccountQuota();
+  const resetQuotaMutation = useResetAccountQuota();
 
   const accounts = rootFirst(query.data?.items ?? []);
   const mutationPending =
@@ -83,6 +92,9 @@ export function AccountsPage() {
     disableMutation.isPending ||
     enableMutation.isPending ||
     resetMutation.isPending ||
+    updateQuotaMutation.isPending ||
+    topUpQuotaMutation.isPending ||
+    resetQuotaMutation.isPending ||
     impersonationPending;
 
   const invalidateAccounts = () => {
@@ -99,6 +111,11 @@ export function AccountsPage() {
   const openAction = (action: AccountAction, account: AccountSchema) => {
     setDialogError(null);
     setDialog({ kind: "confirm", action, account });
+  };
+
+  const openQuotas = (account: AccountSchema) => {
+    setDialogError(null);
+    setDialog({ kind: "quota", account });
   };
 
   const closeDialog = () => {
@@ -183,6 +200,76 @@ export function AccountsPage() {
     }
   };
 
+  const handleQuotaSave = async (
+    category: AccountQuotaSchemaCategory,
+    enabled: boolean,
+    granted: number | null,
+  ) => {
+    if (dialog?.kind !== "quota" || mutationPending) {
+      return;
+    }
+    setDialogError(null);
+    try {
+      const result = await updateQuotaMutation.mutateAsync({
+        userId: dialog.account.user_id,
+        category,
+        data: { enabled, granted },
+      });
+      updateQuotaMutation.reset();
+      invalidateAccounts();
+      setDialog({ kind: "quota", account: result });
+      toast.success(t("core.accounts.quotaSaveSuccess"));
+    } catch (caught) {
+      setDialogError(apiErrorMessage(caught, "core.accounts.quotaError"));
+    }
+  };
+
+  const handleQuotaTopUp = async (
+    category: AccountQuotaSchemaCategory,
+    amount: number,
+  ) => {
+    if (dialog?.kind !== "quota" || mutationPending) {
+      return;
+    }
+    setDialogError(null);
+    try {
+      const result = await topUpQuotaMutation.mutateAsync({
+        userId: dialog.account.user_id,
+        category,
+        data: { amount },
+      });
+      topUpQuotaMutation.reset();
+      invalidateAccounts();
+      setDialog({ kind: "quota", account: result });
+      toast.success(t("core.accounts.quotaTopUpSuccess"));
+    } catch (caught) {
+      setDialogError(apiErrorMessage(caught, "core.accounts.quotaError"));
+    }
+  };
+
+  const handleQuotaReset = async (
+    category: AccountQuotaSchemaCategory,
+    granted: number | null,
+  ) => {
+    if (dialog?.kind !== "quota" || mutationPending) {
+      return;
+    }
+    setDialogError(null);
+    try {
+      const result = await resetQuotaMutation.mutateAsync({
+        userId: dialog.account.user_id,
+        category,
+        data: { granted },
+      });
+      resetQuotaMutation.reset();
+      invalidateAccounts();
+      setDialog({ kind: "quota", account: result });
+      toast.success(t("core.accounts.quotaResetSuccess"));
+    } catch (caught) {
+      setDialogError(apiErrorMessage(caught, "core.accounts.quotaError"));
+    }
+  };
+
   let body: ReactNode;
   if (query.isPending) {
     body = (
@@ -237,6 +324,7 @@ export function AccountsPage() {
               account={account}
               currentUserId={user?.user_id ?? null}
               onAction={openAction}
+              onManageQuotas={openQuotas}
             />
           </li>
         ))}
@@ -297,6 +385,24 @@ export function AccountsPage() {
           account={dialog.account}
           password={dialog.password}
           onClose={closeDialog}
+        />
+      ) : null}
+
+      {dialog?.kind === "quota" ? (
+        <QuotaDialog
+          account={dialog.account}
+          onClose={closeDialog}
+          onSave={(category, enabled, granted) =>
+            void handleQuotaSave(category, enabled, granted)
+          }
+          onTopUp={(category, amount) =>
+            void handleQuotaTopUp(category, amount)
+          }
+          onReset={(category, granted) =>
+            void handleQuotaReset(category, granted)
+          }
+          submitting={mutationPending}
+          error={dialogError}
         />
       ) : null}
     </div>

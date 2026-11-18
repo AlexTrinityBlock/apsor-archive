@@ -4,6 +4,7 @@ from app.module.knowledge.exception.domain_error import (
     AiNotConfiguredError,
     AiProviderError,
     EmbeddingProviderError,
+    EmbeddingUsageLimitExceededError,
     EmptyContentError,
     FileContentUnavailableError,
     FileRecordNotFoundError,
@@ -73,6 +74,11 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(AiNotConfiguredError, 503, "ai_not_configured")
     ExceptionRegistry.register(AiProviderError, 502, "ai_provider_error")
     ExceptionRegistry.register(EmbeddingProviderError, 502, "embedding_provider_error")
+    ExceptionRegistry.register(
+        EmbeddingUsageLimitExceededError,
+        429,
+        "embedding_usage_limit_exceeded",
+    )
     ExceptionRegistry.register(TreePathConflictError, 409, "tree_path_conflict")
     ExceptionRegistry.register(FolderCopyTooLargeError, 422, "folder_copy_too_large")
     ExceptionRegistry.register(IngestJobNotFoundError, 404, "ingest_job_not_found")

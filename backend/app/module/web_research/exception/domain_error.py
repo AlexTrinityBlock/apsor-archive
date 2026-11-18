@@ -37,3 +37,13 @@ class WebProviderAuthenticationError(WebResearchError):
 class WebProviderError(WebResearchError):
     def __init__(self, detail: str) -> None:
         super().__init__(f"The web provider failed: {detail}")
+
+
+class WebUsageLimitExceededError(WebResearchError):
+    """The account's web allowance is disabled or fully consumed."""
+
+    def __init__(self, capability: str = "web") -> None:
+        super().__init__(
+            f"The account has reached its {capability} allowance. "
+            "Ask the administrator to top it up or reset it."
+        )

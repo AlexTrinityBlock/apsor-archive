@@ -2,9 +2,10 @@
 
 from datetime import datetime
 
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.module.auth.domain.quota_domain import QUOTA_FIELDS, QuotaCategory
 from app.module.auth.model.auth_model import (
     AppUserModel,
     UserProfileCardModel,
@@ -114,6 +115,93 @@ class UserRepository:
         user.updated_at = now
         self.session.add(user)
         await self.session.flush()
+        return user
+
+    async def update_quota(
+        self,
+        user: AppUserModel,
+        *,
+        category: QuotaCategory,
+        enabled: bool,
+        granted: int | None,
+        now: datetime,
+    ) -> AppUserModel:
+        """Assign the enabled switch and finite grant for one category."""
+        fields = QUOTA_FIELDS[category]
+        await self.session.execute(
+            update(AppUserModel)
+            .where(AppUserModel.id == user.id)
+            .values(
+                {
+                    getattr(AppUserModel, fields.enabled).key: enabled,
+                    getattr(AppUserModel, fields.granted).key: granted,
+                    AppUserModel.updated_at.key: now,
+                }
+            )
+        )
+        await self.session.refresh(user)
+        return user
+
+    async def top_up_quota(
+        self,
+        user: AppUserModel,
+        *,
+        category: QuotaCategory,
+        amount: int,
+        now: datetime,
+    ) -> bool:
+        """Increase a finite grant in one statement.
+
+        Returns false when the grant is null (unlimited), which the service
+        translates into the stable quota error.
+        """
+        granted_column = getattr(AppUserModel, QUOTA_FIELDS[category].granted)
+        result = await self.session.execute(
+            update(AppUserModel)
+            .where(
+                AppUserModel.id == user.id,
+                granted_column.is_not(None),
+            )
+            .values(
+                {
+                    granted_column.key: granted_column + amount,
+                    AppUserModel.updated_at.key: now,
+                }
+            )
+        )
+        if int(getattr(result, "rowcount", 0) or 0) == 0:
+            return False
+        await self.session.refresh(user)
+        return True
+
+    async def reset_quota_usage(
+        self,
+        user: AppUserModel,
+        *,
+        category: QuotaCategory,
+        granted: int | None,
+        now: datetime,
+    ) -> AppUserModel:
+        """Move the lifetime counter into the reset base and set a new grant.
+
+        PostgreSQL evaluates every SET expression against the old row, so the
+        base receives exactly the lifetime value that existed before this
+        statement.
+        """
+        fields = QUOTA_FIELDS[category]
+        lifetime_column = getattr(AppUserModel, fields.lifetime)
+        await self.session.execute(
+            update(AppUserModel)
+            .where(AppUserModel.id == user.id)
+            .values(
+                {
+                    getattr(AppUserModel, fields.used_before_reset).key: lifetime_column,
+                    getattr(AppUserModel, fields.granted).key: granted,
+                    AppUserModel.updated_at.key: now,
+                }
+            )
+        )
+        await self.session.refresh(user)
         return user
 
     async def list_profile_cards(self, user_id: int) -> list[UserProfileCardModel]:

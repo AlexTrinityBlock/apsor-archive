@@ -237,6 +237,55 @@ export const core = {
     enableSuccess: "Account enabled.",
     resetSuccess: "Password reset. Every session was revoked.",
     error: "The account could not be updated.",
+    quotasTitle: "Usage allowances",
+    quotasManage: "Manage usage",
+    quotaChat: "Chat tokens",
+    quotaEmbedding: "Embedding tokens",
+    quotaWebSearch: "Web searches",
+    quotaWebFetch: "Web fetches",
+    quotaAllowed: "Allowed",
+    quotaBlocked: "Blocked",
+    quotaUnlimited: "Unlimited",
+    quotaUsageAria: "{category}: {used} used of {granted}",
+    quotaBeforeReset: "before reset {value}",
+    quotaDialogTitle: "Usage allowances",
+    quotaDialogDescription:
+      "Set the allowance for {name}. A blank grant means unlimited; zero blocks all usage of that category.",
+    quotaUsed: "Used this cycle",
+    quotaLifetime: "Lifetime",
+    quotaBeforeResetLabel: "Before reset",
+    quotaRemaining: "Remaining",
+    quotaEnabledLabel: "Category enabled",
+    quotaEnabledHint:
+      "When blocked, the category cannot be used even if a grant remains.",
+    quotaGrantLabel: "Grant",
+    quotaGrantHint:
+      "Leave blank for unlimited. 0 is a valid grant that blocks all usage.",
+    quotaGrantInvalid:
+      "Enter a whole number of 0 or greater, or leave the grant blank for unlimited.",
+    quotaSave: "Save allowance",
+    quotaSaving: "Saving…",
+    quotaTopUpTitle: "Top up",
+    quotaTopUpHint: "Add to the current finite grant. Existing usage is unchanged.",
+    quotaTopUpUnlimited:
+      "Unlimited allowances do not need a top-up. Set a finite grant first.",
+    quotaTopUpAmount: "Top-up amount",
+    quotaTopUp: "Top up",
+    quotaTopUpInvalid: "Enter a whole number greater than 0.",
+    quotaResetTitle: "Reset usage",
+    quotaResetDescription:
+      "Start a new cycle. The lifetime counter is kept as the new before-reset baseline.",
+    quotaReset: "Reset usage",
+    quotaResetConfirm:
+      "Reset the current usage of {used}? The lifetime total is preserved and the reset cannot be undone.",
+    quotaResetConfirmAction: "Confirm reset",
+    quotaResetCancel: "Keep usage",
+    quotaResetting: "Resetting…",
+    quotaClose: "Close",
+    quotaSaveSuccess: "Usage allowance saved.",
+    quotaTopUpSuccess: "Usage allowance topped up.",
+    quotaResetSuccess: "Usage reset. The lifetime total was preserved.",
+    quotaError: "The usage allowance could not be updated.",
   },
   notices: {
     title: "System notices",
@@ -453,6 +502,11 @@ export const core = {
     agent_invalid_system_prompt:
       "The system prompt is not valid. Check the text and try again.",
     agent_system_prompt_not_found: "That system prompt could not be found.",
+    usage_limit_exceeded:
+      "This account has reached its chat token allowance. Ask the administrator to top it up or reset it.",
+    web_usage_limit_exceeded:
+      "This account has reached its web search or fetch allowance. Ask the administrator to top it up or reset it.",
+    invalid_usage_quota: "That usage allowance change is not valid.",
     ai_not_configured:
       "Vision extraction is not configured. Add a vision-capable provider in Settings.",
     invalid_vision_prompt:

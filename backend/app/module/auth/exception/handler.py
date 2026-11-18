@@ -14,6 +14,7 @@ from app.module.auth.exception.domain_error import (
     ImpersonationPasswordInvalidError,
     InvalidCredentialsError,
     InvalidProfileError,
+    InvalidUsageQuotaError,
     InvalidUsernameError,
     LastRootProtectedError,
     LoginThrottledError,
@@ -55,6 +56,7 @@ def register_exceptions() -> None:
     )
     ExceptionRegistry.register(InvalidUsernameError, 422, "invalid_username")
     ExceptionRegistry.register(InvalidProfileError, 422, "invalid_profile")
+    ExceptionRegistry.register(InvalidUsageQuotaError, 422, "invalid_usage_quota")
     ExceptionRegistry.register(WeakPasswordError, 422, "weak_password")
     ExceptionRegistry.register(PasswordMismatchError, 422, "password_mismatch")
     ExceptionRegistry.register(LoginThrottledError, 429, "login_throttled")

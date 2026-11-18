@@ -43,8 +43,21 @@ class AppUserModel(Base):
         ),
         CheckConstraint(
             "prompt_tokens >= 0 AND completion_tokens >= 0 AND total_tokens >= 0 "
-            "AND cached_tokens >= 0 AND api_calls >= 0 AND agent_turns >= 0",
+            "AND cached_tokens >= 0 AND api_calls >= 0 AND agent_turns >= 0 "
+            "AND embedding_tokens >= 0 AND web_search_calls >= 0 "
+            "AND web_fetch_calls >= 0",
             name="usage_non_negative",
+        ),
+        CheckConstraint(
+            "(chat_granted IS NULL OR chat_granted >= 0) "
+            "AND (embedding_granted IS NULL OR embedding_granted >= 0) "
+            "AND (web_search_granted IS NULL OR web_search_granted >= 0) "
+            "AND (web_fetch_granted IS NULL OR web_fetch_granted >= 0) "
+            "AND chat_used_before_reset >= 0 "
+            "AND embedding_used_before_reset >= 0 "
+            "AND web_search_used_before_reset >= 0 "
+            "AND web_fetch_used_before_reset >= 0",
+            name="quota_non_negative",
         ),
         Index(
             "uq_app_user_single_root",
@@ -134,6 +147,80 @@ class AppUserModel(Base):
     )
     last_agent_activity_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    # Per-category usage allowances. ``*_used_before_reset`` is the lifetime
+    # counter value captured by the last admin reset, so the current cycle is
+    # ``max(0, lifetime - used_before_reset)``. A NULL grant is unlimited; the
+    # enabled flag still wins over an unlimited grant.
+    chat_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    chat_granted: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    chat_used_before_reset: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    embedding_tokens: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    embedding_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    embedding_granted: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    embedding_used_before_reset: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    web_search_calls: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    web_search_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    web_search_granted: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    web_search_used_before_reset: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    web_fetch_calls: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
+    web_fetch_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    web_fetch_granted: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    web_fetch_used_before_reset: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
     )
 
 
