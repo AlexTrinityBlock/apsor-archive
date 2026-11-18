@@ -16,6 +16,8 @@ from typing import Literal, cast
 from fastapi import Request
 
 from app.infrastructure.config.settings import Settings
+from app.infrastructure.web.deepseek_client import DEFAULT_BASE_URL as DEEPSEEK_DEFAULT_BASE_URL
+from app.infrastructure.web.deepseek_client import DeepSeekWebClient
 from app.infrastructure.web.exa_client import DEFAULT_BASE_URL as EXA_DEFAULT_BASE_URL
 from app.infrastructure.web.exa_client import ExaWebClient
 from app.infrastructure.web.tavily_client import DEFAULT_BASE_URL as TAVILY_DEFAULT_BASE_URL
@@ -85,18 +87,26 @@ class WebClientFactory:
 
     def _base_url(self, config: WebProviderConfigProtocol) -> str:
         # The user can override base_url in the registry. A stale default from
-        # the other provider is ignored so switching the dropdown cannot send
-        # Exa traffic to Tavily, or the reverse.
+        # another provider is ignored so switching the dropdown cannot send one
+        # provider's traffic to another provider's origin.
         if config.provider == "exa":
             base = (config.base_url or "").rstrip("/")
-            if not base or base == "https://api.tavily.com":
+            if not base or base in {TAVILY_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_BASE_URL}:
                 base = str(
                     getattr(self._settings, "exa_base_url", EXA_DEFAULT_BASE_URL)
                     or EXA_DEFAULT_BASE_URL
                 )
             return base
+        if config.provider == "deepseek":
+            base = (config.base_url or "").rstrip("/")
+            if not base or base in {TAVILY_DEFAULT_BASE_URL, EXA_DEFAULT_BASE_URL}:
+                base = str(
+                    getattr(self._settings, "deepseek_base_url", DEEPSEEK_DEFAULT_BASE_URL)
+                    or DEEPSEEK_DEFAULT_BASE_URL
+                )
+            return base
         base = (config.base_url or "").rstrip("/")
-        if not base or base == "https://api.exa.ai":
+        if not base or base in {EXA_DEFAULT_BASE_URL, DEEPSEEK_DEFAULT_BASE_URL}:
             base = str(
                 getattr(self._settings, "tavily_base_url", TAVILY_DEFAULT_BASE_URL)
                 or TAVILY_DEFAULT_BASE_URL
@@ -107,6 +117,12 @@ class WebClientFactory:
         timeout_seconds = float(getattr(self._settings, "web_search_timeout_seconds", 25.0))
         if config.provider == "exa":
             return ExaWebClient(
+                api_key=config.api_key,
+                base_url=self._base_url(config),
+                timeout_seconds=timeout_seconds,
+            )
+        if config.provider == "deepseek":
+            return DeepSeekWebClient(
                 api_key=config.api_key,
                 base_url=self._base_url(config),
                 timeout_seconds=timeout_seconds,
@@ -124,6 +140,12 @@ class WebClientFactory:
         timeout_seconds = float(getattr(self._settings, "web_fetch_timeout_seconds", 45.0))
         if config.provider == "exa":
             return ExaWebClient(
+                api_key=config.api_key,
+                base_url=self._base_url(config),
+                timeout_seconds=timeout_seconds,
+            )
+        if config.provider == "deepseek":
+            return DeepSeekWebClient(
                 api_key=config.api_key,
                 base_url=self._base_url(config),
                 timeout_seconds=timeout_seconds,

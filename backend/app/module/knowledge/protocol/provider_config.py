@@ -51,9 +51,10 @@ class ProviderDefaults(BaseModel):
     web_fetch_base_url: str = "https://api.tavily.com"
     web_fetch_api_key: str | None = None
     # Provider-specific environment fallbacks so a database row can select Exa
-    # without accidentally receiving the Tavily key (or the reverse).
+    # or DeepSeek without accidentally receiving another provider's key.
     tavily_api_key: str | None = None
     exa_api_key: str | None = None
+    deepseek_api_key: str | None = None
 
 
 @dataclass(frozen=True)
