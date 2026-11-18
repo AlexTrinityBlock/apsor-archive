@@ -29,6 +29,17 @@ EmbeddingRefresh = Callable[[], Awaitable[EmbedderProtocol]]
 _AUTH_STATUS_CODES = frozenset({401, 403})
 
 
+def estimate_text_units(text: str) -> int:
+    """Conservatively estimate provider tokens for one short text.
+
+    Four characters per token is the shared convention with
+    :func:`estimate_embedding_units`; the floor of one keeps a query from ever
+    being treated as free. This is an estimate, not provider billing, and does
+    not add a second tokenizer.
+    """
+    return max(1, math.ceil(len(text) / 4))
+
+
 def estimate_embedding_units(drafts: Sequence[ChunkDraft]) -> int:
     """Conservatively estimate the provider tokens one batch will consume.
 

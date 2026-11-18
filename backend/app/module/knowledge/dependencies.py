@@ -173,6 +173,7 @@ def _build_indexer(
         embedding_retry_seconds=settings.ingest_embedding_retry_seconds,
         fail_on_embedding_error=fail_on_embedding_error,
         embedding_refresh=embedding_refresh,
+        quota=AccountQuotaService(cast(Database, state.db), user_id),
     )
     return chunk_repository, indexer
 
@@ -345,6 +346,7 @@ def build_search_service(state: State, session: AsyncSession, *, user_id: int) -
         cache_ttl_seconds=settings.cache_ttl_seconds,
         candidate_limit=settings.search_candidate_limit,
         vector_scan_limit=settings.search_vector_scan_limit,
+        quota=AccountQuotaService(cast(Database, state.db), user_id),
     )
 
 
