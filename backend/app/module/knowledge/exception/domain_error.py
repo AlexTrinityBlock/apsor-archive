@@ -188,7 +188,19 @@ class EmbeddingUsageLimitExceededError(KnowledgeError):
     """Strict ingestion cannot embed because the account allowance is spent."""
 
     DETAIL = (
-        "The account has reached its embedding token allowance. "
+        "The account has reached its embedding character allowance. "
+        "Ask the administrator to top it up or reset it."
+    )
+
+    def __init__(self) -> None:
+        super().__init__(self.DETAIL)
+
+
+class ChatUsageLimitExceededError(KnowledgeError):
+    """A background chat provider call cannot start because chat is spent."""
+
+    DETAIL = (
+        "The account has reached its chat token allowance. "
         "Ask the administrator to top it up or reset it."
     )
 

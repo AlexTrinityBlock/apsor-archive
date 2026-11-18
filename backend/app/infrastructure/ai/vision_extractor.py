@@ -72,7 +72,7 @@ class DeepSeekVisionExtractor:
         mode: Literal["image", "document"] = "image",
     ) -> VisionDocument:
         try:
-            parsed = await self._client.analyze(
+            analysis = await self._client.analyze(
                 data,
                 mime_type,
                 system_prompt=system_prompt,
@@ -89,6 +89,8 @@ class DeepSeekVisionExtractor:
             )
         except VisionProviderError as exc:
             raise VisionExtractionError(str(exc)) from exc
+
+        parsed = analysis.parsed
 
         text = parsed.get("text")
         if not isinstance(text, str):
@@ -134,6 +136,7 @@ class DeepSeekVisionExtractor:
             language=language.strip() if isinstance(language, str) else "",
             description=description.strip() if isinstance(description, str) else "",
             tables=tables,
+            usage=analysis.usage,
         )
 
 

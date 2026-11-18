@@ -11,6 +11,7 @@ this service only answers allow/deny questions and records lifetime counters.
 """
 
 import logging
+from collections.abc import Mapping
 
 from sqlalchemy import select, update
 
@@ -24,6 +25,14 @@ from app.module.auth.domain.quota_domain import (
 from app.module.auth.model.auth_model import AppUserModel
 
 logger = logging.getLogger(__name__)
+
+
+def _usage_int(usage: Mapping[str, int], key: str) -> int:
+    """Read one non-negative provider counter without trusting its type."""
+    try:
+        return max(0, int(usage.get(key, 0) or 0))
+    except (TypeError, ValueError):
+        return 0
 
 
 class AccountQuotaService:
@@ -59,13 +68,69 @@ class AccountQuotaService:
         """Return whether the account may start another chat step."""
         return await self._allowed("chat")
 
-    async def embedding_allowed(self, units: int) -> bool:
-        """Return whether one embedding batch of ``units`` fits the grant."""
-        return await self._allowed("embedding", units)
+    async def embedding_allowed(self, characters: int) -> bool:
+        """Return whether one embedding batch of ``characters`` fits."""
+        return await self._allowed("embedding", characters)
 
-    async def record_embedding(self, units: int) -> None:
-        """Add ``units`` to the embedding lifetime counter; best effort."""
-        await self._record("embedding", units)
+    async def record_embedding(self, characters: int) -> None:
+        """Add ``characters`` to the embedding lifetime counter; best effort."""
+        await self._record("embedding", characters)
+
+    async def record_chat_usage(self, usage: Mapping[str, int]) -> None:
+        """Fold one background provider call into the chat lifetime counters.
+
+        Agent-run usage remains trigger-owned. This path deliberately does not
+        touch ``agent_turns`` or ``last_agent_activity_at``; it only consumes the
+        same ``total_tokens`` allowance that the trigger maintains. Best effort:
+        a failed update never fails the provider call.
+        """
+        if not usage:
+            return
+        prompt_tokens = _usage_int(usage, "prompt_tokens")
+        completion_tokens = _usage_int(usage, "completion_tokens")
+        total_tokens = _usage_int(usage, "total_tokens")
+        if total_tokens == 0:
+            total_tokens = prompt_tokens + completion_tokens
+        cached_tokens = _usage_int(usage, "prompt_cache_hit_tokens")
+        if cached_tokens == 0:
+            cached_tokens = _usage_int(usage, "cached_tokens")
+        if not any((prompt_tokens, completion_tokens, total_tokens, cached_tokens)):
+            return
+        try:
+            async with self.database.system_session() as session:
+                result = await session.execute(
+                    update(AppUserModel)
+                    .where(AppUserModel.id == self.user_id)
+                    .values(
+                        {
+                            AppUserModel.prompt_tokens.key: (
+                                AppUserModel.prompt_tokens + prompt_tokens
+                            ),
+                            AppUserModel.completion_tokens.key: (
+                                AppUserModel.completion_tokens + completion_tokens
+                            ),
+                            AppUserModel.total_tokens.key: (
+                                AppUserModel.total_tokens + total_tokens
+                            ),
+                            AppUserModel.cached_tokens.key: (
+                                AppUserModel.cached_tokens + cached_tokens
+                            ),
+                            AppUserModel.api_calls.key: AppUserModel.api_calls + 1,
+                        }
+                    )
+                )
+                updated = int(getattr(result, "rowcount", 0) or 0)
+                if updated == 0:
+                    logger.warning(
+                        "Chat usage record skipped user_id=%s reason=missing_row",
+                        self.user_id,
+                    )
+        except Exception:
+            logger.warning(
+                "Chat usage record failed user_id=%s",
+                self.user_id,
+                exc_info=True,
+            )
 
     async def web_search_allowed(self) -> bool:
         """Return whether the account may make one web search provider call."""

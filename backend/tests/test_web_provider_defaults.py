@@ -1,8 +1,8 @@
 """Web provider defaults and DeepSeek wiring, without external requests.
 
-The environment selection order is Tavily, then Exa, then DeepSeek, then none.
-A saved database row still wins, but a row without its own key falls back to the
-environment key for that provider, which is the common DeepSeek deployment.
+Both web search and web fetch select DeepSeek first, then Tavily, then Exa.
+A saved database row still wins, but a row without its own key falls back to
+the environment key for that provider.
 """
 
 import asyncio
@@ -59,7 +59,7 @@ def test_deepseek_only_environment_selects_deepseek_for_both_web_capabilities() 
         assert key == "ds-test-key"
 
 
-def test_tavily_key_still_wins_over_deepseek() -> None:
+def test_tavily_and_deepseek_keys_default_both_capabilities_to_deepseek() -> None:
     defaults = provider_defaults_from_settings(
         Settings(
             tavily_api_key="tvly-test",
@@ -68,12 +68,13 @@ def test_tavily_key_still_wins_over_deepseek() -> None:
         )
     )
 
-    assert defaults.web_search_provider == "tavily"
-    assert defaults.web_fetch_provider == "tavily"
-    assert defaults.web_search_api_key == "tvly-test"
+    assert defaults.web_search_provider == "deepseek"
+    assert defaults.web_search_api_key == "ds-test-key"
+    assert defaults.web_fetch_provider == "deepseek"
+    assert defaults.web_fetch_api_key == "ds-test-key"
 
 
-def test_exa_only_environment_still_selects_exa() -> None:
+def test_exa_and_deepseek_keys_default_both_capabilities_to_deepseek() -> None:
     defaults = provider_defaults_from_settings(
         Settings(
             tavily_api_key=None,
@@ -82,9 +83,21 @@ def test_exa_only_environment_still_selects_exa() -> None:
         )
     )
 
-    assert defaults.web_search_provider == "exa"
-    assert defaults.web_fetch_provider == "exa"
-    assert defaults.web_search_api_key == "exa-test"
+    assert defaults.web_search_provider == "deepseek"
+    assert defaults.web_fetch_provider == "deepseek"
+
+
+def test_tavily_and_exa_without_deepseek_default_to_tavily() -> None:
+    defaults = provider_defaults_from_settings(
+        Settings(
+            tavily_api_key="tvly-test",
+            exa_api_key="exa-test",
+            deepseek_api_key=None,
+        )
+    )
+
+    assert defaults.web_search_provider == "tavily"
+    assert defaults.web_fetch_provider == "tavily"
 
 
 def test_no_web_key_keeps_the_capabilities_disabled() -> None:

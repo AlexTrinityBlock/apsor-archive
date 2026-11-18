@@ -12,6 +12,7 @@ from app.module.knowledge.domain.summary_domain import (
 from app.module.knowledge.exception.domain_error import (
     AiNotConfiguredError,
     AiProviderError,
+    ChatUsageLimitExceededError,
     InvalidTimelineRangeError,
     MemoryNotFoundError,
     SummaryNotEnoughMemoriesError,
@@ -122,7 +123,14 @@ class SummaryService:
                 generator="deepseek",
                 model=completion.model,
             )
-        except (AiNotConfiguredError, AiProviderError, KeyError, TypeError, ValueError) as exc:
+        except (
+            AiNotConfiguredError,
+            AiProviderError,
+            ChatUsageLimitExceededError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as exc:
             logger.warning("AI summary failed; falling back to extractive summary: %s", exc)
             return None
 

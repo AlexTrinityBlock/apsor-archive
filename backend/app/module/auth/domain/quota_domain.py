@@ -46,7 +46,7 @@ QUOTA_FIELDS: dict[QuotaCategory, QuotaFields] = {
         enabled="embedding_enabled",
         granted="embedding_granted",
         used_before_reset="embedding_used_before_reset",
-        lifetime="embedding_tokens",
+        lifetime="embedding_characters",
     ),
     "web_search": QuotaFields(
         enabled="web_search_enabled",
@@ -70,7 +70,7 @@ class QuotaRow(Protocol):
     chat_granted: int | None
     chat_used_before_reset: int
     total_tokens: int
-    embedding_tokens: int
+    embedding_characters: int
     embedding_enabled: bool
     embedding_granted: int | None
     embedding_used_before_reset: int

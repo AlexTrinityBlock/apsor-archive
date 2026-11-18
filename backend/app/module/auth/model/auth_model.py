@@ -44,7 +44,7 @@ class AppUserModel(Base):
         CheckConstraint(
             "prompt_tokens >= 0 AND completion_tokens >= 0 AND total_tokens >= 0 "
             "AND cached_tokens >= 0 AND api_calls >= 0 AND agent_turns >= 0 "
-            "AND embedding_tokens >= 0 AND web_search_calls >= 0 "
+            "AND embedding_characters >= 0 AND web_search_calls >= 0 "
             "AND web_fetch_calls >= 0",
             name="usage_non_negative",
         ),
@@ -165,7 +165,7 @@ class AppUserModel(Base):
         default=0,
         server_default=text("0"),
     )
-    embedding_tokens: Mapped[int] = mapped_column(
+    embedding_characters: Mapped[int] = mapped_column(
         BigInteger,
         nullable=False,
         default=0,

@@ -71,6 +71,7 @@ from app.module.knowledge.service.indexer_service import IndexerService
 from app.module.knowledge.service.ingest_job_service import IngestJobService, IngestWorker
 from app.module.knowledge.service.ingest_settings_service import IngestSettingsService
 from app.module.knowledge.service.memory_service import MemoryService
+from app.module.knowledge.service.metered_text_generator import MeteredTextGenerator
 from app.module.knowledge.service.provider_config_service import ProviderConfigService
 from app.module.knowledge.service.provider_error_notice_service import (
     ProviderErrorNoticeService,
@@ -115,12 +116,30 @@ def _vision_extractor_for_state(state: State) -> VisionExtractorProtocol:
         return cast(VisionExtractorProtocol, override)
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
-    chat_config = runtime.chat_config
-    if chat_config.enabled and chat_config.provider != "none" and chat_config.api_key:
+    # OCR defaults to DeepSeek when it is anywhere in the chat chain with a
+    # usable key, even if the active chat primary is another compatible
+    # provider. Falling back to the primary keeps single-provider deployments
+    # working; no provider means vision stays unavailable.
+    deepseek_config = next(
+        (
+            config
+            for config in runtime.chat_chain
+            if config.enabled
+            and config.provider == "deepseek"
+            and bool(config.api_key)
+        ),
+        None,
+    )
+    vision_config = deepseek_config or runtime.chat_config
+    if (
+        vision_config.enabled
+        and vision_config.provider != "none"
+        and vision_config.api_key
+    ):
         return DeepSeekVisionExtractor(
-            api_key=chat_config.api_key,
-            base_url=chat_config.base_url or settings.deepseek_base_url,
-            model=chat_config.model or settings.deepseek_model,
+            api_key=vision_config.api_key,
+            base_url=vision_config.base_url or settings.deepseek_base_url,
+            model=vision_config.model or settings.deepseek_model,
             timeout_seconds=settings.deepseek_timeout_seconds,
         )
     return NullVisionExtractor()
@@ -229,6 +248,7 @@ def build_file_service(
         )
     )
     chunk_repository = ChunkRepository(session, user_id)
+    quota = AccountQuotaService(cast(Database, state.db), user_id)
     indexer = IndexerService(
         chunk_repository,
         runtime.embedder,
@@ -244,7 +264,7 @@ def build_file_service(
         embedding_retry_seconds=settings.ingest_embedding_retry_seconds,
         fail_on_embedding_error=fail_on_embedding_error,
         embedding_refresh=embedding_refresh,
-        quota=AccountQuotaService(cast(Database, state.db), user_id),
+        quota=quota,
     )
     return FileService(
         user_id=user_id,
@@ -254,7 +274,7 @@ def build_file_service(
         indexer=indexer,
         storage=cast(FileStorageProtocol, state.storage),
         cache=cast(CacheProtocol, state.cache),
-        text_generator=runtime.text_generator,
+        text_generator=MeteredTextGenerator(runtime.text_generator, quota),
         vision_extractor=_vision_extractor_for_state(state),
         vision_description_language=resolved_vision_language,
         vision_image_prompt=resolved_image_prompt,
@@ -274,6 +294,7 @@ def build_file_service(
         max_text_bytes=settings.max_text_bytes,
         vision_max_pages=settings.vision_max_pages,
         pdf_text_threshold=settings.pdf_text_threshold,
+        chat_quota=quota,
         cpu_runner=cpu_runner,
     )
 
@@ -303,12 +324,13 @@ def build_summary_service(state: State, session: AsyncSession, *, user_id: int) 
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
     _, indexer = _build_indexer(state, session, user_id=user_id)
+    quota = AccountQuotaService(cast(Database, state.db), user_id)
     return SummaryService(
         user_id=user_id,
         memory_repository=MemoryRepository(session, user_id),
         summary_repository=SummaryRepository(session, user_id),
         indexer=indexer,
-        text_generator=runtime.text_generator,
+        text_generator=MeteredTextGenerator(runtime.text_generator, quota),
         cache=cast(CacheProtocol, state.cache),
         ai_summary_enabled=settings.ai_summary_enabled,
         auto_summary_threshold=settings.auto_summary_threshold,
@@ -320,6 +342,7 @@ def build_memory_service(state: State, session: AsyncSession, *, user_id: int) -
     """Compose an owner-scoped memory service, including its auto-summary hook."""
     runtime = cast(AiRuntime, state.ai_runtime)
     chunk_repository, indexer = _build_indexer(state, session, user_id=user_id)
+    quota = AccountQuotaService(cast(Database, state.db), user_id)
     return MemoryService(
         user_id=user_id,
         memory_repository=MemoryRepository(session, user_id),
@@ -327,7 +350,7 @@ def build_memory_service(state: State, session: AsyncSession, *, user_id: int) -
         indexer=indexer,
         cache=cast(CacheProtocol, state.cache),
         summary_service=build_summary_service(state, session, user_id=user_id),
-        text_generator=runtime.text_generator,
+        text_generator=MeteredTextGenerator(runtime.text_generator, quota),
     )
 
 
