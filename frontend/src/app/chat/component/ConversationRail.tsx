@@ -18,6 +18,7 @@ import {
   invalidateConversationList,
 } from "../query";
 import { clearLastChatConversation } from "../session-storage";
+import { visibleConversations } from "./rail-conversations";
 
 interface ConversationRailProps {
   readonly conversations: readonly AgentConversationSchema[];
@@ -82,7 +83,7 @@ function groupOf(conversation: AgentConversationSchema): SessionGroup {
   return "earlier";
 }
 
-/** Session drawer: grouped conversations with rename, archive, and fork. */
+/** Session drawer: grouped conversations with rename, delete, and fork. */
 export const ConversationRail = memo(function ConversationRail({
   conversations,
   loading,
@@ -107,6 +108,9 @@ export const ConversationRail = memo(function ConversationRail({
   const [editTitle, setEditTitle] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
   const [forkingId, setForkingId] = useState<number | null>(null);
+  const [removedIds, setRemovedIds] = useState<ReadonlySet<number>>(
+    () => new Set(),
+  );
 
   useEffect(() => {
     if (menuId === null) {
@@ -135,12 +139,17 @@ export const ConversationRail = memo(function ConversationRail({
     };
   }, [menuId]);
 
+  const visible = useMemo(
+    () => visibleConversations(conversations, removedIds),
+    [conversations, removedIds],
+  );
+
   const grouped = useMemo(() => {
     const buckets = new Map<SessionGroup, AgentConversationSchema[]>();
     for (const { key } of GROUP_ORDER) {
       buckets.set(key, []);
     }
-    for (const conversation of conversations) {
+    for (const conversation of visible) {
       buckets.get(groupOf(conversation))?.push(conversation);
     }
     for (const bucket of buckets.values()) {
@@ -150,12 +159,7 @@ export const ConversationRail = memo(function ConversationRail({
       ...group,
       items: buckets.get(group.key) ?? [],
     }));
-  }, [conversations]);
-
-  const activeCount = conversations.filter(
-    (conversation) => conversation.status === "active",
-  ).length;
-  const archivedCount = conversations.length - activeCount;
+  }, [visible]);
 
   const refresh = async (conversationId?: number) => {
     await Promise.all([
@@ -191,30 +195,36 @@ export const ConversationRail = memo(function ConversationRail({
     }
   };
 
-  const toggleStatus = async (conversation: AgentConversationSchema) => {
+  const deleteConversation = async (conversation: AgentConversationSchema) => {
     if (busyId !== null || forkingId !== null) {
       return;
     }
-    const nextStatus =
-      conversation.status === "archived" ? "active" : "archived";
     setBusyId(conversation.id);
+    setRemovedIds((current) => new Set(current).add(conversation.id));
     try {
+      // The API has no hard delete: `archived` is the soft-delete tag that
+      // keeps the row and its entries while hiding the conversation from the
+      // active list.
       await updateConversation.mutateAsync({
         conversationId: conversation.id,
-        data: { status: nextStatus },
+        data: { status: "archived" },
       });
       await refresh(conversation.id);
-      toast.success(
-        nextStatus === "archived"
-          ? t("chat.rail.archivedToast")
-          : t("chat.rail.restoredToast"),
-      );
-      if (nextStatus === "archived" && activeId === conversation.id) {
+      toast.success(t("chat.rail.deletedToast"));
+      if (activeId === conversation.id) {
         clearLastChatConversation();
         navigate("/chat");
         onNavigate();
       }
     } catch (caught) {
+      setRemovedIds((current) => {
+        if (!current.has(conversation.id)) {
+          return current;
+        }
+        const next = new Set(current);
+        next.delete(conversation.id);
+        return next;
+      });
       toast.error(describeError(caught));
     } finally {
       setBusyId(null);
@@ -222,11 +232,7 @@ export const ConversationRail = memo(function ConversationRail({
   };
 
   const forkThread = async (conversation: AgentConversationSchema) => {
-    if (
-      busyId !== null ||
-      forkingId !== null ||
-      conversation.status !== "active"
-    ) {
+    if (busyId !== null || forkingId !== null) {
       return;
     }
     setForkingId(conversation.id);
@@ -271,7 +277,7 @@ export const ConversationRail = memo(function ConversationRail({
         </Button>
       </div>
     );
-  } else if (conversations.length === 0) {
+  } else if (visible.length === 0) {
     body = (
       <div className="chat-sessions__state">
         <p className="mono-label">{t("chat.rail.emptyLabel")}</p>
@@ -290,7 +296,6 @@ export const ConversationRail = memo(function ConversationRail({
               <ul className="chat-sessions__list">
                 {group.items.map((conversation) => {
                   const active = conversation.id === activeId;
-                  const archived = conversation.status === "archived";
                   const busy = busyId === conversation.id;
                   const forking = forkingId === conversation.id;
                   const editing = editingId === conversation.id;
@@ -302,8 +307,8 @@ export const ConversationRail = memo(function ConversationRail({
                       className={[
                         "chat-session",
                         active ? "is-active" : null,
-                        archived ? "is-archived" : null,
                         busy ? "is-busy" : null,
+                        menuOpen ? "is-menu-open" : null,
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -380,14 +385,6 @@ export const ConversationRail = memo(function ConversationRail({
                                 <time dateTime={timestamp}>
                                   {formatRelative(timestamp)}
                                 </time>
-                                {archived ? (
-                                  <>
-                                    <span aria-hidden="true">·</span>
-                                    <span className="chat-session__flag">
-                                      {t("chat.rail.archivedFlag")}
-                                    </span>
-                                  </>
-                                ) : null}
                               </span>
                             </span>
                           </Link>
@@ -440,16 +437,11 @@ export const ConversationRail = memo(function ConversationRail({
                                   type="button"
                                   onClick={() => {
                                     setMenuId(null);
-                                    void toggleStatus(conversation);
+                                    void deleteConversation(conversation);
                                   }}
                                 >
-                                  <Icon
-                                    name={archived ? "history" : "archive"}
-                                    size={13}
-                                  />
-                                  {archived
-                                    ? t("chat.rail.restore")
-                                    : t("chat.rail.archive")}
+                                  <Icon name="trash" size={13} />
+                                  {t("chat.rail.delete")}
                                 </button>
                                 <button
                                   type="button"
@@ -457,12 +449,7 @@ export const ConversationRail = memo(function ConversationRail({
                                     setMenuId(null);
                                     void forkThread(conversation);
                                   }}
-                                  disabled={archived}
-                                  title={
-                                    archived
-                                      ? t("chat.rail.forkDisabled")
-                                      : t("chat.rail.forkTitle")
-                                  }
+                                  title={t("chat.rail.forkTitle")}
                                 >
                                   {forking ? (
                                     <Loader
@@ -551,9 +538,8 @@ export const ConversationRail = memo(function ConversationRail({
 
         <div className="chat-sessions__foot">
           <span>
-            {t("chat.rail.counts", {
-              active: formatNumber(activeCount),
-              archived: formatNumber(archivedCount),
+            {t("chat.rail.conversationCount", {
+              count: formatNumber(visible.length),
             })}
           </span>
         </div>

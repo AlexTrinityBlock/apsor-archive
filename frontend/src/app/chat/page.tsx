@@ -359,7 +359,10 @@ export function ChatPage() {
     return () => window.removeEventListener("pagehide", handlePageHide);
   }, [discardComposerAttachments]);
 
-  const conversationsQuery = useListAgentConversations({ limit: 100 });
+  const conversationsQuery = useListAgentConversations({
+    status: "active",
+    limit: 100,
+  });
   const refetchConversations = conversationsQuery.refetch;
   const conversationQuery = useGetAgentConversation(
     conversationId ?? 0,
