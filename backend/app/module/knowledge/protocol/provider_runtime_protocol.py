@@ -32,7 +32,12 @@ class ProviderRuntimeProtocol(Protocol):
     @property
     def vector_enabled(self) -> bool: ...
 
-    async def reload(self, repository: ProviderConfigRepositoryProtocol) -> None: ...
+    async def reload(
+        self,
+        repository: ProviderConfigRepositoryProtocol,
+        *,
+        announce: bool = ...,
+    ) -> bool: ...
 
 
 __all__ = ["ProviderRuntimeProtocol"]

@@ -36,6 +36,13 @@ class OpenAICompatibleEmbedder:
                     json=payload,
                 )
                 response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            # Preserve the upstream status so the caller can distinguish an
+            # authentication failure from a transient transport problem.
+            raise EmbeddingProviderError(
+                str(exc),
+                status_code=exc.response.status_code,
+            ) from exc
         except httpx.HTTPError as exc:
             raise EmbeddingProviderError(str(exc)) from exc
 

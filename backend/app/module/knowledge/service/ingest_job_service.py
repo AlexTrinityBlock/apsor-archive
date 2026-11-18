@@ -83,6 +83,7 @@ from app.module.knowledge.model.ingest_job_model import (
     INGEST_STATUS_SUMMARIZING,
     FileIngestJobModel,
 )
+from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
 from app.module.knowledge.protocol.ingest_progress_protocol import IngestProgressProtocol
 from app.module.knowledge.repository.ingest_job_repository import IngestJobRepository
@@ -434,6 +435,7 @@ class IngestWorker:
         max_attempts: int,
         runtime_config: IngestRuntimeConfig,
         config_provider: Callable[[], Awaitable[IngestRuntimeConfig]] | None = None,
+        provider_refresh: Callable[[], Awaitable[EmbedderProtocol]] | None = None,
         stale_seconds: int = 300,
         extract_pool: ThreadPoolExecutor | None = None,
         extract_semaphore: asyncio.Semaphore | None = None,
@@ -446,6 +448,7 @@ class IngestWorker:
         self.stale_seconds = max(1, stale_seconds)
         self.extract_pool = extract_pool
         self.config_provider = config_provider
+        self.provider_refresh = provider_refresh
         self.runtime_config = runtime_config
         self.poll_seconds = runtime_config.poll_seconds
         self.extract_workers = runtime_config.extract_workers
@@ -487,6 +490,22 @@ class IngestWorker:
         self.extract_workers = config.extract_workers
         self.max_in_flight_jobs = config.max_inflight_jobs
         self.embedding_concurrency = config.embedding_concurrency
+
+    async def _refresh_provider_runtime(self) -> None:
+        """Reload provider configuration at a batch boundary.
+
+        Called only when the worker has no claimed job in flight. A job builds
+        its file service after the claim and keeps that embedder and text
+        generator for its whole pipeline, so a key, model, base URL, or
+        dimension change applies to the next batch instead of mutating a
+        running job. A failed refresh keeps the previous snapshot usable.
+        """
+        if self.provider_refresh is None:
+            return
+        try:
+            await self.provider_refresh()
+        except Exception:
+            logger.exception("Could not refresh the AI provider runtime")
 
     def close(self) -> None:
         """Release extraction threads without waiting on a stopped event loop."""
@@ -569,6 +588,7 @@ class IngestWorker:
 
     async def run_once(self) -> bool:
         """Claim and fully process at most one queued job."""
+        await self._refresh_provider_runtime()
         await self._refresh_runtime()
         claimed = await self._claim_next()
         if claimed is None:
@@ -588,10 +608,15 @@ class IngestWorker:
         tasks: set[asyncio.Task[None]] = set()
         try:
             while stop_event is None or not stop_event.is_set():
-                await self._refresh_runtime()
-                runtime = self._runtime()
                 for finished in {task for task in tasks if task.done()}:
                     tasks.discard(finished)
+                # Provider changes are visible only between batches. Refreshing
+                # while any claimed job is still running would let a routine
+                # key/model edit change the clients underneath that job.
+                if not tasks:
+                    await self._refresh_provider_runtime()
+                await self._refresh_runtime()
+                runtime = self._runtime()
                 while len(tasks) < runtime.config.max_inflight_jobs:
                     try:
                         claimed = await self._claim_next()
@@ -649,6 +674,7 @@ class IngestWorker:
 
     async def process_job(self, job_id: int) -> IngestJobSchema | None:
         """Claim and process one specific queued job (tests and ``--once``)."""
+        await self._refresh_provider_runtime()
         await self._refresh_runtime()
         async with maintenance_session(self.session_factory) as session:
             job = await IngestJobRepository(session).claim(job_id)

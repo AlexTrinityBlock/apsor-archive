@@ -153,6 +153,7 @@ def _build_indexer(
     user_id: int,
     embedding_semaphore: asyncio.Semaphore | None = None,
     fail_on_embedding_error: bool = False,
+    embedding_refresh: Callable[[], Awaitable[EmbedderProtocol]] | None = None,
 ) -> tuple[ChunkRepository, IndexerService]:
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
@@ -167,6 +168,7 @@ def _build_indexer(
         embedding_max_attempts=settings.ingest_embedding_max_attempts,
         embedding_retry_seconds=settings.ingest_embedding_retry_seconds,
         fail_on_embedding_error=fail_on_embedding_error,
+        embedding_refresh=embedding_refresh,
     )
     return chunk_repository, indexer
 
@@ -183,8 +185,14 @@ def build_file_service(
     cpu_runner: CpuRunner | None = None,
     embedding_semaphore: asyncio.Semaphore | None = None,
     fail_on_embedding_error: bool = False,
+    embedding_refresh: Callable[[], Awaitable[EmbedderProtocol]] | None = None,
 ) -> FileService:
-    """Compose a file service for one owner, for requests, workers, and tools."""
+    """Compose a file service for one owner, for requests, workers, and tools.
+
+    ``embedding_refresh`` is supplied only by the durable worker. It lets the
+    indexer recover from one mid-job 401/403 without switching the model or
+    dimension underneath a running job.
+    """
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
     if vision_description_language is not None:
@@ -230,6 +238,7 @@ def build_file_service(
         embedding_max_attempts=settings.ingest_embedding_max_attempts,
         embedding_retry_seconds=settings.ingest_embedding_retry_seconds,
         fail_on_embedding_error=fail_on_embedding_error,
+        embedding_refresh=embedding_refresh,
     )
     return FileService(
         user_id=user_id,
@@ -394,6 +403,30 @@ def build_ingest_job_service(
     )
 
 
+def build_provider_refresh(
+    runtime: AiRuntime,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> Callable[[], Awaitable[EmbedderProtocol]]:
+    """Build the worker's provider-refresh callback.
+
+    The worker calls this at a batch boundary (no in-flight job) and once from
+    an indexer after a mid-job 401/403. Each call loads the current database
+    snapshot through a short-lived system session and returns the embedder that
+    snapshot exposes. ``announce=False`` keeps an unchanged routine reload at
+    DEBUG; startup and root writes still log the snapshot at INFO.
+    """
+
+    async def refresh() -> EmbedderProtocol:
+        async with system_session(session_factory) as session:
+            await runtime.reload(
+                ProviderConfigRepository(session),
+                announce=False,
+            )
+        return runtime.embedder
+
+    return refresh
+
+
 def build_ingest_worker(
     state: State,
     session_factory: async_sessionmaker[AsyncSession],
@@ -401,6 +434,7 @@ def build_ingest_worker(
     *,
     runtime_config: IngestRuntimeConfig | None = None,
     config_provider: Callable[[], Awaitable[IngestRuntimeConfig]] | None = None,
+    provider_refresh: Callable[[], Awaitable[EmbedderProtocol]] | None = None,
 ) -> IngestWorker:
     """Build the shared worker used by lifespan mode and the CLI entrypoint.
 
@@ -409,6 +443,10 @@ def build_ingest_worker(
     value, so lowering or raising ``extract_workers`` affects newly claimed jobs
     without replacing the process. The same pattern applies to embedding
     concurrency and the in-flight job cap.
+
+    ``provider_refresh`` reloads the AI provider snapshot when the worker has no
+    in-flight job, and is also handed to every file service so the indexer can
+    recover once from a mid-job authentication failure.
     """
     initial_config = runtime_config or ingest_runtime_defaults(settings)
     extract_pool = ThreadPoolExecutor(
@@ -433,6 +471,7 @@ def build_ingest_worker(
             cpu_runner=_make_cpu_runner(extract_pool, current_extract_slots),
             embedding_semaphore=current_embedding_slots,
             fail_on_embedding_error=True,
+            embedding_refresh=provider_refresh,
         )
 
     return IngestWorker(
@@ -442,6 +481,7 @@ def build_ingest_worker(
         max_attempts=settings.ingest_job_max_attempts,
         runtime_config=initial_config,
         config_provider=config_provider,
+        provider_refresh=provider_refresh,
         stale_seconds=settings.ingest_job_stale_seconds,
         extract_pool=extract_pool,
         extract_semaphore=extract_slots,

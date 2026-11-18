@@ -166,8 +166,17 @@ class AiContextWindowError(AiProviderError):
 
 
 class EmbeddingProviderError(KnowledgeError):
-    def __init__(self, detail: str) -> None:
+    """An embedding call that did not produce usable vectors.
+
+    ``status_code`` carries the upstream HTTP status when one exists. It never
+    contains credentials or input text; callers use it to distinguish an
+    authentication failure (401/403, recoverable after a provider refresh) from
+    a transient transport error.
+    """
+
+    def __init__(self, detail: str, *, status_code: int | None = None) -> None:
         super().__init__(f"The embedding provider failed: {detail}")
+        self.status_code = status_code
 
 
 class TreePathConflictError(KnowledgeError):
