@@ -1,5 +1,6 @@
 """Resolved AI provider runtime, refreshed when settings change."""
 
+import asyncio
 import logging
 
 from app.infrastructure.ai.deepseek_client import NullTextGenerator
@@ -59,6 +60,10 @@ class AiRuntime:
         self.embedding_config = self._default_embedding()
         self.web_search_config = self._default_web(CAPABILITY_WEB_SEARCH)
         self.web_fetch_config = self._default_web(CAPABILITY_WEB_FETCH)
+        # The API and a worker may both refresh the runtime. Serializing reloads
+        # keeps each snapshot internally consistent and makes the change
+        # comparison below reliable.
+        self._reload_lock = asyncio.Lock()
 
     def _default_chat(self) -> ProviderConfig:
         key = self.defaults.chat_api_key
@@ -165,39 +170,79 @@ class AiRuntime:
             return self.defaults.web_search_api_key
         return self.defaults.web_fetch_api_key
 
-    async def reload(self, repository: ProviderConfigRepositoryProtocol) -> None:
+    async def reload(
+        self,
+        repository: ProviderConfigRepositoryProtocol,
+        *,
+        announce: bool = True,
+    ) -> bool:
         """Reload the four capability slots from the database.
 
         Each capability has at most one active row (guaranteed by the partial
         unique index), so this always queries each of the four tables once; no
         union is used, so that the meaning of "active" stays unambiguous.
-        """
-        configs: dict[ProviderCapability, ProviderConfig] = {
-            CAPABILITY_CHAT: self._default_chat(),
-            CAPABILITY_EMBEDDING: self._default_embedding(),
-            CAPABILITY_WEB_SEARCH: self._default_web(CAPABILITY_WEB_SEARCH),
-            CAPABILITY_WEB_FETCH: self._default_web(CAPABILITY_WEB_FETCH),
-        }
-        for spec in PROVIDER_TABLE_SPECS.values():
-            row = await repository.get_active(spec)
-            if row is not None:
-                configs[spec.capability] = self._row_config(spec, row)
 
-        snapshot = ProviderSnapshot(
-            chat=configs[CAPABILITY_CHAT],
-            embedding=configs[CAPABILITY_EMBEDDING],
-            web_search=configs[CAPABILITY_WEB_SEARCH],
-            web_fetch=configs[CAPABILITY_WEB_FETCH],
+        ``announce`` is true for startup and for the root write path, which
+        should always log the loaded snapshot. The worker's routine
+        batch-boundary refresh passes ``announce=False`` so an unchanged
+        snapshot logs at DEBUG and only an effective configuration change
+        (including a rotated key, a new base URL, model, or dimension) reaches
+        INFO. The return value reports whether the effective snapshot changed.
+        """
+        async with self._reload_lock:
+            previous = self._snapshot()
+            configs: dict[ProviderCapability, ProviderConfig] = {
+                CAPABILITY_CHAT: self._default_chat(),
+                CAPABILITY_EMBEDDING: self._default_embedding(),
+                CAPABILITY_WEB_SEARCH: self._default_web(CAPABILITY_WEB_SEARCH),
+                CAPABILITY_WEB_FETCH: self._default_web(CAPABILITY_WEB_FETCH),
+            }
+            for spec in PROVIDER_TABLE_SPECS.values():
+                row = await repository.get_active(spec)
+                if row is not None:
+                    configs[spec.capability] = self._row_config(spec, row)
+
+            snapshot = ProviderSnapshot(
+                chat=configs[CAPABILITY_CHAT],
+                embedding=configs[CAPABILITY_EMBEDDING],
+                web_search=configs[CAPABILITY_WEB_SEARCH],
+                web_fetch=configs[CAPABILITY_WEB_FETCH],
+            )
+            changed = snapshot != previous
+            self.chat_config = snapshot.chat
+            self.embedding_config = snapshot.embedding
+            self.web_search_config = snapshot.web_search
+            self.web_fetch_config = snapshot.web_fetch
+            self.text_generator = self.builder.build_text_generator(snapshot.chat)
+            self.embedder = self.builder.build_embedder(snapshot.embedding)
+            self.web_search_client = self.builder.build_web_client(snapshot.web_search)
+            self.web_fetch_client = self.builder.build_web_client(snapshot.web_fetch)
+            if announce or changed:
+                self._log_snapshot(snapshot, logging.INFO)
+            else:
+                logger.debug(
+                    "provider runtime unchanged embedding_provider=%s embedding_model=%s "
+                    "embedding_dimension=%s",
+                    snapshot.embedding.provider,
+                    snapshot.embedding.model or "-",
+                    snapshot.embedding.dimension,
+                )
+            return changed
+
+    def _snapshot(self) -> ProviderSnapshot:
+        """Capture the currently resolved capability slots."""
+        return ProviderSnapshot(
+            chat=self.chat_config,
+            embedding=self.embedding_config,
+            web_search=self.web_search_config,
+            web_fetch=self.web_fetch_config,
         )
-        self.chat_config = snapshot.chat
-        self.embedding_config = snapshot.embedding
-        self.web_search_config = snapshot.web_search
-        self.web_fetch_config = snapshot.web_fetch
-        self.text_generator = self.builder.build_text_generator(snapshot.chat)
-        self.embedder = self.builder.build_embedder(snapshot.embedding)
-        self.web_search_client = self.builder.build_web_client(snapshot.web_search)
-        self.web_fetch_client = self.builder.build_web_client(snapshot.web_fetch)
-        logger.info(
+
+    @staticmethod
+    def _log_snapshot(snapshot: ProviderSnapshot, level: int) -> None:
+        """Log the safe parts of one snapshot; the key is reduced to presence."""
+        logger.log(
+            level,
             "provider runtime loaded chat_provider=%s chat_model=%s "
             "chat_base_url=%s chat_source=%s chat_enabled=%s chat_key=%s "
             "embedding_provider=%s embedding_model=%s embedding_dimension=%s "

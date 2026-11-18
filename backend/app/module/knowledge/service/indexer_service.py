@@ -15,6 +15,11 @@ logger = logging.getLogger(__name__)
 
 EmbeddingProgress = Callable[[int, int], Awaitable[None]]
 IndexCheckpoint = Callable[[], Awaitable[None]]
+EmbeddingRefresh = Callable[[], Awaitable[EmbedderProtocol]]
+
+# Only an authentication failure can be fixed by reloading the provider
+# configuration; every other status keeps the ordinary bounded retry.
+_AUTH_STATUS_CODES = frozenset({401, 403})
 
 
 class IndexerService:
@@ -28,7 +33,9 @@ class IndexerService:
     SQLAlchemy session is not concurrency-safe. Transient provider failures get a
     small bounded retry with exponential backoff. Strict callers (the durable
     ingestion worker) surface the error after the retry budget; other callers
-    keep the legacy text-only fallback.
+    keep the legacy text-only fallback. An authentication failure (401/403) may
+    reload the provider once and retry, but only when the refreshed embedder
+    keeps the job's original model and dimension.
     """
 
     def __init__(
@@ -43,6 +50,7 @@ class IndexerService:
         embedding_max_attempts: int = 3,
         embedding_retry_seconds: float = 0.25,
         fail_on_embedding_error: bool = False,
+        embedding_refresh: EmbeddingRefresh | None = None,
     ) -> None:
         self.chunk_repository = chunk_repository
         self.embedder = embedder
@@ -53,11 +61,63 @@ class IndexerService:
         self.embedding_max_attempts = max(1, embedding_max_attempts)
         self.embedding_retry_seconds = max(0.0, embedding_retry_seconds)
         self.fail_on_embedding_error = fail_on_embedding_error
+        self.embedding_refresh = embedding_refresh
+        self._embedding_refresh_lock = asyncio.Lock()
+        # Concurrent embedding batches within one job share this flag: the
+        # first 401/403 reloads the provider once, and every later batch reuses
+        # the same result instead of reloading again.
+        self._embedding_refresh_attempted = False
 
     def _embedding_failure(self, exc: EmbeddingProviderError) -> None:
         if self.fail_on_embedding_error:
             raise exc
         logger.warning("Embedding provider failed; indexing text only: %s", exc)
+
+    async def _refresh_after_auth_error(self, exc: EmbeddingProviderError) -> bool:
+        """Reload the provider once and adopt only a same-shape embedder.
+
+        A rotated key or a corrected base URL can make the job's startup
+        snapshot fail with 401/403 while the database already holds the fixed
+        configuration. Reloading is safe only when the refreshed embedder keeps
+        the model and dimension the job started with; mixing two models or
+        dimensions inside one file would leave incoherent vectors. In that case
+        the job fails instead of swapping, and the next job starts from the new
+        snapshot at the worker's batch boundary.
+        """
+        if self.embedding_refresh is None or self._embedding_refresh_attempted:
+            return False
+        async with self._embedding_refresh_lock:
+            if self._embedding_refresh_attempted:
+                return False
+            self._embedding_refresh_attempted = True
+            try:
+                candidate = await self.embedding_refresh()
+            except Exception:
+                logger.exception(
+                    "Could not refresh the embedding provider after an authentication failure"
+                )
+                return False
+        current = self.embedder
+        if (
+            candidate.model_name != current.model_name
+            or candidate.dimension != current.dimension
+        ):
+            raise EmbeddingProviderError(
+                "The embedding provider configuration changed model or dimension "
+                f"during ingestion ({current.model_name}/{current.dimension} -> "
+                f"{candidate.model_name}/{candidate.dimension}). The job keeps its "
+                "original configuration and must be retried; the next job uses the "
+                "new configuration.",
+                status_code=exc.status_code,
+            )
+        self.embedder = candidate
+        logger.info(
+            "Embedding provider refreshed after HTTP %s; continuing model=%s dimension=%d",
+            exc.status_code,
+            candidate.model_name,
+            candidate.dimension,
+        )
+        return True
 
     async def _embeddings(self, texts: list[str]) -> list[list[float] | None]:
         if self.embedder.dimension <= 0 or not texts:
@@ -73,6 +133,16 @@ class IndexerService:
                         f"Embedding provider returned {len(vectors)} vectors for {len(texts)} texts"
                     )
             except EmbeddingProviderError as exc:
+                if exc.status_code in _AUTH_STATUS_CODES:
+                    try:
+                        refreshed = await self._refresh_after_auth_error(exc)
+                    except EmbeddingProviderError as changed:
+                        self._embedding_failure(changed)
+                        return [None for _text in texts]
+                    if refreshed:
+                        # One immediate retry per indexer; the flag inside the
+                        # helper keeps a wrong replacement key from looping.
+                        continue
                 if attempt >= self.embedding_max_attempts:
                     self._embedding_failure(exc)
                     return [None for _text in texts]
