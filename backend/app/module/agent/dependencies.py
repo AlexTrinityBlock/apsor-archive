@@ -293,14 +293,35 @@ def get_agent_service(
         chat_attachments=chat_attachments,
         server_timezone=cast(Settings, request.app.state.settings).timezone,
         active_provider=runtime.chat_config.provider,
-        web_search_provider=_available_web_provider(runtime.web_search_config),
-        web_fetch_provider=_available_web_provider(runtime.web_fetch_config),
+        web_search_provider=_available_web_provider(
+            runtime.web_search_config,
+            runtime.web_search_client,
+        ),
+        web_fetch_provider=_available_web_provider(
+            runtime.web_fetch_config,
+            runtime.web_fetch_client,
+        ),
     )
 
 
-def _available_web_provider(config: ProviderConfig) -> str:
-    """Return a web provider only when it is active and has a usable key."""
-    if config.enabled and config.api_key and config.provider in {"tavily", "exa", "deepseek"}:
+def _available_web_provider(
+    config: ProviderConfig,
+    client: object | None = None,
+) -> str:
+    """Return a web provider only when it is active and has a usable credential.
+
+    ``client`` is the runtime client, which may be a fallback wrapper whose
+    aggregate ``configured`` is true because a backup holds the key even though
+    the primary row does not. The client is deliberately typed loosely: the
+    agent slice does not import the knowledge web-client protocol here.
+    """
+    configured = getattr(client, "configured", None) if client is not None else None
+    has_credentials = bool(config.api_key) if configured is None else bool(configured)
+    if (
+        config.enabled
+        and has_credentials
+        and config.provider in {"tavily", "exa", "deepseek"}
+    ):
         return config.provider
     return "none"
 

@@ -71,6 +71,9 @@ from app.module.knowledge.service.ingest_job_service import IngestJobService, In
 from app.module.knowledge.service.ingest_settings_service import IngestSettingsService
 from app.module.knowledge.service.memory_service import MemoryService
 from app.module.knowledge.service.provider_config_service import ProviderConfigService
+from app.module.knowledge.service.provider_error_notice_service import (
+    ProviderErrorNoticeService,
+)
 from app.module.knowledge.service.search_service import SearchService
 from app.module.knowledge.service.stats_service import StatsService
 from app.module.knowledge.service.summary_service import SummaryService
@@ -584,6 +587,20 @@ def get_provider_config_service(
         cache=get_cache(request),
         tester=cast(ProviderTesterProtocol, tester),
     )
+
+
+def get_provider_notice_service(request: Request) -> ProviderErrorNoticeService:
+    """Return the process-wide notice service, or build one from the factory.
+
+    The lifespan stores the same instance that the AI runtime uses for its
+    failure reporter, so the request path and provider calls agree on the
+    dedupe clock. Tests may inject a service directly on ``app.state``.
+    """
+    override = getattr(request.app.state, "provider_notice_service", None)
+    if override is not None:
+        return cast(ProviderErrorNoticeService, override)
+    database = cast(Database, request.app.state.db)
+    return ProviderErrorNoticeService(database.session_factory)
 
 
 def ingest_runtime_defaults(settings: Settings) -> IngestRuntimeConfig:

@@ -5,22 +5,30 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
+  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
+  HTTPValidationError,
   HealthSchema,
+  ListProviderNoticesParams,
+  ProviderErrorNoticeListSchema,
+  ProviderErrorNoticeReadSchema,
   StatsSchema
 } from '../schemas';
 
@@ -247,3 +255,259 @@ export function useGetStats<TData = Awaited<ReturnType<typeof getStats>>, TError
 
 
 
+export const getListProviderNoticesUrl = (params?: ListProviderNoticesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/system/provider-notices?${stringifiedParams}` : `/api/v1/system/provider-notices`
+}
+
+/**
+ * Return provider-chain failures and the unresolved count.
+ * @summary List Provider Notices
+ */
+export const listProviderNotices = async (params?: ListProviderNoticesParams, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderErrorNoticeListSchema> => {
+
+  return apiFetch<ProviderErrorNoticeListSchema>(getListProviderNoticesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProviderNoticesQueryKey = (params?: ListProviderNoticesParams,) => {
+    return [
+    `/api/v1/system/provider-notices`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListProviderNoticesQueryOptions = <TData = Awaited<ReturnType<typeof listProviderNotices>>, TError = HTTPValidationError>(params?: ListProviderNoticesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProviderNotices>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProviderNoticesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProviderNotices>>> = ({ signal }) => listProviderNotices(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProviderNotices>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListProviderNoticesQueryResult = NonNullable<Awaited<ReturnType<typeof listProviderNotices>>>
+export type ListProviderNoticesQueryError = HTTPValidationError
+
+
+export function useListProviderNotices<TData = Awaited<ReturnType<typeof listProviderNotices>>, TError = HTTPValidationError>(
+ params: undefined |  ListProviderNoticesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProviderNotices>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProviderNotices>>,
+          TError,
+          Awaited<ReturnType<typeof listProviderNotices>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProviderNotices<TData = Awaited<ReturnType<typeof listProviderNotices>>, TError = HTTPValidationError>(
+ params?: ListProviderNoticesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProviderNotices>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProviderNotices>>,
+          TError,
+          Awaited<ReturnType<typeof listProviderNotices>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProviderNotices<TData = Awaited<ReturnType<typeof listProviderNotices>>, TError = HTTPValidationError>(
+ params?: ListProviderNoticesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProviderNotices>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Provider Notices
+ */
+
+export function useListProviderNotices<TData = Awaited<ReturnType<typeof listProviderNotices>>, TError = HTTPValidationError>(
+ params?: ListProviderNoticesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProviderNotices>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListProviderNoticesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getResolveAllProviderNoticesUrl = () => {
+
+
+
+
+  return `/api/v1/system/provider-notices/resolve-all`
+}
+
+/**
+ * Resolve every open notice and return the refreshed open list.
+ * @summary Resolve All Provider Notices
+ */
+export const resolveAllProviderNotices = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ProviderErrorNoticeListSchema> => {
+
+  return apiFetch<ProviderErrorNoticeListSchema>(getResolveAllProviderNoticesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getResolveAllProviderNoticesMutationKey = () => ['resolveAllProviderNotices'] as const;
+
+export const getResolveAllProviderNoticesMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveAllProviderNotices>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveAllProviderNotices>>, TError,void, TContext> => {
+
+const mutationKey = getResolveAllProviderNoticesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveAllProviderNotices>>, void> = () => {
+
+
+          return  resolveAllProviderNotices(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveAllProviderNoticesMutationResult = NonNullable<Awaited<ReturnType<typeof resolveAllProviderNotices>>>
+
+    export type ResolveAllProviderNoticesMutationError = unknown
+
+
+    /**
+ * @summary Resolve All Provider Notices
+ */
+export const useResolveAllProviderNotices = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveAllProviderNotices>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resolveAllProviderNotices>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getResolveAllProviderNoticesMutationOptions(options), queryClient);
+    }
+    export const getResolveProviderNoticeUrl = (noticeId: number,) => {
+
+
+
+
+  return `/api/v1/system/provider-notices/${noticeId}/resolve`
+}
+
+/**
+ * Mark one notice resolved on behalf of the acting root account.
+ * @summary Resolve Provider Notice
+ */
+export const resolveProviderNotice = async (noticeId: number, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderErrorNoticeReadSchema> => {
+
+  return apiFetch<ProviderErrorNoticeReadSchema>(getResolveProviderNoticeUrl(noticeId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getResolveProviderNoticeMutationKey = () => ['resolveProviderNotice'] as const;
+
+export const getResolveProviderNoticeMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveProviderNotice>>, TError,ResolveProviderNoticeMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveProviderNotice>>, TError,ResolveProviderNoticeMutationVariables, TContext> => {
+
+const mutationKey = getResolveProviderNoticeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveProviderNotice>>, ResolveProviderNoticeMutationVariables> = (props) => {
+          const {noticeId} = props ?? {};
+
+          return  resolveProviderNotice(noticeId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveProviderNoticeMutationResult = NonNullable<Awaited<ReturnType<typeof resolveProviderNotice>>>
+
+    export type ResolveProviderNoticeMutationError = HTTPValidationError
+    export type ResolveProviderNoticeMutationVariables = {noticeId: number}
+
+    /**
+ * @summary Resolve Provider Notice
+ */
+export const useResolveProviderNotice = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveProviderNotice>>, TError,ResolveProviderNoticeMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resolveProviderNotice>>,
+        TError,
+        ResolveProviderNoticeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getResolveProviderNoticeMutationOptions(options), queryClient);
+    }

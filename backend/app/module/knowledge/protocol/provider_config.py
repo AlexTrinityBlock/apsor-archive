@@ -59,12 +59,33 @@ class ProviderDefaults(BaseModel):
 
 @dataclass(frozen=True)
 class ProviderSnapshot:
-    """The four resolved capability slots loaded by ``AiRuntime.reload``."""
+    """The four resolved capability slots loaded by ``AiRuntime.reload``.
+
+    ``chat``/``embedding``/``web_search``/``web_fetch`` stay the primary
+    configuration for compatibility. The ``*_chain`` tuples carry the full
+    ordered chain (primary first) used to build fallback clients; they are empty
+    when no database row and no enabled environment default exists.
+    """
 
     chat: ProviderConfig
     embedding: ProviderConfig
     web_search: ProviderConfig
     web_fetch: ProviderConfig
+    chat_chain: tuple[ProviderConfig, ...] = ()
+    embedding_chain: tuple[ProviderConfig, ...] = ()
+    web_search_chain: tuple[ProviderConfig, ...] = ()
+    web_fetch_chain: tuple[ProviderConfig, ...] = ()
+
+    def chain_for(self, capability: ProviderCapability) -> tuple[ProviderConfig, ...]:
+        """Return one capability's ordered chain without a dict at each call site."""
+        if capability == "chat":
+            return self.chat_chain
+        if capability == "embedding":
+            return self.embedding_chain
+        if capability == "web_search":
+            return self.web_search_chain
+        return self.web_fetch_chain
+
 
 
 __all__ = [

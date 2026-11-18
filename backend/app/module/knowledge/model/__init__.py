@@ -46,6 +46,9 @@ from app.module.knowledge.model.provider_config_model import (
     WebFetchProviderConfigModel,
     WebSearchProviderConfigModel,
 )
+from app.module.knowledge.model.provider_error_notice_model import (
+    ProviderErrorNoticeModel,
+)
 from app.module.knowledge.model.summary_model import MemorySummaryModel
 
 __all__ = [
@@ -86,6 +89,7 @@ __all__ = [
     "MemoryModel",
     "MemorySummaryModel",
     "ProviderConfigMixin",
+    "ProviderErrorNoticeModel",
     "WebFetchProviderConfigModel",
     "WebSearchProviderConfigModel",
 ]

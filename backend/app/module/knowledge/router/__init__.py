@@ -9,6 +9,9 @@ from app.module.knowledge.router.ingest_settings_router import (
     router as ingest_settings_router,
 )
 from app.module.knowledge.router.memory_router import router as memory_router
+from app.module.knowledge.router.provider_notice_router import (
+    router as provider_notice_router,
+)
 from app.module.knowledge.router.search_router import router as search_router
 from app.module.knowledge.router.settings_router import router as settings_router
 from app.module.knowledge.router.system_router import router as system_router
@@ -25,6 +28,7 @@ router.include_router(memory_router)
 router.include_router(timeline_router)
 router.include_router(ai_router)
 router.include_router(system_router)
+router.include_router(provider_notice_router)
 router.include_router(settings_router)
 router.include_router(ingest_settings_router)
 router.include_router(tool_router)

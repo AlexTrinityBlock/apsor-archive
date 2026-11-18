@@ -65,6 +65,7 @@ GLOBAL_TABLES: tuple[str, ...] = (
     "chat_provider_config",
     "embedding_provider_config",
     "ingest_config",
+    "provider_error_notice",
     "system_prompt_section",
     "web_fetch_provider_config",
     "web_search_provider_config",

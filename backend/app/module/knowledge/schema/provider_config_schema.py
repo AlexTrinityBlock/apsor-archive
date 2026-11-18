@@ -27,6 +27,7 @@ class ProviderReadSchema(BaseModel):
     base_url: str | None
     dimension: int | None
     is_active: bool
+    priority: int
     configured: bool
     key_hint: str | None
     key_source: KeySource
@@ -48,6 +49,7 @@ class ProviderCapabilityReadSchema(BaseModel):
     supports_model: bool
     supports_dimension: bool
     active: ProviderReadSchema | None
+    chain: list[ProviderReadSchema]
     providers: list[ProviderReadSchema]
 
 
@@ -62,7 +64,7 @@ class ProviderRegistryReadSchema(BaseModel):
 
 
 class ProviderCreateSchema(BaseModel):
-    """Create one provider row; activate it immediately by default."""
+    """Create one provider row; add it to the chain immediately by default."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -80,8 +82,9 @@ class ProviderUpdateSchema(BaseModel):
 
     Omit ``api_key`` to keep the stored key; set ``clear_api_key`` to remove it.
     ``activate`` defaults to ``False`` so editing an inactive saved provider
-    never silently makes it the active one; activation must be explicit.  When
-    ``activate`` is false the row keeps its current active state.
+    never silently adds it to the chain; activation must be explicit.  When
+    ``activate`` is false the row keeps its current active state and priority.
+    When it is true on an inactive row, the row is appended to the chain.
     """
 
     model_config = ConfigDict(extra="forbid")

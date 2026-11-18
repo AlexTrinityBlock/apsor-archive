@@ -322,10 +322,24 @@ def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> Non
     activated = client.post(f"/api/v1/settings/providers/chat/{second_id}/activate")
     assert activated.status_code == 200, activated.text
     activated_chat = _capability(activated.json(), "chat")
-    assert activated_chat["active"]["id"] == second_id
-    assert _active_ids(activated_chat) == [second_id]
+    # Activate appends to the chain; the first active row stays primary.
+    assert activated_chat["active"]["id"] == first_id
+    assert _active_ids(activated_chat) == [first_id, second_id]
+    assert [item["priority"] for item in activated_chat["chain"]] == [0, 1]
+    assert len(activated_chat["chain"]) == 2
 
-    # Editing an inactive provider must never activate it implicitly:
+    # Removing one row from the chain closes the priority gap and promotes the
+    # remaining row to primary.
+    removed = client.post(
+        f"/api/v1/settings/providers/chat/{first_id}/deactivate"
+    )
+    assert removed.status_code == 200, removed.text
+    removed_chat = _capability(removed.json(), "chat")
+    assert removed_chat["active"]["id"] == second_id
+    assert _active_ids(removed_chat) == [second_id]
+    assert [item["priority"] for item in removed_chat["chain"]] == [0]
+
+    # Editing an inactive provider must never add it back to the chain:
     # ProviderUpdateSchema.activate defaults to false.
     inactive_edit = client.put(
         f"/api/v1/settings/providers/chat/{first_id}",
@@ -345,8 +359,8 @@ def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> Non
     assert inactive_group["active"]["id"] == second_id
     assert _active_ids(inactive_group) == [second_id]
 
-    # Editing the active row keeps it active, but `activate` still defaults to
-    # false so the write never touches other rows' active state.
+    # Editing the active row keeps it active and in place, but `activate` still
+    # defaults to false so the write never reorders the chain.
     edited_secret = "sk-chat-edited-9012"
     edited = client.put(
         f"/api/v1/settings/providers/chat/{second_id}",

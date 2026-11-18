@@ -18,8 +18,11 @@ class AiCompletion(BaseModel):
 class TextGeneratorProtocol(Protocol):
     """Minimal text-generation surface consumed by the knowledge slice."""
 
-    configured: bool
-    model_name: str
+    @property
+    def configured(self) -> bool: ...
+
+    @property
+    def model_name(self) -> str: ...
 
     async def complete_text(self, system_prompt: str, user_prompt: str) -> AiCompletion: ...
 

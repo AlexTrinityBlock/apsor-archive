@@ -6,7 +6,7 @@
  */
 
 /**
- * Create one provider row; activate it immediately by default.
+ * Create one provider row; add it to the chain immediately by default.
  */
 export interface ProviderCreateSchema {
   activate?: boolean;

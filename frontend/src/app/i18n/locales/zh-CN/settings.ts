@@ -442,9 +442,25 @@ export const settings = {
   providers: {
     title: "供应商注册表",
     lede:
-      "四个存储在 PostgreSQL 中的能力槽位：对话、嵌入、网络搜索与网络抓取。每个槽位只能有一行使用中；保存后会立即重新加载运行环境。网络搜索与网络抓取使用各自独立的凭据；如果两者要共用同一把 Tavily 密钥，请分别粘贴到每个区段。密钥会加密保存，永远不会返回浏览器，也不会在这里预先填入。",
+      "四个存储在 PostgreSQL 中的能力链：对话、嵌入、网络搜索与网络抓取。第一行是主要供应商，其余是后备；保存后会立即重新加载运行环境。网络搜索与网络抓取使用各自独立的凭据；如果两者要共用同一把 Tavily 密钥，请分别粘贴到每个区段。密钥会加密保存，永远不会返回浏览器，也不会在这里预先填入。",
     hint:
-      "数据库数据行的优先级高于环境变量后备。将密钥字段留空会保留已存储的密钥。若要某个能力改用服务器环境或内置默认值，请使用“停用”。",
+      "数据库数据行的优先级高于环境变量后备。将密钥字段留空会保留已存储的密钥。将某个能力的所有数据行移出链，就会改用服务器环境或内置默认值。",
+    chainTitle: "供应商链",
+    chainHelp:
+      "只有在供应商请求失败时才会前进到下一个数据行。整条链都失败后，操作才会失败。",
+    chainAria: "{capability}供应商链",
+    chainCount: "链中 {count} 个",
+    chainPrimary: "主要",
+    chainBackup: "后备 {index}",
+    inChain: "在链中",
+    addToChain: "加入链",
+    removeFromChain: "移出链",
+    makePrimary: "设为主要",
+    madePrimaryToast: "供应商已设为主要。",
+    addedToChainToast: "已将供应商附加到链尾。",
+    removedFromChainToast: "已将供应商移出链。",
+    addedToChainHint:
+      "将这个数据行附加到链尾。第一行仍保持主要。",
     reindexRequired: "需要重新索引",
     reindexRequiredBody:
       "现有分段是用不同的模型嵌入的。新文件会使用使用中的嵌入供应商。请从嵌入区段或系统诊断重新嵌入文件库，让语料保持一致。",
@@ -513,11 +529,11 @@ export const settings = {
     clearKey: "清除已存储的密钥",
     clearKeyHint:
       "移除数据库中的密钥。使用中的供应商仍可能应用环境变量后备。",
-    activateAfterSave: "保存后启用",
+    activateAfterSave: "保存后加入链",
     activateHintLocked:
-      "这个数据行正在使用中。请在注册表中使用“停用”将它关闭。",
+      "这个数据行已在链中。请在注册表中使用“移出链”将它移除。",
     activateHint:
-      "让这个数据行成为此能力唯一使用中的供应商。",
+      "将这个数据行附加到链尾。第一行仍保持主要。",
     webCredentialsNote:
       "网络搜索与网络抓取使用各自独立的凭据。即使另一个能力使用相同的值，仍请在这里粘贴此能力的供应商密钥。",
     errors: {
@@ -531,6 +547,8 @@ export const settings = {
         "请输入完整的 URL，例如 https://api.example.com/v1。",
       dimension: "维度必须是 16 到 4096 之间的整数。",
       apiKeyMax: "API 密钥必须为 500 个字符以内。",
+      embeddingChainMismatch:
+        "嵌入后备必须与主要供应商使用相同的模型与维度。使用不同的向量模型或维度会破坏向量索引；请先更改主要供应商并重新索引。",
     },
     testLogConfig: "> {title} · 已保存的配置",
     testLogFailed: "> 失败 · ",

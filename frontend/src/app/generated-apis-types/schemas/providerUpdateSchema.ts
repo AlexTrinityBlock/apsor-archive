@@ -10,8 +10,9 @@
  *
  * Omit ``api_key`` to keep the stored key; set ``clear_api_key`` to remove it.
  * ``activate`` defaults to ``False`` so editing an inactive saved provider
- * never silently makes it the active one; activation must be explicit.  When
- * ``activate`` is false the row keeps its current active state.
+ * never silently adds it to the chain; activation must be explicit.  When
+ * ``activate`` is false the row keeps its current active state and priority.
+ * When it is true on an inactive row, the row is appended to the chain.
  */
 export interface ProviderUpdateSchema {
   activate?: boolean;

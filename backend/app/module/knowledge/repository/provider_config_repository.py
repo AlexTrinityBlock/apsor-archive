@@ -1,8 +1,13 @@
 """Generic SQLAlchemy persistence for the four provider capability tables.
 
 All CRUD methods take a :class:`ProviderTableSpec`; no per-capability repository
-subclass exists.  ``list_active`` walks the four specs once so ``AiRuntime`` can
+subclass exists. ``list_active`` walks the four specs once so ``AiRuntime`` can
 build a full snapshot from a single repository instance.
+
+Each capability is an ordered chain. ``is_active`` means "member of the chain"
+and ``priority`` is its zero-based position; the partial unique index on
+``priority WHERE is_active`` keeps two active rows from sharing a slot. Inactive
+rows keep a saved configuration and any old priority value.
 """
 
 from collections.abc import Sequence
@@ -37,32 +42,47 @@ class ProviderConfigRepository:
         return (await self.session.execute(statement)).scalar_one_or_none()
 
     async def get_active(self, spec: ProviderTableSpec) -> ProviderConfigMixin | None:
-        """Return the single active row for one capability, if any.
+        """Return the primary (lowest-priority) active row for one capability.
 
-        The partial unique index guarantees at most one row, so the strictest
-        ``scalar_one_or_none`` is used; if two rows ever appear, raising is better
-        than silently picking one.
+        This is the compatibility accessor: callers that only need "the"
+        configured provider keep receiving the head of the chain. ``AiRuntime``
+        uses :meth:`list_active_chain` to build fallbacks.
         """
-        statement = select(spec.model).where(spec.model.is_active.is_(True))
+        statement = (
+            select(spec.model)
+            .where(spec.model.is_active.is_(True))
+            .order_by(spec.model.priority, spec.model.id)
+            .limit(1)
+        )
         return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def list_active_chain(
+        self,
+        spec: ProviderTableSpec,
+    ) -> Sequence[ProviderConfigMixin]:
+        """Return one capability's active chain, primary first."""
+        statement = (
+            select(spec.model)
+            .where(spec.model.is_active.is_(True))
+            .order_by(spec.model.priority, spec.model.id)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
 
     async def list_all(self, spec: ProviderTableSpec) -> Sequence[ProviderConfigMixin]:
         statement = select(spec.model).order_by(spec.model.id)
         return list((await self.session.execute(statement)).scalars().all())
 
     async def list_active(self) -> Sequence[ProviderConfigMixin]:
-        """Return every active row across the four tables, in fixed order."""
+        """Return every active row across the four tables, in capability order."""
         active: list[ProviderConfigMixin] = []
         for spec in PROVIDER_TABLE_SPECS.values():
-            row = await self.get_active(spec)
-            if row is not None:
-                active.append(row)
+            active.extend(await self.list_active_chain(spec))
         return active
 
     async def save(self, row: ProviderConfigMixin) -> ProviderConfigMixin:
         self.session.add(row)
-        # Flush first so the identity id and the partial unique index are checked
-        # by the database before the runtime reload happens.
+        # Flush first so the identity id and the chain index are checked by the
+        # database before the runtime reload happens.
         await self.session.flush()
         return row
 
@@ -78,21 +98,33 @@ class ProviderConfigRepository:
         )
         await self.session.execute(statement)
 
-    async def deactivate_others(
+    async def deactivate_row(self, row: ProviderConfigMixin) -> None:
+        """Remove one row from the chain without touching the others."""
+        if not row.is_active:
+            return
+        row.is_active = False
+        row.updated_at = utcnow()
+        await self.session.flush()
+
+    async def replace_chain(
         self,
         spec: ProviderTableSpec,
-        *,
-        keep_id: int,
+        rows: Sequence[ProviderConfigMixin],
     ) -> None:
-        statement = (
-            update(spec.model)
-            .where(
-                spec.model.is_active.is_(True),
-                spec.model.id != keep_id,
-            )
-            .values(is_active=False, updated_at=utcnow())
-        )
-        await self.session.execute(statement)
+        """Rewrite one capability's chain to exactly ``rows``.
+
+        The operation is deliberately two-phase: every active row is first
+        deactivated (so the partial unique index has no live values to clash
+        with), then each ordered row receives its new zero-based priority and is
+        reactivated. The caller owns the surrounding transaction.
+        """
+        await self.deactivate_all(spec)
+        now = utcnow()
+        for priority, row in enumerate(rows):
+            row.priority = priority
+            row.is_active = True
+            row.updated_at = now
+        await self.session.flush()
 
 
 __all__ = ["ProviderConfigRepository"]

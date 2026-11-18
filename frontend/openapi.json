@@ -3932,6 +3932,49 @@
         "title": "PathListingSchema",
         "type": "object"
       },
+      "ProviderAttemptSchema": {
+        "description": "One failed provider in the chain, in attempt order.",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
+          }
+        },
+        "required": [
+          "provider",
+          "status_code",
+          "error_code",
+          "detail"
+        ],
+        "title": "ProviderAttemptSchema",
+        "type": "object"
+      },
       "ProviderCapabilityReadSchema": {
         "description": "One capability group in the registry UI.",
         "properties": {
@@ -3961,6 +4004,13 @@
             ],
             "title": "Capability",
             "type": "string"
+          },
+          "chain": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderReadSchema"
+            },
+            "title": "Chain",
+            "type": "array"
           },
           "default_base_url": {
             "anyOf": [
@@ -4014,6 +4064,7 @@
           "supports_model",
           "supports_dimension",
           "active",
+          "chain",
           "providers"
         ],
         "title": "ProviderCapabilityReadSchema",
@@ -4021,7 +4072,7 @@
       },
       "ProviderCreateSchema": {
         "additionalProperties": false,
-        "description": "Create one provider row; activate it immediately by default.",
+        "description": "Create one provider row; add it to the chain immediately by default.",
         "properties": {
           "activate": {
             "default": true,
@@ -4094,6 +4145,138 @@
           "provider"
         ],
         "title": "ProviderCreateSchema",
+        "type": "object"
+      },
+      "ProviderErrorNoticeListSchema": {
+        "description": "Open notices plus the unresolved count for the Accounts panel.",
+        "properties": {
+          "notices": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderErrorNoticeReadSchema"
+            },
+            "title": "Notices",
+            "type": "array"
+          },
+          "open_count": {
+            "title": "Open Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "notices",
+          "open_count"
+        ],
+        "title": "ProviderErrorNoticeListSchema",
+        "type": "object"
+      },
+      "ProviderErrorNoticeReadSchema": {
+        "description": "Safe notice state; attempts contain only sanitized provider metadata.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderAttemptSchema"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "capability": {
+            "enum": [
+              "chat",
+              "embedding",
+              "web_search",
+              "web_fetch"
+            ],
+            "title": "Capability",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "error_code": {
+            "title": "Error Code",
+            "type": "string"
+          },
+          "first_seen_at": {
+            "format": "date-time",
+            "title": "First Seen At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "chat",
+              "text",
+              "json",
+              "embed",
+              "search",
+              "fetch"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_by_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved By User Id"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
+          }
+        },
+        "required": [
+          "id",
+          "capability",
+          "operation",
+          "error_code",
+          "status_code",
+          "detail",
+          "attempts",
+          "count",
+          "first_seen_at",
+          "last_seen_at",
+          "resolved_at",
+          "resolved_by_user_id"
+        ],
+        "title": "ProviderErrorNoticeReadSchema",
         "type": "object"
       },
       "ProviderReadSchema": {
@@ -4185,6 +4368,10 @@
             ],
             "title": "Model"
           },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
           "provider": {
             "title": "Provider",
             "type": "string"
@@ -4220,6 +4407,7 @@
           "base_url",
           "dimension",
           "is_active",
+          "priority",
           "configured",
           "key_hint",
           "key_source",
@@ -4308,7 +4496,7 @@
       },
       "ProviderUpdateSchema": {
         "additionalProperties": false,
-        "description": "Full replacement of one provider row.\n\nOmit ``api_key`` to keep the stored key; set ``clear_api_key`` to remove it.\n``activate`` defaults to ``False`` so editing an inactive saved provider\nnever silently makes it the active one; activation must be explicit.  When\n``activate`` is false the row keeps its current active state.",
+        "description": "Full replacement of one provider row.\n\nOmit ``api_key`` to keep the stored key; set ``clear_api_key`` to remove it.\n``activate`` defaults to ``False`` so editing an inactive saved provider\nnever silently adds it to the chain; activation must be explicit.  When\n``activate`` is false the row keeps its current active state and priority.\nWhen it is true on an inactive row, the row is appended to the chain.",
         "properties": {
           "activate": {
             "default": false,
@@ -9855,7 +10043,7 @@
     },
     "/api/v1/settings/providers/{capability}/deactivate": {
       "post": {
-        "description": "Clear the active row; the runtime falls back to environment/default.",
+        "description": "Clear the whole chain; the runtime falls back to environment/default.",
         "operationId": "deactivateProvider",
         "parameters": [
           {
@@ -9898,7 +10086,7 @@
     },
     "/api/v1/settings/providers/{capability}/{provider_id}": {
       "delete": {
-        "description": "Delete a provider, deactivating it first when it is the active row.",
+        "description": "Delete a provider, renumbering the chain when it was active.",
         "operationId": "deleteProvider",
         "parameters": [
           {
@@ -10010,8 +10198,79 @@
     },
     "/api/v1/settings/providers/{capability}/{provider_id}/activate": {
       "post": {
-        "description": "Make one row the only active provider for its capability.",
+        "description": "Add or move one row in the chain; omit priority to append it.",
         "operationId": "activateProvider",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "capability",
+            "required": true,
+            "schema": {
+              "title": "Capability",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Id",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Chain position; 0 makes the row primary. Omit to append.",
+            "in": "query",
+            "name": "priority",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Chain position; 0 makes the row primary. Omit to append.",
+              "title": "Priority"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderRegistryReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Activate Provider",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/providers/{capability}/{provider_id}/deactivate": {
+      "post": {
+        "description": "Remove one row from the chain and close the priority gap.",
+        "operationId": "deactivateProviderRow",
         "parameters": [
           {
             "in": "path",
@@ -10054,7 +10313,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Activate Provider",
+        "summary": "Deactivate Provider Row",
         "tags": [
           "settings"
         ]
@@ -10268,6 +10527,131 @@
         "summary": "Get Summary",
         "tags": [
           "memories"
+        ]
+      }
+    },
+    "/api/v1/system/provider-notices": {
+      "get": {
+        "description": "Return provider-chain failures and the unresolved count.",
+        "operationId": "listProviderNotices",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "enum": [
+                "open",
+                "all"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderErrorNoticeListSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Provider Notices",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/system/provider-notices/resolve-all": {
+      "post": {
+        "description": "Resolve every open notice and return the refreshed open list.",
+        "operationId": "resolveAllProviderNotices",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderErrorNoticeListSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Resolve All Provider Notices",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/system/provider-notices/{notice_id}/resolve": {
+      "post": {
+        "description": "Mark one notice resolved on behalf of the acting root account.",
+        "operationId": "resolveProviderNotice",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notice_id",
+            "required": true,
+            "schema": {
+              "title": "Notice Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderErrorNoticeReadSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Provider Notice",
+        "tags": [
+          "system"
         ]
       }
     },

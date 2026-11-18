@@ -22,6 +22,7 @@ export interface ProviderReadSchema {
   key_source: ProviderReadSchemaKeySource;
   label: string;
   model: string | null;
+  priority: number;
   provider: string;
   source: ProviderReadSchemaSource;
   updated_at: string | null;

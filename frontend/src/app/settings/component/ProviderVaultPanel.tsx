@@ -10,7 +10,7 @@ import {
   getGetProviderRegistryQueryKey,
   useActivateProvider,
   useCreateProvider,
-  useDeactivateProvider,
+  useDeactivateProviderRow,
   useDeleteProvider,
   useGetProviderRegistry,
   useReindexEmbeddings,
@@ -221,6 +221,64 @@ function providerSummaryParts(
 
 function testTargetKey(capability: string, providerId: number): string {
   return `${capability}:${providerId}`;
+}
+
+function chainRoleLabel(position: number, t: Translate): string {
+  if (position === 0) {
+    return t("settings.providers.chainPrimary");
+  }
+  return t("settings.providers.chainBackup", { index: String(position) });
+}
+
+function chainErrorMessage(
+  error: unknown,
+  capability: Capability,
+  t: Translate,
+): string {
+  const message = apiErrorMessage(error);
+  if (
+    capability === "embedding" &&
+    /embedding backups|vector index/i.test(message)
+  ) {
+    return t("settings.providers.errors.embeddingChainMismatch");
+  }
+  return message;
+}
+
+function embeddingChainWouldMismatch(
+  group: ProviderCapabilityReadSchema,
+  initial: ProviderReadSchema | undefined,
+  values: {
+    readonly provider: string;
+    readonly model: string | null;
+    readonly dimension: number | null;
+  },
+  activate: boolean,
+): boolean {
+  const proposed = group.chain.map((row) =>
+    row.id === initial?.id
+      ? values
+      : {
+          provider: row.provider,
+          model: row.model,
+          dimension: row.dimension,
+        },
+  );
+  if ((!initial || !initial.is_active) && activate) {
+    proposed.push(values);
+  }
+  const anchor = proposed[0];
+  if (anchor === undefined) {
+    return false;
+  }
+  if (anchor.provider === "none") {
+    return proposed.length > 1;
+  }
+  return proposed.some(
+    (row) =>
+      row.provider !== "none" &&
+      (row.model !== anchor.model || row.dimension !== anchor.dimension),
+  );
 }
 
 function createPayload(draft: ProviderEditorDraft): ProviderCreateSchema {
@@ -470,6 +528,30 @@ function ProviderEditorDialog({
     if (!isNone && provider !== "hashing" && trimmedBaseUrl.length > 0) {
       baseValue = trimmedBaseUrl;
     }
+    const dimensionValue =
+      group.supports_dimension && !isNone ? parsedDimension.value : null;
+
+    // Catch an embedding model/dimension mismatch before the request so the
+    // operator sees localized copy. The backend still enforces this rule.
+    const joinsChain = initial ? initial.is_active : activate;
+    if (
+      group.capability === "embedding" &&
+      joinsChain &&
+      !isNone &&
+      embeddingChainWouldMismatch(
+        group,
+        initial,
+        {
+          provider,
+          model: modelValue,
+          dimension: dimensionValue,
+        },
+        activate,
+      )
+    ) {
+      setFormError(t("settings.providers.errors.embeddingChainMismatch"));
+      return;
+    }
 
     setFormError(null);
     onSubmit({
@@ -477,8 +559,7 @@ function ProviderEditorDialog({
       label: trimmedLabel,
       model: modelValue,
       base_url: baseValue,
-      dimension:
-        group.supports_dimension && !isNone ? parsedDimension.value : null,
+      dimension: dimensionValue,
       api_key: trimmedKey.length > 0 ? trimmedKey : null,
       clear_api_key: clearKey,
       activate: isNone ? false : activate,
@@ -734,43 +815,50 @@ function ProviderEditorDialog({
   );
 }
 
-function ActiveProviderCard({
+function ProviderChainCard({
   group,
   provider,
+  position,
   busy,
   onEdit,
-  onDeactivate,
   onTest,
+  onMakePrimary,
+  onRemove,
 }: {
   readonly group: ProviderCapabilityReadSchema;
   readonly provider: ProviderReadSchema;
+  readonly position: number | null;
   readonly busy: boolean;
   readonly onEdit: (provider: ProviderReadSchema) => void;
-  readonly onDeactivate: () => void;
   readonly onTest: (provider: ProviderReadSchema) => void;
+  readonly onMakePrimary: (provider: ProviderReadSchema) => void;
+  readonly onRemove: (provider: ProviderReadSchema) => void;
 }) {
   const { t, formatDateTime } = useI18n();
   const keyless = isProviderKeyless(provider, group.keyless_providers);
-  const runtimeFallback = provider.id === null;
+  const runtimeFallback = position === null;
+  const isPrimary = position === 0;
   const summary = providerSummaryParts(
     provider,
     group.supports_model,
     group.supports_dimension,
     t,
   );
+  let roleClass = "registry-active is-backup";
+  if (runtimeFallback) {
+    roleClass = "registry-active is-fallback";
+  } else if (isPrimary) {
+    roleClass = "registry-active is-primary";
+  }
 
   return (
-    <article
-      className={
-        runtimeFallback ? "registry-active is-fallback" : "registry-active"
-      }
-    >
+    <article className={roleClass}>
       <div className="registry-active__head">
         <div className="registry-active__heading">
           <p className="mono-label">
             {runtimeFallback
               ? t("settings.providers.runtimeFallback")
-              : t("settings.providers.activeProvider")}
+              : chainRoleLabel(position, t)}
           </p>
           <h3 className="registry-active__title">
             {provider.label || providerDisplayName(provider.provider)}
@@ -866,7 +954,7 @@ function ActiveProviderCard({
         </p>
       ) : null}
 
-      {provider.id !== null ? (
+      {position !== null ? (
         <div className="registry-row__actions">
           <Button
             type="button"
@@ -888,15 +976,27 @@ function ActiveProviderCard({
             <Icon name="pencil" size={13} />
             {t("settings.providers.edit")}
           </Button>
+          {!isPrimary ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => onMakePrimary(provider)}
+              disabled={busy}
+            >
+              <Icon name="arrow-up" size={13} />
+              {t("settings.providers.makePrimary")}
+            </Button>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            onClick={onDeactivate}
+            onClick={() => onRemove(provider)}
             disabled={busy}
           >
             <Icon name="stop" size={13} />
-            {t("settings.providers.deactivate")}
+            {t("settings.providers.removeFromChain")}
           </Button>
         </div>
       ) : null}
@@ -910,7 +1010,7 @@ function SavedProviderRow({
   busy,
   onEdit,
   onActivate,
-  onDeactivate,
+  onRemove,
   onDelete,
   onTest,
 }: {
@@ -919,7 +1019,7 @@ function SavedProviderRow({
   readonly busy: boolean;
   readonly onEdit: (provider: ProviderReadSchema) => void;
   readonly onActivate: (provider: ProviderReadSchema) => void;
-  readonly onDeactivate: () => void;
+  readonly onRemove: (provider: ProviderReadSchema) => void;
   readonly onDelete: (provider: ProviderReadSchema) => void;
   readonly onTest: (provider: ProviderReadSchema) => void;
 }) {
@@ -945,7 +1045,7 @@ function SavedProviderRow({
           </span>
           {provider.is_active ? (
             <Badge tone="moss" dot>
-              {t("settings.providers.active")}
+              {t("settings.providers.inChain")}
             </Badge>
           ) : (
             <Badge tone="neutral">{t("settings.providers.saved")}</Badge>
@@ -1006,11 +1106,11 @@ function SavedProviderRow({
               type="button"
               variant="ghost"
               size="sm"
-              onClick={onDeactivate}
+              onClick={() => onRemove(provider)}
               disabled={busy}
             >
               <Icon name="stop" size={13} />
-              {t("settings.providers.deactivate")}
+              {t("settings.providers.removeFromChain")}
             </Button>
           ) : (
             <Button
@@ -1021,7 +1121,7 @@ function SavedProviderRow({
               disabled={busy}
             >
               <Icon name="check" size={13} />
-              {t("settings.providers.activate")}
+              {t("settings.providers.addToChain")}
             </Button>
           )}
           <Button
@@ -1049,7 +1149,8 @@ function RegistrySection({
   onAdd,
   onEdit,
   onActivate,
-  onDeactivate,
+  onMakePrimary,
+  onRemove,
   onDelete,
   onTest,
 }: {
@@ -1061,7 +1162,8 @@ function RegistrySection({
   readonly onAdd: () => void;
   readonly onEdit: (provider: ProviderReadSchema) => void;
   readonly onActivate: (provider: ProviderReadSchema) => void;
-  readonly onDeactivate: () => void;
+  readonly onMakePrimary: (provider: ProviderReadSchema) => void;
+  readonly onRemove: (provider: ProviderReadSchema) => void;
   readonly onDelete: (provider: ProviderReadSchema) => void;
   readonly onTest: (provider: ProviderReadSchema) => void;
 }) {
@@ -1071,6 +1173,58 @@ function RegistrySection({
     testState && testState.key.startsWith(`${group.capability}:`)
       ? testState
       : null;
+  let chainBody: ReactNode;
+  if (group.chain.length > 0) {
+    chainBody = (
+      <div
+        className="registry-chain"
+        aria-label={t("settings.providers.chainAria", {
+          capability: capabilityLabel(group.capability, t),
+        })}
+      >
+        <div className="registry-chain__head">
+          <p className="mono-label">{t("settings.providers.chainTitle")}</p>
+          <span className="registry-list__count">
+            {t("settings.providers.chainCount", {
+              count: formatNumber(group.chain.length),
+            })}
+          </span>
+        </div>
+        {group.chain.map((provider, position) => (
+          <ProviderChainCard
+            key={providerRegistryCardKey(group.capability, provider)}
+            group={group}
+            provider={provider}
+            position={position}
+            busy={busy}
+            onEdit={onEdit}
+            onTest={onTest}
+            onMakePrimary={onMakePrimary}
+            onRemove={onRemove}
+          />
+        ))}
+      </div>
+    );
+  } else if (active) {
+    chainBody = (
+      <ProviderChainCard
+        group={group}
+        provider={active}
+        position={null}
+        busy={busy}
+        onEdit={onEdit}
+        onTest={onTest}
+        onMakePrimary={onMakePrimary}
+        onRemove={onRemove}
+      />
+    );
+  } else {
+    chainBody = (
+      <p className="registry-empty">
+        {t("settings.providers.noProviderState")}
+      </p>
+    );
+  }
 
   return (
     <section className="registry-section" aria-labelledby={`${group.capability}-title`}>
@@ -1084,6 +1238,9 @@ function RegistrySection({
             {group.title}
           </h3>
           <p className="registry-section__copy">{group.description}</p>
+          <p className="registry-section__copy">
+            {t("settings.providers.chainHelp")}
+          </p>
         </div>
         <div className="registry-section__actions">
           <Button
@@ -1099,20 +1256,7 @@ function RegistrySection({
         </div>
       </div>
 
-      {active ? (
-        <ActiveProviderCard
-          group={group}
-          provider={active}
-          busy={busy}
-          onEdit={onEdit}
-          onDeactivate={onDeactivate}
-          onTest={onTest}
-        />
-      ) : (
-        <p className="registry-empty">
-          {t("settings.providers.noProviderState")}
-        </p>
-      )}
+      {chainBody}
 
       <div className="registry-list">
         <div className="registry-list__head">
@@ -1136,7 +1280,7 @@ function RegistrySection({
               busy={busy}
               onEdit={onEdit}
               onActivate={onActivate}
-              onDeactivate={onDeactivate}
+              onRemove={onRemove}
               onDelete={onDelete}
               onTest={onTest}
             />
@@ -1418,8 +1562,14 @@ export function ProviderVaultPanel() {
         setEditor(null);
         toast.success(t("settings.providers.addedToast"));
       },
-      onError: (error) => {
-        setEditorError(apiErrorMessage(error));
+      onError: (error, variables) => {
+        setEditorError(
+          chainErrorMessage(
+            error,
+            variables.capability as Capability,
+            t,
+          ),
+        );
       },
     },
   });
@@ -1432,29 +1582,45 @@ export function ProviderVaultPanel() {
         setEditor(null);
         toast.success(t("settings.providers.updatedToast"));
       },
-      onError: (error) => {
-        setEditorError(apiErrorMessage(error));
+      onError: (error, variables) => {
+        setEditorError(
+          chainErrorMessage(
+            error,
+            variables.capability as Capability,
+            t,
+          ),
+        );
       },
     },
   });
 
   const activateMutation = useActivateProvider({
     mutation: {
-      onSuccess: async (data) => {
+      onSuccess: async (data, variables) => {
         await applyRegistry(data);
-        toast.success(t("settings.providers.activatedToast"));
+        toast.success(
+          variables.params?.priority === 0
+            ? t("settings.providers.madePrimaryToast")
+            : t("settings.providers.addedToChainToast"),
+        );
       },
-      onError: (error) => {
-        toast.error(apiErrorMessage(error));
+      onError: (error, variables) => {
+        toast.error(
+          chainErrorMessage(
+            error,
+            variables.capability as Capability,
+            t,
+          ),
+        );
       },
     },
   });
 
-  const deactivateMutation = useDeactivateProvider({
+  const deactivateRowMutation = useDeactivateProviderRow({
     mutation: {
       onSuccess: async (data) => {
         await applyRegistry(data);
-        toast.success(t("settings.providers.deactivatedToast"));
+        toast.success(t("settings.providers.removedFromChainToast"));
       },
       onError: (error) => {
         toast.error(apiErrorMessage(error));
@@ -1534,17 +1700,13 @@ export function ProviderVaultPanel() {
     createMutation.isPending ||
     updateMutation.isPending ||
     activateMutation.isPending ||
-    deactivateMutation.isPending ||
+    deactivateRowMutation.isPending ||
     deleteMutation.isPending ||
     testMutation.isPending;
 
   const openEditor = (next: ProviderEditorState) => {
     setEditorError(null);
     setEditor(next);
-  };
-
-  const handleDeactivate = (capability: Capability) => {
-    deactivateMutation.mutate({ capability });
   };
 
   const reindexExtra = (
@@ -1619,7 +1781,23 @@ export function ProviderVaultPanel() {
                 });
               }
             }}
-            onDeactivate={() => handleDeactivate(group.capability)}
+            onMakePrimary={(provider) => {
+              if (provider.id !== null) {
+                activateMutation.mutate({
+                  capability: group.capability,
+                  providerId: provider.id,
+                  params: { priority: 0 },
+                });
+              }
+            }}
+            onRemove={(provider) => {
+              if (provider.id !== null) {
+                deactivateRowMutation.mutate({
+                  capability: group.capability,
+                  providerId: provider.id,
+                });
+              }
+            }}
             onDelete={(provider) => setDeleteTarget(provider)}
             onTest={(provider) => {
               if (provider.id !== null) {
