@@ -46,6 +46,7 @@ from app.module.agent.service.history_indexer import AgentHistoryIndexer
 from app.module.knowledge.dependencies import (
     build_history_chunk_store,
     build_ingest_worker,
+    build_provider_refresh,
     ingest_runtime_defaults,
     load_ingest_runtime_config,
 )
@@ -112,6 +113,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                 database.session_factory,
                 ingest_defaults,
             ),
+            provider_refresh=build_provider_refresh(runtime, database.session_factory),
         )
         cleanup = ChatAttachmentCleanup(
             database=database,

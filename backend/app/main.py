@@ -39,6 +39,7 @@ from app.module.auth.router.auth_router import router as auth_router
 from app.module.knowledge.dependencies import (
     build_history_chunk_store,
     build_ingest_worker,
+    build_provider_refresh,
     ingest_runtime_defaults,
     load_ingest_runtime_config,
 )
@@ -125,6 +126,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 if resolved_settings.ingest_worker_enabled
                 else None
+            ),
+            provider_refresh=build_provider_refresh(
+                runtime,
+                app.state.db.session_factory,
             ),
         )
         worker_task: asyncio.Task[None] | None = None
