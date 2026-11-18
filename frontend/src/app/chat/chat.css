@@ -414,12 +414,13 @@
   border-color: var(--accent-seal);
 }
 
-.chat-session.is-archived {
-  opacity: 0.78;
-}
-
 .chat-session.is-busy {
   opacity: 0.55;
+}
+
+/* The open menu must paint above later sibling rows. */
+.chat-session.is-menu-open {
+  z-index: 10;
 }
 
 .chat-session__anchor {
@@ -477,10 +478,6 @@
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.chat-session__flag {
-  color: var(--accent-ochre);
 }
 
 .chat-session__dot {
