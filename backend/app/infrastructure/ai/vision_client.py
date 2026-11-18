@@ -2,6 +2,7 @@
 
 import base64
 import json
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -9,6 +10,26 @@ import httpx
 
 class VisionProviderError(Exception):
     """Raised by the low-level vision client; callers translate it."""
+
+
+@dataclass(frozen=True)
+class VisionAnalysis:
+    """One parsed vision response plus its provider usage counters."""
+
+    parsed: dict[str, Any]
+    usage: dict[str, int]
+
+
+def _normalize_usage(raw: object) -> dict[str, int]:
+    """Keep numeric provider counters; ignore anything else."""
+    if not isinstance(raw, dict):
+        return {}
+    usage: dict[str, int] = {}
+    for key, value in raw.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        usage[str(key)] = max(0, int(value))
+    return usage
 
 
 class DeepSeekVisionClient:
@@ -37,7 +58,7 @@ class DeepSeekVisionClient:
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 700,
-    ) -> dict[str, Any]:
+    ) -> VisionAnalysis:
         encoded = base64.b64encode(data).decode("ascii")
         payload = {
             "model": self.model_name,
@@ -82,4 +103,4 @@ class DeepSeekVisionClient:
             raise VisionProviderError("malformed vision response") from exc
         if not isinstance(parsed, dict):
             raise VisionProviderError("vision response is not a JSON object")
-        return parsed
+        return VisionAnalysis(parsed=parsed, usage=_normalize_usage(body.get("usage")))

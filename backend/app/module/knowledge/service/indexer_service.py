@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import math
 from collections.abc import Awaitable, Callable, Sequence
 
 from app.module.knowledge.domain.chunking_domain import ChunkDraft
@@ -29,30 +28,13 @@ EmbeddingRefresh = Callable[[], Awaitable[EmbedderProtocol]]
 _AUTH_STATUS_CODES = frozenset({401, 403})
 
 
-def estimate_text_units(text: str) -> int:
-    """Conservatively estimate provider tokens for one short text.
+def sum_embedding_characters(drafts: Sequence[ChunkDraft]) -> int:
+    """Return the exact input characters one embedding batch will send.
 
-    Four characters per token is the shared convention with
-    :func:`estimate_embedding_units`; the floor of one keeps a query from ever
-    being treated as free. This is an estimate, not provider billing, and does
-    not add a second tokenizer.
+    Embedding usage is measured in characters, so the chunker's token estimate
+    is deliberately ignored here.
     """
-    return max(1, math.ceil(len(text) / 4))
-
-
-def estimate_embedding_units(drafts: Sequence[ChunkDraft]) -> int:
-    """Conservatively estimate the provider tokens one batch will consume.
-
-    The estimate is deliberately not provider billing: it takes the larger of
-    the chunker's token count and ``ceil(characters / 4)`` per draft, then sums
-    the call. Four characters per token is a common conservative heuristic for
-    mixed Latin/CJK text; an actual provider tokenizer may differ by a small
-    margin.
-    """
-    return sum(
-        max(draft.token_count, math.ceil(draft.char_count / 4))
-        for draft in drafts
-    )
+    return sum(max(0, draft.char_count) for draft in drafts)
 
 
 class IndexerService:
@@ -117,16 +99,16 @@ class IndexerService:
         """
         if self.quota is None:
             return True
-        units = estimate_embedding_units(drafts)
-        if await self.quota.embedding_allowed(units):
+        characters = sum_embedding_characters(drafts)
+        if await self.quota.embedding_allowed(characters):
             return True
         if self.fail_on_embedding_error:
             raise EmbeddingUsageLimitExceededError()
         logger.warning(
             "Embedding usage allowance exhausted; indexing text only user_id=%s "
-            "estimated_units=%d",
+            "characters=%d",
             self.user_id,
-            units,
+            characters,
         )
         return False
 
@@ -144,7 +126,10 @@ class IndexerService:
             return
         if not any(embedding is not None for embedding in embeddings):
             return
-        await self.quota.record_embedding(estimate_embedding_units(drafts))
+        characters = sum_embedding_characters(drafts)
+        if characters <= 0:
+            return
+        await self.quota.record_embedding(characters)
 
     async def _refresh_after_auth_error(self, exc: EmbeddingProviderError) -> bool:
         """Reload the provider once and adopt only a same-shape embedder.

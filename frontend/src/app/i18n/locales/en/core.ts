@@ -240,7 +240,7 @@ export const core = {
     quotasTitle: "Usage allowances",
     quotasManage: "Manage usage",
     quotaChat: "Chat tokens",
-    quotaEmbedding: "Embedding tokens",
+    quotaEmbedding: "Embedding characters",
     quotaWebSearch: "Web searches",
     quotaWebFetch: "Web fetches",
     quotaAllowed: "Allowed",
@@ -251,6 +251,8 @@ export const core = {
     quotaDialogTitle: "Usage allowances",
     quotaDialogDescription:
       "Set the allowance for {name}. A blank grant means unlimited; zero blocks all usage of that category.",
+    quotaAccountingHint:
+      "Chat tokens include chat runs, summaries, extraction, memory titles, and vision. Embedding usage is measured in input characters.",
     quotaUsed: "Used this cycle",
     quotaLifetime: "Lifetime",
     quotaBeforeResetLabel: "Before reset",

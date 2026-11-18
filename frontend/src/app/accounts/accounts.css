@@ -643,6 +643,13 @@
   align-items: start;
 }
 
+.accounts-quota__hint {
+  margin: 0 0 14px;
+  color: var(--mono-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .accounts-quota__tabs {
   display: flex;
   min-width: 0;

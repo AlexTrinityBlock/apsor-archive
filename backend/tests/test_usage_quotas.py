@@ -5,18 +5,20 @@ database. No live archive or provider is contacted.
 """
 
 import asyncio
-import math
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 from starlette.datastructures import State
 
+from app.infrastructure.ai import vision_client
+from app.infrastructure.ai.vision_client import DeepSeekVisionClient
 from app.infrastructure.database.session import Database
 from app.infrastructure.security.password_hasher import Argon2PasswordHasher
 from app.module.agent.test.fake_chat_generator import (
@@ -37,21 +39,31 @@ from app.module.auth.service.account_service import AccountService
 from app.module.auth.service.quota_service import AccountQuotaService
 from app.module.knowledge.dependencies import _build_indexer, build_ingest_worker
 from app.module.knowledge.domain.chunking_domain import ChunkDraft
+from app.module.knowledge.domain.vision_prompt_domain import (
+    DEFAULT_VISION_DOCUMENT_PROMPT,
+    DEFAULT_VISION_IMAGE_PROMPT,
+)
 from app.module.knowledge.exception.domain_error import (
+    ChatUsageLimitExceededError,
     EmbeddingProviderError,
     EmbeddingUsageLimitExceededError,
 )
+from app.module.knowledge.protocol.text_generator_protocol import AiCompletion
+from app.module.knowledge.protocol.vision_extractor_protocol import VisionDocument
 from app.module.knowledge.repository.chunk_repository import ChunkRepository
 from app.module.knowledge.repository.file_repository import FileRepository
 from app.module.knowledge.repository.memory_repository import MemoryRepository
 from app.module.knowledge.repository.summary_repository import SummaryRepository
+from app.module.knowledge.service.file_service import FileService
 from app.module.knowledge.service.indexer_service import (
     IndexerService,
-    estimate_embedding_units,
-    estimate_text_units,
+    sum_embedding_characters,
 )
 from app.module.knowledge.service.ingest_job_service import ingest_error_code
+from app.module.knowledge.service.memory_service import MemoryService
+from app.module.knowledge.service.metered_text_generator import MeteredTextGenerator
 from app.module.knowledge.service.search_service import SearchService
+from app.module.knowledge.service.summary_service import SummaryService
 from app.module.web_research.exception.domain_error import (
     WebProviderError,
     WebUsageLimitExceededError,
@@ -115,7 +127,7 @@ def _all_quota_columns(**overrides: Any) -> SimpleNamespace:
         "chat_granted": None,
         "chat_used_before_reset": 0,
         "total_tokens": 0,
-        "embedding_tokens": 0,
+        "embedding_characters": 0,
         "embedding_enabled": True,
         "embedding_granted": None,
         "embedding_used_before_reset": 0,
@@ -153,7 +165,7 @@ def test_quota_domain_derives_used_and_remaining_from_the_reset_base() -> None:
     # A reset base newer than the counter can happen only after a manual
     # correction; current usage clamps at zero instead of going negative.
     row = _all_quota_columns(
-        embedding_tokens=5,
+        embedding_characters=5,
         embedding_used_before_reset=10,
         embedding_granted=10,
     )
@@ -200,7 +212,7 @@ def test_accounts_list_exposes_four_ordered_quotas_with_lifetime_math(
         chat_granted=100,
         chat_used_before_reset=10,
         total_tokens=40,
-        embedding_tokens=25,
+        embedding_characters=25,
         embedding_granted=100,
         embedding_used_before_reset=5,
         web_search_calls=3,
@@ -279,7 +291,7 @@ def test_root_can_update_top_up_and_reset_each_quota(
     _set_user_columns(
         owner_engine,
         root_account.user_id,
-        embedding_tokens=80,
+        embedding_characters=80,
         embedding_used_before_reset=10,
     )
     reset = client.post(
@@ -368,7 +380,7 @@ def test_quota_service_records_only_the_matching_lifetime_counter(
         owner_engine,
         root_account.user_id,
         total_tokens=11,
-        embedding_tokens=20,
+        embedding_characters=20,
         web_search_calls=2,
         web_fetch_calls=3,
     )
@@ -393,7 +405,7 @@ def test_quota_service_records_only_the_matching_lifetime_counter(
         owner_engine,
         root_account.user_id,
         "total_tokens",
-        "embedding_tokens",
+        "embedding_characters",
         "web_search_calls",
         "web_fetch_calls",
     )
@@ -573,6 +585,383 @@ def test_mid_run_chat_guard_stops_before_the_second_provider_call(
 
 
 # ---------------------------------------------------------------------------
+# Background chat usage
+# ---------------------------------------------------------------------------
+
+
+class _FakeChatQuota:
+    def __init__(self, *, allowed: bool = True) -> None:
+        self.allowed = allowed
+        self.recorded: list[dict[str, int]] = []
+
+    async def chat_allowed(self) -> bool:
+        return self.allowed
+
+    async def record_chat_usage(self, usage: Any) -> None:
+        self.recorded.append(dict(usage))
+
+
+class _FakeInnerGenerator:
+    configured = True
+    model_name = "inner-text"
+
+    def __init__(self, usage: dict[str, int] | None = None) -> None:
+        self.usage = dict(usage or {})
+        self.calls: list[tuple[str, str]] = []
+
+    async def complete_text(self, system_prompt: str, user_prompt: str) -> AiCompletion:
+        self.calls.append((system_prompt, user_prompt))
+        return AiCompletion(text="text result", model=self.model_name, usage=self.usage)
+
+    async def complete_json(self, system_prompt: str, user_prompt: str) -> AiCompletion:
+        self.calls.append((system_prompt, user_prompt))
+        return AiCompletion(text='{"ok": true}', model=self.model_name, usage=self.usage)
+
+
+class _BlockedGenerator:
+    configured = True
+    model_name = "blocked"
+
+    async def complete_text(self, system_prompt: str, user_prompt: str) -> AiCompletion:
+        del system_prompt, user_prompt
+        raise ChatUsageLimitExceededError()
+
+    async def complete_json(self, system_prompt: str, user_prompt: str) -> AiCompletion:
+        del system_prompt, user_prompt
+        raise ChatUsageLimitExceededError()
+
+
+def test_metered_generator_denies_before_calling_the_inner_generator() -> None:
+    inner = _FakeInnerGenerator()
+    quota = _FakeChatQuota(allowed=False)
+    generator = MeteredTextGenerator(inner, quota)
+
+    with pytest.raises(ChatUsageLimitExceededError):
+        asyncio.run(generator.complete_text("system", "user"))
+    with pytest.raises(ChatUsageLimitExceededError):
+        asyncio.run(generator.complete_json("system", "user"))
+    assert inner.calls == []
+    assert quota.recorded == []
+
+
+def test_metered_generator_records_exact_usage_once() -> None:
+    usage = {
+        "prompt_tokens": 11,
+        "completion_tokens": 4,
+        "total_tokens": 15,
+        "prompt_cache_hit_tokens": 3,
+    }
+    inner = _FakeInnerGenerator(usage)
+    quota = _FakeChatQuota()
+    generator = MeteredTextGenerator(inner, quota)
+
+    completion = asyncio.run(generator.complete_json("system", "user"))
+    assert completion.text == '{"ok": true}'
+    assert completion.usage == usage
+    assert len(inner.calls) == 1
+    assert quota.recorded == [usage]
+
+
+def test_metered_generator_skips_an_empty_usage_object() -> None:
+    inner = _FakeInnerGenerator({})
+    quota = _FakeChatQuota()
+    generator = MeteredTextGenerator(inner, quota)
+
+    completion = asyncio.run(generator.complete_text("system", "user"))
+    assert completion.text == "text result"
+    assert len(inner.calls) == 1
+    assert quota.recorded == []
+
+
+def test_record_chat_usage_consumes_the_allowance_without_agent_metrics(
+    root_account: UserClient,
+    owner_engine: Engine,
+) -> None:
+    activity = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+    _set_user_columns(
+        owner_engine,
+        root_account.user_id,
+        chat_granted=70,
+        prompt_tokens=0,
+        completion_tokens=0,
+        total_tokens=0,
+        cached_tokens=0,
+        api_calls=0,
+        agent_turns=7,
+        last_agent_activity_at=activity,
+    )
+
+    async def run() -> None:
+        database = Database(TEST_DATABASE_URL)
+        try:
+            service = AccountQuotaService(database, root_account.user_id)
+            await service.record_chat_usage(
+                {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 20,
+                    "prompt_cache_hit_tokens": 3,
+                }
+            )
+            assert await service.chat_allowed() is True
+            await service.record_chat_usage({})
+            await service.record_chat_usage(
+                {
+                    "prompt_tokens": 20,
+                    "completion_tokens": 30,
+                    "cached_tokens": 4,
+                }
+            )
+            assert await service.chat_allowed() is False
+        finally:
+            await database.dispose()
+
+    asyncio.run(run())
+    counters = _read_user_columns(
+        owner_engine,
+        root_account.user_id,
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "cached_tokens",
+        "api_calls",
+        "agent_turns",
+        "last_agent_activity_at",
+    )
+    assert counters[:6] == (30, 35, 70, 7, 2, 7)
+    assert counters[6] == activity
+
+
+def _file_service(
+    *,
+    text_generator: Any,
+    vision_extractor: Any = None,
+    chat_quota: Any = None,
+) -> FileService:
+    return FileService(
+        user_id=1,
+        file_repository=cast(Any, None),
+        folder_repository=cast(Any, None),
+        chunk_repository=cast(Any, None),
+        indexer=cast(Any, None),
+        storage=cast(Any, None),
+        cache=cast(Any, None),
+        text_generator=text_generator,
+        vision_extractor=vision_extractor,
+        vision_description_language="English",
+        vision_image_prompt=DEFAULT_VISION_IMAGE_PROMPT,
+        vision_document_prompt=DEFAULT_VISION_DOCUMENT_PROMPT,
+        target_chars=1_000,
+        overlap_chars=100,
+        max_chunks=100,
+        max_upload_bytes=1_000_000,
+        max_text_bytes=1_000_000,
+        vision_max_pages=4,
+        pdf_text_threshold=100,
+        chat_quota=chat_quota,
+    )
+
+
+def test_background_services_fall_back_when_chat_is_blocked() -> None:
+    generator = _BlockedGenerator()
+    summary = SummaryService(
+        user_id=1,
+        memory_repository=cast(Any, None),
+        summary_repository=cast(Any, None),
+        indexer=cast(Any, None),
+        text_generator=generator,
+        cache=cast(Any, None),
+        ai_summary_enabled=True,
+        auto_summary_threshold=10,
+        min_memories=1,
+    )
+    memory = SimpleNamespace(
+        id=1,
+        memory_time=datetime(2026, 1, 1, tzinfo=UTC),
+        content="A durable memory about a wrench.",
+    )
+    assert asyncio.run(summary._ai_draft([memory])) is None
+
+    memory_service = MemoryService(
+        user_id=1,
+        memory_repository=cast(Any, None),
+        chunk_repository=cast(Any, None),
+        indexer=cast(Any, None),
+        cache=cast(Any, None),
+        summary_service=cast(Any, None),
+        text_generator=generator,
+    )
+    assert asyncio.run(memory_service._generate_title("A durable memory")) == (
+        "A durable memory"
+    )
+
+    service = _file_service(text_generator=generator)
+    analysis = asyncio.run(
+        service._analyze_text(
+            "x" * 60,
+            file_name_value="sample.txt",
+            document_type="text",
+        )
+    )
+    assert analysis.has_meaningful_text is True
+    assert analysis.use_vision is False
+    assert analysis.title == "sample.txt"
+
+
+# ---------------------------------------------------------------------------
+# Vision usage
+# ---------------------------------------------------------------------------
+
+
+class _UsageVisionExtractor:
+    configured = True
+    model_name = "fake-vision"
+
+    def __init__(self, usage: dict[str, int] | None = None) -> None:
+        self.usage = dict(
+            usage
+            or {
+                "prompt_tokens": 12,
+                "completion_tokens": 6,
+                "total_tokens": 18,
+            }
+        )
+        self.calls: list[bytes] = []
+
+    async def extract(
+        self,
+        data: bytes,
+        mime_type: str,
+        *,
+        system_prompt: str,
+        mode: str = "image",
+    ) -> VisionDocument:
+        del mime_type, system_prompt, mode
+        self.calls.append(data)
+        return VisionDocument(
+            text="page text",
+            caption="",
+            ocr_text="page text",
+            title="Page",
+            summary="",
+            document_type="other",
+            tags=[],
+            language="en",
+            usage=dict(self.usage),
+        )
+
+
+class _VisionChatQuota:
+    def __init__(self, *, allowed: bool, stop_after_first: bool = False) -> None:
+        self.allowed = allowed
+        self.stop_after_first = stop_after_first
+        self.recorded: list[dict[str, int]] = []
+
+    async def chat_allowed(self) -> bool:
+        return self.allowed
+
+    async def record_chat_usage(self, usage: Any) -> None:
+        self.recorded.append(dict(usage))
+        if self.stop_after_first:
+            self.allowed = False
+
+
+def test_file_service_stops_vision_when_chat_is_denied() -> None:
+    extractor = _UsageVisionExtractor()
+    quota = _VisionChatQuota(allowed=False)
+    service = _file_service(
+        text_generator=_BlockedGenerator(),
+        vision_extractor=extractor,
+        chat_quota=quota,
+    )
+
+    asyncio.run(service._vision_images([(b"first", "image/png")]))
+    assert extractor.calls == []
+    assert quota.recorded == []
+
+
+def test_file_service_records_vision_usage_and_stops_between_calls() -> None:
+    extractor = _UsageVisionExtractor()
+    quota = _VisionChatQuota(allowed=True, stop_after_first=True)
+    service = _file_service(
+        text_generator=_BlockedGenerator(),
+        vision_extractor=extractor,
+        chat_quota=quota,
+    )
+
+    asyncio.run(
+        service._vision_images(
+            [(b"first", "image/png"), (b"second", "image/png")]
+        )
+    )
+    assert extractor.calls == [b"first"]
+    assert quota.recorded == [extractor.usage]
+
+
+def test_vision_document_usage_round_trips() -> None:
+    document = VisionDocument(
+        text="page",
+        caption="",
+        ocr_text="page",
+        title="Page",
+        summary="",
+        document_type="other",
+        tags=[],
+        language="en",
+        usage={"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
+    )
+    payload = document.model_dump()
+    assert payload["usage"] == {
+        "prompt_tokens": 3,
+        "completion_tokens": 2,
+        "total_tokens": 5,
+    }
+    assert VisionDocument.model_validate(payload).usage == document.usage
+
+
+def test_vision_client_captures_provider_usage(monkeypatch: Any) -> None:
+    body = {
+        "choices": [{"message": {"content": '{"text": "vision text"}'}}],
+        "usage": {
+            "prompt_tokens": 21,
+            "completion_tokens": 7,
+            "total_tokens": 28,
+        },
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return httpx.Response(200, json=body)
+
+    real_client = httpx.AsyncClient
+
+    def factory(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    monkeypatch.setattr(vision_client.httpx, "AsyncClient", factory)
+    client = DeepSeekVisionClient(
+        api_key="test-key",
+        base_url="https://vision.example",
+        model="vision-test",
+        timeout_seconds=1,
+    )
+    analysis = asyncio.run(
+        client.analyze(
+            b"image",
+            "image/png",
+            system_prompt="system",
+            user_prompt="user",
+        )
+    )
+    assert analysis.parsed["text"] == "vision text"
+    assert analysis.usage == {
+        "prompt_tokens": 21,
+        "completion_tokens": 7,
+        "total_tokens": 28,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Embedding enforcement
 # ---------------------------------------------------------------------------
 
@@ -676,15 +1065,13 @@ def test_indexer_lenient_denial_persists_text_only_chunks() -> None:
     assert quota.recorded == []
 
 
-def test_indexer_records_the_conservative_estimate_once_per_successful_batch() -> None:
+def test_indexer_records_characters_once_per_successful_batch() -> None:
     repository = _FakeChunkRepository()
     embedder = _FakeEmbedder()
     quota = _FakeQuota(allowed=True)
     drafts = _drafts()
-    expected = sum(
-        max(draft.token_count, math.ceil(draft.char_count / 4)) for draft in drafts
-    )
-    assert expected == estimate_embedding_units(drafts)
+    expected = sum(draft.char_count for draft in drafts)
+    assert expected == sum_embedding_characters(drafts)
     indexer = IndexerService(
         cast(Any, repository),
         cast(Any, embedder),
@@ -703,10 +1090,32 @@ def test_indexer_records_the_conservative_estimate_once_per_successful_batch() -
     assert count == 2
     assert embedder.calls == [["abcdefgh"], ["ijklmnop"]]
     assert quota.recorded == [
-        estimate_embedding_units([drafts[0]]),
-        estimate_embedding_units([drafts[1]]),
+        sum_embedding_characters([drafts[0]]),
+        sum_embedding_characters([drafts[1]]),
     ]
     assert all(chunk.embedding is not None for chunk in repository.chunks)
+
+
+def test_indexer_zero_character_batch_records_nothing() -> None:
+    repository = _FakeChunkRepository()
+    embedder = _FakeEmbedder()
+    quota = _FakeQuota(allowed=True)
+    indexer = IndexerService(
+        cast(Any, repository),
+        cast(Any, embedder),
+        user_id=1,
+        quota=cast(Any, quota),
+    )
+
+    count = asyncio.run(
+        indexer.index_chunks(
+            source_kind="file",
+            source_id=1,
+            drafts=[ChunkDraft(index=1, content="", char_count=0, token_count=5)],
+        )
+    )
+    assert count == 1
+    assert quota.recorded == []
 
 
 def test_shared_indexer_composition_enforces_and_records_embedding_quota(
@@ -727,7 +1136,7 @@ def test_shared_indexer_composition_enforces_and_records_embedding_quota(
             token_count=6,
         )
     ]
-    expected = estimate_embedding_units(drafts)
+    expected = sum_embedding_characters(drafts)
 
     async def index(source_id: int) -> None:
         async with client.app.state.db.user_session(
@@ -750,7 +1159,7 @@ def test_shared_indexer_composition_enforces_and_records_embedding_quota(
         owner_engine,
         root_account.user_id,
         embedding_granted=0,
-        embedding_tokens=0,
+        embedding_characters=0,
         embedding_used_before_reset=0,
     )
     client.portal.call(index, 9001)
@@ -759,14 +1168,14 @@ def test_shared_indexer_composition_enforces_and_records_embedding_quota(
     assert denied_chunks[0][0] is True
     assert denied_chunks[0][1] is None
     assert _read_user_columns(
-        owner_engine, root_account.user_id, "embedding_tokens"
+        owner_engine, root_account.user_id, "embedding_characters"
     )[0] == 0
 
     _set_user_columns(
         owner_engine,
         root_account.user_id,
         embedding_granted=1_000_000,
-        embedding_tokens=0,
+        embedding_characters=0,
         embedding_used_before_reset=0,
     )
     client.portal.call(index, 9002)
@@ -775,7 +1184,7 @@ def test_shared_indexer_composition_enforces_and_records_embedding_quota(
     assert allowed_chunks[0][0] is False
     assert allowed_chunks[0][1] == "apsor-hash-384"
     assert _read_user_columns(
-        owner_engine, root_account.user_id, "embedding_tokens"
+        owner_engine, root_account.user_id, "embedding_characters"
     )[0] == expected
 
 
@@ -865,7 +1274,7 @@ def test_search_query_embedding_obeys_the_allowance(
         owner_engine,
         root_account.user_id,
         embedding_granted=0,
-        embedding_tokens=0,
+        embedding_characters=0,
         embedding_used_before_reset=0,
     )
 
@@ -920,7 +1329,7 @@ def test_search_query_embedding_obeys_the_allowance(
         owner_engine,
         root_account.user_id,
         embedding_granted=1_000_000,
-        embedding_tokens=0,
+        embedding_characters=0,
         embedding_used_before_reset=0,
     )
     allowed_query = "wrench allowed search"
@@ -937,8 +1346,8 @@ def test_search_query_embedding_obeys_the_allowance(
     assert has_results is True
     assert calls == 1
     assert _read_user_columns(
-        owner_engine, root_account.user_id, "embedding_tokens"
-    )[0] == estimate_text_units(allowed_query)
+        owner_engine, root_account.user_id, "embedding_characters"
+    )[0] == len(allowed_query)
 
 
 def test_durable_ingest_job_error_code_for_denied_embedding() -> None:

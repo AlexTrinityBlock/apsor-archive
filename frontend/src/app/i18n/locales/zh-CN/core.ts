@@ -236,7 +236,7 @@ export const core = {
     quotasTitle: "用量额度",
     quotasManage: "管理用量",
     quotaChat: "聊天令牌",
-    quotaEmbedding: "嵌入令牌",
+    quotaEmbedding: "嵌入字符",
     quotaWebSearch: "网络搜索",
     quotaWebFetch: "网络抓取",
     quotaAllowed: "允许",
@@ -247,6 +247,8 @@ export const core = {
     quotaDialogTitle: "用量额度",
     quotaDialogDescription:
       "设置 {name} 的额度。留空表示无上限；0 会禁止该类别的一切用量。",
+    quotaAccountingHint:
+      "聊天令牌包含聊天轮次、摘要、提取、记忆标题与视觉识别。嵌入用量按输入字符计算。",
     quotaUsed: "本期已用",
     quotaLifetime: "累计",
     quotaBeforeResetLabel: "重置前累计",

@@ -68,29 +68,25 @@ def provider_defaults_from_settings(settings: Settings) -> ProviderDefaults:
         if settings.deepseek_api_key is not None
         else None
     )
-    # An Exa-only or DeepSeek-only deployment should work out of the box. When
-    # several keys exist, Tavily stays the default for existing deployments,
-    # then Exa, then DeepSeek; the operator can switch either capability in
-    # Settings.
-    use_exa = bool(exa_key) and not tavily_key
-    use_deepseek = bool(deepseek_key) and not tavily_key and not exa_key
-    web_api_key: str | None
-    if tavily_key:
-        web_provider = "tavily"
-        web_base_url = settings.tavily_base_url
-        web_api_key = tavily_key
-    elif use_exa:
-        web_provider = "exa"
-        web_base_url = settings.exa_base_url
-        web_api_key = exa_key
-    elif use_deepseek:
-        web_provider = "deepseek"
-        web_base_url = settings.deepseek_base_url
-        web_api_key = deepseek_key
-    else:
-        web_provider = "none"
-        web_base_url = settings.tavily_base_url
-        web_api_key = None
+    # Both web capabilities prefer DeepSeek when its key exists, then Tavily,
+    # then Exa. The two capabilities remain independently selectable in
+    # Settings, and a saved database row always takes precedence.
+    search_provider, search_base_url, search_api_key = _first_web_provider(
+        (
+            ("deepseek", deepseek_key, settings.deepseek_base_url),
+            ("tavily", tavily_key, settings.tavily_base_url),
+            ("exa", exa_key, settings.exa_base_url),
+        ),
+        settings.tavily_base_url,
+    )
+    fetch_provider, fetch_base_url, fetch_api_key = _first_web_provider(
+        (
+            ("deepseek", deepseek_key, settings.deepseek_base_url),
+            ("tavily", tavily_key, settings.tavily_base_url),
+            ("exa", exa_key, settings.exa_base_url),
+        ),
+        settings.tavily_base_url,
+    )
     return ProviderDefaults(
         chat_provider="deepseek",
         chat_model=settings.deepseek_model,
@@ -111,16 +107,27 @@ def provider_defaults_from_settings(settings: Settings) -> ProviderDefaults:
         embedding_dimension=settings.embedding_dimension,
         # Environment fallbacks for the two independent web capabilities; an
         # active database row always takes precedence.
-        web_search_provider=web_provider,
-        web_search_base_url=web_base_url,
-        web_search_api_key=web_api_key,
-        web_fetch_provider=web_provider,
-        web_fetch_base_url=web_base_url,
-        web_fetch_api_key=web_api_key,
+        web_search_provider=search_provider,
+        web_search_base_url=search_base_url,
+        web_search_api_key=search_api_key,
+        web_fetch_provider=fetch_provider,
+        web_fetch_base_url=fetch_base_url,
+        web_fetch_api_key=fetch_api_key,
         tavily_api_key=tavily_key,
         exa_api_key=exa_key,
         deepseek_api_key=deepseek_key,
     )
+
+
+def _first_web_provider(
+    candidates: tuple[tuple[str, str | None, str], ...],
+    fallback_base_url: str,
+) -> tuple[str, str, str | None]:
+    """Return the first web provider with a usable environment key."""
+    for provider, api_key, base_url in candidates:
+        if api_key:
+            return provider, base_url, api_key
+    return "none", fallback_base_url, None
 
 
 class ProviderFactory:

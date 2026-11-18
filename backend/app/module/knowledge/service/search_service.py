@@ -37,7 +37,6 @@ from app.module.knowledge.schema.search_schema import (
     SummarySearchResultSchema,
 )
 from app.module.knowledge.service.cache_keys import user_cache_key, user_version_scope
-from app.module.knowledge.service.indexer_service import estimate_text_units
 from app.shared.retrieval import (
     HISTORY_MIN_VECTOR_CONTENT_CHARS,
     HISTORY_MIN_VECTOR_SIMILARITY,
@@ -101,13 +100,13 @@ class SearchService:
         """
         if self.embedder.dimension <= 0:
             return None
-        units = estimate_text_units(query)
-        if self.quota is not None and not await self.quota.embedding_allowed(units):
+        characters = max(1, len(query))
+        if self.quota is not None and not await self.quota.embedding_allowed(characters):
             logger.warning(
                 "Vector recall skipped: embedding usage allowance exhausted "
-                "user_id=%s estimated_units=%d",
+                "user_id=%s characters=%d",
                 self.user_id,
-                units,
+                characters,
             )
             return None
         try:
@@ -118,7 +117,7 @@ class SearchService:
         if not vectors or not vectors[0]:
             return None
         if self.quota is not None:
-            await self.quota.record_embedding(units)
+            await self.quota.record_embedding(characters)
         return vectors[0]
 
     async def _vector_hits(
