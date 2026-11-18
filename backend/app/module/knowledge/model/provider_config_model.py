@@ -52,6 +52,15 @@ class ProviderConfigMixin:
         default=False,
         server_default=text("false"),
     )
+    # Chain order inside one capability: 0 is the primary, 1.. are backups.
+    # ``is_active`` means "in this chain"; inactive rows keep a saved
+    # configuration but are never called.
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -81,9 +90,10 @@ def _provider_table_args(
     ``ck_<table>_<name>`` naming convention.  Chat and web tables share this
     helper, but their model checks differ (required vs. NULL), so the constraint
     suffix is explicit and must match the Alembic migration.  The partial unique
-    index is the only source of truth for "at most one active row per
-    capability"; there is intentionally no separate ``enabled`` column or
-    active-pointer table.
+    index on ``priority`` is the only source of truth for the ordered active
+    chain; ``is_active`` means "member of the chain" and the index guarantees
+    that two active rows cannot share a position.  There is intentionally no
+    separate ``enabled`` column or active-pointer table.
 
     ``Any`` is used for the return type because SQLAlchemy's table-argument
     tuple mixes ``CheckConstraint`` and ``Index`` instances.
@@ -93,9 +103,10 @@ def _provider_table_args(
         CheckConstraint(model_check, name=model_constraint),
         CheckConstraint(dimension_check, name="dimension_null"),
         CheckConstraint("char_length(label) <= 80", name="label_length"),
+        CheckConstraint("priority >= 0", name="priority_non_negative"),
         Index(
-            f"uq_{table_name}_active",
-            "is_active",
+            f"uq_{table_name}_active_priority",
+            "priority",
             unique=True,
             postgresql_where=text("is_active"),
         ),
@@ -118,9 +129,10 @@ def _embedding_table_args() -> tuple[Any, ...]:
             name="dimension_range",
         ),
         CheckConstraint("char_length(label) <= 80", name="label_length"),
+        CheckConstraint("priority >= 0", name="priority_non_negative"),
         Index(
-            "uq_embedding_provider_config_active",
-            "is_active",
+            "uq_embedding_provider_config_active_priority",
+            "priority",
             unique=True,
             postgresql_where=text("is_active"),
         ),

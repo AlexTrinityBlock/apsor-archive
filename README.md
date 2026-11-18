@@ -294,18 +294,26 @@ account can edit the global registry. It writes to four independent capability
 tables, so one capability can never overwrite another:
 
 - **Chat** — `chat_provider_config`: DeepSeek or any OpenAI-compatible chat
-  endpoint. Multiple saved rows are allowed; exactly one is active.
+  endpoint. Several rows may be active as one ordered chain.
 - **Embedding** — `embedding_provider_config`: offline `hashing`, `openai`, or
-  `openai-compatible`. Multiple saved rows are allowed; exactly one is active.
+  `openai-compatible`. Several rows may form one chain, but every active row
+  must use the same model and dimension.
 - **Web search** — `web_search_provider_config`: Tavily, Exa, or DeepSeek.
-  Multiple saved rows are allowed; exactly one is active.
+  Several rows may be active as one ordered chain.
 - **Web fetch** — `web_fetch_provider_config`: Tavily `extract`, Exa
   `contents`, or DeepSeek `fetch`. Web search and web fetch are deliberately
   separate rows, so they can use different providers or different credentials.
 
-Every table has a partial unique index on `is_active`; PostgreSQL enforces at
-most one active row per capability. Deleting a row does not reuse its identity
-id. Provider rows are global deployment configuration: only the root account can
+Every table stores a zero-based `priority` and a partial unique index on
+`priority WHERE is_active`. The first chain row is the primary; the rest are
+backups. A provider request advances to the next row only on a provider or
+transport failure, and the operation fails only after every row fails. Agent chat
+fails over only before the first text delta: switching after output reached the
+caller would duplicate visible text. Context-window and output-limit errors are
+never failed over because the agent owns compaction and its bounded retry.
+Embedding backups must share the primary's model and dimension, since mixing
+vector spaces would corrupt the per-owner index. Deleting a row does not reuse
+its identity id. Provider rows are global deployment configuration: only the root account can
 list, edit, test, or delete them, and normal users never receive a provider
 secret or a global runtime setting. The API never returns a plaintext key: the
 browser receives only a hint such as `...14f8`. `APSOR_SECRET_KEY` supplies the Fernet master key. If it is unset,
@@ -318,8 +326,8 @@ the gitignored `.secrets/exa.env` as `EXA_API_KEY` (or as
 DeepSeek web search and web fetch provider, so no separate web credential is
 needed.
 
-Precedence is: **active database row → environment → built-in default**. The
-Settings page labels each provider with its source. Changing the embedding model
+Precedence is: **active database chain → environment → built-in default**. The
+Settings page labels each provider with its source and shows the chain order. Changing the embedding model
 does not rewrite existing vectors; `reindex_required` warns you. Run **Re-embed
 library** (or `POST /api/v1/settings/providers/embedding/reindex`) to refresh
 current chunks. Vector search skips chunks whose dimension does not match the
@@ -329,18 +337,32 @@ Provider registry API:
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/api/v1/settings/providers` | Four capability groups, masked hints, active row, reindex advice |
-| `POST` | `/api/v1/settings/providers/{capability}` | Create one saved provider; optionally activate it |
-| `PUT` | `/api/v1/settings/providers/{capability}/{provider_id}` | Replace one saved provider |
-| `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | Delete one saved provider |
-| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | Make it the only active row for that capability |
-| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | Clear the active row and fall back to environment/default |
+| `GET` | `/api/v1/settings/providers` | Four capability groups, masked hints, ordered chain, reindex advice |
+| `POST` | `/api/v1/settings/providers/{capability}` | Create one saved provider; optionally append it to the chain |
+| `PUT` | `/api/v1/settings/providers/{capability}/{provider_id}` | Replace one saved provider without reordering the chain |
+| `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | Delete one saved provider and close the chain gap |
+| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | Append the row, or pass `priority=0` to make it primary |
+| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/deactivate` | Remove one row from the chain and close the gap |
+| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | Clear the whole chain and fall back to environment/default |
 | `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/test` | One small provider request plus latency |
 | `POST` | `/api/v1/settings/providers/embedding/reindex` | Re-embed every current chunk with the active provider |
 
 `{capability}` is one of `chat`, `embedding`, `web_search`, or `web_fetch`.
 The registry response is cached for 30 seconds under the `providers` cache
 scope; every provider write bumps that scope.
+
+When an entire chain fails, the API and worker record one sanitized
+`provider_error_notice` row and root sees it on the Accounts page. Notices
+deduplicate by capability, operation, and error code inside a 15-minute window;
+`count` and `last_seen_at` advance on repeats. The table holds only provider
+metadata, never prompts or archive content. Root can list, resolve one, or
+resolve all:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/system/provider-notices?status=open\|all&limit=50` | Open notices plus the unresolved count |
+| `POST` | `/api/v1/system/provider-notices/{notice_id}/resolve` | Resolve one notice |
+| `POST` | `/api/v1/system/provider-notices/resolve-all` | Resolve every open notice |
 
 ### Web research tools
 

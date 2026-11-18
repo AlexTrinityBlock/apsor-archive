@@ -49,6 +49,9 @@ from app.module.knowledge.repository.provider_config_repository import (
 )
 from app.module.knowledge.router import router as knowledge_router
 from app.module.knowledge.router.health_router import router as health_router
+from app.module.knowledge.service.provider_error_notice_service import (
+    ProviderErrorNoticeService,
+)
 from app.module.prompt.exception.handler import register_prompt_exceptions
 from app.module.prompt.router import router as prompt_router
 from app.module.web_research.exception.handler import (
@@ -96,15 +99,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.cache = build_cache(resolved_settings.cache_url)
         app.state.storage = build_file_storage(resolved_settings)
         cipher = SecretCipher.from_settings(resolved_settings)
+        notice_service = ProviderErrorNoticeService(app.state.db.session_factory)
         runtime = AiRuntime(
             builder=ProviderFactory(resolved_settings),
             cipher=cipher,
             defaults=provider_defaults_from_settings(resolved_settings),
+            reporter=notice_service.report,
         )
         async with system_session(app.state.db.session_factory) as session:
             await runtime.reload(ProviderConfigRepository(session))
         app.state.secret_cipher = cipher
         app.state.ai_runtime = runtime
+        app.state.provider_notice_service = notice_service
         ingest_defaults = ingest_runtime_defaults(resolved_settings)
         ingest_config = ingest_defaults
         if resolved_settings.ingest_worker_enabled:

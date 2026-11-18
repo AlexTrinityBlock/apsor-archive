@@ -1872,6 +1872,34 @@
   min-height: 150px;
 }
 
+.registry-chain {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.registry-chain__head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.registry-active.is-primary {
+  border-left-color: var(--accent-moss);
+}
+
+.registry-active.is-backup {
+  border-left-color: var(--accent-ochre);
+}
+
+.registry-active.is-backup .registry-active__title {
+  font-weight: 600;
+}
+
 .registry-active {
   display: flex;
   min-width: 0;

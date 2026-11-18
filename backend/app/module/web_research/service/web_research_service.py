@@ -158,9 +158,10 @@ class WebResearchService:
                 content = content[:_MAX_SEARCH_CONTENT_CHARS]
                 truncated = True
             hits.append(hit.model_copy(update={"content": content}))
+        # Preserve the client's provider: with a provider chain the successful
+        # backup may not be the configured primary.
         response = response.model_copy(
             update={
-                "provider": self._search_config.provider,
                 "results": hits,
                 "truncated": truncated,
                 "cached": False,
@@ -238,7 +239,7 @@ class WebResearchService:
             source_truncated = True
         full = _full_fetch_response(
             response,
-            provider=self._fetch_config.provider,
+            provider=response.provider,
             content=content,
             source_truncated=source_truncated,
             page_chars=page_chars,
@@ -250,7 +251,7 @@ class WebResearchService:
             logger.warning(
                 "web fetch skipped cache provider=%s total_chars=%d "
                 "reason=structurally_incomplete",
-                self._fetch_config.provider,
+                response.provider,
                 len(content),
             )
         else:
@@ -439,19 +440,13 @@ def _is_ready(
 ) -> bool:
     """Return whether a provider can actually serve a request.
 
-    Both ``enabled`` and ``provider != "none"`` must hold; the key is only ever
-    tested as a boolean here and is never written into a message or the cache.
-    ``client.configured`` is the second safety net, so a registry entry that looks
-    enabled but whose client has no credentials does not send an empty-key
-    request.
+    ``enabled`` and ``provider != "none"`` describe the primary row. The
+    aggregate ``client.configured`` is the real credential check: a fallback
+    wrapper reports true when any entry in the chain holds a usable key, even if
+    the primary row itself has none. The key is only ever tested as a boolean
+    here and is never written into a message or the cache.
     """
-    return (
-        config.enabled
-        and config.provider != "none"
-        and bool(config.api_key)
-        and client.configured
-        and client.provider == config.provider
-    )
+    return config.enabled and config.provider != "none" and client.configured
 
 
 def _normalize_domains(domains: list[str]) -> list[str]:

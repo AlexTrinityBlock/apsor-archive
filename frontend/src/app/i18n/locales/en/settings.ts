@@ -451,9 +451,25 @@ export const settings = {
   providers: {
     title: "Provider registry",
     lede:
-      "Four capability slots stored in PostgreSQL: chat, embedding, web search, and web fetch. One row is active per slot; saving reloads the runtime immediately. Web search and web fetch use separate credentials; if both should use the same Tavily key, paste it into each section. Keys are encrypted at rest, never returned to the browser, and never prefilled here.",
+      "Four capability chains stored in PostgreSQL: chat, embedding, web search, and web fetch. The first row is primary and the rest are backups; saving reloads the runtime immediately. Web search and web fetch use separate credentials; if both should use the same Tavily key, paste it into each section. Keys are encrypted at rest, never returned to the browser, and never prefilled here.",
     hint:
-      "Database rows take precedence over environment fallbacks. Leaving a key field blank preserves the stored key. Use Deactivate to fall back to the server environment or built-in defaults for one capability.",
+      "Database rows take precedence over environment fallbacks. Leaving a key field blank preserves the stored key. Remove every row from a chain to fall back to the server environment or built-in defaults for that capability.",
+    chainTitle: "Provider chain",
+    chainHelp:
+      "Fallback moves to the next row only when a provider request fails. The operation fails only after every row in the chain fails.",
+    chainAria: "{capability} provider chain",
+    chainCount: "{count} in chain",
+    chainPrimary: "Primary",
+    chainBackup: "Backup {index}",
+    inChain: "In chain",
+    addToChain: "Add to chain",
+    removeFromChain: "Remove from chain",
+    makePrimary: "Make primary",
+    madePrimaryToast: "Provider is now primary.",
+    addedToChainToast: "Provider appended to the chain.",
+    removedFromChainToast: "Provider removed from the chain.",
+    addedToChainHint:
+      "Appends this row to the end of the chain. The first row stays primary.",
     reindexRequired: "Re-index required",
     reindexRequiredBody:
       "Existing chunks were embedded with a different model. New files use the active embedding provider. Re-embed the library from the embedding section or System diagnostics to align the corpus.",
@@ -523,11 +539,11 @@ export const settings = {
     clearKey: "Clear stored key",
     clearKeyHint:
       "Removes the database key. Environment fallback may still apply to the active provider.",
-    activateAfterSave: "Activate after saving",
+    activateAfterSave: "Add to the chain after saving",
     activateHintLocked:
-      "This row is active. Use Deactivate in the registry to turn it off.",
+      "This row is in the chain. Use Remove from chain in the registry to take it out.",
     activateHint:
-      "Makes this row the only active provider for this capability.",
+      "Appends this row to the end of the chain. The first row stays primary.",
     webCredentialsNote:
       "Web search and web fetch use separate credentials. Paste this capability's provider key here even if the other capability uses the same value.",
     errors: {
@@ -544,6 +560,8 @@ export const settings = {
       dimension:
         "Dimension must be a whole number between 16 and 4096.",
       apiKeyMax: "API key must be 500 characters or fewer.",
+      embeddingChainMismatch:
+        "Embedding backups must use the same model and dimension as the primary. A different vector model or dimension would corrupt the vector index; change the primary and re-index first.",
     },
     testLogConfig: "> {title} · saved configuration",
     testLogFailed: "> FAILED · ",

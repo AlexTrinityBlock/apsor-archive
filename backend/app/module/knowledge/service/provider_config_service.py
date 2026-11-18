@@ -128,12 +128,15 @@ class ProviderConfigService:
             spec = PROVIDER_TABLE_SPECS[capability]
             rows = list(await self.repository.list_all(spec))
             reads = [self._read_saved(spec, row) for row in rows]
-            active_row = next((row for row in rows if row.is_active), None)
-            active = (
-                self._read_active(spec, active_row)
-                if active_row is not None
-                else self._read_virtual_active(spec)
+            active_rows = sorted(
+                (row for row in rows if row.is_active),
+                key=lambda row: (row.priority, row.id),
             )
+            chain = [
+                self._read_active(spec, row, primary=index == 0)
+                for index, row in enumerate(active_rows)
+            ]
+            active = chain[0] if chain else self._read_virtual_active(spec)
             capabilities.append(
                 ProviderCapabilityReadSchema(
                     capability=capability,
@@ -145,6 +148,7 @@ class ProviderConfigService:
                     supports_model=spec.supports_model,
                     supports_dimension=spec.supports_dimension,
                     active=active,
+                    chain=chain,
                     providers=reads,
                 )
             )
@@ -175,6 +179,7 @@ class ProviderConfigService:
             base_url=row.base_url,
             dimension=row.dimension,
             is_active=row.is_active,
+            priority=row.priority,
             configured=self._row_configured(spec, row),
             key_hint=row.api_key_hint,
             key_source="database" if row.api_key_ciphertext else "none",
@@ -186,17 +191,28 @@ class ProviderConfigService:
         self,
         spec: ProviderTableSpec,
         row: ProviderConfigMixin,
+        *,
+        primary: bool,
     ) -> ProviderReadSchema:
-        """Read an active row, including any environment key fallback."""
-        config = self._current_config(spec)
+        """Read one chain row, including any environment key fallback.
+
+        The primary uses the aggregate runtime readiness so environment
+        defaults and keyless providers stay consistent with the existing
+        single-provider behaviour. A backup reports its own row-level
+        credential state; the aggregate runtime only describes the head.
+        """
         key_source: KeySource = "none"
         if row.api_key_ciphertext:
             key_source = "database"
-        elif config.api_key:
-            key_source = "environment"
+        else:
+            environment_key = self._environment_key(spec.capability, row.provider)
+            if environment_key:
+                key_source = "environment"
         hint = row.api_key_hint
-        if hint is None and key_source == "environment" and config.api_key:
-            hint = self.cipher.hint(config.api_key)
+        if hint is None and key_source == "environment":
+            environment_key = self._environment_key(spec.capability, row.provider)
+            if environment_key:
+                hint = self.cipher.hint(environment_key)
         return ProviderReadSchema(
             id=row.id,
             capability=spec.capability,
@@ -206,7 +222,18 @@ class ProviderConfigService:
             base_url=row.base_url,
             dimension=row.dimension,
             is_active=True,
-            configured=self._active_configured(spec),
+            priority=row.priority,
+            configured=(
+                self._active_configured(spec)
+                if primary
+                else (
+                    row.provider != "none"
+                    and (
+                        row.provider in spec.keyless_providers
+                        or key_source != "none"
+                    )
+                )
+            ),
             key_hint=hint,
             key_source=key_source,
             source="database",
@@ -225,6 +252,7 @@ class ProviderConfigService:
             base_url=config.base_url,
             dimension=config.dimension,
             is_active=config.enabled,
+            priority=0,
             configured=self._active_configured(spec),
             key_hint=self.cipher.hint(config.api_key) if config.api_key else None,
             key_source="environment" if config.api_key else "none",
@@ -360,6 +388,7 @@ class ProviderConfigService:
             base_url=normalized.base_url,
             dimension=normalized.dimension,
             is_active=False,
+            priority=0,
             created_at=now,
             updated_at=now,
         )
@@ -368,14 +397,11 @@ class ProviderConfigService:
             payload=payload,
             keyless=normalized.provider in spec.keyless_providers,
         )
-        # Save first to obtain the identity id; the partial unique index allows any
-        # number of inactive rows, so the order must be "insert inactive,
-        # deactivate the others, then set active".
+        # Save first to obtain the identity id. Inactive rows never participate
+        # in the partial unique index, so the insert cannot conflict.
         await self.repository.save(row)
         if payload.activate:
-            await self.repository.deactivate_others(spec, keep_id=row.id)
-            row.is_active = True
-            row.updated_at = utcnow()
+            await self._append_to_chain(spec, row)
         await self._after_write(spec)
         return await self.get_registry()
 
@@ -401,12 +427,15 @@ class ProviderConfigService:
             payload=payload,
             keyless=normalized.provider in spec.keyless_providers,
         )
-        if payload.activate:
-            await self.repository.deactivate_others(spec, keep_id=row.id)
-            row.is_active = True
-        # activate=False keeps the row's current active state; deactivation is a
-        # separate explicit endpoint so an edit cannot silently drop a capability.
-        await self.repository.save(row)
+        # Editing an inactive row only appends when activation is explicit.
+        # Editing an active row keeps its position; activation is never a way to
+        # reorder the chain.
+        if payload.activate and not row.is_active:
+            await self._append_to_chain(spec, row)
+        else:
+            if row.is_active:
+                await self._validate_active_chain(spec)
+            await self.repository.save(row)
         await self._after_write(spec)
         return await self.get_registry()
 
@@ -419,11 +448,16 @@ class ProviderConfigService:
         row = await self.repository.get_by_id(spec, provider_id)
         if row is None:
             raise ProviderNotFoundError(provider_id)
-        if row.is_active:
-            # Deactivate before deleting so the capability immediately falls
-            # back to environment/default until the transaction commits.
-            await self.repository.deactivate_all(spec)
+        was_active = row.is_active
+        remaining = [
+            item
+            for item in await self.repository.list_active_chain(spec)
+            if item.id != row.id
+        ]
         await self.repository.delete(row)
+        if was_active:
+            # Close the priority gap so the next row becomes the primary.
+            await self.repository.replace_chain(spec, remaining)
         await self._after_write(spec)
         return await self.get_registry()
 
@@ -431,24 +465,110 @@ class ProviderConfigService:
         self,
         capability: str,
         provider_id: int,
+        priority: int | None = None,
     ) -> ProviderRegistryReadSchema:
+        """Add or move one row in the chain and renumber it deterministically."""
         spec = self._spec(capability)
         row = await self.repository.get_by_id(spec, provider_id)
         if row is None:
             raise ProviderNotFoundError(provider_id)
-        await self.repository.deactivate_others(spec, keep_id=row.id)
-        row.is_active = True
-        row.updated_at = utcnow()
-        await self.repository.save(row)
+        chain = [
+            item
+            for item in await self.repository.list_active_chain(spec)
+            if item.id != row.id
+        ]
+        if priority is None:
+            target = len(chain)
+        else:
+            if priority < 0 or priority > len(chain):
+                raise InvalidProviderConfigError(
+                    f"priority must be between 0 and {len(chain)}."
+                )
+            target = priority
+        ordered = [*chain[:target], row, *chain[target:]]
+        self._validate_embedding_chain(spec, ordered)
+        await self.repository.replace_chain(spec, ordered)
+        await self._after_write(spec)
+        return await self.get_registry()
+
+    async def deactivate_row(
+        self,
+        capability: str,
+        provider_id: int,
+    ) -> ProviderRegistryReadSchema:
+        """Remove one row from the chain and close the resulting priority gap."""
+        spec = self._spec(capability)
+        row = await self.repository.get_by_id(spec, provider_id)
+        if row is None:
+            raise ProviderNotFoundError(provider_id)
+        if row.is_active:
+            remaining = [
+                item
+                for item in await self.repository.list_active_chain(spec)
+                if item.id != row.id
+            ]
+            await self.repository.replace_chain(spec, remaining)
         await self._after_write(spec)
         return await self.get_registry()
 
     async def deactivate(self, capability: str) -> ProviderRegistryReadSchema:
-        """Clear the active row for one capability; runtime falls back."""
+        """Clear the whole active chain for one capability; runtime falls back."""
         spec = self._spec(capability)
         await self.repository.deactivate_all(spec)
         await self._after_write(spec)
         return await self.get_registry()
+
+    async def _append_to_chain(
+        self,
+        spec: ProviderTableSpec,
+        row: ProviderConfigMixin,
+    ) -> None:
+        """Append one row to the end of the active chain and renumber it."""
+        chain = list(await self.repository.list_active_chain(spec))
+        chain = [item for item in chain if item.id != row.id]
+        chain.append(row)
+        self._validate_embedding_chain(spec, chain)
+        await self.repository.replace_chain(spec, chain)
+
+    async def _validate_active_chain(self, spec: ProviderTableSpec) -> None:
+        """Validate the current active chain after an in-place edit."""
+        chain = list(await self.repository.list_active_chain(spec))
+        self._validate_embedding_chain(spec, chain)
+
+    @staticmethod
+    def _validate_embedding_chain(
+        spec: ProviderTableSpec,
+        chain: list[ProviderConfigMixin],
+    ) -> None:
+        """Refuse an embedding chain whose backups use a different vector space.
+
+        Different models (or dimensions of the same model) produce vectors that
+        cannot be compared, so mixing them in one per-owner index would corrupt
+        semantic recall. Multiple keys or providers are allowed as long as the
+        model id and dimension are identical.
+        """
+        if spec.capability != CAPABILITY_EMBEDDING or len(chain) <= 1:
+            return
+        primary = chain[0]
+        if primary.provider == "none":
+            raise InvalidProviderConfigError(
+                "The disabled embedding provider cannot be combined with other "
+                "providers in one chain."
+            )
+        for row in chain[1:]:
+            if row.provider == "none":
+                raise InvalidProviderConfigError(
+                    "The disabled embedding provider cannot be combined with other "
+                    "providers in one chain."
+                )
+            if row.model != primary.model or row.dimension != primary.dimension:
+                raise InvalidProviderConfigError(
+                    "Embedding backups must use the primary's model and dimension "
+                    f"(model={primary.model}, dimension={primary.dimension}). "
+                    "Mixing embedding models or dimensions in one chain would "
+                    "corrupt the per-owner vector index; change the primary and "
+                    "re-index before adding this provider."
+                )
 
     async def _after_write(self, spec: ProviderTableSpec) -> None:
         """Flush, refresh the runtime, then invalidate the scoped caches.

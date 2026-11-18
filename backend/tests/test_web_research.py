@@ -398,3 +398,61 @@ def test_tavily_fetch_uses_advanced_extraction_with_provider_timeout(
     assert captured["timeout"] == 40.0
     assert captured["format"] == "markdown"
     assert response.content == "# Page\n\nBody"
+
+
+class FakeBackupSearchClient:
+    """A configured fallback whose provider differs from the primary row."""
+
+    provider = "exa"
+    configured = True
+
+    async def search(
+        self,
+        query: str,
+        *,
+        max_results: int,
+        search_depth: Literal["basic", "advanced"],
+        include_domains: list[str],
+        exclude_domains: list[str],
+        objective: str = "",
+    ) -> WebSearchResponse:
+        del max_results, search_depth, include_domains, exclude_domains, objective
+        return WebSearchResponse(
+            provider="exa",
+            query=query,
+            results=[],
+            elapsed_ms=4,
+            retrieved_at=RETRIEVED_AT,
+        )
+
+
+def test_search_preserves_the_fallback_provider_and_accepts_aggregate_readiness() -> None:
+    """A backup may hold the key while the primary row has none."""
+
+    primary_without_key = FakeWebProviderConfig(
+        capability="web_search",
+        provider="tavily",
+        api_key=None,
+    )
+    backup_client = FakeBackupSearchClient()
+    assert web_research_service._is_ready(primary_without_key, backup_client) is True
+
+    service = WebResearchService(
+        search_config=primary_without_key,
+        fetch_config=FakeWebProviderConfig(capability="web_fetch"),
+        search_client=backup_client,
+        fetch_client=FakeFetchClient(_document(2)),
+        cache=FakeWebCache(),
+    )
+
+    response = asyncio.run(
+        service.search(
+            "query",
+            max_results=3,
+            search_depth="basic",
+            include_domains=[],
+            exclude_domains=[],
+        )
+    )
+
+    assert response.provider == "exa"

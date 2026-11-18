@@ -60,6 +60,10 @@ class _FakeEmbedder:
 class _EmptyProviderRepository:
     """No active provider rows: the runtime resolves the environment defaults."""
 
+    async def list_active_chain(self, spec: Any) -> list[Any]:
+        del spec
+        return []
+
     async def get_active(self, spec: Any) -> None:
         del spec
         return None

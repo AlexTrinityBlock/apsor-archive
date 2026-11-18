@@ -1,6 +1,6 @@
 """HTTP adapters for the unified multi-provider registry."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.dependency.auth import require_root
 from app.module.knowledge.dependencies import get_provider_config_service
@@ -71,7 +71,7 @@ async def delete_provider(
     provider_id: int,
     service: ProviderConfigService = Depends(get_provider_config_service),
 ) -> ProviderRegistryReadSchema:
-    """Delete a provider, deactivating it first when it is the active row."""
+    """Delete a provider, renumbering the chain when it was active."""
     return await service.delete(capability, provider_id)
 
 
@@ -83,10 +83,29 @@ async def delete_provider(
 async def activate_provider(
     capability: str,
     provider_id: int,
+    priority: int | None = Query(
+        default=None,
+        ge=0,
+        description="Chain position; 0 makes the row primary. Omit to append.",
+    ),
     service: ProviderConfigService = Depends(get_provider_config_service),
 ) -> ProviderRegistryReadSchema:
-    """Make one row the only active provider for its capability."""
-    return await service.activate(capability, provider_id)
+    """Add or move one row in the chain; omit priority to append it."""
+    return await service.activate(capability, provider_id, priority)
+
+
+@router.post(
+    "/providers/{capability}/{provider_id}/deactivate",
+    response_model=ProviderRegistryReadSchema,
+    operation_id="deactivateProviderRow",
+)
+async def deactivate_provider_row(
+    capability: str,
+    provider_id: int,
+    service: ProviderConfigService = Depends(get_provider_config_service),
+) -> ProviderRegistryReadSchema:
+    """Remove one row from the chain and close the priority gap."""
+    return await service.deactivate_row(capability, provider_id)
 
 
 @router.post(
@@ -98,7 +117,7 @@ async def deactivate_provider(
     capability: str,
     service: ProviderConfigService = Depends(get_provider_config_service),
 ) -> ProviderRegistryReadSchema:
-    """Clear the active row; the runtime falls back to environment/default."""
+    """Clear the whole chain; the runtime falls back to environment/default."""
     return await service.deactivate(capability)
 
 

@@ -24,6 +24,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ActivateProviderParams,
   EmbeddingReindexSchema,
   HTTPValidationError,
   IngestSettingsReadSchema,
@@ -783,7 +784,7 @@ export const useCreateProvider = <TError = HTTPValidationError,
 }
 
 /**
- * Clear the active row; the runtime falls back to environment/default.
+ * Clear the whole chain; the runtime falls back to environment/default.
  * @summary Deactivate Provider
  */
 export const deactivateProvider = async (capability: string, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
@@ -858,7 +859,7 @@ export const useDeactivateProvider = <TError = HTTPValidationError,
 }
 
 /**
- * Delete a provider, deactivating it first when it is the active row.
+ * Delete a provider, renumbering the chain when it was active.
  * @summary Delete Provider
  */
 export const deleteProvider = async (capability: string,
@@ -1016,22 +1017,31 @@ export const useUpdateProvider = <TError = HTTPValidationError,
       return useMutation(getUpdateProviderMutationOptions(options), queryClient);
     }
     export const getActivateProviderUrl = (capability: string,
-    providerId: number,) => {
+    providerId: number,
+    params?: ActivateProviderParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/v1/settings/providers/${capability}/${providerId}/activate`
+  return stringifiedParams.length > 0 ? `/api/v1/settings/providers/${capability}/${providerId}/activate?${stringifiedParams}` : `/api/v1/settings/providers/${capability}/${providerId}/activate`
 }
 
 /**
- * Make one row the only active provider for its capability.
+ * Add or move one row in the chain; omit priority to append it.
  * @summary Activate Provider
  */
 export const activateProvider = async (capability: string,
-    providerId: number, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
+    providerId: number,
+    params?: ActivateProviderParams, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
 
-  return apiFetch<ProviderRegistryReadSchema>(getActivateProviderUrl(capability,providerId),
+  return apiFetch<ProviderRegistryReadSchema>(getActivateProviderUrl(capability,providerId,params),
   {
     ...options,
     method: 'POST'
@@ -1061,9 +1071,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof activateProvider>>, ActivateProviderMutationVariables> = (props) => {
-          const {capability,providerId} = props ?? {};
+          const {capability,providerId,params} = props ?? {};
 
-          return  activateProvider(capability,providerId,requestOptions)
+          return  activateProvider(capability,providerId,params,requestOptions)
         }
 
 
@@ -1076,7 +1086,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ActivateProviderMutationResult = NonNullable<Awaited<ReturnType<typeof activateProvider>>>
 
     export type ActivateProviderMutationError = HTTPValidationError
-    export type ActivateProviderMutationVariables = {capability: string;providerId: number}
+    export type ActivateProviderMutationVariables = {capability: string;providerId: number;params?: ActivateProviderParams}
 
     /**
  * @summary Activate Provider
@@ -1090,6 +1100,82 @@ export const useActivateProvider = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getActivateProviderMutationOptions(options), queryClient);
+    }
+    export const getDeactivateProviderRowUrl = (capability: string,
+    providerId: number,) => {
+
+
+
+
+  return `/api/v1/settings/providers/${capability}/${providerId}/deactivate`
+}
+
+/**
+ * Remove one row from the chain and close the priority gap.
+ * @summary Deactivate Provider Row
+ */
+export const deactivateProviderRow = async (capability: string,
+    providerId: number, options?: Parameters<typeof apiFetch>[1]): Promise<ProviderRegistryReadSchema> => {
+
+  return apiFetch<ProviderRegistryReadSchema>(getDeactivateProviderRowUrl(capability,providerId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeactivateProviderRowMutationKey = () => ['deactivateProviderRow'] as const;
+
+export const getDeactivateProviderRowMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateProviderRow>>, TError,DeactivateProviderRowMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deactivateProviderRow>>, TError,DeactivateProviderRowMutationVariables, TContext> => {
+
+const mutationKey = getDeactivateProviderRowMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deactivateProviderRow>>, DeactivateProviderRowMutationVariables> = (props) => {
+          const {capability,providerId} = props ?? {};
+
+          return  deactivateProviderRow(capability,providerId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeactivateProviderRowMutationResult = NonNullable<Awaited<ReturnType<typeof deactivateProviderRow>>>
+
+    export type DeactivateProviderRowMutationError = HTTPValidationError
+    export type DeactivateProviderRowMutationVariables = {capability: string;providerId: number}
+
+    /**
+ * @summary Deactivate Provider Row
+ */
+export const useDeactivateProviderRow = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deactivateProviderRow>>, TError,DeactivateProviderRowMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deactivateProviderRow>>,
+        TError,
+        DeactivateProviderRowMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeactivateProviderRowMutationOptions(options), queryClient);
     }
     export const getTestProviderUrl = (capability: string,
     providerId: number,) => {

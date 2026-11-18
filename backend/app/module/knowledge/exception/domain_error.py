@@ -35,6 +35,11 @@ class ProviderNotFoundError(KnowledgeError):
         super().__init__(f"Provider {provider_id} was not found.")
 
 
+class ProviderNoticeNotFoundError(KnowledgeError):
+    def __init__(self, notice_id: int) -> None:
+        super().__init__(f"Provider error notice {notice_id} was not found.")
+
+
 class PathNotFoundError(KnowledgeError):
     def __init__(self, path: str) -> None:
         super().__init__(f"Path {path} was not found.")

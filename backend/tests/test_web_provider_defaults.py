@@ -33,6 +33,10 @@ class _Repository:
     def __init__(self, rows: dict[Any, Any]) -> None:
         self.rows = rows
 
+    async def list_active_chain(self, spec: Any) -> list[Any]:
+        row = self.rows.get(spec.capability)
+        return [row] if row is not None else []
+
     async def get_active(self, spec: Any) -> Any:
         return self.rows.get(spec.capability)
 

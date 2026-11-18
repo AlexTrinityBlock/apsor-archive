@@ -53,6 +53,9 @@ from app.module.knowledge.dependencies import (
 from app.module.knowledge.repository.provider_config_repository import (
     ProviderConfigRepository,
 )
+from app.module.knowledge.service.provider_error_notice_service import (
+    ProviderErrorNoticeService,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +85,12 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
     cache = build_cache(settings.cache_url)
     storage = build_file_storage(settings)
     cipher = SecretCipher.from_settings(settings)
+    notice_service = ProviderErrorNoticeService(database.session_factory)
     runtime = AiRuntime(
         builder=ProviderFactory(settings),
         cipher=cipher,
         defaults=provider_defaults_from_settings(settings),
+        reporter=notice_service.report,
     )
     try:
         async with system_session(database.session_factory) as session:
@@ -98,6 +103,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
         state.storage = storage
         state.secret_cipher = cipher
         state.ai_runtime = runtime
+        state.provider_notice_service = notice_service
 
         ingest_defaults = ingest_runtime_defaults(settings)
         ingest_config = await load_ingest_runtime_config(

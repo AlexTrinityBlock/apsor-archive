@@ -29,6 +29,7 @@ import {
   type AccountAction,
 } from "./component/ConfirmAccountActionDialog";
 import { CreateAccountDialog } from "./component/CreateAccountDialog";
+import { SystemNoticesPanel } from "./component/SystemNoticesPanel";
 import { TemporaryPasswordDialog } from "./component/TemporaryPasswordDialog";
 import "./accounts.css";
 
@@ -268,6 +269,7 @@ export function AccountsPage() {
           </Button>
         }
       />
+      <SystemNoticesPanel />
       {body}
 
       {dialog?.kind === "create" ? (

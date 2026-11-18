@@ -18,8 +18,11 @@ class WebClientProtocol(Protocol):
     slice; knowledge never reads their fields.
     """
 
-    provider: str
-    configured: bool
+    @property
+    def provider(self) -> str: ...
+
+    @property
+    def configured(self) -> bool: ...
 
     async def search(
         self,
