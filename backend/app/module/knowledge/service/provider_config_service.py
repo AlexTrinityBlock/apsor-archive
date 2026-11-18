@@ -803,6 +803,8 @@ class ProviderConfigService:
             return self.defaults.exa_api_key
         if provider == "tavily":
             return self.defaults.tavily_api_key
+        if provider == "deepseek":
+            return self.defaults.deepseek_api_key
         if capability == CAPABILITY_WEB_SEARCH:
             return self.defaults.web_search_api_key
         return self.defaults.web_fetch_api_key

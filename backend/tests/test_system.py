@@ -88,6 +88,28 @@ def test_exa_web_provider_row_stores_its_key_in_the_database(
     engine.dispose()
 
 
+def test_deepseek_web_provider_row_is_allowed(
+    client: TestClient,
+) -> None:
+    """The migration admits deepseek in the web provider check constraints."""
+    response = client.post(
+        "/api/v1/settings/providers/web_search",
+        json={
+            "provider": "deepseek",
+            "label": "DeepSeek search",
+            "api_key": "ds-test-key-1234",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    group = _capability(response.json(), "web_search")
+    active = group["active"]
+    assert active["provider"] == "deepseek"
+    assert active["base_url"] == "https://api.deepseek.com"
+    assert active["key_hint"] == "...1234"
+    assert active["key_source"] == "database"
+
+
 def _capability(registry: dict[str, Any], name: str) -> dict[str, Any]:
     return next(item for item in registry["capabilities"] if item["capability"] == name)
 
@@ -239,7 +261,12 @@ def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> Non
         web_group = _capability(initial, web_capability)
         assert web_group["active"]["provider"] == "none"
         assert web_group["active"]["configured"] is False
-        assert web_group["allowed_providers"] == ["exa", "none", "tavily"]
+        assert web_group["allowed_providers"] == [
+            "deepseek",
+            "exa",
+            "none",
+            "tavily",
+        ]
         assert web_group["default_base_url"] == "https://api.tavily.com"
         assert web_group["supports_model"] is False
         assert web_group["supports_dimension"] is False
