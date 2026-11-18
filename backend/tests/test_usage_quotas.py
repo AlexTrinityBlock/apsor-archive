@@ -35,14 +35,23 @@ from app.module.auth.domain.quota_domain import (
 from app.module.auth.repository.auth_repository import SessionRepository, UserRepository
 from app.module.auth.service.account_service import AccountService
 from app.module.auth.service.quota_service import AccountQuotaService
-from app.module.knowledge.dependencies import build_ingest_worker
+from app.module.knowledge.dependencies import _build_indexer, build_ingest_worker
 from app.module.knowledge.domain.chunking_domain import ChunkDraft
-from app.module.knowledge.exception.domain_error import EmbeddingUsageLimitExceededError
+from app.module.knowledge.exception.domain_error import (
+    EmbeddingProviderError,
+    EmbeddingUsageLimitExceededError,
+)
+from app.module.knowledge.repository.chunk_repository import ChunkRepository
+from app.module.knowledge.repository.file_repository import FileRepository
+from app.module.knowledge.repository.memory_repository import MemoryRepository
+from app.module.knowledge.repository.summary_repository import SummaryRepository
 from app.module.knowledge.service.indexer_service import (
     IndexerService,
     estimate_embedding_units,
+    estimate_text_units,
 )
 from app.module.knowledge.service.ingest_job_service import ingest_error_code
+from app.module.knowledge.service.search_service import SearchService
 from app.module.web_research.exception.domain_error import (
     WebProviderError,
     WebUsageLimitExceededError,
@@ -53,6 +62,7 @@ from app.module.web_research.schema.web_research_schema import (
 )
 from app.module.web_research.service.web_research_service import WebResearchService
 from tests.conftest import TEST_DATABASE_URL, UserClient
+from tests.helpers import create_memory
 
 ACCOUNTS_URL = "/api/v1/accounts"
 CATEGORY_ORDER = ["chat", "embedding", "web_search", "web_fetch"]
@@ -697,6 +707,238 @@ def test_indexer_records_the_conservative_estimate_once_per_successful_batch() -
         estimate_embedding_units([drafts[1]]),
     ]
     assert all(chunk.embedding is not None for chunk in repository.chunks)
+
+
+def test_shared_indexer_composition_enforces_and_records_embedding_quota(
+    client: TestClient,
+    root_account: UserClient,
+    owner_engine: Engine,
+) -> None:
+    """Memory, summary, and history share ``_build_indexer``; it must enforce."""
+    state = State()
+    state.db = client.app.state.db
+    state.settings = client.app.state.settings
+    state.ai_runtime = client.app.state.ai_runtime
+    drafts = [
+        ChunkDraft(
+            index=1,
+            content="A durable memory about a wrench.",
+            char_count=32,
+            token_count=6,
+        )
+    ]
+    expected = estimate_embedding_units(drafts)
+
+    async def index(source_id: int) -> None:
+        async with client.app.state.db.user_session(
+            root_account.user_id,
+            "root",
+        ) as session:
+            _chunk_repository, indexer = _build_indexer(
+                state,
+                session,
+                user_id=root_account.user_id,
+            )
+            assert indexer.quota is not None
+            await indexer.index_chunks(
+                source_kind="memory",
+                source_id=source_id,
+                drafts=drafts,
+            )
+
+    _set_user_columns(
+        owner_engine,
+        root_account.user_id,
+        embedding_granted=0,
+        embedding_tokens=0,
+        embedding_used_before_reset=0,
+    )
+    client.portal.call(index, 9001)
+    denied_chunks = _read_chunks(owner_engine, root_account.user_id, 9001)
+    assert len(denied_chunks) == 1
+    assert denied_chunks[0][0] is True
+    assert denied_chunks[0][1] is None
+    assert _read_user_columns(
+        owner_engine, root_account.user_id, "embedding_tokens"
+    )[0] == 0
+
+    _set_user_columns(
+        owner_engine,
+        root_account.user_id,
+        embedding_granted=1_000_000,
+        embedding_tokens=0,
+        embedding_used_before_reset=0,
+    )
+    client.portal.call(index, 9002)
+    allowed_chunks = _read_chunks(owner_engine, root_account.user_id, 9002)
+    assert len(allowed_chunks) == 1
+    assert allowed_chunks[0][0] is False
+    assert allowed_chunks[0][1] == "apsor-hash-384"
+    assert _read_user_columns(
+        owner_engine, root_account.user_id, "embedding_tokens"
+    )[0] == expected
+
+
+def _read_chunks(
+    engine: Engine,
+    user_id: int,
+    source_id: int,
+) -> list[tuple[bool, str | None]]:
+    with engine.begin() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT (embedding IS NULL OR embedding = 'null'::jsonb), "
+                "embedding_model FROM chunk "
+                "WHERE user_id = :user_id AND source_kind = 'memory' "
+                "AND source_id = :source_id"
+            ),
+            {"user_id": user_id, "source_id": source_id},
+        ).all()
+    return [(bool(row[0]), row[1]) for row in rows]
+
+
+class _CountingQueryEmbedder:
+    model_name = "fake-query-embedding"
+    dimension = 3
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls += 1
+        return [[0.2, 0.3, 0.4] for _text in texts]
+
+
+class _SearchQuota:
+    def __init__(self, *, allowed: bool) -> None:
+        self.allowed = allowed
+        self.recorded: list[int] = []
+
+    async def embedding_allowed(self, units: int) -> bool:
+        del units
+        return self.allowed
+
+    async def record_embedding(self, units: int) -> None:
+        self.recorded.append(units)
+
+
+class _FailingQueryEmbedder:
+    dimension = 3
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        del texts
+        raise EmbeddingProviderError("temporary failure", status_code=503)
+
+
+def test_search_query_embedding_provider_failure_does_not_record() -> None:
+    quota = _SearchQuota(allowed=True)
+    service = SearchService(
+        user_id=1,
+        chunk_repository=cast(Any, None),
+        file_repository=cast(Any, None),
+        memory_repository=cast(Any, None),
+        summary_repository=cast(Any, None),
+        embedder=cast(Any, _FailingQueryEmbedder()),
+        cache=cast(Any, None),
+        cache_ttl_seconds=5,
+        candidate_limit=10,
+        vector_scan_limit=10,
+        quota=quota,
+    )
+
+    assert asyncio.run(service._query_embedding("wrench query")) is None
+    assert quota.recorded == []
+
+
+def test_search_query_embedding_obeys_the_allowance(
+    client: TestClient,
+    root_account: UserClient,
+    owner_engine: Engine,
+) -> None:
+    """Denied queries stay keyword-only; an allowed query records once."""
+    create_memory(
+        client,
+        "The wrench is a hand tool used for chassis repair.",
+        "2026-09-05T09:00:00Z",
+    )
+    _set_user_columns(
+        owner_engine,
+        root_account.user_id,
+        embedding_granted=0,
+        embedding_tokens=0,
+        embedding_used_before_reset=0,
+    )
+
+    def run_search(query: str, embedder: _CountingQueryEmbedder, quota: Any):
+        async def scenario() -> tuple[bool, int, list[int]]:
+            async with client.app.state.db.user_session(
+                root_account.user_id,
+                "root",
+            ) as session:
+                service = SearchService(
+                    user_id=root_account.user_id,
+                    chunk_repository=ChunkRepository(session, root_account.user_id),
+                    file_repository=FileRepository(session, root_account.user_id),
+                    memory_repository=MemoryRepository(session, root_account.user_id),
+                    summary_repository=SummaryRepository(
+                        session,
+                        root_account.user_id,
+                    ),
+                    embedder=embedder,
+                    cache=client.app.state.cache,
+                    cache_ttl_seconds=5,
+                    candidate_limit=50,
+                    vector_scan_limit=200,
+                    quota=quota,
+                )
+                response = await service.search(
+                    query,
+                    result_number=5,
+                    include_history=False,
+                )
+                recorded = list(getattr(quota, "recorded", []))
+                return (
+                    len(response.memory_results) > 0,
+                    embedder.calls,
+                    recorded,
+                )
+
+        return client.portal.call(scenario)
+
+    denied_embedder = _CountingQueryEmbedder()
+    denied_quota = _SearchQuota(allowed=False)
+    has_results, calls, recorded = run_search(
+        "wrench denied search",
+        denied_embedder,
+        denied_quota,
+    )
+    assert has_results is True
+    assert calls == 0
+    assert recorded == []
+
+    _set_user_columns(
+        owner_engine,
+        root_account.user_id,
+        embedding_granted=1_000_000,
+        embedding_tokens=0,
+        embedding_used_before_reset=0,
+    )
+    allowed_query = "wrench allowed search"
+    allowed_embedder = _CountingQueryEmbedder()
+    allowed_quota = AccountQuotaService(
+        client.app.state.db,
+        root_account.user_id,
+    )
+    has_results, calls, _recorded = run_search(
+        allowed_query,
+        allowed_embedder,
+        allowed_quota,
+    )
+    assert has_results is True
+    assert calls == 1
+    assert _read_user_columns(
+        owner_engine, root_account.user_id, "embedding_tokens"
+    )[0] == estimate_text_units(allowed_query)
 
 
 def test_durable_ingest_job_error_code_for_denied_embedding() -> None:
