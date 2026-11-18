@@ -2,17 +2,22 @@
 
 import asyncio
 import base64
+from types import SimpleNamespace
 from typing import Any, Literal
 
 from fastapi.testclient import TestClient
+from starlette.datastructures import State
 
+from app.infrastructure.ai.vision_client import VisionAnalysis
 from app.infrastructure.ai.vision_extractor import (
     VISION_DOCUMENT_MAX_TOKENS,
     VISION_IMAGE_MAX_TOKENS,
     DeepSeekVisionExtractor,
     build_vision_prompt,
 )
+from app.infrastructure.config.settings import Settings
 from app.module.knowledge.dependencies import (
+    _vision_extractor_for_state,
     ingest_runtime_defaults,
     load_ingest_runtime_config,
 )
@@ -20,6 +25,7 @@ from app.module.knowledge.domain.vision_prompt_domain import (
     DEFAULT_VISION_IMAGE_PROMPT,
     render_vision_prompt,
 )
+from app.module.knowledge.protocol.provider_config import ProviderConfig
 from app.module.knowledge.protocol.vision_extractor_protocol import VisionDocument
 
 # A 1x1 blue PNG; enough to exercise the image extension and vision path.
@@ -46,7 +52,7 @@ class _StubVisionClient:
         system_prompt: str,
         user_prompt: str,
         max_tokens: int = 700,
-    ) -> dict[str, Any]:
+    ) -> VisionAnalysis:
         self.calls.append(
             {
                 "data": data,
@@ -56,7 +62,10 @@ class _StubVisionClient:
                 "max_tokens": max_tokens,
             }
         )
-        return self.response
+        return VisionAnalysis(
+            parsed=self.response,
+            usage={"prompt_tokens": 31, "completion_tokens": 9, "total_tokens": 40},
+        )
 
 
 class FakeVisionExtractor:
@@ -99,6 +108,49 @@ def _chunk_text(client: TestClient, file_id: int) -> str:
     )
     assert response.status_code == 200, response.text
     return "\n".join(chunk["content"] for chunk in response.json()["chunks"])
+
+
+def test_vision_provider_prefers_a_deepseek_chain_entry() -> None:
+    primary = ProviderConfig(
+        capability="chat",
+        provider="openai-compatible",
+        label="Primary",
+        model="primary-vision",
+        base_url="https://primary.example/v1",
+        api_key="primary-key",
+        dimension=None,
+        enabled=True,
+        source="database",
+    )
+    backup = ProviderConfig(
+        capability="chat",
+        provider="deepseek",
+        label="DeepSeek",
+        model="deepseek-vision",
+        base_url="https://api.deepseek.com",
+        api_key="ds-key",
+        dimension=None,
+        enabled=True,
+        source="database",
+    )
+    state = State()
+    state.settings = Settings()
+    state.ai_runtime = SimpleNamespace(
+        chat_config=primary,
+        chat_chain=(primary, backup),
+    )
+
+    extractor = _vision_extractor_for_state(state)
+    assert isinstance(extractor, DeepSeekVisionExtractor)
+    assert extractor.model_name == "deepseek-vision"
+    assert extractor._client.base_url == "https://api.deepseek.com"
+    assert extractor._client.api_key == "ds-key"
+
+    state.ai_runtime = SimpleNamespace(chat_config=primary, chat_chain=(primary,))
+    fallback = _vision_extractor_for_state(state)
+    assert isinstance(fallback, DeepSeekVisionExtractor)
+    assert fallback.model_name == "primary-vision"
+    assert fallback._client.base_url == "https://primary.example/v1"
 
 
 def test_vision_prompt_contract_and_parsing() -> None:
@@ -162,6 +214,11 @@ def test_vision_prompt_contract_and_parsing() -> None:
     assert parsed.document_type == "receipt"
     assert parsed.title == "Receipt"
     assert parsed.tags == ["receipt", "total"]
+    assert parsed.usage == {
+        "prompt_tokens": 31,
+        "completion_tokens": 9,
+        "total_tokens": 40,
+    }
 
     # Missing optional fields default cleanly; a lone table string is wrapped.
     stub.response = {"text": " only text ", "tables": f" {TABLE} "}

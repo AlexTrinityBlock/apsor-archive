@@ -48,6 +48,7 @@ from app.module.knowledge.domain.vision_prompt_domain import (
 from app.module.knowledge.exception.domain_error import (
     AiNotConfiguredError,
     AiProviderError,
+    ChatUsageLimitExceededError,
     EmptyContentError,
     FileContentUnavailableError,
     FileRecordNotFoundError,
@@ -68,6 +69,9 @@ from app.module.knowledge.model.chunk_model import SOURCE_FILE, ChunkModel
 from app.module.knowledge.model.file_model import FileModel
 from app.module.knowledge.model.folder_model import FolderModel
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
+from app.module.knowledge.protocol.chat_usage_quota_protocol import (
+    ChatUsageQuotaProtocol,
+)
 from app.module.knowledge.protocol.chunk_repository_protocol import ChunkRepositoryProtocol
 from app.module.knowledge.protocol.file_repository_protocol import FileRepositoryProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
@@ -188,6 +192,7 @@ class FileService:
         max_text_bytes: int,
         vision_max_pages: int,
         pdf_text_threshold: int,
+        chat_quota: ChatUsageQuotaProtocol | None = None,
         cpu_runner: CpuRunner | None = None,
     ) -> None:
         self.user_id = user_id
@@ -219,6 +224,7 @@ class FileService:
         self.max_text_bytes = max_text_bytes
         self.vision_max_pages = vision_max_pages
         self.pdf_text_threshold = pdf_text_threshold
+        self.chat_quota = chat_quota
         self.cpu_runner: CpuRunner = cpu_runner or asyncio.to_thread
 
     async def _run_cpu(
@@ -415,7 +421,13 @@ class FileService:
                 user_prompt,
             )
             body = json.loads(completion.text)
-        except (AiProviderError, KeyError, TypeError, ValueError) as exc:
+        except (
+            AiProviderError,
+            ChatUsageLimitExceededError,
+            KeyError,
+            TypeError,
+            ValueError,
+        ) as exc:
             logger.warning("Document analysis failed; using heuristics: %s", exc)
             return self._heuristic_analysis(
                 text,
@@ -474,6 +486,20 @@ class FileService:
             sections.append("## Visual description\n" + description.strip())
         return "\n\n".join(sections)
 
+    async def _vision_allowed(self) -> bool:
+        """Check the same chat allowance that agent runs consume."""
+        if self.chat_quota is None:
+            return True
+        return await self.chat_quota.chat_allowed()
+
+    async def _record_vision_usage(self, usage: dict[str, int]) -> None:
+        if self.chat_quota is None or not usage:
+            return
+        try:
+            await self.chat_quota.record_chat_usage(usage)
+        except Exception:
+            logger.warning("Vision usage could not be recorded", exc_info=True)
+
     async def _vision_pdf(
         self,
         data: bytes,
@@ -494,12 +520,18 @@ class FileService:
                 self.vision_max_pages,
             )
             for page in pages:
+                if not await self._vision_allowed():
+                    logger.warning(
+                        "Vision extraction stopped: chat usage allowance exhausted"
+                    )
+                    break
                 vision = await self.vision_extractor.extract(
                     page,
                     "image/png",
                     system_prompt=rendered.system_prompt,
                     mode="document",
                 )
+                await self._record_vision_usage(vision.usage)
                 if vision.text.strip():
                     texts.append(vision.text.strip())
                 tables.extend(table for table in vision.tables if table.strip())
@@ -571,12 +603,18 @@ class FileService:
         tags: list[str] = []
         document_type = "docx"
         for data, mime_type in images[: self.vision_max_pages]:
+            if not await self._vision_allowed():
+                logger.warning(
+                    "Vision extraction stopped: chat usage allowance exhausted"
+                )
+                break
             vision = await self.vision_extractor.extract(
                 data,
                 mime_type,
                 system_prompt=rendered.system_prompt,
                 mode="image",
             )
+            await self._record_vision_usage(vision.usage)
             if vision.text.strip():
                 texts.append(vision.text.strip())
             tables.extend(table for table in vision.tables if table.strip())

@@ -3,6 +3,7 @@
 from app.module.knowledge.exception.domain_error import (
     AiNotConfiguredError,
     AiProviderError,
+    ChatUsageLimitExceededError,
     EmbeddingProviderError,
     EmbeddingUsageLimitExceededError,
     EmptyContentError,
@@ -73,6 +74,7 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(SummaryNotEnoughMemoriesError, 422, "not_enough_memories")
     ExceptionRegistry.register(AiNotConfiguredError, 503, "ai_not_configured")
     ExceptionRegistry.register(AiProviderError, 502, "ai_provider_error")
+    ExceptionRegistry.register(ChatUsageLimitExceededError, 429, "usage_limit_exceeded")
     ExceptionRegistry.register(EmbeddingProviderError, 502, "embedding_provider_error")
     ExceptionRegistry.register(
         EmbeddingUsageLimitExceededError,

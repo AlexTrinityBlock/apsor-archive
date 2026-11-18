@@ -20,6 +20,7 @@ class VisionDocument(BaseModel):
     language: str
     description: str = ""
     tables: list[str] = Field(default_factory=list)
+    usage: dict[str, int] = Field(default_factory=dict)
 
 
 class VisionExtractorProtocol(Protocol):

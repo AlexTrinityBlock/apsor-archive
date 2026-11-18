@@ -238,7 +238,7 @@ export const core = {
     quotasTitle: "用量額度",
     quotasManage: "管理用量",
     quotaChat: "聊天權杖",
-    quotaEmbedding: "嵌入權杖",
+    quotaEmbedding: "嵌入字元",
     quotaWebSearch: "網路搜尋",
     quotaWebFetch: "網路擷取",
     quotaAllowed: "允許",
@@ -249,6 +249,8 @@ export const core = {
     quotaDialogTitle: "用量額度",
     quotaDialogDescription:
       "設定 {name} 的額度。留空表示無上限；0 會封鎖該類別的所有用量。",
+    quotaAccountingHint:
+      "聊天權杖包含聊天回合、摘要、擷取、記憶標題與視覺辨識。嵌入用量以輸入字元計算。",
     quotaUsed: "本期已用",
     quotaLifetime: "累計",
     quotaBeforeResetLabel: "重設前累計",

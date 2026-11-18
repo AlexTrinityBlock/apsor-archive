@@ -9,6 +9,7 @@ from typing import cast
 from app.module.knowledge.exception.domain_error import (
     AiNotConfiguredError,
     AiProviderError,
+    ChatUsageLimitExceededError,
     InvalidQueryError,
     MemoryAlreadyDeprecatedError,
     MemoryNotFoundError,
@@ -117,7 +118,14 @@ class MemoryService:
                 title = title.rstrip("。.!?！？;；,，")
                 if title:
                     return title[:MEMORY_TITLE_LIMIT]
-            except (AiNotConfiguredError, AiProviderError, KeyError, TypeError, ValueError):
+            except (
+                AiNotConfiguredError,
+                AiProviderError,
+                ChatUsageLimitExceededError,
+                KeyError,
+                TypeError,
+                ValueError,
+            ):
                 logger.debug("Falling back to a derived memory title.", exc_info=True)
         return _fallback_title(content)[:MEMORY_TITLE_LIMIT]
 

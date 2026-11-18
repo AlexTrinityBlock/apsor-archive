@@ -369,6 +369,9 @@ export function QuotaDialog({
         </Button>
       }
     >
+      <p className="accounts-quota__hint">
+        {t("core.accounts.quotaAccountingHint")}
+      </p>
       <div className="accounts-quota">
         <div
           className="accounts-quota__tabs"
