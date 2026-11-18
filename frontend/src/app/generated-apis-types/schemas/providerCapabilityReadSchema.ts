@@ -14,6 +14,7 @@ export interface ProviderCapabilityReadSchema {
   active: ProviderReadSchema | null;
   allowed_providers: string[];
   capability: ProviderCapabilityReadSchemaCapability;
+  chain: ProviderReadSchema[];
   default_base_url: string | null;
   description: string;
   keyless_providers: string[];

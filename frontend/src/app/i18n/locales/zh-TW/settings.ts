@@ -442,9 +442,25 @@ export const settings = {
   providers: {
     title: "供應商登錄",
     lede:
-      "四個儲存在 PostgreSQL 中的能力插槽：對話、嵌入、網路搜尋與網路擷取。每個插槽只能有一列使用中；儲存後會立即重新載入執行環境。網路搜尋與網路擷取使用各自獨立的憑證；如果兩者要共用同一把 Tavily 金鑰，請分別貼到每個區段。金鑰會加密保存，永遠不會回傳到瀏覽器，也不會在這裡預先填入。",
+      "四個儲存在 PostgreSQL 中的能力鏈：對話、嵌入、網路搜尋與網路擷取。第一列是主要供應商，其餘是備援；儲存後會立即重新載入執行環境。網路搜尋與網路擷取使用各自獨立的憑證；如果兩者要共用同一把 Tavily 金鑰，請分別貼到每個區段。金鑰會加密保存，永遠不會回傳到瀏覽器，也不會在這裡預先填入。",
     hint:
-      "資料庫資料列的優先順序高於環境變數備援。將金鑰欄位留白會保留已儲存的金鑰。若要讓某個能力改用伺服器環境或內建預設值，請使用「停用」。",
+      "資料庫資料列的優先順序高於環境變數備援。將金鑰欄位留白會保留已儲存的金鑰。將某個能力的所有資料列移出鏈，就會改用伺服器環境或內建預設值。",
+    chainTitle: "供應商鏈",
+    chainHelp:
+      "只有在供應商請求失敗時才會前進到下一個資料列。整條鏈都失敗後，操作才會失敗。",
+    chainAria: "{capability}供應商鏈",
+    chainCount: "鏈中 {count} 個",
+    chainPrimary: "主要",
+    chainBackup: "備援 {index}",
+    inChain: "在鏈中",
+    addToChain: "加入鏈",
+    removeFromChain: "移出鏈",
+    makePrimary: "設為主要",
+    madePrimaryToast: "供應商已設為主要。",
+    addedToChainToast: "已將供應商附加到鏈尾。",
+    removedFromChainToast: "已將供應商移出鏈。",
+    addedToChainHint:
+      "將這個資料列附加到鏈尾。第一列仍維持主要。",
     reindexRequired: "需要重新索引",
     reindexRequiredBody:
       "既有分段是以不同的模型嵌入。新檔案會使用使用中的嵌入供應商。請從嵌入區段或系統診斷重新嵌入檔案庫，讓語料保持一致。",
@@ -513,11 +529,11 @@ export const settings = {
     clearKey: "清除已儲存的金鑰",
     clearKeyHint:
       "移除資料庫中的金鑰。使用中的供應商仍可能套用環境變數備援。",
-    activateAfterSave: "儲存後啟用",
+    activateAfterSave: "儲存後加入鏈",
     activateHintLocked:
-      "這個資料列正在使用中。請在登錄中使用「停用」將它關閉。",
+      "這個資料列已在鏈中。請在登錄中使用「移出鏈」將它移除。",
     activateHint:
-      "讓這個資料列成為此能力唯一使用中的供應商。",
+      "將這個資料列附加到鏈尾。第一列仍維持主要。",
     webCredentialsNote:
       "網路搜尋與網路擷取使用各自獨立的憑證。即使另一個能力使用相同的值，仍請在這裡貼上此能力的供應商金鑰。",
     errors: {
@@ -531,6 +547,8 @@ export const settings = {
         "請輸入完整的 URL，例如 https://api.example.com/v1。",
       dimension: "維度必須是 16 到 4096 之間的整數。",
       apiKeyMax: "API 金鑰必須為 500 個字元以內。",
+      embeddingChainMismatch:
+        "嵌入備援必須與主要供應商使用相同的模型與維度。使用不同的向量模型或維度會破壞向量索引；請先變更主要供應商並重新索引。",
     },
     testLogConfig: "> {title} · 已儲存的設定",
     testLogFailed: "> 失敗 · ",
