@@ -8,15 +8,17 @@ import type { AgentConversationDetailSchemaStatus } from './agentConversationDet
 import type { AgentEntrySchema } from './agentEntrySchema';
 
 /**
- * Conversation metadata plus the first entry page.
+ * Conversation metadata plus the latest entry page.
  */
 export interface AgentConversationDetailSchema {
   archived_at: string | null;
   created_at: string;
   deleted_at: string | null;
   entries: AgentEntrySchema[];
-  entries_has_more: boolean;
-  entries_next_after_id: number | null;
+  entries_has_more?: boolean;
+  entries_has_previous?: boolean;
+  entries_next_after_id?: number | null;
+  entries_previous_before_id?: number | null;
   entries_total: number;
   fork_at_entry_id: number | null;
   id: number;

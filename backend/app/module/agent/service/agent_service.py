@@ -163,10 +163,16 @@ class AgentApprovalTurn:
 
 @dataclass
 class _CompletionOutcome:
-    """Mutable holder for an async-generator completion."""
+    """Mutable holder for an async-generator completion.
+
+    ``text`` keeps every delta already sent to the client so a provider timeout
+    can persist the visible prefix instead of losing it behind an empty error
+    entry.
+    """
 
     result: ChatResult | None = None
     error: Exception | None = None
+    text: str = ""
 
 
 class AgentService:
@@ -305,13 +311,17 @@ class AgentService:
         conversation = await self.repository.get_conversation(conversation_id)
         if conversation is None:
             raise AgentConversationNotFoundError(conversation_id)
-        entries, has_more = await self.repository.list_entries(
+        entries, has_previous = await self.repository.list_latest_entries(
             conversation_id,
-            after_id=None,
             limit=limit,
         )
         total = await self.repository.count_entries(conversation_id)
-        page = _entry_page(conversation_id, entries, total, has_more)
+        page = _entry_page(
+            conversation_id,
+            entries,
+            total,
+            has_previous=has_previous,
+        )
         base = _conversation_schema(conversation)
         last_page_context_key = await self.repository.last_page_context_key(conversation_id)
         return AgentConversationDetailSchema(
@@ -320,6 +330,8 @@ class AgentService:
             entries_total=page.total_results,
             entries_next_after_id=page.next_after_id,
             entries_has_more=page.has_more,
+            entries_previous_before_id=page.previous_before_id,
+            entries_has_previous=page.has_previous,
             last_page_context_key=last_page_context_key,
         )
 
@@ -328,18 +340,35 @@ class AgentService:
         conversation_id: int,
         *,
         after_id: int | None,
+        before_id: int | None,
         limit: int,
     ) -> AgentEntryPageSchema:
         conversation = await self.repository.get_conversation(conversation_id)
         if conversation is None:
             raise AgentConversationNotFoundError(conversation_id)
+        if after_id is not None and before_id is not None:
+            raise AgentInvalidEntryError(
+                "Use after_id or before_id, not both."
+            )
+        total = await self.repository.count_entries(conversation_id)
+        if before_id is not None:
+            entries, has_previous = await self.repository.list_entries_before(
+                conversation_id,
+                before_id=before_id,
+                limit=limit,
+            )
+            return _entry_page(
+                conversation_id,
+                entries,
+                total,
+                has_previous=has_previous,
+            )
         entries, has_more = await self.repository.list_entries(
             conversation_id,
             after_id=after_id,
             limit=limit,
         )
-        total = await self.repository.count_entries(conversation_id)
-        return _entry_page(conversation_id, entries, total, has_more)
+        return _entry_page(conversation_id, entries, total, has_more=has_more)
 
     async def update_conversation(
         self,
@@ -864,6 +893,7 @@ class AgentService:
                             last_entry_id,
                             provider_error,
                             step,
+                            partial_text=completion.text,
                         )
                         await self._fail_run(
                             turn,
@@ -956,6 +986,7 @@ class AgentService:
                         completion_error,
                         step,
                         usage=result.usage,
+                        partial_text=result.text,
                     )
                     await self._fail_run(
                         turn,
@@ -1786,6 +1817,7 @@ class AgentService:
                 async def on_delta(delta: str) -> None:
                     nonlocal emitted
                     emitted = True
+                    outcome.text += delta
                     await queue.put(("delta", delta))
 
                 attempt_started = time.monotonic()
@@ -2050,6 +2082,7 @@ class AgentService:
                 last_entry_id,
                 error,
                 step,
+                partial_text=completion.text,
             )
             await self._fail_run(
                 turn,
@@ -2147,6 +2180,7 @@ class AgentService:
         detail: str,
         step: int,
         usage: dict[str, int] | None = None,
+        partial_text: str = "",
     ) -> int:
         data: dict[str, Any] = {
             "finish_reason": "error",
@@ -2155,11 +2189,13 @@ class AgentService:
             "provider": turn.conversation.provider,
             "step": step,
         }
+        if partial_text:
+            data["partial"] = True
         if usage is not None:
             data["usage"] = dict(usage)
         draft = EntryDraft(
             kind=KIND_ASSISTANT,
-            messages=[{"role": "assistant", "content": ""}],
+            messages=[{"role": "assistant", "content": partial_text}],
             data=data,
         )
         try:
@@ -2181,6 +2217,7 @@ class AgentService:
         error: Exception | None,
         step: int,
         usage: dict[str, int] | None = None,
+        partial_text: str = "",
     ) -> tuple[int, str, str]:
         if isinstance(error, AiNotConfiguredError):
             code = "not_configured"
@@ -2231,6 +2268,7 @@ class AgentService:
             detail,
             step,
             usage=usage,
+            partial_text=partial_text,
         )
         return entry_id, code, detail
 
@@ -2471,7 +2509,9 @@ def _entry_page(
     conversation_id: int,
     rows: list[AgentEntryModel],
     total: int,
-    has_more: bool,
+    *,
+    has_more: bool = False,
+    has_previous: bool = False,
 ) -> AgentEntryPageSchema:
     entries = [_entry_schema(row) for row in rows]
     return AgentEntryPageSchema(
@@ -2480,6 +2520,8 @@ def _entry_page(
         entries=entries,
         next_after_id=entries[-1].id if has_more and entries else None,
         has_more=has_more,
+        previous_before_id=entries[0].id if has_previous and entries else None,
+        has_previous=has_previous,
     )
 
 

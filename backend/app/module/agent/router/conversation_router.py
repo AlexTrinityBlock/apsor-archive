@@ -118,13 +118,15 @@ async def get_conversation(
 async def list_entries(
     conversation_id: int,
     after_id: int | None = Query(default=None, ge=1),
+    before_id: int | None = Query(default=None, ge=1),
     limit: int = Query(default=50, ge=1, le=200),
     agent_service: AgentService = Depends(get_agent_service),
 ) -> AgentEntryPageSchema:
-    """Read entries in ascending id order after an exclusive cursor."""
+    """Read entries around one exclusive cursor, always in ascending id order."""
     return await agent_service.list_entries(
         conversation_id,
         after_id=after_id,
+        before_id=before_id,
         limit=limit,
     )
 

@@ -634,6 +634,20 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
 
     first_detail = client.get(f"/api/v1/agent/conversations/{conversation_id}").json()
     assert first_detail["last_page_context_key"] == PAGE_KEY
+    assert [entry["id"] for entry in first_detail["entries"]] == [
+        system_entry["id"],
+        *ids,
+    ]
+
+    latest_detail = client.get(
+        f"/api/v1/agent/conversations/{conversation_id}",
+        params={"limit": 2},
+    ).json()
+    assert [entry["id"] for entry in latest_detail["entries"]] == [ids[-2], ids[-1]]
+    assert latest_detail["entries_has_previous"] is True
+    assert latest_detail["entries_previous_before_id"] == ids[-2]
+    assert latest_detail["entries_has_more"] is False
+    assert latest_detail["entries_next_after_id"] is None
 
     first_page = client.get(
         f"/api/v1/agent/conversations/{conversation_id}/entries",
@@ -703,6 +717,18 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "pi.tool-result",
         "pi.assistant",
     ]
+
+    previous_page = client.get(
+        f"/api/v1/agent/conversations/{conversation_id}/entries",
+        params={"before_id": ids[3], "limit": 2},
+    )
+    assert previous_page.status_code == 200
+    previous = previous_page.json()
+    assert [entry["id"] for entry in previous["entries"]] == [ids[1], ids[2]]
+    assert previous["has_previous"] is True
+    assert previous["previous_before_id"] == ids[1]
+    assert previous["has_more"] is False
+    assert previous["next_after_id"] is None
 
     repeated = client.get(
         f"/api/v1/agent/conversations/{conversation_id}/entries",

@@ -7,12 +7,17 @@
 import type { AgentEntrySchema } from './agentEntrySchema';
 
 /**
- * Forward pagination over the entry log.
+ * Bidirectional pagination over the entry log.
+ *
+ * Entries are always returned in ascending id order. ``next_after_id`` walks
+ * forward, while ``previous_before_id`` walks backward into older entries.
  */
 export interface AgentEntryPageSchema {
   conversation_id: number;
   entries: AgentEntrySchema[];
-  has_more: boolean;
-  next_after_id: number | null;
+  has_more?: boolean;
+  has_previous?: boolean;
+  next_after_id?: number | null;
+  previous_before_id?: number | null;
   total_results: number;
 }
