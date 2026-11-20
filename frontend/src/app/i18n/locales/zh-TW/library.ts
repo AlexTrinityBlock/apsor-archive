@@ -560,6 +560,7 @@ export const library = {
       pdfOriginal: "正在取得 PDF 原始檔",
       pdfPages: "正在排版 PDF 頁面",
       pdfPage: "正在渲染第 {page} 頁",
+      image: "正在載入圖片",
       docxOriginal: "正在取得 DOCX 原始檔",
       docxLayout: "正在排版 Word 文件",
       xlsxOriginal: "正在取得試算表原始檔",

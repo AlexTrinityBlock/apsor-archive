@@ -15,6 +15,7 @@ import "react-pdf/dist/Page/TextLayer.css";
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { Loader } from "../../component/Loader";
 import { useScrollLock } from "../../hook/useScrollLock";
 import { useI18n } from "../../i18n";
 import { ViewerErrorState } from "./ViewerStates";
@@ -146,6 +147,18 @@ function findScrollOwner(element: HTMLElement | null): HTMLElement | null {
     node = node.parentElement;
   }
   return null;
+}
+
+/** Centered, token-based spinner while PDF.js resolves the document. */
+function PdfLoading({ label }: { readonly label: string }) {
+  return (
+    <div className="viewer-pdf__loading">
+      <Loader size={30} label={label} className="viewer-pdf__loader" />
+      <span className="viewer-pdf__loading-label" aria-hidden="true">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 /**
@@ -685,9 +698,7 @@ export function PdfView({ fileUrl, fileName, downloadUrl }: PdfViewProps) {
           file={fileUrl}
           options={PDF_OPTIONS}
           loading={
-            <p className="viewer-pdf__message">
-              {t("library.viewer.loading.pdfPages")}
-            </p>
+            <PdfLoading label={t("library.viewer.loading.pdfPages")} />
           }
           onLoadSuccess={handleDocumentLoad}
           onLoadError={handleDocumentError}

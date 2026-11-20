@@ -569,6 +569,7 @@ export const library = {
       pdfOriginal: "Fetching the PDF original",
       pdfPages: "Laying out the PDF pages",
       pdfPage: "Rendering page {page}",
+      image: "Loading the image",
       docxOriginal: "Fetching the DOCX original",
       docxLayout: "Laying out the Word document",
       xlsxOriginal: "Fetching the spreadsheet original",
