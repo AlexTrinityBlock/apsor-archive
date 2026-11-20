@@ -813,7 +813,17 @@
   margin-left: 0;
 }
 
-.chat-entry__actions .copy-button.chat-entry__copy {
+.chat-turn__copy {
+  display: flex;
+  align-items: center;
+  margin-top: -1px;
+}
+
+.chat-turn--user .chat-turn__copy {
+  justify-content: flex-end;
+}
+
+.chat-turn__copy .copy-button.chat-entry__copy {
   width: 20px;
   height: 20px;
   padding: 0;
@@ -821,7 +831,7 @@
   border-radius: 999px;
 }
 
-.chat-entry__actions .copy-button.chat-entry__copy:hover:not(:disabled) {
+.chat-turn__copy .copy-button.chat-entry__copy:hover:not(:disabled) {
   color: var(--mono-ink);
   border-color: var(--mono-ink);
   background: transparent;
