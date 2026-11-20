@@ -7,6 +7,7 @@
 
 export type ListAgentEntriesParams = {
 after_id?: number | null;
+before_id?: number | null;
 /**
  * @minimum 1
  * @maximum 200

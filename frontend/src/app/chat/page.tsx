@@ -184,7 +184,6 @@ function ThreadState({
 /** The persistent archive desk: sessions, stream, and inspector. */
 // The page orchestrates conversation queries, streaming, approvals, and three
 // coordinated panes; the complexity is in the composition, not a deep branch.
-// eslint-disable-next-line sonarjs/cognitive-complexity
 export function ChatPage() {
   const params = useParams<{ conversationId?: string }>();
   const conversationId = parseConversationId(params.conversationId);
@@ -255,18 +254,18 @@ export function ChatPage() {
   const [lastError, setLastError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [extraStateId, setExtraStateId] = useState<number | null>(null);
-  const [extraEntries, setExtraEntries] = useState<AgentEntrySchema[]>([]);
-  const [extraCursor, setExtraCursor] = useState<number | null>(null);
-  const [extraHasMore, setExtraHasMore] = useState(false);
-  const [extraLoaded, setExtraLoaded] = useState(false);
-  const [extraLoading, setExtraLoading] = useState(false);
-  const [extraError, setExtraError] = useState<string | null>(null);
+  const [historyStateId, setHistoryStateId] = useState<number | null>(null);
+  const [historyEntries, setHistoryEntries] = useState<AgentEntrySchema[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<number | null>(null);
+  const [historyHasMore, setHistoryHasMore] = useState<boolean | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const handledRouteDraft = useRef<string | null>(null);
   const handledEntryHash = useRef<string | null>(null);
   const entryHighlightTimer = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const extraInFlightRef = useRef(false);
+  const historyInFlightRef = useRef(false);
+  const historyRequestIdRef = useRef(0);
   const stickToBottomRef = useRef(true);
 
   useEffect(() => {
@@ -648,12 +647,39 @@ export function ChatPage() {
   const conversation = conversationQuery.data ?? null;
   const archived = conversation?.status === "archived";
   const baseEntries = conversation?.entries ?? NO_ENTRIES;
-  const extraForCurrent = extraStateId === conversationId;
-  const currentExtraEntries = extraForCurrent ? extraEntries : NO_ENTRIES;
+  const historyForCurrent = historyStateId === conversationId;
+  const retainedEntries = historyForCurrent ? historyEntries : NO_ENTRIES;
   const entries = useMemo(
-    () => mergeEntries(baseEntries, currentExtraEntries),
-    [baseEntries, currentExtraEntries],
+    () => mergeEntries(retainedEntries, baseEntries),
+    [baseEntries, retainedEntries],
   );
+
+  // The detail endpoint now returns the newest page. Keep every page the reader
+  // has already seen so a later refetch cannot drop the tail that moved out of
+  // the page window, and reset the accumulated history on a conversation change.
+  /* eslint-disable react-hooks/set-state-in-effect -- paged server rows are accumulated here */
+  useEffect(() => {
+    historyRequestIdRef.current += 1;
+    historyInFlightRef.current = false;
+    setHistoryStateId(conversationId);
+    setHistoryEntries([]);
+    setHistoryCursor(null);
+    setHistoryHasMore(null);
+    setHistoryLoading(false);
+    setHistoryError(null);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (
+      conversationId === null ||
+      conversation?.id !== conversationId ||
+      historyStateId !== conversationId
+    ) {
+      return;
+    }
+    setHistoryEntries((current) => mergeEntries(current, baseEntries));
+  }, [baseEntries, conversation, conversationId, historyStateId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
   const memoryTitles = useMemo(
     () =>
       buildMemoryTitles(
@@ -753,34 +779,16 @@ export function ChatPage() {
     [forkAtEntry],
   );
 
-  const applyContextBoundary = useCallback(
-    (entry: AgentEntrySchema) => {
-      if (conversationId === null) {
-        return;
-      }
-      setExtraStateId(conversationId);
-      if (extraForCurrent && extraLoaded) {
-        setExtraEntries((current) => mergeEntries(current, [entry]));
-        return;
-      }
-      setExtraEntries([entry]);
-      setExtraCursor(conversation?.entries_next_after_id ?? null);
-      setExtraHasMore(conversation?.entries_has_more ?? false);
-      setExtraLoaded(true);
-    },
-    [conversation, conversationId, extraForCurrent, extraLoaded],
-  );
-
-  const hasMore =
-    extraForCurrent && extraLoaded
-      ? extraHasMore
-      : (conversation?.entries_has_more ?? false);
-  const nextAfterId =
-    extraForCurrent && extraLoaded
-      ? extraCursor
-      : (conversation?.entries_next_after_id ?? null);
-  const loadingMore = extraForCurrent && extraLoading;
-  const extraLoadError = extraForCurrent ? extraError : null;
+  const hasOlder =
+    historyHasMore === null
+      ? (conversation?.entries_has_previous ?? false)
+      : historyHasMore;
+  const olderCursor =
+    historyHasMore === null
+      ? (conversation?.entries_previous_before_id ?? null)
+      : historyCursor;
+  const loadingOlder = historyLoading;
+  const olderLoadError = historyForCurrent ? historyError : null;
   const streamToolCount = stream?.toolCalls.length ?? 0;
   const streamTextLength = stream?.assistantText.length ?? 0;
   const streamingActive = stream !== null;
@@ -907,34 +915,44 @@ export function ChatPage() {
     void retry(conversationId, retryState.lastUserText);
   }, [conversationId, retry, retryState.lastUserText, retryState.retryable]);
 
-  const loadMore = async () => {
+  const loadOlder = async () => {
     if (
       conversationId === null ||
-      nextAfterId === null ||
-      extraInFlightRef.current
+      olderCursor === null ||
+      historyInFlightRef.current
     ) {
       return;
     }
-    extraInFlightRef.current = true;
-    setExtraStateId(conversationId);
-    setExtraLoading(true);
-    setExtraError(null);
+    const requestId = historyRequestIdRef.current + 1;
+    historyRequestIdRef.current = requestId;
+    historyInFlightRef.current = true;
+    stickToBottomRef.current = false;
+    setHistoryStateId(conversationId);
+    setHistoryLoading(true);
+    setHistoryError(null);
     try {
       const page = await listAgentEntries(conversationId, {
-        after_id: nextAfterId,
+        before_id: olderCursor,
         limit: PAGE_SIZE,
       });
-      setExtraEntries((current) =>
-        mergeEntries(extraForCurrent && extraLoaded ? current : [], page.entries),
+      if (historyRequestIdRef.current !== requestId) {
+        return;
+      }
+      setHistoryEntries((current) =>
+        mergeEntries(historyForCurrent ? current : baseEntries, page.entries),
       );
-      setExtraCursor(page.next_after_id);
-      setExtraHasMore(page.has_more);
-      setExtraLoaded(true);
+      setHistoryCursor(page.previous_before_id ?? null);
+      setHistoryHasMore(page.has_previous ?? false);
     } catch (error) {
-      setExtraError(describeError(error));
+      if (historyRequestIdRef.current !== requestId) {
+        return;
+      }
+      setHistoryError(describeError(error));
     } finally {
-      extraInFlightRef.current = false;
-      setExtraLoading(false);
+      if (historyRequestIdRef.current === requestId) {
+        historyInFlightRef.current = false;
+        setHistoryLoading(false);
+      }
     }
   };
 
@@ -1128,6 +1146,36 @@ export function ChatPage() {
 
     return (
       <>
+        {hasOlder ? (
+          <div className="chat-thread__more chat-thread__more--older">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void loadOlder()}
+              disabled={loadingOlder}
+            >
+              {loadingOlder ? (
+                <>
+                  <Loader size={14} label={t("chat.page.loadingMoreLabel")} />
+                  {t("chat.page.loadingMore")}
+                </>
+              ) : (
+                <>
+                  <Icon name="arrow-up" size={14} />
+                  {t("chat.page.loadMore")}
+                </>
+              )}
+            </Button>
+          </div>
+        ) : null}
+        {olderLoadError ? (
+          <p className="chat-thread__more-error" role="alert">
+            {t("chat.page.moreError")}{" "}
+            <button type="button" onClick={() => void loadOlder()}>
+              {t("chat.page.moreErrorRetry")}
+            </button>
+          </p>
+        ) : null}
         <ChatThread
           entries={entries}
           memoryTitles={memoryTitles}
@@ -1155,36 +1203,6 @@ export function ChatPage() {
             onOpenCitation={handleOpenCitation}
             onOpenResource={handleOpenResource}
           />
-        ) : null}
-        {hasMore ? (
-          <div className="chat-thread__more">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void loadMore()}
-              disabled={loadingMore}
-            >
-              {loadingMore ? (
-                <>
-                  <Loader size={14} label={t("chat.page.loadingMoreLabel")} />
-                  {t("chat.page.loadingMore")}
-                </>
-              ) : (
-                <>
-                  {t("chat.page.loadMore")}
-                  <Icon name="arrow-down" size={14} />
-                </>
-              )}
-            </Button>
-          </div>
-        ) : null}
-        {extraLoadError ? (
-          <p className="chat-thread__more-error" role="alert">
-            {t("chat.page.moreError")}{" "}
-            <button type="button" onClick={() => void loadMore()}>
-              {t("chat.page.moreErrorRetry")}
-            </button>
-          </p>
         ) : null}
       </>
     );
@@ -1364,7 +1382,6 @@ export function ChatPage() {
                 conversationQuery.isError ||
                 waitingForApproval)
             }
-            onApplied={applyContextBoundary}
           />
         }
       />
