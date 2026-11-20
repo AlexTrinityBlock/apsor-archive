@@ -3,6 +3,7 @@ import { TransformComponent, TransformWrapper, type ReactZoomPanPinchContentRef 
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { Loader } from "../../component/Loader";
 import { useI18n } from "../../i18n";
 
 interface ImageViewProps {
@@ -19,6 +20,7 @@ interface ImageViewProps {
 export function ImageView({ src, alt, downloadUrl, downloadName }: ImageViewProps) {
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [naturalScale, setNaturalScale] = useState(1);
   const imageRef = useRef<HTMLImageElement>(null);
   const controlsRef = useRef<ReactZoomPanPinchContentRef | null>(null);
@@ -112,6 +114,7 @@ export function ImageView({ src, alt, downloadUrl, downloadName }: ImageViewProp
               decoding="async"
               draggable={false}
               onLoad={() => {
+                setLoaded(true);
                 const image = imageRef.current;
                 if (!image || image.clientWidth === 0) {
                   return;
@@ -120,6 +123,15 @@ export function ImageView({ src, alt, downloadUrl, downloadName }: ImageViewProp
               }}
               onError={() => setFailed(true)}
             />
+            {loaded ? null : (
+              <span className="viewer-image__loading" aria-hidden="true">
+                <Loader
+                  size={30}
+                  label={t("library.viewer.loading.image")}
+                  className="viewer-image__loader"
+                />
+              </span>
+            )}
           </TransformComponent>
         </div>
       )}

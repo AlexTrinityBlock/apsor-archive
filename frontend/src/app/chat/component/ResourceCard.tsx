@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { Icon, type IconName } from "../../component/Icon";
+import { Loader } from "../../component/Loader";
 import { useI18n } from "../../i18n";
 import {
   classifyFile,
@@ -95,6 +96,7 @@ function ResourceThumb({
 }) {
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const resourceId = resource.resourceId;
   const isImage = kind === "image" && resourceId !== null;
   const title = resource.title ?? t(RESOURCE_LABEL_KEYS[resource.resourceType]);
@@ -102,11 +104,17 @@ function ResourceThumb({
   if (isImage && !failed) {
     return (
       <span className="chat-resource__thumb chat-resource__thumb--image">
+        {imageLoaded ? null : (
+          <span className="chat-resource__thumb-loading" aria-hidden="true">
+            <Loader size={18} className="chat-resource__thumb-loader" />
+          </span>
+        )}
         <img
           src={fileContentUrl(resourceId)}
           alt=""
           loading="lazy"
           decoding="async"
+          onLoad={() => setImageLoaded(true)}
           onError={() => setFailed(true)}
         />
       </span>

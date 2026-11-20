@@ -103,6 +103,7 @@ function rendererFor(file: FileSchema): ReactNode {
     case "image":
       return (
         <ImageView
+          key={file.id}
           src={contentUrl}
           alt={file.file_name}
           downloadUrl={fileDownloadUrl(file.id)}

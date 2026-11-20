@@ -2019,6 +2019,18 @@
   object-fit: cover;
 }
 
+.chat-resource__thumb-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--mono-card-warm);
+}
+
+.chat-resource__thumb-loader {
+  color: var(--accent-moss);
+}
+
 .chat-resource__thumb--pdf {
   display: flex;
   align-items: center;
