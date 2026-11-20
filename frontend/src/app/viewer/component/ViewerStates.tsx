@@ -1,5 +1,6 @@
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
+import { Loader } from "../../component/Loader";
 import { useI18n } from "../../i18n";
 import { viewerErrorMessage } from "./viewer-utils";
 
@@ -10,14 +11,17 @@ interface LoadingProps {
 /** A quiet archive placeholder while a renderer or chunk loads. */
 export function ViewerLoading({ label }: LoadingProps) {
   const { t } = useI18n();
+  const message = label ?? t("library.viewer.loadingDefault");
   return (
-    <div className="viewer-state viewer-state--loading" role="status" aria-live="polite">
-      <span className="viewer-loader" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </span>
-      <p className="viewer-state__label">{label ?? t("library.viewer.loadingDefault")}</p>
+    <div className="viewer-state viewer-state--loading">
+      <Loader
+        size={34}
+        label={message}
+        className="viewer-state__loader"
+      />
+      <p className="viewer-state__label" aria-hidden="true">
+        {message}
+      </p>
     </div>
   );
 }

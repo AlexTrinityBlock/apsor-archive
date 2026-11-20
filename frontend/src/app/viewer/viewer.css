@@ -51,39 +51,8 @@
   text-transform: uppercase;
 }
 
-.viewer-loader {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 12px;
-}
-
-.viewer-loader span {
-  width: 6px;
-  height: 6px;
-  background: var(--accent-moss);
-  border-radius: 50%;
-  animation: viewer-pulse 1.2s ease-in-out infinite;
-}
-
-.viewer-loader span:nth-child(2) {
-  animation-delay: 140ms;
-}
-
-.viewer-loader span:nth-child(3) {
-  animation-delay: 280ms;
-}
-
-@keyframes viewer-pulse {
-  0%,
-  100% {
-    opacity: 0.28;
-    transform: translateY(0);
-  }
-  50% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
+.viewer-state__loader {
+  color: var(--accent-moss);
 }
 
 .viewer-state--error {
@@ -909,11 +878,28 @@
 }
 
 .viewer-pdf__scroll .react-pdf__message,
-.viewer-pdf__message {
-  padding: 16px;
+.viewer-pdf__loading {
+  display: flex;
+  width: 100%;
+  min-height: 180px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+.viewer-pdf__loader {
+  color: var(--accent-moss);
+}
+
+.viewer-pdf__loading-label {
   color: var(--mono-muted);
   font-family: var(--mono-font-mono);
   font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* Fullscreen viewing fills the viewport and owns both scroll axes, so page
@@ -1057,11 +1043,25 @@
 }
 
 .viewer-image__content {
+  position: relative;
   display: flex;
   width: 100%;
   height: 100%;
   align-items: center;
   justify-content: center;
+}
+
+.viewer-image__loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--mono-paper);
+  pointer-events: none;
+}
+
+.viewer-image__loader {
+  color: var(--accent-moss);
 }
 
 .viewer-image__img {
@@ -1220,8 +1220,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .viewer-loader span {
-    animation: none;
+  .viewer-state__loader {
     opacity: 0.7;
   }
 }
