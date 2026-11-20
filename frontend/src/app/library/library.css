@@ -2211,6 +2211,7 @@ button.library-crumb:hover {
   color: var(--mono-muted);
   font-size: 11px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .library-field__hint code {
@@ -2281,6 +2282,29 @@ button.library-crumb:hover {
   cursor: pointer;
 }
 
+.library-fixed-path {
+  display: block;
+  min-width: 0;
+  padding: 8px 11px;
+  color: var(--mono-muted);
+  background: var(--mono-paper);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 4px;
+  font-family: var(--mono-font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.library-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .library-file-chip {
   display: flex;
   flex-wrap: wrap;
@@ -2305,6 +2329,34 @@ button.library-crumb:hover {
 .library-file-chip__size {
   color: var(--mono-muted);
   white-space: nowrap;
+}
+
+.library-file-chip__remove {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--mono-muted);
+  background: transparent;
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.library-file-chip__remove:hover {
+  color: var(--mono-ink);
+  border-color: var(--mono-ink);
+}
+
+.library-file-chip__remove:focus-visible {
+  outline: 2px solid var(--accent-moss);
+  outline-offset: 1px;
 }
 
 .library-form__error {

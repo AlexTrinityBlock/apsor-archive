@@ -1540,6 +1540,9 @@ function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
         <UploadDialog
           currentPath={uploadTarget}
           onClose={() => setUploadOpen(false)}
+          onUploadFiles={(files) => {
+            void enqueueFiles(files, uploadTarget);
+          }}
           onUploaded={openCreatedFile}
         />
       ) : null}
