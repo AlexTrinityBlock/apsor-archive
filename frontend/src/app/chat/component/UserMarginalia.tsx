@@ -11,6 +11,7 @@ interface UserMarginaliaProps {
   readonly createdAt?: string;
   readonly pending?: boolean;
   readonly action?: ReactNode;
+  readonly copyAction?: ReactNode;
 }
 
 /** The keeper's turn: a compact author line and an ink speech bubble. */
@@ -20,6 +21,7 @@ export function UserMarginalia({
   createdAt,
   pending = false,
   action,
+  copyAction,
 }: UserMarginaliaProps) {
   const { user } = useAuth();
   const { t, formatRelative } = useI18n();
@@ -51,6 +53,9 @@ export function UserMarginalia({
       ) : null}
       {text.trim().length > 0 ? (
         <div className="chat-turn__bubble">{text}</div>
+      ) : null}
+      {copyAction ? (
+        <div className="chat-turn__copy">{copyAction}</div>
       ) : null}
     </article>
   );

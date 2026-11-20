@@ -127,13 +127,11 @@ function ThreadEntry({
   } else if (entry.kind === "pi.assistant") {
     copyValue = assistantText(entry);
   }
-  const entryActions =
-    forkAction || copyValue.trim().length > 0 ? (
-      <span className="chat-entry__actions">
-        <CopyEntryAction value={copyValue} />
-        {forkAction}
-      </span>
-    ) : null;
+  const headerAction = forkAction ? (
+    <span className="chat-entry__actions">{forkAction}</span>
+  ) : null;
+  const copyAction =
+    copyValue.trim().length > 0 ? <CopyEntryAction value={copyValue} /> : null;
   switch (entry.kind) {
     case "pi.user":
       return (
@@ -141,7 +139,8 @@ function ThreadEntry({
           text={userText(entry)}
           attachments={readUserAttachments(entry)}
           createdAt={entry.created_at}
-          action={entryActions}
+          action={headerAction}
+          copyAction={copyAction}
         />
       );
     case "pi.assistant":
@@ -150,7 +149,8 @@ function ThreadEntry({
           entry={entry}
           toolResults={toolResults}
           memoryTitles={memoryTitles}
-          action={entryActions}
+          action={headerAction}
+          copyAction={copyAction}
           selectedTraceId={selectedTraceId}
           onSelectTrace={onSelectTrace}
           onOpenCitation={onOpenCitation}

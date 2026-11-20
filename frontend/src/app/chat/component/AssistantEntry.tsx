@@ -27,6 +27,7 @@ interface AssistantEntryProps {
   readonly toolResults: ReadonlyMap<string, ToolResultInfo>;
   readonly memoryTitles?: ReadonlyMap<number, string>;
   readonly action?: ReactNode;
+  readonly copyAction?: ReactNode;
   readonly selectedTraceId?: string | null;
   readonly onSelectTrace?: (traceId: string) => void;
   readonly onOpenCitation?: (token: CitationToken) => void;
@@ -62,6 +63,7 @@ export function AssistantEntry({
   toolResults,
   memoryTitles,
   action,
+  copyAction,
   selectedTraceId = null,
   onSelectTrace,
   onOpenCitation,
@@ -186,6 +188,10 @@ export function AssistantEntry({
       ) : null}
 
       {body}
+
+      {copyAction ? (
+        <div className="chat-turn__copy">{copyAction}</div>
+      ) : null}
 
       {resources.length > 0 ? (
         <div className="chat-resource-stack">
