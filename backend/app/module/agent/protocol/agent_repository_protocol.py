@@ -237,6 +237,21 @@ class AgentRepositoryProtocol(Protocol):
         limit: int,
     ) -> tuple[list[AgentEntryModel], bool]: ...
 
+    async def list_entries_before(
+        self,
+        conversation_id: int,
+        *,
+        before_id: int,
+        limit: int,
+    ) -> tuple[list[AgentEntryModel], bool]: ...
+
+    async def list_latest_entries(
+        self,
+        conversation_id: int,
+        *,
+        limit: int,
+    ) -> tuple[list[AgentEntryModel], bool]: ...
+
     async def count_entries(self, conversation_id: int) -> int: ...
 
     async def last_page_context_key(self, conversation_id: int) -> str | None: ...

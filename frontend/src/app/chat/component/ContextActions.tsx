@@ -10,7 +10,6 @@ import {
   useClearAgentConversation,
   useCompactAgentConversation,
 } from "../../generated-apis-types/agent/agent";
-import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
 import { invalidateConversation } from "../query";
 
 interface ContextActionsProps {
@@ -19,8 +18,6 @@ interface ContextActionsProps {
   readonly archived: boolean;
   readonly disabled?: boolean;
   readonly className?: string;
-  /** Lets a surface merge the boundary entry before the refetch lands. */
-  readonly onApplied?: (entry: AgentEntrySchema) => void;
 }
 
 function describeContextError(error: unknown, t: Translate): string {
@@ -61,7 +58,6 @@ export function ContextActions({
   archived,
   disabled = false,
   className,
-  onApplied,
 }: ContextActionsProps) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -103,12 +99,12 @@ export function ContextActions({
     setError(null);
     inFlightRef.current = true;
     try {
-      const entry =
-        kind === "compact"
-          ? await compactConversation.mutateAsync({ conversationId })
-          : await clearConversation.mutateAsync({ conversationId });
+      if (kind === "compact") {
+        await compactConversation.mutateAsync({ conversationId });
+      } else {
+        await clearConversation.mutateAsync({ conversationId });
+      }
       setConfirmingClear(false);
-      onApplied?.(entry);
       await invalidateConversation(queryClient, conversationId);
       toast.success(
         kind === "compact"

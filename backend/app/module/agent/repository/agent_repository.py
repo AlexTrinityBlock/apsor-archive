@@ -1350,6 +1350,50 @@ class AgentRepository:
             has_more = len(rows) > limit
             return rows[:limit], has_more
 
+    async def list_entries_before(
+        self,
+        conversation_id: int,
+        *,
+        before_id: int,
+        limit: int,
+    ) -> tuple[list[AgentEntryModel], bool]:
+        """Return older entries in ascending order, ending before ``before_id``."""
+        async with self._read() as session:
+            statement = (
+                select(AgentEntryModel)
+                .where(
+                    AgentEntryModel.conversation_id == conversation_id,
+                    AgentEntryModel.user_id == self.user_id,
+                    AgentEntryModel.id < before_id,
+                )
+                .order_by(AgentEntryModel.id.desc())
+                .limit(limit + 1)
+            )
+            rows = list((await session.execute(statement)).scalars().all())
+            has_previous = len(rows) > limit
+            return list(reversed(rows[:limit])), has_previous
+
+    async def list_latest_entries(
+        self,
+        conversation_id: int,
+        *,
+        limit: int,
+    ) -> tuple[list[AgentEntryModel], bool]:
+        """Return the newest page in ascending order for a chat tail."""
+        async with self._read() as session:
+            statement = (
+                select(AgentEntryModel)
+                .where(
+                    AgentEntryModel.conversation_id == conversation_id,
+                    AgentEntryModel.user_id == self.user_id,
+                )
+                .order_by(AgentEntryModel.id.desc())
+                .limit(limit + 1)
+            )
+            rows = list((await session.execute(statement)).scalars().all())
+            has_previous = len(rows) > limit
+            return list(reversed(rows[:limit])), has_previous
+
     async def count_entries(self, conversation_id: int) -> int:
         async with self._read() as session:
             statement = (

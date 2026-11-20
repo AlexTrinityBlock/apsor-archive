@@ -129,24 +129,32 @@ class AgentEntrySchema(BaseModel):
 
 
 class AgentEntryPageSchema(BaseModel):
-    """Forward pagination over the entry log."""
+    """Bidirectional pagination over the entry log.
+
+    Entries are always returned in ascending id order. ``next_after_id`` walks
+    forward, while ``previous_before_id`` walks backward into older entries.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     conversation_id: int
     total_results: int
     entries: list[AgentEntrySchema]
-    next_after_id: int | None
-    has_more: bool
+    next_after_id: int | None = None
+    has_more: bool = False
+    previous_before_id: int | None = None
+    has_previous: bool = False
 
 
 class AgentConversationDetailSchema(AgentConversationSchema):
-    """Conversation metadata plus the first entry page."""
+    """Conversation metadata plus the latest entry page."""
 
     entries: list[AgentEntrySchema]
     entries_total: int
-    entries_next_after_id: int | None
-    entries_has_more: bool
+    entries_next_after_id: int | None = None
+    entries_has_more: bool = False
+    entries_previous_before_id: int | None = None
+    entries_has_previous: bool = False
     last_page_context_key: str | None = None
 
 

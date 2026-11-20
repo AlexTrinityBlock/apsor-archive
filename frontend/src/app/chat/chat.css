@@ -2930,6 +2930,10 @@
   padding: 12px 0 2px;
 }
 
+.chat-thread__more--older {
+  padding: 2px 0 12px;
+}
+
 .chat-thread__more-error {
   color: var(--accent-seal-deep);
   font-family: var(--mono-font-mono);

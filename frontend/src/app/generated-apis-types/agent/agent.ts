@@ -1437,7 +1437,7 @@ export const useCompactAgentConversation = <TError = HTTPValidationError,
 }
 
 /**
- * Read entries in ascending id order after an exclusive cursor.
+ * Read entries around one exclusive cursor, always in ascending id order.
  * @summary List Entries
  */
 export const listAgentEntries = async (conversationId: number,

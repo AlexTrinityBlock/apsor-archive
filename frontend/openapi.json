@@ -561,7 +561,7 @@
         "type": "object"
       },
       "AgentConversationDetailSchema": {
-        "description": "Conversation metadata plus the first entry page.",
+        "description": "Conversation metadata plus the latest entry page.",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -600,7 +600,13 @@
             "type": "array"
           },
           "entries_has_more": {
+            "default": false,
             "title": "Entries Has More",
+            "type": "boolean"
+          },
+          "entries_has_previous": {
+            "default": false,
+            "title": "Entries Has Previous",
             "type": "boolean"
           },
           "entries_next_after_id": {
@@ -613,6 +619,17 @@
               }
             ],
             "title": "Entries Next After Id"
+          },
+          "entries_previous_before_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entries Previous Before Id"
           },
           "entries_total": {
             "title": "Entries Total",
@@ -713,9 +730,7 @@
           "archived_at",
           "deleted_at",
           "entries",
-          "entries_total",
-          "entries_next_after_id",
-          "entries_has_more"
+          "entries_total"
         ],
         "title": "AgentConversationDetailSchema",
         "type": "object"
@@ -909,7 +924,7 @@
         "type": "object"
       },
       "AgentEntryPageSchema": {
-        "description": "Forward pagination over the entry log.",
+        "description": "Bidirectional pagination over the entry log.\n\nEntries are always returned in ascending id order. ``next_after_id`` walks\nforward, while ``previous_before_id`` walks backward into older entries.",
         "properties": {
           "conversation_id": {
             "title": "Conversation Id",
@@ -923,7 +938,13 @@
             "type": "array"
           },
           "has_more": {
+            "default": false,
             "title": "Has More",
+            "type": "boolean"
+          },
+          "has_previous": {
+            "default": false,
+            "title": "Has Previous",
             "type": "boolean"
           },
           "next_after_id": {
@@ -937,6 +958,17 @@
             ],
             "title": "Next After Id"
           },
+          "previous_before_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Before Id"
+          },
           "total_results": {
             "title": "Total Results",
             "type": "integer"
@@ -945,9 +977,7 @@
         "required": [
           "conversation_id",
           "total_results",
-          "entries",
-          "next_after_id",
-          "has_more"
+          "entries"
         ],
         "title": "AgentEntryPageSchema",
         "type": "object"
@@ -7285,7 +7315,7 @@
     },
     "/api/v1/agent/conversations/{conversation_id}/entries": {
       "get": {
-        "description": "Read entries in ascending id order after an exclusive cursor.",
+        "description": "Read entries around one exclusive cursor, always in ascending id order.",
         "operationId": "listAgentEntries",
         "parameters": [
           {
@@ -7312,6 +7342,23 @@
                 }
               ],
               "title": "After Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
             }
           },
           {

@@ -158,6 +158,9 @@ def test_transient_provider_failure_after_output_is_not_retried(
     assert body["run"]["status"] == "failed"
     assert body["error_code"] == "provider_error"
     assert body["assistant_entry"]["data"]["finish_reason"] == "error"
+    assert body["assistant_entry"]["data"]["partial"] is True
+    assert body["assistant_entry"]["model"][0]["content"] == "partial "
+    assert body["answer"] == "partial "
     assert fake.calls == 1
 
 
