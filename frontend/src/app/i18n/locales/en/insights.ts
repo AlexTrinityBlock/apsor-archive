@@ -155,7 +155,7 @@ export const insights = {
     header: {
       kicker: "Temporal Density // 03",
       kickerMeta: "Complete chronological spine · windowed reads",
-      title: "The Annual-Ring Chronology",
+      title: "Timeline",
       description:
         "Every memory, summary, and file update in the selected window, read as one continuous chronology. Earlier windows load automatically as you scroll; the agent still reads a sparse sample.",
       readingWindow: "Reading window",

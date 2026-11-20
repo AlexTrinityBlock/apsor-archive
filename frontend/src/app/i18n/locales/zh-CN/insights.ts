@@ -153,7 +153,7 @@ export const insights = {
     header: {
       kicker: "时间密度 // 03",
       kickerMeta: "完整年表主轴 · 分段窗口读取",
-      title: "年轮年表",
+      title: "时间轴",
       description:
         "选定范围内的每一条记忆、摘要与文件更新，串成一份连续年表。更早的范围会随滚动自动加载；代理仍只读取稀疏采样。",
       readingWindow: "正在读取范围",
