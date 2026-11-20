@@ -11,8 +11,9 @@ import { LibraryDialog } from "./LibraryDialog";
 import {
   describeError,
   invalidateLibraryQueries,
+  isSafeFolderName,
+  joinArchivePath,
   normalizeArchivePath,
-  sameArchivePath,
 } from "./library-utils";
 
 interface NewFolderDialogProps {
@@ -21,22 +22,19 @@ interface NewFolderDialogProps {
   readonly onCreated: (path: string) => void;
 }
 
-function pathPrefix(path: string): string {
-  const normalized = normalizeArchivePath(path);
-  return normalized === "/" ? "/" : `${normalized}/`;
-}
-
 /**
- * Creates one branch folder inside the current shelf. The server also creates
- * missing ancestors and returns the existing directory for an idempotent call.
+ * Creates one branch folder inside the current shelf. The parent path is fixed
+ * and only the leaf name is editable, so the dialog never turns into a second
+ * path editor; the folder API creates it.
  */
 export function NewFolderDialog({ currentPath, onClose, onCreated }: NewFolderDialogProps) {
   const { t } = useI18n();
   const baseId = useId();
-  const pathId = `${baseId}-folder-path`;
+  const nameId = `${baseId}-folder-name`;
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [folderPath, setFolderPath] = useState(() => pathPrefix(currentPath));
+  const parentPath = normalizeArchivePath(currentPath) || "/";
+  const [folderName, setFolderName] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -45,19 +43,17 @@ export function NewFolderDialog({ currentPath, onClose, onCreated }: NewFolderDi
     event.preventDefault();
     setLocalError(null);
     setServerError(null);
-    const normalized = normalizeArchivePath(folderPath);
-    if (normalized === "/" || normalized.length === 0) {
+    const name = folderName.trim();
+    if (!isSafeFolderName(name)) {
       setLocalError(t("library.newFolder.errorName"));
-      return;
-    }
-    if (sameArchivePath(normalized, currentPath)) {
-      setLocalError(t("library.newFolder.errorCurrent"));
       return;
     }
 
     setPending(true);
     try {
-      const directory = await createFolder({ path: normalized });
+      const directory = await createFolder({
+        path: joinArchivePath(parentPath, name),
+      });
       toast.success(
         t("library.newFolder.createdToast", { name: basename(directory.path) }),
       );
@@ -80,21 +76,36 @@ export function NewFolderDialog({ currentPath, onClose, onCreated }: NewFolderDi
       className="library-new-folder"
     >
       <form className="library-form" onSubmit={handleSubmit}>
-        <label className="library-field" htmlFor={pathId}>
-          <span className="library-field__label">{t("library.newFolder.pathLabel")}</span>
+        <div className="library-field">
+          <span className="library-field__label">
+            {t("library.newFolder.parentLabel")}
+          </span>
+          <code className="library-fixed-path" data-page-context="exclude">
+            {parentPath}
+          </code>
+          <span className="library-field__hint">
+            {t("library.newFolder.parentHint")}
+          </span>
+        </div>
+
+        <label className="library-field" htmlFor={nameId}>
+          <span className="library-field__label">
+            {t("library.newFolder.nameLabel")}
+          </span>
           <input
-            id={pathId}
+            id={nameId}
             className="library-input"
             type="text"
-            value={folderPath}
-            onChange={(event) => setFolderPath(event.target.value)}
-            placeholder="/notes/research"
+            value={folderName}
+            onChange={(event) => setFolderName(event.target.value)}
+            placeholder="research"
             autoComplete="off"
             spellCheck={false}
+            disabled={pending}
             data-autofocus
           />
           <span className="library-field__hint">
-            {t("library.newFolder.pathHint")} <code>{currentPath}</code>
+            {t("library.newFolder.nameHint")}
           </span>
         </label>
 
