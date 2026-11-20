@@ -1,9 +1,14 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 
-import { Button, ButtonLink } from "../../component/Button";
 import { Icon, type IconName } from "../../component/Icon";
 import { useI18n } from "../../i18n";
-import { basename } from "../../../lib/format";
+import {
+  classifyFile,
+  fileContentUrl,
+  kindLabel,
+  type ViewerKind,
+} from "../../viewer/component/viewer-utils";
 import { resourceHref, type ResourceMeta } from "../types";
 
 const RESOURCE_ICONS: Record<ResourceMeta["resourceType"], IconName> = {
@@ -21,13 +26,102 @@ const PRESENTED_LABEL_KEYS = {
   memory: "chat.resource.presentedMemory",
 } as const;
 
+function extensionOf(title: string | null): string {
+  if (!title) {
+    return "";
+  }
+  const match = /\.[^./\\]+$/.exec(title);
+  return match ? match[0].toLowerCase() : "";
+}
+
+function thumbnailBadge(kind: ViewerKind, title: string | null): string {
+  switch (kind) {
+    case "pdf":
+      return "PDF";
+    case "docx":
+      return "DOC";
+    case "spreadsheet":
+      return "XLS";
+    case "image":
+      return "IMG";
+    case "markdown":
+      return "MD";
+    case "json":
+      return "JSON";
+    case "csv":
+      return "CSV";
+    case "text":
+      return "TXT";
+    default: {
+      const extension = extensionOf(title).replace(".", "").slice(0, 4);
+      return extension.length > 0 ? extension.toUpperCase() : "FILE";
+    }
+  }
+}
+
+function ResourceThumb({
+  resource,
+  kind,
+}: {
+  readonly resource: ResourceMeta;
+  readonly kind: ViewerKind | null;
+}) {
+  const { t } = useI18n();
+  const [failed, setFailed] = useState(false);
+  const resourceId = resource.resourceId;
+  const isImage = kind === "image" && resourceId !== null;
+  const title = resource.title ?? t(RESOURCE_LABEL_KEYS[resource.resourceType]);
+
+  if (isImage && !failed) {
+    return (
+      <span className="chat-resource__thumb chat-resource__thumb--image">
+        <img
+          src={fileContentUrl(resourceId)}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+        />
+      </span>
+    );
+  }
+
+  let icon: IconName = RESOURCE_ICONS.file;
+  if (resource.resourceType === "memory") {
+    icon = RESOURCE_ICONS.memory;
+  } else if (kind === "image") {
+    icon = "image";
+  }
+
+  return (
+    <span
+      className="chat-resource__thumb chat-resource__thumb--file"
+      aria-hidden="true"
+      title={title}
+    >
+      <Icon name={icon} size={20} />
+      <span className="chat-resource__badge">
+        {resource.resourceType === "memory"
+          ? t("chat.resource.memoryBadge")
+          : thumbnailBadge(kind ?? "unsupported", resource.title)}
+      </span>
+    </span>
+  );
+}
+
 interface ResourceCardProps {
   readonly resource: ResourceMeta;
-  /** When present, the card opens the in-situ preview instead of navigating. */
+  /** When present, the card opens the in-chat preview dialog. */
   readonly onOpen?: (resource: ResourceMeta) => void;
 }
 
-/** A structured `present_resource` card with a real file or memory target. */
+/**
+ * A presented file or memory as a compact preview bubble.
+ *
+ * Images show their real thumbnail; every other kind uses a type tile. The
+ * whole bubble is the preview trigger, so the chat transcript never needs to
+ * send the reader to another page just to recognise what the agent presented.
+ */
 export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
   const { t } = useI18n();
   const resourceLabel = t(RESOURCE_LABEL_KEYS[resource.resourceType]);
@@ -36,69 +130,77 @@ export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
     `${resourceLabel} ${
       resource.resourceId === null ? "" : `#${resource.resourceId}`
     }`.trim();
+  const extension = extensionOf(resource.title);
+  const kind =
+    resource.resourceType === "file"
+      ? classifyFile({
+          mime_type: resource.mimeType ?? "",
+          extension,
+        })
+      : null;
   const details = [
-    resourceLabel,
-    resource.mimeType,
+    kind === null ? null : kindLabel(kind, t),
+    kind === "unsupported" ? resource.mimeType : null,
     resource.chunk === null
       ? null
       : t("chat.common.chunk", { chunk: resource.chunk }),
-    resource.rawFilePath ? basename(resource.rawFilePath) : null,
-  ].filter((item): item is string => item !== null && item.length > 0);
+  ].filter(
+    (item): item is string => item !== null && item.length > 0,
+  );
   const href = resourceHref(resource);
-  const fileAction = onOpen
-    ? t("chat.resource.preview")
-    : t("chat.resource.openFile");
   const actionLabel =
     resource.resourceType === "file"
-      ? fileAction
+      ? t("chat.resource.preview")
       : t("chat.resource.openMemory");
+  const fallbackDetail =
+    resource.resourceType === "memory"
+      ? t("chat.resource.openMemory")
+      : t("chat.resource.previewHint");
 
-  let action: ReactNode;
+  const body = (
+    <>
+      <ResourceThumb resource={resource} kind={kind} />
+      <span className="chat-resource__body">
+        <span className="mono-label">
+          {t(PRESENTED_LABEL_KEYS[resource.resourceType])}
+        </span>
+        <span className="chat-resource__title">{title}</span>
+        <span className="chat-resource__meta">
+          {details.length > 0 ? details.join(" · ") : fallbackDetail}
+        </span>
+      </span>
+      <span className="chat-resource__go" aria-hidden="true">
+        <Icon name={onOpen ? "maximize" : "arrow-up-right"} size={14} />
+      </span>
+    </>
+  );
+
+  let card: ReactNode;
   if (onOpen) {
-    action = (
-      <Button
-        variant="secondary"
-        size="sm"
-        className="chat-resource__action"
+    card = (
+      <button
+        type="button"
+        className="chat-resource"
         onClick={() => onOpen(resource)}
+        aria-label={t("chat.resource.previewAria", { title })}
+        title={t("chat.resource.preview")}
       >
-        {actionLabel}
-        <Icon name="arrow-right" size={13} />
-      </Button>
+        {body}
+      </button>
     );
   } else if (href) {
-    action = (
-      <ButtonLink
-        to={href}
-        variant="secondary"
-        size="sm"
-        className="chat-resource__action"
-      >
-        {actionLabel}
-        <Icon name="arrow-up-right" size={13} />
-      </ButtonLink>
+    card = (
+      <Link className="chat-resource" to={href} aria-label={actionLabel}>
+        {body}
+      </Link>
     );
   } else {
-    action = (
-      <span className="chat-resource__unavailable">
-        {t("chat.resource.noTarget")}
+    card = (
+      <span className="chat-resource is-static" aria-label={actionLabel}>
+        {body}
       </span>
     );
   }
 
-  return (
-    <article className="chat-resource">
-      <span className="chat-resource__icon" aria-hidden="true">
-        <Icon name={RESOURCE_ICONS[resource.resourceType]} size={18} />
-      </span>
-      <div className="chat-resource__body">
-        <p className="mono-label">
-          {t(PRESENTED_LABEL_KEYS[resource.resourceType])}
-        </p>
-        <h3>{title}</h3>
-        <p className="chat-resource__meta">{details.join(" · ")}</p>
-      </div>
-      {action}
-    </article>
-  );
+  return <div className="chat-resource-row">{card}</div>;
 }

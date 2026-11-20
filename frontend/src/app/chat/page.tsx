@@ -53,6 +53,7 @@ import { ChatIntro } from "./component/ChatIntro";
 import { ChatThread } from "./component/ChatThread";
 import { ContextActions } from "./component/ContextActions";
 import { ConversationRail } from "./component/ConversationRail";
+import { ResourcePreviewDialog } from "./component/ResourcePreviewDialog";
 import { RetryBar } from "./component/RetryBar";
 import { StreamingTurn } from "./component/StreamingTurn";
 import { useChatSplit } from "./hook/useChatSplit";
@@ -225,6 +226,9 @@ export function ChatPage() {
   const [pane, setPane] = useState<ChatPane>("thread");
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>("telemetry");
   const [previewTarget, setPreviewTarget] = useState<ResourceTarget | null>(null);
+  const [previewResource, setPreviewResource] = useState<ResourceMeta | null>(
+    null,
+  );
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const [highlightedEntryId, setHighlightedEntryId] = useState<number | null>(
     null,
@@ -337,6 +341,7 @@ export function ChatPage() {
   useEffect(() => {
     setPinnedId(null);
     setPreviewTarget(null);
+    setPreviewResource(null);
     setInspectorTab("telemetry");
     setLastError(null);
     setPane("thread");
@@ -940,6 +945,7 @@ export function ChatPage() {
     setLastError(null);
     setPinnedId(null);
     setPreviewTarget(null);
+    setPreviewResource(null);
     setInspectorTab("telemetry");
     setPane("thread");
     if (narrow) {
@@ -1012,19 +1018,12 @@ export function ChatPage() {
     [memoryTitles, openFilePreview, openMemoryPreview],
   );
 
-  const handleOpenResource = useCallback(
-    (resource: ResourceMeta) => {
-      if (resource.resourceId === null) {
-        return;
-      }
-      if (resource.resourceType === "file") {
-        openFilePreview(resource.resourceId, resource.chunk);
-        return;
-      }
-      openMemoryPreview(resource.resourceId, resource.title);
-    },
-    [openFilePreview, openMemoryPreview],
-  );
+  const handleOpenResource = useCallback((resource: ResourceMeta) => {
+    if (resource.resourceId === null) {
+      return;
+    }
+    setPreviewResource(resource);
+  }, []);
 
   const handleSelectTrace = useCallback(
     (traceId: string) => {
@@ -1441,6 +1440,10 @@ export function ChatPage() {
         open={attachmentManagerOpen}
         onClose={closeAttachmentManager}
         onDeleted={forgetDeletedAttachment}
+      />
+      <ResourcePreviewDialog
+        resource={previewResource}
+        onClose={() => setPreviewResource(null)}
       />
     </div>
   );

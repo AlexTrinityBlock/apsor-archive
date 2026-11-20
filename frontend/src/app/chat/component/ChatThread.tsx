@@ -154,6 +154,7 @@ function ThreadEntry({
           selectedTraceId={selectedTraceId}
           onSelectTrace={onSelectTrace}
           onOpenCitation={onOpenCitation}
+          onOpenResource={onOpenResource}
         />
       );
     case "pi.tool-result":
