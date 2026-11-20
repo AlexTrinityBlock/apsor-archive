@@ -11,11 +11,13 @@ import {
   readAssistantMeta,
   readToolCalls,
   type CitationToken,
+  type ResourceMeta,
   type ToolResultInfo,
 } from "../types";
 import { CitationChip } from "./CitationChip";
 import { MarkdownBody } from "./MarkdownBody";
 import { PlotBlock } from "./PlotBlock";
+import { ResourceCard } from "./ResourceCard";
 import { ToolCallCard } from "./ToolCallCard";
 import { ToolDiagnostics, type ToolDiagnosticItem } from "./ToolDiagnostics";
 import { finishReasonTone, isToolFailure } from "./status";
@@ -28,6 +30,7 @@ interface AssistantEntryProps {
   readonly selectedTraceId?: string | null;
   readonly onSelectTrace?: (traceId: string) => void;
   readonly onOpenCitation?: (token: CitationToken) => void;
+  readonly onOpenResource?: (resource: ResourceMeta) => void;
 }
 
 type UsageKey = "prompt" | "completion" | "total" | "cacheHit" | "cacheMiss";
@@ -62,6 +65,7 @@ export function AssistantEntry({
   selectedTraceId = null,
   onSelectTrace,
   onOpenCitation,
+  onOpenResource,
 }: AssistantEntryProps) {
   const { t, formatNumber } = useI18n();
   const meta = readAssistantMeta(entry);
@@ -105,6 +109,25 @@ export function AssistantEntry({
       ? [{ id: call.id, data: plotData }]
       : [];
   });
+  // A presented resource stays visible in the transcript even though its raw
+  // tool result is folded into the assistant turn. Deduplicate by target so a
+  // repeated presentation does not stack identical bubbles.
+  const resources: ResourceMeta[] = [];
+  const seenResources = new Set<string>();
+  for (const call of visibleCalls) {
+    const resource = toolResults.get(call.id)?.meta.resource ?? null;
+    if (resource === null) {
+      continue;
+    }
+    const key = `${resource.resourceType}:${resource.resourceId ?? "none"}:${
+      resource.chunk ?? ""
+    }`;
+    if (seenResources.has(key)) {
+      continue;
+    }
+    seenResources.add(key);
+    resources.push(resource);
+  }
 
   let body: ReactNode = null;
   if (text.length > 0) {
@@ -163,6 +186,20 @@ export function AssistantEntry({
       ) : null}
 
       {body}
+
+      {resources.length > 0 ? (
+        <div className="chat-resource-stack">
+          {resources.map((resource) => (
+            <ResourceCard
+              key={`${resource.resourceType}:${resource.resourceId ?? "none"}:${
+                resource.chunk ?? ""
+              }`}
+              resource={resource}
+              onOpen={onOpenResource}
+            />
+          ))}
+        </div>
+      ) : null}
 
       {plots.map((plot) => (
         <PlotBlock key={plot.id} data={plot.data} />
