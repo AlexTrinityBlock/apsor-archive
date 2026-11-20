@@ -2019,6 +2019,63 @@
   object-fit: cover;
 }
 
+.chat-resource__thumb--pdf {
+  display: block;
+  width: 58px;
+  height: 78px;
+  padding: 0;
+  background: #ffffff;
+}
+
+.chat-resource__thumb--pdf .react-pdf__Document {
+  display: block;
+  width: 116px;
+  transform: scale(0.5);
+  transform-origin: top left;
+}
+
+.chat-resource__thumb--pdf .react-pdf__Page {
+  display: block;
+  width: 116px;
+  min-width: 0;
+  background: #ffffff;
+}
+
+.chat-resource__thumb--pdf canvas {
+  display: block;
+}
+
+.chat-resource__pdf-sheet {
+  display: block;
+  width: 116px;
+  height: 156px;
+  background: var(--mono-card-warm);
+}
+
+.chat-resource__pdf-pending {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    linear-gradient(
+      100deg,
+      var(--mono-card-warm) 20%,
+      var(--mono-card-bg) 45%,
+      var(--mono-card-warm) 70%
+    );
+  background-size: 240% 100%;
+  animation: chat-resource-pdf-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes chat-resource-pdf-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
 .chat-resource__badge {
   position: absolute;
   right: 3px;
@@ -3255,6 +3312,11 @@
   .chat-resource__thumb {
     width: 52px;
     height: 52px;
+  }
+
+  .chat-resource__thumb--pdf {
+    width: 56px;
+    height: 74px;
   }
 
   .chat-resource-modal__body {
