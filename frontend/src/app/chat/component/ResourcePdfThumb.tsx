@@ -25,9 +25,10 @@ const PDF_THUMB_OPTIONS = {
   disableAutoFetch: true,
 } as unknown as NonNullable<ComponentProps<typeof Document>["options"]>;
 
-// Render at 2x the visible width and scale down in CSS so the page stays sharp
-// on high-density screens without changing the 58 × 78 bubble slot.
-const THUMB_RENDER_WIDTH = 116;
+// The page is rendered at the bubble's visible width. PDF.js backs the canvas
+// with devicePixelRatio pixels, so the thumbnail stays sharp on high-density
+// screens without a CSS transform.
+const THUMB_RENDER_WIDTH = 58;
 
 interface ResourcePdfThumbProps {
   readonly fileId: number;
