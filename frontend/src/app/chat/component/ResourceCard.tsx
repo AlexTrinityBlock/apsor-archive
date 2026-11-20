@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { Icon, type IconName } from "../../component/Icon";
@@ -25,6 +25,33 @@ const PRESENTED_LABEL_KEYS = {
   file: "chat.resource.presentedFile",
   memory: "chat.resource.presentedMemory",
 } as const;
+
+const ResourcePdfThumb = lazy(() =>
+  import("./ResourcePdfThumb").then((module) => ({
+    default: module.ResourcePdfThumb,
+  })),
+);
+
+function FileTile({
+  icon,
+  badge,
+  title,
+}: {
+  readonly icon: IconName;
+  readonly badge: string;
+  readonly title: string;
+}) {
+  return (
+    <span
+      className="chat-resource__thumb chat-resource__thumb--file"
+      aria-hidden="true"
+      title={title}
+    >
+      <Icon name={icon} size={20} />
+      <span className="chat-resource__badge">{badge}</span>
+    </span>
+  );
+}
 
 function extensionOf(title: string | null): string {
   if (!title) {
@@ -92,21 +119,29 @@ function ResourceThumb({
   } else if (kind === "image") {
     icon = "image";
   }
+  const badge =
+    resource.resourceType === "memory"
+      ? t("chat.resource.memoryBadge")
+      : thumbnailBadge(kind ?? "unsupported", resource.title);
+  const tile = <FileTile icon={icon} badge={badge} title={title} />;
 
-  return (
-    <span
-      className="chat-resource__thumb chat-resource__thumb--file"
-      aria-hidden="true"
-      title={title}
-    >
-      <Icon name={icon} size={20} />
-      <span className="chat-resource__badge">
-        {resource.resourceType === "memory"
-          ? t("chat.resource.memoryBadge")
-          : thumbnailBadge(kind ?? "unsupported", resource.title)}
-      </span>
-    </span>
-  );
+  // A PDF shows its first page instead of a generic file tile. The lazy chunk
+  // keeps pdf.js out of the transcript until a PDF is actually presented.
+  if (resource.resourceType === "file" && kind === "pdf" && resourceId !== null) {
+    if (failed) {
+      return tile;
+    }
+    return (
+      <Suspense fallback={tile}>
+        <ResourcePdfThumb
+          fileId={resourceId}
+          onError={() => setFailed(true)}
+        />
+      </Suspense>
+    );
+  }
+
+  return tile;
 }
 
 interface ResourceCardProps {
@@ -118,9 +153,10 @@ interface ResourceCardProps {
 /**
  * A presented file or memory as a compact preview bubble.
  *
- * Images show their real thumbnail; every other kind uses a type tile. The
- * whole bubble is the preview trigger, so the chat transcript never needs to
- * send the reader to another page just to recognise what the agent presented.
+ * Images and the first page of a PDF show a real preview; every other kind
+ * uses a type tile. The whole bubble is the preview trigger, so the chat
+ * transcript never needs to send the reader to another page just to recognise
+ * what the agent presented.
  */
 export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
   const { t } = useI18n();
