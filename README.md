@@ -538,6 +538,38 @@ The standard and Cloudflare Compose stacks run this as a dedicated `worker`
 service and set `APSOR_INGEST_WORKER_ENABLED=false` on the API, so exactly one
 process owns the queue.
 
+#### RabbitMQ dispatch
+
+The Compose stacks also run `rabbitmq:4-management-alpine` as an optional
+low-latency dispatch path for durable ingestion. PostgreSQL `file_ingest_job`
+remains the authoritative job ledger: a message carries only `{job_id,
+retry_count}`, and the consumer re-reads the row, claims it with
+`SELECT ... FOR UPDATE SKIP LOCKED`, and decides from the database status. A
+duplicate, late, or lost message can only cost latency; it can never become a
+second source of truth.
+
+- The API publishes persistent JSON messages to the durable `apsor.ingest`
+  direct exchange with publisher confirms. A broker failure is logged by
+  exception type and swallowed, so the upload still returns `202` and the job
+  stays `queued`.
+- The worker consumes `apsor.ingest.jobs` with `prefetch_count=1` and manual
+  acknowledgements. It acks only after `process_notified_job` returns: a worker
+  crash leaves the delivery unacked, RabbitMQ redelivers it, and the job resumes
+  or retries from its row.
+- `retry` outcomes and unexpected handler failures publish to
+  `apsor.ingest.jobs.retry`, a 30-second TTL queue that dead-letters back to the
+  main queue. Dispatch retries are capped at 20 so a broken job cannot loop
+  forever.
+- The container is capped at 384 MB with a 200 MB VM watermark
+  (`docker/rabbitmq/rabbitmq.conf`). The management UI is
+  http://127.0.0.1:15672; the local demo credentials are `apsor` / `apsor` and
+  must be changed through `RABBITMQ_DEFAULT_USER`/`RABBITMQ_DEFAULT_PASS` before
+  any shared deployment.
+- Disable dispatch with `APSOR_RABBITMQ_ENABLED=false`. The API then uses the
+  no-op notifier and the worker keeps polling PostgreSQL every second, so no job
+  is lost. The same polling fallback applies while the broker is down or a
+  notifier connection fails.
+
 The **Ingestion runtime** panel on `/settings` (root only) edits the singleton
 `ingest_config` row. It is a full replacement, not a patch, and the read body
 carries `{config, defaults, source, updated_at}` with a Database/Defaults badge.

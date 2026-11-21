@@ -125,6 +125,19 @@ class Settings(BaseSettings):
     ingest_embedding_max_attempts: int = 3
     ingest_embedding_retry_seconds: float = 0.25
 
+    # RabbitMQ wake-up dispatch for durable ingestion. PostgreSQL
+    # ``file_ingest_job`` remains the authoritative ledger; the broker only
+    # reduces the latency between enqueue and a worker claim. When disabled, the
+    # worker polls the database exactly as before.
+    rabbitmq_enabled: bool = False
+    rabbitmq_url: SecretStr | None = None
+    rabbitmq_ingest_exchange: str = "apsor.ingest"
+    rabbitmq_ingest_queue: str = "apsor.ingest.jobs"
+    rabbitmq_ingest_retry_queue: str = "apsor.ingest.jobs.retry"
+    rabbitmq_connect_timeout_seconds: float = 5.0
+    rabbitmq_retry_ttl_ms: int = 30_000
+    rabbitmq_max_dispatch_retries: int = 20
+
     search_candidate_limit: int = 200
     search_vector_scan_limit: int = 20_000
     timeline_max_day_range: int = 366

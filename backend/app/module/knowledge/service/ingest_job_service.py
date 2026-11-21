@@ -29,9 +29,10 @@ import logging
 import mimetypes
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -73,6 +74,7 @@ from app.module.knowledge.exception.domain_error import (
     VisionExtractionError,
 )
 from app.module.knowledge.model.ingest_job_model import (
+    INGEST_PROCESSING_STATUSES,
     INGEST_SOURCE_REINGEST,
     INGEST_SOURCE_TEXT,
     INGEST_SOURCE_UPLOAD,
@@ -87,6 +89,10 @@ from app.module.knowledge.model.ingest_job_model import (
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
 from app.module.knowledge.protocol.ingest_progress_protocol import IngestProgressProtocol
+from app.module.knowledge.protocol.job_notifier_protocol import (
+    JobNotifierProtocol,
+    NullJobNotifier,
+)
 from app.module.knowledge.repository.ingest_job_repository import IngestJobRepository
 from app.module.knowledge.schema.file_schema import (
     IngestJobListSchema,
@@ -140,6 +146,8 @@ FileServiceFactory = Callable[
 
 ClaimedJob = tuple[int, int]
 
+NotifiedJobOutcome = Literal["processed", "terminal", "retry", "missing"]
+
 
 @dataclass(frozen=True)
 class _WorkerRuntime:
@@ -187,11 +195,29 @@ class IngestJobService:
         repository: IngestJobRepository,
         file_service: FileService,
         max_attempts: int,
+        notifier: JobNotifierProtocol | None = None,
     ) -> None:
         self.user_id = user_id
         self.repository = repository
         self.file_service = file_service
         self.max_attempts = max(1, max_attempts)
+        self.notifier: JobNotifierProtocol = notifier or NullJobNotifier()
+
+    async def _notify(self, job_id: int) -> None:
+        """Wake a worker without ever failing the successful enqueue.
+
+        The notifier adapter already swallows broker failures; this guard keeps
+        the same guarantee for injected fakes and future implementations.
+        """
+        try:
+            await self.notifier.notify(job_id)
+        except Exception as exc:
+            logger.warning(
+                "Could not dispatch ingestion job %d to the wake-up queue (%s); "
+                "database polling remains the fallback",
+                job_id,
+                type(exc).__name__,
+            )
 
     async def _discard_storage(self, storage_key: str, backend: str | None) -> None:
         try:
@@ -252,6 +278,7 @@ class IngestJobService:
         except Exception:
             await self._discard_storage(storage_key, storage_backend)
             raise
+        await self._notify(job.id)
         return _to_schema(job)
 
     async def enqueue_text(
@@ -296,6 +323,7 @@ class IngestJobService:
         except Exception:
             await self._discard_storage(storage_key, storage_backend)
             raise
+        await self._notify(job.id)
         return _to_schema(job)
 
     async def get_job(self, job_id: int) -> IngestJobSchema:
@@ -338,6 +366,7 @@ class IngestJobService:
                 await self.repository.add(job)
         except IntegrityError as exc:
             raise IngestJobConflictError(source.path) from exc
+        await self._notify(job.id)
         return _to_schema(job)
 
     async def list_jobs(self, *, limit: int, offset: int) -> IngestJobListSchema:
@@ -535,23 +564,7 @@ class IngestWorker:
                 continue
             # Keep updated_at stale so the requeue query below still sees this
             # row after the staged file is removed.
-            try:
-                async with user_session(self.session_factory, user_id, ROLE_USER) as session:
-                    repository = IngestJobRepository(session, user_id)
-                    await repository.clear_file_id(job_id)
-                    file_service = self.file_service_factory(
-                        session,
-                        user_id,
-                        runtime.config,
-                        runtime.extract_semaphore,
-                        runtime.embedding_semaphore,
-                    )
-                    await file_service.discard_pending(file_id)
-            except Exception:
-                logger.exception(
-                    "Could not discard staged file %d during startup recovery",
-                    file_id,
-                )
+            await self._discard_staged_file(job_id, user_id, file_id, runtime)
 
         async with maintenance_session(self.session_factory) as session:
             recovered, terminal_payloads = await IngestJobRepository(session).requeue_stale(
@@ -587,6 +600,36 @@ class IngestWorker:
             await self.storage.delete(storage_key, backend=storage_backend)
         except Exception:
             logger.warning("Could not delete ingestion payload %s", storage_key)
+
+    async def _discard_staged_file(
+        self,
+        job_id: int,
+        user_id: int,
+        file_id: int,
+        runtime: _WorkerRuntime,
+    ) -> None:
+        """Remove one interrupted attempt's staged file inside the owner's RLS.
+
+        ``clear_file_id`` keeps ``updated_at`` stale so startup recovery and the
+        single-job notifier recovery can still see the row afterwards.
+        """
+        try:
+            async with user_session(self.session_factory, user_id, ROLE_USER) as session:
+                repository = IngestJobRepository(session, user_id)
+                await repository.clear_file_id(job_id)
+                file_service = self.file_service_factory(
+                    session,
+                    user_id,
+                    runtime.config,
+                    runtime.extract_semaphore,
+                    runtime.embedding_semaphore,
+                )
+                await file_service.discard_pending(file_id)
+        except Exception:
+            logger.exception(
+                "Could not discard staged file %d during recovery",
+                file_id,
+            )
 
     async def run_once(self) -> bool:
         """Claim and fully process at most one queued job."""
@@ -674,6 +717,79 @@ class IngestWorker:
         except Exception:
             logger.exception("Ingestion job %d crashed", job_id)
 
+    async def process_notified_job(self, job_id: int) -> NotifiedJobOutcome:
+        """Process one job named by a broker wake-up message.
+
+        The message is a hint, never a state source. The status is re-read from
+        PostgreSQL while holding an in-flight slot, so a duplicate, late, or
+        crash-redelivered delivery cannot run a terminal job again. A processing
+        row that is still fresh returns ``retry``; an expired lease is recovered
+        for exactly this job before it is claimed.
+        """
+        await self._refresh_runtime()
+        runtime = self._runtime()
+        stale_before = utcnow() - timedelta(seconds=self.stale_seconds)
+        async with runtime.job_slots:
+            async with maintenance_session(self.session_factory) as session:
+                job = await IngestJobRepository(session).get(job_id)
+                if job is None:
+                    return "missing"
+                status = job.status
+                user_id = job.user_id
+                updated_at = job.updated_at
+                file_id = job.file_id
+            if status in (INGEST_STATUS_READY, INGEST_STATUS_FAILED):
+                return "terminal"
+            if status == INGEST_STATUS_QUEUED:
+                return await self._claim_notified(job_id, runtime)
+            if status not in INGEST_PROCESSING_STATUSES:
+                return "terminal"
+            if updated_at >= stale_before:
+                # Another worker still owns a live lease; let the consumer use
+                # the retry queue instead of competing for the row.
+                return "retry"
+            if file_id is not None:
+                await self._discard_staged_file(job_id, user_id, file_id, runtime)
+            return await self._recover_notified(job_id, runtime)
+
+    async def _claim_notified(
+        self,
+        job_id: int,
+        runtime: _WorkerRuntime,
+    ) -> NotifiedJobOutcome:
+        """Claim one specific queued row, or classify why it was not claimable."""
+        async with maintenance_session(self.session_factory) as session:
+            repository = IngestJobRepository(session)
+            job = await repository.claim(job_id)
+            if job is None:
+                current = await repository.get(job_id)
+                if current is None:
+                    return "missing"
+                if current.status in (INGEST_STATUS_READY, INGEST_STATUS_FAILED):
+                    return "terminal"
+                return "retry"
+            user_id = job.user_id
+        await self._process_claimed(job_id, user_id, runtime)
+        return "processed"
+
+    async def _recover_notified(
+        self,
+        job_id: int,
+        runtime: _WorkerRuntime,
+    ) -> NotifiedJobOutcome:
+        """Requeue one expired processing lease without consuming an attempt."""
+        stale_before = utcnow() - timedelta(seconds=self.stale_seconds)
+        async with maintenance_session(self.session_factory) as session:
+            job = await IngestJobRepository(session).requeue_one(
+                job_id,
+                stale_before=stale_before,
+            )
+            if job is None:
+                # The status changed while this message was in flight; the
+                # retry queue re-evaluates it from the database later.
+                return "retry"
+        return await self._claim_notified(job_id, runtime)
+
     async def process_job(self, job_id: int) -> IngestJobSchema | None:
         """Claim and process one specific queued job (tests and ``--once``)."""
         await self._refresh_provider_runtime()
@@ -723,6 +839,10 @@ class IngestWorker:
         storage_key: str | None = None
         storage_backend: str | None = None
         occurred_at: datetime | None = None
+        heartbeat = asyncio.create_task(
+            self._heartbeat_forever(job_id, user_id),
+            name=f"ingest-heartbeat-{job_id}",
+        )
         try:
             if job.source_kind == INGEST_SOURCE_REINGEST:
                 if job.source_file_id is None:
@@ -832,6 +952,32 @@ class IngestWorker:
                 runtime,
                 progress.file_id or staged_file_id,
             )
+        finally:
+            heartbeat.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat
+
+    def _heartbeat_interval(self) -> float:
+        """Refresh a live lease well before startup recovery considers it stale."""
+        return float(max(5, self.stale_seconds // 3))
+
+    async def _heartbeat_forever(self, job_id: int, user_id: int) -> None:
+        """Touch ``updated_at`` while parsing or embedding is still running.
+
+        Long extractions must not look like an abandoned lease to another
+        worker. The job row stays the single heartbeat source.
+        """
+        while True:
+            await asyncio.sleep(self._heartbeat_interval())
+            try:
+                await self.update_job(job_id, user_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.warning(
+                    "Could not refresh the heartbeat for ingestion job %d",
+                    job_id,
+                )
 
     async def _load_job(self, job_id: int, user_id: int) -> FileIngestJobModel | None:
         async with user_session(self.session_factory, user_id, ROLE_USER) as session:

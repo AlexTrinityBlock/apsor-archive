@@ -142,6 +142,38 @@ class IngestJobRepository:
             statement = statement.where(FileIngestJobModel.user_id == self.user_id)
         await self.session.execute(statement)
 
+    async def requeue_one(
+        self,
+        job_id: int,
+        *,
+        stale_before: datetime,
+    ) -> FileIngestJobModel | None:
+        """Lock and requeue one stale processing job for a broker dispatch.
+
+        The row must still be processing and older than ``stale_before``; a
+        concurrent recovery or progress update wins and this returns ``None``.
+        Recovery does not consume another attempt because the claim that started
+        the interrupted run already incremented the counter.
+        """
+        statement = self._scoped(
+            select(FileIngestJobModel)
+            .where(
+                FileIngestJobModel.id == job_id,
+                FileIngestJobModel.status.in_(INGEST_PROCESSING_STATUSES),
+                FileIngestJobModel.updated_at < stale_before,
+            )
+            .with_for_update()
+        )
+        job = (await self.session.execute(statement)).scalar_one_or_none()
+        if job is None:
+            return None
+        job.status = INGEST_STATUS_QUEUED
+        job.stage = "Requeued after an interrupted worker"
+        job.started_at = None
+        job.updated_at = utcnow()
+        await self.session.flush()
+        return job
+
     async def requeue_stale(
         self,
         *,
