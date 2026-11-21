@@ -90,6 +90,9 @@ class IngestJobRepository:
         job.status = INGEST_STATUS_PARSING
         job.stage = "Reading and extracting text"
         job.progress_pct = 5
+        job.stage_done = None
+        job.stage_total = None
+        job.stage_unit = None
         job.attempts += 1
         job.started_at = now
         job.finished_at = None
@@ -183,6 +186,12 @@ class IngestJobRepository:
         job.file_id = None
         job.status = INGEST_STATUS_QUEUED
         job.stage = "Requeued after an interrupted worker"
+        job.progress_pct = 0
+        job.stage_done = None
+        job.stage_total = None
+        job.stage_unit = None
+        job.chunks_total = None
+        job.chunks_embedded = None
         job.started_at = None
         job.updated_at = utcnow()
         await self.session.flush()
@@ -227,6 +236,9 @@ class IngestJobRepository:
                     "attempt limit was reached."
                 )
                 job.finished_at = now
+                job.stage_done = None
+                job.stage_total = None
+                job.stage_unit = None
                 if (
                     job.storage_key is not None
                     and job.file_id is None
@@ -236,6 +248,12 @@ class IngestJobRepository:
             else:
                 job.status = INGEST_STATUS_QUEUED
                 job.stage = "Requeued after an interrupted worker"
+                job.progress_pct = 0
+                job.stage_done = None
+                job.stage_total = None
+                job.stage_unit = None
+                job.chunks_total = None
+                job.chunks_embedded = None
                 job.started_at = None
         await self.session.flush()
         return len(jobs), terminal_payloads

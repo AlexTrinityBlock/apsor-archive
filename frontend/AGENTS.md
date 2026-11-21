@@ -34,6 +34,7 @@ It does not own backend behavior, database migrations, API schemas, or deploymen
 - `openapi.json` — committed FastAPI schema used when no backend is running.
 - `src/apis/fetch-client.ts` — shared JSON mutator and `ApiError` contract.
 - `src/apis/agent-stream.ts` — the deliberate SSE exception for agent turns.
+- `src/apis/ingest-stream.ts` — the fetch-based SSE transport for durable ingestion progress, with polling fallback outside the stream.
 - `src/app/auth/AuthProvider.tsx` / `AuthGate.tsx` / `RequireRoot.tsx` — session state, impersonation transitions, first-run and forced-change gates, root route guard.
 - `src/app/auth/component/ChangePasswordScreen.tsx` — non-dismissible forced password change.
 - `src/app/auth/component/ImpersonateUserDialog.tsx` — root-only searchable user switcher with focus trap and busy blocking.
@@ -49,7 +50,7 @@ It does not own backend behavior, database migrations, API schemas, or deploymen
 
 - Use Bun and the existing scripts. Do not introduce npm, pnpm, or a second lockfile.
 - Do not edit `src/app/generated-apis-types/`; regenerate with `bun run api:generate`. Generated code is ignored by ESLint for a reason.
-- Do not add hand-written API clients. The only exceptions are the existing SSE stream, viewer text/binary loaders, and the chat-image XHR upload (`src/app/chat/attachments.ts`), which needs `xhr.upload.onprogress` and `xhr.abort()`. All of them preserve `ApiError` behavior and dispatch `apsor-archive:unauthorized` on `401`.
+- Do not add hand-written API clients. The only exceptions are the existing agent and ingestion-progress SSE streams, viewer text/binary loaders, and the chat-image XHR upload (`src/app/chat/attachments.ts`), which needs `xhr.upload.onprogress` and `xhr.abort()`. All of them preserve `ApiError` behavior and dispatch `apsor-archive:unauthorized` on `401`.
 - After mutations, invalidate the narrow React Query keys that changed. Avoid blanket invalidation except for deliberate seeding. Account create/disable/enable/reset invalidates the account list; patch or invalidate auth status only when the current account changes. Impersonation start and stop must use `useAuth().impersonate` / `stopImpersonation`: `AuthProvider` replaces the auth-status snapshot, clears every private query, and broadcasts the transition so root and target rows never survive in this tab or another tab. Stopping requires the root password and must not navigate from inside the provider.
 - Keep a one-time temporary password in local dialog state only. Never place it in the React Query cache, localStorage, a URL, a log, or a toast; clear it when the dialog closes.
 - Derive role visibility from `useAuth` (`isRoot`) and the Settings section `roles` field. Hidden deep links fall back to the first visible Settings tab, and a direct `/accounts` visit redirects a normal user to `/profile`.

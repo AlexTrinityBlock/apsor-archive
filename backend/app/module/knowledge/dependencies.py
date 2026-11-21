@@ -21,7 +21,11 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.datastructures import State
 
-from app.dependency.auth import require_authenticated, require_root
+from app.dependency.auth import (
+    require_authenticated,
+    require_root,
+    require_stateless_authenticated,
+)
 from app.infrastructure.ai.provider_factory import ProviderClientTester, ProviderFactory
 from app.infrastructure.ai.runtime import AiRuntime
 from app.infrastructure.ai.vision_extractor import (
@@ -41,6 +45,7 @@ from app.module.knowledge.domain.ingest_config_domain import (
     IngestRuntimeConfig,
     normalize_vision_description_language,
 )
+from app.module.knowledge.domain.ingest_progress_domain import ProgressTracker
 from app.module.knowledge.domain.vision_prompt_domain import (
     DEFAULT_VISION_DOCUMENT_PROMPT,
     DEFAULT_VISION_IMAGE_PROMPT,
@@ -51,6 +56,10 @@ from app.module.knowledge.protocol.file_storage_protocol import FileStorageProto
 from app.module.knowledge.protocol.job_notifier_protocol import (
     JobNotifierProtocol,
     NullJobNotifier,
+)
+from app.module.knowledge.protocol.progress_bus_protocol import (
+    NullProgressBus,
+    ProgressBusProtocol,
 )
 from app.module.knowledge.protocol.provider_tester_protocol import ProviderTesterProtocol
 from app.module.knowledge.protocol.secret_cipher_protocol import SecretCipherProtocol
@@ -74,6 +83,7 @@ from app.module.knowledge.service.file_service import CpuRunner, FileService
 from app.module.knowledge.service.history_chunk_store import HistoryChunkStore
 from app.module.knowledge.service.indexer_service import IndexerService
 from app.module.knowledge.service.ingest_job_service import IngestJobService, IngestWorker
+from app.module.knowledge.service.ingest_progress_service import IngestProgressService
 from app.module.knowledge.service.ingest_settings_service import IngestSettingsService
 from app.module.knowledge.service.memory_service import MemoryService
 from app.module.knowledge.service.metered_text_generator import MeteredTextGenerator
@@ -215,12 +225,15 @@ def build_file_service(
     embedding_semaphore: asyncio.Semaphore | None = None,
     fail_on_embedding_error: bool = False,
     embedding_refresh: Callable[[], Awaitable[EmbedderProtocol]] | None = None,
+    progress_tracker: ProgressTracker | None = None,
 ) -> FileService:
     """Compose a file service for one owner, for requests, workers, and tools.
 
     ``embedding_refresh`` is supplied only by the durable worker. It lets the
     indexer recover from one mid-job 401/403 without switching the model or
-    dimension underneath a running job.
+    dimension underneath a running job. ``progress_tracker`` is also
+    worker-only: request-path and agent ingestion stay indeterminate, while a
+    durable job shares one tracker between extraction and the progress reporter.
     """
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
@@ -301,6 +314,7 @@ def build_file_service(
         pdf_text_threshold=settings.pdf_text_threshold,
         chat_quota=quota,
         cpu_runner=cpu_runner,
+        progress_tracker=progress_tracker,
     )
 
 
@@ -529,6 +543,7 @@ def build_ingest_worker(
     runtime_config: IngestRuntimeConfig | None = None,
     config_provider: Callable[[], Awaitable[IngestRuntimeConfig]] | None = None,
     provider_refresh: Callable[[], Awaitable[EmbedderProtocol]] | None = None,
+    progress_bus: ProgressBusProtocol | None = None,
 ) -> IngestWorker:
     """Build the shared worker used by lifespan mode and the CLI entrypoint.
 
@@ -556,6 +571,7 @@ def build_ingest_worker(
         config: IngestRuntimeConfig,
         current_extract_slots: asyncio.Semaphore,
         current_embedding_slots: asyncio.Semaphore,
+        progress_tracker: ProgressTracker | None = None,
     ) -> FileService:
         return build_file_service(
             state,
@@ -566,6 +582,7 @@ def build_ingest_worker(
             embedding_semaphore=current_embedding_slots,
             fail_on_embedding_error=True,
             embedding_refresh=provider_refresh,
+            progress_tracker=progress_tracker,
         )
 
     return IngestWorker(
@@ -580,6 +597,7 @@ def build_ingest_worker(
         extract_pool=extract_pool,
         extract_semaphore=extract_slots,
         embedding_semaphore=embedding_slots,
+        progress_bus=progress_bus,
     )
 
 
@@ -597,6 +615,45 @@ def get_ingest_job_service(
     user: UserSchema = Depends(require_authenticated),
 ) -> IngestJobService:
     return build_ingest_job_service(request.app.state, session, user_id=user.user_id)
+
+
+def get_progress_bus(state: State) -> ProgressBusProtocol:
+    """Return the lifespan progress bus, or a null bus when it is not built."""
+    bus = getattr(state, "progress_bus", None)
+    if bus is None:
+        return NullProgressBus()
+    return cast(ProgressBusProtocol, bus)
+
+
+def build_ingest_progress_service(
+    state: State,
+    *,
+    user_id: int,
+    role: str,
+) -> IngestProgressService:
+    """Compose the SSE service on short-lived owner sessions, never a request one."""
+    return IngestProgressService(
+        database=cast(Database, state.db),
+        progress_bus=get_progress_bus(state),
+        user_id=user_id,
+        role=role,
+    )
+
+
+def get_ingest_progress_service(
+    request: Request,
+    user: UserSchema = Depends(require_stateless_authenticated),
+) -> IngestProgressService:
+    """Build the streaming progress service without touching the request session.
+
+    ``require_stateless_authenticated`` resolves the cookie in a short public
+    session, so the stream never pins the request transaction open.
+    """
+    return build_ingest_progress_service(
+        request.app.state,
+        user_id=user.user_id,
+        role=user.role,
+    )
 
 
 def get_summary_service(

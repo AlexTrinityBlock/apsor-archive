@@ -33,6 +33,7 @@ from app.infrastructure.ai.provider_factory import (
     provider_defaults_from_settings,
 )
 from app.infrastructure.ai.runtime import AiRuntime
+from app.infrastructure.cache.progress_bus import build_progress_bus
 from app.infrastructure.cache.resilient_cache import build_cache
 from app.infrastructure.config.settings import Settings, get_settings
 from app.infrastructure.database.migrations import upgrade_to_head
@@ -85,6 +86,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
 
     database = Database(settings.database_url, echo=settings.debug)
     cache = build_cache(settings.cache_url)
+    progress_bus = build_progress_bus(settings.cache_url)
     storage = build_file_storage(settings)
     cipher = SecretCipher.from_settings(settings)
     notice_service = ProviderErrorNoticeService(database.session_factory)
@@ -102,6 +104,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
         state.settings = settings
         state.db = database
         state.cache = cache
+        state.progress_bus = progress_bus
         state.storage = storage
         state.secret_cipher = cipher
         state.ai_runtime = runtime
@@ -122,6 +125,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                 ingest_defaults,
             ),
             provider_refresh=build_provider_refresh(runtime, database.session_factory),
+            progress_bus=progress_bus,
         )
         cleanup = ChatAttachmentCleanup(
             database=database,
@@ -191,6 +195,7 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                     await history_task
             worker.close()
     finally:
+        await progress_bus.close()
         await cache.close()
         await database.dispose()
 

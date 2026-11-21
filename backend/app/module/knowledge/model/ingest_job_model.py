@@ -152,6 +152,23 @@ class FileIngestJobModel(Base):
             name="progress_pct_range",
         ),
         CheckConstraint(
+            "stage_done IS NULL OR stage_done >= 0",
+            name="stage_done_non_negative",
+        ),
+        CheckConstraint(
+            "stage_total IS NULL OR stage_total >= 0",
+            name="stage_total_non_negative",
+        ),
+        CheckConstraint(
+            "stage_done IS NULL OR stage_total IS NULL OR stage_done <= stage_total",
+            name="stage_done_within_total",
+        ),
+        CheckConstraint(
+            "stage_unit IS NULL OR (char_length(stage_unit) >= 1 "
+            "AND char_length(stage_unit) <= 16)",
+            name="stage_unit_length",
+        ),
+        CheckConstraint(
             "chunks_total IS NULL OR chunks_total >= 0",
             name="chunks_total_non_negative",
         ),
@@ -199,6 +216,9 @@ class FileIngestJobModel(Base):
         default=0,
         server_default=text("0"),
     )
+    stage_done: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stage_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stage_unit: Mapped[str | None] = mapped_column(String(16), nullable=True)
     chunks_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunks_embedded: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)

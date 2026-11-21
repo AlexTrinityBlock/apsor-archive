@@ -85,6 +85,9 @@ class IngestJobSchema(BaseModel):
     status: IngestJobStatus
     stage: str | None
     progress_pct: int
+    stage_done: int | None
+    stage_total: int | None
+    stage_unit: str | None
     chunks_total: int | None
     chunks_embedded: int | None
     error_code: str | None
@@ -94,6 +97,32 @@ class IngestJobSchema(BaseModel):
     updated_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+
+
+class IngestProgressEventSchema(BaseModel):
+    """Compact, pub/sub-safe progress for one job.
+
+    It deliberately omits the archive path, file name, MIME type, size, payload
+    storage, and every other archive-content field. ``from_attributes`` lets the
+    worker and the SSE snapshot build it directly from either the ORM row or the
+    public ``IngestJobSchema``.
+    """
+
+    model_config = ConfigDict(frozen=True, from_attributes=True)
+
+    id: int
+    status: IngestJobStatus
+    stage: str | None
+    progress_pct: int
+    stage_done: int | None
+    stage_total: int | None
+    stage_unit: str | None
+    chunks_total: int | None
+    chunks_embedded: int | None
+    file_id: int | None
+    error_code: str | None
+    error_detail: str | None
+    updated_at: datetime
 
 
 class IngestJobListSchema(BaseModel):

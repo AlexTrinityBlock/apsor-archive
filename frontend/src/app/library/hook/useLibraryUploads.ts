@@ -20,7 +20,7 @@ import {
   isSafeUploadName,
   joinArchivePath,
   taskProgressFromJob,
-  waitForIngestJob,
+  watchIngestJob,
   type LibraryUploadTask,
 } from "../component/library-utils";
 
@@ -85,11 +85,11 @@ export function useLibraryUploads(): LibraryUploadsState {
   const followJob = useCallback(
     async (
       id: number,
-      jobId: number,
+      job: IngestJobSchema,
       targetFolder: string,
       controller: AbortController,
     ): Promise<boolean> => {
-      const finalJob = await waitForIngestJob(jobId, {
+      const finalJob = await watchIngestJob(job.id, job, {
         signal: controller.signal,
         onUpdate: (snapshot) => {
           updateTask(id, {
@@ -129,7 +129,7 @@ export function useLibraryUploads(): LibraryUploadsState {
           status: "processing",
           message: undefined,
         });
-        return await followJob(id, job.id, targetFolder, controller);
+        return await followJob(id, job, targetFolder, controller);
       } catch (error) {
         if (controller.signal.aborted || isAbortError(error)) {
           return false;
@@ -174,7 +174,7 @@ export function useLibraryUploads(): LibraryUploadsState {
         });
         return await followJob(
           task.id,
-          job.id,
+          job,
           parentPath(task.targetPath),
           controller,
         );

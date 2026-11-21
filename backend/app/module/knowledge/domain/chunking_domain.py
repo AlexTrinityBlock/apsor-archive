@@ -1,6 +1,7 @@
 """Sentence-aware chunking with a bounded character overlap."""
 
 import re
+from collections.abc import Callable
 
 from pydantic import BaseModel, ConfigDict
 
@@ -56,12 +57,23 @@ def _split_long_unit(value: str, target_chars: int) -> list[str]:
     return pieces
 
 
-def chunk_text(text: str, *, target_chars: int, overlap_chars: int) -> list[ChunkDraft]:
+def chunk_text(
+    text: str,
+    *,
+    target_chars: int,
+    overlap_chars: int,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> list[ChunkDraft]:
     """Split a document into deterministic, 1-based chunks.
 
     A chunk is flushed when the next sentence would push it past
     ``target_chars``. The next chunk starts with at most ``overlap_chars`` from
     the previous chunk so a sentence straddling a boundary remains retrievable.
+
+    ``on_progress`` receives ``(drafts_built, raw_chunk_total)`` from the
+    extraction thread. The total is the raw split count; drafts are the
+    cleaned, persisted chunks, so the callback reaches the total exactly once
+    at the end.
     """
     if target_chars < 100:
         raise ValueError("target_chars must be at least 100")
@@ -94,6 +106,10 @@ def chunk_text(text: str, *, target_chars: int, overlap_chars: int) -> list[Chun
     if buffer:
         raw_chunks.append(buffer)
 
+    total = len(raw_chunks)
+    if on_progress is not None:
+        on_progress(0, total)
+
     drafts: list[ChunkDraft] = []
     for content in raw_chunks:
         cleaned = content.strip()
@@ -107,4 +123,6 @@ def chunk_text(text: str, *, target_chars: int, overlap_chars: int) -> list[Chun
                 token_count=count_terms(cleaned),
             )
         )
+        if on_progress is not None:
+            on_progress(len(drafts), total)
     return drafts

@@ -25,6 +25,11 @@ from app.infrastructure.files.storage_errors import (
     StorageUnavailableError,
 )
 from app.module.knowledge.domain.chunking_domain import chunk_text
+from app.module.knowledge.domain.ingest_progress_domain import (
+    PHASE_CHUNKING,
+    PHASE_PARSING,
+    ProgressTracker,
+)
 from app.module.knowledge.domain.path_domain import (
     MAX_PATH_LENGTH,
     InvalidPathValueError,
@@ -200,6 +205,7 @@ class FileService:
         pdf_text_threshold: int,
         chat_quota: ChatUsageQuotaProtocol | None = None,
         cpu_runner: CpuRunner | None = None,
+        progress_tracker: ProgressTracker | None = None,
     ) -> None:
         self.user_id = user_id
         self.file_repository = file_repository
@@ -232,6 +238,7 @@ class FileService:
         self.pdf_text_threshold = pdf_text_threshold
         self.chat_quota = chat_quota
         self.cpu_runner: CpuRunner = cpu_runner or asyncio.to_thread
+        self.progress_tracker = progress_tracker
 
     async def _run_cpu(
         self,
@@ -364,11 +371,23 @@ class FileService:
         return f"users/{user_id}/files/{uuid4().hex[:2]}/{uuid4().hex}{suffix}"
 
     @staticmethod
-    def _pdf_text(data: bytes) -> str:
-        """Extract PDF text synchronously; callers run this in a thread."""
+    def _pdf_text(data: bytes, tracker: ProgressTracker | None = None) -> str:
+        """Extract PDF text synchronously; callers run this in a thread.
+
+        One page is one progress unit. The tracker is advanced only after a
+        page's text has been read, so the reporter never reports a page that is
+        still being decoded.
+        """
         try:
             reader = PdfReader(BytesIO(data))
-            pages = [page.extract_text() or "" for page in reader.pages]
+            total = len(reader.pages)
+            if tracker is not None:
+                tracker.begin(PHASE_PARSING, total, "page")
+            pages: list[str] = []
+            for page in reader.pages:
+                pages.append(page.extract_text() or "")
+                if tracker is not None:
+                    tracker.advance()
             return "\n\n".join(page for page in pages if page.strip())
         except Exception:
             return ""
@@ -532,6 +551,9 @@ class FileService:
                 data,
                 self.vision_max_pages,
             )
+            # Rendering stays coarse; one rendered page is one vision unit.
+            if self.progress_tracker is not None:
+                self.progress_tracker.begin(PHASE_PARSING, len(pages), "page")
             for page in pages:
                 if not await self._vision_allowed():
                     logger.warning(
@@ -545,6 +567,8 @@ class FileService:
                     mode="document",
                 )
                 await self._record_vision_usage(vision.usage)
+                if self.progress_tracker is not None:
+                    self.progress_tracker.advance()
                 if vision.text.strip():
                     texts.append(vision.text.strip())
                 tables.extend(table for table in vision.tables if table.strip())
@@ -573,14 +597,34 @@ class FileService:
         )
 
     @staticmethod
-    def _docx_text(data: bytes) -> str:
+    def _docx_text(data: bytes, tracker: ProgressTracker | None = None) -> str:
+        """Read paragraphs and table rows, one progress unit per rendered line.
+
+        DOCX is text-only when vision is unnecessary; the paragraph/row count is
+        known after the document parses, so the render stays coarse while the
+        per-unit advances are exact.
+        """
         document = Document(BytesIO(data))
-        parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+        paragraphs = [
+            paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()
+        ]
+        rows: list[str] = []
         for table in document.tables:
             for row in table.rows:
                 cells = [cell.text.strip() for cell in row.cells]
                 if any(cells):
-                    parts.append(" | ".join(cells))
+                    rows.append(" | ".join(cells))
+        if tracker is not None:
+            tracker.begin(PHASE_PARSING, len(paragraphs) + len(rows), "paragraph")
+        parts: list[str] = []
+        for paragraph in paragraphs:
+            parts.append(paragraph)
+            if tracker is not None:
+                tracker.advance()
+        for row in rows:
+            parts.append(row)
+            if tracker is not None:
+                tracker.advance()
         return "\n".join(parts)
 
     @staticmethod
@@ -713,7 +757,7 @@ class FileService:
                 ai_tags=analysis.tags,
             )
         if suffix == ".pdf":
-            text = await self._run_cpu(self._pdf_text, data)
+            text = await self._run_cpu(self._pdf_text, data, self.progress_tracker)
             analysis = await self._analyze_text(
                 text,
                 file_name_value=file_name_value,
@@ -757,7 +801,7 @@ class FileService:
             )
         if suffix == ".docx":
             try:
-                text = await self._run_cpu(self._docx_text, data)
+                text = await self._run_cpu(self._docx_text, data, self.progress_tracker)
             except Exception as exc:
                 raise EmptyContentError() from exc
             analysis = await self._analyze_text(
@@ -871,6 +915,24 @@ class FileService:
         folder = await self._ensure_folder_chain(parent_directory(path))
         return folder.id if folder is not None else None
 
+    def _chunk_progress_callback(self) -> Callable[[int, int], None] | None:
+        """Adapt the shared tracker to ``chunk_text``'s thread callback.
+
+        The chunker runs in the extraction pool. The tracker is lock-protected
+        and performs no I/O, so reporting from that thread is safe.
+        """
+        tracker = self.progress_tracker
+        if tracker is None:
+            return None
+
+        def report(done: int, total: int) -> None:
+            if done == 0:
+                tracker.begin(PHASE_CHUNKING, total, "chunk")
+            else:
+                tracker.advance_to(done)
+
+        return report
+
     async def _ingest(
         self,
         *,
@@ -905,6 +967,7 @@ class FileService:
             text,
             target_chars=self.target_chars,
             overlap_chars=self.overlap_chars,
+            on_progress=self._chunk_progress_callback(),
         )
         if not drafts:
             raise EmptyContentError()

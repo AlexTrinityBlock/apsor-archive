@@ -13,7 +13,7 @@ import {
 import {
   describeError,
   isAbortError,
-  waitForIngestJob,
+  watchIngestJob,
 } from "../component/library-utils";
 
 /** The visible states of one page-level re-ingest run. */
@@ -128,7 +128,7 @@ export function useFileReingest({
         setJob(queued);
         setPhase("processing");
 
-        const finished = await waitForIngestJob(queued.id, {
+        const finished = await watchIngestJob(queued.id, queued, {
           signal: controller.signal,
           onUpdate: (snapshot) => {
             if (runId === generation.current) {
