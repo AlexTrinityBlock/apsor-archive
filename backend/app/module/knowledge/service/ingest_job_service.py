@@ -455,7 +455,13 @@ class _JobProgress(IngestProgressProtocol):
         self.progress_bus = progress_bus
         self.file_id: int | None = None
         self.embedded_count: int | None = None
+        self._last_pct = 0
         self._lock = asyncio.Lock()
+
+    def _raise_high_water(self, value: int) -> int:
+        """Record and return the highest percentage this job has published."""
+        self._last_pct = max(self._last_pct, value)
+        return self._last_pct
 
     async def chunked(self, total: int) -> None:
         async with self._lock:
@@ -465,7 +471,7 @@ class _JobProgress(IngestProgressProtocol):
                 self.user_id,
                 status=INGEST_STATUS_CHUNKING,
                 stage="Splitting text into chunks",
-                progress_pct=60,
+                progress_pct=self._raise_high_water(60),
                 stage_done=None,
                 stage_total=None,
                 stage_unit=None,
@@ -480,7 +486,6 @@ class _JobProgress(IngestProgressProtocol):
     async def embedded(self, done: int, total: int) -> None:
         self.embedded_count = done
         ratio = 0.0 if total <= 0 else done / total
-        progress_pct = min(92, 60 + int(32 * ratio))
         async with self._lock:
             self.tracker.finish()
             await self.worker.update_job(
@@ -488,7 +493,7 @@ class _JobProgress(IngestProgressProtocol):
                 self.user_id,
                 status=INGEST_STATUS_EMBEDDING,
                 stage=f"Embedding chunks {done}/{total}",
-                progress_pct=progress_pct,
+                progress_pct=self._raise_high_water(min(92, 60 + int(32 * ratio))),
                 stage_done=None,
                 stage_total=None,
                 stage_unit=None,
@@ -500,9 +505,17 @@ class _JobProgress(IngestProgressProtocol):
 
         The reporter can be mid-tick when extraction hands off to chunking or
         publication. Serializing both writers keeps the published status and
-        percentage monotonic.
+        percentage monotonic. A chunking announcement also moves the tracker
+        out of parsing with an unknown total, so a reporter tick before the
+        chunker starts cannot revert the status or republish parse counts.
         """
         async with self._lock:
+            if fields.get("status") == INGEST_STATUS_CHUNKING:
+                self.tracker.begin(PHASE_CHUNKING, 0, "chunk")
+            if "progress_pct" in fields:
+                raw = fields["progress_pct"]
+                if isinstance(raw, int):
+                    fields["progress_pct"] = self._raise_high_water(raw)
             await self.worker.update_job(self.job_id, self.user_id, **fields)
 
     async def report(self) -> None:
@@ -512,6 +525,11 @@ class _JobProgress(IngestProgressProtocol):
         still writes ``updated_at`` so a long embedding pass keeps the lease
         fresh. Once the tracker is idle the DB keeps the embedding milestone and
         this method only heartbeats.
+
+        Parsing and chunking percentages use a per-job high-water mark. A
+        second parsing pass (PDF text, then rendered vision pages, or DOCX text,
+        then images) legitimately restarts its unit count, but the overall bar
+        must never move backwards.
         """
         async with self._lock:
             snapshot = self.tracker.snapshot()
@@ -519,30 +537,26 @@ class _JobProgress(IngestProgressProtocol):
             if snapshot.phase == PHASE_PARSING:
                 total = snapshot.total or 0
                 done = snapshot.done
-                progress_pct = (
-                    5 + int(40 * done / total) if total > 0 else 5
-                )
+                progress_pct = 5 + int(40 * done / total) if total > 0 else 5
                 fields = {
                     "status": INGEST_STATUS_PARSING,
                     "stage": f"Extracting {done}/{total} {snapshot.unit or 'unit'}",
-                    "progress_pct": min(45, progress_pct),
-                    "stage_done": done,
-                    "stage_total": total,
-                    "stage_unit": snapshot.unit,
+                    "progress_pct": self._raise_high_water(min(45, progress_pct)),
+                    "stage_done": done if total > 0 else None,
+                    "stage_total": total if total > 0 else None,
+                    "stage_unit": snapshot.unit if total > 0 else None,
                 }
             elif snapshot.phase == PHASE_CHUNKING:
                 total = snapshot.total or 0
                 done = snapshot.done
-                progress_pct = (
-                    45 + int(15 * done / total) if total > 0 else 45
-                )
+                progress_pct = 45 + int(15 * done / total) if total > 0 else 45
                 fields = {
                     "status": INGEST_STATUS_CHUNKING,
                     "stage": f"Chunking {done}/{total} chunks",
-                    "progress_pct": min(60, progress_pct),
-                    "stage_done": done,
-                    "stage_total": total,
-                    "stage_unit": snapshot.unit,
+                    "progress_pct": self._raise_high_water(min(60, progress_pct)),
+                    "stage_done": done if total > 0 else None,
+                    "stage_total": total if total > 0 else None,
+                    "stage_unit": snapshot.unit if total > 0 else None,
                 }
             await self.worker.update_job(self.job_id, self.user_id, **fields)
 
@@ -1073,14 +1087,16 @@ class IngestWorker:
                     data=data,
                     force_vision=force_vision,
                 )
-                # Move the tracker to chunking before the status write, so a
-                # concurrently running reporter cannot briefly publish parsing
-                # after the job has advanced.
-                tracker.begin(PHASE_CHUNKING, 0, "chunk")
+                # Announce chunking before chunk_text starts. announce() moves
+                # the tracker out of parsing and clears the stale parse counts,
+                # so a reporter tick cannot show "Chunking · 10/10 pages".
                 await progress.announce(
                     status=INGEST_STATUS_CHUNKING,
                     stage="Splitting text into chunks",
                     progress_pct=45,
+                    stage_done=None,
+                    stage_total=None,
+                    stage_unit=None,
                 )
 
                 async def checkpoint() -> None:

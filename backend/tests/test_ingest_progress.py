@@ -22,7 +22,7 @@ from app.infrastructure.cache.progress_bus import (
     build_progress_bus,
     progress_channel,
 )
-from app.infrastructure.database.session import get_db_session
+from app.infrastructure.database.session import get_db_session, maintenance_session
 from app.module.knowledge.domain.chunking_domain import chunk_text
 from app.module.knowledge.domain.ingest_config_domain import IngestRuntimeConfig
 from app.module.knowledge.domain.ingest_progress_domain import (
@@ -35,11 +35,13 @@ from app.module.knowledge.domain.vision_prompt_domain import (
     DEFAULT_VISION_DOCUMENT_PROMPT,
     render_vision_prompt,
 )
+from app.module.knowledge.model.ingest_job_model import INGEST_STATUS_CHUNKING
 from app.module.knowledge.protocol.progress_bus_protocol import (
     NullProgressBus,
     ProgressBusUnavailable,
 )
 from app.module.knowledge.protocol.vision_extractor_protocol import VisionDocument
+from app.module.knowledge.repository.ingest_job_repository import IngestJobRepository
 from app.module.knowledge.schema.file_schema import (
     IngestJobSchema,
     IngestProgressEventSchema,
@@ -369,6 +371,78 @@ def test_job_progress_milestones_clear_stage_fields() -> None:
     assert writes[-1]["status"] == "embedding"
     assert writes[-1]["progress_pct"] == 60 + int(32 * 10 / 20)
     assert writes[-1]["chunks_embedded"] == 10
+
+
+def test_job_progress_keeps_high_water_mark_when_parsing_restarts() -> None:
+    worker = _stub_worker()
+    writes: list[dict[str, Any]] = []
+
+    async def fake_update(
+        _job_id: int,
+        _user_id: int,
+        **fields: Any,
+    ) -> None:
+        writes.append(fields)
+
+    worker.update_job = fake_update  # type: ignore[method-assign]
+    tracker = ProgressTracker()
+    progress = _JobProgress(worker, 7, 11, tracker, None)
+
+    tracker.begin(PHASE_PARSING, 10, "page")
+    tracker.advance_to(10)
+    asyncio.run(progress.report())
+    assert writes[-1]["progress_pct"] == 45
+
+    # A vision pass legitimately resets the unit count from text pages to
+    # rendered pages, but the overall bar must not fall from 45% to 5%.
+    tracker.begin(PHASE_PARSING, 4, "page")
+    asyncio.run(progress.report())
+    assert writes[-1]["progress_pct"] == 45
+    assert writes[-1]["stage_done"] == 0
+    assert writes[-1]["stage_total"] == 4
+    assert writes[-1]["stage_unit"] == "page"
+
+
+def test_job_progress_chunk_announcement_clears_stale_parse_counts() -> None:
+    worker = _stub_worker()
+    writes: list[dict[str, Any]] = []
+
+    async def fake_update(
+        _job_id: int,
+        _user_id: int,
+        **fields: Any,
+    ) -> None:
+        writes.append(fields)
+
+    worker.update_job = fake_update  # type: ignore[method-assign]
+    tracker = ProgressTracker()
+    progress = _JobProgress(worker, 7, 11, tracker, None)
+
+    tracker.begin(PHASE_PARSING, 10, "page")
+    tracker.advance_to(10)
+    asyncio.run(progress.report())
+    assert writes[-1]["progress_pct"] == 45
+    assert writes[-1]["stage_total"] == 10
+
+    asyncio.run(
+        progress.announce(
+            status=INGEST_STATUS_CHUNKING,
+            stage="Splitting text into chunks",
+            progress_pct=45,
+            stage_done=None,
+            stage_total=None,
+            stage_unit=None,
+        )
+    )
+    asyncio.run(progress.report())
+
+    last = writes[-1]
+    assert last["status"] == "chunking"
+    assert last["progress_pct"] == 45
+    assert last["stage_done"] is None
+    assert last["stage_total"] is None
+    assert last["stage_unit"] is None
+    assert tracker.snapshot().phase == PHASE_CHUNKING
 
 
 def test_worker_publishes_after_committed_update(
@@ -714,3 +788,75 @@ def test_ingest_job_api_exposes_and_constrains_stage_progress(
     assert allowed["stage_done"] == 2
     assert allowed["stage_total"] == 5
     assert allowed["stage_unit"] == "page"
+
+
+def _seed_stale_processing_progress(
+    owner_engine: Engine,
+    job_id: int,
+) -> None:
+    """Give one queued job the progress a crashed worker would leave behind."""
+    with owner_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE file_ingest_job SET "
+                "status = 'parsing', attempts = 1, progress_pct = 45, "
+                "stage_done = 10, stage_total = 10, stage_unit = 'page', "
+                "chunks_total = 7, chunks_embedded = 3, "
+                "updated_at = now() - interval '1 hour' "
+                "WHERE id = :job_id"
+            ),
+            {"job_id": job_id},
+        )
+
+
+def _assert_queued_progress_reset(client: TestClient, job_id: int) -> None:
+    body = client.get(f"/api/v1/files/ingest-jobs/{job_id}").json()
+    assert body["status"] == "queued"
+    assert body["progress_pct"] == 0
+    assert body["stage_done"] is None
+    assert body["stage_total"] is None
+    assert body["stage_unit"] is None
+    assert body["chunks_total"] is None
+    assert body["chunks_embedded"] is None
+
+
+def test_requeue_one_resets_all_progress_and_counts(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    job = _create_queued_job(client, "/progress/requeue-one.md")
+    _seed_stale_processing_progress(owner_engine, job.id)
+    stale_before = utcnow() - timedelta(seconds=300)
+
+    async def run() -> Any:
+        async with maintenance_session(client.app.state.db.session_factory) as session:
+            return await IngestJobRepository(session).requeue_one(
+                job.id,
+                stale_before=stale_before,
+            )
+
+    assert client.portal is not None
+    assert client.portal.call(run) is not None
+    _assert_queued_progress_reset(client, job.id)
+
+
+def test_requeue_stale_resets_all_progress_and_counts(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    job = _create_queued_job(client, "/progress/requeue-stale.md")
+    _seed_stale_processing_progress(owner_engine, job.id)
+    stale_before = utcnow() - timedelta(seconds=300)
+
+    async def run() -> Any:
+        async with maintenance_session(client.app.state.db.session_factory) as session:
+            return await IngestJobRepository(session).requeue_stale(
+                stale_before=stale_before,
+                max_attempts=3,
+            )
+
+    assert client.portal is not None
+    recovered, payloads = client.portal.call(run)
+    assert recovered == 1
+    assert payloads == []
+    _assert_queued_progress_reset(client, job.id)
