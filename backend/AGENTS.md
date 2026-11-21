@@ -8,7 +8,7 @@ Serve the Apsor Archive API and the committed SPA, process asynchronous ingest j
 
 ## Architecture
 
-- `app/main.py` builds the FastAPI application. Its lifespan creates the database, cache, storage router, secret cipher, AI runtime, and ingestion worker; it also recovers incomplete agent runs and optionally runs Alembic migrations.
+- `app/main.py` builds the FastAPI application. Its lifespan creates the database, cache, progress bus, storage router, secret cipher, AI runtime, and ingestion worker; it also recovers incomplete agent runs and optionally runs Alembic migrations.
 - The API is versioned at `/api/v1`. Auth, health, and SPA assets are public; knowledge, prompt, and agent routers require an authenticated, active account. Account management and global configuration routers additionally require `role='root'`.
 - The codebase is organized as vertical slices under `app/module/`: `auth`, `knowledge`, `agent`, `prompt`, and `web_research`. Each slice owns its router, service, repository, protocol, domain, schema, exception, and model layers as needed. Account listing/create/disable/enable/reset live in the auth slice's account router/service.
 - A normal request flows router → service → repository. Routers translate HTTP; services make decisions and coordinate transactions; repositories contain SQL and do not own business rules. Every private repository method takes the acting `user_id` explicitly or captures it in the repository instance.

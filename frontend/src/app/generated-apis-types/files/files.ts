@@ -525,6 +525,111 @@ export function useGetIngestJob<TData = Awaited<ReturnType<typeof getIngestJob>>
 
 
 
+export const getStreamIngestJobEventsUrl = (jobId: number,) => {
+
+
+
+
+  return `/api/v1/files/ingest-jobs/${jobId}/events`
+}
+
+/**
+ * Stream one owner's durable job progress until it is terminal.
+ *
+ * A missing or cross-account job is a 404 from the snapshot read before the
+ * response starts. The browser also keeps its one-second polling fallback when
+ * the stream cannot be established.
+ * @summary Stream Ingest Job Events
+ */
+export const streamIngestJobEvents = async (jobId: number, options?: Parameters<typeof apiFetch>[1]): Promise<unknown | string> => {
+
+  return apiFetch<unknown | string>(getStreamIngestJobEventsUrl(jobId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getStreamIngestJobEventsQueryKey = (jobId: number,) => {
+    return [
+    `/api/v1/files/ingest-jobs/${jobId}/events`
+    ] as const;
+    }
+
+
+export const getStreamIngestJobEventsQueryOptions = <TData = Awaited<ReturnType<typeof streamIngestJobEvents>>, TError = HTTPValidationError>(jobId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamIngestJobEvents>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getStreamIngestJobEventsQueryKey(jobId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof streamIngestJobEvents>>> = ({ signal }) => streamIngestJobEvents(jobId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: jobId !== null && jobId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof streamIngestJobEvents>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type StreamIngestJobEventsQueryResult = NonNullable<Awaited<ReturnType<typeof streamIngestJobEvents>>>
+export type StreamIngestJobEventsQueryError = HTTPValidationError
+
+
+export function useStreamIngestJobEvents<TData = Awaited<ReturnType<typeof streamIngestJobEvents>>, TError = HTTPValidationError>(
+ jobId: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamIngestJobEvents>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof streamIngestJobEvents>>,
+          TError,
+          Awaited<ReturnType<typeof streamIngestJobEvents>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStreamIngestJobEvents<TData = Awaited<ReturnType<typeof streamIngestJobEvents>>, TError = HTTPValidationError>(
+ jobId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamIngestJobEvents>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof streamIngestJobEvents>>,
+          TError,
+          Awaited<ReturnType<typeof streamIngestJobEvents>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useStreamIngestJobEvents<TData = Awaited<ReturnType<typeof streamIngestJobEvents>>, TError = HTTPValidationError>(
+ jobId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamIngestJobEvents>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Stream Ingest Job Events
+ */
+
+export function useStreamIngestJobEvents<TData = Awaited<ReturnType<typeof streamIngestJobEvents>>, TError = HTTPValidationError>(
+ jobId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof streamIngestJobEvents>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getStreamIngestJobEventsQueryOptions(jobId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export const getRetryIngestJobUrl = (jobId: number,) => {
 
 

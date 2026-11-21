@@ -96,6 +96,9 @@ function ProgressBody({
           variant="large"
           stage={job?.status ?? null}
           progressPct={job?.progress_pct ?? null}
+          stageDone={job?.stage_done ?? null}
+          stageTotal={job?.stage_total ?? null}
+          stageUnit={job?.stage_unit ?? null}
           chunksTotal={job?.chunks_total ?? null}
           chunksEmbedded={job?.chunks_embedded ?? null}
           label={

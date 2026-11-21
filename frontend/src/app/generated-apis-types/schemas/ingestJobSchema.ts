@@ -29,6 +29,9 @@ export interface IngestJobSchema {
   source_file_id: number | null;
   source_kind: IngestJobSchemaSourceKind;
   stage: string | null;
+  stage_done: number | null;
+  stage_total: number | null;
+  stage_unit: string | null;
   started_at: string | null;
   status: IngestJobSchemaStatus;
   updated_at: string;

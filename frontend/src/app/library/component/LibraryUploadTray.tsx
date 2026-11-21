@@ -162,6 +162,9 @@ export function LibraryUploadTray({ tasks, onRetry, onDismiss }: LibraryUploadTr
                   variant="compact"
                   stage={task.stage ?? null}
                   progressPct={task.progressPct ?? null}
+                  stageDone={task.stageDone ?? null}
+                  stageTotal={task.stageTotal ?? null}
+                  stageUnit={task.stageUnit ?? null}
                   chunksTotal={task.chunksTotal ?? null}
                   chunksEmbedded={task.chunksEmbedded ?? null}
                   label={
