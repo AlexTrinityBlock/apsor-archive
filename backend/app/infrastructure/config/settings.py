@@ -135,6 +135,9 @@ class Settings(BaseSettings):
     rabbitmq_ingest_queue: str = "apsor.ingest.jobs"
     rabbitmq_ingest_retry_queue: str = "apsor.ingest.jobs.retry"
     rabbitmq_connect_timeout_seconds: float = 5.0
+    # A publish must never hold up the upload response. The wake-up is
+    # best-effort; the durable row is already queued for polling.
+    rabbitmq_publish_timeout_seconds: float = 1.0
     rabbitmq_retry_ttl_ms: int = 30_000
     rabbitmq_max_dispatch_retries: int = 20
 

@@ -6,7 +6,9 @@ publications and fake messages that record ack/reject calls.
 """
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
@@ -14,12 +16,20 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 
 from app.infrastructure.config.settings import Settings
+from app.infrastructure.database.session import maintenance_session
 from app.infrastructure.queue.rabbitmq import (
     RabbitMQJobConsumer,
+    RabbitMQJobNotifier,
     build_job_message,
 )
 from app.module.knowledge.dependencies import build_job_notifier
 from app.module.knowledge.protocol.job_notifier_protocol import NullJobNotifier
+from app.module.knowledge.repository.ingest_job_repository import (
+    IngestJobRepository,
+    RequeuedJob,
+)
+from app.shared.time import utcnow
+from tests.helpers import create_text
 
 
 class _RecordingNotifier:
@@ -80,6 +90,50 @@ class _RecordingConsumer(RabbitMQJobConsumer):
         self.retries.append((job_id, retry_count))
 
 
+class _ReconnectConsumer(RabbitMQJobConsumer):
+    """Lose the message stream once, then stop cleanly on the next session."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            url="amqp://demo:demo@127.0.0.1/",
+            handler=self._noop_handler,
+            exchange_name="test.ingest",
+            queue_name="test.ingest.jobs",
+            retry_queue_name="test.ingest.jobs.retry",
+            initial_backoff_seconds=0.01,
+            max_backoff_seconds=0.01,
+        )
+        self.attempts = 0
+
+    @staticmethod
+    async def _noop_handler(job_id: int) -> str:
+        del job_id
+        return "processed"
+
+    async def _consume_until_stopped(self) -> None:
+        self.attempts += 1
+        if self.attempts == 1:
+            raise ConnectionError("broker restarted")
+        self._stop.set()
+
+
+class _StalledNotifier(RabbitMQJobNotifier):
+    """Notifier whose connection attempt outlives the publish bound."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            url="amqp://demo:demo@127.0.0.1/",
+            exchange_name="test.ingest",
+            queue_name="test.ingest.jobs",
+            retry_queue_name="test.ingest.jobs.retry",
+            publish_timeout_seconds=0.1,
+        )
+
+    async def _ensure_exchange(self) -> Any:
+        await asyncio.sleep(5)
+        raise AssertionError("the timeout should have cancelled this call")
+
+
 def _upload(client: TestClient, path: str) -> dict[str, Any]:
     response = client.post(
         "/api/v1/files/async",
@@ -90,6 +144,23 @@ def _upload(client: TestClient, path: str) -> dict[str, Any]:
     body = response.json()
     assert isinstance(body, dict)
     return body
+
+
+def _requeue_one(
+    client: TestClient,
+    job_id: int,
+    stale_before: datetime,
+) -> RequeuedJob | None:
+    """Call the maintenance-only atomic requeue through the app's database."""
+
+    async def run() -> RequeuedJob | None:
+        async with maintenance_session(client.app.state.db.session_factory) as session:
+            return await IngestJobRepository(session).requeue_one(
+                job_id,
+                stale_before=stale_before,
+            )
+
+    return client.portal.call(run)
 
 
 def test_async_upload_notifies_the_created_job(client: TestClient) -> None:
@@ -161,6 +232,48 @@ def test_process_notified_job_retries_a_live_lease_and_recovers_a_stale_one(
         )
     assert client.portal.call(worker.process_notified_job, job["id"]) == "processed"
     assert client.get(f"/api/v1/files/ingest-jobs/{job['id']}").json()["status"] == "ready"
+
+
+def test_requeue_one_detaches_the_staged_file_atomically(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    source = create_text(client, "/dispatch/requeue-source.md", "Source content. " * 20)
+    source_file_id = int(source["id"])
+    job = _upload(client, "/dispatch/requeue.txt")
+
+    with owner_engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE file_ingest_job SET status = 'parsing', attempts = 1, "
+                "file_id = :file_id, updated_at = now() - interval '1 hour' "
+                "WHERE id = :job_id"
+            ),
+            {"file_id": source_file_id, "job_id": job["id"]},
+        )
+
+    stale_before = utcnow() - timedelta(seconds=300)
+    result = _requeue_one(client, job["id"], stale_before)
+
+    assert result is not None
+    assert result.old_file_id == source_file_id
+    assert result.user_id > 0
+
+    with owner_engine.begin() as connection:
+        row = connection.execute(
+            text(
+                "SELECT status, file_id, attempts FROM file_ingest_job "
+                "WHERE id = :job_id"
+            ),
+            {"job_id": job["id"]},
+        ).one()
+    assert row.status == "queued"
+    assert row.file_id is None
+    assert row.attempts == 1
+
+    # The same cutoff cannot requeue an already queued row a second time, so a
+    # later caller cannot delete a file it no longer owns.
+    assert _requeue_one(client, job["id"], stale_before) is None
 
 
 @pytest.mark.parametrize("outcome", ["processed", "terminal", "missing"])
@@ -251,6 +364,24 @@ def test_consumer_requeues_the_original_when_retry_scheduling_fails() -> None:
 
     assert message.acked is False
     assert message.rejected == [True]
+
+
+def test_consumer_reconnects_after_a_stream_loss() -> None:
+    consumer = _ReconnectConsumer()
+
+    asyncio.run(asyncio.wait_for(consumer.run(), timeout=2))
+
+    assert consumer.attempts == 2
+
+
+def test_publisher_timeout_bounds_a_stalled_broker_connection() -> None:
+    notifier = _StalledNotifier()
+
+    started = time.monotonic()
+    asyncio.run(notifier.notify(22))
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 1.0
 
 
 def test_dispatch_messages_are_persistent_json() -> None:

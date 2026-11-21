@@ -112,6 +112,7 @@ class RabbitMQJobNotifier:
         retry_queue_name: str,
         retry_ttl_ms: int = 30_000,
         connect_timeout_seconds: float = 5.0,
+        publish_timeout_seconds: float = 1.0,
     ) -> None:
         self._url = url
         self._exchange_name = exchange_name
@@ -119,6 +120,7 @@ class RabbitMQJobNotifier:
         self._retry_queue_name = retry_queue_name
         self._retry_ttl_ms = retry_ttl_ms
         self._connect_timeout_seconds = connect_timeout_seconds
+        self._publish_timeout_seconds = max(0.1, publish_timeout_seconds)
         self._connection: AbstractRobustConnection | None = None
         self._channel: AbstractRobustChannel | None = None
         self._exchange: AbstractExchange | None = None
@@ -162,13 +164,19 @@ class RabbitMQJobNotifier:
             return exchange
 
     async def notify(self, job_id: int) -> None:
-        """Publish one wake-up hint; a broker failure never fails the enqueue."""
+        """Publish one wake-up hint; a broker failure never fails the enqueue.
+
+        Publishing is time-boxed: an upload must not wait for a full connection
+        timeout when the broker is down. The database row is already the durable
+        record, so a missed wake-up only costs one polling interval.
+        """
         try:
-            exchange = await self._ensure_exchange()
-            await exchange.publish(
-                build_job_message(job_id, retry_count=0),
-                routing_key=ROUTING_KEY,
-            )
+            async with asyncio.timeout(self._publish_timeout_seconds):
+                exchange = await self._ensure_exchange()
+                await exchange.publish(
+                    build_job_message(job_id, retry_count=0),
+                    routing_key=ROUTING_KEY,
+                )
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -196,7 +204,13 @@ class RabbitMQJobNotifier:
         self._channel = None
         self._exchange = None
         if connection is not None:
-            await self._close_quietly(connection)
+            try:
+                async with asyncio.timeout(self._publish_timeout_seconds):
+                    await self._close_quietly(connection)
+            except TimeoutError:
+                # The reference is already dropped; the next notify reconnects.
+                # Do not let a half-open socket extend the upload latency.
+                pass
 
     @staticmethod
     async def _close_quietly(connection: AbstractRobustConnection) -> None:
@@ -291,12 +305,22 @@ class RabbitMQJobConsumer:
             )
             self._channel = channel
             self._exchange = exchange
-            await queue.consume(self._on_message, no_ack=False)
             logger.info(
                 "RabbitMQ ingest consumer started queue=%s prefetch=1",
                 self._queue_name,
             )
-            await self._stop.wait()
+            # Iterate the deliveries explicitly. ``consume()`` only registers a
+            # callback and returns, so waiting on the stop event afterwards
+            # would never notice a channel or broker loss. The iterator ends
+            # when the channel closes; an unexpected end must surface to
+            # ``run()`` so it reconnects with backoff.
+            async with queue.iterator(no_ack=False) as iterator:
+                async for message in iterator:
+                    await self._on_message(message)
+            if not self._stop.is_set():
+                raise ConnectionError(
+                    "The RabbitMQ ingest message stream ended unexpectedly."
+                )
         finally:
             self._channel = None
             self._exchange = None

@@ -449,6 +449,7 @@ def build_job_notifier(settings: Settings) -> JobNotifierProtocol:
         retry_queue_name=settings.rabbitmq_ingest_retry_queue,
         retry_ttl_ms=settings.rabbitmq_retry_ttl_ms,
         connect_timeout_seconds=settings.rabbitmq_connect_timeout_seconds,
+        publish_timeout_seconds=settings.rabbitmq_publish_timeout_seconds,
     )
 
 

@@ -8,6 +8,7 @@ Two access modes exist:
   ``maintenance_session`` to claim and recover jobs across owners.
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TypeVar
 
@@ -26,6 +27,14 @@ from app.module.knowledge.model.ingest_job_model import (
 from app.shared.time import utcnow
 
 _Row = TypeVar("_Row")
+
+
+@dataclass(frozen=True)
+class RequeuedJob:
+    """Immutable outcome of one atomic stale-job requeue."""
+
+    user_id: int
+    old_file_id: int | None
 
 
 class IngestJobRepository:
@@ -147,13 +156,16 @@ class IngestJobRepository:
         job_id: int,
         *,
         stale_before: datetime,
-    ) -> FileIngestJobModel | None:
-        """Lock and requeue one stale processing job for a broker dispatch.
+    ) -> RequeuedJob | None:
+        """Lock and atomically requeue one stale processing job.
 
         The row must still be processing and older than ``stale_before``; a
-        concurrent recovery or progress update wins and this returns ``None``.
-        Recovery does not consume another attempt because the claim that started
-        the interrupted run already incremented the counter.
+        concurrent heartbeat, progress update, or recovery wins and this returns
+        ``None`` without changing anything. On success the staged ``file_id`` is
+        detached in the same locked update and returned, so the caller can delete
+        that file only after winning the race. Recovery does not consume another
+        attempt because the claim that started the interrupted run already
+        incremented the counter.
         """
         statement = self._scoped(
             select(FileIngestJobModel)
@@ -167,12 +179,14 @@ class IngestJobRepository:
         job = (await self.session.execute(statement)).scalar_one_or_none()
         if job is None:
             return None
+        old_file_id = job.file_id
+        job.file_id = None
         job.status = INGEST_STATUS_QUEUED
         job.stage = "Requeued after an interrupted worker"
         job.started_at = None
         job.updated_at = utcnow()
         await self.session.flush()
-        return job
+        return RequeuedJob(user_id=job.user_id, old_file_id=old_file_id)
 
     async def requeue_stale(
         self,

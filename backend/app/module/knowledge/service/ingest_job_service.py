@@ -631,6 +631,34 @@ class IngestWorker:
                 file_id,
             )
 
+    async def _discard_requeued_file(
+        self,
+        user_id: int,
+        file_id: int,
+        runtime: _WorkerRuntime,
+    ) -> None:
+        """Delete the staged file detached by an atomic stale-job requeue.
+
+        The row already has ``file_id = NULL`` from the locked requeue, so this
+        path must not call ``clear_file_id`` again. Deleting only the captured
+        id keeps a concurrent heartbeat or a live worker's staging untouched.
+        """
+        try:
+            async with user_session(self.session_factory, user_id, ROLE_USER) as session:
+                file_service = self.file_service_factory(
+                    session,
+                    user_id,
+                    runtime.config,
+                    runtime.extract_semaphore,
+                    runtime.embedding_semaphore,
+                )
+                await file_service.discard_pending(file_id)
+        except Exception:
+            logger.exception(
+                "Could not discard staged file %d during recovery",
+                file_id,
+            )
+
     async def run_once(self) -> bool:
         """Claim and fully process at most one queued job."""
         await self._refresh_provider_runtime()
@@ -735,9 +763,7 @@ class IngestWorker:
                 if job is None:
                     return "missing"
                 status = job.status
-                user_id = job.user_id
                 updated_at = job.updated_at
-                file_id = job.file_id
             if status in (INGEST_STATUS_READY, INGEST_STATUS_FAILED):
                 return "terminal"
             if status == INGEST_STATUS_QUEUED:
@@ -748,8 +774,6 @@ class IngestWorker:
                 # Another worker still owns a live lease; let the consumer use
                 # the retry queue instead of competing for the row.
                 return "retry"
-            if file_id is not None:
-                await self._discard_staged_file(job_id, user_id, file_id, runtime)
             return await self._recover_notified(job_id, runtime)
 
     async def _claim_notified(
@@ -777,17 +801,29 @@ class IngestWorker:
         job_id: int,
         runtime: _WorkerRuntime,
     ) -> NotifiedJobOutcome:
-        """Requeue one expired processing lease without consuming an attempt."""
+        """Requeue one expired processing lease without consuming an attempt.
+
+        ``requeue_one`` atomically detaches any staged file while holding the
+        row lock, so the returned file id can only belong to the attempt that
+        lost its lease. A heartbeat or another worker that won the race returns
+        ``None`` and nothing is deleted.
+        """
         stale_before = utcnow() - timedelta(seconds=self.stale_seconds)
         async with maintenance_session(self.session_factory) as session:
-            job = await IngestJobRepository(session).requeue_one(
+            requeued = await IngestJobRepository(session).requeue_one(
                 job_id,
                 stale_before=stale_before,
             )
-            if job is None:
-                # The status changed while this message was in flight; the
-                # retry queue re-evaluates it from the database later.
-                return "retry"
+        if requeued is None:
+            # The status changed while this message was in flight; the retry
+            # queue re-evaluates it from the database later.
+            return "retry"
+        if requeued.old_file_id is not None:
+            await self._discard_requeued_file(
+                requeued.user_id,
+                requeued.old_file_id,
+                runtime,
+            )
         return await self._claim_notified(job_id, runtime)
 
     async def process_job(self, job_id: int) -> IngestJobSchema | None:

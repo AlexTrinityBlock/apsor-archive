@@ -549,9 +549,10 @@ duplicate, late, or lost message can only cost latency; it can never become a
 second source of truth.
 
 - The API publishes persistent JSON messages to the durable `apsor.ingest`
-  direct exchange with publisher confirms. A broker failure is logged by
-  exception type and swallowed, so the upload still returns `202` and the job
-  stays `queued`.
+  direct exchange with publisher confirms. The publish path is time-boxed at
+  one second (`APSOR_RABBITMQ_PUBLISH_TIMEOUT_SECONDS`); a broker failure is
+  logged by exception type and swallowed, so the upload still returns `202` and
+  the job stays `queued`.
 - The worker consumes `apsor.ingest.jobs` with `prefetch_count=1` and manual
   acknowledgements. It acks only after `process_notified_job` returns: a worker
   crash leaves the delivery unacked, RabbitMQ redelivers it, and the job resumes
