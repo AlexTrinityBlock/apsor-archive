@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import mimetypes
+import threading
 import zipfile
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -108,6 +109,11 @@ DOCUMENT_EXTENSIONS = {".pdf", ".docx"} | set(SPREADSHEET_EXTENSIONS)
 MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".csv", ".json", ".log"}
 ALLOWED_EXTENSIONS = TEXT_EXTENSIONS | DOCUMENT_EXTENSIONS | IMAGE_EXTENSIONS
+
+# PDFium documents are not thread-safe, even across separate documents. The
+# extraction pool may render two scanned PDFs on different threads, so the whole
+# document lifetime is serialized by one process-wide lock.
+_PDFIUM_RENDER_LOCK = threading.Lock()
 
 FOLDER_COPY_MAX_FILES = 300
 FOLDER_COPY_MAX_BYTES = 256 * 1024 * 1024
@@ -452,18 +458,25 @@ class FileService:
 
     @staticmethod
     def _render_pdf_pages(data: bytes, max_pages: int) -> list[bytes]:
-        """Render PDF pages to PNG bytes; callers run this in a thread."""
+        """Render PDF pages to PNG bytes; callers run this in a thread.
+
+        PDFium is not thread-safe across threads, even for different documents,
+        so document creation, page rendering, PNG encoding, and close all run
+        under the module-level lock. Two scanned PDFs in the extraction pool
+        therefore render one after the other instead of concurrently.
+        """
         images: list[bytes] = []
-        pdf = pdfium.PdfDocument(data)
-        try:
-            for index in range(min(len(pdf), max_pages)):
-                bitmap = pdf[index].render(scale=2.0)
-                image = bitmap.to_pil()
-                buffer = BytesIO()
-                image.save(buffer, format="PNG")
-                images.append(buffer.getvalue())
-        finally:
-            pdf.close()
+        with _PDFIUM_RENDER_LOCK:
+            pdf = pdfium.PdfDocument(data)
+            try:
+                for index in range(min(len(pdf), max_pages)):
+                    bitmap = pdf[index].render(scale=2.0)
+                    image = bitmap.to_pil()
+                    buffer = BytesIO()
+                    image.save(buffer, format="PNG")
+                    images.append(buffer.getvalue())
+            finally:
+                pdf.close()
         return images
 
     @staticmethod

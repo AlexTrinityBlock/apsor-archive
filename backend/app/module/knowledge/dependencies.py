@@ -34,6 +34,7 @@ from app.infrastructure.database.session import (
     get_db_session,
     system_session,
 )
+from app.infrastructure.queue.rabbitmq import RabbitMQJobConsumer, RabbitMQJobNotifier
 from app.module.auth.schema.auth_schema import UserSchema
 from app.module.auth.service.quota_service import AccountQuotaService
 from app.module.knowledge.domain.ingest_config_domain import (
@@ -47,6 +48,10 @@ from app.module.knowledge.domain.vision_prompt_domain import (
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
+from app.module.knowledge.protocol.job_notifier_protocol import (
+    JobNotifierProtocol,
+    NullJobNotifier,
+)
 from app.module.knowledge.protocol.provider_tester_protocol import ProviderTesterProtocol
 from app.module.knowledge.protocol.secret_cipher_protocol import SecretCipherProtocol
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
@@ -417,6 +422,64 @@ def build_ai_service(state: State) -> AiService:
     )
 
 
+def _rabbitmq_url(settings: Settings) -> str:
+    """Return the AMQP URL or fail startup with a secret-free message."""
+    secret = settings.rabbitmq_url
+    url = secret.get_secret_value().strip() if secret is not None else ""
+    if not url:
+        raise RuntimeError(
+            "APSOR_RABBITMQ_ENABLED is true but APSOR_RABBITMQ_URL is not set."
+        )
+    return url
+
+
+def build_job_notifier(settings: Settings) -> JobNotifierProtocol:
+    """Build the process-wide ingestion wake-up publisher.
+
+    Disabled dispatch returns the no-op notifier, so the API keeps working with
+    database polling alone. An enabled deployment without a URL fails startup
+    instead of silently running without the advertised queue.
+    """
+    if not settings.rabbitmq_enabled:
+        return NullJobNotifier()
+    return RabbitMQJobNotifier(
+        url=_rabbitmq_url(settings),
+        exchange_name=settings.rabbitmq_ingest_exchange,
+        queue_name=settings.rabbitmq_ingest_queue,
+        retry_queue_name=settings.rabbitmq_ingest_retry_queue,
+        retry_ttl_ms=settings.rabbitmq_retry_ttl_ms,
+        connect_timeout_seconds=settings.rabbitmq_connect_timeout_seconds,
+        publish_timeout_seconds=settings.rabbitmq_publish_timeout_seconds,
+    )
+
+
+def build_job_consumer(
+    settings: Settings,
+    worker: IngestWorker,
+) -> RabbitMQJobConsumer | None:
+    """Build the ingestion consumer for a process that owns the worker."""
+    if not settings.rabbitmq_enabled:
+        return None
+    return RabbitMQJobConsumer(
+        url=_rabbitmq_url(settings),
+        handler=worker.process_notified_job,
+        exchange_name=settings.rabbitmq_ingest_exchange,
+        queue_name=settings.rabbitmq_ingest_queue,
+        retry_queue_name=settings.rabbitmq_ingest_retry_queue,
+        retry_ttl_ms=settings.rabbitmq_retry_ttl_ms,
+        max_dispatch_retries=settings.rabbitmq_max_dispatch_retries,
+        connect_timeout_seconds=settings.rabbitmq_connect_timeout_seconds,
+    )
+
+
+def get_job_notifier(state: State) -> JobNotifierProtocol:
+    """Return the lifespan notifier, or the no-op default for tests."""
+    notifier = getattr(state, "job_notifier", None)
+    if notifier is None:
+        return NullJobNotifier()
+    return cast(JobNotifierProtocol, notifier)
+
+
 def build_ingest_job_service(
     state: State,
     session: AsyncSession,
@@ -430,6 +493,7 @@ def build_ingest_job_service(
         repository=IngestJobRepository(session, user_id),
         file_service=build_file_service(state, session, user_id=user_id),
         max_attempts=settings.ingest_job_max_attempts,
+        notifier=get_job_notifier(state),
     )
 
 

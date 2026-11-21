@@ -4,6 +4,14 @@ name: apsor-archive-dev
 #   docker compose -f docker-compose.dev.yml up -d --wait
 #   cd backend && uv run apsor-archive --reload
 #   cd frontend && bun run dev
+#
+# RabbitMQ is exposed on the host for a host-run API/worker. Match the Compose
+# defaults with:
+#   APSOR_RABBITMQ_ENABLED=true
+#   APSOR_RABBITMQ_URL=amqp://apsor:apsor@127.0.0.1:5672/
+# The management UI is http://127.0.0.1:15672 (apsor / apsor).
+# PostgreSQL is still the authoritative ingest-job ledger; the broker only
+# dispatches wake-ups and redelivers unacked messages after a worker crash.
 services:
   db:
     image: postgres:17-alpine
@@ -45,8 +53,33 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # Demo dispatch queue for host-run API/worker development. Same image, memory
+  # cap, watermark config, and demo credentials as docker-compose.yml.
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    mem_limit: 384m
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-apsor}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-apsor}
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "+S 2:2 +sbwt none +sbwtdcpu none +sbwtdio none"
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+      - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
   postgres-data:
     # The physical name is explicit so a Compose project rename cannot silently
     # orphan the database volume.
     name: apsor-archive-dev_postgres-data
+  rabbitmq-data:
+    name: apsor-archive-dev_rabbitmq-data

@@ -534,6 +534,8 @@ def settings(tmp_path: Path) -> Settings:
         cookie_secure=False,
         login_attempt_limit=100,
         ingest_worker_enabled=False,
+        # Never let a developer .env point tests at a live broker.
+        rabbitmq_enabled=False,
     )
 
 

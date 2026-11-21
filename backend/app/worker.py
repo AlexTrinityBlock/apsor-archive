@@ -39,6 +39,7 @@ from app.infrastructure.database.migrations import upgrade_to_head
 from app.infrastructure.database.session import Database, system_session
 from app.infrastructure.files.storage_factory import build_file_storage
 from app.infrastructure.logger.logging import configure_logging
+from app.infrastructure.queue.rabbitmq import RabbitMQJobConsumer
 from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
@@ -46,6 +47,7 @@ from app.module.agent.service.history_indexer import AgentHistoryIndexer
 from app.module.knowledge.dependencies import (
     build_history_chunk_store,
     build_ingest_worker,
+    build_job_consumer,
     build_provider_refresh,
     ingest_runtime_defaults,
     load_ingest_runtime_config,
@@ -137,6 +139,8 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
         )
         cleanup_task: asyncio.Task[None] | None = None
         history_task: asyncio.Task[None] | None = None
+        consumer_task: asyncio.Task[None] | None = None
+        consumer: RabbitMQJobConsumer | None = None
         try:
             await worker.startup()
 
@@ -155,6 +159,12 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                     history_batch.indexed,
                 )
             else:
+                consumer = build_job_consumer(settings, worker)
+                if consumer is not None:
+                    consumer_task = asyncio.create_task(
+                        consumer.run(),
+                        name="ingest-rabbitmq-consumer",
+                    )
                 cleanup_task = asyncio.create_task(
                     cleanup.run_forever(stop_event),
                     name="chat-attachment-cleanup",
@@ -165,6 +175,12 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                 )
                 await worker.run_forever(stop_event)
         finally:
+            if consumer_task is not None:
+                consumer_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await consumer_task
+            if consumer is not None:
+                await consumer.close()
             if cleanup_task is not None:
                 cleanup_task.cancel()
                 with suppress(asyncio.CancelledError):

@@ -26,6 +26,7 @@ from app.infrastructure.database.migrations import upgrade_to_head
 from app.infrastructure.database.session import Database, system_session
 from app.infrastructure.files.storage_factory import build_file_storage
 from app.infrastructure.logger.logging import configure_logging
+from app.infrastructure.queue.rabbitmq import RabbitMQJobConsumer
 from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.exception.handler import register_exceptions as register_agent_exceptions
@@ -39,6 +40,8 @@ from app.module.auth.router.auth_router import router as auth_router
 from app.module.knowledge.dependencies import (
     build_history_chunk_store,
     build_ingest_worker,
+    build_job_consumer,
+    build_job_notifier,
     build_provider_refresh,
     ingest_runtime_defaults,
     load_ingest_runtime_config,
@@ -91,6 +94,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # WARNING. Configure application logging after the migration so INFO
         # request/provider/run logs survive startup.
         configure_logging(debug=resolved_settings.debug)
+        # The API always owns the dispatch publisher. A disabled deployment gets
+        # the no-op notifier; an enabled deployment without a URL fails here
+        # instead of silently advertising a queue it cannot use.
+        app.state.job_notifier = build_job_notifier(resolved_settings)
         app.state.db = Database(
             resolved_settings.database_url,
             echo=resolved_settings.debug,
@@ -139,14 +146,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
         )
         worker_task: asyncio.Task[None] | None = None
+        consumer_task: asyncio.Task[None] | None = None
         cleanup_task: asyncio.Task[None] | None = None
         history_task: asyncio.Task[None] | None = None
+        job_consumer: RabbitMQJobConsumer | None = None
         if resolved_settings.ingest_worker_enabled:
             await app.state.ingest_worker.startup()
             worker_task = asyncio.create_task(
                 app.state.ingest_worker.run_forever(),
                 name="ingest-worker",
             )
+            job_consumer = build_job_consumer(
+                resolved_settings,
+                app.state.ingest_worker,
+            )
+            app.state.job_consumer = job_consumer
+            if job_consumer is not None:
+                consumer_task = asyncio.create_task(
+                    job_consumer.run(),
+                    name="ingest-rabbitmq-consumer",
+                )
             cleanup = ChatAttachmentCleanup(
                 database=app.state.db,
                 storage=app.state.storage,
@@ -180,11 +199,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 history_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await history_task
+            if consumer_task is not None:
+                consumer_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await consumer_task
+            if job_consumer is not None:
+                await job_consumer.close()
             if worker_task is not None:
                 worker_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await worker_task
             app.state.ingest_worker.close()
+            await app.state.job_notifier.close()
             await app.state.cache.close()
             await app.state.db.dispose()
 
