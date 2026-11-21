@@ -1,6 +1,11 @@
 import type { QueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "../../../apis/fetch-client";
+import {
+  isNewerIngestUpdate,
+  mergeIngestProgressEvent,
+  streamIngestJobProgress,
+} from "../../../apis/ingest-stream";
 import { basename } from "../../../lib/format";
 import {
   getActiveLocale,
@@ -157,6 +162,9 @@ export interface LibraryUploadTask {
   readonly jobId?: number;
   readonly stage?: IngestStage;
   readonly progressPct?: number;
+  readonly stageDone?: number | null;
+  readonly stageTotal?: number | null;
+  readonly stageUnit?: string | null;
   readonly chunksTotal?: number | null;
   readonly chunksEmbedded?: number | null;
   readonly fileId?: number | null;
@@ -169,12 +177,23 @@ export function taskProgressFromJob(
   job: IngestJobSchema,
 ): Pick<
   LibraryUploadTask,
-  "jobId" | "stage" | "progressPct" | "chunksTotal" | "chunksEmbedded" | "fileId"
+  | "jobId"
+  | "stage"
+  | "progressPct"
+  | "stageDone"
+  | "stageTotal"
+  | "stageUnit"
+  | "chunksTotal"
+  | "chunksEmbedded"
+  | "fileId"
 > {
   return {
     jobId: job.id,
     stage: job.status,
     progressPct: job.progress_pct,
+    stageDone: job.stage_done,
+    stageTotal: job.stage_total,
+    stageUnit: job.stage_unit,
     chunksTotal: job.chunks_total,
     chunksEmbedded: job.chunks_embedded,
     fileId: job.file_id,
@@ -235,6 +254,10 @@ function abortError(): DOMException {
   return new DOMException("Ingest polling was cancelled.", "AbortError");
 }
 
+function jobHasStatus(job: IngestJobSchema, status: IngestJobSchema["status"]): boolean {
+  return job.status === status;
+}
+
 function waitForPoll(intervalMs: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
     return Promise.reject(abortError());
@@ -257,6 +280,8 @@ export interface WaitForIngestJobOptions {
   readonly intervalMs?: number;
   readonly timeoutMs?: number;
   readonly onUpdate?: (job: IngestJobSchema) => void;
+  /** The enqueue response, so a fallback poll never re-reads a stale state. */
+  readonly initialJob?: IngestJobSchema;
 }
 
 async function readIngestJob(jobId: number, signal?: AbortSignal): Promise<IngestJobSchema> {
@@ -280,7 +305,7 @@ export async function waitForIngestJob(
 ): Promise<IngestJobSchema> {
   const deadline = Date.now() + (options.timeoutMs ?? INGEST_POLL_TIMEOUT_MS);
   const intervalMs = options.intervalMs ?? INGEST_POLL_INTERVAL_MS;
-  let job = await readIngestJob(jobId, options.signal);
+  let job = options.initialJob ?? (await readIngestJob(jobId, options.signal));
 
   for (;;) {
     options.onUpdate?.(job);
@@ -299,18 +324,105 @@ export async function waitForIngestJob(
 }
 
 /**
+ * Watches one durable job through the SSE progress stream.
+ *
+ * The stream merges compact `snapshot`/`progress` events into the enqueue
+ * snapshot. A stream error or an early close before a terminal status falls back
+ * to the existing one-second polling helper with the last merged job, so the UI
+ * never loses progress it already displayed. There is exactly one SSE attempt;
+ * this function never reconnects in a loop.
+ *
+ * @param jobId - Durable job returned by the async upload endpoints.
+ * @param initialJob - The job returned by enqueue.
+ * @param options - Cancellation, cadence, deadline, and progress sink.
+ * @returns The terminal job, whose `file_id` points at the published file.
+ * @throws {IngestJobFailureError} When the job reports `failed`.
+ * @throws {IngestPollTimeoutError} When the 30-minute wait budget expires.
+ */
+export async function watchIngestJob(
+  jobId: number,
+  initialJob: IngestJobSchema,
+  options: WaitForIngestJobOptions = {},
+): Promise<IngestJobSchema> {
+  const deadline = Date.now() + (options.timeoutMs ?? INGEST_POLL_TIMEOUT_MS);
+  let current = initialJob;
+  options.onUpdate?.(current);
+  if (current.status === "ready") {
+    return current;
+  }
+  if (current.status === "failed") {
+    throw new IngestJobFailureError(current);
+  }
+  if (options.signal?.aborted) {
+    throw abortError();
+  }
+  if (Date.now() >= deadline) {
+    throw new IngestPollTimeoutError(current);
+  }
+
+  const streamController = new AbortController();
+  const abortFromParent = () => streamController.abort();
+  options.signal?.addEventListener("abort", abortFromParent, { once: true });
+  const deadlineTimer = window.setTimeout(
+    () => streamController.abort(),
+    Math.max(0, deadline - Date.now()),
+  );
+  try {
+    await streamIngestJobProgress({
+      jobId,
+      signal: streamController.signal,
+      onEvent: (event) => {
+        if (!isNewerIngestUpdate(current.updated_at, event.updated_at)) {
+          return;
+        }
+        current = mergeIngestProgressEvent(current, event);
+        options.onUpdate?.(current);
+      },
+    });
+  } catch (error) {
+    if (options.signal?.aborted) {
+      throw abortError();
+    }
+    if (isAbortError(error)) {
+      throw new IngestPollTimeoutError(current);
+    }
+    // Any fetch/parse/HTTP failure is a stream failure. The durable job is
+    // still running, so use the polling fallback with what we already show.
+  } finally {
+    window.clearTimeout(deadlineTimer);
+    options.signal?.removeEventListener("abort", abortFromParent);
+  }
+
+  if (jobHasStatus(current, "ready")) {
+    return current;
+  }
+  if (jobHasStatus(current, "failed")) {
+    throw new IngestJobFailureError(current);
+  }
+
+  return waitForIngestJob(jobId, {
+    ...options,
+    timeoutMs: Math.max(0, deadline - Date.now()),
+    initialJob: current,
+  });
+}
+
+/**
  * Waits for a job and then loads the published file. The extra request is only
  * made once the backend has marked the job ready.
  *
  * @param jobId - Durable job returned by the async upload endpoints.
- * @param options - The same options accepted by `waitForIngestJob`.
+ * @param options - The same options accepted by `waitForIngestJob`, including
+ * the enqueue snapshot used to seed the SSE merge.
  * @returns The fully indexed file.
  */
 export async function waitForIngestedFile(
   jobId: number,
   options: WaitForIngestJobOptions = {},
 ): Promise<FileSchema> {
-  const job = await waitForIngestJob(jobId, options);
+  const initial =
+    options.initialJob ?? (await readIngestJob(jobId, options.signal));
+  const job = await watchIngestJob(jobId, initial, options);
   if (job.file_id === null) {
     throw new Error(translate(getActiveLocale(), "library.ingest.missingFile"));
   }

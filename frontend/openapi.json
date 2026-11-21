@@ -3162,6 +3162,39 @@
             ],
             "title": "Stage"
           },
+          "stage_done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Done"
+          },
+          "stage_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Total"
+          },
+          "stage_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Unit"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -3206,6 +3239,9 @@
           "status",
           "stage",
           "progress_pct",
+          "stage_done",
+          "stage_total",
+          "stage_unit",
           "chunks_total",
           "chunks_embedded",
           "error_code",
@@ -8724,6 +8760,52 @@
           }
         },
         "summary": "Get Ingest Job",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/ingest-jobs/{job_id}/events": {
+      "get": {
+        "description": "Stream one owner's durable job progress until it is terminal.\n\nA missing or cross-account job is a 404 from the snapshot read before the\nresponse starts. The browser also keeps its one-second polling fallback when\nthe stream cannot be established.",
+        "operationId": "streamIngestJobEvents",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Server-sent ingestion progress (snapshot, progress, keepalive)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Ingest Job Events",
         "tags": [
           "files"
         ]

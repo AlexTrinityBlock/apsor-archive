@@ -49,6 +49,11 @@ from app.infrastructure.files.storage_errors import (
     StorageUnavailableError,
 )
 from app.module.knowledge.domain.ingest_config_domain import IngestRuntimeConfig
+from app.module.knowledge.domain.ingest_progress_domain import (
+    PHASE_CHUNKING,
+    PHASE_PARSING,
+    ProgressTracker,
+)
 from app.module.knowledge.domain.path_domain import extension
 from app.module.knowledge.domain.vision_prompt_domain import vision_mode_for_extension
 from app.module.knowledge.exception.domain_error import (
@@ -81,6 +86,7 @@ from app.module.knowledge.model.ingest_job_model import (
     INGEST_STATUS_CHUNKING,
     INGEST_STATUS_EMBEDDING,
     INGEST_STATUS_FAILED,
+    INGEST_STATUS_PARSING,
     INGEST_STATUS_QUEUED,
     INGEST_STATUS_READY,
     INGEST_STATUS_SUMMARIZING,
@@ -93,11 +99,13 @@ from app.module.knowledge.protocol.job_notifier_protocol import (
     JobNotifierProtocol,
     NullJobNotifier,
 )
+from app.module.knowledge.protocol.progress_bus_protocol import ProgressBusProtocol
 from app.module.knowledge.repository.ingest_job_repository import IngestJobRepository
 from app.module.knowledge.schema.file_schema import (
     IngestJobListSchema,
     IngestJobSchema,
     IngestJobStatus,
+    IngestProgressEventSchema,
     IngestSourceKind,
 )
 from app.module.knowledge.service.file_service import (
@@ -108,6 +116,10 @@ from app.module.knowledge.service.file_service import (
 from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
+
+# A broker outage must never stall extraction or embedding; a dropped progress
+# event only means one missed UI update.
+PROGRESS_PUBLISH_TIMEOUT_SECONDS = 1.0
 
 _ERROR_CODES: tuple[tuple[type[BaseException], str], ...] = (
     (EmptyContentError, "empty_content"),
@@ -140,7 +152,14 @@ def ingest_error_code(exc: BaseException) -> str:
 
 
 FileServiceFactory = Callable[
-    [AsyncSession, int, IngestRuntimeConfig, asyncio.Semaphore, asyncio.Semaphore],
+    [
+        AsyncSession,
+        int,
+        IngestRuntimeConfig,
+        asyncio.Semaphore,
+        asyncio.Semaphore,
+        ProgressTracker | None,
+    ],
     FileService,
 ]
 
@@ -173,6 +192,9 @@ def _to_schema(job: FileIngestJobModel) -> IngestJobSchema:
         status=cast(IngestJobStatus, job.status),
         stage=job.stage,
         progress_pct=job.progress_pct,
+        stage_done=job.stage_done,
+        stage_total=job.stage_total,
+        stage_unit=job.stage_unit,
         chunks_total=job.chunks_total,
         chunks_embedded=job.chunks_embedded,
         error_code=job.error_code,
@@ -389,6 +411,9 @@ class IngestJobService:
         job.status = INGEST_STATUS_QUEUED
         job.stage = "Retry queued"
         job.progress_pct = 0
+        job.stage_done = None
+        job.stage_total = None
+        job.stage_unit = None
         job.chunks_total = None
         job.chunks_embedded = None
         job.error_code = None
@@ -405,45 +430,121 @@ class IngestJobService:
 
 
 class _JobProgress(IngestProgressProtocol):
-    """Persist ingestion milestones in short, owner-scoped transactions.
+    """Persist ingestion milestones and report granular parse/chunk progress.
 
     ``file_created`` runs after the worker's file/node checkpoint, so the
     staged file row is already committed when the job stores its foreign key.
+
+    Every write goes through one per-job lock. The reporter and the pipeline's
+    milestone callbacks share it, so a slow report cannot overwrite a later
+    milestone with an older status or percentage.
     """
 
-    def __init__(self, worker: "IngestWorker", job_id: int, user_id: int) -> None:
+    def __init__(
+        self,
+        worker: "IngestWorker",
+        job_id: int,
+        user_id: int,
+        tracker: ProgressTracker,
+        progress_bus: ProgressBusProtocol | None = None,
+    ) -> None:
         self.worker = worker
         self.job_id = job_id
         self.user_id = user_id
+        self.tracker = tracker
+        self.progress_bus = progress_bus
         self.file_id: int | None = None
         self.embedded_count: int | None = None
+        self._lock = asyncio.Lock()
 
     async def chunked(self, total: int) -> None:
-        await self.worker.update_job(
-            self.job_id,
-            self.user_id,
-            status=INGEST_STATUS_CHUNKING,
-            stage="Splitting text into chunks",
-            progress_pct=20,
-            chunks_total=total,
-        )
+        async with self._lock:
+            self.tracker.finish()
+            await self.worker.update_job(
+                self.job_id,
+                self.user_id,
+                status=INGEST_STATUS_CHUNKING,
+                stage="Splitting text into chunks",
+                progress_pct=60,
+                stage_done=None,
+                stage_total=None,
+                stage_unit=None,
+                chunks_total=total,
+            )
 
     async def file_created(self, file_id: int) -> None:
         self.file_id = file_id
-        await self.worker.update_job(self.job_id, self.user_id, file_id=file_id)
+        async with self._lock:
+            await self.worker.update_job(self.job_id, self.user_id, file_id=file_id)
 
     async def embedded(self, done: int, total: int) -> None:
         self.embedded_count = done
         ratio = 0.0 if total <= 0 else done / total
-        progress_pct = min(90, 25 + int(65 * ratio))
-        await self.worker.update_job(
-            self.job_id,
-            self.user_id,
-            status=INGEST_STATUS_EMBEDDING,
-            stage=f"Embedding chunks {done}/{total}",
-            progress_pct=progress_pct,
-            chunks_embedded=done,
-        )
+        progress_pct = min(92, 60 + int(32 * ratio))
+        async with self._lock:
+            self.tracker.finish()
+            await self.worker.update_job(
+                self.job_id,
+                self.user_id,
+                status=INGEST_STATUS_EMBEDDING,
+                stage=f"Embedding chunks {done}/{total}",
+                progress_pct=progress_pct,
+                stage_done=None,
+                stage_total=None,
+                stage_unit=None,
+                chunks_embedded=done,
+            )
+
+    async def announce(self, **fields: Any) -> None:
+        """Write a pipeline transition under the same lock as the reporter.
+
+        The reporter can be mid-tick when extraction hands off to chunking or
+        publication. Serializing both writers keeps the published status and
+        percentage monotonic.
+        """
+        async with self._lock:
+            await self.worker.update_job(self.job_id, self.user_id, **fields)
+
+    async def report(self) -> None:
+        """Write one granular snapshot, or just refresh the lease when idle.
+
+        Called once per second by the job's reporter task. An unchanged snapshot
+        still writes ``updated_at`` so a long embedding pass keeps the lease
+        fresh. Once the tracker is idle the DB keeps the embedding milestone and
+        this method only heartbeats.
+        """
+        async with self._lock:
+            snapshot = self.tracker.snapshot()
+            fields: dict[str, Any] = {}
+            if snapshot.phase == PHASE_PARSING:
+                total = snapshot.total or 0
+                done = snapshot.done
+                progress_pct = (
+                    5 + int(40 * done / total) if total > 0 else 5
+                )
+                fields = {
+                    "status": INGEST_STATUS_PARSING,
+                    "stage": f"Extracting {done}/{total} {snapshot.unit or 'unit'}",
+                    "progress_pct": min(45, progress_pct),
+                    "stage_done": done,
+                    "stage_total": total,
+                    "stage_unit": snapshot.unit,
+                }
+            elif snapshot.phase == PHASE_CHUNKING:
+                total = snapshot.total or 0
+                done = snapshot.done
+                progress_pct = (
+                    45 + int(15 * done / total) if total > 0 else 45
+                )
+                fields = {
+                    "status": INGEST_STATUS_CHUNKING,
+                    "stage": f"Chunking {done}/{total} chunks",
+                    "progress_pct": min(60, progress_pct),
+                    "stage_done": done,
+                    "stage_total": total,
+                    "stage_unit": snapshot.unit,
+                }
+            await self.worker.update_job(self.job_id, self.user_id, **fields)
 
 
 class IngestWorker:
@@ -471,6 +572,7 @@ class IngestWorker:
         extract_pool: ThreadPoolExecutor | None = None,
         extract_semaphore: asyncio.Semaphore | None = None,
         embedding_semaphore: asyncio.Semaphore | None = None,
+        progress_bus: ProgressBusProtocol | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.file_service_factory = file_service_factory
@@ -480,6 +582,7 @@ class IngestWorker:
         self.extract_pool = extract_pool
         self.config_provider = config_provider
         self.provider_refresh = provider_refresh
+        self.progress_bus = progress_bus
         self.runtime_config = runtime_config
         self.poll_seconds = runtime_config.poll_seconds
         self.extract_workers = runtime_config.extract_workers
@@ -623,6 +726,7 @@ class IngestWorker:
                     runtime.config,
                     runtime.extract_semaphore,
                     runtime.embedding_semaphore,
+                    None,
                 )
                 await file_service.discard_pending(file_id)
         except Exception:
@@ -651,6 +755,7 @@ class IngestWorker:
                     runtime.config,
                     runtime.extract_semaphore,
                     runtime.embedding_semaphore,
+                    None,
                 )
                 await file_service.discard_pending(file_id)
         except Exception:
@@ -843,15 +948,51 @@ class IngestWorker:
             job = await IngestJobRepository(session, user_id).get(job_id)
             return None if job is None else _to_schema(job)
 
-    async def update_job(self, job_id: int, user_id: int, **fields: Any) -> None:
-        """Apply one progress update in the job owner's scoped transaction."""
+    async def update_job(
+        self,
+        job_id: int,
+        user_id: int,
+        **fields: Any,
+    ) -> IngestJobSchema | None:
+        """Apply one progress update in the job owner's scoped transaction.
+
+        The compact event is published only after the scoped session commits.
+        The returned schema lets callers that need the committed row reuse it;
+        existing callers may ignore the value.
+        """
+        updated: FileIngestJobModel | None = None
         async with user_session(self.session_factory, user_id, ROLE_USER) as session:
             job = await IngestJobRepository(session, user_id).get(job_id)
             if job is None:
-                return
+                return None
             for name, value in fields.items():
                 setattr(job, name, value)
             job.updated_at = utcnow()
+            await session.flush()
+            updated = job
+        if updated is None:  # pragma: no cover - the branch above already returned
+            return None
+        schema = _to_schema(updated)
+        await self._publish_progress(schema)
+        return schema
+
+    async def _publish_progress(self, schema: IngestJobSchema) -> None:
+        """Publish one compact event; a broker failure never fails the job."""
+        if self.progress_bus is None:
+            return
+        try:
+            await asyncio.wait_for(
+                self.progress_bus.publish(
+                    IngestProgressEventSchema.model_validate(schema)
+                ),
+                timeout=PROGRESS_PUBLISH_TIMEOUT_SECONDS,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Could not publish progress for ingestion job %d (%s)",
+                schema.id,
+                type(exc).__name__,
+            )
 
     async def _claim_next(self) -> ClaimedJob | None:
         async with maintenance_session(self.session_factory) as session:
@@ -869,15 +1010,22 @@ class IngestWorker:
         job = await self._load_job(job_id, user_id)
         if job is None:
             return
-        progress = _JobProgress(self, job_id, user_id)
+        tracker = ProgressTracker()
+        progress = _JobProgress(
+            self,
+            job_id,
+            user_id,
+            tracker,
+            self.progress_bus,
+        )
         staged_file_id: int | None = None
         source: ReingestSource | None = None
         storage_key: str | None = None
         storage_backend: str | None = None
         occurred_at: datetime | None = None
-        heartbeat = asyncio.create_task(
-            self._heartbeat_forever(job_id, user_id),
-            name=f"ingest-heartbeat-{job_id}",
+        reporter = asyncio.create_task(
+            self._report_progress_forever(progress),
+            name=f"ingest-progress-{job_id}",
         )
         try:
             if job.source_kind == INGEST_SOURCE_REINGEST:
@@ -890,6 +1038,7 @@ class IngestWorker:
                         runtime.config,
                         runtime.extract_semaphore,
                         runtime.embedding_semaphore,
+                        tracker,
                     )
                     source = await source_service.get_reingest_source_by_file_id(
                         job.source_file_id,
@@ -916,6 +1065,7 @@ class IngestWorker:
                     runtime.config,
                     runtime.extract_semaphore,
                     runtime.embedding_semaphore,
+                    tracker,
                 )
                 extracted = await file_service.prepare_job_document(
                     source_kind=job.source_kind,
@@ -923,12 +1073,14 @@ class IngestWorker:
                     data=data,
                     force_vision=force_vision,
                 )
-                await self.update_job(
-                    job_id,
-                    user_id,
+                # Move the tracker to chunking before the status write, so a
+                # concurrently running reporter cannot briefly publish parsing
+                # after the job has advanced.
+                tracker.begin(PHASE_CHUNKING, 0, "chunk")
+                await progress.announce(
                     status=INGEST_STATUS_CHUNKING,
                     stage="Splitting text into chunks",
-                    progress_pct=15,
+                    progress_pct=45,
                 )
 
                 async def checkpoint() -> None:
@@ -949,15 +1101,17 @@ class IngestWorker:
                 )
             staged_file_id = file_schema.id
 
-            await self.update_job(
-                job_id,
-                user_id,
+            await progress.announce(
                 file_id=file_schema.id,
                 status=INGEST_STATUS_SUMMARIZING,
                 stage="Publishing file",
                 progress_pct=95,
+                stage_done=None,
+                stage_total=None,
+                stage_unit=None,
             )
             expected_current_file_id = source.file_id if source is not None else None
+            ready_schema: IngestJobSchema | None = None
             async with user_session(self.session_factory, user_id, ROLE_USER) as session:
                 file_service = self.file_service_factory(
                     session,
@@ -965,6 +1119,7 @@ class IngestWorker:
                     runtime.config,
                     runtime.extract_semaphore,
                     runtime.embedding_semaphore,
+                    tracker,
                 )
                 await file_service.publish_pending(
                     file_schema.id,
@@ -975,11 +1130,23 @@ class IngestWorker:
                     ready_job.status = INGEST_STATUS_READY
                     ready_job.stage = "Ready"
                     ready_job.progress_pct = 100
+                    ready_job.stage_done = None
+                    ready_job.stage_total = None
+                    ready_job.stage_unit = None
                     ready_job.chunks_embedded = progress.embedded_count
                     ready_job.file_id = file_schema.id
                     ready_job.finished_at = utcnow()
                     ready_job.updated_at = utcnow()
+                    ready_schema = _to_schema(ready_job)
+            if ready_schema is not None:
+                await self._publish_progress(ready_schema)
         except Exception as exc:
+            # Stop granular writes before the terminal failure so a reporter
+            # tick cannot publish parsing/chunking after the job has failed.
+            tracker.finish()
+            reporter.cancel()
+            with suppress(asyncio.CancelledError):
+                await reporter
             logger.exception("Ingestion job %d failed", job_id)
             await self._fail(
                 job_id,
@@ -989,30 +1156,32 @@ class IngestWorker:
                 progress.file_id or staged_file_id,
             )
         finally:
-            heartbeat.cancel()
+            reporter.cancel()
             with suppress(asyncio.CancelledError):
-                await heartbeat
+                await reporter
 
-    def _heartbeat_interval(self) -> float:
-        """Refresh a live lease well before startup recovery considers it stale."""
-        return float(max(5, self.stale_seconds // 3))
+    def _report_interval(self) -> float:
+        """Report granular progress once per second and keep the lease fresh."""
+        return 1.0
 
-    async def _heartbeat_forever(self, job_id: int, user_id: int) -> None:
-        """Touch ``updated_at`` while parsing or embedding is still running.
+    async def _report_progress_forever(self, progress: _JobProgress) -> None:
+        """Write tracker snapshots until the job's reporter is cancelled.
 
-        Long extractions must not look like an abandoned lease to another
-        worker. The job row stays the single heartbeat source.
+        The same loop is the lease heartbeat: an unchanged snapshot still
+        touches ``updated_at``. Long extractions therefore never look like an
+        abandoned lease to another worker, and the job row stays the single
+        heartbeat source.
         """
         while True:
-            await asyncio.sleep(self._heartbeat_interval())
+            await asyncio.sleep(self._report_interval())
             try:
-                await self.update_job(job_id, user_id)
+                await progress.report()
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.warning(
-                    "Could not refresh the heartbeat for ingestion job %d",
-                    job_id,
+                    "Could not refresh progress for ingestion job %d",
+                    progress.job_id,
                 )
 
     async def _load_job(self, job_id: int, user_id: int) -> FileIngestJobModel | None:
@@ -1043,6 +1212,7 @@ class IngestWorker:
                     runtime.config,
                     runtime.extract_semaphore,
                     runtime.embedding_semaphore,
+                    None,
                 )
                 discarded = await file_service.discard_pending(file_id)
         can_delete_payload = (file_id is None or discarded) and (
@@ -1059,6 +1229,9 @@ class IngestWorker:
             error_code=ingest_error_code(exc),
             error_detail=detail[:2000],
             file_id=None,
+            stage_done=None,
+            stage_total=None,
+            stage_unit=None,
             finished_at=utcnow(),
         )
 

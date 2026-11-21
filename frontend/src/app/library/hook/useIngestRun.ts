@@ -49,14 +49,15 @@ export function useIngestRun(onReady: (file: FileSchema) => void): IngestRunStat
     [],
   );
 
-  const followJob = async (generation: number, jobId: number) => {
+  const followJob = async (generation: number, job: IngestJobSchema) => {
     const controller = new AbortController();
     controllerRef.current = controller;
     let file: FileSchema | null = null;
 
     try {
-      file = await waitForIngestedFile(jobId, {
+      file = await waitForIngestedFile(job.id, {
         signal: controller.signal,
+        initialJob: job,
         onUpdate: (snapshot) => {
           if (generation === runGeneration.current) {
             setJob(snapshot);
@@ -103,7 +104,7 @@ export function useIngestRun(onReady: (file: FileSchema) => void): IngestRunStat
         }
         setJob(queued);
         setPhase("processing");
-        await followJob(generation, queued.id);
+        await followJob(generation, queued);
       } catch (error) {
         if (generation !== runGeneration.current || isAbortError(error)) {
           return;

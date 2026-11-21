@@ -9,7 +9,7 @@ Keep application assembly, infrastructure, and business slices separate so a fea
 ## Architecture
 
 - `main.py` is the composition shell. `create_app()` installs lifespan resources, exception handlers, middleware, routers, and the SPA fallback. `cli.py` starts the API; `worker.py` starts the durable-ingestion process.
-- `app.state` owns process-wide adapters: `db`, `cache`, `storage`, `secret_cipher`, `ai_runtime`, `ingest_worker`, and `settings`. Tests may replace `agent_chat_generator`, `web_research_service`, or `provider_tester`.
+- `app.state` owns process-wide adapters: `db`, `cache`, `progress_bus`, `storage`, `secret_cipher`, `ai_runtime`, `ingest_worker`, and `settings`. Tests may replace `agent_chat_generator`, `web_research_service`, or `provider_tester`.
 - `dependency/` holds dependencies shared across slices. Today it exposes the authenticated account guard, the forced-password-change guard, and the root guard; it is not a home for feature services.
 - `infrastructure/` adapts external systems: config, async database/Alembic, cache, local/R2 storage, AI/embeddings, web clients, security, and logging. Adapters implement slice protocols but must not own archive policy.
 - `module/` contains vertical slices: `auth`, `knowledge`, `agent`, `prompt`, and `web_research`. A slice may contain `domain/` (pure rules), `model/` (SQLAlchemy), `schema/` (Pydantic HTTP contracts), `protocol/` (ports), `repository/` (SQL), `service/` (orchestration), `router/` (HTTP), `exception/`, and `dependencies.py`.

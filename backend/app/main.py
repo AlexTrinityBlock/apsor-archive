@@ -20,6 +20,7 @@ from app.infrastructure.ai.provider_factory import (
     provider_defaults_from_settings,
 )
 from app.infrastructure.ai.runtime import AiRuntime
+from app.infrastructure.cache.progress_bus import build_progress_bus
 from app.infrastructure.cache.resilient_cache import build_cache
 from app.infrastructure.config.settings import Settings, get_settings
 from app.infrastructure.database.migrations import upgrade_to_head
@@ -52,6 +53,9 @@ from app.module.knowledge.repository.provider_config_repository import (
 )
 from app.module.knowledge.router import router as knowledge_router
 from app.module.knowledge.router.health_router import router as health_router
+from app.module.knowledge.router.ingest_progress_router import (
+    router as ingest_progress_router,
+)
 from app.module.knowledge.service.provider_error_notice_service import (
     ProviderErrorNoticeService,
 )
@@ -104,6 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         await AgentRepository.recover_stale_runs(app.state.db, now=utcnow())
         app.state.cache = build_cache(resolved_settings.cache_url)
+        app.state.progress_bus = build_progress_bus(resolved_settings.cache_url)
         app.state.storage = build_file_storage(resolved_settings)
         cipher = SecretCipher.from_settings(resolved_settings)
         notice_service = ProviderErrorNoticeService(app.state.db.session_factory)
@@ -144,6 +149,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 runtime,
                 app.state.db.session_factory,
             ),
+            progress_bus=app.state.progress_bus,
         )
         worker_task: asyncio.Task[None] | None = None
         consumer_task: asyncio.Task[None] | None = None
@@ -211,6 +217,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     await worker_task
             app.state.ingest_worker.close()
             await app.state.job_notifier.close()
+            await app.state.progress_bus.close()
             await app.state.cache.close()
             await app.state.db.dispose()
 
@@ -308,6 +315,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(account_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(
+        ingest_progress_router,
+        prefix="/api/v1",
+        # Ingestion progress is SSE. It deliberately stays outside the
+        # knowledge aggregate so the request-scoped require_authenticated guard
+        # does not hold get_db_session open for the stream's lifetime.
+        dependencies=[Depends(require_stateless_authenticated)],
+    )
     app.include_router(
         knowledge_router,
         dependencies=[Depends(require_authenticated)],
