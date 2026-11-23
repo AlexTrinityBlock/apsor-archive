@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { memo } from "react";
 
 import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
@@ -7,21 +7,15 @@ import type {
   ChatStreamTool,
   ChatStreamView,
 } from "../hook/useChatStream";
-import {
-  stringValue,
-  type CitationToken,
-  type ResourceMeta,
-  type ToolCallMeta,
-  type ToolResultMeta,
+import type {
+  CitationToken,
+  ResourceMeta,
+  ToolResultMeta,
 } from "../types";
-import { readPlotSpec } from "../plot";
 import { MarkdownBody } from "./MarkdownBody";
-import { PlotBlock } from "./PlotBlock";
-import { ResourceCard } from "./ResourceCard";
-import { ToolCallCard } from "./ToolCallCard";
-import { ToolDiagnostics, type ToolDiagnosticItem } from "./ToolDiagnostics";
+import { ToolStepCard } from "./ToolStepCard";
 import { UserMarginalia } from "./UserMarginalia";
-import { finishReasonTone, isToolFailure } from "./status";
+import { finishReasonTone } from "./status";
 
 interface StreamingTurnProps {
   readonly stream: ChatStreamView;
@@ -30,15 +24,6 @@ interface StreamingTurnProps {
   readonly onSelectTrace?: (traceId: string) => void;
   readonly onOpenCitation?: (token: CitationToken) => void;
   readonly onOpenResource?: (resource: ResourceMeta) => void;
-}
-
-function asCall(tool: ChatStreamTool): ToolCallMeta {
-  return {
-    id: tool.id,
-    name: tool.name,
-    arguments: tool.arguments,
-    rawArguments: null,
-  };
 }
 
 function pageContextLabel(stream: ChatStreamView, t: Translate): string {
@@ -77,49 +62,10 @@ export const StreamingTurn = memo(function StreamingTurn({
 }: StreamingTurnProps) {
   const { t, formatNumber } = useI18n();
   const total = stream.usage.total_tokens;
-  const failures: ToolDiagnosticItem[] = [];
-  const visibleTools = stream.toolCalls.filter((tool) => {
-    if (!isToolFailure(tool.status)) {
-      return true;
-    }
-    failures.push({
-      id: tool.id,
-      name: tool.name,
-      status: tool.status,
-      errorCode: tool.errorCode,
-      detail: stringValue(tool.data?.detail),
-    });
-    return false;
-  });
-
-  let liveBody: ReactNode = null;
-  if (stream.status === "waiting") {
-    liveBody = (
-      <p className="chat-turn__silent is-live" role="status">
-        <span className="chat-pulse" aria-hidden="true" />
-        {t("chat.streaming.waitingApproval")}
-      </p>
-    );
-  } else if (stream.assistantText.length > 0) {
-    liveBody = (
-      <div className="chat-turn__bubble">
-        <MarkdownBody
-          markdown={stream.assistantText}
-          memoryTitles={memoryTitles}
-          onOpenCitation={onOpenCitation}
-        />
-      </div>
-    );
-  } else if (!stream.error) {
-    liveBody = (
-      <p className="chat-turn__silent is-live">
-        <span className="chat-pulse" aria-hidden="true" />
-        {stream.toolCalls.length > 0
-          ? t("chat.streaming.readingTools")
-          : t("chat.streaming.waitingFirstLine")}
-      </p>
-    );
-  }
+  const visibleSegments = stream.segments.filter(
+    (segment) => segment.text.trim().length > 0 || segment.toolCalls.length > 0,
+  );
+  const hasHistory = visibleSegments.length > 0;
 
   return (
     <div className="chat-live-turn" aria-busy={stream.status === "running"}>
@@ -149,34 +95,58 @@ export const StreamingTurn = memo(function StreamingTurn({
           ) : null}
         </header>
 
-        {visibleTools.length > 0 ? (
-          <div className="chat-tool-flow">
-            {visibleTools.map((tool, index) => (
-              <div className="chat-stream-tool" key={tool.id}>
-                <ToolCallCard
-                  call={asCall(tool)}
-                  result={asResult(tool)}
-                  index={index}
-                  selected={selectedTraceId === tool.id}
-                  onSelect={onSelectTrace}
-                />
-                {tool.resource ? (
-                  <ResourceCard
-                    resource={tool.resource}
-                    onOpen={onOpenResource}
-                  />
+        {hasHistory ? (
+          <div className="chat-timeline chat-timeline--live">
+            {visibleSegments.map((segment) => (
+              <div className="chat-timeline__segment" key={segment.index}>
+                {segment.text.trim().length > 0 ? (
+                  <div className="chat-timeline__prose">
+                    <p className="chat-timeline__step">
+                      {t("chat.timeline.step", { step: segment.index })}
+                    </p>
+                    <div className="chat-turn__bubble">
+                      <MarkdownBody
+                        markdown={segment.text}
+                        memoryTitles={memoryTitles}
+                        onOpenCitation={onOpenCitation}
+                      />
+                    </div>
+                  </div>
                 ) : null}
-                {readPlotSpec(tool.data) ? (
-                  <PlotBlock data={tool.data} />
+                {segment.toolCalls.length > 0 ? (
+                  <div className="chat-tool-flow">
+                    {segment.toolCalls.map((tool) => (
+                      <ToolStepCard
+                        key={tool.id}
+                        meta={asResult(tool)}
+                        step={segment.index}
+                        entryId={tool.entryId}
+                        callId={tool.id}
+                        selected={selectedTraceId === tool.id}
+                        onSelect={onSelectTrace}
+                        onOpenResource={onOpenResource}
+                      />
+                    ))}
+                  </div>
                 ) : null}
               </div>
             ))}
           </div>
         ) : null}
 
-        {liveBody}
+        {stream.status === "waiting" ? (
+          <p className="chat-turn__silent is-live" role="status">
+            <span className="chat-pulse" aria-hidden="true" />
+            {t("chat.streaming.waitingApproval")}
+          </p>
+        ) : null}
 
-        <ToolDiagnostics items={failures} />
+        {!hasHistory && stream.status !== "waiting" && !stream.error ? (
+          <p className="chat-turn__silent is-live">
+            <span className="chat-pulse" aria-hidden="true" />
+            {t("chat.streaming.waitingFirstLine")}
+          </p>
+        ) : null}
 
         {stream.pageContextKey !== null && stream.runId !== null ? (
           <p className="chat-context-live">

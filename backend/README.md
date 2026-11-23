@@ -896,10 +896,15 @@ Tool names: `search_knowledge`, `read_file`, `read_timeline`, `read_path`,
 `web_search`, `web_fetch`.
 The two web tools are read-only. They call the active `web_search` / `web_fetch`
 provider, cite the URL and retrieval time, and never send archive-private
-content or keys to the provider. `search_knowledge` summary sources and
-`read_timeline` summary events carry `view="compressed"`, `memory_count`, and a
-`<compressed_view>` child with coverage; the agent must not treat them as the
-complete original text.
+content or keys to the provider. `web_search` returns bounded excerpts and
+always appends a `<search_hint>` child with `truncated`, `excerpts_clipped`,
+`provider_truncated`, and `excerpt_limit`; every `<result>` also reports
+`content_chars`, `excerpt_chars`, and `excerpt_truncated`. The hint tells the
+model to call `web_fetch` when a detail may continue beyond the excerpt, on a
+later page, or in results the provider did not return. `search_knowledge`
+summary sources and `read_timeline` summary events carry `view="compressed"`,
+`memory_count`, and a `<compressed_view>` child with coverage; the agent must
+not treat them as the complete original text.
 
 `web_fetch` caches the full normalized extracted document once per URL
 (provider version, normalized URL, schema `v3`, the 800-character wrap width,
