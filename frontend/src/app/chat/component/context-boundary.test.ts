@@ -1,6 +1,7 @@
+// @ts-expect-error -- `bun:test` is provided by the Bun runtime; the frontend tsconfig does not load @types/bun.
 import { describe, expect, test } from "bun:test";
 
-import { entryIdRange } from "../src/app/chat/component/ContextBoundaryCard";
+import { entryIdRange } from "./ContextBoundaryCard";
 
 describe("entryIdRange", () => {
   test("returns the first and last ids of a non-empty list", () => {
