@@ -91,7 +91,6 @@ import {
 } from "./component/library-utils";
 import { useFileReingest } from "./hook/useFileReingest";
 import { useLibraryUploads } from "./hook/useLibraryUploads";
-import { useMediaQuery } from "./hook/useMediaQuery";
 
 interface ParamUpdates {
   readonly [key: string]: string | number | null;
@@ -133,11 +132,11 @@ interface LibraryContextMenuState {
 const EMPTY_SELECTED_FILE_IDS: ReadonlySet<number> = new Set<number>();
 const EMPTY_SELECTED_FOLDER_PATHS: ReadonlySet<string> = new Set<string>();
 
-function resolveView(rawView: string | null, isDesktop: boolean): LibraryView {
+function resolveView(rawView: string | null): LibraryView {
   if (rawView === "board" || rawView === "list") {
     return rawView;
   }
-  return isDesktop ? "board" : "list";
+  return "board";
 }
 
 interface RenameRequestDialogProps {
@@ -364,7 +363,6 @@ function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { t, formatNumber } = useI18n();
-  const isDesktop = useMediaQuery("(min-width: 761px)");
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const {
     tasks: uploadTasks,
@@ -415,7 +413,7 @@ function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
   const query = rawQuery.trim();
   const debouncedQuery = useDebouncedValue(query, 300);
   const activeQuery = query.length > 0 ? debouncedQuery.trim() : "";
-  const view = resolveView(searchParams.get("view"), isDesktop);
+  const view = resolveView(searchParams.get("view"));
   const startInEdit = searchParams.get("mode") === "edit";
 
   const browseQuery = useReadPath(
