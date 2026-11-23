@@ -16,6 +16,7 @@ from app.module.agent.exception.domain_error import (
     AgentError,
     AgentForkEntryInvalidError,
     AgentHistoryMessageNotFoundError,
+    AgentInvalidCompactionPromptError,
     AgentInvalidEntryError,
     AgentInvalidSystemPromptError,
     AgentNotConfiguredError,
@@ -26,6 +27,8 @@ from app.module.agent.exception.domain_error import (
     AgentRunNotRetryableError,
     AgentSystemPromptNotFoundError,
     AgentUsageLimitExceededError,
+    ModelNotAssignedError,
+    ProviderInactiveError,
     SavedQuestionNotFoundError,
 )
 from app.shared.exception.registry import ExceptionRegistry
@@ -77,6 +80,13 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(AgentRunNotRetryableError, 409, "agent_run_not_retryable")
     ExceptionRegistry.register(AgentRunNotActiveError, 409, "agent_run_not_active")
     ExceptionRegistry.register(AgentNotConfiguredError, 503, "agent_not_configured")
+    ExceptionRegistry.register(ModelNotAssignedError, 409, "model_not_assigned")
+    ExceptionRegistry.register(ProviderInactiveError, 409, "provider_inactive")
+    ExceptionRegistry.register(
+        AgentInvalidCompactionPromptError,
+        422,
+        "compaction_prompt_invalid",
+    )
     ExceptionRegistry.register(
         AgentUsageLimitExceededError,
         429,

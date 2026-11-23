@@ -15,8 +15,10 @@ from app.module.agent.domain.agent_domain import (
     AUTO_COMPACTION_ENABLED,
     CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
     CHAT_ATTACHMENT_STAGED_TTL_HOURS,
+    COMPACTION_MAX_OUTPUT_TOKENS,
     COMPACTION_THRESHOLD_TOKENS,
     CONTEXT_WINDOW_TOKENS,
+    DEFAULT_COMPACTION_PROMPT,
     MAX_COMPACTION_LAST_USER_CHARS,
     MAX_COMPACTION_SUMMARY_CHARS,
     MAX_PAGE_CONTEXT_CHARS,
@@ -30,6 +32,7 @@ from app.module.agent.domain.agent_domain import (
     PARALLEL_TOOLS_ENABLED,
     SAVE_MEMORY_REQUIRES_APPROVAL,
 )
+from app.module.agent.domain.compaction_domain import validate_compaction_template
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,10 @@ class AgentRuntimeConfig:
     max_page_context_chars: int = MAX_PAGE_CONTEXT_CHARS
     max_compaction_summary_chars: int = MAX_COMPACTION_SUMMARY_CHARS
     max_compaction_last_user_chars: int = MAX_COMPACTION_LAST_USER_CHARS
+    model_escalation_enabled: bool = True
+    compaction_prompt: str = DEFAULT_COMPACTION_PROMPT
+    compaction_max_output_tokens: int = COMPACTION_MAX_OUTPUT_TOKENS
+    agent_max_output_tokens: int = 64_000
     auto_compaction_enabled: bool = AUTO_COMPACTION_ENABLED
     parallel_tools_enabled: bool = PARALLEL_TOOLS_ENABLED
     save_memory_requires_approval: bool = SAVE_MEMORY_REQUIRES_APPROVAL
@@ -94,6 +101,18 @@ class AgentRuntimeConfig:
                 10_000,
             ),
             (
+                "compaction_max_output_tokens",
+                self.compaction_max_output_tokens,
+                256,
+                16_384,
+            ),
+            (
+                "agent_max_output_tokens",
+                self.agent_max_output_tokens,
+                256,
+                131_072,
+            ),
+            (
                 "chat_attachment_staged_ttl_hours",
                 self.chat_attachment_staged_ttl_hours,
                 1,
@@ -114,6 +133,16 @@ class AgentRuntimeConfig:
                 raise ValueError(f"{name} must be an integer.")
             if value < minimum or value > maximum:
                 raise ValueError(f"{name} must be between {minimum} and {maximum}.")
+        if not isinstance(self.compaction_prompt, str):
+            raise ValueError("compaction_prompt must be a string.")
+        if not 1 <= len(self.compaction_prompt) <= 20_000:
+            raise ValueError(
+                "compaction_prompt must be between 1 and 20000 characters."
+            )
+        try:
+            validate_compaction_template(self.compaction_prompt)
+        except ValueError as exc:
+            raise ValueError(f"compaction_prompt is invalid: {exc}") from exc
         if self.compaction_threshold_tokens >= self.context_window_tokens:
             raise ValueError(
                 "compaction_threshold_tokens must be less than context_window_tokens."

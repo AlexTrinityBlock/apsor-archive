@@ -26,6 +26,14 @@ class AgentSettingsValuesSchema(BaseModel):
     max_page_context_chars: int = Field(ge=500, le=50_000)
     max_compaction_summary_chars: int = Field(ge=1_000, le=20_000)
     max_compaction_last_user_chars: int = Field(ge=500, le=10_000)
+    # Operator-editable instruction text for the deterministic compaction entry.
+    # The placeholder invariant is enforced by AgentRuntimeConfig so a bad
+    # template becomes 422 compaction_prompt_invalid instead of a generic
+    # request-validation error.
+    compaction_prompt: str = Field(min_length=1, max_length=20_000)
+    compaction_max_output_tokens: int = Field(ge=256, le=16_384)
+    model_escalation_enabled: bool
+    agent_max_output_tokens: int = Field(ge=256, le=131_072)
     auto_compaction_enabled: bool
     parallel_tools_enabled: bool
     save_memory_requires_approval: bool

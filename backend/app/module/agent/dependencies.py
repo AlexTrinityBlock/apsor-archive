@@ -10,8 +10,10 @@ They are read through system-scoped sessions and written only by the root-guarde
 settings routers; they never carry a ``user_id``.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from dataclasses import dataclass, replace
 from typing import cast
 
 from fastapi import Depends, Request
@@ -22,12 +24,21 @@ from app.dependency.auth import (
     require_root,
     require_stateless_authenticated,
 )
+from app.infrastructure.ai.deepseek_client import NullTextGenerator
+from app.infrastructure.ai.model_catalog import MODEL_CATALOG, TIER_ORDER, spec_for
 from app.infrastructure.ai.runtime import AiRuntime
+from app.infrastructure.ai.user_models import (
+    ChatAssignment,
+    UserGenerator,
+    build_user_text_generator,
+    load_assignment,
+    resolve_endpoint,
+    slot_values,
+)
 from app.infrastructure.config.settings import Settings
 from app.infrastructure.database.session import Database, get_db_session
 from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
 from app.module.agent.domain.user_profile_domain import UserProfile, UserProfileCard
-from app.module.agent.exception.domain_error import AgentNotConfiguredError
 from app.module.agent.protocol.chat_attachment_service_protocol import (
     ChatAttachmentServiceProtocol,
 )
@@ -67,7 +78,10 @@ from app.module.knowledge.dependencies import (
     build_timeline_service,
 )
 from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 from app.module.web_research.dependencies import get_web_research_service
+
+logger = logging.getLogger(__name__)
 
 
 async def get_current_user_profile(
@@ -87,20 +101,189 @@ async def get_current_user_profile(
     )
 
 
-def get_agent_chat_generator(request: Request) -> ChatGeneratorProtocol:
-    """Resolve the chat generator, honouring a test/runtime override.
+async def get_chat_assignment(
+    request: Request,
+    user: UserSchema = Depends(require_stateless_authenticated),
+) -> ChatAssignment | None:
+    """Load both endpoint assignments in one short system session.
 
-    Tests can either override this dependency or set
-    ``app.state.agent_chat_generator`` to a deterministic fake.
+    ``app_user`` is an auth table outside RLS, so the read works without an
+    owner-scoped private session. ``None`` means the
+    ``app.state.agent_chat_generator`` test seam is active: the override
+    replaces assignment resolution entirely, so no assignment row is required
+    and the fake is never replaced by escalation. FastAPI caches this
+    dependency per request, so the service and the model plan share one read.
     """
-    override = getattr(request.app.state, "agent_chat_generator", None)
-    if override is not None:
-        return cast(ChatGeneratorProtocol, override)
+    if getattr(request.app.state, "agent_chat_generator", None) is not None:
+        return None
+    database = cast(Database, request.app.state.db)
+    async with database.system_session() as session:
+        return await load_assignment(session, user.user_id)
+
+
+async def get_user_generator(
+    request: Request,
+    assignment: ChatAssignment | None = Depends(get_chat_assignment),
+) -> UserGenerator:
+    """Build the caller's primary-slot generator once per request.
+
+    A test override wins before the assignment is consulted. Otherwise the
+    generator is built from the assigned primary endpoint row only; a missing,
+    inactive, or keyless endpoint yields ``NullTextGenerator`` and the service
+    turns that into ``model_not_assigned`` or ``provider_inactive`` before the
+    SSE response starts.
+    """
     runtime = cast(AiRuntime, request.app.state.ai_runtime)
-    generator = runtime.text_generator
-    if not hasattr(generator, "complete_chat"):
-        raise AgentNotConfiguredError()
-    return cast(ChatGeneratorProtocol, generator)
+    if assignment is None:
+        override = getattr(request.app.state, "agent_chat_generator", None)
+        assert override is not None
+        # Test seam only: the conversation metadata keeps using the runtime
+        # default so existing mechanics tests do not need assignment rows.
+        chat_config = runtime.chat_config
+        return UserGenerator(
+            generator=cast(TextGeneratorProtocol, override),
+            model=chat_config.model or "deepseek-flash",
+            provider=chat_config.provider,
+            effort=None,
+            provider_config_id=None,
+        )
+    return build_user_text_generator(runtime, assignment, slot="primary")
+
+
+def get_agent_chat_generator(
+    generator: UserGenerator = Depends(get_user_generator),
+) -> ChatGeneratorProtocol:
+    """Return the resolved primary generator (or the test override)."""
+    return cast(ChatGeneratorProtocol, generator.generator)
+
+
+@dataclass(frozen=True)
+class AgentModelPlan:
+    """The primary endpoint plus its optional one-step escalation target.
+
+    Every generator is built from the **same** endpoint row with a different
+    model string, so escalation never changes keys, base URL, or provider. The
+    plan is ``None`` for an unknown or top-tier model, which pins the account.
+    """
+
+    runtime: AiRuntime
+    endpoint: ProviderConfig
+    effort: str | None
+    primary_model: str
+    escalation_model: str
+
+    def next_model(self, current_model: str) -> str | None:
+        """Return the one allowed target, or ``None`` once already escalated."""
+        if current_model != self.primary_model:
+            return None
+        return self.escalation_model
+
+    def generator_for(self, model: str) -> ChatGeneratorProtocol:
+        """Build the escalated client on the same endpoint row."""
+        config = self.endpoint.model_copy(
+            update={"model": model, "reasoning_effort": self.effort}
+        )
+        return cast(ChatGeneratorProtocol, self.runtime.builder.build_text_generator(config))
+
+
+def _next_escalation_model(primary_model: str, provider: str) -> str | None:
+    """Return the nearest higher catalog tier served by the same row provider.
+
+    Unknown models and top-tier models have no target. A tier with no catalog
+    row for the endpoint's provider is skipped rather than crossing provider
+    families, because the row holds exactly one key and base URL.
+    """
+    spec = spec_for(primary_model)
+    if spec is None or spec.tier is None:
+        return None
+    for tier in TIER_ORDER[TIER_ORDER.index(spec.tier) + 1 :]:
+        match = next(
+            (
+                candidate.model
+                for candidate in MODEL_CATALOG.values()
+                if candidate.tier == tier and candidate.provider == provider
+            ),
+            None,
+        )
+        if match is not None:
+            return match
+    return None
+
+
+def get_agent_model_plan(
+    request: Request,
+    assignment: ChatAssignment | None = Depends(get_chat_assignment),
+    generator: UserGenerator = Depends(get_user_generator),
+) -> AgentModelPlan | None:
+    """Build the escalation plan for a catalog-known, usable primary slot.
+
+    The plan is absent for the test seam, an unassigned or broken slot, an
+    unknown model, and a primary already at the top tier. In every one of those
+    cases the model is pinned and no escalation is attempted.
+    """
+    if (
+        assignment is None
+        or generator.provider == "none"
+        or generator.provider_config_id is None
+        or not generator.model
+    ):
+        return None
+    runtime = cast(AiRuntime, request.app.state.ai_runtime)
+    resolved = resolve_endpoint(runtime.chat_chain, generator.provider_config_id)
+    if (
+        resolved is None
+        or not resolved.enabled
+        or resolved.provider == "none"
+        or not resolved.api_key
+    ):
+        return None
+    escalation_model = _next_escalation_model(generator.model, resolved.provider)
+    if escalation_model is None:
+        return None
+    return AgentModelPlan(
+        runtime=runtime,
+        endpoint=resolved,
+        effort=slot_values(assignment, "primary").effort,
+        primary_model=generator.model,
+        escalation_model=escalation_model,
+    )
+
+
+def with_account_limits(
+    base: AgentRuntimeConfig,
+    assignment: ChatAssignment,
+) -> tuple[AgentRuntimeConfig, str | None]:
+    """Apply the account's stored window/threshold over the global snapshot.
+
+    ``dataclasses.replace`` re-runs ``__post_init__``, so an inherited pair that
+    became invalid after a global default change is rejected rather than
+    silently shrunk. The caller logs the degradation and keeps the global
+    snapshot; the assignment read surface reports ``invalid_threshold``.
+    """
+    window = assignment.context_window_tokens or base.context_window_tokens
+    threshold = (
+        assignment.compaction_threshold_tokens or base.compaction_threshold_tokens
+    )
+    if (
+        window == base.context_window_tokens
+        and threshold == base.compaction_threshold_tokens
+    ):
+        return base, None
+    try:
+        return (
+            replace(
+                base,
+                context_window_tokens=window,
+                compaction_threshold_tokens=threshold,
+            ),
+            None,
+        )
+    except ValueError:
+        logger.warning(
+            "invalid account agent limits user_id=%s; using the global snapshot",
+            assignment.user_id,
+        )
+        return base, "invalid_threshold"
 
 
 class _ToolServiceScope:
@@ -130,12 +313,12 @@ class _ToolServiceScope:
                     session,
                     user_id=self.user_id,
                 ),
-                file_service=build_file_service(
+                file_service=await build_file_service(
                     state,
                     session,
                     user_id=self.user_id,
                 ),
-                memory_service=build_memory_service(
+                memory_service=await build_memory_service(
                     state,
                     session,
                     user_id=self.user_id,
@@ -264,19 +447,51 @@ def get_agent_service(
     chat_attachments: ChatAttachmentServiceProtocol = Depends(
         get_chat_attachment_service
     ),
+    assignment: ChatAssignment | None = Depends(get_chat_assignment),
+    user_generator: UserGenerator = Depends(get_user_generator),
+    model_plan: AgentModelPlan | None = Depends(get_agent_model_plan),
 ) -> AgentService:
     """Build an owner-bound agent service for one authenticated request.
 
     The repository captures ``user_id``/``role``; every short transaction in the
     JSON request and the later SSE stream therefore runs with the same account's
     RLS context. A service instance is never reused for another account.
+
+    Provider and model come from the account's assigned primary endpoint, never
+    from ``runtime.chat_config``. The test seam keeps the historical
+    runtime-default metadata so conversation mechanics tests do not need
+    assignment rows.
     """
     runtime = cast(AiRuntime, request.app.state.ai_runtime)
-    chat_config = runtime.chat_config
-    provider = chat_config.provider
-    if provider not in {"deepseek", "openai-compatible"}:
-        provider = "deepseek"
-    model = chat_config.model or "deepseek-flash"
+    effective_config = config
+    if assignment is None:
+        chat_config = runtime.chat_config
+        provider = chat_config.provider
+        if provider not in {"deepseek", "openai-compatible", "anthropic"}:
+            provider = "deepseek"
+        model = chat_config.model or "deepseek-flash"
+        active_provider = chat_config.provider
+        model_status = "assigned"
+    else:
+        provider = user_generator.provider
+        model = user_generator.model
+        active_provider = user_generator.provider
+        effective_config, degraded = with_account_limits(config, assignment)
+        if degraded is not None:
+            logger.warning(
+                "agent account limits degraded user_id=%s reason=%s",
+                assignment.user_id,
+                degraded,
+            )
+        if isinstance(user_generator.generator, NullTextGenerator):
+            values = slot_values(assignment, "primary")
+            model_status = (
+                "missing"
+                if values.row_id is None or not values.model
+                else "inactive"
+            )
+        else:
+            model_status = "assigned"
     database = cast(Database, request.app.state.db)
     repository = AgentRepository(
         database,
@@ -292,11 +507,13 @@ def get_agent_service(
         tool_registry=tool_registry,
         default_provider=provider,
         default_model=model,
-        config=config,
+        config=effective_config,
         system_prompt_service=get_system_prompt_service(request),
         chat_attachments=chat_attachments,
         server_timezone=cast(Settings, request.app.state.settings).timezone,
-        active_provider=runtime.chat_config.provider,
+        active_provider=active_provider,
+        model_plan=model_plan,
+        model_status=model_status,
         web_search_provider=_available_web_provider(
             runtime.web_search_config,
             runtime.web_search_client,
@@ -371,17 +588,22 @@ def get_saved_question_ask_service(
 
 
 __all__ = [
+    "AgentModelPlan",
     "ToolServiceScopeProtocol",
     "get_agent_chat_generator",
+    "get_agent_model_plan",
     "get_agent_runtime_config",
     "get_agent_service",
     "get_agent_settings_service",
     "get_app_settings",
+    "get_chat_assignment",
     "get_chat_attachment_service",
     "get_current_user_profile",
     "get_history_message_service",
     "get_saved_question_ask_service",
     "get_saved_question_service",
     "get_system_prompt_admin_service",
+    "get_user_generator",
     "load_agent_runtime_config",
+    "with_account_limits",
 ]
