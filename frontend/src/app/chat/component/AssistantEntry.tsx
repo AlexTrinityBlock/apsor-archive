@@ -4,23 +4,18 @@ import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
 import { useI18n, type TranslationKey } from "../../i18n";
-import { readPlotSpec } from "../plot";
 import {
   assistantText,
   parseCitationLabel,
   readAssistantMeta,
   readToolCalls,
   type CitationToken,
-  type ResourceMeta,
   type ToolResultInfo,
 } from "../types";
 import { CitationChip } from "./CitationChip";
 import { MarkdownBody } from "./MarkdownBody";
-import { PlotBlock } from "./PlotBlock";
-import { ResourceCard } from "./ResourceCard";
 import { ToolCallCard } from "./ToolCallCard";
-import { ToolDiagnostics, type ToolDiagnosticItem } from "./ToolDiagnostics";
-import { finishReasonTone, isToolFailure } from "./status";
+import { finishReasonTone } from "./status";
 
 interface AssistantEntryProps {
   readonly entry: AgentEntrySchema;
@@ -28,10 +23,11 @@ interface AssistantEntryProps {
   readonly memoryTitles?: ReadonlyMap<number, string>;
   readonly action?: ReactNode;
   readonly copyAction?: ReactNode;
+  /** A linked result entry is rendered right after this step. */
+  readonly hasToolStep?: boolean;
   readonly selectedTraceId?: string | null;
   readonly onSelectTrace?: (traceId: string) => void;
   readonly onOpenCitation?: (token: CitationToken) => void;
-  readonly onOpenResource?: (resource: ResourceMeta) => void;
 }
 
 type UsageKey = "prompt" | "completion" | "total" | "cacheHit" | "cacheMiss";
@@ -57,17 +53,17 @@ const USAGE_LABEL_KEYS: Readonly<Record<UsageKey, TranslationKey>> = {
   cacheMiss: "chat.assistant.usageCacheMiss",
 };
 
-/** An archival assistant turn: tool step chips, prose, citations, and usage. */
+/** An archival assistant step: pending tool chips, prose, citations, and usage. */
 export function AssistantEntry({
   entry,
   toolResults,
   memoryTitles,
   action,
   copyAction,
+  hasToolStep = false,
   selectedTraceId = null,
   onSelectTrace,
   onOpenCitation,
-  onOpenResource,
 }: AssistantEntryProps) {
   const { t, formatNumber } = useI18n();
   const meta = readAssistantMeta(entry);
@@ -88,48 +84,9 @@ export function AssistantEntry({
     citations.push(token);
   }
   const usage = usageRows(meta.usage);
-  const failures: ToolDiagnosticItem[] = [];
-  const visibleCalls = calls.filter((call) => {
-    const result = toolResults.get(call.id)?.meta ?? null;
-    if (!isToolFailure(result?.status)) {
-      return true;
-    }
-    failures.push({
-      id: call.id,
-      name: call.name,
-      status: result?.status ?? null,
-      errorCode: result?.errorCode ?? null,
-      detail: result?.detail ?? null,
-    });
-    return false;
-  });
-  const plots = visibleCalls.flatMap((call) => {
-    const plotData = toolResults.get(call.id)?.meta.data;
-    return plotData !== null &&
-      plotData !== undefined &&
-      readPlotSpec(plotData) !== null
-      ? [{ id: call.id, data: plotData }]
-      : [];
-  });
-  // A presented resource stays visible in the transcript even though its raw
-  // tool result is folded into the assistant turn. Deduplicate by target so a
-  // repeated presentation does not stack identical bubbles.
-  const resources: ResourceMeta[] = [];
-  const seenResources = new Set<string>();
-  for (const call of visibleCalls) {
-    const resource = toolResults.get(call.id)?.meta.resource ?? null;
-    if (resource === null) {
-      continue;
-    }
-    const key = `${resource.resourceType}:${resource.resourceId ?? "none"}:${
-      resource.chunk ?? ""
-    }`;
-    if (seenResources.has(key)) {
-      continue;
-    }
-    seenResources.add(key);
-    resources.push(resource);
-  }
+  // A call whose result entry is in the transcript is rendered by that entry.
+  // Only a call that never produced one keeps a compact waiting chip here.
+  const pendingCalls = calls.filter((call) => !toolResults.has(call.id));
 
   let body: ReactNode = null;
   if (text.length > 0) {
@@ -142,7 +99,7 @@ export function AssistantEntry({
         />
       </div>
     );
-  } else if (visibleCalls.length === 0 && failures.length === 0 && !meta.error) {
+  } else if (pendingCalls.length === 0 && !hasToolStep && !meta.error) {
     body = (
       <p className="chat-turn__silent">{t("chat.assistant.silent")}</p>
     );
@@ -156,25 +113,24 @@ export function AssistantEntry({
         </span>
         <span>Apsor Archive Agent</span>
         <span className="chat-turn__meta">
-          {[
-            meta.provider,
-            meta.model,
-            meta.step === null
-              ? null
-              : t("chat.assistant.step", { step: meta.step }),
-          ]
+          {[meta.provider, meta.model]
             .filter((item): item is string => Boolean(item))
             .join(" · ")}
         </span>
+        {meta.step === null ? null : (
+          <span className="chat-turn__step">
+            {t("chat.timeline.step", { step: meta.step })}
+          </span>
+        )}
         <Badge tone={finishReasonTone(meta.finishReason)}>
           {meta.finishReason ?? t("chat.common.recorded")}
         </Badge>
         {action}
       </header>
 
-      {visibleCalls.length > 0 ? (
+      {pendingCalls.length > 0 ? (
         <div className="chat-tool-flow">
-          {visibleCalls.map((call, index) => (
+          {pendingCalls.map((call, index) => (
             <ToolCallCard
               key={call.id}
               call={call}
@@ -192,26 +148,6 @@ export function AssistantEntry({
       {copyAction ? (
         <div className="chat-turn__copy">{copyAction}</div>
       ) : null}
-
-      {resources.length > 0 ? (
-        <div className="chat-resource-stack">
-          {resources.map((resource) => (
-            <ResourceCard
-              key={`${resource.resourceType}:${resource.resourceId ?? "none"}:${
-                resource.chunk ?? ""
-              }`}
-              resource={resource}
-              onOpen={onOpenResource}
-            />
-          ))}
-        </div>
-      ) : null}
-
-      {plots.map((plot) => (
-        <PlotBlock key={plot.id} data={plot.data} />
-      ))}
-
-      <ToolDiagnostics items={failures} />
 
       {meta.error ? (
         <div className="chat-turn__error" role="status">

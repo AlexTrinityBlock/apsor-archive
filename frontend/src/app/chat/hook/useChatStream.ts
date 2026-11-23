@@ -38,11 +38,23 @@ export interface ChatStreamTool {
   readonly errorCode: string | null;
 }
 
+/** One assistant step and the tool calls made after its prose. */
+export interface ChatStreamSegment {
+  /** 1-based step number within this turn. */
+  readonly index: number;
+  readonly text: string;
+  readonly toolCalls: readonly ChatStreamTool[];
+}
+
 export interface ChatStreamView {
   readonly conversationId: number;
   readonly userContent: string;
   readonly userAttachments: readonly ChatAttachmentView[];
+  /** The ordered segment history; earlier prose is never discarded. */
+  readonly segments: readonly ChatStreamSegment[];
+  /** Aggregate prose kept for the inspector. */
   readonly assistantText: string;
+  /** Flat tool list kept for the inspector and memory-title lookup. */
   readonly toolCalls: readonly ChatStreamTool[];
   readonly usage: Readonly<Record<string, number>>;
   readonly finishReason: string | null;
@@ -112,6 +124,84 @@ function upsertTool(
   );
 }
 
+function segmentsText(segments: readonly ChatStreamSegment[]): string {
+  return segments
+    .map((segment) => segment.text)
+    .filter((text) => text.length > 0)
+    .join("\n\n");
+}
+
+/** Keep the aggregate fields and the ordered segments in one assignment. */
+function withSegments(
+  state: ChatStreamView,
+  segments: readonly ChatStreamSegment[],
+): ChatStreamView {
+  return { ...state, segments, assistantText: segmentsText(segments) };
+}
+
+function ensureSegments(
+  segments: readonly ChatStreamSegment[],
+): ChatStreamSegment[] {
+  return segments.length > 0
+    ? [...segments]
+    : [{ index: 1, text: "", toolCalls: [] }];
+}
+
+function updateLastSegment(
+  segments: readonly ChatStreamSegment[],
+  update: (segment: ChatStreamSegment) => ChatStreamSegment,
+): ChatStreamSegment[] {
+  const base = ensureSegments(segments);
+  const lastIndex = base.length - 1;
+  return base.map((segment, index) =>
+    index === lastIndex ? update(segment) : segment,
+  );
+}
+
+function updateSegmentTool(
+  segments: readonly ChatStreamSegment[],
+  callId: string,
+  patch: Partial<ChatStreamTool> & { readonly name: string },
+): ChatStreamSegment[] {
+  const base = ensureSegments(segments);
+  let target = base.findIndex((segment) =>
+    segment.toolCalls.some((tool) => tool.id === callId),
+  );
+  if (target < 0) {
+    target = base.length - 1;
+  }
+  return base.map((segment, index) =>
+    index === target
+      ? {
+          ...segment,
+          toolCalls: upsertTool(segment.toolCalls, callId, patch),
+        }
+      : segment,
+  );
+}
+
+function startAssistantSegment(state: ChatStreamView): ChatStreamView {
+  const segments = [...state.segments];
+  const current = segments.at(-1);
+  const fresh =
+    current === undefined ||
+    current.text.length > 0 ||
+    current.toolCalls.length > 0;
+  if (fresh) {
+    segments.push({
+      index: segments.length + 1,
+      text: "",
+      toolCalls: [],
+    });
+  }
+  return {
+    ...withSegments(state, segments),
+    finishReason: fresh ? null : state.finishReason,
+    usage: fresh ? {} : state.usage,
+    status: "running",
+  };
+}
+
 function applyEvent(
   state: ChatStreamView,
   event: AgentStreamEvent,
@@ -124,52 +214,54 @@ function applyEvent(
         pageContextEntryId: event.data.page_context_entry_id,
         pageContextAttached: event.data.page_context_attached,
       };
-    case "message_start": {
-      // A new assistant step after tools starts a fresh prose run; the
-      // persisted transcript will replace this live view when it settles.
-      const newStep = state.toolCalls.length > 0;
-      return {
-        ...state,
-        assistantText: newStep ? "" : state.assistantText,
-        finishReason: newStep ? null : state.finishReason,
-        usage: newStep ? {} : state.usage,
-        status: "running",
-      };
+    case "message_start":
+      return startAssistantSegment(state);
+    case "message_delta": {
+      const segments = updateLastSegment(state.segments, (segment) => ({
+        ...segment,
+        text: segment.text + event.data.delta,
+      }));
+      return withSegments(state, segments);
     }
-    case "message_delta":
-      return {
-        ...state,
-        assistantText: state.assistantText + event.data.delta,
-      };
     case "message_end":
       return {
         ...state,
         usage: event.data.usage,
         finishReason: event.data.finish_reason,
       };
-    case "tool_start":
+    case "tool_start": {
+      const patch = {
+        name: event.data.name,
+        arguments: event.data.arguments,
+        status: "running",
+        entryId: event.data.entry_id,
+      } as const;
       return {
-        ...state,
-        toolCalls: upsertTool(state.toolCalls, event.data.tool_call_id, {
-          name: event.data.name,
-          arguments: event.data.arguments,
-          status: "running",
-          entryId: event.data.entry_id,
-        }),
+        ...withSegments(
+          state,
+          updateSegmentTool(state.segments, event.data.tool_call_id, patch),
+        ),
+        toolCalls: upsertTool(state.toolCalls, event.data.tool_call_id, patch),
       };
-    case "tool_end":
+    }
+    case "tool_end": {
+      const patch = {
+        name: event.data.name,
+        status: event.data.status,
+        resource: readResource(event.data.resource),
+        entryId: event.data.entry_id,
+        data: event.data.data,
+        durationMs: event.data.duration_ms,
+        errorCode: event.data.error_code,
+      };
       return {
-        ...state,
-        toolCalls: upsertTool(state.toolCalls, event.data.tool_call_id, {
-          name: event.data.name,
-          status: event.data.status,
-          resource: readResource(event.data.resource),
-          entryId: event.data.entry_id,
-          data: event.data.data,
-          durationMs: event.data.duration_ms,
-          errorCode: event.data.error_code,
-        }),
+        ...withSegments(
+          state,
+          updateSegmentTool(state.segments, event.data.tool_call_id, patch),
+        ),
+        toolCalls: upsertTool(state.toolCalls, event.data.tool_call_id, patch),
       };
+    }
     case "approval_required":
       return { ...state, status: "waiting" };
     case "run_end": {
@@ -235,6 +327,7 @@ export function useChatStream(
         conversationId,
         userContent,
         userAttachments,
+        segments: [],
         assistantText: "",
         toolCalls: [],
         usage: {},

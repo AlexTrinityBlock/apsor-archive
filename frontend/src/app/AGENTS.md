@@ -54,6 +54,12 @@ The application layer does not define backend behavior. API shapes come from `ge
 - New dialogs and menus must manage focus, Escape, keyboard traversal, and focus return. New icons belong in `component/Icon.tsx`.
 - Page CSS is imported by that page or its owning component and uses a workspace prefix. Global tokens and shell rules belong in `src/styles/`.
 
+## Chat workspace
+
+- Every persisted assistant step and its immediately following tool results render in transcript order. Do not fold linked `pi.tool-result` entries out of the reading view, merge assistant steps into one bubble, or render only the last step.
+- The live stream keeps an ordered segment list: assistant prose for one step, then that step's tools, then the next assistant step. A new `message_start` appends a segment; it never erases earlier prose.
+- Tool steps show their concrete arguments and a bounded structured preview. The model-facing tool XML is never rendered, and hidden provider reasoning is not invented when the contract does not persist it.
+
 ## Verification
 
 ```bash
