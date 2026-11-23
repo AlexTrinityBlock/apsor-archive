@@ -277,11 +277,18 @@ export const chat = {
     auto: "Auto",
     compactLead:
       "Earlier turns were folded into this boundary. The full transcript is still preserved here; the model sees the summary instead.",
+    compactLeadAuto:
+      "Earlier turns are summarized here. The full transcript is still stored; the model reads the summary instead.",
     foldedOne: "{count} entry folded",
     foldedOther: "{count} entries folded",
-    summaryChars: "{count} summary chars",
+    entryRange: "entries {from}–{to}",
+    entryOne: "entry {id}",
+    summaryChars: "{count} chars",
     lastUserInput: "Last user input",
+    lastUserInputEntry: "Last user input · entry {id}",
     summary: "Summary",
+    copySummary: "Copy summary",
+    copySummaryTitle: "Copy the compaction summary",
     cleared: "Context cleared",
     resetLead:
       "Older transcript entries are preserved here, but they are no longer sent to the model.",

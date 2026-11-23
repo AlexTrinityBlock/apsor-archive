@@ -1593,6 +1593,28 @@
   border-top: 0.7px dashed var(--mono-grid);
 }
 
+.context-card__summary-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 4px;
+  margin-top: 7px;
+  border-top: 0.7px dashed var(--mono-grid);
+}
+
+.context-card__summary-row .context-card__details {
+  min-width: 0;
+  flex: 1;
+  margin-top: 0;
+  border-top: 0;
+}
+
+.context-card__summary-copy {
+  flex: none;
+  margin-top: 1px;
+  white-space: nowrap;
+}
+
 .context-card__details summary {
   display: flex;
   align-items: center;

@@ -29,6 +29,7 @@ from app.module.agent.domain.compaction_domain import (
     MAX_COMPACTION_SUMMARY_CHARS,
     MAX_SUMMARY_ITEM_CHARS,
     MAX_SUMMARY_ITEMS,
+    _summary_lines,
     build_compaction_draft,
     estimate_context_tokens,
     estimate_provider_context_tokens,
@@ -50,6 +51,33 @@ def _entry(
         role = "user" if kind == KIND_USER else "assistant"
         messages = ({"role": role, "content": text},)
     return TranscriptEntry(id=entry_id, kind=kind, messages=messages, data=data)
+
+
+def _tool_entry(
+    entry_id: int,
+    tool: str,
+    *,
+    status: str = "ok",
+    error_code: str | None = None,
+    arguments: dict[str, Any] | None = None,
+) -> TranscriptEntry:
+    """Build one tool-result entry with the persisted display arguments."""
+    data: dict[str, Any] = {"tool": tool, "status": status}
+    if error_code is not None:
+        data["error_code"] = error_code
+    if arguments is not None:
+        data["arguments"] = arguments
+    return TranscriptEntry(id=entry_id, kind=KIND_TOOL_RESULT, data=data)
+
+
+def _summary_text(
+    entries: list[TranscriptEntry],
+    **kwargs: Any,
+) -> str:
+    """Extract the provider-visible summary from a compaction draft."""
+    draft = build_compaction_draft(entries, reason="manual", auto=False, **kwargs)
+    content = draft.messages[0]["content"]
+    return content.split("<summary>", 1)[1].rsplit("</summary>", 1)[0]
 
 
 def _representative_transcript() -> list[TranscriptEntry]:
@@ -106,8 +134,11 @@ def _provider_context() -> ProviderContext:
     )
 
 
-# Legacy golden output from the pre-template compactor. The bounded path must
-# never change this: existing threshold compaction stores exactly these bytes.
+# Legacy golden output from the pre-template compactor. Stored old compactions
+# remain valid because the renderer reads only the XML envelope. New
+# compactions use the compact format, but this particular transcript renders
+# identically: it has one un-argumented tool result and no empty assistant
+# step, so repeated-tool grouping and concrete arguments add nothing here.
 _LEGACY_SUMMARY = (
     "User: First question about the wrench.\n"
     "Assistant: The wrench is a hand tool [file:3#1]. citations=[file:3#1]\n"
@@ -315,6 +346,209 @@ def test_build_compaction_draft_explicit_none_is_the_legacy_path() -> None:
     )
 
     assert implicit == explicit
+
+
+def test_summary_merges_consecutive_identical_tool_calls() -> None:
+    """One run of same-tool, same-status results becomes one counted line."""
+    entries = [
+        _entry(1, KIND_USER, text="Compare three search results."),
+        _tool_entry(2, "web_search", arguments={"query": "vLLM prefix caching"}),
+        _tool_entry(3, "web_search", arguments={"query": "PagedAttention"}),
+        _tool_entry(4, "web_search", arguments={"query": "continuous batching"}),
+        _entry(5, KIND_ASSISTANT, text="The results agree."),
+    ]
+
+    summary = _summary_text(entries)
+
+    assert summary.splitlines() == [
+        "User: Compare three search results.",
+        (
+            "Tool web_search ×3: ok — "
+            '"vLLM prefix caching" | "PagedAttention" | "continuous batching"'
+        ),
+        "Assistant: The results agree.",
+    ]
+
+
+def test_summary_does_not_merge_different_tools_statuses_or_errors() -> None:
+    """A different tool, status, or error code always starts a new line."""
+    entries = [
+        _tool_entry(1, "web_search", arguments={"query": "first query"}),
+        _tool_entry(
+            2,
+            "web_fetch",
+            arguments={"url": "https://example.com/docs"},
+        ),
+        _tool_entry(
+            3,
+            "web_search",
+            status="error",
+            error_code="timeout",
+            arguments={"query": "retry me"},
+        ),
+        _tool_entry(
+            4,
+            "web_search",
+            status="error",
+            error_code="timeout",
+            arguments={"query": "retry me"},
+        ),
+        _tool_entry(5, "web_search", arguments={"query": "second query"}),
+        _tool_entry(6, "web_search", status="rejected", arguments={"query": "x"}),
+    ]
+
+    assert _summary_text(entries).splitlines() == [
+        'Tool web_search: ok — "first query"',
+        'Tool web_fetch: ok — "https://example.com/docs"',
+        "Tool web_search: error — code=timeout",
+        "Tool web_search: error — code=timeout",
+        'Tool web_search: ok — "second query"',
+        'Tool web_search: rejected — "x"',
+    ]
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments", "expected"),
+    [
+        ("web_search", {"query": "q"}, 'Tool web_search: ok — "q"'),
+        ("search_knowledge", {"query": "q"}, 'Tool search_knowledge: ok — "q"'),
+        ("history_message", {"id": 7}, "Tool history_message: ok — id=7"),
+        (
+            "web_fetch",
+            {"url": "https://example.com/api"},
+            'Tool web_fetch: ok — "https://example.com/api"',
+        ),
+        ("read_memory", {"id": 116}, "Tool read_memory: ok — id=116"),
+        (
+            "read_file",
+            {"title": "notes.md"},
+            'Tool read_file: ok — "notes.md"',
+        ),
+        (
+            "calculate",
+            {"expression": "12 * 3"},
+            'Tool calculate: ok — "12 * 3"',
+        ),
+        ("render_plot", {"title": "Trend"}, 'Tool render_plot: ok — "Trend"'),
+        (
+            "present_resource",
+            {"resource_type": "file", "resource_id": 42},
+            "Tool present_resource: ok — file#42",
+        ),
+        (
+            "save_memory",
+            {"title": "Retire the old plan"},
+            'Tool save_memory: ok — "Retire the old plan"',
+        ),
+        (
+            "save_memory",
+            {"content": "First line\nSecond line"},
+            'Tool save_memory: ok — "First line"',
+        ),
+        (
+            "read_timeline",
+            {"start": "2026-01-01", "end": "2026-02-01"},
+            'Tool read_timeline: ok — end="2026-02-01"',
+        ),
+    ],
+)
+def test_summary_tool_line_uses_a_concrete_primary_argument(
+    tool: str,
+    arguments: dict[str, Any],
+    expected: str,
+) -> None:
+    """Known tools use their stable key; unknown tools sort their first scalar."""
+    assert _summary_text([_tool_entry(1, tool, arguments=arguments)]) == expected
+
+
+def test_summary_tool_line_deduplicates_and_caps_argument_values() -> None:
+    """Duplicate values appear once and only three distinct values are shown."""
+    entries = [
+        _tool_entry(1, "web_search", arguments={"query": "same"}),
+        _tool_entry(2, "web_search", arguments={"query": "same"}),
+        _tool_entry(3, "web_search", arguments={"query": "one"}),
+        _tool_entry(4, "web_search", arguments={"query": "two"}),
+        _tool_entry(5, "web_search", arguments={"query": "three"}),
+        _tool_entry(6, "web_search", arguments={"query": "four"}),
+    ]
+
+    assert _summary_text(entries) == (
+        'Tool web_search ×6: ok — "same" | "one" | "two" | +2 more'
+    )
+
+
+def test_summary_omits_empty_assistant_lines() -> None:
+    """An assistant step with no text leaves no placeholder line."""
+    entries = [
+        _entry(1, KIND_USER, text="Hello"),
+        _entry(2, KIND_ASSISTANT, text=""),
+        _entry(3, KIND_ASSISTANT, text="   "),
+        _entry(4, KIND_ASSISTANT, text="Useful answer"),
+    ]
+
+    summary = _summary_text(entries)
+
+    assert summary == "User: Hello\nAssistant: Useful answer"
+    assert "(empty)" not in summary
+
+
+def test_summary_tool_line_stays_within_the_item_cap() -> None:
+    """Long concrete arguments are clipped to the per-item bound."""
+    entries = [
+        _tool_entry(
+            index,
+            "web_search",
+            arguments={"query": f"{'x' * 1_000}-{index}"},
+        )
+        for index in range(1, 4)
+    ]
+
+    summary = _summary_text(entries)
+
+    assert summary.startswith("Tool web_search ×3: ok — ")
+    for line in summary.splitlines():
+        assert len(line) <= MAX_SUMMARY_ITEM_CHARS
+
+
+def test_summary_total_cap_still_applies_to_merged_tool_lines() -> None:
+    """The configured summary cap bounds the rendered, grouped summary."""
+    entries = [
+        _tool_entry(index, "web_search", arguments={"query": f"query {index}"})
+        for index in range(1, 30)
+    ]
+
+    summary = _summary_text(entries, max_summary_chars=120)
+
+    assert len(summary) <= 120
+
+
+def test_summary_does_not_merge_a_run_split_by_another_entry() -> None:
+    """A user, assistant, page-context, reset, or compaction entry breaks a run."""
+    entries = [
+        _tool_entry(1, "web_search", arguments={"query": "first"}),
+        _tool_entry(2, "web_search", arguments={"query": "second"}),
+        _entry(3, KIND_USER, text="Pause."),
+        _tool_entry(4, "web_search", arguments={"query": "third"}),
+        _tool_entry(5, "web_search", arguments={"query": "fourth"}),
+    ]
+
+    assert _summary_text(entries).splitlines() == [
+        'Tool web_search ×2: ok — "first" | "second"',
+        "User: Pause.",
+        'Tool web_search ×2: ok — "third" | "fourth"',
+    ]
+
+
+def test_summary_merges_only_the_selected_part_of_a_run() -> None:
+    """A window that starts mid-run merges only the entries inside it."""
+    entries = [
+        _tool_entry(index, "web_search", arguments={"query": f"query {index}"})
+        for index in range(1, 8)
+    ]
+
+    assert _summary_lines(entries[4:]) == [
+        'Tool web_search ×3: ok — "query 5" | "query 6" | "query 7"',
+    ]
 
 
 def test_build_compaction_draft_target_tokens_keeps_newest_whole_items() -> None:
