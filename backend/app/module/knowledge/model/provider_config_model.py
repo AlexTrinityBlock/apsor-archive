@@ -143,13 +143,26 @@ class ChatProviderConfigModel(Base, ProviderConfigMixin):
     """Saved chat/LLM provider configurations."""
 
     __tablename__ = "chat_provider_config"
-    __table_args__ = _provider_table_args(
-        table_name="chat_provider_config",
-        provider_check="provider IN ('deepseek', 'openai-compatible', 'none')",
-        model_check="char_length(model) BETWEEN 1 AND 128",
-        model_constraint="model_required",
-        dimension_check="dimension IS NULL",
+    __table_args__ = (
+        *_provider_table_args(
+            table_name="chat_provider_config",
+            provider_check=(
+                "provider IN ('anthropic', 'deepseek', 'openai-compatible', 'none')"
+            ),
+            model_check="char_length(model) BETWEEN 1 AND 128",
+            model_constraint="model_required",
+            dimension_check="dimension IS NULL",
+        ),
+        CheckConstraint(
+            "max_output_tokens IS NULL OR max_output_tokens BETWEEN 256 AND 131072",
+            name="max_output_tokens_range",
+        ),
     )
+
+    # Per-row output cap for one chat endpoint. NULL means the deployment
+    # default, so a Claude row and a DeepSeek row can coexist without forcing
+    # the smaller cap onto every provider.
+    max_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class EmbeddingProviderConfigModel(Base, ProviderConfigMixin):

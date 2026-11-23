@@ -21,6 +21,7 @@ export interface ProviderReadSchema {
   key_hint: string | null;
   key_source: ProviderReadSchemaKeySource;
   label: string;
+  max_output_tokens?: number | null;
   model: string | null;
   priority: number;
   provider: string;

@@ -55,6 +55,33 @@ class AgentNotConfiguredError(AgentError):
         super().__init__("No chat provider is configured for agent conversations.")
 
 
+class ModelNotAssignedError(AgentError):
+    """The account has no primary endpoint/model assignment.
+
+    This is a configuration error, not a user input error: no path may fall
+    back to ``runtime.chat_config`` or the deployment key to rescue it.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("No chat model is assigned to this account.")
+
+
+class ProviderInactiveError(AgentError):
+    """The assigned primary endpoint is inactive, disabled, or keyless."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "The assigned chat endpoint is not active or has no usable API key."
+        )
+
+
+class AgentInvalidCompactionPromptError(AgentError):
+    """The compaction template cannot be rendered safely."""
+
+    def __init__(self, detail: str | None = None) -> None:
+        super().__init__(detail or "The compaction prompt is invalid.")
+
+
 class AgentProviderError(AgentError):
     def __init__(self) -> None:
         super().__init__("The chat provider failed.")

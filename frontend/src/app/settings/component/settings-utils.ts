@@ -15,6 +15,7 @@ export type SettingsTone = "ok" | "degraded" | "error" | "unknown";
 
 /** Human labels for provider kinds, falling back to the raw API value. */
 const PROVIDER_LABELS: Readonly<Record<string, string>> = {
+  anthropic: "Anthropic",
   deepseek: "DeepSeek",
   "openai-compatible": "OpenAI-compatible",
   openai: "OpenAI",

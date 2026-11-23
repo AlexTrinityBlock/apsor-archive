@@ -5,9 +5,9 @@ There are two secret locations:
 - `secrets/` holds the Cloudflare Tunnel token file named by
   `docker-compose.cloudflare-tunnel.yml`.
 - `.secrets/` holds application env files that the API and worker read
-  themselves: `deepseek.env`, `openai.env`, `r2.env`, and the optional
-  `exa.env`. Compose mounts `.secrets/` read-only, so these values never become
-  container environment variables.
+  themselves: `deepseek.env`, `anthropic.env`, `openai.env`, `r2.env`, and the
+  optional `exa.env`. Compose mounts `.secrets/` read-only, so these values
+  never become container environment variables.
 
 The contents of both directories are gitignored (this README is the tracked
 exception). Never put a secret in `environment:`, a committed `.env` file, a
@@ -54,8 +54,8 @@ The API and worker run as uid `10001` and must be able to read the file:
 ```bash
 chmod 755 .secrets
 # Container uid 10001 needs read access; unrelated host users do not.
-sudo chgrp 10001 .secrets/r2.env .secrets/deepseek.env .secrets/openai.env
-chmod 640 .secrets/r2.env .secrets/deepseek.env .secrets/openai.env
+sudo chgrp 10001 .secrets/r2.env .secrets/deepseek.env .secrets/anthropic.env .secrets/openai.env
+chmod 640 .secrets/r2.env .secrets/deepseek.env .secrets/anthropic.env .secrets/openai.env
 ```
 
 On a single-user host, `644` also works, but `640` with group `10001` is the
@@ -66,6 +66,32 @@ not add a lifecycle expiry rule for `files/`. Back up `.secrets/r2.env`
 separately from the bucket: it is required for restores and for the storage
 migration CLI. `data/.secret_key` remains the Fernet master key for provider
 credentials and is not an R2 secret.
+
+## Anthropic Claude (optional)
+
+Create `.secrets/anthropic.env` with the key from the Anthropic console:
+
+```text
+ANTHROPIC_API_KEY=...
+```
+
+The app also accepts the prefixed `APSOR_ANTHROPIC_API_KEY` name. The key is
+the environment fallback for `anthropic` chat provider rows only: an Anthropic
+row never receives the DeepSeek key, and a database key on the row wins. The
+Settings UI can store an encrypted key in the database instead. Keep the same
+read permissions as the other application secret files:
+
+```bash
+sudo chgrp 10001 .secrets/anthropic.env
+chmod 640 .secrets/anthropic.env
+```
+
+`APSOR_ANTHROPIC_BASE_URL`, `APSOR_ANTHROPIC_MODEL`,
+`APSOR_ANTHROPIC_TIMEOUT_SECONDS`, `APSOR_ANTHROPIC_MAX_TOKENS`, and
+`APSOR_ANTHROPIC_VERSION` are non-secret deployment defaults; set them in the
+untracked `.env` if needed. `.env.example` documents the names with placeholders
+only. A DeepSeek Anthropic-compatible origin can be set as a row's `base_url`;
+it is not a provider default. Do not put the key in `.env`, a URL, or a log line.
 
 ## Exa web search/fetch (optional)
 

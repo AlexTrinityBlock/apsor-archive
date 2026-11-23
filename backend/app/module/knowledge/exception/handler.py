@@ -18,6 +18,7 @@ from app.module.knowledge.exception.domain_error import (
     IngestJobNotRetryableError,
     IngestSourceStaleError,
     InvalidChunkWindowError,
+    InvalidModelAssignmentError,
     InvalidPathError,
     InvalidProviderConfigError,
     InvalidQueryError,
@@ -27,6 +28,7 @@ from app.module.knowledge.exception.domain_error import (
     MemoryAlreadyDeprecatedError,
     MemoryNotFoundError,
     MemorySupersedeTargetError,
+    ModelProbeFailedError,
     PathNotFoundError,
     ProviderNotFoundError,
     ProviderNoticeNotFoundError,
@@ -88,4 +90,10 @@ def register_exceptions() -> None:
     ExceptionRegistry.register(IngestJobNotRetryableError, 409, "ingest_job_not_retryable")
     ExceptionRegistry.register(IngestSourceStaleError, 409, "ingest_source_stale")
     ExceptionRegistry.register(InvalidVisionPromptError, 422, "invalid_vision_prompt")
+    ExceptionRegistry.register(
+        InvalidModelAssignmentError,
+        422,
+        "invalid_model_assignment",
+    )
+    ExceptionRegistry.register(ModelProbeFailedError, 422, "model_probe_failed")
     ExceptionRegistry.register(KnowledgeError, 500, "knowledge_error")

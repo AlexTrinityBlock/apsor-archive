@@ -26,6 +26,11 @@ export const SETTINGS_SECTIONS = [
     roles: "all",
   },
   {
+    id: "settings-model",
+    labelKey: "core.settingsNav.model",
+    roles: "all",
+  },
+  {
     id: "settings-providers",
     labelKey: "core.settingsNav.providers",
     roles: "root",

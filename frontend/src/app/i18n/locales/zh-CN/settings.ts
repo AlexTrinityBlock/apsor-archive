@@ -16,7 +16,7 @@ export const settings = {
     personalEyebrow: "设置 · 个人设置",
     personalTitle: "个人设置。",
     personalDescription:
-      "整理空白聊天页显示的常用提示词，并选择界面语言。账号管理与全局运行环境设置属于 root 账号。",
+      "查看管理员指派的模型、整理空白聊天页显示的常用提示词，并选择界面语言。账号管理与全局运行环境设置属于 root 账号。",
     personalMeta: "设置 02 · 本地优先档案馆",
   },
   utils: {
@@ -107,6 +107,10 @@ export const settings = {
     fieldPageContextLabel: "页面上下文",
     fieldPageContextUnit: "字符",
     fieldPageContextHint: "单个轮次可附加的最大页面文本量。",
+    fieldAgentMaxOutputLabel: "代理输出上限",
+    fieldAgentMaxOutputUnit: "令牌",
+    fieldAgentMaxOutputHint:
+      "单次代理调用的最大输出令牌数。默认 64,000；供应商行与模型上限可能再降低。",
     fieldParallelToolsLabel: "最大并行工具数",
     fieldParallelToolsUnit: "个工具",
     fieldParallelToolsHint: "可同时执行的工具数量。",
@@ -143,6 +147,20 @@ export const settings = {
     fieldLastUserCharsLabel: "最后用户输入字符数",
     fieldLastUserCharsUnit: "字符",
     fieldLastUserCharsHint: "完整保留的最近一条用户消息。",
+    fieldCompactionMaxOutputLabel: "压缩输出上限",
+    fieldCompactionMaxOutputUnit: "令牌",
+    fieldCompactionMaxOutputHint:
+      "确定性摘要的硬性上限。默认 2,600 个令牌；既有字符上限仍会应用。",
+    fieldCompactionPromptLabel: "压缩提示词模板",
+    fieldCompactionPromptUnit: "模板",
+    fieldCompactionPromptHint:
+      "必须包含 {placeholder}。允许的占位符：{max_output_tokens}、{max_output_chars}、{max_items}、{max_line_chars}、{max_last_user_chars}。若要显示字面大括号必须成对。",
+    compactionPromptRequired: "压缩提示词不能为空。",
+    compactionPromptMax:
+      "压缩提示词目前为 {count} 个字符；上限为 {max}。",
+    compactionPromptPlaceholder:
+      "压缩提示词必须包含 {placeholder}。",
+    compactionPromptCount: "{count} / {max} 个字符",
     toggleAutoCompactionLabel: "自动压缩",
     toggleAutoCompactionHint:
       "达到阈值时，将较旧的轮次折叠成摘要。",
@@ -152,6 +170,9 @@ export const settings = {
     toggleMemoryApprovalLabel: "记忆写入需要手动批准",
     toggleMemoryApprovalHint:
       "开启时，代理的 save_memory 请求（包括直接淘汰）会等待你批准或拒绝。关闭时，代理只能在既有的提示词层级确认后写入。手动批准默认为开启。",
+    toggleEscalationLabel: "模型升级",
+    toggleEscalationHint:
+      "当主要模型存在于目录中时，允许每次运行升级一次模型。未知模型会固定不升级。",
     loadReadingAria: "正在读取代理运行环境设置",
     loadErrorTitle: "代理运行环境设置没有响应。",
   },
@@ -483,6 +504,7 @@ export const settings = {
     activeProvider: "使用中的供应商",
     metaProvider: "供应商",
     metaModel: "模型",
+    metaMaxOutputTokens: "最大输出",
     metaBaseUrl: "基础 URL",
     metaDimension: "维度",
     metaKey: "密钥",
@@ -512,6 +534,10 @@ export const settings = {
     modelHelpEmbedding:
       "会记录用于新分段。更改后必须重新嵌入。",
     modelHelp: "发送给这个供应商的模型 ID。",
+    fieldMaxOutputTokens: "最大输出令牌数",
+    maxOutputTokensHelp:
+      "256–131,072。留空会使用供应商默认值；已知模型可能再降低实际上限。",
+    maxOutputSummary: "最大输出 {tokens}",
     fieldBaseUrl: "基础 URL",
     baseUrlHelpDefault: "留空以使用供应商默认值（{url}）。",
     baseUrlHelp: "留空以使用供应商默认值。",
@@ -546,6 +572,8 @@ export const settings = {
       baseUrlInvalid:
         "请输入完整的 URL，例如 https://api.example.com/v1。",
       dimension: "维度必须是 16 到 4096 之间的整数。",
+      maxOutputTokens:
+        "最大输出令牌数必须是 256 到 131,072 之间的整数。",
       apiKeyMax: "API 密钥必须为 500 个字符以内。",
       embeddingChainMismatch:
         "嵌入后备必须与主要供应商使用相同的模型与维度。使用不同的向量模型或维度会破坏向量索引；请先更改主要供应商并重新索引。",

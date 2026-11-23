@@ -26,8 +26,17 @@ from app.dependency.auth import (
     require_root,
     require_stateless_authenticated,
 )
+from app.infrastructure.ai.anthropic_vision import AnthropicVisionExtractor
+from app.infrastructure.ai.probe import ProviderProbe
 from app.infrastructure.ai.provider_factory import ProviderClientTester, ProviderFactory
 from app.infrastructure.ai.runtime import AiRuntime
+from app.infrastructure.ai.user_models import (
+    ChatAssignment,
+    build_user_text_generator,
+    load_assignment,
+    resolve_endpoint,
+    slot_values,
+)
 from app.infrastructure.ai.vision_extractor import (
     DeepSeekVisionExtractor,
     NullVisionExtractor,
@@ -73,6 +82,9 @@ from app.module.knowledge.repository.ingest_config_repository import (
 )
 from app.module.knowledge.repository.ingest_job_repository import IngestJobRepository
 from app.module.knowledge.repository.memory_repository import MemoryRepository
+from app.module.knowledge.repository.model_assignment_repository import (
+    ModelAssignmentRepository,
+)
 from app.module.knowledge.repository.provider_config_repository import (
     ProviderConfigRepository,
 )
@@ -87,6 +99,9 @@ from app.module.knowledge.service.ingest_progress_service import IngestProgressS
 from app.module.knowledge.service.ingest_settings_service import IngestSettingsService
 from app.module.knowledge.service.memory_service import MemoryService
 from app.module.knowledge.service.metered_text_generator import MeteredTextGenerator
+from app.module.knowledge.service.model_assignment_service import (
+    ModelAssignmentService,
+)
 from app.module.knowledge.service.provider_config_service import ProviderConfigService
 from app.module.knowledge.service.provider_error_notice_service import (
     ProviderErrorNoticeService,
@@ -125,36 +140,53 @@ def get_storage(request: Request) -> FileStorageProtocol:
     return cast(FileStorageProtocol, request.app.state.storage)
 
 
-def _vision_extractor_for_state(state: State) -> VisionExtractorProtocol:
+def _vision_extractor_for_state(
+    state: State,
+    assignment: ChatAssignment,
+) -> VisionExtractorProtocol:
+    """Select vision extraction from the account's auxiliary endpoint.
+
+    Selection follows the resolved auxiliary row, exactly like background text
+    generation: the assigned row id is looked up in the runtime chain, and only
+    that row's provider family decides between the Anthropic and DeepSeek
+    extractors. There is no scan for "some usable provider" and no fallback to
+    ``runtime.chat_config``: an account with no auxiliary assignment, or one
+    whose row is inactive or keyless, gets :class:`NullVisionExtractor` and the
+    existing ``ai_not_configured`` behaviour. The ``app.state.vision_extractor``
+    test seam still wins before any of this.
+    """
     override = getattr(state, "vision_extractor", None)
     if override is not None:
         return cast(VisionExtractorProtocol, override)
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
-    # OCR defaults to DeepSeek when it is anywhere in the chat chain with a
-    # usable key, even if the active chat primary is another compatible
-    # provider. Falling back to the primary keeps single-provider deployments
-    # working; no provider means vision stays unavailable.
-    deepseek_config = next(
-        (
-            config
-            for config in runtime.chat_chain
-            if config.enabled
-            and config.provider == "deepseek"
-            and bool(config.api_key)
-        ),
-        None,
-    )
-    vision_config = deepseek_config or runtime.chat_config
+    values = slot_values(assignment, "auxiliary")
+    if values.row_id is None:
+        return NullVisionExtractor()
+    resolved = resolve_endpoint(runtime.chat_chain, values.row_id)
     if (
-        vision_config.enabled
-        and vision_config.provider != "none"
-        and vision_config.api_key
+        resolved is None
+        or not resolved.enabled
+        or resolved.provider == "none"
+        or not resolved.api_key
     ):
+        return NullVisionExtractor()
+    model = values.model or resolved.model
+    if not model:
+        return NullVisionExtractor()
+    if resolved.provider == "anthropic":
+        return AnthropicVisionExtractor(
+            api_key=resolved.api_key,
+            base_url=resolved.base_url or settings.anthropic_base_url,
+            model=model,
+            timeout_seconds=settings.anthropic_timeout_seconds,
+            reasoning_effort=values.effort,
+        )
+    if resolved.provider == "deepseek":
         return DeepSeekVisionExtractor(
-            api_key=vision_config.api_key,
-            base_url=vision_config.base_url or settings.deepseek_base_url,
-            model=vision_config.model or settings.deepseek_model,
+            api_key=resolved.api_key,
+            base_url=resolved.base_url or settings.deepseek_base_url,
+            model=model,
             timeout_seconds=settings.deepseek_timeout_seconds,
         )
     return NullVisionExtractor()
@@ -212,7 +244,7 @@ def _build_indexer(
     return chunk_repository, indexer
 
 
-def build_file_service(
+async def build_file_service(
     state: State,
     session: AsyncSession,
     *,
@@ -229,6 +261,12 @@ def build_file_service(
 ) -> FileService:
     """Compose a file service for one owner, for requests, workers, and tools.
 
+    Titles, tags, document analysis, and extraction use the account's auxiliary
+    endpoint, read from ``app_user`` in the caller's session. An unassigned,
+    inactive, or keyless slot yields the null generator, so the existing
+    ``ai_not_configured`` behaviour is preserved without falling back to another
+    provider. Vision follows the same resolved auxiliary row.
+
     ``embedding_refresh`` is supplied only by the durable worker. It lets the
     indexer recover from one mid-job 401/403 without switching the model or
     dimension underneath a running job. ``progress_tracker`` is also
@@ -237,6 +275,8 @@ def build_file_service(
     """
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
+    assignment = await load_assignment(session, user_id)
+    built = build_user_text_generator(runtime, assignment, slot="auxiliary")
     if vision_description_language is not None:
         resolved_vision_language = normalize_vision_description_language(
             vision_description_language
@@ -292,8 +332,8 @@ def build_file_service(
         indexer=indexer,
         storage=cast(FileStorageProtocol, state.storage),
         cache=cast(CacheProtocol, state.cache),
-        text_generator=MeteredTextGenerator(runtime.text_generator, quota),
-        vision_extractor=_vision_extractor_for_state(state),
+        text_generator=MeteredTextGenerator(built.generator, quota),
+        vision_extractor=_vision_extractor_for_state(state, assignment),
         vision_description_language=resolved_vision_language,
         vision_image_prompt=resolved_image_prompt,
         vision_document_prompt=resolved_document_prompt,
@@ -338,10 +378,17 @@ def build_history_chunk_store(
     )
 
 
-def build_summary_service(state: State, session: AsyncSession, *, user_id: int) -> SummaryService:
-    """Compose an owner-scoped summary service."""
+async def build_summary_service(
+    state: State,
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> SummaryService:
+    """Compose an owner-scoped summary service on the auxiliary endpoint."""
     settings = cast(Settings, state.settings)
     runtime = cast(AiRuntime, state.ai_runtime)
+    assignment = await load_assignment(session, user_id)
+    built = build_user_text_generator(runtime, assignment, slot="auxiliary")
     _, indexer = _build_indexer(state, session, user_id=user_id)
     quota = AccountQuotaService(cast(Database, state.db), user_id)
     return SummaryService(
@@ -349,7 +396,7 @@ def build_summary_service(state: State, session: AsyncSession, *, user_id: int) 
         memory_repository=MemoryRepository(session, user_id),
         summary_repository=SummaryRepository(session, user_id),
         indexer=indexer,
-        text_generator=MeteredTextGenerator(runtime.text_generator, quota),
+        text_generator=MeteredTextGenerator(built.generator, quota),
         cache=cast(CacheProtocol, state.cache),
         ai_summary_enabled=settings.ai_summary_enabled,
         auto_summary_threshold=settings.auto_summary_threshold,
@@ -357,9 +404,16 @@ def build_summary_service(state: State, session: AsyncSession, *, user_id: int) 
     )
 
 
-def build_memory_service(state: State, session: AsyncSession, *, user_id: int) -> MemoryService:
+async def build_memory_service(
+    state: State,
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> MemoryService:
     """Compose an owner-scoped memory service, including its auto-summary hook."""
     runtime = cast(AiRuntime, state.ai_runtime)
+    assignment = await load_assignment(session, user_id)
+    built = build_user_text_generator(runtime, assignment, slot="auxiliary")
     chunk_repository, indexer = _build_indexer(state, session, user_id=user_id)
     quota = AccountQuotaService(cast(Database, state.db), user_id)
     return MemoryService(
@@ -368,8 +422,8 @@ def build_memory_service(state: State, session: AsyncSession, *, user_id: int) -
         chunk_repository=chunk_repository,
         indexer=indexer,
         cache=cast(CacheProtocol, state.cache),
-        summary_service=build_summary_service(state, session, user_id=user_id),
-        text_generator=MeteredTextGenerator(runtime.text_generator, quota),
+        summary_service=await build_summary_service(state, session, user_id=user_id),
+        text_generator=MeteredTextGenerator(built.generator, quota),
     )
 
 
@@ -494,7 +548,7 @@ def get_job_notifier(state: State) -> JobNotifierProtocol:
     return cast(JobNotifierProtocol, notifier)
 
 
-def build_ingest_job_service(
+async def build_ingest_job_service(
     state: State,
     session: AsyncSession,
     *,
@@ -505,7 +559,7 @@ def build_ingest_job_service(
     return IngestJobService(
         user_id=user_id,
         repository=IngestJobRepository(session, user_id),
-        file_service=build_file_service(state, session, user_id=user_id),
+        file_service=await build_file_service(state, session, user_id=user_id),
         max_attempts=settings.ingest_job_max_attempts,
         notifier=get_job_notifier(state),
     )
@@ -565,7 +619,7 @@ def build_ingest_worker(
     extract_slots = asyncio.Semaphore(max(1, initial_config.extract_workers))
     embedding_slots = asyncio.Semaphore(max(1, initial_config.embedding_concurrency))
 
-    def file_service_factory(
+    async def file_service_factory(
         session: AsyncSession,
         user_id: int,
         config: IngestRuntimeConfig,
@@ -573,7 +627,7 @@ def build_ingest_worker(
         current_embedding_slots: asyncio.Semaphore,
         progress_tracker: ProgressTracker | None = None,
     ) -> FileService:
-        return build_file_service(
+        return await build_file_service(
             state,
             session,
             user_id=user_id,
@@ -601,20 +655,24 @@ def build_ingest_worker(
     )
 
 
-def get_file_service(
+async def get_file_service(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     user: UserSchema = Depends(require_authenticated),
 ) -> FileService:
-    return build_file_service(request.app.state, session, user_id=user.user_id)
+    return await build_file_service(request.app.state, session, user_id=user.user_id)
 
 
-def get_ingest_job_service(
+async def get_ingest_job_service(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     user: UserSchema = Depends(require_authenticated),
 ) -> IngestJobService:
-    return build_ingest_job_service(request.app.state, session, user_id=user.user_id)
+    return await build_ingest_job_service(
+        request.app.state,
+        session,
+        user_id=user.user_id,
+    )
 
 
 def get_progress_bus(state: State) -> ProgressBusProtocol:
@@ -656,20 +714,28 @@ def get_ingest_progress_service(
     )
 
 
-def get_summary_service(
+async def get_summary_service(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     user: UserSchema = Depends(require_authenticated),
 ) -> SummaryService:
-    return build_summary_service(request.app.state, session, user_id=user.user_id)
+    return await build_summary_service(
+        request.app.state,
+        session,
+        user_id=user.user_id,
+    )
 
 
-def get_memory_service(
+async def get_memory_service(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     user: UserSchema = Depends(require_authenticated),
 ) -> MemoryService:
-    return build_memory_service(request.app.state, session, user_id=user.user_id)
+    return await build_memory_service(
+        request.app.state,
+        session,
+        user_id=user.user_id,
+    )
 
 
 def get_search_service(
@@ -848,9 +914,55 @@ async def get_upload_file_service(
     The settings read is deliberately non-materializing: uploads never create
     the settings row.
     """
-    return build_file_service(
+    return await build_file_service(
         request.app.state,
         session,
         user_id=user.user_id,
         runtime_config=runtime_config,
     )
+
+
+def get_provider_probe(request: Request) -> ProviderProbe:
+    """Return the per-request endpoint probe, or the test seam on ``app.state``.
+
+    The probe is stateless and cheap, but one instance per request keeps the
+    timeout snapshot and the factory consistent across every changed slot in a
+    single save. Tests install a deterministic fake as ``app.state.provider_probe``
+    so no assignment test can reach a real provider.
+    """
+    override = getattr(request.app.state, "provider_probe", None)
+    if override is not None:
+        return cast(ProviderProbe, override)
+    return ProviderProbe(ProviderFactory(get_app_settings(request)))
+
+
+def build_model_assignment_service(
+    request: Request,
+    session: AsyncSession,
+    *,
+    probe: ProviderProbe | None = None,
+) -> ModelAssignmentService:
+    """Compose the assignment service on the caller's request session.
+
+    The repository reads ``app_user`` (an auth table) and
+    ``chat_provider_config`` (a global config table); no private archive row is
+    touched. The runtime supplies the resolved chain used for row-id lookups and
+    for the stored key a probe needs.
+    """
+    runtime = get_ai_runtime(request)
+    return ModelAssignmentService(
+        session=session,
+        repository=ModelAssignmentRepository(session),
+        runtime=runtime,
+        defaults=runtime.defaults,
+        probe=probe if probe is not None else get_provider_probe(request),
+    )
+
+
+def get_model_assignment_service(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    probe: ProviderProbe = Depends(get_provider_probe),
+) -> ModelAssignmentService:
+    """FastAPI dependency for the assignment router."""
+    return build_model_assignment_service(request, session, probe=probe)

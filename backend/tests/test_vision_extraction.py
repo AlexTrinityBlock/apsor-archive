@@ -8,11 +8,14 @@ from typing import Any, Literal
 from fastapi.testclient import TestClient
 from starlette.datastructures import State
 
+from app.infrastructure.ai.anthropic_vision import AnthropicVisionExtractor
+from app.infrastructure.ai.user_models import ChatAssignment
 from app.infrastructure.ai.vision_client import VisionAnalysis
 from app.infrastructure.ai.vision_extractor import (
     VISION_DOCUMENT_MAX_TOKENS,
     VISION_IMAGE_MAX_TOKENS,
     DeepSeekVisionExtractor,
+    NullVisionExtractor,
     build_vision_prompt,
 )
 from app.infrastructure.config.settings import Settings
@@ -110,7 +113,28 @@ def _chunk_text(client: TestClient, file_id: int) -> str:
     return "\n".join(chunk["content"] for chunk in response.json()["chunks"])
 
 
-def test_vision_provider_prefers_a_deepseek_chain_entry() -> None:
+def _auxiliary_assignment(
+    row_id: int | None,
+    model: str | None,
+    *,
+    effort: str = "low",
+) -> ChatAssignment:
+    """Build the Q1-independent shape: only the auxiliary slot is declared."""
+    return ChatAssignment(
+        user_id=1,
+        provider_config_id=None,
+        model=None,
+        reasoning_effort=None,
+        aux_provider_config_id=row_id,
+        aux_model=model,
+        aux_reasoning_effort=effort,
+        context_window_tokens=None,
+        compaction_threshold_tokens=None,
+    )
+
+
+def test_vision_extractor_follows_the_assigned_auxiliary_row() -> None:
+    """Selection is a row-id lookup, never a scan for a usable provider."""
     primary = ProviderConfig(
         capability="chat",
         provider="openai-compatible",
@@ -121,36 +145,78 @@ def test_vision_provider_prefers_a_deepseek_chain_entry() -> None:
         dimension=None,
         enabled=True,
         source="database",
+        row_id=1,
     )
-    backup = ProviderConfig(
+    anthropic = ProviderConfig(
+        capability="chat",
+        provider="anthropic",
+        label="Anthropic",
+        model="row-anthropic",
+        base_url=None,
+        api_key="anthropic-key",
+        dimension=None,
+        enabled=True,
+        source="database",
+        row_id=2,
+    )
+    deepseek = ProviderConfig(
         capability="chat",
         provider="deepseek",
         label="DeepSeek",
-        model="deepseek-vision",
+        model="row-deepseek",
         base_url="https://api.deepseek.com",
         api_key="ds-key",
         dimension=None,
         enabled=True,
         source="database",
+        row_id=3,
     )
+    settings = Settings(_env_file=None)
     state = State()
-    state.settings = Settings()
-    state.ai_runtime = SimpleNamespace(
-        chat_config=primary,
-        chat_chain=(primary, backup),
+    state.settings = settings
+    state.ai_runtime = SimpleNamespace(chat_chain=(primary, anthropic, deepseek))
+
+    extractor = _vision_extractor_for_state(
+        state,
+        _auxiliary_assignment(2, "aux-anthropic", effort="high"),
     )
+    assert isinstance(extractor, AnthropicVisionExtractor)
+    assert extractor.model_name == "aux-anthropic"
+    assert extractor._image_client.api_key == "anthropic-key"
+    assert extractor._image_client.base_url == settings.anthropic_base_url
+    assert extractor._image_client.reasoning_effort == "high"
 
-    extractor = _vision_extractor_for_state(state)
-    assert isinstance(extractor, DeepSeekVisionExtractor)
-    assert extractor.model_name == "deepseek-vision"
-    assert extractor._client.base_url == "https://api.deepseek.com"
-    assert extractor._client.api_key == "ds-key"
+    fallback_model = _vision_extractor_for_state(
+        state, _auxiliary_assignment(2, None)
+    )
+    assert isinstance(fallback_model, AnthropicVisionExtractor)
+    assert fallback_model.model_name == "row-anthropic"
 
-    state.ai_runtime = SimpleNamespace(chat_config=primary, chat_chain=(primary,))
-    fallback = _vision_extractor_for_state(state)
-    assert isinstance(fallback, DeepSeekVisionExtractor)
-    assert fallback.model_name == "primary-vision"
-    assert fallback._client.base_url == "https://primary.example/v1"
+    deepseek_extractor = _vision_extractor_for_state(
+        state, _auxiliary_assignment(3, "aux-deepseek")
+    )
+    assert isinstance(deepseek_extractor, DeepSeekVisionExtractor)
+    assert deepseek_extractor.model_name == "aux-deepseek"
+    assert deepseek_extractor._client.api_key == "ds-key"
+    assert deepseek_extractor._client.base_url == "https://api.deepseek.com"
+
+    # An assigned row of another provider stays null even though an Anthropic
+    # row is active in the chain; no provider family is ever scanned for.
+    other = _vision_extractor_for_state(state, _auxiliary_assignment(1, "primary-vision"))
+    assert isinstance(other, NullVisionExtractor)
+
+    # An unassigned auxiliary slot is not vision, even with active rows present.
+    unassigned = _vision_extractor_for_state(state, _auxiliary_assignment(None, None))
+    assert isinstance(unassigned, NullVisionExtractor)
+
+    # A deleted or inactive row id is absent from the chain and stays null.
+    missing = _vision_extractor_for_state(state, _auxiliary_assignment(99, "gone-model"))
+    assert isinstance(missing, NullVisionExtractor)
+
+    # The app-state override is the test seam and wins before assignment use.
+    override = FakeVisionExtractor()
+    state.vision_extractor = override
+    assert _vision_extractor_for_state(state, _auxiliary_assignment(2, "aux-anthropic")) is override
 
 
 def test_vision_prompt_contract_and_parsing() -> None:
