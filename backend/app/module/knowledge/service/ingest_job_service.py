@@ -160,7 +160,7 @@ FileServiceFactory = Callable[
         asyncio.Semaphore,
         ProgressTracker | None,
     ],
-    FileService,
+    Awaitable[FileService],
 ]
 
 ClaimedJob = tuple[int, int]
@@ -734,7 +734,7 @@ class IngestWorker:
             async with user_session(self.session_factory, user_id, ROLE_USER) as session:
                 repository = IngestJobRepository(session, user_id)
                 await repository.clear_file_id(job_id)
-                file_service = self.file_service_factory(
+                file_service = await self.file_service_factory(
                     session,
                     user_id,
                     runtime.config,
@@ -763,7 +763,7 @@ class IngestWorker:
         """
         try:
             async with user_session(self.session_factory, user_id, ROLE_USER) as session:
-                file_service = self.file_service_factory(
+                file_service = await self.file_service_factory(
                     session,
                     user_id,
                     runtime.config,
@@ -1046,7 +1046,7 @@ class IngestWorker:
                 if job.source_file_id is None:
                     raise IngestSourceStaleError(job.id)
                 async with user_session(self.session_factory, user_id, ROLE_USER) as session:
-                    source_service = self.file_service_factory(
+                    source_service = await self.file_service_factory(
                         session,
                         user_id,
                         runtime.config,
@@ -1073,7 +1073,7 @@ class IngestWorker:
                 force_vision = False
 
             async with user_session(self.session_factory, user_id, ROLE_USER) as session:
-                file_service = self.file_service_factory(
+                file_service = await self.file_service_factory(
                     session,
                     user_id,
                     runtime.config,
@@ -1129,7 +1129,7 @@ class IngestWorker:
             expected_current_file_id = source.file_id if source is not None else None
             ready_schema: IngestJobSchema | None = None
             async with user_session(self.session_factory, user_id, ROLE_USER) as session:
-                file_service = self.file_service_factory(
+                file_service = await self.file_service_factory(
                     session,
                     user_id,
                     runtime.config,
@@ -1222,7 +1222,7 @@ class IngestWorker:
             # so deleting the staged file would otherwise delete the job too.
             await self.update_job(job_id, user_id, file_id=None)
             async with user_session(self.session_factory, user_id, ROLE_USER) as session:
-                file_service = self.file_service_factory(
+                file_service = await self.file_service_factory(
                     session,
                     user_id,
                     runtime.config,
