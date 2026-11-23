@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 AgentConversationStatus = Literal["active", "archived"]
-AgentProvider = Literal["deepseek", "openai-compatible"]
+AgentProvider = Literal["deepseek", "openai-compatible", "anthropic"]
 AgentEntryKind = Literal[
     "pi.user",
     "pi.assistant",

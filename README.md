@@ -34,6 +34,7 @@
   - [Docker Compose (normal)](#docker-compose-normal)
   - [Object storage (local or R2)](#object-storage-local-or-r2)
   - [Configure providers in the app](#configure-providers-in-the-app)
+  - [Per-account model assignment](#per-account-model-assignment)
   - [Web research tools](#web-research-tools)
   - [Frequently used prompts](#frequently-used-prompts)
   - [Agent runtime settings](#agent-runtime-settings)
@@ -91,10 +92,18 @@ result carries its source, chunk number, and time.
 - **The agent has one workspace.** Chat is a three-panel desk: a collapsible
   conversation drawer, the streaming transcript, and a tool inspector with a
   draggable, persisted split. There is no second composer or command palette.
-- **Agent limits are database-backed.** The model context window, compaction
-  threshold, step and tool caps, parallel width, and result budgets live in one
-  validated `agent_config` row and apply to new runs without a restart. The
-  context window is model metadata; compaction is the long-conversation control.
+- **Agent limits are database-backed.** The step and tool caps, parallel width,
+  result budgets, and compaction controls live in one validated `agent_config`
+  row and apply to new runs without a restart. Each account's primary model and
+  context budget are separate assignments: the context window is a real
+  per-account input budget, not model metadata, and the agent enforces it
+  locally instead of failing the turn.
+- **Chat models are assigned per account.** Root links each account to a saved
+  chat endpoint plus a free-text model and reasoning effort for agent chat, and
+  a second endpoint for summaries, memory, ingestion, and vision. A changed
+  connection must pass a real provider probe before it can be saved. Provider
+  rows hold the encrypted key, so rotating a key affects every account assigned
+  to that endpoint.
 - **Long threads can be folded or cleared.** Compaction writes a summary
   boundary; clear starts an empty active context. The full transcript remains
   readable in both cases.
@@ -109,9 +118,9 @@ result carries its source, chunk number, and time.
   anchors per event kind and reports exactly how many events were skipped. The
   human Timeline page requests the complete selected window (`complete=true`)
   and loads earlier windows automatically as you scroll.
-- **AI answers are grounded.** DeepSeek receives retrieved passages, not the
-  whole library, and every claim must carry a citation. Without a key, agent
-  turns fail closed.
+- **AI answers are grounded.** The assigned chat model receives retrieved
+  passages, not the whole library, and every claim must carry a citation.
+  Without a usable assignment, agent turns fail closed with a stable code.
 - **Questions outlive the conversation.** Save a question before you have an
   answer, ask it later, and keep the answer, its citations, the run status, and
   a link to the conversation on the same row. Editing the question clears the
@@ -173,7 +182,7 @@ result carries its source, chunk number, and time.
 | Storage | PostgreSQL 17 (`pg_trgm` for path fuzzy search); original bytes on local disk or in private Cloudflare R2 |
 | Cache | Valkey / Redis-compatible, with a memory fallback |
 | Retrieval | CJK bigram + Latin token n-grams, BM25, signed hashing vectors, RRF |
-| AI | DeepSeek `deepseek-flash` (OpenAI-compatible chat completions) |
+| AI | DeepSeek `deepseek-flash`, Anthropic Claude, or any OpenAI-compatible chat endpoint |
 | Frontend | React 19, TypeScript, Vite, React Router, React Query, Orval |
 | Deploy | Docker Compose, optional Cloudflare Tunnel, or bare metal with `uv` |
 
@@ -293,8 +302,9 @@ The Settings page is the normal way to configure providers, and only the root
 account can edit the global registry. It writes to four independent capability
 tables, so one capability can never overwrite another:
 
-- **Chat** — `chat_provider_config`: DeepSeek or any OpenAI-compatible chat
-  endpoint. Several rows may be active as one ordered chain.
+- **Chat** — `chat_provider_config`: DeepSeek, Anthropic Claude, or any
+  OpenAI-compatible chat endpoint. A chat row is an **endpoint** that accounts
+  are assigned to; it has an optional `max_output_tokens` cap (256–131,072).
 - **Embedding** — `embedding_provider_config`: offline `hashing`, `openai`, or
   `openai-compatible`. Several rows may form one chain, but every active row
   must use the same model and dimension.
@@ -305,33 +315,45 @@ tables, so one capability can never overwrite another:
   separate rows, so they can use different providers or different credentials.
 
 Every table stores a zero-based `priority` and a partial unique index on
-`priority WHERE is_active`. The first chain row is the primary; the rest are
-backups. A provider request advances to the next row only on a provider or
-transport failure, and the operation fails only after every row fails. Agent chat
-fails over only before the first text delta: switching after output reached the
-caller would duplicate visible text. Context-window and output-limit errors are
-never failed over because the agent owns compaction and its bounded retry.
-Embedding backups must share the primary's model and dimension, since mixing
-vector spaces would corrupt the per-owner index. Deleting a row does not reuse
-its identity id. Provider rows are global deployment configuration: only the root account can
+`priority WHERE is_active`. For embedding, web search, and web fetch, the first
+chain row is the primary and the rest are backups; a request advances to the
+next row only on a provider or transport failure, and the operation fails only
+after every row fails. Chat is different: each account is assigned one exact
+chat row, and an agent turn never fails over to another chat row. Embedding
+backups must share the primary's model and dimension, since mixing vector
+spaces would corrupt the per-owner index. Deleting a row does not reuse its
+identity id.
+
+Provider rows are global deployment configuration: only the root account can
 list, edit, test, or delete them, and normal users never receive a provider
 secret or a global runtime setting. The API never returns a plaintext key: the
-browser receives only a hint such as `...14f8`. `APSOR_SECRET_KEY` supplies the Fernet master key. If it is unset,
-a `0600` key file is created at `data/.secret_key` (or `/data/.secret_key` in
-Docker), so encrypted values survive restarts. `APSOR_TAVILY_API_KEY` is an
-optional environment fallback for both web capabilities. An Exa key can live in
-the gitignored `.secrets/exa.env` as `EXA_API_KEY` (or as
-`APSOR_EXA_API_KEY`); the encrypted provider row still wins. The same
-`APSOR_DEEPSEEK_API_KEY` used for chat is the environment fallback for the
-DeepSeek web search and web fetch provider, so no separate web credential is
-needed.
+browser receives only a hint such as `...14f8`. `APSOR_SECRET_KEY` supplies the
+Fernet master key. If it is unset, a `0600` key file is created at
+`data/.secret_key` (or `/data/.secret_key` in Docker), so encrypted values
+survive restarts. `APSOR_TAVILY_API_KEY` is an optional environment fallback
+for both web capabilities. An Exa key can live in the gitignored
+`.secrets/exa.env` as `EXA_API_KEY` (or as `APSOR_EXA_API_KEY`); the encrypted
+provider row still wins. The same `APSOR_DEEPSEEK_API_KEY` used for chat is the
+environment fallback for the DeepSeek web search and web fetch provider, so no
+separate web credential is needed. An Anthropic key can live in
+`.secrets/anthropic.env` as `ANTHROPIC_API_KEY` (or as
+`APSOR_ANTHROPIC_API_KEY`); a database key on the endpoint row still wins.
 
-Precedence is: **active database chain → environment → built-in default**. The
-Settings page labels each provider with its source and shows the chain order. Changing the embedding model
-does not rewrite existing vectors; `reindex_required` warns you. Run **Re-embed
-library** (or `POST /api/v1/settings/providers/embedding/reindex`) to refresh
-current chunks. Vector search skips chunks whose dimension does not match the
-current embedder.
+A chat endpoint owns its key, not the account. Multiple accounts may share one
+endpoint, and rotating or clearing the endpoint's key affects every account
+assigned to it. A row with no encrypted key may use the provider-scoped
+environment key as row enrichment, but there is no per-user key and no
+deployment-wide chat fallback: an unassigned account is never rescued by
+another active row or by an environment key alone.
+
+Precedence for embedding, web search, and web fetch is: **active database chain
+→ environment → built-in default**. For chat, the account assignment selects an
+endpoint row by id; the provider-scoped environment key can only complete that
+row. The Settings page labels each provider with its source and shows the chain
+order. Changing the embedding model does not rewrite existing vectors;
+`reindex_required` warns you. Run **Re-embed library** (or
+`POST /api/v1/settings/providers/embedding/reindex`) to refresh current chunks.
+Vector search skips chunks whose dimension does not match the current embedder.
 
 Provider registry API:
 
@@ -343,7 +365,7 @@ Provider registry API:
 | `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | Delete one saved provider and close the chain gap |
 | `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | Append the row, or pass `priority=0` to make it primary |
 | `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/deactivate` | Remove one row from the chain and close the gap |
-| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | Clear the whole chain and fall back to environment/default |
+| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | Clear the whole chain; embedding/web fall back to environment/default, chat assignments become inactive |
 | `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/test` | One small provider request plus latency |
 | `POST` | `/api/v1/settings/providers/embedding/reindex` | Re-embed every current chunk with the active provider |
 
@@ -363,6 +385,94 @@ resolve all:
 | `GET` | `/api/v1/system/provider-notices?status=open\|all&limit=50` | Open notices plus the unresolved count |
 | `POST` | `/api/v1/system/provider-notices/{notice_id}/resolve` | Resolve one notice |
 | `POST` | `/api/v1/system/provider-notices/resolve-all` | Resolve every open notice |
+
+### Per-account model assignment
+
+Every account has two chat slots. The **primary** slot serves agent chat. The
+**auxiliary** slot serves summaries, memory consolidation, ingest titles, tags
+and document analysis, extraction, and vision. Root assigns both from
+**Accounts → Model**: choose a saved chat endpoint, type the model name and
+reasoning effort, set the optional context budget, then press **Test** on each
+slot whose connection changed. A normal account reads the same two slots from
+**Settings → Model**; that view is read-only.
+
+Model names and effort strings are free text, up to 128 and 32 characters. The
+model catalog is advisory, never an allow-list. A known model may add prices, a
+tier, and a tokenizer ratio; an unknown model is accepted with `tier=None`, no
+routing, no automatic escalation, and `unpriced` cost. The effort hints in the
+dialog are provider guidance only: DeepSeek accepts `low | high | max` (default
+`high`, with `minimal`→`low`, `medium`/`xhigh`→`high`, and `ultra`→`max`
+aliases), Anthropic accepts `low | medium | high | xhigh | max`, and
+OpenAI/GPT accepts `none | minimal | low | medium | high | xhigh | max`
+depending on the model. The probe is the validation.
+
+The endpoint row owns the Fernet-encrypted key. Multiple accounts may share one
+endpoint, and rotating or clearing its key affects every account assigned to it.
+There is no per-user key and no global or environment chat fallback: a missing,
+inactive, disabled, or keyless endpoint fails closed. The auxiliary slot
+inherits the primary endpoint and model only when both auxiliary fields are
+`NULL` (the upgrade backfill shape); that inherited work uses the auxiliary
+effort, `low` by default. A stored auxiliary row without a model, or a model
+without a row, is reported as degraded instead of silently falling back.
+
+Saves are probe-gated. The server tests each slot whose connection fingerprint
+(endpoint row, base URL, key ciphertext, model, and effort) changed with one real
+16-token generation, and `PUT` re-checks that gate server-side even when the
+browser already pressed **Test**. A budget-only change skips the probe. If a
+probe fails, the request returns `422 model_probe_failed` and writes nothing.
+Deleting an assignment clears both slots and leaves the account unassigned.
+
+The context window and compaction threshold are optional per-account overrides;
+a blank value inherits the deployment default from `agent_config`. The context
+window is a real outbound input budget, not model metadata. Before each provider
+call the agent estimates the request and never raises a local context error:
+over budget, it first force-compacts deterministically at 60% of the budget,
+then drops page context, then clips tool-result bodies oldest-first at 8,000,
+then 2,000, then 500 characters while keeping the `<tool_result>` envelope, and
+finally truncates only the outbound copy of the current user message (dropping
+its attachments if needed). One `ui.notice` records what the model did not see.
+The stored transcript is unchanged. There is no `agent_context_limit_exceeded`
+code.
+
+Compaction is always deterministic and never calls a provider. Root can edit its
+instruction template in `agent_config`; the template must contain
+`{max_output_tokens}` and may use `{max_output_chars}`, `{max_items}`,
+`{max_line_chars}`, and `{max_last_user_chars}`. A template that omits the
+output bound, uses an unknown placeholder, or contains a stray brace returns
+`422 compaction_prompt_invalid` and does not save.
+
+With `model_escalation_enabled` on, the agent may escalate at most once per run,
+one catalog tier up, on the same endpoint. It does so after a context-window
+rejection that survived one compaction, an output-limit completion that produced
+no text after its retry, three consecutive invalid-argument tool calls, an
+unusable completion, or a refusal. It never escalates on 5xx, timeout, 401/403,
+or quota errors. A `ui.notice` records `reason`, `from_model`, and `to_model`.
+An unknown model has no tier, so it never escalates.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/model-assignments` | Every account's stored, effective, and warning fields (root only) |
+| `GET` | `/api/v1/model-assignments/me` | The caller's own assignment (every authenticated account) |
+| `PUT` | `/api/v1/model-assignments/{user_id}` | Probe changed slots and save both assignments (root only) |
+| `DELETE` | `/api/v1/model-assignments/{user_id}` | Clear both assignments (root only) |
+| `GET` | `/api/v1/chat-endpoints` | Saved chat endpoints, host name only, never a key or full URL |
+| `POST` | `/api/v1/chat-endpoints/{provider_config_id}/probe` | Test one candidate model/effort; writes nothing |
+| `GET` | `/api/v1/model-catalog` | Advisory catalog in escalation order; other model strings stay legal |
+
+Stable assignment errors:
+
+| Status | Code | When |
+|---|---|---|
+| `409` | `model_not_assigned` | The account has no primary endpoint/model |
+| `409` | `provider_inactive` | The assigned endpoint is inactive, disabled, or keyless |
+| `422` | `invalid_model_assignment` | An endpoint is unusable, or the budget pair is invalid |
+| `422` | `model_probe_failed` | A changed slot failed its probe; nothing was written |
+| `422` | `compaction_prompt_invalid` | The compaction template omits `{max_output_tokens}` or has an unknown placeholder |
+
+Catalog prices are informational; the existing per-account token quotas remain
+the enforcement, and there is no dollar-cost readout. `GET /api/v1/ai/status`
+still reports the deployment-global runtime for root diagnostics; it is not the
+per-account assignment.
 
 ### Web research tools
 
@@ -444,17 +554,19 @@ prompt text; it does not send the message. The API is
 ### Agent runtime settings
 
 The **Agent runtime** panel on `/settings` (root only) edits the singleton
-`agent_config` row (`id=1`). Provider and model selection stay in the AI settings
-above, so there is still one source of truth for which model answers. All
-seventeen runtime values are stored in PostgreSQL, apply to new runs without a
-restart, and are shared by every account. The two chat-image lifetime values are
-also read by the background cleanup loop from this row; they are not
-environment variables.
+`agent_config` row (`id=1`). Chat endpoint and model selection are per-account
+assignments (see **Per-account model assignment**); this row carries the step and
+tool budgets, the deployment-default context budget, and the compaction and
+escalation controls. All twenty-one runtime values are stored in PostgreSQL,
+apply to new runs without a restart, and are shared by every account. An
+account's own context window and compaction threshold override these deployment
+defaults when set. The two chat-image lifetime values are also read by the
+background cleanup loop from this row; they are not environment variables.
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | Effective config, defaults, source, `updated_at` |
-| `PUT` | `/api/v1/agent/settings` | Full replacement; all seventeen fields are required |
+| `PUT` | `/api/v1/agent/settings` | Full replacement; all twenty-one fields are required |
 | `POST` | `/api/v1/agent/settings/reset` | Persist and return the built-in defaults |
 
 The generated operations are `getAgentSettings`, `updateAgentSettings`, and
@@ -468,7 +580,7 @@ fields are rejected.
 | Field | Default | Range |
 |---|---|---|
 | `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000; below the context window |
-| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; model metadata |
+| `context_window_tokens` | 1,000,000 | 8,000–2,000,000; deployment default budget |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
@@ -476,6 +588,10 @@ fields are rejected.
 | `max_page_context_chars` | 6,000 | 500–50,000 |
 | `max_compaction_summary_chars` | 6,000 | 1,000–20,000 |
 | `max_compaction_last_user_chars` | 4,000 | 500–10,000 |
+| `compaction_prompt` | built-in template | 1–20,000 characters; must contain `{max_output_tokens}` |
+| `compaction_max_output_tokens` | 2,600 | 256–16,384 |
+| `model_escalation_enabled` | `true` | boolean |
+| `agent_max_output_tokens` | 64,000 | 256–131,072 |
 | `auto_compaction_enabled` | `true` | boolean |
 | `parallel_tools_enabled` | `true` | boolean |
 | `save_memory_requires_approval` | `true` | boolean; manual approval for `save_memory` |
@@ -488,9 +604,13 @@ fields are rejected.
 Pydantic and matching PostgreSQL check constraints enforce the ranges and three
 cross-field rules: the compaction threshold must stay below the model context
 window, the parallel width must not exceed tool calls per turn, and
-`max_plot_nodes` must be at least `max_plot_points`. The plot budgets apply to
-`render_plot` for every account. The app's global validation envelope maps
-request validation failures to `400 invalid_request` rather than 422.
+`max_plot_nodes` must be at least `max_plot_points`. The compaction template also
+must render with the known placeholders; literal braces are doubled, and a
+missing `{max_output_tokens}` or an unknown placeholder is rejected as
+`422 compaction_prompt_invalid` instead of `400 invalid_request`. The plot
+budgets apply to `render_plot` for every account. The app's global validation
+envelope maps other request validation failures to `400 invalid_request` rather
+than 422.
 
 A request loads one immutable runtime snapshot in a short-lived database session.
 An active SSE run keeps the snapshot it started with; later runs use changed
@@ -792,7 +912,9 @@ Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 `PATCH /api/v1/memories/{memory_id}` (edit text; the title is regenerated),
 `POST /api/v1/memories/{memory_id}/deprecate` (retire directly with an optional
 `reason`), `POST /api/v1/summaries`, `GET /api/v1/stats`,
-`GET /api/v1/health`, and `GET /api/v1/ai/status`.
+`GET /api/v1/health`, and `GET /api/v1/ai/status`. `ai/status` reports the
+deployment-global runtime for root diagnostics; it is not an account's model
+assignment.
 
 ### Folder workspace
 
@@ -938,8 +1060,9 @@ steps, 20 tool calls per user turn, 6 parallel tools, 75,000 tokens of active
 context before auto compaction, and 100,000 result characters per tool. There is
 no cumulative per-turn token ceiling; a turn ends only on a final answer, the
 step or tool-call limits, a user cancellation, or a provider failure. The
-1,000,000-token context window records provider capacity and is the bound the
-compaction threshold is measured against. Each
+effective context window is the deployment default (1,000,000) unless the
+account assigns its own budget; it is the real outbound input budget enforced by
+the local overflow ladder, and the compaction threshold must stay below it. Each
 result is clipped independently at that per-result cap with a visible
 `[truncated]` marker; there is no turn-wide result budget or second summarization
 call. A 100,000-character cap spans roughly twenty-five 4,000-character chunks.
@@ -956,8 +1079,8 @@ failed/cancelled assistant answer, a trailing hard-limit tool result
 `tool_result_budget_exhausted`), or the last stream failed before an assistant
 entry was recorded. Retry starts a new run for the same user entry; the UI does
 not append a second message and disables the action while a stream is active. A
-retry can hit the same context limit again if the transcript is still
-too long. The endpoint returns `409 agent_run_not_retryable` when the latest run
+retry can still be rejected by the provider if even the overflow ladder cannot
+fit the request. The endpoint returns `409 agent_run_not_retryable` when the latest run
 is completed or otherwise not failed/cancelled; the UI refetches the transcript
 after that error so a stale Retry action disappears.
 
@@ -1019,6 +1142,12 @@ instead of failing the provider call:
   `<last_user_input>` (the last user input before compaction) and `<summary>`.
 - The same transaction writes compaction → page context (when the page is
   reattached) → user, so the model sees the summary before the new request.
+
+Compaction is deterministic: it never calls a provider. The summary is bounded
+by `compaction_max_output_tokens` (2,600 by default) and rendered from the
+root-editable `compaction_prompt`, which must contain `{max_output_tokens}`; the
+legacy character caps still apply. The overflow ladder can also build an
+ephemeral compaction for one outbound request without appending a boundary.
 
 This starts a new KV-cache lineage. The system prompt and tool snapshot stay
 frozen, and the old transcript remains readable in `/chat` and the dock.
@@ -1303,6 +1432,12 @@ zero state. Usage is counted per agent run and rolled up by a database trigger,
 so the card stays a cheap root-only list read rather than a cross-account
 conversation scan.
 
+Each card also summarizes the account's model assignment. Root opens **Model**
+next to the token quotas to assign the primary and auxiliary endpoints, their
+free-text model and effort, and the optional context budget, or to reset both
+slots. The account itself sees the same two slots read-only under **Settings →
+Model**; only root can change them.
+
 Root can start an impersonation session from the footer user switcher or from a
 normal active account card. The dialog searches the root-only account list
 locally, excludes root accounts, and refuses disabled accounts or accounts that
@@ -1328,9 +1463,10 @@ password or open the target's session, and therefore could sign in as that
 account. Protect the root credential accordingly; RLS is not a defense against
 a malicious root who uses those capabilities. Normal users do not see the
 global Settings tabs or the **Accounts** page; their Settings shows only
-**Frequent prompts** and **Language**, while root sees all eight tabs. Dashboard
-and stats counts are scoped to the signed-in account; AI status is global and
-read-only. Passwords are hashed with Argon2; the database stores only a SHA-256
+**Frequent prompts**, **Model**, and **Language**, while root sees all nine
+tabs. Dashboard and stats counts are scoped to the signed-in account; AI status
+is the deployment-global runtime diagnostic, not the account's model
+assignment. Passwords are hashed with Argon2; the database stores only a SHA-256
 hash of each session token. The cookie is HttpOnly, SameSite=Lax, and Secure
 when `APSOR_COOKIE_SECURE=true` (the Cloudflare compose sets it). Each
 account can edit its display name and any number of ordered title/content
@@ -1601,12 +1737,19 @@ user context exists; global config tables are read-all/root-write.
 - `chat_provider_config` / `embedding_provider_config` /
   `web_search_provider_config` / `web_fetch_provider_config`: one row per saved
   provider, with an encrypted API key, a safe hint, and the model/base
-  URL/dimension. A partial unique index on `is_active` enforces one active row
+  URL/dimension. `chat_provider_config` also stores an optional
+  `max_output_tokens` and admits `anthropic`, `deepseek`,
+  `openai-compatible`, and `none`; a chat row is an endpoint that accounts are
+  assigned to. A partial unique index on `is_active` enforces one active row
   per capability. `web_search` and `web_fetch` are independent credentials.
 - `app_user`: one row per account. `role` is `root` or `user`; `is_active`,
   `must_change_password`, `disabled_at`, `created_by_user_id`, and the password
-  audit timestamps model the account lifecycle. A partial unique index enforces
-  exactly one root, and usernames stay globally unique and immutable.
+  audit timestamps model the account lifecycle. The eight assignment columns are
+  `chat_provider_config_id`, `chat_model`, `chat_reasoning_effort`,
+  `aux_provider_config_id`, `aux_model`, `aux_reasoning_effort` (not null,
+  default `low`), `chat_context_window_tokens`, and
+  `chat_compaction_threshold_tokens`. A partial unique index enforces exactly
+  one root, and usernames stay globally unique and immutable.
 - `user_profile_card`: ordered title/content cards that describe the account; the
   full set is frozen into a new conversation as the `user_profile` section.
 - `frequently_used_prompt`: private, account-editable shortcuts for the empty
@@ -1619,7 +1762,8 @@ user context exists; global config tables are read-all/root-write.
   confirmation-required writes, with validated arguments, a safe preview, and
   the loop snapshot used to resume the waiting run.
 - `agent_config`: one row (`id=1`) with the validated runtime limits used by the
-  agent loop and the settings API.
+  agent loop and the settings API, including the compaction template and output
+  cap plus the escalation switch.
 - `saved_question`: the account's Q&A library. `question` is user-authored;
   `answer`, `citations`, `conversation_id`, and the run status/error fields are
   written only by an ask. `conversation_id` uses `ON DELETE SET NULL`, and
@@ -1690,8 +1834,8 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `f7a3c2d9e1b4`, after `c2f6a8d4e1b3`. The migrations
-after `agent_config` on this branch are:
+The latest migration is `a4c9e2f7b1d6`. The migrations after `agent_config` on
+this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
 - `a6e2f9c4d1b8` raises the per-result tool character cap to 100,000;
@@ -1772,12 +1916,20 @@ after `agent_config` on this branch are:
   `ingest_config.vision_description_language` as a non-null `varchar(80)` with
   an `English` server default and a trimmed-length check. The downgrade drops
   the check and column;
-- `f7a3c2d9e1b4` (current head) adds the nullable
+- `f7a3c2d9e1b4` adds the nullable
   `ingest_config.vision_image_prompt` / `vision_document_prompt` templates, the
   `file` prompt fingerprint columns, and `file_ingest_job.source_file_id` with
   its owner-safe composite FK, re-ingest check, active-source unique index, and
   lookup index. It does not seed or backfill prompt/fingerprint values. The
-  downgrade removes re-ingest jobs before restoring the old source-kind check.
+  downgrade removes re-ingest jobs before restoring the old source-kind check;
+- `a4c9e2f7b1d6` (current head) adds the eight per-account assignment columns and
+  their two `ON DELETE SET NULL` endpoint foreign keys, the seven assignment
+  check constraints, `chat_provider_config.max_output_tokens`, the widened chat
+  provider check that admits `anthropic`, and the four new `agent_config`
+  columns. It backfills the lowest active non-`none` chat row and its model into
+  any account with no assignment; if no such row exists, every account stays
+  unassigned. The downgrade drops the assignment columns and refuses to restore
+  the narrower provider check while an `anthropic` row exists.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

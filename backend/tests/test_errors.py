@@ -38,5 +38,5 @@ def test_validation_and_error_envelope(client: TestClient) -> None:
         json={"content": "What is in the library?"},
         headers={"Accept": "application/json"},
     )
-    assert missing_agent.status_code == 503
-    assert missing_agent.json()["error"] == "agent_not_configured"
+    assert missing_agent.status_code == 409
+    assert missing_agent.json()["error"] == "model_not_assigned"

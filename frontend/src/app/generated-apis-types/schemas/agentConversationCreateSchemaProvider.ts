@@ -11,4 +11,5 @@ export type AgentConversationCreateSchemaProvider = typeof AgentConversationCrea
 export const AgentConversationCreateSchemaProvider = {
   deepseek: 'deepseek',
   'openai-compatible': 'openai-compatible',
+  anthropic: 'anthropic',
 } as const;

@@ -34,6 +34,7 @@
   - [Docker Compose（一般）](#docker-compose一般)
   - [物件儲存（本機或 R2）](#物件儲存本機或-r2)
   - [在應用程式內設定供應商](#在應用程式內設定供應商)
+  - [每位帳號的模型指派](#每位帳號的模型指派)
   - [網路研究工具](#網路研究工具)
   - [常用提示詞](#常用提示詞)
   - [代理執行階段設定](#代理執行階段設定)
@@ -86,10 +87,15 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
 - **代理只有一個工作區。** 對話是含三個面板的工作台：可收合的對話抽屜、
   串流中的對話記錄，以及可拖曳且會保存分割比例的工具檢視器。沒有第二個
   輸入區，也沒有命令選擇區。
-- **代理限制以資料庫為後端。** 模型脈絡視窗、壓縮門檻、步驟與
-  工具上限、平行寬度，以及結果預算，全都存放在單一經驗證的 `agent_config`
-  資料列中，並套用至新的執行，無需重新啟動。脈絡視窗是模型中介資料；
-  壓縮是長對話的控制機制。
+- **代理限制以資料庫為後端。** 步驟與工具上限、平行寬度、結果預算與壓縮
+  控制全都存放在單一經驗證的 `agent_config` 資料列中，並套用至新的執行，
+  無需重新啟動。每個帳號的主要模型與脈絡預算是獨立的指派：脈絡視窗是
+  真正的每位帳號輸入預算，不是模型中繼資料，且代理會在本機強制執行，
+  而不是讓回合失敗。
+- **對話模型依帳號指派。** root 會把每個帳號連結到已儲存的對話端點，
+  以及供代理對話使用的自由文字模型與推理力度，並為摘要、記憶、匯入與
+  視覺連結第二個端點。變更後的連線必須通過真實的供應商探測才能儲存。
+  供應商資料列持有加密金鑰，因此輪替金鑰會影響指派到該端點的每個帳號。
 - **長討論串可以摺疊或清除。** 壓縮會寫入摘要邊界；清除會從空的活動脈絡
   開始。兩種情況下完整對話記錄仍可閱讀。
 - **記憶是線性且可追溯的。** 新的信念可以取代舊的。舊記憶會離開搜尋介面，
@@ -99,8 +105,9 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
 - **時間取樣忠實呈現。** 代理的時間軸工具每種事件種類最多傳回五個錨點，
   並精確回報略過多少事件。人類時間軸頁面則以 `complete=true` 取得所選視窗
   的完整事件，並在向下捲動時自動載入更早的視窗。
-- **AI 回答有憑據。** DeepSeek 收到的是檢索到的段落，不是整個檔案庫，且
-  每項主張都必須附上引用。沒有金鑰時，代理回合會封閉式失敗。
+- **AI 回答有憑據。** 指派的對話模型收到的是檢索到的段落，不是整個
+  檔案庫，且每項主張都必須附上引用。沒有可用的指派時，代理回合會以
+  穩定代碼封閉式失敗。
 - **問題的生命超越對話。** 可以在還沒有答案時先儲存問題，之後再提問，並把
   答案、引用、執行狀態與對話連結留在同一資料列上。編輯問題會清除過期
   答案，而不是在畫面上留下彼此不符的配對。
@@ -141,7 +148,7 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
 | 儲存 | PostgreSQL 17（`pg_trgm` 用於路徑模糊搜尋）；原始位元組位於本機磁碟或私人的 Cloudflare R2 |
 | 快取 | Valkey／相容於 Redis，附記憶體內備援 |
 | 檢索 | CJK 雙字組 + 拉丁詞元 n-gram、BM25、帶符號雜湊向量、RRF |
-| AI | DeepSeek `deepseek-flash`（OpenAI 相容的對話完成） |
+| AI | DeepSeek `deepseek-flash`、Anthropic Claude，或任何 OpenAI 相容的對話端點 |
 | 前端 | React 19、TypeScript、Vite、React Router、React Query、Orval |
 | 部署 | Docker Compose、可選的 Cloudflare Tunnel，或使用 `uv` 的裸機部署 |
 
@@ -249,8 +256,9 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 設定頁是設定供應商的標準方式，且只有 root 帳號能編輯全域登錄。它會寫入
 四張各自獨立的能力資料表，因此一種能力永遠不會覆寫另一種：
 
-- **對話** —— `chat_provider_config`：DeepSeek 或任何 OpenAI 相容的對話
-  端點。允許保存多個資料列；恰有一個處於使用中。
+- **對話** —— `chat_provider_config`：DeepSeek、Anthropic Claude 或任何
+  OpenAI 相容的對話端點。對話資料列是帳號所指派的 **端點**；它有選用的
+  `max_output_tokens` 上限（256–131,072）。
 - **嵌入** —— `embedding_provider_config`：離線的 `hashing`、`openai` 或
   `openai-compatible`。允許保存多個資料列；恰有一個處於使用中。
 - **網路搜尋** —— `web_search_provider_config`：目前為 Tavily，並保留
@@ -260,20 +268,34 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
   網路搜尋與網路取得刻意分成不同資料列，因此它們可以使用不同的供應商或
   不同的憑證。
 
-每張資料表都對 `is_active` 設有部分唯一索引；PostgreSQL 會強制每種能力
-最多只有一個使用中的資料列。刪除資料列不會重複使用其身分 ID。供應商
-資料列屬於全域部署設定：只有 root 帳號可以列出、編輯、測試或刪除它們，
-一般使用者永遠不會收到供應商祕密或全域執行階段設定。API 永遠不會傳回
-明文金鑰：瀏覽器只會收到例如 `...14f8` 的提示。`APSOR_SECRET_KEY` 提供
-Fernet 主金鑰。若未設定，會在 `data/.secret_key`（Docker 中為
-`/data/.secret_key`）建立 `0600` 權限的金鑰檔案，因此加密值能承受重新
-啟動。`APSOR_TAVILY_API_KEY` 是兩種網路能力可選的環境備援。
+每張資料表都儲存從零開始的 `priority`，並對 `priority WHERE is_active` 設有
+部分唯一索引。對嵌入、網路搜尋與網路取得而言，鏈結中的第一列是主要，其餘
+是備援；只有在供應商或傳輸失敗時才會前進到下一列，且所有資料列都失敗後
+操作才失敗。對話不同：每個帳號會指派到一個明確的對話資料列，代理回合永遠
+不會容錯移轉到另一個對話資料列。嵌入備援必須共用主要的模型與維度，因為
+混合向量空間會損壞每位擁有者的索引。刪除資料列不會重複使用其身分 ID。
 
-優先順序為：**使用中的資料庫資料列 → 環境 → 內建預設值**。設定頁會標示
-每個供應商的來源。變更嵌入模型不會重寫現有向量；`reindex_required` 會
-提出警告。請執行 **重新嵌入檔案庫**（或
-`POST /api/v1/settings/providers/embedding/reindex`）來更新目前的分塊。
-向量搜尋會略過維度與目前嵌入器不符的分塊。
+供應商資料列屬於全域部署設定：只有 root 帳號可以列出、編輯、測試或刪除
+它們，一般使用者永遠不會收到供應商祕密或全域執行階段設定。API 永遠不會
+傳回明文金鑰：瀏覽器只會收到例如 `...14f8` 的提示。`APSOR_SECRET_KEY`
+提供 Fernet 主金鑰。若未設定，會在 `data/.secret_key`（Docker 中為
+`/data/.secret_key`）建立 `0600` 權限的金鑰檔案，因此加密值能承受重新
+啟動。`APSOR_TAVILY_API_KEY` 是兩種網路能力可選的環境備援。Anthropic
+金鑰可以放在 `.secrets/anthropic.env` 中，名為 `ANTHROPIC_API_KEY`（或
+`APSOR_ANTHROPIC_API_KEY`）；端點資料列上的資料庫金鑰仍然優先。
+
+對話端點擁有其金鑰，而不是帳號。多個帳號可以共用一個端點，輪替或清除該
+端點的金鑰會影響每個指派到它的帳號。沒有加密金鑰的資料列可以使用供應商
+範圍的環境金鑰作為資料列補充，但沒有每位使用者的金鑰，也沒有部署全域的
+對話備援：未指派的帳號永遠不會被另一個使用中的資料列或單獨的環境金鑰
+拯救。
+
+嵌入、網路搜尋與網路取得的優先順序為：**使用中的資料庫鏈結 → 環境 →
+內建預設值**。就對話而言，帳號指派會依 ID 選取端點資料列；供應商範圍的
+環境金鑰只能補足該資料列。設定頁會標示每個供應商的來源與鏈結順序。變更
+嵌入模型不會重寫現有向量；`reindex_required` 會提出警告。請執行 **重新
+嵌入檔案庫**（或 `POST /api/v1/settings/providers/embedding/reindex`）來
+更新目前的分塊。向量搜尋會略過維度與目前嵌入器不符的分塊。
 
 供應商登錄 API：
 
@@ -284,13 +306,89 @@ Fernet 主金鑰。若未設定，會在 `data/.secret_key`（Docker 中為
 | `PUT` | `/api/v1/settings/providers/{capability}/{provider_id}` | 取代一個儲存的供應商 |
 | `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | 刪除一個儲存的供應商 |
 | `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | 使其成為該能力唯一使用中的資料列 |
-| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | 清除使用中的資料列，並退回環境／預設值 |
+| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | 清除整個鏈結；嵌入／網路退回環境／預設值，對話指派則變為未啟用 |
 | `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/test` | 送出一個小型供應商請求並測量延遲 |
 | `POST` | `/api/v1/settings/providers/embedding/reindex` | 以使用中的供應商重新嵌入每個目前的分塊 |
 
 `{capability}` 是 `chat`、`embedding`、`web_search` 或 `web_fetch` 之一。
 登錄回應會在 `providers` 快取範圍下快取 30 秒；每次供應商寫入都會更新該
 範圍。
+
+### 每位帳號的模型指派
+
+每個帳號都有兩個對話插槽。**主要** 插槽負責代理對話。**輔助** 插槽負責
+摘要、記憶彙整、匯入標題與標籤、文件分析、擷取，以及視覺。root 從
+**帳號 → 模型** 指派兩者：選擇已儲存的對話端點、輸入模型名稱與推理力度、
+設定選用的脈絡預算，然後對每個連線有變更的插槽按下 **測試**。一般帳號會
+從 **設定 → 模型** 讀取相同的兩個插槽；該檢視是唯讀的。
+
+模型名稱與力度字串是自由文字，上限分別為 128 與 32 字元。模型型錄只是
+建議，永遠不是允許清單。已知模型可能會提供價格、層級與分詞比例；未知模型會以
+`tier=None` 接受，不進行路由、不自動升級，成本顯示為 `unpriced`。對話框
+中的力度提示只是供應商指引：DeepSeek 接受 `low | high | max`（預設
+`high`，並有 `minimal`→`low`、`medium`/`xhigh`→`high`、`ultra`→`max`
+別名），Anthropic 接受 `low | medium | high | xhigh | max`，OpenAI/GPT
+依模型接受 `none | minimal | low | medium | high | xhigh | max`。探測才是
+驗證。
+
+端點資料列擁有 Fernet 加密金鑰。多個帳號可以共用一個端點；輪替或清除其
+金鑰會影響每個指派到該端點的帳號。沒有每位使用者的金鑰，也沒有全域或
+環境對話備援：缺少、未啟用、已停用或沒有金鑰的端點會封閉式失敗。輔助
+插槽只有在兩個輔助欄位皆為 `NULL` 時（升級回填的形狀）才繼承主要端點與
+模型；該繼承工作使用輔助力度，預設為 `low`。有輔助資料列但沒有模型，或
+有模型但沒有資料列，會回報為降級，而不是默默備援。
+
+儲存受探測閘門控制。伺服器會對每個連線指紋（端點資料列、基底 URL、金鑰
+密文、模型與力度）有變更的插槽，執行一次真實的 16 權杖生成；即使瀏覽器
+已按下 **測試**，`PUT` 仍會在伺服器端重新檢查閘門。只有預算變更時會跳過
+探測。若探測失敗，請求會傳回 `422 model_probe_failed`，且不寫入任何內容。
+刪除指派會清除兩個插槽，讓帳號保持未指派。
+
+脈絡視窗與壓縮門檻是選用的每位帳號覆寫；空白值會繼承 `agent_config` 的
+部署預設值。脈絡視窗是真正的對外送出輸入預算，不是模型中繼資料。每次
+供應商呼叫前，代理會估算請求，且絕不引發本機脈絡錯誤：超出預算時，先以
+預算的 60% 強制進行確定性壓縮，再丟棄頁面脈絡，然後從最舊的開始將工具
+結果本文裁剪為 8,000、2,000、500 字元（保留 `<tool_result>` 信封），最後
+只截斷目前使用者訊息的輸出副本（必要時丟棄其附件）。一則 `ui.notice` 會
+記錄模型未看到的內容。儲存的對話記錄不變。沒有
+`agent_context_limit_exceeded` 代碼。
+
+壓縮一律是確定性的，且永不呼叫供應商。root 可以在 `agent_config` 編輯其
+指示範本；範本必須包含 `{max_output_tokens}`，並可使用
+`{max_output_chars}`、`{max_items}`、`{max_line_chars}` 與
+`{max_last_user_chars}`。缺少輸出上限、使用未知預留位置或含有不成對大括號
+的範本會傳回 `422 compaction_prompt_invalid`，且不會儲存。
+
+開啟 `model_escalation_enabled` 時，代理每次執行最多升級一次，往型錄的
+下一層，且在同一個端點上。觸發時機為：經過一次壓縮後仍遭脈絡視窗拒絕、
+重試後仍未產生文字且達到輸出上限、連續三次無效引數的工具呼叫、無法使用的
+完成，或拒絕回答。5xx、逾時、401/403 或配額錯誤永不升級。一則 `ui.notice`
+會記錄 `reason`、`from_model` 與 `to_model`。未知模型沒有層級，因此永不
+升級。
+
+| 方法 | 路徑 | 用途 |
+|---|---|---|
+| `GET` | `/api/v1/model-assignments` | 每個帳號的儲存值、生效值與警告欄位（僅限 root） |
+| `GET` | `/api/v1/model-assignments/me` | 呼叫者自己的指派（每個已驗證帳號） |
+| `PUT` | `/api/v1/model-assignments/{user_id}` | 探測有變更的插槽並儲存兩個指派（僅限 root） |
+| `DELETE` | `/api/v1/model-assignments/{user_id}` | 清除兩個指派（僅限 root） |
+| `GET` | `/api/v1/chat-endpoints` | 已儲存的對話端點，只有主機名稱，永遠沒有金鑰或完整 URL |
+| `POST` | `/api/v1/chat-endpoints/{provider_config_id}/probe` | 測試一個候選模型／力度；不寫入任何內容 |
+| `GET` | `/api/v1/model-catalog` | 依升級順序排列的建議型錄；其他模型字串仍合法 |
+
+穩定的指派錯誤：
+
+| 狀態 | 代碼 | 時機 |
+|---|---|---|
+| `409` | `model_not_assigned` | 帳號沒有主要端點／模型 |
+| `409` | `provider_inactive` | 指派的端點未啟用、已停用或沒有金鑰 |
+| `422` | `invalid_model_assignment` | 端點無法使用，或預算配對無效 |
+| `422` | `model_probe_failed` | 有變更的插槽探測失敗；未寫入任何內容 |
+| `422` | `compaction_prompt_invalid` | 壓縮範本缺少 `{max_output_tokens}` 或含有未知預留位置 |
+
+型錄價格僅供參考；既有的每位帳號權杖配額仍是強制執行機制，且沒有美元
+成本讀數。`GET /api/v1/ai/status` 仍回報部署全域執行階段供 root 診斷；
+它不是每位帳號的指派。
 
 ### 網路研究工具
 
@@ -359,14 +457,16 @@ Tavily 是第一個轉接器（`/search` 與 `/extract`）。供應商接縫是�
 ### 代理執行階段設定
 
 `/settings` 上的 **代理執行階段** 面板（僅限 root）會編輯單例的
-`agent_config` 資料列（`id=1`）。供應商與模型選擇仍留在上方的 AI 設定中，
-因此哪個模型負責回答仍然只有單一事實來源。全部十二個執行階段值都存放在
-PostgreSQL 中，套用至新的執行且無需重新啟動，並由每個帳號共用。
+`agent_config` 資料列（`id=1`）。對話端點與模型選擇是每位帳號的指派
+（見 **每位帳號的模型指派**）；此資料列帶有步驟與工具預算、部署預設的
+脈絡預算，以及壓縮與升級控制。這些執行階段值都存放在 PostgreSQL 中，
+套用至新的執行且無需重新啟動，並由每個帳號共用。帳號自己的脈絡視窗與
+壓縮門檻會在設定時覆寫這些部署預設值。
 
 | 方法 | 路徑 | 用途 |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | 生效設定、預設值、來源、`updated_at` |
-| `PUT` | `/api/v1/agent/settings` | 完整取代；十二個欄位皆為必填 |
+| `PUT` | `/api/v1/agent/settings` | 完整取代；所有欄位皆為必填 |
 | `POST` | `/api/v1/agent/settings/reset` | 保存並傳回內建預設值 |
 
 產生的操作為 `getAgentSettings`、`updateAgentSettings` 與
@@ -379,7 +479,7 @@ PostgreSQL 中，套用至新的執行且無需重新啟動，並由每個帳號
 | 欄位 | 預設 | 範圍 |
 |---|---|---|
 | `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000；低於脈絡視窗 |
-| `context_window_tokens` | 1,000,000 | 8,000–2,000,000；模型中介資料 |
+| `context_window_tokens` | 1,000,000 | 8,000–2,000,000；部署預設預算 |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
@@ -387,17 +487,27 @@ PostgreSQL 中，套用至新的執行且無需重新啟動，並由每個帳號
 | `max_page_context_chars` | 6,000 | 500–50,000 |
 | `max_compaction_summary_chars` | 6,000 | 1,000–20,000 |
 | `max_compaction_last_user_chars` | 4,000 | 500–10,000 |
+| `compaction_prompt` | 內建範本 | 1–20,000 字元；必須包含 `{max_output_tokens}` |
+| `compaction_max_output_tokens` | 2,600 | 256–16,384 |
+| `model_escalation_enabled` | `true` | 布林值 |
+| `agent_max_output_tokens` | 64,000 | 256–131,072 |
 | `auto_compaction_enabled` | `true` | 布林值 |
 | `parallel_tools_enabled` | `true` | 布林值 |
 | `save_memory_requires_approval` | `true` | 布林值；`save_memory` 需要人工核准 |
 
 Pydantic 與對應的 PostgreSQL 檢查條件約束會強制執行範圍與兩項跨欄位規則：
 壓縮門檻必須低於模型脈絡視窗，且平行寬度不得超過每回合的工具呼叫數。
-應用程式的全域驗證封套會將請求驗證失敗對應為 `400 invalid_request`，而非 422。
+壓縮範本也必須含有 `{max_output_tokens}`；未知的預留位置、轉換、格式規格
+或缺少輸出上限會傳回 `422 compaction_prompt_invalid`，而不是
+`400 invalid_request`。應用程式的全域驗證封套會將其他請求驗證失敗對應為
+`400 invalid_request`，而非 422。
 
 請求會在一次短暫的資料庫工作階段中載入一個不可變的執行階段快照。進行中
-的 SSE 執行會保留它啟動時的快照；之後的執行則使用已變更的設定。後端契約
-描述於 `backend/README.md`。
+的 SSE 執行會保留它啟動時的快照；之後的執行則使用已變更的設定。已儲存的
+帳號預算對會套用到快照上；若繼承的配對不再符合門檻規則，會回報為
+`invalid_threshold` 並保留部署值。主要供應商與模型仍來自帳號指派，而不是
+`/api/v1/ai/status` 或 `runtime.chat_config`。後端契約描述於
+`backend/README.md`。
 
 ### 資料匯入執行階段
 
@@ -695,7 +805,7 @@ coding-agent harness 的持久化逐字稿模型：對話是一份由不可變�
   待處理／已核准／已拒絕／已過期的人工決定，包含經驗證的引數、安全預覽，
   以及用來恢復等待中執行的迴圈快照。
 - `agent_config` —— 單例執行階段設定（`id=1`），保存經驗證的權杖、步驟、
-  工具、頁面脈絡與壓縮限制。
+  工具、頁面脈絡與壓縮限制，以及壓縮範本、其輸出上限與升級開關。
 
 第一個項目是凍結的 `pi.system` 提示詞與工具快照。脈絡建構器會以確定性
 方式重播項目：它會遵循 `head_entry_id` 與 `edits`、保留系統項目、將工具
@@ -827,6 +937,11 @@ API 重新啟動時，過期的 `running` 執行會以 `interrupted` 失敗。�
 
 這會開始新的 KV 快取系譜。系統提示詞與工具快照維持凍結，舊的對話記錄
 仍可在 `/chat` 與浮動面板中閱讀。
+
+壓縮一律是確定性的：永不呼叫供應商。摘要受 `compaction_max_output_tokens`
+（預設 2,600）限制，並由 root 可編輯的 `compaction_prompt` 渲染；範本必須
+包含 `{max_output_tokens}`，舊的字元上限仍然適用。溢位階梯也可以為單一
+對外請求建立臨時壓縮，而不附加邊界。
 
 `POST .../compact` 會從目前的活動脈絡手動附加相同的邊界。
 `POST .../clear` 會附加 `pi.reset`，其 `head_entry_id` 指向自己，且沒有
@@ -1076,6 +1191,11 @@ PDF.js 的 CMaps 與標準字型會由 `bun run pdf-assets` 從固定版本的
 代理執行計數，並由資料庫觸發程序彙總，因此卡片仍只是低成本的 root 專用
 清單讀取，而不是跨帳號的對話掃描。
 
+每張卡片也會彙總該帳號的模型指派。root 會在權杖配額旁開啟 **模型**，指派
+主要與輔助端點、其自由文字模型與力度，以及選用的脈絡預算，或重設兩個
+插槽。帳號本身會在 **設定 → 模型** 以唯讀方式看到相同的兩個插槽；只有
+root 可以變更它們。
+
 root 可以從頁尾使用者切換器或一般使用中帳號卡片開始模擬工作階段。對話框
 會在本機搜尋 root 專用的帳號清單、排除 root 帳號，並拒絕已停用或必須
 變更密碼的帳號。模擬是 root 刻意保留的受信任能力：cookie 會變成目標
@@ -1094,8 +1214,9 @@ root 工作階段。要求密碼可防止被模擬的人接管 root。模擬期�
 例外：root 可以發出臨時密碼或開啟目標的工作階段，因此能以該帳號登入。
 請據此保護 root 憑證；RLS 並不是用來防禦惡意 root 使用那些能力的機制。
 一般使用者看不到全域設定分頁或 **帳號** 頁面；他們的設定只會顯示
-**常用提示詞** 與 **語言**，而 root 會看到全部八個分頁。儀表板與統計
-計數的範圍限於登入的帳號；AI 狀態是全域且唯讀的。密碼會以 Argon2
+**常用提示詞**、**模型** 與 **語言**，而 root 會看到全部九個分頁。儀表板
+與統計計數的範圍限於登入的帳號；AI 狀態是部署全域的執行階段診斷，而不是
+帳號的模型指派。密碼會以 Argon2
 雜湊；資料庫只儲存每個工作階段權杖的 SHA-256 雜湊。cookie 為 HttpOnly、
 SameSite=Lax，並在 `APSOR_COOKIE_SECURE=true` 時為 Secure（Cloudflare
 compose 會設定它）。每個帳號都可以在 `/profile` 編輯其顯示名稱與任意
@@ -1325,12 +1446,17 @@ memory_summary ───┘
 - `chat_provider_config` / `embedding_provider_config` /
   `web_search_provider_config` / `web_fetch_provider_config`：每個儲存的
   供應商一列，附加密的 API 金鑰、安全提示，以及模型／基礎 URL／維度。
-  `is_active` 上的部分唯一索引會強制每種能力只有一個使用中的資料列。
-  `web_search` 與 `web_fetch` 是獨立的憑證。
+  `chat_provider_config` 另外儲存選用的 `max_output_tokens`，並接受
+  `anthropic`、`deepseek`、`openai-compatible` 與 `none`；對話資料列是
+  帳號所指派的端點。`is_active` 上的部分唯一索引會強制每種能力只有一個
+  使用中的資料列。`web_search` 與 `web_fetch` 是獨立的憑證。
 - `app_user`：每個帳號一列。`role` 為 `root` 或 `user`；`is_active`、
   `must_change_password`、`disabled_at`、`created_by_user_id` 與密碼稽核
-  時間戳記描述帳號生命週期。部分唯一索引會強制恰好一個 root，且使用者
-  名稱會維持全域唯一且不可變。
+  時間戳記描述帳號生命週期。八個指派欄位是 `chat_provider_config_id`、
+  `chat_model`、`chat_reasoning_effort`、`aux_provider_config_id`、
+  `aux_model`、`aux_reasoning_effort`（非 null，預設 `low`）、
+  `chat_context_window_tokens` 與 `chat_compaction_threshold_tokens`。部分
+  唯一索引會強制恰好一個 root，且使用者名稱會維持全域唯一且不可變。
 - `user_profile_card`：描述帳號的有序標題／內容卡片；整組卡片會作為
   `user_profile` 區段凍結到新對話中。
 - `frequently_used_prompt`：供空白對話頁使用的私人、帳號可編輯捷徑，依
@@ -1406,8 +1532,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `f7a3c2d9e1b4`，在 `c2f6a8d4e1b3` 之後。此分支上
-`agent_config` 之後的移轉為：
+最新的移轉是 `a4c9e2f7b1d6`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -1480,12 +1605,22 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 - `c2f6a8d4e1b3` 將 `ingest_config.vision_description_language`
   新增為非 null 的 `varchar(80)`，伺服器預設為 `English`，並附去除空白後
   的長度檢查。降級會移除檢查條件與欄位；
-- `f7a3c2d9e1b4`（目前 head）新增可為 null 的
+- `f7a3c2d9e1b4` 新增可為 null 的
   `ingest_config.vision_image_prompt` / `vision_document_prompt` 範本、
   `file` 提示詞指紋欄位，以及 `file_ingest_job.source_file_id` 與其
   擁有者安全的複合外鍵、重新匯入檢查、使用中來源唯一索引與查詢索引。
   它不會植入或回填提示詞／指紋值。降級會先移除重新匯入工作，再還原舊的
-  來源種類檢查。
+  來源種類檢查；
+- `a4c9e2f7b1d6`（目前 head）新增八個 `app_user` 指派欄位與兩個指向
+  `chat_provider_config` 的 `ON DELETE SET NULL` 外鍵、七項檢查條件、
+  `chat_provider_config.max_output_tokens`（256–131,072）、允許 `anthropic`
+  的較寬對話供應商檢查，以及四個新的 `agent_config` 欄位
+  （`compaction_prompt`、`compaction_max_output_tokens`、
+  `model_escalation_enabled`、`agent_max_output_tokens`）。它會把最低的
+  使用中非 `none` 對話資料列及其模型回填到尚未指派的帳號；若沒有這種
+  資料列，每個帳號都會保持未指派。`app_user` 仍在 RLS 之外，因此不需要
+  變更原則或授權。降級會移除指派欄位，並在仍有 `anthropic` 資料列時
+  拒絕還原較窄的供應商檢查。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會

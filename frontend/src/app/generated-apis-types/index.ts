@@ -5,6 +5,7 @@ export * from './auth/auth';
 export * from './files/files';
 export * from './folders/folders';
 export * from './memories/memories';
+export * from './model-assignments/model-assignments';
 export * from './prompts/prompts';
 export * from './search/search';
 export * from './settings/settings';

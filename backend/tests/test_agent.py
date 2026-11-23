@@ -13,7 +13,10 @@ from sqlalchemy import Engine, create_engine, text
 from app.infrastructure.ai.deepseek_client import DeepSeekClient, _is_context_window_error
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
-from app.module.agent.domain.agent_domain import ProviderContext
+from app.module.agent.domain.agent_domain import (
+    DEFAULT_COMPACTION_PROMPT,
+    ProviderContext,
+)
 from app.module.agent.domain.agent_status_domain import (
     AgentStatus,
     render_agent_status,
@@ -302,6 +305,10 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "max_page_context_chars": 6_000,
         "max_compaction_summary_chars": 6_000,
         "max_compaction_last_user_chars": 4_000,
+        "compaction_prompt": DEFAULT_COMPACTION_PROMPT,
+        "compaction_max_output_tokens": 2_600,
+        "model_escalation_enabled": True,
+        "agent_max_output_tokens": 64_000,
         "auto_compaction_enabled": True,
         "parallel_tools_enabled": True,
         "save_memory_requires_approval": True,

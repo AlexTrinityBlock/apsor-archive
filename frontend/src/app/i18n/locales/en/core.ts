@@ -288,6 +288,119 @@ export const core = {
     quotaTopUpSuccess: "Usage allowance topped up.",
     quotaResetSuccess: "Usage reset. The lifetime total was preserved.",
     quotaError: "The usage allowance could not be updated.",
+    modelTitle: "Model assignment",
+    modelManage: "Manage model",
+    modelLoading: "Reading model assignment…",
+    modelUnavailable: "The model assignment could not be read.",
+    modelPrimary: "Primary",
+    modelAuxiliary: "Auxiliary",
+    modelUnassigned: "Unassigned",
+    modelBudgetShort: "{tokens} ctx",
+    modelCompactionShort: "{tokens} compact",
+    modelWarningCount: "{count} warnings",
+    modelWarningCountOne: "{count} warning",
+    modelDegradedBadge: "Degraded",
+    modelDialogTitle: "Model assignment",
+    modelDialogDescription:
+      "Choose the two provider endpoints {name} uses. Every changed connection is tested before it is saved.",
+    modelDialogHelp:
+      "Model names and effort values are free text. The catalog is advisory; the connection test is the only validation.",
+    modelEndpoint: "Endpoint",
+    modelEndpointPlaceholder: "Select an endpoint",
+    modelEndpointUnavailable: "{label} (unavailable)",
+    modelEndpointError: "The endpoint list did not answer.",
+    modelEndpointEmpty:
+      "No active, keyed chat endpoint is available. Add one in Settings → Provider registry.",
+    modelName: "Model",
+    modelNameHint:
+      "Free text, up to 128 characters. Known names are suggestions, not a closed list.",
+    modelOptionPrice: "${input} in · ${output} out per MTok",
+    modelUnknown:
+      "Not in the price catalog: no tier, no automatic escalation, and the cost is shown as unpriced.",
+    modelFamilyMismatch:
+      "This model is usually served by {family}; the call will probably fail.",
+    modelEffort: "Reasoning effort",
+    modelEffortHint:
+      "Anything is accepted here. Test is the only validation.",
+    modelPrimaryEffortEmpty:
+      "Leave blank to use the provider default.",
+    modelEffortHintsAnthropic:
+      "Anthropic accepts low · medium · high · xhigh · max.",
+    modelEffortHintsDeepSeek:
+      "DeepSeek accepts low · high · max; none disables thinking.",
+    modelEffortHintsOpenAI:
+      "OpenAI/GPT accepts none · minimal · low · medium · high · xhigh · max.",
+    modelEffortHintsOther:
+      "Check the provider documentation for the accepted values.",
+    modelTest: "Test",
+    modelTesting: "Testing…",
+    modelTestOk: "Connected · {latency} ms · {model}",
+    modelTestOkNoModel: "Connected · {latency} ms",
+    modelTestFailed: "Test failed",
+    modelTestError: "The connection test did not answer.",
+    modelTestHint:
+      "Test the endpoint, model, and effort before saving a change.",
+    modelSlotPrimaryTitle: "Primary slot",
+    modelSlotPrimaryDescription: "Agent chat uses the primary endpoint.",
+    modelSlotAuxiliaryTitle: "Auxiliary slot",
+    modelSlotAuxiliaryDescription:
+      "Summaries, memory, ingestion, and vision use the auxiliary endpoint.",
+    modelSlotRequired: "Choose an endpoint and a model for both slots.",
+    modelAuxEffortRequired: "The auxiliary effort is required.",
+    modelAuxInherited:
+      "This account currently inherits the primary endpoint for auxiliary work. Saving writes an explicit auxiliary assignment, which needs its own test.",
+    modelBudgetTitle: "Context budget",
+    modelBudgetDescription:
+      "The maximum input sent to the provider for one call, and when older turns are folded away.",
+    modelBudgetPercent: "{percent}% of the context window",
+    modelContextWindow: "Context window",
+    modelContextWindowHint:
+      "8,000–2,000,000 tokens. Leave blank to use the deployment default.",
+    modelCompactionThreshold: "Compaction threshold",
+    modelThresholdHint:
+      "1,000–1,000,000 tokens; it must be below the context window. Leave blank to use the deployment default.",
+    modelThresholdOrder:
+      "The compaction threshold must be less than the context window.",
+    modelBudgetInvalid:
+      "Enter a whole number within the allowed range, or leave the field blank.",
+    modelCostHint:
+      "Prompts above 100,000 tokens cost 5x more per token, including cache reads. 90,000 leaves ~10K of headroom.",
+    modelWarningsTitle: "Advisory warnings",
+    modelWarningUnknownModel:
+      "The model is not in the price catalog: no tier, no automatic escalation, and the cost is unpriced.",
+    modelWarningFamilyMismatch:
+      "The model is normally served by a different provider family; the call may fail.",
+    modelWarningWindowAboveCatalog:
+      "The context window is above the model's catalog window. The stored value is kept.",
+    modelWarningLongPromptStep:
+      "Above the model's long-prompt threshold every token costs more, including cache reads.",
+    modelWarningAuxInherited:
+      "The auxiliary slot currently inherits the primary endpoint.",
+    modelDegradedNoProvider:
+      "The primary endpoint was deleted or is invalid. Chat is unavailable until a new endpoint is assigned.",
+    modelDegradedProviderInactive:
+      "The assigned endpoint is inactive or has no usable key. Requests fail until it is fixed.",
+    modelDegradedAuxNoProvider:
+      "The auxiliary endpoint was deleted or is invalid. Background AI is unavailable.",
+    modelDegradedInvalidThreshold:
+      "The stored budget pair is not usable with the deployment defaults; the deployment budget applies.",
+    modelDegradedUnknown: "The effective configuration is degraded ({reason}).",
+    modelResetTitle: "Reset assignment",
+    modelResetDescription:
+      "Clear both endpoints and both budgets. The account then has no model assignment.",
+    modelResetConfirm:
+      "Reset the model assignment for {name}? Chat and background AI stop until a new assignment is saved.",
+    modelResetConfirmAction: "Confirm reset",
+    modelResetCancel: "Keep assignment",
+    modelReset: "Reset assignment",
+    modelResetting: "Resetting…",
+    modelSave: "Save assignment",
+    modelSaving: "Saving…",
+    modelSaveBlocked: "Test every changed slot before saving.",
+    modelClose: "Close",
+    modelSaveSuccess: "Model assignment saved.",
+    modelResetSuccess: "Model assignment reset.",
+    modelError: "The model assignment could not be updated.",
   },
   notices: {
     title: "System notices",
@@ -453,12 +566,67 @@ export const core = {
     collapse: "Collapse settings navigation",
     systemPrompt: "System prompt",
     frequentPrompts: "Frequent prompts",
+    model: "Model",
     providers: "Provider registry",
     diagnostics: "Diagnostics",
     agentRuntime: "Agent runtime",
     ingestRuntime: "Ingestion runtime",
     maintenance: "Maintenance",
     language: "Language",
+  },
+  settings: {
+    model: {
+      title: "Model assignment",
+      lede:
+        "The two endpoints your account uses. Primary endpoints serve agent chat; auxiliary endpoints serve summaries, memory, ingestion, and vision. Your administrator assigns both.",
+      loadReadingAria: "Reading model assignment",
+      loadErrorTitle: "The model assignment did not answer.",
+      primary: "Primary",
+      auxiliary: "Auxiliary",
+      inherited: "Inherited",
+      endpoint: "Endpoint",
+      provider: "Provider",
+      model: "Model",
+      effort: "Effort",
+      effortEmpty: "Provider default",
+      price: "Price",
+      pricing: "${input} in · ${output} out per MTok",
+      pricingUnpriced: "unpriced",
+      tierUnpriced: "unpriced",
+      noEndpoint: "No endpoint",
+      budgetTitle: "Context budget",
+      budgetContext: "Context window",
+      budgetThreshold: "Compaction threshold",
+      budgetDefaultHint:
+        "A blank budget inherits the deployment default from the agent runtime settings.",
+      deploymentDefault: "Deployment default",
+      warningsTitle: "Advisory warnings",
+      warningUnknownModel:
+        "The model is not in the price catalog: no tier, no automatic escalation, and the cost is shown as unpriced.",
+      warningFamilyMismatch:
+        "The model is normally served by a different provider family; calls may fail.",
+      warningWindowAboveCatalog:
+        "The context window is above the model's catalog window. The stored value is kept.",
+      warningLongPromptStep:
+        "Above the model's long-prompt threshold every token costs more, including cache reads.",
+      warningAuxInherited:
+        "The auxiliary slot currently inherits the primary endpoint.",
+      degradedNoProvider:
+        "The primary endpoint was deleted or is invalid. Chat is unavailable until a new endpoint is assigned.",
+      degradedProviderInactive:
+        "The assigned endpoint is inactive or has no usable key. Requests fail until it is fixed.",
+      degradedAuxNoProvider:
+        "The auxiliary endpoint was deleted or is invalid. Background AI is unavailable.",
+      degradedInvalidThreshold:
+        "The stored budget pair is not usable with the deployment defaults; the deployment budget applies.",
+      degradedUnknown: "The effective configuration is degraded ({reason}).",
+      unassigned: "No model assigned — ask the administrator.",
+      unassignedHint:
+        "Chat and background AI are unavailable until an administrator assigns both endpoints.",
+      unassignedBadge: "Unassigned",
+      adminNote: "Assigned by your administrator.",
+      updated: "Updated",
+    },
   },
   errors: {
     invalid_request: "The request was not valid. Check the values and try again.",
@@ -509,6 +677,10 @@ export const core = {
     web_usage_limit_exceeded:
       "This account has reached its web search or fetch allowance. Ask the administrator to top it up or reset it.",
     invalid_usage_quota: "That usage allowance change is not valid.",
+    model_not_assigned:
+      "No model is assigned to this account. Ask the administrator.",
+    provider_inactive:
+      "The assigned model endpoint is inactive or has no usable key. Ask the administrator.",
     ai_not_configured:
       "Vision extraction is not configured. Add a vision-capable provider in Settings.",
     invalid_vision_prompt:

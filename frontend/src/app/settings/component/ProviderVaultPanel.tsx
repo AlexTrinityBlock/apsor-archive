@@ -58,9 +58,15 @@ const CAPABILITY_ORDER: readonly Capability[] = [
 ];
 
 const PROVIDER_DEFAULT_MODELS: Readonly<Record<string, string>> = {
+  anthropic: "claude-haiku-5-5",
   deepseek: "deepseek-flash",
   hashing: "apsor-hash-384",
   none: "none",
+};
+
+const PROVIDER_DEFAULT_BASE_URLS: Readonly<Record<string, string>> = {
+  anthropic: "https://api.anthropic.com",
+  deepseek: "https://api.deepseek.com",
 };
 
 const KNOWN_DEFAULT_MODELS = new Set(Object.values(PROVIDER_DEFAULT_MODELS));
@@ -71,6 +77,7 @@ interface ProviderEditorDraft {
   readonly model: string | null;
   readonly base_url: string | null;
   readonly dimension: number | null;
+  readonly max_output_tokens: number | null;
   readonly api_key: string | null;
   readonly clear_api_key: boolean;
   readonly activate: boolean;
@@ -164,6 +171,39 @@ function dimensionResult(
   return { value: parsed, error: null };
 }
 
+function maxOutputResult(
+  value: string,
+  t: Translate,
+): { readonly value: number | null; readonly error: string | null } {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return { value: null, error: null };
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isInteger(parsed) || parsed < 256 || parsed > 131072) {
+    return {
+      value: null,
+      error: t("settings.providers.errors.maxOutputTokens"),
+    };
+  }
+  return { value: parsed, error: null };
+}
+
+function providerDefaultBaseUrl(
+  group: ProviderCapabilityReadSchema,
+  provider: string,
+): string | null {
+  if (group.capability !== "chat") {
+    return group.default_base_url;
+  }
+  if (provider === "openai-compatible") {
+    return null;
+  }
+  return (
+    PROVIDER_DEFAULT_BASE_URLS[provider] ?? group.default_base_url
+  );
+}
+
 function vectorBadgeLabel(
   pending: boolean,
   enabled: boolean | undefined,
@@ -206,6 +246,16 @@ function providerSummaryParts(
   }
   if (config.base_url) {
     parts.push(config.base_url);
+  }
+  if (
+    config.max_output_tokens !== null &&
+    config.max_output_tokens !== undefined
+  ) {
+    parts.push(
+      t("settings.providers.maxOutputSummary", {
+        tokens: String(config.max_output_tokens),
+      }),
+    );
   }
   if (supportsDimension) {
     parts.push(
@@ -288,6 +338,7 @@ function createPayload(draft: ProviderEditorDraft): ProviderCreateSchema {
     model: draft.model,
     base_url: draft.base_url,
     dimension: draft.dimension,
+    max_output_tokens: draft.max_output_tokens,
     api_key: draft.api_key,
     activate: draft.activate,
   };
@@ -300,6 +351,7 @@ function updatePayload(draft: ProviderEditorDraft): ProviderUpdateSchema {
     model: draft.model,
     base_url: draft.base_url,
     dimension: draft.dimension,
+    max_output_tokens: draft.max_output_tokens,
     api_key: draft.api_key,
     clear_api_key: draft.clear_api_key,
     activate: draft.activate,
@@ -433,12 +485,21 @@ function ProviderEditorDialog({
       ? ""
       : String(initial.dimension),
   );
+  const [maxOutput, setMaxOutput] = useState(
+    initial?.max_output_tokens === null ||
+      initial?.max_output_tokens === undefined
+      ? ""
+      : String(initial.max_output_tokens),
+  );
   const [apiKey, setApiKey] = useState("");
   const [clearKey, setClearKey] = useState(false);
   const [activate, setActivate] = useState(
     initial ? initial.is_active : true,
   );
   const [formError, setFormError] = useState<string | null>(null);
+
+  const supportsMaxOutput = group.capability === "chat";
+  const defaultBaseUrl = providerDefaultBaseUrl(group, provider);
 
   const keyless = group.keyless_providers.includes(provider);
   const isNone = provider === "none";
@@ -456,6 +517,7 @@ function ProviderEditorDialog({
   const modelFieldId = `${fieldId}-model`;
   const baseUrlFieldId = `${fieldId}-base-url`;
   const dimensionFieldId = `${fieldId}-dimension`;
+  const maxOutputFieldId = `${fieldId}-max-output`;
   const keyFieldId = `${fieldId}-key`;
   let submitLabel = initial
     ? t("settings.providers.submitSave")
@@ -472,6 +534,7 @@ function ProviderEditorDialog({
       setModel("none");
       setBaseUrl("");
       setDimension("");
+      setMaxOutput("");
       setApiKey("");
       setActivate(false);
       return;
@@ -512,6 +575,11 @@ function ProviderEditorDialog({
     const parsedDimension = dimensionResult(dimension, t);
     if (group.supports_dimension && parsedDimension.error) {
       setFormError(parsedDimension.error);
+      return;
+    }
+    const parsedMaxOutput = maxOutputResult(maxOutput, t);
+    if (parsedMaxOutput.error) {
+      setFormError(parsedMaxOutput.error);
       return;
     }
     const trimmedKey = apiKey.trim();
@@ -560,6 +628,8 @@ function ProviderEditorDialog({
       model: modelValue,
       base_url: baseValue,
       dimension: dimensionValue,
+      max_output_tokens:
+        supportsMaxOutput && !isNone ? parsedMaxOutput.value : null,
       api_key: trimmedKey.length > 0 ? trimmedKey : null,
       clear_api_key: clearKey,
       activate: isNone ? false : activate,
@@ -703,14 +773,12 @@ function ProviderEditorDialog({
               spellCheck={false}
               autoCapitalize="none"
               disabled={saving || isNone || provider === "hashing"}
-              placeholder={
-                group.default_base_url ?? "https://api.example.com/v1"
-              }
+              placeholder={defaultBaseUrl ?? "https://api.example.com/v1"}
             />
             <span className="field-help">
-              {group.default_base_url
+              {defaultBaseUrl
                 ? t("settings.providers.baseUrlHelpDefault", {
-                    url: group.default_base_url,
+                    url: defaultBaseUrl,
                   })
                 : t("settings.providers.baseUrlHelp")}
             </span>
@@ -738,6 +806,32 @@ function ProviderEditorDialog({
               />
               <span className="field-help">
                 {t("settings.providers.dimensionHelp")}
+              </span>
+            </label>
+          ) : null}
+
+          {supportsMaxOutput ? (
+            <label className="field" htmlFor={maxOutputFieldId}>
+              <span className="field-label">
+                {t("settings.providers.fieldMaxOutputTokens")}
+              </span>
+              <input
+                id={maxOutputFieldId}
+                className="input registry-input"
+                type="number"
+                min={256}
+                max={131072}
+                step={256}
+                value={maxOutput}
+                onChange={(event) => {
+                  setMaxOutput(event.target.value);
+                  setFormError(null);
+                }}
+                disabled={saving || isNone}
+                placeholder={t("settings.providers.providerDefault")}
+              />
+              <span className="field-help">
+                {t("settings.providers.maxOutputTokensHelp")}
               </span>
             </label>
           ) : null}
@@ -896,6 +990,19 @@ function ProviderChainCard({
           <div className="meta-item">
             <dt className="meta-key">{t("settings.providers.metaModel")}</dt>
             <dd className="meta-value">{provider.model ?? "—"}</dd>
+          </div>
+        ) : null}
+        {group.capability === "chat" ? (
+          <div className="meta-item">
+            <dt className="meta-key">
+              {t("settings.providers.metaMaxOutputTokens")}
+            </dt>
+            <dd className="meta-value">
+              {provider.max_output_tokens === null ||
+              provider.max_output_tokens === undefined
+                ? t("settings.providers.providerDefault")
+                : String(provider.max_output_tokens)}
+            </dd>
           </div>
         ) : null}
         <div className="meta-item">

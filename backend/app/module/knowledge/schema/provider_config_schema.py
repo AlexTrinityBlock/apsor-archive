@@ -26,6 +26,9 @@ class ProviderReadSchema(BaseModel):
     model: str | None
     base_url: str | None
     dimension: int | None
+    # Defaulted so a registry cache entry written by the previous release still
+    # validates during a rolling deploy.
+    max_output_tokens: int | None = None
     is_active: bool
     priority: int
     configured: bool
@@ -73,6 +76,7 @@ class ProviderCreateSchema(BaseModel):
     model: str | None = Field(default=None, max_length=128)
     base_url: str | None = Field(default=None, max_length=500)
     dimension: int | None = Field(default=None, ge=16, le=4096)
+    max_output_tokens: int | None = Field(default=None, ge=256, le=131072)
     api_key: str | None = Field(default=None, max_length=500)
     activate: bool = True
 
@@ -94,6 +98,7 @@ class ProviderUpdateSchema(BaseModel):
     model: str | None = Field(default=None, max_length=128)
     base_url: str | None = Field(default=None, max_length=500)
     dimension: int | None = Field(default=None, ge=16, le=4096)
+    max_output_tokens: int | None = Field(default=None, ge=256, le=131072)
     api_key: str | None = Field(default=None, max_length=500)
     clear_api_key: bool = False
     activate: bool = False

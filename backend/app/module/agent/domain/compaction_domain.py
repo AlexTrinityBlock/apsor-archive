@@ -7,8 +7,11 @@ future requests without rewriting any immutable row.
 """
 
 import json
+import math
 import re
 from collections.abc import Sequence
+from decimal import Decimal
+from string import Formatter
 from typing import Any
 
 from app.module.agent.domain.agent_domain import (
@@ -30,12 +33,34 @@ from app.module.agent.domain.context_domain import (
     active_start_entry_id,
     build_context,
 )
-from app.module.agent.domain.xml_domain import clip, xml_text
+from app.module.agent.domain.xml_domain import TRUNCATION_MARKER, clip, xml_text
 
 MAX_SUMMARY_ITEM_CHARS = 280
 MAX_COMPACTION_CARRY_CHARS = 1_200
 MAX_SUMMARY_ITEMS = 40
 CHARS_PER_ESTIMATED_TOKEN = 3
+# Fixed XML envelope sizes. The bounded path reserves these before spending the
+# remaining characters on the carry line and the summary items.
+_COMPACTION_ENVELOPE_CHARS = len("<compaction><summary></summary></compaction>")
+_LAST_USER_ENVELOPE_CHARS = len("<last_user_input></last_user_input>")
+# The operator-editable compaction template is a closed vocabulary. Literal
+# braces must be doubled, and ``{max_output_tokens}`` is mandatory so the
+# summary always states its bound.
+_COMPACTION_TEMPLATE_FIELDS = frozenset(
+    {
+        "max_output_tokens",
+        "max_output_chars",
+        "max_items",
+        "max_line_chars",
+        "max_last_user_chars",
+    }
+)
+_COMPACTION_CONTEXT_FIELDS = (
+    "max_items",
+    "max_line_chars",
+    "max_last_user_chars",
+)
+_FORMATTER = Formatter()
 _CITATION_PATTERN = re.compile(
     r"\[(?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+)\]"
 )
@@ -59,18 +84,96 @@ def compactable_context_entries(
     return [entry for entry in active_context_entries(entries) if entry.kind != KIND_SYSTEM]
 
 
-def estimate_context_tokens(entries: Sequence[TranscriptEntry]) -> int:
+def validate_compaction_template(template: str) -> None:
+    """Reject a compaction template the renderer cannot substitute safely.
+
+    Only the placeholders used by the default template are accepted. A literal
+    brace must be doubled so a typo cannot be silently treated as text, and the
+    output bound is mandatory because the summary must state its limit.
+    """
+    if not isinstance(template, str):
+        raise ValueError("Compaction template must be a string.")
+    try:
+        parsed = list(_FORMATTER.parse(template))
+    except ValueError as exc:
+        raise ValueError("Compaction template has an unmatched brace.") from exc
+    names: list[str] = []
+    for _, field_name, format_spec, conversion in parsed:
+        if field_name is None:
+            continue
+        if field_name not in _COMPACTION_TEMPLATE_FIELDS:
+            raise ValueError(
+                f"Compaction template has an unknown placeholder {{{field_name}}}."
+            )
+        if conversion or format_spec:
+            raise ValueError(
+                "Compaction template placeholders do not support conversions or "
+                "format specifications."
+            )
+        names.append(field_name)
+    if "max_output_tokens" not in names:
+        raise ValueError(
+            "Compaction template must contain the {max_output_tokens} placeholder."
+        )
+
+
+def render_compaction_prompt(
+    template: str,
+    *,
+    max_output_tokens: int,
+    chars_per_token: float = CHARS_PER_ESTIMATED_TOKEN,
+    **context: int,
+) -> str:
+    """Render the deterministic compaction instruction for the next model.
+
+    The character bound is derived from the token bound and the provider's
+    characters-per-token ratio, so the instruction and the output clip always
+    state the same limit. Rendering is pure: no provider, clock, or randomness.
+    """
+    validate_compaction_template(template)
+    _validate_positive_int("max_output_tokens", max_output_tokens)
+    _validate_chars_per_token(chars_per_token)
+    unknown = set(context) - set(_COMPACTION_CONTEXT_FIELDS)
+    if unknown:
+        raise ValueError(
+            "Compaction template has unknown context values: "
+            f"{', '.join(sorted(unknown))}."
+        )
+    values = {
+        "max_output_tokens": max_output_tokens,
+        "max_output_chars": _char_budget(max_output_tokens, chars_per_token),
+        "max_items": context.get("max_items", MAX_SUMMARY_ITEMS),
+        "max_line_chars": context.get("max_line_chars", MAX_SUMMARY_ITEM_CHARS),
+        "max_last_user_chars": context.get(
+            "max_last_user_chars",
+            MAX_COMPACTION_LAST_USER_CHARS,
+        ),
+    }
+    for name in _COMPACTION_CONTEXT_FIELDS:
+        _validate_positive_int(name, values[name])
+    return template.format_map(values)
+
+
+def estimate_context_tokens(
+    entries: Sequence[TranscriptEntry],
+    *,
+    chars_per_token: float = CHARS_PER_ESTIMATED_TOKEN,
+) -> int:
     """Estimate provider tokens without calling the provider.
 
     The estimate is intentionally conservative: a serialized character count at
-    three characters per token, compared against the latest valid assistant
-    usage. The larger value wins so the auto-compaction threshold cannot be
-    bypassed by a terse usage report.
+    the caller's characters-per-token ratio, compared against the latest valid
+    assistant usage. The larger value wins so the auto-compaction threshold
+    cannot be bypassed by a terse usage report.
     """
+    _validate_chars_per_token(chars_per_token)
     ordered = sorted(entries, key=lambda entry: entry.id)
     if not ordered:
         return 0
-    char_estimate = estimate_provider_context_tokens(build_context(ordered))
+    char_estimate = estimate_provider_context_tokens(
+        build_context(ordered),
+        chars_per_token=chars_per_token,
+    )
 
     start = active_start_entry_id(ordered)
     usage_estimate = 0
@@ -99,14 +202,18 @@ def estimate_provider_context_tokens(
     context: ProviderContext,
     *,
     strip_image_data: bool = False,
+    chars_per_token: float = CHARS_PER_ESTIMATED_TOKEN,
 ) -> int:
     """Estimate tokens for an already-built system/tools/messages request.
 
     ``strip_image_data`` replaces inline base64 image URLs with a short
     placeholder before serializing. Compression estimates use the default, so
     their behavior is unchanged; the provider-only self block opts in because it
-    runs after chat-image enrichment.
+    runs after chat-image enrichment. ``chars_per_token`` is the primary model's
+    catalog ratio, so an unknown or non-Claude model uses the conservative
+    default.
     """
+    _validate_chars_per_token(chars_per_token)
     messages = (
         _strip_image_data_urls(context.messages)
         if strip_image_data
@@ -123,7 +230,7 @@ def estimate_provider_context_tokens(
         separators=(",", ":"),
         default=str,
     )
-    return (len(serialized) + CHARS_PER_ESTIMATED_TOKEN - 1) // CHARS_PER_ESTIMATED_TOKEN
+    return math.ceil(len(serialized) / chars_per_token)
 
 
 IMAGE_DATA_PLACEHOLDER = "[image-data-url]"
@@ -154,43 +261,72 @@ def build_compaction_draft(
     auto: bool,
     max_summary_chars: int = MAX_COMPACTION_SUMMARY_CHARS,
     max_last_user_chars: int = MAX_COMPACTION_LAST_USER_CHARS,
+    target_tokens: int | None = None,
+    chars_per_token: float = CHARS_PER_ESTIMATED_TOKEN,
 ) -> EntryDraft:
     """Build the provider message and UI data for one compaction entry.
 
     The summary and carried last-user-input caps come from the active runtime
     config snapshot; the defaults keep the pure builder usable in isolation.
+
+    ``target_tokens`` is the output budget used by the overflow ladder. When it
+    is set, whole items are kept newest-first until the rendered entry fits the
+    budget, and the summary and carry line share the derived character cap.
+    Omitting it preserves the original threshold-compaction output exactly.
     """
     compactable = compactable_context_entries(entries)
-    selected = compactable[-MAX_SUMMARY_ITEMS:]
-    omitted = len(compactable) - len(selected)
-    lines: list[str] = []
-    if omitted > 0:
-        lines.append(f"[{omitted} earlier entries omitted]")
-    lines.extend(_summary_line(entry) for entry in selected)
-    summary = "\n".join(line for line in lines if line)
-    if not summary:
-        summary = "No active conversation content to compact."
-    summary = clip(summary, max_summary_chars)
-
-    last_user_entry = next(
-        (entry for entry in reversed(compactable) if entry.kind == KIND_USER and _user_text(entry)),
-        None,
-    )
-    last_user_text = (
-        clip(_one_line(_user_text(last_user_entry)), max_last_user_chars)
-        if last_user_entry is not None
-        else ""
-    )
-
-    values: list[str] = ["<compaction>"]
-    if last_user_text:
-        values.append(f"<last_user_input>{xml_text(last_user_text)}</last_user_input>")
-    values.append(f"<summary>{xml_text(summary)}</summary>")
-    values.append("</compaction>")
+    last_user_entry = _last_user_entry(compactable)
+    if target_tokens is None:
+        selected = compactable[-MAX_SUMMARY_ITEMS:]
+        omitted = len(compactable) - len(selected)
+        lines: list[str] = []
+        if omitted > 0:
+            lines.append(f"[{omitted} earlier entries omitted]")
+        lines.extend(_summary_line(entry) for entry in selected)
+        summary = "\n".join(line for line in lines if line)
+        if not summary:
+            summary = "No active conversation content to compact."
+        summary = clip(summary, max_summary_chars)
+        last_user_text = (
+            clip(_one_line(_user_text(last_user_entry)), max_last_user_chars)
+            if last_user_entry is not None
+            else ""
+        )
+    else:
+        _validate_positive_int("target_tokens", target_tokens)
+        _validate_chars_per_token(chars_per_token)
+        budget_chars = _char_budget(target_tokens, chars_per_token)
+        summary_cap = min(max_summary_chars, budget_chars)
+        carry_cap = min(
+            max_last_user_chars,
+            summary_cap,
+            max(
+                0,
+                budget_chars
+                - _COMPACTION_ENVELOPE_CHARS
+                - _LAST_USER_ENVELOPE_CHARS,
+            ),
+        )
+        last_user_text = (
+            _clip_budget(_one_line(_user_text(last_user_entry)), carry_cap)
+            if last_user_entry is not None
+            else ""
+        )
+        selected, summary = _bounded_summary(
+            compactable,
+            last_user_text=last_user_text,
+            budget_chars=budget_chars,
+            summary_cap=summary_cap,
+        )
 
     return EntryDraft(
         kind=KIND_COMPACTION,
-        messages=[{"role": "user", "content": "".join(values)}],
+        messages=[
+            {
+                "role": "user",
+                "content": _compaction_content(summary, last_user_text),
+            }
+        ],
         data={
             "reason": reason,
             "summary_chars": len(summary),
@@ -199,6 +335,62 @@ def build_compaction_draft(
             "auto": auto,
         },
     )
+
+
+def _compaction_content(summary: str, last_user_text: str) -> str:
+    """Render the provider-visible compaction message."""
+    values: list[str] = ["<compaction>"]
+    if last_user_text:
+        values.append(f"<last_user_input>{xml_text(last_user_text)}</last_user_input>")
+    values.append(f"<summary>{xml_text(summary)}</summary>")
+    values.append("</compaction>")
+    return "".join(values)
+
+
+def _last_user_entry(compactable: Sequence[TranscriptEntry]) -> TranscriptEntry | None:
+    """Return the newest user entry that carries text."""
+    return next(
+        (
+            entry
+            for entry in reversed(compactable)
+            if entry.kind == KIND_USER and _user_text(entry)
+        ),
+        None,
+    )
+
+
+def _bounded_summary(
+    compactable: Sequence[TranscriptEntry],
+    *,
+    last_user_text: str,
+    budget_chars: int,
+    summary_cap: int,
+) -> tuple[list[TranscriptEntry], str]:
+    """Keep the newest whole items while the rendered entry fits the budget.
+
+    Items are dropped oldest-first, never split. If not even one item fits, the
+    summary falls back to the omission notice, clipped to the remaining room.
+    """
+    candidates = list(compactable[-MAX_SUMMARY_ITEMS:])
+    for count in range(len(candidates), -1, -1):
+        selected = candidates[len(candidates) - count :] if count else []
+        omitted = len(compactable) - count
+        lines: list[str] = []
+        if omitted > 0:
+            lines.append(f"[{omitted} earlier entries omitted]")
+        lines.extend(_summary_line(entry) for entry in selected)
+        summary = "\n".join(line for line in lines if line)
+        if count == 0:
+            if not summary:
+                summary = "No active conversation content to compact."
+            overhead = len(_compaction_content("", last_user_text))
+            available = max(0, budget_chars - overhead)
+            return [], _clip_budget(summary, min(summary_cap, available))
+        if len(summary) > summary_cap:
+            continue
+        if len(_compaction_content(summary, last_user_text)) <= budget_chars:
+            return selected, summary
+    return [], ""
 
 
 def _summary_line(entry: TranscriptEntry) -> str:
@@ -261,6 +453,39 @@ def _one_line(value: str) -> str:
     return " ".join(value.split())
 
 
+def _validate_positive_int(name: str, value: int) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise ValueError(f"{name} must be a positive integer.")
+
+
+def _validate_chars_per_token(chars_per_token: float) -> None:
+    if not isinstance(chars_per_token, (int, float)) or isinstance(chars_per_token, bool):
+        raise ValueError("chars_per_token must be a number.")
+    if not math.isfinite(chars_per_token) or chars_per_token <= 0:
+        raise ValueError("chars_per_token must be a positive finite number.")
+
+
+def _char_budget(tokens: int, chars_per_token: float) -> int:
+    """Return the integer character allowance for a token budget.
+
+    ``Decimal(str(...))`` keeps catalog ratios such as 2.3 exact, so the default
+    2,600-token cap reads 5,980 characters instead of a binary-float 5,979.
+    """
+    ratio = Decimal(str(chars_per_token))
+    return max(1, math.floor(Decimal(tokens) * ratio))
+
+
+def _clip_budget(value: str, limit: int) -> str:
+    """Clip to a hard character budget, even below the truncation marker."""
+    if limit <= 0:
+        return ""
+    if len(value) <= limit:
+        return value
+    if limit <= len(TRUNCATION_MARKER):
+        return ""
+    return clip(value, limit)
+
+
 def _int_value(value: Any) -> int:
     if isinstance(value, int) and not isinstance(value, bool):
         return value
@@ -273,4 +498,6 @@ __all__ = [
     "compactable_context_entries",
     "estimate_context_tokens",
     "estimate_provider_context_tokens",
+    "render_compaction_prompt",
+    "validate_compaction_template",
 ]

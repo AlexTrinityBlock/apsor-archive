@@ -143,6 +143,12 @@ class AiRuntime:
         )
 
     def _decrypt_key(self, row: ProviderConfigMixin) -> str | None:
+        """Decrypt one stored key; a failure stays keyless, never env-backed.
+
+        The caller distinguishes "no ciphertext" from "failed to decrypt" by
+        checking ``row.api_key_ciphertext`` itself. A stored ciphertext that no
+        longer decrypts must not borrow another secret from the environment.
+        """
         if not row.api_key_ciphertext:
             return None
         try:
@@ -161,10 +167,12 @@ class AiRuntime:
         row: ProviderConfigMixin,
     ) -> ProviderConfig:
         key = self._decrypt_key(row)
-        # The DB key wins; only when the row has no key (or decryption fails) does
-        # it fall back to the environment variable for that row's provider. This
-        # keeps an Exa row from receiving the Tavily key when both are present.
-        if key is None:
+        if not row.api_key_ciphertext:
+            # Environment enrichment is row enrichment, not a global fallback.
+            # It applies only to a row with no stored ciphertext at all, and the
+            # provider-aware lookup guarantees an Anthropic row can never receive
+            # the DeepSeek deployment key. A failed decryption above stays
+            # keyless so a corrupted key is visible instead of silently hidden.
             key = self._environment_key(spec.capability, row.provider)
         return ProviderConfig(
             capability=spec.capability,
@@ -176,6 +184,12 @@ class AiRuntime:
             dimension=row.dimension,
             enabled=row.is_active,
             source="database",
+            row_id=row.id,
+            # Reasoning effort is per-account, not per-row: the shared endpoint
+            # row has no effort column. The per-user resolver fills it with
+            # ``model_copy(update={"reasoning_effort": ...})``.
+            reasoning_effort=None,
+            max_output_tokens=getattr(row, "max_output_tokens", None),
         )
 
     def _environment_key(
@@ -184,7 +198,14 @@ class AiRuntime:
         provider: str,
     ) -> str | None:
         if capability == CAPABILITY_CHAT:
-            return self.defaults.chat_api_key
+            # Chat keys are provider-specific. Returning the deployment's
+            # DeepSeek key for an Anthropic row would silently bill the wrong
+            # endpoint, so an unrecognised chat provider gets no environment key.
+            if provider == "anthropic":
+                return self.defaults.anthropic_api_key
+            if provider == "deepseek":
+                return self.defaults.deepseek_api_key
+            return None
         if capability == CAPABILITY_EMBEDDING:
             return self.defaults.embedding_api_key
         if provider == "exa":

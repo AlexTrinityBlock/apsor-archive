@@ -45,6 +45,8 @@ const ERROR_CODE_KEYS = {
   usage_limit_exceeded: "core.errors.usage_limit_exceeded",
   web_usage_limit_exceeded: "core.errors.web_usage_limit_exceeded",
   invalid_usage_quota: "core.errors.invalid_usage_quota",
+  model_not_assigned: "core.errors.model_not_assigned",
+  provider_inactive: "core.errors.provider_inactive",
   ai_not_configured: "core.errors.ai_not_configured",
   invalid_vision_prompt: "core.errors.invalid_vision_prompt",
   ingest_job_conflict: "core.errors.ingest_job_conflict",

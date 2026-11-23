@@ -2,6 +2,7 @@
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
@@ -52,6 +53,48 @@ def test_exa_database_row_uses_the_exa_environment_key() -> None:
 
     assert runtime._environment_key(CAPABILITY_WEB_SEARCH, "exa") == "exa-test"
     assert runtime._environment_key(CAPABILITY_WEB_SEARCH, "tavily") == "tvly-test"
+
+
+def test_chat_environment_keys_are_provider_scoped() -> None:
+    settings = Settings(deepseek_api_key="ds-test", anthropic_api_key="an-test")
+    defaults = provider_defaults_from_settings(settings)
+    runtime = AiRuntime(builder=_NullBuilder(), cipher=None, defaults=defaults)  # type: ignore[arg-type]
+
+    assert defaults.anthropic_api_key == "an-test"
+    assert runtime._environment_key("chat", "anthropic") == "an-test"
+    assert runtime._environment_key("chat", "deepseek") == "ds-test"
+    # An OpenAI-compatible row has no deployment key of its own; it must use a
+    # stored ciphertext instead of silently borrowing the DeepSeek secret.
+    assert runtime._environment_key("chat", "openai-compatible") is None
+
+
+def test_anthropic_settings_defaults_and_aliases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("ANTHROPIC_API_KEY", "APSOR_ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+    defaults = Settings(_env_file=None)
+    assert defaults.anthropic_api_key is None
+    assert defaults.anthropic_base_url == "https://api.anthropic.com"
+    assert defaults.anthropic_model == "claude-haiku-5-5"
+    assert defaults.anthropic_timeout_seconds == 120.0
+    assert defaults.anthropic_max_tokens == 2000
+    assert defaults.anthropic_version == "2026-10-21"
+    assert defaults.chat_agent_max_output_tokens == 64_000
+    assert defaults.chat_probe_timeout_seconds == 20.0
+    assert ".secrets/anthropic.env" in defaults.model_config["env_file"]
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-legacy-1234")
+    legacy = Settings(_env_file=None)
+    assert legacy.anthropic_api_key is not None
+    assert legacy.anthropic_api_key.get_secret_value() == "sk-ant-legacy-1234"
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.setenv("APSOR_ANTHROPIC_API_KEY", "sk-ant-prefixed-5678")
+    prefixed = Settings(_env_file=None)
+    assert prefixed.anthropic_api_key is not None
+    assert prefixed.anthropic_api_key.get_secret_value() == "sk-ant-prefixed-5678"
 
 
 def test_exa_web_provider_row_stores_its_key_in_the_database(
@@ -248,6 +291,7 @@ def test_health_gzip_and_cache_invalidation(anonymous_client: TestClient) -> Non
     assert initial_chat["active"]["configured"] is False
     assert initial_chat["providers"] == []
     assert initial_chat["allowed_providers"] == [
+        "anthropic",
         "deepseek",
         "none",
         "openai-compatible",

@@ -3,21 +3,25 @@
 import asyncio
 import json
 import logging
+import math
 import re
 import time
 from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
+from app.infrastructure.ai.model_catalog import chars_per_token_for
 from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
 from app.module.agent.domain.agent_domain import (
     ERROR_FINISH_REASONS,
     KIND_ASSISTANT,
     KIND_COMPACTION,
+    KIND_NOTICE,
     KIND_PAGE_CONTEXT,
     KIND_RESET,
+    KIND_SYSTEM,
     KIND_TOOL_RESULT,
     KIND_USER,
     RUN_CANCELLED,
@@ -40,9 +44,12 @@ from app.module.agent.domain.agent_status_domain import (
     render_output_limit_notice,
 )
 from app.module.agent.domain.compaction_domain import (
+    active_context_entries,
     build_compaction_draft,
     compactable_context_entries,
     estimate_context_tokens,
+    estimate_provider_context_tokens,
+    render_compaction_prompt,
 )
 from app.module.agent.domain.context_domain import build_context, render_tool_result
 from app.module.agent.domain.plot_spec_domain import PlotLimits
@@ -65,6 +72,8 @@ from app.module.agent.exception.domain_error import (
     AgentRunNotFoundError,
     AgentRunNotRetryableError,
     AgentUsageLimitExceededError,
+    ModelNotAssignedError,
+    ProviderInactiveError,
 )
 from app.module.agent.model.agent_model import (
     AgentApprovalModel,
@@ -135,6 +144,22 @@ _PROVIDER_RETRY_DELAYS_SECONDS = (1.0, 3.0)
 _INVALID_ARGUMENT_ERROR_CODES = frozenset({"invalid_tool_arguments"})
 _INVALID_ARGUMENTS_NOTICE_THRESHOLD = 2
 _INVALID_ARGUMENTS_TEXT_ONLY_THRESHOLD = 3
+# The local context-budget ladder. Each tool-result pass clips a body to the
+# next cap and re-estimates; the current user message is only touched after
+# page context is gone and tool results are as small as this ladder allows.
+_TOOL_RESULT_BODY_CAPS = (8_000, 2_000, 500)
+_FORCED_COMPACTION_BUDGET_RATIO = 0.6
+_USER_MESSAGE_HEAD_RATIO = 0.6
+_IMAGE_OMITTED_TEXT = "[image omitted: context budget]"
+_ATTACHMENT_PART_TYPES = frozenset({"image", "image_url", "document", "input_file"})
+
+
+class AgentModelPlanProtocol(Protocol):
+    """One primary endpoint plus its optional single escalation target."""
+
+    def next_model(self, current_model: str) -> str | None: ...
+
+    def generator_for(self, model: str) -> ChatGeneratorProtocol: ...
 
 
 @dataclass(frozen=True)
@@ -175,6 +200,31 @@ class _CompletionOutcome:
     text: str = ""
 
 
+@dataclass
+class _BudgetStats:
+    """What the local overflow ladder removed from one outbound request."""
+
+    dropped_messages: int = 0
+    dropped_page_contexts: int = 0
+    clipped_tool_results: int = 0
+    truncated_user_chars: int = 0
+    truncated_attachments: int = 0
+
+    def as_dict(self) -> dict[str, int]:
+        """Return the stable notice payload keys from design §6.4."""
+        return {
+            "dropped_messages": self.dropped_messages,
+            "dropped_page_contexts": self.dropped_page_contexts,
+            "clipped_tool_results": self.clipped_tool_results,
+            "truncated_user_chars": self.truncated_user_chars,
+            "truncated_attachments": self.truncated_attachments,
+        }
+
+    def lost_input(self) -> bool:
+        """Return whether any provider input was removed or shortened."""
+        return any(self.as_dict().values())
+
+
 class AgentService:
     """Own conversation CRUD and the durable multi-step turn loop.
 
@@ -207,6 +257,8 @@ class AgentService:
         web_search_provider: str = "none",
         web_fetch_provider: str = "none",
         quota: AgentQuotaProtocol | None = None,
+        model_plan: AgentModelPlanProtocol | None = None,
+        model_status: str = "assigned",
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -218,7 +270,7 @@ class AgentService:
         self.chat_attachments = chat_attachments
         self.server_timezone = server_timezone
         # Provider availability is resolved by the composition root from the
-        # active AiRuntime. They are safe names only; keys and base URLs never
+        # account assignment. They are safe names only; keys and base URLs never
         # reach the agent service.
         self.active_provider = active_provider or default_provider or "none"
         self.web_search_provider = _web_provider_name(web_search_provider)
@@ -227,6 +279,14 @@ class AgentService:
         # optional so isolated tests that exercise conversation mechanics keep
         # working with no quota policy.
         self.quota = quota
+        # Provider calls use the current model, not the conversation's
+        # creation-time metadata. Escalation is capped at one swap per run and
+        # every generator in the plan comes from the same primary endpoint row.
+        self._current_model = default_model
+        self._model_plan = model_plan
+        self._model_status = model_status
+        self._escalations = 0
+        self._budget_notice_emitted = False
 
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
@@ -239,7 +299,7 @@ class AgentService:
         user_profile: UserProfile | None = None,
     ) -> AgentConversationSchema:
         provider = payload.provider or self.default_provider
-        if provider not in {"deepseek", "openai-compatible"}:
+        if provider not in {"deepseek", "openai-compatible", "anthropic"}:
             provider = "deepseek"
         model = payload.model or self.default_model or "deepseek-flash"
         now = utcnow()
@@ -528,12 +588,10 @@ class AgentService:
             conversation_id,
             cutoff_entry_id=None,
         )
-        draft = build_compaction_draft(
+        draft = self._compaction_draft(
             _transcript_from_rows(rows),
             reason="manual",
             auto=False,
-            max_summary_chars=self.config.max_compaction_summary_chars,
-            max_last_user_chars=self.config.max_compaction_last_user_chars,
         )
         entry = await self.repository.append_boundary_entry(
             conversation_id=conversation_id,
@@ -582,14 +640,15 @@ class AgentService:
             return None
         if not any(entry.kind == KIND_USER for entry in compactable):
             return None
-        if estimate_context_tokens(transcript) <= self.config.compaction_threshold_tokens:
+        if estimate_context_tokens(
+            transcript,
+            chars_per_token=self._chars_per_token(),
+        ) <= self.config.compaction_threshold_tokens:
             return None
-        return build_compaction_draft(
+        return self._compaction_draft(
             transcript,
             reason="auto_context_threshold",
             auto=True,
-            max_summary_chars=self.config.max_compaction_summary_chars,
-            max_last_user_chars=self.config.max_compaction_last_user_chars,
         )
 
     async def _context_for_step(
@@ -599,61 +658,246 @@ class AgentService:
         last_entry_id: int,
         last_compaction_entry_id: int | None,
     ) -> tuple[ProviderContext, int, int | None]:
-        """Compact before a provider call when the active context is full.
+        """Compact and fit the outbound context before a provider call.
 
         The pre-turn check in ``begin_message`` cannot see tool results added
         during this run. Re-check before every provider step so a long tool loop
-        compacts instead of hitting the provider's context limit.
+        compacts instead of hitting the provider's context limit. The message
+        ladder runs after the context is rebuilt and never raises a local
+        context-limit error.
         """
-        if not self.config.auto_compaction_enabled:
-            return (
-                await self._context(
-                    conversation_id,
-                    last_entry_id,
-                    keep_plot_run_id=run_id,
-                ),
-                last_entry_id,
-                last_compaction_entry_id,
+        context: ProviderContext | None = None
+        if self.config.auto_compaction_enabled:
+            rows = await self.repository.load_context_entries(
+                conversation_id,
+                cutoff_entry_id=last_entry_id,
             )
+            transcript = _transcript_from_rows(rows)
+            active = compactable_context_entries(transcript)
+            active_compactions = [
+                entry.id for entry in active if entry.kind == KIND_COMPACTION
+            ]
+            latest_compaction = max(active_compactions) if active_compactions else None
+            if last_compaction_entry_id is None:
+                last_compaction_entry_id = latest_compaction
+            # A compaction created by ``begin_message`` already carries the new
+            # user/page input. Do not compact again until tool or assistant
+            # entries have actually added new provider-visible work.
+            pending_turn_only = latest_compaction is not None and not any(
+                entry.id > latest_compaction
+                and entry.kind not in {KIND_USER, KIND_PAGE_CONTEXT}
+                for entry in active
+            )
+            if (
+                not pending_turn_only
+                and last_entry_id != last_compaction_entry_id
+                and estimate_context_tokens(
+                    transcript,
+                    chars_per_token=self._chars_per_token(),
+                )
+                > self.config.compaction_threshold_tokens
+            ):
+                compacted = await self._compact_active_context(
+                    conversation_id,
+                    run_id,
+                    last_entry_id,
+                    reason="auto_context_threshold",
+                )
+                if compacted is not None:
+                    context, last_entry_id = compacted
+                    last_compaction_entry_id = last_entry_id
+        if context is None:
+            context = await self._context(
+                conversation_id,
+                last_entry_id,
+                keep_plot_run_id=run_id,
+            )
+        return await self._enforce_context_budget(
+            context,
+            conversation_id=conversation_id,
+            run_id=run_id,
+            last_entry_id=last_entry_id,
+            last_compaction_entry_id=last_compaction_entry_id,
+        )
+
+    async def _enforce_context_budget(
+        self,
+        context: ProviderContext,
+        *,
+        conversation_id: int,
+        run_id: int,
+        last_entry_id: int,
+        last_compaction_entry_id: int | None,
+    ) -> tuple[ProviderContext, int, int | None]:
+        """Run the no-error overflow ladder for one outbound request.
+
+        Order is fixed: forced compaction at 60% of the budget, page-context
+        drop, tool-result clipping oldest-first, then outbound truncation of the
+        current user message. The stored transcript is never modified; one
+        ``ui.notice`` per run records what the model did not see.
+        """
+        budget = self.config.context_window_tokens
+        chars_per_token = self._chars_per_token()
+        if (
+            estimate_provider_context_tokens(
+                context,
+                chars_per_token=chars_per_token,
+            )
+            <= budget
+        ):
+            return context, last_entry_id, last_compaction_entry_id
+        target_tokens = max(1, math.floor(budget * _FORCED_COMPACTION_BUDGET_RATIO))
+        forced = await self._forced_compaction_context(
+            conversation_id,
+            last_entry_id,
+            target_tokens=target_tokens,
+            keep_plot_run_id=run_id,
+        )
+        if forced is not None:
+            context = forced
+        fitted, stats = _fit_provider_context(
+            context,
+            budget_tokens=budget,
+            chars_per_token=chars_per_token,
+        )
+        if stats.lost_input() and not self._budget_notice_emitted:
+            notice = EntryDraft(
+                kind=KIND_NOTICE,
+                messages=[],
+                data={
+                    "reason": "context_budget_truncated",
+                    "budget_tokens": budget,
+                    **stats.as_dict(),
+                },
+            )
+            entries = await self.repository.append_tool_results(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                drafts=[notice],
+                now=utcnow(),
+            )
+            if entries:
+                last_entry_id = entries[-1].id
+            self._budget_notice_emitted = True
+            logger.info(
+                "agent context budget applied conversation_id=%s run_id=%s "
+                "budget_tokens=%d dropped_messages=%d dropped_page_contexts=%d "
+                "clipped_tool_results=%d truncated_user_chars=%d "
+                "truncated_attachments=%d",
+                conversation_id,
+                run_id,
+                budget,
+                stats.dropped_messages,
+                stats.dropped_page_contexts,
+                stats.clipped_tool_results,
+                stats.truncated_user_chars,
+                stats.truncated_attachments,
+            )
+        return fitted, last_entry_id, last_compaction_entry_id
+
+    async def _forced_compaction_context(
+        self,
+        conversation_id: int,
+        last_entry_id: int,
+        *,
+        target_tokens: int,
+        keep_plot_run_id: int | None,
+    ) -> ProviderContext | None:
+        """Summarize the history before the current user into the outbound copy.
+
+        The overflow backstop is intentionally ephemeral: it re-projects the
+        request as "compaction summary + current user + anything after it" but
+        appends no boundary. The current turn's input therefore stays complete
+        in the outbound copy until the message ladder decides whether it must be
+        truncated, and the stored transcript is never rewritten. Persisted
+        compaction (threshold and provider-overflow) is still handled by
+        ``_compact_active_context``.
+        """
         rows = await self.repository.load_context_entries(
             conversation_id,
             cutoff_entry_id=last_entry_id,
         )
         transcript = _transcript_from_rows(rows)
-        active = compactable_context_entries(transcript)
-        active_compactions = [
-            entry.id for entry in active if entry.kind == KIND_COMPACTION
+        active = active_context_entries(transcript)
+        current_user_index = next(
+            (
+                index
+                for index in range(len(active) - 1, -1, -1)
+                if active[index].kind == KIND_USER
+            ),
+            None,
+        )
+        if current_user_index is None:
+            return None
+        earlier = active[:current_user_index]
+        if not compactable_context_entries(earlier):
+            return None
+        draft = self._compaction_draft(
+            earlier,
+            reason="forced_context_budget",
+            auto=True,
+            target_tokens=target_tokens,
+        )
+        system_entries = [
+            entry for entry in transcript if entry.kind == KIND_SYSTEM
         ]
-        latest_compaction = max(active_compactions) if active_compactions else None
-        if last_compaction_entry_id is None:
-            last_compaction_entry_id = latest_compaction
-        # A compaction created by ``begin_message`` already carries the new
-        # user/page input. Do not compact again until tool or assistant entries
-        # have actually added new provider-visible work.
-        pending_turn_only = latest_compaction is not None and not any(
-            entry.id > latest_compaction and entry.kind not in {KIND_USER, KIND_PAGE_CONTEXT}
-            for entry in active
+        tail = [*system_entries, *active[current_user_index:]]
+        enriched = await self.chat_attachments.enrich_transcript(tail)
+        tail_context = build_context(enriched, keep_plot_run_id=keep_plot_run_id)
+        compaction_messages = [dict(message) for message in draft.messages]
+        return replace(
+            tail_context,
+            messages=[*compaction_messages, *tail_context.messages],
         )
-        if (
-            not pending_turn_only
-            and last_entry_id != last_compaction_entry_id
-            and estimate_context_tokens(transcript) > self.config.compaction_threshold_tokens
-        ):
-            compacted = await self._compact_active_context(
-                conversation_id,
-                run_id,
-                last_entry_id,
-                reason="auto_context_threshold",
+
+    def _compaction_draft(
+        self,
+        transcript: Sequence[TranscriptEntry],
+        *,
+        reason: str,
+        auto: bool,
+        target_tokens: int | None = None,
+    ) -> EntryDraft:
+        """Build one compaction entry, rendering the prompt only when forced.
+
+        Threshold, manual, and provider-overflow compaction keep the legacy
+        bytes exactly. Overflow-forced compaction additionally renders the
+        operator's template and states the output cap it derived, because that
+        entry is the one created to protect the budget.
+        """
+        if target_tokens is None:
+            return build_compaction_draft(
+                transcript,
+                reason=reason,
+                auto=auto,
+                max_summary_chars=self.config.max_compaction_summary_chars,
+                max_last_user_chars=self.config.max_compaction_last_user_chars,
             )
-            if compacted is not None:
-                context, last_entry_id = compacted
-                return context, last_entry_id, last_entry_id
-        enriched = await self.chat_attachments.enrich_transcript(transcript)
-        return (
-            build_context(enriched, keep_plot_run_id=run_id),
-            last_entry_id,
-            last_compaction_entry_id,
+        chars_per_token = self._chars_per_token()
+        draft = build_compaction_draft(
+            transcript,
+            reason=reason,
+            auto=auto,
+            max_summary_chars=self.config.max_compaction_summary_chars,
+            max_last_user_chars=self.config.max_compaction_last_user_chars,
+            target_tokens=target_tokens,
+            chars_per_token=chars_per_token,
         )
+        rendered = render_compaction_prompt(
+            self.config.compaction_prompt,
+            max_output_tokens=self.config.compaction_max_output_tokens,
+            chars_per_token=chars_per_token,
+            max_last_user_chars=self.config.max_compaction_last_user_chars,
+        )
+        content = draft.messages[0]["content"] if draft.messages else ""
+        return replace(
+            draft,
+            messages=[{"role": "user", "content": f"{rendered}\n\n{content}"}],
+        )
+
+    def _chars_per_token(self) -> float:
+        """Return the current model's catalog density (2.3 when unknown)."""
+        return chars_per_token_for(self._current_model)
 
     async def _compact_active_context(
         self,
@@ -671,12 +915,10 @@ class AgentService:
         transcript = _transcript_from_rows(rows)
         if not compactable_context_entries(transcript):
             return None
-        draft = build_compaction_draft(
+        draft = self._compaction_draft(
             transcript,
             reason=reason,
             auto=True,
-            max_summary_chars=self.config.max_compaction_summary_chars,
-            max_last_user_chars=self.config.max_compaction_last_user_chars,
         )
         entry = await self.repository.append_run_compaction(
             conversation_id=conversation_id,
@@ -848,7 +1090,7 @@ class AgentService:
                     completion = _CompletionOutcome()
                     async for event in self._completion_events(
                         context,
-                        turn.conversation.model,
+                        self._current_model,
                         completion,
                         run_id=run_id,
                         step=step,
@@ -882,6 +1124,15 @@ class AgentService:
                                 context, last_entry_id = compacted
                                 last_compaction_entry_id = last_entry_id
                                 pending_retry_notice = render_context_overflow_notice()
+                                retry_next_step = True
+                                break
+                        if isinstance(provider_error, AiContextWindowError):
+                            escalated, last_entry_id = await self._maybe_escalate(
+                                turn,
+                                "context_window",
+                                last_entry_id=last_entry_id,
+                            )
+                            if escalated:
                                 retry_next_step = True
                                 break
                         (
@@ -921,6 +1172,21 @@ class AgentService:
                         return
 
                     finish_reason = _normalize_finish(result)
+                    if finish_reason == "refusal":
+                        # A refusal is a model/endpoint signal, not a user input
+                        # error. One same-endpoint escalation gets one chance; if
+                        # it is unavailable, a refusal that carries text is still
+                        # a valid answer and an empty one stays unusable.
+                        escalated, last_entry_id = await self._maybe_escalate(
+                            turn,
+                            "refusal",
+                            last_entry_id=last_entry_id,
+                        )
+                        if escalated:
+                            _merge_usage(retry_usage, result.usage)
+                            continue
+                        if not result.text.strip():
+                            finish_reason = None
                     if finish_reason is not None:
                         if retry_usage:
                             merged_usage = dict(retry_usage)
@@ -952,6 +1218,13 @@ class AgentService:
                             output_limit_retries += 1
                             pending_retry_notice = render_output_limit_notice()
                             continue
+                        escalated, last_entry_id = await self._maybe_escalate(
+                            turn,
+                            "output_limit",
+                            last_entry_id=last_entry_id,
+                        )
+                        if escalated:
+                            continue
                         async for event in self._stream_assistant_text(
                             turn,
                             last_entry_id,
@@ -976,6 +1249,15 @@ class AgentService:
                         completion_error = RuntimeError(
                             "truncated or malformed completion"
                         )
+                    if not isinstance(completion_error, AgentOutputLimitError):
+                        escalated, last_entry_id = await self._maybe_escalate(
+                            turn,
+                            "unusable_completion",
+                            last_entry_id=last_entry_id,
+                        )
+                        if escalated:
+                            _merge_usage(retry_usage, result.usage)
+                            continue
                     (
                         last_entry_id,
                         provider_code,
@@ -1044,6 +1326,7 @@ class AgentService:
                     step,
                     finish_reason,
                     context.cache_prefix_hash,
+                    model=self._current_model,
                 )
                 try:
                     assistant_entry = await self.repository.append_assistant(
@@ -1420,6 +1703,16 @@ class AgentService:
                         invalid_arguments_streak = 0
 
                 if invalid_arguments_streak >= _INVALID_ARGUMENTS_TEXT_ONLY_THRESHOLD:
+                    # One same-endpoint escalation is preferred over removing
+                    # tools; a successful arguments escalation resets the streak.
+                    escalated, last_entry_id = await self._maybe_escalate(
+                        turn,
+                        "invalid_tool_arguments",
+                        last_entry_id=last_entry_id,
+                    )
+                    if escalated:
+                        invalid_arguments_streak = 0
+                        continue
                     # The same invalid call survived the retry notice, so offer
                     # no tools for one call and let the model answer in text.
                     # Rebuild the context first so the final call sees the tool
@@ -1974,7 +2267,7 @@ class AgentService:
         result = ChatResult(
             text=text,
             finish_reason="stop",
-            model=turn.conversation.model,
+            model=self._current_model,
             usage=dict(usage),
         )
         try:
@@ -1990,6 +2283,7 @@ class AgentService:
                         step,
                         "stop",
                         cache_prefix_hash,
+                        model=self._current_model,
                     ),
                 ),
                 now=utcnow(),
@@ -2051,10 +2345,20 @@ class AgentService:
             "message_start",
             {"entry_id": None, "kind": KIND_ASSISTANT, "role": "assistant"},
         )
+        # The caller rebuilt the context immediately before this call, but the
+        # ladder runs here as well so a text-only answer can never exceed the
+        # local budget.
+        context, last_entry_id, _last_compaction = await self._enforce_context_budget(
+            context,
+            conversation_id=conversation_id,
+            run_id=run_id,
+            last_entry_id=last_entry_id,
+            last_compaction_entry_id=None,
+        )
         completion = _CompletionOutcome()
         async for event in self._completion_events(
             context,
-            turn.conversation.model,
+            self._current_model,
             completion,
             run_id=run_id,
             step=step,
@@ -2117,6 +2421,7 @@ class AgentService:
                         step,
                         finish_reason,
                         context.cache_prefix_hash,
+                        model=self._current_model,
                     ),
                 ),
                 now=utcnow(),
@@ -2185,7 +2490,7 @@ class AgentService:
         data: dict[str, Any] = {
             "finish_reason": "error",
             "error": {"code": code, "detail": detail},
-            "model": turn.conversation.model,
+            "model": self._current_model,
             "provider": turn.conversation.provider,
             "step": step,
         }
@@ -2220,8 +2525,18 @@ class AgentService:
         partial_text: str = "",
     ) -> tuple[int, str, str]:
         if isinstance(error, AiNotConfiguredError):
-            code = "not_configured"
-            detail = "No chat provider is configured."
+            if self._model_status == "inactive":
+                code = "provider_inactive"
+                detail = (
+                    "The assigned chat endpoint is not active or has no usable "
+                    "API key."
+                )
+            elif self._model_status == "missing":
+                code = "model_not_assigned"
+                detail = "No chat model is assigned to this account."
+            else:
+                code = "not_configured"
+                detail = "No chat provider is configured."
         elif isinstance(error, AgentOutputLimitError):
             code = "output_limit"
             detail = (
@@ -2376,7 +2691,86 @@ class AgentService:
         except Exception:
             logger.exception("Could not mark agent run %s as cancelled", turn.run.id)
 
+    async def _maybe_escalate(
+        self,
+        turn: AgentTurnState,
+        reason: str,
+        *,
+        last_entry_id: int,
+    ) -> tuple[bool, int]:
+        """Swap to the next catalog tier once, on the same endpoint row.
+
+        The kill switch, the one-per-run cap, and the plan's single target are
+        all checked before any notice or client is built. A failed or cancelled
+        run leaves the current generator untouched. A successful swap appends
+        one ``ui.notice`` with the transition; no provider-visible message is
+        sent.
+        """
+        if (
+            self._model_plan is None
+            or not self.config.model_escalation_enabled
+            or self._escalations >= 1
+        ):
+            return False, last_entry_id
+        next_model = self._model_plan.next_model(self._current_model)
+        if next_model is None:
+            return False, last_entry_id
+        previous_model = self._current_model
+        try:
+            generator = self._model_plan.generator_for(next_model)
+        except Exception:
+            logger.exception(
+                "agent escalation client build failed run_id=%s model=%s",
+                turn.run.id,
+                next_model,
+            )
+            return False, last_entry_id
+        notice = EntryDraft(
+            kind=KIND_NOTICE,
+            messages=[],
+            data={
+                "reason": reason,
+                "from_model": previous_model,
+                "to_model": next_model,
+            },
+        )
+        try:
+            entries = await self.repository.append_tool_results(
+                conversation_id=turn.conversation.id,
+                run_id=turn.run.id,
+                drafts=[notice],
+                now=utcnow(),
+            )
+        except AgentRunNotActiveError:
+            return False, last_entry_id
+        self.chat_generator = generator
+        self._current_model = next_model
+        self._escalations += 1
+        new_last_entry_id = entries[-1].id if entries else last_entry_id
+        logger.info(
+            "agent model escalated run_id=%s conversation_id=%s reason=%s "
+            "from_model=%s to_model=%s last_entry_id=%s",
+            turn.run.id,
+            turn.conversation.id,
+            reason,
+            previous_model or "-",
+            next_model,
+            new_last_entry_id,
+        )
+        return True, new_last_entry_id
+
     def _ensure_configured(self) -> None:
+        """Fail before the SSE response starts when the slot cannot run.
+
+        A missing assignment and an inactive/keyless endpoint are configuration
+        errors with their own stable codes. A ``NullTextGenerator`` must never
+        reach a completion call, because the null client would raise a generic
+        not-configured error instead of naming the broken slot.
+        """
+        if self._model_status == "missing":
+            raise ModelNotAssignedError()
+        if self._model_status == "inactive":
+            raise ProviderInactiveError()
         if not self.chat_generator.configured:
             raise AgentNotConfiguredError()
 
@@ -2569,11 +2963,13 @@ def _assistant_data(
     step: int,
     finish_reason: str,
     cache_prefix_hash: str,
+    *,
+    model: str,
 ) -> dict[str, Any]:
     return {
         "finish_reason": finish_reason,
         "usage": dict(result.usage),
-        "model": result.model or turn.conversation.model,
+        "model": result.model or model,
         "provider": turn.conversation.provider,
         "step": step,
         "cache_prefix_hash": cache_prefix_hash,
@@ -2587,11 +2983,281 @@ def _normalize_finish(result: ChatResult) -> str | None:
         if finish in {"length", "content_filter"} or finish in ERROR_FINISH_REASONS:
             return None
         return "tool_calls"
+    # A refusal is classified before the unusable branch so the escalation
+    # ladder can react to it. An empty refusal has no text to show and is left
+    # to the caller's unusable handling when no escalation is available.
+    if finish == "refusal":
+        return "refusal"
     if not result.text.strip():
         return None
     if finish in {"", "stop", "length"}:
         return finish or "stop"
     return None
+
+
+def _fit_provider_context(
+    context: ProviderContext,
+    *,
+    budget_tokens: int,
+    chars_per_token: float,
+) -> tuple[ProviderContext, _BudgetStats]:
+    """Apply the message-level part of the overflow ladder to one request.
+
+    Steps, in order and each re-estimated: drop page-context messages, clip
+    tool-result bodies oldest-first at 8,000 → 2,000 → 500 characters while
+    keeping the ``<tool_result>`` envelope, then truncate only the outbound copy
+    of the current user message (head + tail with an explicit marker) and drop
+    its inline attachments. If even that cannot fit, the request keeps the
+    system prompt only. The stored transcript is never touched; this function
+    only rewrites the provider projection.
+    """
+    stats = _BudgetStats()
+
+    def estimate(candidate: ProviderContext) -> int:
+        return estimate_provider_context_tokens(
+            candidate,
+            chars_per_token=chars_per_token,
+        )
+
+    current = context
+    if estimate(current) <= budget_tokens:
+        return current, stats
+
+    # Step 2: page context is optional by construction and is dropped first.
+    # The current user message is never a page snapshot even when its text
+    # happens to look like one, so it is excluded from this pass.
+    protected_index = _last_user_message_index(current.messages)
+    kept: list[dict[str, Any]] = []
+    for index, message in enumerate(current.messages):
+        if index != protected_index and _is_page_context_message(message):
+            stats.dropped_page_contexts += 1
+            continue
+        kept.append(message)
+    if stats.dropped_page_contexts:
+        current = replace(current, messages=kept)
+        if estimate(current) <= budget_tokens:
+            return current, stats
+
+    # Step 3: clip tool-result bodies oldest-first, never the envelope.
+    clipped_indices: set[int] = set()
+    for cap in _TOOL_RESULT_BODY_CAPS:
+        messages = list(current.messages)
+        changed = False
+        for index, message in enumerate(messages):
+            if message.get("role") != "tool":
+                continue
+            content = message.get("content")
+            if not isinstance(content, str):
+                continue
+            limited = _clip_tool_result_content(content, cap)
+            if limited != content:
+                messages[index] = {**message, "content": limited}
+                clipped_indices.add(index)
+                changed = True
+        if changed:
+            stats.clipped_tool_results = len(clipped_indices)
+            current = replace(current, messages=messages)
+            if estimate(current) <= budget_tokens:
+                return current, stats
+
+    # Step 4: truncate the outbound copy of the current user message. Page
+    # contexts are already gone, so the last user-role message is the turn's
+    # own input, not a dropped snapshot.
+    user_index = _last_user_message_index(current.messages)
+    original_user_chars = 0
+    if user_index is not None:
+        user_message = current.messages[user_index]
+        original_user_chars = _message_text_chars(user_message)
+        # Reserve the message envelope and keep attachments out of the text
+        # allowance: the text is fitted first, then attachments are dropped if
+        # the request is still over budget.
+        probe_content = _text_free_content(user_message.get("content"))
+        probe_message = {**user_message, "content": probe_content}
+        others = replace(
+            current,
+            messages=[
+                *current.messages[:user_index],
+                probe_message,
+                *current.messages[user_index + 1 :],
+            ],
+        )
+        allowance = max(
+            0,
+            math.floor((budget_tokens - estimate(others)) * chars_per_token) - 8,
+        )
+        truncated, truncated_chars = _truncate_user_text(user_message, allowance)
+        if truncated_chars:
+            messages = list(current.messages)
+            messages[user_index] = truncated
+            current = replace(current, messages=messages)
+            stats.truncated_user_chars = truncated_chars
+            if estimate(current) <= budget_tokens:
+                return current, stats
+        if estimate(current) > budget_tokens:
+            dropped, attachment_count = _drop_user_attachments(current.messages[user_index])
+            if attachment_count:
+                messages = list(current.messages)
+                messages[user_index] = dropped
+                current = replace(current, messages=messages)
+                stats.truncated_attachments = attachment_count
+                if estimate(current) <= budget_tokens:
+                    return current, stats
+
+    # Step 5: the absolute last resort. A request that cannot fit even after the
+    # user message was shortened keeps the system prompt only; the turn still
+    # runs on the provider's own terms, never on a local context error.
+    if estimate(current) > budget_tokens:
+        stats.dropped_messages += len(current.messages)
+        if user_index is not None and not stats.truncated_user_chars:
+            stats.truncated_user_chars = original_user_chars
+        current = replace(current, messages=[])
+    return current, stats
+
+
+def _is_page_context_message(message: Mapping[str, Any]) -> bool:
+    content = message.get("content")
+    return (
+        message.get("role") == "user"
+        and isinstance(content, str)
+        and content.startswith("<page_context")
+        and content.endswith("</page_context>")
+    )
+
+
+def _clip_tool_result_content(content: str, cap: int) -> str:
+    """Clip a tool body while preserving the full ``<tool_result>`` envelope."""
+    opening_end = content.find(">")
+    closing_start = content.rfind("</tool_result>")
+    if not content.startswith("<tool_result") or opening_end == -1 or closing_start == -1:
+        return clip(content, cap)
+    body = content[opening_end + 1 : closing_start]
+    if len(body) <= cap:
+        return content
+    return (
+        content[: opening_end + 1]
+        + clip(body, cap)
+        + content[closing_start:]
+    )
+
+
+def _last_user_message_index(messages: Sequence[Mapping[str, Any]]) -> int | None:
+    for index in range(len(messages) - 1, -1, -1):
+        if messages[index].get("role") == "user":
+            return index
+    return None
+
+
+def _text_free_content(content: object) -> object:
+    """Return a message body with text and attachments removed for estimation."""
+    if isinstance(content, str):
+        return ""
+    if not isinstance(content, list):
+        return content
+    return [
+        part
+        for part in content
+        if not (
+            isinstance(part, Mapping)
+            and (
+                isinstance(part.get("text"), str)
+                or part.get("type") in _ATTACHMENT_PART_TYPES
+            )
+        )
+    ]
+
+
+def _message_text_chars(message: Mapping[str, Any]) -> int:
+    content = message.get("content")
+    if isinstance(content, str):
+        return len(content)
+    if not isinstance(content, list):
+        return 0
+    return sum(
+        len(part["text"])
+        for part in content
+        if isinstance(part, Mapping) and isinstance(part.get("text"), str)
+    )
+
+
+def _truncate_user_text(
+    message: Mapping[str, Any],
+    allowance: int,
+) -> tuple[dict[str, Any], int]:
+    """Return a copy with the user text clipped, and the original character count.
+
+    A string body gets the head/tail rule directly. A multimodal body clips its
+    text parts in order and leaves attachments for the next ladder step.
+    """
+    content = message.get("content")
+    if isinstance(content, str):
+        if len(content) <= allowance:
+            return dict(message), 0
+        return {**message, "content": _head_tail_clip(content, allowance)}, len(content)
+    if not isinstance(content, list):
+        return dict(message), 0
+    text_parts = [
+        part
+        for part in content
+        if isinstance(part, dict) and isinstance(part.get("text"), str)
+    ]
+    original_chars = sum(len(part["text"]) for part in text_parts)
+    if original_chars <= allowance:
+        return dict(message), 0
+    updated: list[Any] = []
+    remaining = allowance
+    for part in content:
+        if not isinstance(part, dict) or not isinstance(part.get("text"), str):
+            updated.append(part)
+            continue
+        if remaining <= 0:
+            updated.append({**part, "text": ""})
+            continue
+        text = part["text"]
+        if len(text) <= remaining:
+            updated.append(part)
+            remaining -= len(text)
+            continue
+        updated.append({**part, "text": _head_tail_clip(text, remaining)})
+        remaining = 0
+    return {**message, "content": updated}, original_chars
+
+
+def _drop_user_attachments(
+    message: Mapping[str, Any],
+) -> tuple[dict[str, Any], int]:
+    """Replace inline image/document parts with a short omitted marker."""
+    content = message.get("content")
+    if not isinstance(content, list):
+        return dict(message), 0
+    dropped = 0
+    updated: list[Any] = []
+    for part in content:
+        kind = part.get("type") if isinstance(part, Mapping) else None
+        if kind in _ATTACHMENT_PART_TYPES:
+            dropped += 1
+            updated.append({"type": "text", "text": _IMAGE_OMITTED_TEXT})
+            continue
+        updated.append(part)
+    if not dropped:
+        return dict(message), 0
+    return {**message, "content": updated}, dropped
+
+
+def _head_tail_clip(value: str, allowance: int) -> str:
+    """Keep the opening instruction and the closing question of a long text."""
+    if allowance <= 0:
+        return ""
+    if len(value) <= allowance:
+        return value
+    reserved = len(f"[… truncated {len(value)} characters …]")
+    if allowance <= reserved:
+        return value[:allowance]
+    remaining = allowance - reserved
+    head = int(remaining * _USER_MESSAGE_HEAD_RATIO)
+    tail = remaining - head
+    removed = max(0, len(value) - remaining)
+    marker = f"[… truncated {removed} characters …]"
+    return value[:head] + marker + (value[-tail:] if tail else "")
 
 
 def _output_limit_text(max_output_tokens: int) -> str:

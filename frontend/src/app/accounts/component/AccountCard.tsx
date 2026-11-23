@@ -1,8 +1,11 @@
+import type { ReactNode } from "react";
+
 import { Badge } from "../../component/Badge";
 import { Button } from "../../component/Button";
 import type {
   AccountQuotaSchema,
   AccountSchema,
+  ModelAssignmentSchema,
 } from "../../generated-apis-types/schemas";
 import type { TranslationKey } from "../../i18n";
 import { useI18n } from "../../i18n";
@@ -12,8 +15,12 @@ import "../accounts.css";
 interface AccountCardProps {
   readonly account: AccountSchema;
   readonly currentUserId: number | null;
+  readonly assignment: ModelAssignmentSchema | null;
+  readonly assignmentLoading: boolean;
+  readonly assignmentError: boolean;
   readonly onAction: (action: AccountAction, account: AccountSchema) => void;
   readonly onManageQuotas: (account: AccountSchema) => void;
+  readonly onManageModel: (account: AccountSchema) => void;
 }
 
 const QUOTA_LABEL_KEYS = {
@@ -35,8 +42,12 @@ function initialsFor(name: string): string {
 export function AccountCard({
   account,
   currentUserId,
+  assignment,
+  assignmentLoading,
+  assignmentError,
   onAction,
   onManageQuotas,
+  onManageModel,
 }: AccountCardProps) {
   const { t, formatDateTime, formatNumber } = useI18n();
   const isCurrent = account.user_id === currentUserId;
@@ -216,6 +227,14 @@ export function AccountCard({
         </ul>
       </section>
 
+      <AccountModelSection
+        account={account}
+        assignment={assignment}
+        assignmentLoading={assignmentLoading}
+        assignmentError={assignmentError}
+        onManageModel={onManageModel}
+      />
+
       {isCurrent || isRoot ? null : (
         <div className="account-card__actions">
           {canImpersonate ? (
@@ -258,6 +277,126 @@ export function AccountCard({
         </div>
       )}
     </article>
+  );
+}
+
+interface AccountModelSectionProps {
+  readonly account: AccountSchema;
+  readonly assignment: ModelAssignmentSchema | null;
+  readonly assignmentLoading: boolean;
+  readonly assignmentError: boolean;
+  readonly onManageModel: (account: AccountSchema) => void;
+}
+
+/** Compact model-assignment summary on one account card. */
+function AccountModelSection({
+  account,
+  assignment,
+  assignmentLoading,
+  assignmentError,
+  onManageModel,
+}: AccountModelSectionProps) {
+  const { t, formatNumber } = useI18n();
+  let warningLabel: string | null = null;
+  if (assignment !== null && assignment.warnings.length > 0) {
+    warningLabel = t(
+      assignment.warnings.length === 1
+        ? "core.accounts.modelWarningCountOne"
+        : "core.accounts.modelWarningCount",
+      { count: formatNumber(assignment.warnings.length) },
+    );
+  }
+
+  let content: ReactNode;
+  if (assignment === null) {
+    content = (
+      <p className="account-card__model-empty">
+        {assignmentLoading
+          ? t("core.accounts.modelLoading")
+          : t("core.accounts.modelUnavailable")}
+      </p>
+    );
+  } else if (assignment.source === "unassigned") {
+    content = (
+      <div className="account-card__model-empty">
+        <Badge tone="neutral" dot>
+          {t("core.accounts.modelUnassigned")}
+        </Badge>
+      </div>
+    );
+  } else {
+    const primaryParts = [assignment.effective_chat_model ?? "—"];
+    if (assignment.effective_chat_effort) {
+      primaryParts.push(assignment.effective_chat_effort);
+    }
+    if (assignment.effective_context_window_tokens !== null) {
+      primaryParts.push(
+        t("core.accounts.modelBudgetShort", {
+          tokens: formatNumber(assignment.effective_context_window_tokens),
+        }),
+      );
+    }
+    if (assignment.effective_compaction_threshold_tokens !== null) {
+      primaryParts.push(
+        t("core.accounts.modelCompactionShort", {
+          tokens: formatNumber(
+            assignment.effective_compaction_threshold_tokens,
+          ),
+        }),
+      );
+    }
+    const auxParts = [assignment.effective_aux_model ?? "—"];
+    if (assignment.effective_aux_effort) {
+      auxParts.push(assignment.effective_aux_effort);
+    }
+    content = (
+      <dl className="account-card__model-grid">
+        <div>
+          <dt>{t("core.accounts.modelPrimary")}</dt>
+          <dd>{primaryParts.join(" · ")}</dd>
+        </div>
+        <div>
+          <dt>{t("core.accounts.modelAuxiliary")}</dt>
+          <dd>{auxParts.join(" · ")}</dd>
+        </div>
+      </dl>
+    );
+  }
+
+  return (
+    <section
+      className="account-card__model"
+      aria-label={t("core.accounts.modelTitle")}
+    >
+      <div className="account-card__model-head">
+        <h3 className="account-card__model-title">
+          {t("core.accounts.modelTitle")}
+        </h3>
+        <div className="account-card__model-actions">
+          {warningLabel ? <Badge tone="ochre">{warningLabel}</Badge> : null}
+          {assignment?.degraded_reason ? (
+            <Badge tone="ochre" dot>
+              {t("core.accounts.modelDegradedBadge")}
+            </Badge>
+          ) : null}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => onManageModel(account)}
+            disabled={assignment === null || assignmentLoading}
+          >
+            {t("core.accounts.modelManage")}
+          </Button>
+        </div>
+      </div>
+      {content}
+      {assignmentError ? (
+        <p className="account-card__model-empty">
+          {t("core.accounts.modelUnavailable")}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

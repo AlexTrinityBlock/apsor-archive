@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, text
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base
@@ -10,8 +10,10 @@ from app.module.agent.domain.agent_domain import (
     AUTO_COMPACTION_ENABLED,
     CHAT_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
     CHAT_ATTACHMENT_STAGED_TTL_HOURS,
+    COMPACTION_MAX_OUTPUT_TOKENS,
     COMPACTION_THRESHOLD_TOKENS,
     CONTEXT_WINDOW_TOKENS,
+    DEFAULT_COMPACTION_PROMPT,
     MAX_COMPACTION_LAST_USER_CHARS,
     MAX_COMPACTION_SUMMARY_CHARS,
     MAX_PAGE_CONTEXT_CHARS,
@@ -70,6 +72,22 @@ class AgentConfigModel(Base):
         CheckConstraint(
             "max_compaction_last_user_chars BETWEEN 500 AND 10000",
             name="max_compaction_last_user_chars_range",
+        ),
+        CheckConstraint(
+            "compaction_max_output_tokens BETWEEN 256 AND 16384",
+            name="compaction_max_output_tokens",
+        ),
+        CheckConstraint(
+            "agent_max_output_tokens BETWEEN 256 AND 131072",
+            name="agent_max_output_tokens",
+        ),
+        CheckConstraint(
+            "char_length(compaction_prompt) BETWEEN 1 AND 20000",
+            name="compaction_prompt_length",
+        ),
+        CheckConstraint(
+            "position('{max_output_tokens}' IN compaction_prompt) > 0",
+            name="compaction_prompt_placeholder",
         ),
         CheckConstraint(
             "chat_attachment_staged_ttl_hours BETWEEN 1 AND 168",
@@ -159,6 +177,33 @@ class AgentConfigModel(Base):
         nullable=False,
         default=MAX_COMPACTION_LAST_USER_CHARS,
         server_default=text(str(MAX_COMPACTION_LAST_USER_CHARS)),
+    )
+    model_escalation_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("true"),
+    )
+    # Root-editable instruction text rendered into the deterministic compaction
+    # entry. The migration and the ORM share the domain default so a fresh row
+    # and a rendered template never drift.
+    compaction_prompt: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default=DEFAULT_COMPACTION_PROMPT,
+        server_default=DEFAULT_COMPACTION_PROMPT,
+    )
+    compaction_max_output_tokens: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=COMPACTION_MAX_OUTPUT_TOKENS,
+        server_default=text(str(COMPACTION_MAX_OUTPUT_TOKENS)),
+    )
+    agent_max_output_tokens: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=64_000,
+        server_default=text("64000"),
     )
     auto_compaction_enabled: Mapped[bool] = mapped_column(
         Boolean,

@@ -23,6 +23,8 @@ class Settings(BaseSettings):
             "../.env",
             ".secrets/deepseek.env",
             "../.secrets/deepseek.env",
+            ".secrets/anthropic.env",
+            "../.secrets/anthropic.env",
             ".secrets/openai.env",
             "../.secrets/openai.env",
             ".secrets/r2.env",
@@ -163,6 +165,25 @@ class Settings(BaseSettings):
     deepseek_max_tokens: int = 1800
     deepseek_chat_max_tokens: int = 20_000
     deepseek_temperature: float = 0.2
+
+    # Anthropic Messages API. The key can live in ``.secrets/anthropic.env`` as
+    # ``ANTHROPIC_API_KEY`` (or the prefixed name); a key stored on an active
+    # provider row wins. ``anthropic_max_tokens`` is the shared background
+    # text/JSON cap; agent chat uses ``chat_agent_max_output_tokens`` unless the
+    # chat row sets its own ``max_output_tokens``.
+    anthropic_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ANTHROPIC_API_KEY", "APSOR_ANTHROPIC_API_KEY"),
+    )
+    anthropic_base_url: str = "https://api.anthropic.com"
+    anthropic_model: str = "claude-haiku-5-5"
+    anthropic_timeout_seconds: float = 120.0
+    anthropic_max_tokens: int = 2000
+    anthropic_version: str = "2026-10-21"
+    chat_agent_max_output_tokens: int = 64_000
+    # Connection probes are interactive, so they use their own short timeout
+    # instead of the regular chat timeout.
+    chat_probe_timeout_seconds: float = 20.0
 
     # Tavily is the environment fallback for the two independent web
     # capabilities.  A database row always wins; when neither capability has an

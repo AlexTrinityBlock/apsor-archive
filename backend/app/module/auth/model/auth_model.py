@@ -59,6 +59,39 @@ class AppUserModel(Base):
             "AND web_fetch_used_before_reset >= 0",
             name="quota_non_negative",
         ),
+        CheckConstraint(
+            "chat_model IS NULL OR char_length(chat_model) BETWEEN 1 AND 128",
+            name="chat_model_length",
+        ),
+        CheckConstraint(
+            "aux_model IS NULL OR char_length(aux_model) BETWEEN 1 AND 128",
+            name="aux_model_length",
+        ),
+        CheckConstraint(
+            "chat_reasoning_effort IS NULL "
+            "OR char_length(chat_reasoning_effort) BETWEEN 1 AND 32",
+            name="chat_effort_length",
+        ),
+        CheckConstraint(
+            "char_length(aux_reasoning_effort) BETWEEN 1 AND 32",
+            name="aux_effort_length",
+        ),
+        CheckConstraint(
+            "chat_context_window_tokens IS NULL "
+            "OR chat_context_window_tokens BETWEEN 8000 AND 2000000",
+            name="chat_context_window",
+        ),
+        CheckConstraint(
+            "chat_compaction_threshold_tokens IS NULL "
+            "OR chat_compaction_threshold_tokens BETWEEN 1000 AND 1000000",
+            name="chat_compaction_threshold",
+        ),
+        CheckConstraint(
+            "chat_compaction_threshold_tokens IS NULL "
+            "OR chat_context_window_tokens IS NULL "
+            "OR chat_compaction_threshold_tokens < chat_context_window_tokens",
+            name="chat_context_order",
+        ),
         Index(
             "uq_app_user_single_root",
             "role",
@@ -221,6 +254,45 @@ class AppUserModel(Base):
         nullable=False,
         default=0,
         server_default=text("0"),
+    )
+    # Two chat endpoints per account: ``chat_*`` serves the agent loop and
+    # ``aux_*`` serves summaries, memory, ingest extraction, and vision. The
+    # row id and the model are a pair: both NULL means unassigned, a row id with
+    # no model means the endpoint was deleted. The foreign key is the only
+    # cross-slice schema edge (auth -> knowledge) and is intentional, because
+    # the assignment must point at the row whose URL and key serve the model.
+    # app_user stays outside RLS, so these columns use the same root-read/write
+    # path the quota columns already use.
+    chat_provider_config_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "chat_provider_config.id",
+            ondelete="SET NULL",
+            name="fk_app_user_chat_provider_config_id_chat_provider_config",
+        ),
+        nullable=True,
+    )
+    chat_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    chat_reasoning_effort: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    aux_provider_config_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "chat_provider_config.id",
+            ondelete="SET NULL",
+            name="fk_app_user_aux_provider_config_id_chat_provider_config",
+        ),
+        nullable=True,
+    )
+    aux_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    aux_reasoning_effort: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="low",
+        server_default=text("'low'"),
+    )
+    chat_context_window_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chat_compaction_threshold_tokens: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
     )
 
 

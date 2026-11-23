@@ -11,6 +11,7 @@ not here.
 from datetime import datetime
 
 from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
+from app.module.agent.exception.domain_error import AgentInvalidCompactionPromptError
 from app.module.agent.model.agent_config_model import AgentConfigModel
 from app.module.agent.protocol.agent_config_repository_protocol import (
     AgentConfigRepositoryProtocol,
@@ -46,8 +47,19 @@ class AgentSettingsService:
         self,
         values: AgentSettingsUpdateSchema,
     ) -> AgentSettingsReadSchema:
-        """Replace every stored limit with one validated request payload."""
-        config = AgentRuntimeConfig(**values.model_dump())
+        """Replace every stored limit with one validated request payload.
+
+        The schema enforces the numeric bounds; the domain re-validates the
+        compaction template. A template without ``{max_output_tokens}``, with an
+        unknown placeholder, or with a stray brace becomes
+        ``compaction_prompt_invalid`` rather than a generic validation error.
+        """
+        try:
+            config = AgentRuntimeConfig(**values.model_dump())
+        except ValueError as exc:
+            if "compaction_prompt" in str(exc):
+                raise AgentInvalidCompactionPromptError(str(exc)) from exc
+            raise
         row = await self.repository.get_singleton()
         if row is None:
             row = AgentConfigModel(id=SINGLETON_ID)
@@ -98,6 +110,10 @@ def _config_from_model(row: AgentConfigModel) -> AgentRuntimeConfig:
         max_page_context_chars=row.max_page_context_chars,
         max_compaction_summary_chars=row.max_compaction_summary_chars,
         max_compaction_last_user_chars=row.max_compaction_last_user_chars,
+        model_escalation_enabled=row.model_escalation_enabled,
+        compaction_prompt=row.compaction_prompt,
+        compaction_max_output_tokens=row.compaction_max_output_tokens,
+        agent_max_output_tokens=row.agent_max_output_tokens,
         auto_compaction_enabled=row.auto_compaction_enabled,
         parallel_tools_enabled=row.parallel_tools_enabled,
         save_memory_requires_approval=row.save_memory_requires_approval,
@@ -126,6 +142,10 @@ def _apply_config(
     row.max_page_context_chars = config.max_page_context_chars
     row.max_compaction_summary_chars = config.max_compaction_summary_chars
     row.max_compaction_last_user_chars = config.max_compaction_last_user_chars
+    row.model_escalation_enabled = config.model_escalation_enabled
+    row.compaction_prompt = config.compaction_prompt
+    row.compaction_max_output_tokens = config.compaction_max_output_tokens
+    row.agent_max_output_tokens = config.agent_max_output_tokens
     row.auto_compaction_enabled = config.auto_compaction_enabled
     row.parallel_tools_enabled = config.parallel_tools_enabled
     row.save_memory_requires_approval = config.save_memory_requires_approval
@@ -150,6 +170,10 @@ def _values_schema(config: AgentRuntimeConfig) -> AgentSettingsValuesSchema:
         max_page_context_chars=config.max_page_context_chars,
         max_compaction_summary_chars=config.max_compaction_summary_chars,
         max_compaction_last_user_chars=config.max_compaction_last_user_chars,
+        model_escalation_enabled=config.model_escalation_enabled,
+        compaction_prompt=config.compaction_prompt,
+        compaction_max_output_tokens=config.compaction_max_output_tokens,
+        agent_max_output_tokens=config.agent_max_output_tokens,
         auto_compaction_enabled=config.auto_compaction_enabled,
         parallel_tools_enabled=config.parallel_tools_enabled,
         save_memory_requires_approval=config.save_memory_requires_approval,
