@@ -279,6 +279,111 @@ export const core = {
     quotaTopUpSuccess: "已充值用量额度。",
     quotaResetSuccess: "已重置用量，累计总量已保留。",
     quotaError: "无法更新用量额度。",
+    modelTitle: "模型指派",
+    modelManage: "管理模型",
+    modelLoading: "正在读取模型指派…",
+    modelUnavailable: "无法读取模型指派。",
+    modelPrimary: "主要",
+    modelAuxiliary: "辅助",
+    modelUnassigned: "未指派",
+    modelBudgetShort: "{tokens} 上下文",
+    modelCompactionShort: "{tokens} 压缩",
+    modelWarningCount: "{count} 个警告",
+    modelWarningCountOne: "{count} 个警告",
+    modelDegradedBadge: "已降级",
+    modelDialogTitle: "模型指派",
+    modelDialogDescription:
+      "选择 {name} 使用的两个供应商端点。每个变更的连接都会在保存前测试。",
+    modelDialogHelp:
+      "模型名称与推理强度都是自由输入。目录仅供参考；连接测试是唯一的验证。",
+    modelEndpoint: "端点",
+    modelEndpointPlaceholder: "选择端点",
+    modelEndpointUnavailable: "{label}（不可用）",
+    modelEndpointError: "端点列表没有响应。",
+    modelEndpointEmpty:
+      "没有已启用且具备密钥的聊天端点。请在“设置 → 供应商注册表”添加。",
+    modelName: "模型",
+    modelNameHint:
+      "自由输入，最多 128 个字符。已知名称只是建议，不是封闭列表。",
+    modelOptionPrice: "每百万令牌 ${input} 输入 · ${output} 输出",
+    modelUnknown:
+      "不在价格目录中：没有层级、不会自动升级，费用显示为未定价。",
+    modelFamilyMismatch:
+      "此模型通常由 {family} 提供；调用可能失败。",
+    modelEffort: "推理强度",
+    modelEffortHint: "这里接受任何值。测试是唯一的验证。",
+    modelPrimaryEffortEmpty: "留空以使用供应商默认值。",
+    modelEffortHintsAnthropic:
+      "Anthropic 接受 low · medium · high · xhigh · max。",
+    modelEffortHintsDeepSeek:
+      "DeepSeek 接受 low · high · max；none 会停用思考。",
+    modelEffortHintsOpenAI:
+      "OpenAI/GPT 接受 none · minimal · low · medium · high · xhigh · max。",
+    modelEffortHintsOther: "请查阅供应商文档以确认接受的值。",
+    modelTest: "测试",
+    modelTesting: "测试中…",
+    modelTestOk: "已连接 · {latency} 毫秒 · {model}",
+    modelTestOkNoModel: "已连接 · {latency} 毫秒",
+    modelTestFailed: "测试失败",
+    modelTestError: "连接测试没有响应。",
+    modelTestHint: "保存变更前，请先测试端点、模型与推理强度。",
+    modelSlotPrimaryTitle: "主要槽",
+    modelSlotPrimaryDescription: "代理对话使用主要端点。",
+    modelSlotAuxiliaryTitle: "辅助槽",
+    modelSlotAuxiliaryDescription: "摘要、记忆、摄取与视觉使用辅助端点。",
+    modelSlotRequired: "两个槽都必须选择端点与模型。",
+    modelAuxEffortRequired: "必须填写辅助推理强度。",
+    modelAuxInherited:
+      "此账号的辅助工作目前继承主要端点。保存后会写入明确的辅助指派，并需要单独测试。",
+    modelBudgetTitle: "上下文预算",
+    modelBudgetDescription:
+      "单次调用发送给供应商的输入上限，以及较早回合被折叠的时机。",
+    modelBudgetPercent: "上下文窗口的 {percent}%",
+    modelContextWindow: "上下文窗口",
+    modelContextWindowHint:
+      "8,000–2,000,000 个令牌。留空以使用部署默认值。",
+    modelCompactionThreshold: "压缩阈值",
+    modelThresholdHint:
+      "1,000–1,000,000 个令牌；必须小于上下文窗口。留空以使用部署默认值。",
+    modelThresholdOrder: "压缩阈值必须小于上下文窗口。",
+    modelBudgetInvalid: "请输入范围内的整数，或将字段留空。",
+    modelCostHint:
+      "超过 100,000 个令牌的提示词，每个令牌（包括缓存读取）费用为 5 倍。90,000 约保留 10K 的余量。",
+    modelWarningsTitle: "提醒",
+    modelWarningUnknownModel:
+      "此模型不在价格目录中：没有层级、不会自动升级，费用显示为未定价。",
+    modelWarningFamilyMismatch:
+      "此模型通常由不同的供应商系列提供；调用可能失败。",
+    modelWarningWindowAboveCatalog:
+      "上下文窗口高于目录中的模型上限。系统会保留已存储的值。",
+    modelWarningLongPromptStep:
+      "超过模型的长提示词阈值后，每个令牌（包括缓存读取）的费用都会提高。",
+    modelWarningAuxInherited: "辅助槽目前继承主要端点。",
+    modelDegradedNoProvider:
+      "主要端点已删除或无效。在指派新端点之前，聊天功能不可用。",
+    modelDegradedProviderInactive:
+      "指派的端点未启用或没有可用的密钥。在修复之前，请求都会失败。",
+    modelDegradedAuxNoProvider:
+      "辅助端点已删除或无效。后台 AI 不可用。",
+    modelDegradedInvalidThreshold:
+      "存储的预算组合无法与部署默认值搭配使用；系统会改用部署预算。",
+    modelDegradedUnknown: "当前生效的配置已降级（{reason}）。",
+    modelResetTitle: "重置指派",
+    modelResetDescription:
+      "清除两个端点与两个预算。账号将不再有模型指派。",
+    modelResetConfirm:
+      "要重置 {name} 的模型指派吗？在新指派保存前，聊天与后台 AI 都会停止。",
+    modelResetConfirmAction: "确认重置",
+    modelResetCancel: "保留指派",
+    modelReset: "重置指派",
+    modelResetting: "重置中…",
+    modelSave: "保存指派",
+    modelSaving: "保存中…",
+    modelSaveBlocked: "保存前请测试每个已变更的槽。",
+    modelClose: "关闭",
+    modelSaveSuccess: "模型指派已保存。",
+    modelResetSuccess: "模型指派已重置。",
+    modelError: "无法更新模型指派。",
   },
   notices: {
     title: "系统通知",
@@ -439,12 +544,66 @@ export const core = {
     collapse: "收起设置导航",
     systemPrompt: "系统提示词",
     frequentPrompts: "常用提示词",
+    model: "模型",
     providers: "供应商注册表",
     diagnostics: "诊断",
     agentRuntime: "代理运行环境",
     ingestRuntime: "摄取运行环境",
     maintenance: "维护",
     language: "语言",
+  },
+  settings: {
+    model: {
+      title: "模型指派",
+      lede:
+        "此账号使用的两个端点。主要端点用于代理对话；辅助端点用于摘要、记忆、摄取与视觉。两者都由管理员指派。",
+      loadReadingAria: "正在读取模型指派",
+      loadErrorTitle: "模型指派没有响应。",
+      primary: "主要",
+      auxiliary: "辅助",
+      inherited: "继承",
+      endpoint: "端点",
+      provider: "供应商",
+      model: "模型",
+      effort: "推理强度",
+      effortEmpty: "供应商默认",
+      price: "价格",
+      pricing: "每百万令牌 ${input} 输入 · ${output} 输出",
+      pricingUnpriced: "未定价",
+      tierUnpriced: "未定价",
+      noEndpoint: "没有端点",
+      budgetTitle: "上下文预算",
+      budgetContext: "上下文窗口",
+      budgetThreshold: "压缩阈值",
+      budgetDefaultHint:
+        "留空的预算会继承代理运行环境设置中的部署默认值。",
+      deploymentDefault: "部署默认值",
+      warningsTitle: "提醒",
+      warningUnknownModel:
+        "此模型不在价格目录中：没有层级、不会自动升级，费用显示为未定价。",
+      warningFamilyMismatch:
+        "此模型通常由不同的供应商系列提供；调用可能失败。",
+      warningWindowAboveCatalog:
+        "上下文窗口高于目录中的模型上限。系统会保留已存储的值。",
+      warningLongPromptStep:
+        "超过模型的长提示词阈值后，每个令牌（包括缓存读取）的费用都会提高。",
+      warningAuxInherited: "辅助槽目前继承主要端点。",
+      degradedNoProvider:
+        "主要端点已删除或无效。在指派新端点之前，聊天功能不可用。",
+      degradedProviderInactive:
+        "指派的端点未启用或没有可用的密钥。在修复之前，请求都会失败。",
+      degradedAuxNoProvider:
+        "辅助端点已删除或无效。后台 AI 不可用。",
+      degradedInvalidThreshold:
+        "存储的预算组合无法与部署默认值搭配使用；系统会改用部署预算。",
+      degradedUnknown: "当前生效的配置已降级（{reason}）。",
+      unassigned: "尚未指派模型 — 请联系管理员。",
+      unassignedHint:
+        "在管理员指派两个端点之前，聊天与后台 AI 都不可用。",
+      unassignedBadge: "未指派",
+      adminNote: "由您的管理员指派。",
+      updated: "更新时间",
+    },
   },
   errors: {
     invalid_request: "请求内容无效。请检查字段后重试。",
@@ -486,6 +645,9 @@ export const core = {
     web_usage_limit_exceeded:
       "此账号的网络搜索或抓取额度已用完。请管理员充值或重置。",
     invalid_usage_quota: "这个用量额度变更无效。",
+    model_not_assigned: "此账号尚未指派模型。请联系管理员。",
+    provider_inactive:
+      "指派的模型端点未启用或没有可用的密钥。请联系管理员。",
     ai_not_configured:
       "视觉提取尚未配置。请在设置中添加支持视觉的供应商。",
     invalid_vision_prompt:

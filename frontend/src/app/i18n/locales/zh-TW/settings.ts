@@ -16,7 +16,7 @@ export const settings = {
     personalEyebrow: "設定 · 個人設定",
     personalTitle: "個人設定。",
     personalDescription:
-      "整理空白聊天頁顯示的常用提示詞，並選擇介面語言。帳號管理與全域執行環境設定屬於 root 帳號。",
+      "檢視管理員指派的模型、整理空白聊天頁顯示的常用提示詞，並選擇介面語言。帳號管理與全域執行環境設定屬於 root 帳號。",
     personalMeta: "設定 02 · 本地優先檔案館",
   },
   utils: {
@@ -107,6 +107,10 @@ export const settings = {
     fieldPageContextLabel: "頁面上下文",
     fieldPageContextUnit: "字元",
     fieldPageContextHint: "單一輪次可附加的最大頁面文字量。",
+    fieldAgentMaxOutputLabel: "代理輸出上限",
+    fieldAgentMaxOutputUnit: "token",
+    fieldAgentMaxOutputHint:
+      "單次代理呼叫的最大輸出權杖數。預設 64,000；供應商列與模型上限可能再降低。",
     fieldParallelToolsLabel: "最大平行工具數",
     fieldParallelToolsUnit: "個工具",
     fieldParallelToolsHint: "可同時執行的工具數量。",
@@ -143,6 +147,20 @@ export const settings = {
     fieldLastUserCharsLabel: "最後使用者輸入字元數",
     fieldLastUserCharsUnit: "字元",
     fieldLastUserCharsHint: "完整保留的最近一則使用者訊息。",
+    fieldCompactionMaxOutputLabel: "壓縮輸出上限",
+    fieldCompactionMaxOutputUnit: "token",
+    fieldCompactionMaxOutputHint:
+      "決定性摘要的硬性上限。預設 2,600 個權杖；既有字元上限仍會套用。",
+    fieldCompactionPromptLabel: "壓縮提示詞範本",
+    fieldCompactionPromptUnit: "範本",
+    fieldCompactionPromptHint:
+      "必須包含 {placeholder}。允許的佔位符：{max_output_tokens}、{max_output_chars}、{max_items}、{max_line_chars}、{max_last_user_chars}。大括號若要顯示字面值必須成對。",
+    compactionPromptRequired: "壓縮提示詞不能空白。",
+    compactionPromptMax:
+      "壓縮提示詞目前為 {count} 個字元；上限為 {max}。",
+    compactionPromptPlaceholder:
+      "壓縮提示詞必須包含 {placeholder}。",
+    compactionPromptCount: "{count} / {max} 個字元",
     toggleAutoCompactionLabel: "自動壓縮",
     toggleAutoCompactionHint:
       "達到閾值時，將較舊的輪次摺疊成摘要。",
@@ -152,6 +170,9 @@ export const settings = {
     toggleMemoryApprovalLabel: "記憶寫入需要手動核准",
     toggleMemoryApprovalHint:
       "開啟時，代理的 save_memory 請求（包括直接淘汰）會等待你核准或拒絕。關閉時，代理只能在既有的提示詞層級確認後寫入。手動核准預設為開啟。",
+    toggleEscalationLabel: "模型升級",
+    toggleEscalationHint:
+      "當主要模型存在於目錄中時，允許每次執行升級一次模型。未知模型會固定不升級。",
     loadReadingAria: "正在讀取代理執行環境設定",
     loadErrorTitle: "代理執行環境設定沒有回應。",
   },
@@ -483,6 +504,7 @@ export const settings = {
     activeProvider: "使用中的供應商",
     metaProvider: "供應商",
     metaModel: "模型",
+    metaMaxOutputTokens: "最大輸出",
     metaBaseUrl: "基礎 URL",
     metaDimension: "維度",
     metaKey: "金鑰",
@@ -512,6 +534,10 @@ export const settings = {
     modelHelpEmbedding:
       "會記錄用於新分段。變更後必須重新嵌入。",
     modelHelp: "傳送給這個供應商的模型 ID。",
+    fieldMaxOutputTokens: "最大輸出權杖數",
+    maxOutputTokensHelp:
+      "256–131,072。留空會使用供應商預設值；已知模型可能再降低實際上限。",
+    maxOutputSummary: "最大輸出 {tokens}",
     fieldBaseUrl: "基礎 URL",
     baseUrlHelpDefault: "留白以使用供應商預設值（{url}）。",
     baseUrlHelp: "留白以使用供應商預設值。",
@@ -546,6 +572,8 @@ export const settings = {
       baseUrlInvalid:
         "請輸入完整的 URL，例如 https://api.example.com/v1。",
       dimension: "維度必須是 16 到 4096 之間的整數。",
+      maxOutputTokens:
+        "最大輸出權杖數必須是 256 到 131,072 之間的整數。",
       apiKeyMax: "API 金鑰必須為 500 個字元以內。",
       embeddingChainMismatch:
         "嵌入備援必須與主要供應商使用相同的模型與維度。使用不同的向量模型或維度會破壞向量索引；請先變更主要供應商並重新索引。",

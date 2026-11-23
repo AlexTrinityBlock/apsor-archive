@@ -9,6 +9,11 @@
  * Replace the whole stored runtime configuration.
  */
 export interface AgentSettingsUpdateSchema {
+  /**
+     * @minimum 256
+     * @maximum 131072
+     */
+  agent_max_output_tokens: number;
   auto_compaction_enabled: boolean;
   /**
      * @minimum 60
@@ -20,6 +25,16 @@ export interface AgentSettingsUpdateSchema {
      * @maximum 168
      */
   chat_attachment_staged_ttl_hours: number;
+  /**
+     * @minimum 256
+     * @maximum 16384
+     */
+  compaction_max_output_tokens: number;
+  /**
+     * @minLength 1
+     * @maxLength 20000
+     */
+  compaction_prompt: string;
   /**
      * @minimum 1000
      * @maximum 1000000
@@ -80,6 +95,7 @@ export interface AgentSettingsUpdateSchema {
      * @maximum 200000
      */
   max_tool_result_chars: number;
+  model_escalation_enabled: boolean;
   parallel_tools_enabled: boolean;
   save_memory_requires_approval: boolean;
 }

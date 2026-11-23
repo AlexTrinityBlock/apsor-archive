@@ -16,6 +16,7 @@ import { FrequentlyUsedPromptsPanel } from "./component/FrequentlyUsedPromptsPan
 import { LanguagePanel } from "./component/LanguagePanel";
 import { IngestRuntimeSection } from "./component/IngestRuntimeSection";
 import { MaintenancePanel } from "./component/MaintenancePanel";
+import { ModelSettingsPanel } from "./component/ModelSettingsPanel";
 import { ProviderVaultPanel } from "./component/ProviderVaultPanel";
 import { AgentRuntimeSettingsPanel } from "./component/RuntimeSettingsPanels";
 import {
@@ -34,6 +35,7 @@ import "./settings.css";
 const SECTION_PANELS: Record<SettingsSectionId, ComponentType> = {
   "settings-system-prompt": SystemPromptPanel,
   "settings-frequent-prompts": FrequentlyUsedPromptsPanel,
+  "settings-model": ModelSettingsPanel,
   "settings-providers": ProviderVaultPanel,
   "settings-diagnostics": DiagnosticsPanel,
   "settings-agent-runtime": AgentRuntimeSettingsPanel,

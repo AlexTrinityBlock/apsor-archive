@@ -17,7 +17,7 @@ export const settings = {
     personalEyebrow: "Settings · personal configuration",
     personalTitle: "Personal settings.",
     personalDescription:
-      "Curate the shortcuts shown on your empty chat page and choose the interface language. Account management and global runtime settings belong to the root account.",
+      "Review the model your administrator assigned, curate the shortcuts shown on your empty chat page, and choose the interface language. Account management and global runtime settings belong to the root account.",
     personalMeta: "Settings 02 · local-first archive",
   },
   utils: {
@@ -109,6 +109,10 @@ export const settings = {
     fieldPageContextLabel: "Page context",
     fieldPageContextUnit: "chars",
     fieldPageContextHint: "Maximum page text attached to a turn.",
+    fieldAgentMaxOutputLabel: "Agent output cap",
+    fieldAgentMaxOutputUnit: "tokens",
+    fieldAgentMaxOutputHint:
+      "Maximum output tokens for one agent call. Default 64,000; the row and model caps can lower it.",
     fieldParallelToolsLabel: "Max parallel tools",
     fieldParallelToolsUnit: "tools",
     fieldParallelToolsHint: "Tools that may execute at the same time.",
@@ -145,6 +149,20 @@ export const settings = {
     fieldLastUserCharsLabel: "Last user input chars",
     fieldLastUserCharsUnit: "chars",
     fieldLastUserCharsHint: "Most recent user message kept verbatim.",
+    fieldCompactionMaxOutputLabel: "Compaction output cap",
+    fieldCompactionMaxOutputUnit: "tokens",
+    fieldCompactionMaxOutputHint:
+      "Hard cap on the deterministic summary. Default 2,600 tokens; the legacy character cap still applies.",
+    fieldCompactionPromptLabel: "Compaction prompt template",
+    fieldCompactionPromptUnit: "template",
+    fieldCompactionPromptHint:
+      "Must contain {placeholder}. Allowed placeholders: {max_output_tokens}, {max_output_chars}, {max_items}, {max_line_chars}, {max_last_user_chars}. Literal braces must be doubled.",
+    compactionPromptRequired: "The compaction prompt must not be empty.",
+    compactionPromptMax:
+      "The compaction prompt is {count} characters; the maximum is {max}.",
+    compactionPromptPlaceholder:
+      "The compaction prompt must contain {placeholder}.",
+    compactionPromptCount: "{count} / {max} characters",
     toggleAutoCompactionLabel: "Auto compaction",
     toggleAutoCompactionHint:
       "Fold older turns into a summary when the threshold is reached.",
@@ -155,6 +173,9 @@ export const settings = {
       "Require manual approval for memory writes",
     toggleMemoryApprovalHint:
       "When on, the agent's save_memory request (including a direct deprecation) waits for your Approve/Reject decision. When off, the agent may write only after its existing prompt-level confirmation. Manual approval is on by default.",
+    toggleEscalationLabel: "Model escalation",
+    toggleEscalationHint:
+      "Allow one catalog-driven model escalation per run when the primary model is catalog-known. Unknown models stay pinned.",
     loadReadingAria: "Reading agent runtime settings",
     loadErrorTitle: "Agent runtime settings did not answer.",
   },
@@ -492,6 +513,7 @@ export const settings = {
     activeProvider: "Active provider",
     metaProvider: "Provider",
     metaModel: "Model",
+    metaMaxOutputTokens: "Max output",
     metaBaseUrl: "Base URL",
     metaDimension: "Dimension",
     metaKey: "Key",
@@ -522,6 +544,10 @@ export const settings = {
     modelHelpEmbedding:
       "Recorded for new chunks. Changing it requires re-embedding.",
     modelHelp: "The model id sent to this provider.",
+    fieldMaxOutputTokens: "Max output tokens",
+    maxOutputTokensHelp:
+      "256–131,072. Blank uses the provider default; a known model may lower the effective cap.",
+    maxOutputSummary: "max output {tokens}",
     fieldBaseUrl: "Base URL",
     baseUrlHelpDefault: "Leave blank to use the provider default ({url}).",
     baseUrlHelp: "Leave blank to use the provider default.",
@@ -559,6 +585,8 @@ export const settings = {
         "Enter a complete URL, for example https://api.example.com/v1.",
       dimension:
         "Dimension must be a whole number between 16 and 4096.",
+      maxOutputTokens:
+        "Max output tokens must be a whole number between 256 and 131,072.",
       apiKeyMax: "API key must be 500 characters or fewer.",
       embeddingChainMismatch:
         "Embedding backups must use the same model and dimension as the primary. A different vector model or dimension would corrupt the vector index; change the primary and re-index first.",

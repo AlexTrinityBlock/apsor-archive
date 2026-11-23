@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useRef,
   useState,
   type CSSProperties,
@@ -39,6 +40,10 @@ export interface AgentRuntimeValues {
   readonly max_plot_points: number;
   readonly max_plot_bytes: number;
   readonly max_plot_nodes: number;
+  readonly compaction_prompt: string;
+  readonly compaction_max_output_tokens: number;
+  readonly model_escalation_enabled: boolean;
+  readonly agent_max_output_tokens: number;
 }
 
 /** Props for the presentational runtime panel; persistence stays with the page. */
@@ -49,6 +54,7 @@ export interface AgentRuntimePanelProps {
   readonly updatedAt: string | null;
   readonly saving: boolean;
   readonly error: string | null;
+  readonly errorCode: string | null;
   readonly onSave: (values: AgentRuntimeValues) => void;
   readonly onReset: () => void;
   readonly className?: string;
@@ -57,13 +63,17 @@ export interface AgentRuntimePanelProps {
 type BooleanField =
   | "auto_compaction_enabled"
   | "parallel_tools_enabled"
-  | "save_memory_requires_approval";
+  | "save_memory_requires_approval"
+  | "model_escalation_enabled";
 
-type NumericField = Exclude<keyof AgentRuntimeValues, BooleanField>;
+type NumericField = Exclude<
+  keyof AgentRuntimeValues,
+  BooleanField | "compaction_prompt"
+>;
 
 type DraftValues = { readonly [Key in NumericField]: string } & {
   readonly [Key in BooleanField]: boolean;
-};
+} & { readonly compaction_prompt: string };
 
 interface NumericFieldSpec
   extends Omit<RuntimeNumberSpec, "label" | "unit" | "hint"> {
@@ -109,6 +119,15 @@ const CONTEXT_FIELDS: readonly NumericFieldSpec[] = [
     max: 50000,
     step: 500,
     hintKey: "settings.agent.fieldPageContextHint",
+  },
+  {
+    key: "agent_max_output_tokens",
+    labelKey: "settings.agent.fieldAgentMaxOutputLabel",
+    unitKey: "settings.agent.fieldAgentMaxOutputUnit",
+    min: 256,
+    max: 131072,
+    step: 256,
+    hintKey: "settings.agent.fieldAgentMaxOutputHint",
   },
 ];
 
@@ -209,6 +228,15 @@ const COMPACTION_FIELDS: readonly NumericFieldSpec[] = [
     step: 500,
     hintKey: "settings.agent.fieldLastUserCharsHint",
   },
+  {
+    key: "compaction_max_output_tokens",
+    labelKey: "settings.agent.fieldCompactionMaxOutputLabel",
+    unitKey: "settings.agent.fieldCompactionMaxOutputUnit",
+    min: 256,
+    max: 16384,
+    step: 256,
+    hintKey: "settings.agent.fieldCompactionMaxOutputHint",
+  },
 ];
 
 function localizeSpec(
@@ -248,6 +276,10 @@ const VALUE_KEYS: readonly (keyof AgentRuntimeValues)[] = [
   "max_plot_points",
   "max_plot_bytes",
   "max_plot_nodes",
+  "compaction_prompt",
+  "compaction_max_output_tokens",
+  "model_escalation_enabled",
+  "agent_max_output_tokens",
 ];
 
 function toDraft(values: AgentRuntimeValues): DraftValues {
@@ -273,6 +305,10 @@ function toDraft(values: AgentRuntimeValues): DraftValues {
     max_plot_points: String(values.max_plot_points),
     max_plot_bytes: String(values.max_plot_bytes),
     max_plot_nodes: String(values.max_plot_nodes),
+    compaction_prompt: values.compaction_prompt,
+    compaction_max_output_tokens: String(values.compaction_max_output_tokens),
+    model_escalation_enabled: values.model_escalation_enabled,
+    agent_max_output_tokens: String(values.agent_max_output_tokens),
   };
 }
 
@@ -299,6 +335,10 @@ function fromDraft(draft: DraftValues): AgentRuntimeValues {
     max_plot_points: Number(draft.max_plot_points),
     max_plot_bytes: Number(draft.max_plot_bytes),
     max_plot_nodes: Number(draft.max_plot_nodes),
+    compaction_prompt: draft.compaction_prompt,
+    compaction_max_output_tokens: Number(draft.compaction_max_output_tokens),
+    model_escalation_enabled: draft.model_escalation_enabled,
+    agent_max_output_tokens: Number(draft.agent_max_output_tokens),
   };
 }
 
@@ -319,12 +359,15 @@ function draftMatchesValues(
     draft.auto_compaction_enabled === values.auto_compaction_enabled &&
     draft.parallel_tools_enabled === values.parallel_tools_enabled &&
     draft.save_memory_requires_approval ===
-      values.save_memory_requires_approval
+      values.save_memory_requires_approval &&
+    draft.model_escalation_enabled === values.model_escalation_enabled &&
+    draft.compaction_prompt === values.compaction_prompt
   );
 }
 
 interface ValidationResult {
   readonly fieldErrors: Partial<Record<NumericField, string>>;
+  readonly promptError: string | null;
   readonly parsed: AgentRuntimeValues | null;
 }
 
@@ -355,6 +398,21 @@ function validateDraft(
       continue;
     }
     numbers[spec.key] = parsed;
+  }
+
+  const prompt = draft.compaction_prompt;
+  let promptError: string | null = null;
+  if (prompt.trim().length === 0) {
+    promptError = t("settings.agent.compactionPromptRequired");
+  } else if (prompt.length > 20000) {
+    promptError = t("settings.agent.compactionPromptMax", {
+      count: formatNumber(prompt.length),
+      max: formatNumber(20000),
+    });
+  } else if (!prompt.includes("{max_output_tokens}")) {
+    promptError = t("settings.agent.compactionPromptPlaceholder", {
+      placeholder: "{max_output_tokens}",
+    });
   }
 
   const contextWindow = numbers.context_window_tokens;
@@ -399,9 +457,11 @@ function validateDraft(
     );
   }
 
-  const hasErrors = Object.keys(fieldErrors).length > 0;
+  const hasErrors =
+    Object.keys(fieldErrors).length > 0 || promptError !== null;
   return {
     fieldErrors,
+    promptError,
     parsed: hasErrors ? null : fromDraft(draft),
   };
 }
@@ -427,11 +487,13 @@ export function AgentRuntimePanel({
   updatedAt,
   saving,
   error,
+  errorCode,
   onSave,
   onReset,
   className,
 }: AgentRuntimePanelProps) {
   const { t, formatNumber } = useI18n();
+  const promptFieldId = useId();
   const [draft, setDraft] = useState<DraftValues>(() => toDraft(values));
   const [confirmingReset, setConfirmingReset] = useState(false);
 
@@ -449,7 +511,12 @@ export function AgentRuntimePanel({
 
   const validation = validateDraft(draft, t, formatNumber);
   const isDirty = !draftMatchesValues(draft, values);
-  const isInvalid = Object.keys(validation.fieldErrors).length > 0;
+  const isInvalid =
+    Object.keys(validation.fieldErrors).length > 0 ||
+    validation.promptError !== null;
+  const promptServerError =
+    errorCode === "compaction_prompt_invalid" ? error : null;
+  const promptError = validation.promptError ?? promptServerError;
   const canSave = isDirty && !isInvalid && !saving;
 
   const draftContext =
@@ -627,6 +694,16 @@ export function AgentRuntimePanel({
                 updateNumber("max_page_context_chars", next)
               }
             />
+            <RuntimeNumberField
+              spec={contextFields[4]}
+              value={draft.agent_max_output_tokens}
+              defaultValue={defaults.agent_max_output_tokens}
+              disabled={saving}
+              error={validation.fieldErrors.agent_max_output_tokens}
+              onValueChange={(next) =>
+                updateNumber("agent_max_output_tokens", next)
+              }
+            />
           </RuntimeGroup>
 
           <RuntimeGroup
@@ -653,6 +730,17 @@ export function AgentRuntimePanel({
                 disabled={saving}
                 onChange={(next) =>
                   updateBoolean("save_memory_requires_approval", next)
+                }
+              />
+            </div>
+            <div className="runtime-field runtime-field--wide">
+              <SwitchField
+                label={t("settings.agent.toggleEscalationLabel")}
+                hint={t("settings.agent.toggleEscalationHint")}
+                checked={draft.model_escalation_enabled}
+                disabled={saving}
+                onChange={(next) =>
+                  updateBoolean("model_escalation_enabled", next)
                 }
               />
             </div>
@@ -745,6 +833,56 @@ export function AgentRuntimePanel({
             description={t("settings.agent.groupCompactionDescription")}
             advanced
           >
+            <div className="runtime-field runtime-field--wide">
+              <label className="runtime-field__label" htmlFor={promptFieldId}>
+                <span>{t("settings.agent.fieldCompactionPromptLabel")}</span>
+                <span className="runtime-field__unit" aria-hidden="true">
+                  {t("settings.agent.fieldCompactionPromptUnit")}
+                </span>
+              </label>
+              <textarea
+                id={promptFieldId}
+                className={
+                  promptError
+                    ? "runtime-input runtime-textarea runtime-input--invalid"
+                    : "runtime-input runtime-textarea"
+                }
+                value={draft.compaction_prompt}
+                rows={8}
+                spellCheck={false}
+                dir="auto"
+                disabled={saving}
+                aria-invalid={promptError ? true : undefined}
+                aria-describedby={`${promptFieldId}-hint${
+                  promptError ? ` ${promptFieldId}-error` : ""
+                }`}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    compaction_prompt: event.target.value,
+                  }))
+                }
+              />
+              <span className="runtime-field__hint" id={`${promptFieldId}-hint`}>
+                {t("settings.agent.fieldCompactionPromptHint", {
+                  placeholder: "{max_output_tokens}",
+                })}
+              </span>
+              <span className="runtime-field__hint">
+                {t("settings.agent.compactionPromptCount", {
+                  count: formatNumber(draft.compaction_prompt.length),
+                  max: formatNumber(20000),
+                })}
+              </span>
+              {promptError ? (
+                <span
+                  className="runtime-field__error"
+                  id={`${promptFieldId}-error`}
+                >
+                  {promptError}
+                </span>
+              ) : null}
+            </div>
             <RuntimeNumberField
               spec={compactionFields[0]}
               value={draft.max_compaction_summary_chars}
@@ -765,10 +903,22 @@ export function AgentRuntimePanel({
                 updateNumber("max_compaction_last_user_chars", next)
               }
             />
+            <RuntimeNumberField
+              spec={compactionFields[2]}
+              value={draft.compaction_max_output_tokens}
+              defaultValue={defaults.compaction_max_output_tokens}
+              disabled={saving}
+              error={validation.fieldErrors.compaction_max_output_tokens}
+              onValueChange={(next) =>
+                updateNumber("compaction_max_output_tokens", next)
+              }
+            />
           </RuntimeGroup>
         </div>
 
-        {error ? <RuntimeError message={error} /> : null}
+        {error && errorCode !== "compaction_prompt_invalid" ? (
+          <RuntimeError message={error} />
+        ) : null}
 
         <RuntimeActions
           saving={saving}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { ApiError } from "../../../apis/fetch-client";
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Panel } from "../../component/Panel";
@@ -26,6 +27,9 @@ export function AgentRuntimeSettingsPanel() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [mutationErrorCode, setMutationErrorCode] = useState<string | null>(
+    null,
+  );
   const [panelRevision, setPanelRevision] = useState(0);
 
   const settingsQuery = useGetAgentSettings({ query: { staleTime: 60_000 } });
@@ -42,11 +46,13 @@ export function AgentRuntimeSettingsPanel() {
       onSuccess: async (settings) => {
         queryClient.setQueryData(getGetAgentSettingsQueryKey(), settings);
         setMutationError(null);
+        setMutationErrorCode(null);
         toast.success(t("settings.agentMessages.savedToast"));
         await refreshSettings();
       },
       onError: (error) => {
         setMutationError(apiErrorMessage(error));
+        setMutationErrorCode(error instanceof ApiError ? error.code : null);
       },
     },
   });
@@ -56,12 +62,14 @@ export function AgentRuntimeSettingsPanel() {
       onSuccess: async (settings) => {
         queryClient.setQueryData(getGetAgentSettingsQueryKey(), settings);
         setMutationError(null);
+        setMutationErrorCode(null);
         setPanelRevision((current) => current + 1);
         toast.success(t("settings.agentMessages.resetToast"));
         await refreshSettings();
       },
       onError: (error) => {
         setMutationError(apiErrorMessage(error));
+        setMutationErrorCode(error instanceof ApiError ? error.code : null);
       },
     },
   });
@@ -139,12 +147,15 @@ export function AgentRuntimeSettingsPanel() {
       updatedAt={settings.updated_at}
       saving={saving}
       error={mutationError}
+      errorCode={mutationErrorCode}
       onSave={(values) => {
         setMutationError(null);
+        setMutationErrorCode(null);
         updateSettings.mutate({ data: values });
       }}
       onReset={() => {
         setMutationError(null);
+        setMutationErrorCode(null);
         resetSettings.mutate();
       }}
     />

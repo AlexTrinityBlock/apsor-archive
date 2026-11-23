@@ -11,20 +11,27 @@ import { PageHeader } from "../component/PageHeader";
 import { Panel } from "../component/Panel";
 import { useToast } from "../component/Toast";
 import {
+  getGetMyModelAssignmentQueryKey,
   getListAccountsQueryKey,
+  getListModelAssignmentsQueryKey,
   useCreateAccount,
   useDisableAccount,
   useEnableAccount,
   useListAccounts,
+  useListModelAssignments,
   useResetAccountPassword,
   useResetAccountQuota,
+  useResetModelAssignment,
   useTopUpAccountQuota,
   useUpdateAccountQuota,
+  useUpdateModelAssignment,
 } from "../generated-apis-types";
 import type {
   AccountCreateSchema,
   AccountQuotaSchemaCategory,
   AccountSchema,
+  ModelAssignmentSchema,
+  ModelAssignmentUpdateSchema,
 } from "../generated-apis-types/schemas";
 import { useApiErrorMessage, useI18n } from "../i18n";
 import { AccountCard } from "./component/AccountCard";
@@ -33,6 +40,7 @@ import {
   type AccountAction,
 } from "./component/ConfirmAccountActionDialog";
 import { CreateAccountDialog } from "./component/CreateAccountDialog";
+import { ModelDialog } from "./component/ModelDialog";
 import { QuotaDialog } from "./component/QuotaDialog";
 import { SystemNoticesPanel } from "./component/SystemNoticesPanel";
 import { TemporaryPasswordDialog } from "./component/TemporaryPasswordDialog";
@@ -51,6 +59,11 @@ type DialogState =
       readonly password: string;
     }
   | { readonly kind: "quota"; readonly account: AccountSchema }
+  | {
+      readonly kind: "model";
+      readonly account: AccountSchema;
+      readonly assignment: ModelAssignmentSchema;
+    }
   | null;
 
 function rootFirst(items: readonly AccountSchema[]): AccountSchema[] {
@@ -78,6 +91,9 @@ export function AccountsPage() {
   const query = useListAccounts({
     query: { retry: false, staleTime: 15_000 },
   });
+  const assignmentsQuery = useListModelAssignments({
+    query: { retry: false, staleTime: 15_000 },
+  });
   const createMutation = useCreateAccount();
   const disableMutation = useDisableAccount();
   const enableMutation = useEnableAccount();
@@ -85,8 +101,13 @@ export function AccountsPage() {
   const updateQuotaMutation = useUpdateAccountQuota();
   const topUpQuotaMutation = useTopUpAccountQuota();
   const resetQuotaMutation = useResetAccountQuota();
+  const updateModelMutation = useUpdateModelAssignment();
+  const resetModelMutation = useResetModelAssignment();
 
   const accounts = rootFirst(query.data?.items ?? []);
+  const assignmentsByUser = new Map(
+    (assignmentsQuery.data?.items ?? []).map((item) => [item.user_id, item]),
+  );
   const mutationPending =
     createMutation.isPending ||
     disableMutation.isPending ||
@@ -95,12 +116,24 @@ export function AccountsPage() {
     updateQuotaMutation.isPending ||
     topUpQuotaMutation.isPending ||
     resetQuotaMutation.isPending ||
+    updateModelMutation.isPending ||
+    resetModelMutation.isPending ||
     impersonationPending;
 
   const invalidateAccounts = () => {
     void queryClient.invalidateQueries({
       queryKey: getListAccountsQueryKey(),
     });
+  };
+
+  const invalidateModelAssignments = () => {
+    void queryClient.invalidateQueries({
+      queryKey: getListModelAssignmentsQueryKey(),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: getGetMyModelAssignmentQueryKey(),
+    });
+    invalidateAccounts();
   };
 
   const openCreate = () => {
@@ -116,6 +149,15 @@ export function AccountsPage() {
   const openQuotas = (account: AccountSchema) => {
     setDialogError(null);
     setDialog({ kind: "quota", account });
+  };
+
+  const openModel = (account: AccountSchema) => {
+    const assignment = assignmentsByUser.get(account.user_id);
+    if (assignment === undefined) {
+      return;
+    }
+    setDialogError(null);
+    setDialog({ kind: "model", account, assignment });
   };
 
   const closeDialog = () => {
@@ -270,6 +312,41 @@ export function AccountsPage() {
     }
   };
 
+  const handleModelSave = async (payload: ModelAssignmentUpdateSchema) => {
+    if (dialog?.kind !== "model" || mutationPending) {
+      return;
+    }
+    setDialogError(null);
+    try {
+      await updateModelMutation.mutateAsync({
+        userId: dialog.account.user_id,
+        data: payload,
+      });
+      updateModelMutation.reset();
+      invalidateModelAssignments();
+      toast.success(t("core.accounts.modelSaveSuccess"));
+      setDialog(null);
+    } catch (caught) {
+      setDialogError(apiErrorMessage(caught, "core.accounts.modelError"));
+    }
+  };
+
+  const handleModelReset = async () => {
+    if (dialog?.kind !== "model" || mutationPending) {
+      return;
+    }
+    setDialogError(null);
+    try {
+      await resetModelMutation.mutateAsync({ userId: dialog.account.user_id });
+      resetModelMutation.reset();
+      invalidateModelAssignments();
+      toast.success(t("core.accounts.modelResetSuccess"));
+      setDialog(null);
+    } catch (caught) {
+      setDialogError(apiErrorMessage(caught, "core.accounts.modelError"));
+    }
+  };
+
   let body: ReactNode;
   if (query.isPending) {
     body = (
@@ -323,8 +400,12 @@ export function AccountsPage() {
             <AccountCard
               account={account}
               currentUserId={user?.user_id ?? null}
+              assignment={assignmentsByUser.get(account.user_id) ?? null}
+              assignmentLoading={assignmentsQuery.isPending}
+              assignmentError={assignmentsQuery.isError}
               onAction={openAction}
               onManageQuotas={openQuotas}
+              onManageModel={openModel}
             />
           </li>
         ))}
@@ -401,6 +482,17 @@ export function AccountsPage() {
           onReset={(category, granted) =>
             void handleQuotaReset(category, granted)
           }
+          submitting={mutationPending}
+          error={dialogError}
+        />
+      ) : null}
+      {dialog?.kind === "model" ? (
+        <ModelDialog
+          account={dialog.account}
+          assignment={dialog.assignment}
+          onClose={closeDialog}
+          onSave={(payload) => void handleModelSave(payload)}
+          onReset={() => void handleModelReset()}
           submitting={mutationPending}
           error={dialogError}
         />

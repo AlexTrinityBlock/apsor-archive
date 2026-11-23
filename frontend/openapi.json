@@ -533,7 +533,8 @@
               {
                 "enum": [
                   "deepseek",
-                  "openai-compatible"
+                  "openai-compatible",
+                  "anthropic"
                 ],
                 "type": "string"
               },
@@ -1462,6 +1463,12 @@
         "additionalProperties": false,
         "description": "Replace the whole stored runtime configuration.",
         "properties": {
+          "agent_max_output_tokens": {
+            "maximum": 131072.0,
+            "minimum": 256.0,
+            "title": "Agent Max Output Tokens",
+            "type": "integer"
+          },
           "auto_compaction_enabled": {
             "title": "Auto Compaction Enabled",
             "type": "boolean"
@@ -1477,6 +1484,18 @@
             "minimum": 1.0,
             "title": "Chat Attachment Staged Ttl Hours",
             "type": "integer"
+          },
+          "compaction_max_output_tokens": {
+            "maximum": 16384.0,
+            "minimum": 256.0,
+            "title": "Compaction Max Output Tokens",
+            "type": "integer"
+          },
+          "compaction_prompt": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Compaction Prompt",
+            "type": "string"
           },
           "compaction_threshold_tokens": {
             "maximum": 1000000.0,
@@ -1550,6 +1569,10 @@
             "title": "Max Tool Result Chars",
             "type": "integer"
           },
+          "model_escalation_enabled": {
+            "title": "Model Escalation Enabled",
+            "type": "boolean"
+          },
           "parallel_tools_enabled": {
             "title": "Parallel Tools Enabled",
             "type": "boolean"
@@ -1569,6 +1592,10 @@
           "max_page_context_chars",
           "max_compaction_summary_chars",
           "max_compaction_last_user_chars",
+          "compaction_prompt",
+          "compaction_max_output_tokens",
+          "model_escalation_enabled",
+          "agent_max_output_tokens",
           "auto_compaction_enabled",
           "parallel_tools_enabled",
           "save_memory_requires_approval",
@@ -1585,6 +1612,12 @@
         "additionalProperties": false,
         "description": "One complete, validated set of agent runtime limits.\n\nEvery field is required so ``PUT /api/v1/agent/settings`` always writes a\nfull snapshot instead of silently resetting omitted fields to defaults.",
         "properties": {
+          "agent_max_output_tokens": {
+            "maximum": 131072.0,
+            "minimum": 256.0,
+            "title": "Agent Max Output Tokens",
+            "type": "integer"
+          },
           "auto_compaction_enabled": {
             "title": "Auto Compaction Enabled",
             "type": "boolean"
@@ -1600,6 +1633,18 @@
             "minimum": 1.0,
             "title": "Chat Attachment Staged Ttl Hours",
             "type": "integer"
+          },
+          "compaction_max_output_tokens": {
+            "maximum": 16384.0,
+            "minimum": 256.0,
+            "title": "Compaction Max Output Tokens",
+            "type": "integer"
+          },
+          "compaction_prompt": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Compaction Prompt",
+            "type": "string"
           },
           "compaction_threshold_tokens": {
             "maximum": 1000000.0,
@@ -1673,6 +1718,10 @@
             "title": "Max Tool Result Chars",
             "type": "integer"
           },
+          "model_escalation_enabled": {
+            "title": "Model Escalation Enabled",
+            "type": "boolean"
+          },
           "parallel_tools_enabled": {
             "title": "Parallel Tools Enabled",
             "type": "boolean"
@@ -1692,6 +1741,10 @@
           "max_page_context_chars",
           "max_compaction_summary_chars",
           "max_compaction_last_user_chars",
+          "compaction_prompt",
+          "compaction_max_output_tokens",
+          "model_escalation_enabled",
+          "agent_max_output_tokens",
           "auto_compaction_enabled",
           "parallel_tools_enabled",
           "save_memory_requires_approval",
@@ -2099,6 +2152,196 @@
           "confirm_password"
         ],
         "title": "ChangePasswordSchema",
+        "type": "object"
+      },
+      "ChatEndpointListSchema": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ChatEndpointSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ChatEndpointListSchema",
+        "type": "object"
+      },
+      "ChatEndpointProbeResultSchema": {
+        "description": "A probe always resolves to this shape; a failure is not an HTTP error.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "resolved_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Model"
+          },
+          "usage": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok",
+          "latency_ms",
+          "resolved_model",
+          "usage",
+          "detail"
+        ],
+        "title": "ChatEndpointProbeResultSchema",
+        "type": "object"
+      },
+      "ChatEndpointProbeSchema": {
+        "additionalProperties": false,
+        "description": "One candidate ``(model, effort)`` pair to test against a saved row.",
+        "properties": {
+          "model": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "purpose": {
+            "default": "primary",
+            "enum": [
+              "primary",
+              "auxiliary"
+            ],
+            "title": "Purpose",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "title": "ChatEndpointProbeSchema",
+        "type": "object"
+      },
+      "ChatEndpointSchema": {
+        "description": "One saved chat endpoint without key material or a full base URL.",
+        "properties": {
+          "base_url_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Url Host"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "key_source": {
+            "enum": [
+              "database",
+              "environment",
+              "none"
+            ],
+            "title": "Key Source",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max_output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Output Tokens"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "provider",
+          "model",
+          "base_url_host",
+          "configured",
+          "key_source",
+          "is_active",
+          "priority",
+          "max_output_tokens"
+        ],
+        "title": "ChatEndpointSchema",
         "type": "object"
       },
       "ChunkSchema": {
@@ -4047,6 +4290,539 @@
         "title": "MemoryUpdateSchema",
         "type": "object"
       },
+      "ModelAssignmentListSchema": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelAssignmentSchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ModelAssignmentListSchema",
+        "type": "object"
+      },
+      "ModelAssignmentSchema": {
+        "description": "One account assignment: stored values, effective resolution, warnings.",
+        "properties": {
+          "aux_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aux Model"
+          },
+          "aux_pricing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelPricingSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "aux_provider_config_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aux Provider Config Id"
+          },
+          "aux_provider_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aux Provider Label"
+          },
+          "aux_reasoning_effort": {
+            "title": "Aux Reasoning Effort",
+            "type": "string"
+          },
+          "aux_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aux Tier"
+          },
+          "chat_compaction_threshold_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Compaction Threshold Tokens"
+          },
+          "chat_context_window_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Context Window Tokens"
+          },
+          "chat_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Model"
+          },
+          "chat_pricing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelPricingSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chat_provider_config_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Provider Config Id"
+          },
+          "chat_provider_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Provider Label"
+          },
+          "chat_reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Reasoning Effort"
+          },
+          "chat_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Tier"
+          },
+          "degraded_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Degraded Reason"
+          },
+          "effective_aux_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Aux Effort"
+          },
+          "effective_aux_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Aux Model"
+          },
+          "effective_aux_provider": {
+            "title": "Effective Aux Provider",
+            "type": "string"
+          },
+          "effective_chat_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Chat Effort"
+          },
+          "effective_chat_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Chat Model"
+          },
+          "effective_chat_provider": {
+            "title": "Effective Chat Provider",
+            "type": "string"
+          },
+          "effective_compaction_threshold_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Compaction Threshold Tokens"
+          },
+          "effective_context_window_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Context Window Tokens"
+          },
+          "source": {
+            "enum": [
+              "account",
+              "unassigned"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "chat_provider_config_id",
+          "chat_model",
+          "chat_reasoning_effort",
+          "aux_provider_config_id",
+          "aux_model",
+          "aux_reasoning_effort",
+          "chat_context_window_tokens",
+          "chat_compaction_threshold_tokens",
+          "chat_provider_label",
+          "aux_provider_label",
+          "effective_chat_model",
+          "effective_chat_provider",
+          "effective_chat_effort",
+          "effective_aux_model",
+          "effective_aux_provider",
+          "effective_aux_effort",
+          "effective_context_window_tokens",
+          "effective_compaction_threshold_tokens",
+          "chat_tier",
+          "aux_tier",
+          "chat_pricing",
+          "aux_pricing",
+          "source",
+          "degraded_reason",
+          "warnings",
+          "updated_at"
+        ],
+        "title": "ModelAssignmentSchema",
+        "type": "object"
+      },
+      "ModelAssignmentUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Full replacement of one account's two endpoint assignments.\n\n``PUT`` requires both slots. The primary effort may be empty (the provider\ndefault applies); the auxiliary effort is required and defaults to ``low``.\nBudget ranges match the database CHECKs. The cross-field rule\n``compaction_threshold_tokens < context_window_tokens`` is enforced by the\nservice so a violation keeps the documented ``422\ninvalid_model_assignment`` code instead of the request-validation ``400``.",
+        "properties": {
+          "aux_model": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Aux Model",
+            "type": "string"
+          },
+          "aux_provider_config_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Aux Provider Config Id",
+            "type": "integer"
+          },
+          "aux_reasoning_effort": {
+            "default": "low",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Aux Reasoning Effort",
+            "type": "string"
+          },
+          "chat_model": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Chat Model",
+            "type": "string"
+          },
+          "chat_provider_config_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Chat Provider Config Id",
+            "type": "integer"
+          },
+          "chat_reasoning_effort": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Reasoning Effort"
+          },
+          "compaction_threshold_tokens": {
+            "anyOf": [
+              {
+                "maximum": 1000000.0,
+                "minimum": 1000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compaction Threshold Tokens"
+          },
+          "context_window_tokens": {
+            "anyOf": [
+              {
+                "maximum": 2000000.0,
+                "minimum": 8000.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Window Tokens"
+          }
+        },
+        "required": [
+          "chat_provider_config_id",
+          "chat_model",
+          "aux_provider_config_id",
+          "aux_model"
+        ],
+        "title": "ModelAssignmentUpdateSchema",
+        "type": "object"
+      },
+      "ModelCatalogEntrySchema": {
+        "description": "One advisory catalog row; unknown models are legal and unpriced.",
+        "properties": {
+          "context_window_tokens": {
+            "title": "Context Window Tokens",
+            "type": "integer"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "max_output_tokens": {
+            "title": "Max Output Tokens",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "pricing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelPricingSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "replacement_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement Model"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "suggested_compaction_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Compaction Tokens"
+          },
+          "supports_tools": {
+            "title": "Supports Tools",
+            "type": "boolean"
+          },
+          "supports_vision": {
+            "title": "Supports Vision",
+            "type": "boolean"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          }
+        },
+        "required": [
+          "model",
+          "display_name",
+          "provider",
+          "tier",
+          "context_window_tokens",
+          "max_output_tokens",
+          "supports_tools",
+          "supports_vision",
+          "pricing",
+          "suggested_compaction_tokens",
+          "status",
+          "replacement_model"
+        ],
+        "title": "ModelCatalogEntrySchema",
+        "type": "object"
+      },
+      "ModelCatalogListSchema": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ModelCatalogEntrySchema"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ModelCatalogListSchema",
+        "type": "object"
+      },
+      "ModelPricingSchema": {
+        "description": "USD per million tokens; ``cache_write`` is the five-minute write bucket.",
+        "properties": {
+          "cache_read": {
+            "title": "Cache Read",
+            "type": "number"
+          },
+          "cache_write": {
+            "title": "Cache Write",
+            "type": "number"
+          },
+          "input": {
+            "title": "Input",
+            "type": "number"
+          },
+          "output": {
+            "title": "Output",
+            "type": "number"
+          }
+        },
+        "required": [
+          "input",
+          "output",
+          "cache_write",
+          "cache_read"
+        ],
+        "title": "ModelPricingSchema",
+        "type": "object"
+      },
       "PathFileSchema": {
         "description": "One file in a path listing.",
         "properties": {
@@ -4324,6 +5100,19 @@
             "title": "Label",
             "type": "string"
           },
+          "max_output_tokens": {
+            "anyOf": [
+              {
+                "maximum": 131072.0,
+                "minimum": 256.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Output Tokens"
+          },
           "model": {
             "anyOf": [
               {
@@ -4559,6 +5348,17 @@
             "title": "Label",
             "type": "string"
           },
+          "max_output_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Output Tokens"
+          },
           "model": {
             "anyOf": [
               {
@@ -4752,6 +5552,19 @@
             "maxLength": 80,
             "title": "Label",
             "type": "string"
+          },
+          "max_output_tokens": {
+            "anyOf": [
+              {
+                "maximum": 131072.0,
+                "minimum": 256.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Output Tokens"
           },
           "model": {
             "anyOf": [
@@ -8539,6 +9352,81 @@
         ]
       }
     },
+    "/api/v1/chat-endpoints": {
+      "get": {
+        "description": "List saved chat rows for the assignment dialog, host names only.",
+        "operationId": "listChatEndpoints",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatEndpointListSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Chat Endpoints",
+        "tags": [
+          "model-assignments"
+        ]
+      }
+    },
+    "/api/v1/chat-endpoints/{provider_config_id}/probe": {
+      "post": {
+        "description": "Test one candidate model/effort; writes nothing and never returns a 500.",
+        "operationId": "probeChatEndpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider_config_id",
+            "required": true,
+            "schema": {
+              "title": "Provider Config Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatEndpointProbeSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatEndpointProbeResultSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Probe Chat Endpoint",
+        "tags": [
+          "model-assignments"
+        ]
+      }
+    },
     "/api/v1/files": {
       "post": {
         "description": "Upload one file; the server extracts text and indexes it.",
@@ -9913,6 +10801,166 @@
         "summary": "Deprecate Memory",
         "tags": [
           "memories"
+        ]
+      }
+    },
+    "/api/v1/model-assignments": {
+      "get": {
+        "description": "Return every account assignment for the root Accounts page.",
+        "operationId": "listModelAssignments",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelAssignmentListSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Model Assignments",
+        "tags": [
+          "model-assignments"
+        ]
+      }
+    },
+    "/api/v1/model-assignments/me": {
+      "get": {
+        "description": "Return the caller's own read-only assignment view.",
+        "operationId": "getMyModelAssignment",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelAssignmentSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get My Model Assignment",
+        "tags": [
+          "model-assignments"
+        ]
+      }
+    },
+    "/api/v1/model-assignments/{user_id}": {
+      "delete": {
+        "description": "Clear both assignments, leaving the account unassigned.",
+        "operationId": "resetModelAssignment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelAssignmentSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Model Assignment",
+        "tags": [
+          "model-assignments"
+        ]
+      },
+      "put": {
+        "description": "Validate both endpoints, probe changed slots, and save both assignments.",
+        "operationId": "updateModelAssignment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelAssignmentUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelAssignmentSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Model Assignment",
+        "tags": [
+          "model-assignments"
+        ]
+      }
+    },
+    "/api/v1/model-catalog": {
+      "get": {
+        "description": "Return the advisory model catalog; any other model string is legal.",
+        "operationId": "listChatModels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCatalogListSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Chat Models",
+        "tags": [
+          "model-assignments"
         ]
       }
     },

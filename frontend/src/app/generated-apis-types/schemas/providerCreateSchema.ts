@@ -15,6 +15,7 @@ export interface ProviderCreateSchema {
   dimension?: number | null;
   /** @maxLength 80 */
   label?: string;
+  max_output_tokens?: number | null;
   model?: string | null;
   /**
      * @minLength 1
