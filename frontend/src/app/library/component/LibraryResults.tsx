@@ -15,6 +15,7 @@ import {
   type FileOperationMode,
   type LibraryContextMenuTrigger,
 } from "./library-utils";
+import { FileThumb } from "./thumbnail/FileThumb";
 
 interface LibraryResultsProps {
   readonly listing: PathListingSchema;
@@ -264,9 +265,7 @@ export function LibraryResults({
                     );
                   }}
                 >
-                  <span className="library-row__icon library-row__icon--file" aria-hidden="true">
-                    <Icon name="file" size={17} />
-                  </span>
+                  <FileThumb file={file} variant="row" />
                   <span className="library-row__text">
                     <span className="library-row__label">{file.file_name}</span>
                     <span className="library-row__hint">{file.raw_file_path}</span>
