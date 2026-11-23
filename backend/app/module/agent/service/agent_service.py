@@ -152,6 +152,9 @@ _FORCED_COMPACTION_BUDGET_RATIO = 0.6
 _USER_MESSAGE_HEAD_RATIO = 0.6
 _IMAGE_OMITTED_TEXT = "[image omitted: context budget]"
 _ATTACHMENT_PART_TYPES = frozenset({"image", "image_url", "document", "input_file"})
+# ``context_used`` renders its own estimate, so the trailing status block needs
+# a bounded fixed-point pass. The digits settle after at most one change.
+_AGENT_STATUS_ESTIMATE_ATTEMPTS = 3
 
 
 class AgentModelPlanProtocol(Protocol):
@@ -1084,7 +1087,8 @@ class AgentService:
                 retry_next_step = False
                 while True:
                     agent_status = self._agent_status_message(
-                        retry_notice=pending_retry_notice
+                        context,
+                        retry_notice=pending_retry_notice,
                     )
                     pending_retry_notice = None
                     completion = _CompletionOutcome()
@@ -2225,17 +2229,62 @@ class AgentService:
             with suppress(asyncio.CancelledError):
                 await task
 
-    def _agent_status_message(self, *, retry_notice: str | None) -> str:
-        """Render the provider-only agent status system message."""
-        return render_agent_status(
-            AgentStatus(
-                max_tool_result_chars=self.config.max_tool_result_chars,
-                max_page_context_chars=self.config.max_page_context_chars,
-                max_expression_chars=MAX_EXPRESSION_CHARS,
-                output_limit_tokens=self.chat_generator.max_output_tokens,
-                retry_notice=retry_notice,
-            )
+    def _agent_status_message(
+        self,
+        context: ProviderContext,
+        *,
+        retry_notice: str | None,
+    ) -> str:
+        """Render the provider-only status message for this exact request.
+
+        ``context_used`` covers the complete ordered request assembled by
+        ``_provider_messages``: the frozen system message, every replayed context
+        message in entry order, and this trailing block. The estimate uses the
+        same chars-per-token ratio as the budget ladder and runs after chat-image
+        enrichment, so raw base64 image payloads are stripped.
+
+        Because the block renders its own estimate, its digit count can change
+        the total. A bounded fixed-point loop re-estimates after each render
+        until the number stops moving. Only the deterministic estimator runs;
+        this never calls a provider or a tokenizer.
+        """
+        chars_per_token = self._chars_per_token()
+        limit = self.config.context_window_tokens
+        compaction_at = self.config.compaction_threshold_tokens
+        total = estimate_provider_context_tokens(
+            context,
+            strip_image_data=True,
+            chars_per_token=chars_per_token,
         )
+
+        def render(used: int) -> str:
+            return render_agent_status(
+                AgentStatus(
+                    max_tool_result_chars=self.config.max_tool_result_chars,
+                    max_page_context_chars=self.config.max_page_context_chars,
+                    max_expression_chars=MAX_EXPRESSION_CHARS,
+                    output_limit_tokens=self.chat_generator.max_output_tokens,
+                    retry_notice=retry_notice,
+                    context_used=used,
+                    context_limit=limit,
+                    context_remaining=max(0, limit - used),
+                    compaction_at=compaction_at,
+                    compaction_in=max(0, compaction_at - used),
+                )
+            )
+
+        block = render(total)
+        for _ in range(_AGENT_STATUS_ESTIMATE_ATTEMPTS):
+            with_block = _estimated_provider_request_tokens(
+                context,
+                block,
+                chars_per_token=chars_per_token,
+            )
+            if with_block == total:
+                return block
+            total = with_block
+            block = render(total)
+        return block
 
     async def _stream_assistant_text(
         self,
@@ -2363,7 +2412,8 @@ class AgentService:
             run_id=run_id,
             step=step,
             agent_status=self._agent_status_message(
-                retry_notice=render_invalid_arguments_notice()
+                context,
+                retry_notice=render_invalid_arguments_notice(),
             ),
             tools=[],
         ):
@@ -2791,6 +2841,33 @@ def _provider_messages(
     messages.extend(context.messages)
     messages.append({"role": "system", "content": agent_status})
     return messages
+
+
+def _estimated_provider_request_tokens(
+    context: ProviderContext,
+    agent_status: str,
+    *,
+    chars_per_token: float,
+) -> int:
+    """Estimate tokens for the exact ordered request including the status block.
+
+    This assumes the ``_provider_messages`` order: the frozen system message,
+    every replayed context message in entry order, then ``agent_status`` as the
+    final system message. Image data URLs are stripped because the status block
+    is composed after chat-image enrichment and its budget must not count raw
+    base64 payload bytes.
+    """
+    return estimate_provider_context_tokens(
+        replace(
+            context,
+            messages=[
+                *context.messages,
+                {"role": "system", "content": agent_status},
+            ],
+        ),
+        strip_image_data=True,
+        chars_per_token=chars_per_token,
+    )
 
 
 def _context_chars(messages: Sequence[Mapping[str, Any]]) -> int:
