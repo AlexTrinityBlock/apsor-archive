@@ -250,3 +250,23 @@ class IngestSourceStaleError(KnowledgeError):
         super().__init__(
             f"File {file_id} changed or moved while its re-ingest was running."
         )
+
+
+class InvalidModelAssignmentError(KnowledgeError):
+    """A submitted endpoint assignment cannot be saved as requested.
+
+    The detail names the slot (``primary`` or ``auxiliary``) and the reason; it
+    never contains a key, a full base URL, or provider response text.
+    """
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+
+
+class ModelProbeFailedError(KnowledgeError):
+    """A changed endpoint slot failed its mandatory connection probe."""
+
+    def __init__(self, slot: str, detail: str) -> None:
+        super().__init__(f"{slot}: {detail}")
+        self.slot = slot
+        self.detail = detail
