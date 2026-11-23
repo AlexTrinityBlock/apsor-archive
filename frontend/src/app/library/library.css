@@ -3481,8 +3481,9 @@ button.library-crumb:hover {
    -------------------------------------------------------------------------- */
 
 /* The editor surface follows the visible viewport so the on-screen keyboard
-   cannot cover its bottom edge. The variables come from useVisualViewport and
-   fall back to the normal full-height layer before the effect runs. */
+   cannot cover its bottom edge. The variables are published by the AppShell's
+   useVisualViewport hook and fall back to the normal full-height layer before
+   the effect runs. */
 .markdown-editor-dialog-layer,
 .library-preview--editing {
   top: var(--app-visual-viewport-top, 0px);

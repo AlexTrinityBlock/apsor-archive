@@ -387,6 +387,8 @@ export const chat = {
     imageOmitted: "Image omitted from the transcript",
     imageOmittedAlt: "Image omitted from the transcript: {alt}",
     tableAria: "Table, scroll horizontally to read all columns",
+    copyCode: "Copy code",
+    copyCodeTitle: "Copy this code block",
   },
   plot: {
     title: "Chart",
