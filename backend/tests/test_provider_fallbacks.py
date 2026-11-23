@@ -77,6 +77,7 @@ class _FakeChatClient:
         model: str | None = None,
         stream: bool = False,
         on_text_delta: Callable[[str], Any] | None = None,
+        on_reasoning_delta: Callable[[str], Any] | None = None,
     ) -> ChatResult:
         del messages, tools, stream
         self.chat_calls += 1

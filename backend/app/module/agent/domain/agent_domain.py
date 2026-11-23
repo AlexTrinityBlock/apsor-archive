@@ -78,6 +78,10 @@ COMPACTION_THRESHOLD_TOKENS = 75_000
 MAX_TOOL_RESULT_CHARS = 100_000
 MAX_COMPACTION_SUMMARY_CHARS = 6_000
 MAX_COMPACTION_LAST_USER_CHARS = 4_000
+# Provider reasoning is display-only telemetry. It is bounded once on the path
+# into the transcript so a long or repeated thinking stream cannot inflate an
+# entry; the provider-facing message never contains it.
+MAX_ASSISTANT_REASONING_CHARS = 20_000
 # Deterministic compaction is rendered from this operator-editable template.
 # ``{max_output_tokens}`` is mandatory: the settings schema, the database CHECK,
 # and the renderer all reject a template that omits the output bound.

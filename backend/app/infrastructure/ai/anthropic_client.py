@@ -141,12 +141,15 @@ class AnthropicClient:
         model: str | None = None,
         stream: bool = False,
         on_text_delta: TextDeltaCallback | None = None,
+        on_reasoning_delta: TextDeltaCallback | None = None,
     ) -> ChatResult:
         """Run one chat completion, optionally streaming text deltas."""
         system_blocks, translated_messages, translated_tools = _translate_request(
             messages, tools
         )
-        should_stream = stream or on_text_delta is not None
+        should_stream = (
+            stream or on_text_delta is not None or on_reasoning_delta is not None
+        )
         request_model = model or self.model_name
         payload: dict[str, Any] = {
             "model": request_model,
@@ -165,7 +168,11 @@ class AnthropicClient:
         if effort is not None:
             payload["output_config"] = {"effort": effort}
         if should_stream:
-            return await self._stream_chat(payload, on_text_delta)
+            return await self._stream_chat(
+                payload,
+                on_text_delta,
+                on_reasoning_delta,
+            )
         return await self._chat_once(payload)
 
     def _effective_effort(self, override: str | None) -> str | None:
@@ -277,7 +284,7 @@ class AnthropicClient:
                 status_code=response.status_code,
                 provider_request_id=request_id,
             )
-        text, _tool_calls = _parse_content_blocks(content)
+        text, _tool_calls, _reasoning = _parse_content_blocks(content)
         if not text.strip():
             _log_invalid_response(
                 operation=operation,
@@ -408,7 +415,7 @@ class AnthropicClient:
                 status_code=response.status_code,
                 provider_request_id=request_id,
             )
-        text, tool_calls = _parse_content_blocks(content)
+        text, tool_calls, reasoning = _parse_content_blocks(content)
         if not text.strip() and not tool_calls:
             _log_invalid_response(
                 operation=operation,
@@ -435,6 +442,7 @@ class AnthropicClient:
             model=str(response_model),
             usage=usage,
             raw_assistant_message=_raw_assistant_message(text, tool_calls),
+            reasoning=reasoning,
         )
         _log_request_completed(
             operation=operation,
@@ -458,6 +466,7 @@ class AnthropicClient:
         self,
         payload: dict[str, Any],
         on_text_delta: TextDeltaCallback | None,
+        on_reasoning_delta: TextDeltaCallback | None,
     ) -> ChatResult:
         operation = "chat"
         call_id = uuid4().hex[:12]
@@ -513,6 +522,7 @@ class AnthropicClient:
                                     data_lines,
                                     state,
                                     on_text_delta,
+                                    on_reasoning_delta,
                                     response_request_id,
                                 )
                                 data_lines = []
@@ -535,6 +545,7 @@ class AnthropicClient:
                             data_lines,
                             state,
                             on_text_delta,
+                            on_reasoning_delta,
                             response_request_id,
                         )
         except httpx.HTTPError as exc:
@@ -597,6 +608,7 @@ class AnthropicClient:
             model=response_model,
             usage=_normalize_anthropic_usage(state.usage_raw),
             raw_assistant_message=_raw_assistant_message(text, tool_calls),
+            reasoning="".join(state.reasoning_parts),
         )
         _log_request_completed(
             operation=operation,
@@ -622,6 +634,7 @@ class _AnthropicStreamState:
 
     def __init__(self) -> None:
         self.text_parts: list[str] = []
+        self.reasoning_parts: list[str] = []
         self.tool_slots: dict[int, dict[str, Any]] = {}
         self.tool_calls: list[ChatToolCall] = []
         self.usage_raw: dict[str, Any] = {}
@@ -635,6 +648,7 @@ class _AnthropicStreamState:
         event_name: str,
         payload: dict[str, Any],
         on_text_delta: TextDeltaCallback | None,
+        on_reasoning_delta: TextDeltaCallback | None,
         request_id: str | None,
     ) -> None:
         raw_kind = payload.get("type")
@@ -666,6 +680,12 @@ class _AnthropicStreamState:
                     self.text_parts.append(initial)
                     if on_text_delta is not None:
                         await on_text_delta(initial)
+            elif block_type == "thinking":
+                initial_thinking = block.get("thinking")
+                if isinstance(initial_thinking, str) and initial_thinking:
+                    self.reasoning_parts.append(initial_thinking)
+                    if on_reasoning_delta is not None:
+                        await on_reasoning_delta(initial_thinking)
             elif block_type == "tool_use":
                 initial_input = block.get("input")
                 self.tool_slots[index] = {
@@ -699,7 +719,13 @@ class _AnthropicStreamState:
                 piece = delta.get("partial_json")
                 if isinstance(piece, str):
                     slot["json"] += piece
-            # thinking_delta and signature_delta are deliberately ignored.
+            elif delta_type == "thinking_delta":
+                thinking_piece = delta.get("thinking")
+                if isinstance(thinking_piece, str) and thinking_piece:
+                    self.reasoning_parts.append(thinking_piece)
+                    if on_reasoning_delta is not None:
+                        await on_reasoning_delta(thinking_piece)
+            # signature_delta carries an opaque signature, not display text.
             return
         if kind == "content_block_stop":
             index = _int_or(payload.get("index"), 0)
@@ -733,6 +759,7 @@ async def _dispatch_event(
     data_lines: list[str],
     state: _AnthropicStreamState,
     on_text_delta: TextDeltaCallback | None,
+    on_reasoning_delta: TextDeltaCallback | None,
     request_id: str | None,
 ) -> None:
     """Decode one buffered SSE event; malformed data is skipped, not fatal."""
@@ -751,7 +778,13 @@ async def _dispatch_event(
         return
     if not isinstance(payload, dict):
         return
-    await state.consume(event_name, payload, on_text_delta, request_id)
+    await state.consume(
+        event_name,
+        payload,
+        on_text_delta,
+        on_reasoning_delta,
+        request_id,
+    )
 
 
 def _messages_url(base_url: str) -> str:
@@ -983,8 +1016,9 @@ def _apply_cache_breakpoints(payload: dict[str, Any]) -> None:
 
 def _parse_content_blocks(
     content: list[object],
-) -> tuple[str, list[ChatToolCall]]:
+) -> tuple[str, list[ChatToolCall], str]:
     text_parts: list[str] = []
+    reasoning_parts: list[str] = []
     tool_calls: list[ChatToolCall] = []
     for index, block in enumerate(content):
         if not isinstance(block, dict):
@@ -994,9 +1028,13 @@ def _parse_content_blocks(
             text = block.get("text")
             if isinstance(text, str):
                 text_parts.append(text)
+        elif block_type == "thinking":
+            thinking = block.get("thinking")
+            if isinstance(thinking, str) and thinking:
+                reasoning_parts.append(thinking)
         elif block_type == "tool_use":
             tool_calls.append(_tool_call_from_block(block, index))
-    return "".join(text_parts), tool_calls
+    return "".join(text_parts), tool_calls, "".join(reasoning_parts)
 
 
 def _tool_call_from_block(block: dict[str, Any], index: int) -> ChatToolCall:

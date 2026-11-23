@@ -46,6 +46,9 @@ export interface AssistantMeta {
   readonly provider: string | null;
   readonly step: number | null;
   readonly citations: readonly string[];
+  readonly reasoning: string;
+  readonly reasoningTokens: number | null;
+  readonly reasoningTruncated: boolean;
   readonly error: { readonly code: string; readonly detail: string } | null;
 }
 
@@ -261,6 +264,9 @@ export function readAssistantMeta(entry: AgentEntrySchema): AssistantMeta {
     provider: stringValue(data?.provider),
     step: numberValue(data?.step),
     citations: stringList(data?.citations),
+    reasoning: stringValue(data?.reasoning) ?? "",
+    reasoningTokens: numberValue(data?.reasoning_tokens),
+    reasoningTruncated: data?.reasoning_truncated === true,
     error: errorRecord
       ? {
           code: stringValue(errorRecord.code) ?? "agent_error",

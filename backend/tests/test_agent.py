@@ -2897,6 +2897,7 @@ class ContextOverflowChatGenerator:
         model: str | None = None,
         stream: bool = False,
         on_text_delta: Any = None,
+        on_reasoning_delta: Any = None,
     ) -> Any:
         del tools, model, stream
         self.requests.append([dict(message) for message in messages])
