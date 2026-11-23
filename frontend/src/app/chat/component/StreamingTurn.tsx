@@ -112,10 +112,6 @@ export const StreamingTurn = memo(function StreamingTurn({
                     <ThinkingBlock
                       text={segment.reasoning}
                       tokens={segment.reasoningTokens}
-                      defaultOpen={
-                        stream.status === "running" &&
-                        segment.index === visibleSegments.at(-1)?.index
-                      }
                     />
                     {segment.text.trim().length > 0 ? (
                       <div className="chat-turn__bubble">

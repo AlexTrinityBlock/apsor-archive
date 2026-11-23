@@ -152,11 +152,7 @@ export function AssistantEntry({
         </div>
       ) : null}
 
-      <ThinkingBlock
-        text={meta.reasoning}
-        tokens={meta.reasoningTokens}
-        defaultOpen={false}
-      />
+      <ThinkingBlock text={meta.reasoning} tokens={meta.reasoningTokens} />
 
       {body}
 
