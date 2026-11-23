@@ -17,12 +17,13 @@ from app.module.knowledge.domain.vision_prompt_domain import (
 )
 from app.module.knowledge.exception.domain_error import VisionExtractionError
 from app.module.knowledge.protocol.vision_extractor_protocol import VisionDocument
-from tests.helpers import create_text
+from tests.helpers import build_pptx_deck, create_text
 
 # A 1x1 blue PNG; enough to exercise the image extension and shared original bytes.
 BLUE_PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 )
+PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
 DESCRIPTION = "A white receipt on a blue table with a red square."
 TABLE = "| Item | Price |\n|---|---|\n| Widget | 42 |"
@@ -363,6 +364,47 @@ def test_reingest_failure_and_startup_recovery_preserve_source_bytes(
     assert after_recovery.status_code == 200
     assert after_recovery.json()["is_current"] is True
     assert client.get(f"/api/v1/files/{source_id}/content").content == BLUE_PNG
+
+
+def test_reingest_accepts_pptx_and_reuses_the_source(
+    client: TestClient,
+) -> None:
+    """PPTX is vision-eligible: re-ingest publishes a new version with media vision."""
+    client.app.state.vision_extractor = FakeVisionExtractor()
+    payload = build_pptx_deck()
+    uploaded = client.post(
+        "/api/v1/files",
+        data={"path": "/reingest/deck.pptx"},
+        files={"file": ("deck.pptx", payload, PPTX_MIME)},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    source = uploaded.json()
+    source_id = int(source["id"])
+    assert source["document_type"] == "pptx"
+    assert source["vision_prompt_mode"] is None
+
+    worker = _wire_worker(client)
+    enqueued = _enqueue(client, source_id, 1)
+    assert enqueued.status_code == 202, enqueued.text
+    job = enqueued.json()
+    assert job["source_kind"] == "reingest"
+    assert job["source_file_id"] == source_id
+
+    assert client.portal is not None
+    assert client.portal.call(worker.process_job, job["id"]) is not None
+    state = client.get(f"/api/v1/files/ingest-jobs/{job['id']}").json()
+    assert state["status"] == "ready"
+    new_file_id = int(state["file_id"])
+    assert new_file_id != source_id
+
+    new_file = client.get(f"/api/v1/files/{new_file_id}").json()
+    assert new_file["version"] == 2
+    assert new_file["is_current"] is True
+    assert new_file["vision_prompt_mode"] == "image"
+    assert new_file["vision_prompt_sha256"]
+    assert new_file["extraction_method"] == "mixed"
+    assert client.get(f"/api/v1/files/{source_id}").json()["is_current"] is False
+    assert client.get(f"/api/v1/files/{source_id}/content").content == payload
 
 
 def test_reingest_rejects_invalid_sources(

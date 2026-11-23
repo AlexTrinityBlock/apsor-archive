@@ -16,6 +16,7 @@ import type { FileSchema } from "../../generated-apis-types/schemas";
 export type ViewerKind =
   | "pdf"
   | "docx"
+  | "pptx"
   | "image"
   | "markdown"
   | "json"
@@ -126,6 +127,13 @@ export function classifyFile(
     return "docx";
   }
   if (
+    mime ===
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    extension === ".pptx"
+  ) {
+    return "pptx";
+  }
+  if (
     mime.startsWith("image/") ||
     [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"].includes(extension)
   ) {
@@ -161,6 +169,8 @@ export function kindLabel(kind: ViewerKind, t: Translate): string {
       return t("library.viewer.kind.pdf");
     case "docx":
       return t("library.viewer.kind.docx");
+    case "pptx":
+      return t("library.viewer.kind.pptx");
     case "image":
       return t("library.viewer.kind.image");
     case "markdown":

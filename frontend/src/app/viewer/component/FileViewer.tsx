@@ -20,6 +20,9 @@ const PdfView = lazy(() =>
 const DocxView = lazy(() =>
   import("./DocxView").then((module) => ({ default: module.DocxView })),
 );
+const PptxView = lazy(() =>
+  import("./PptxView").then((module) => ({ default: module.PptxView })),
+);
 const ImageView = lazy(() =>
   import("./ImageView").then((module) => ({ default: module.ImageView })),
 );
@@ -100,6 +103,16 @@ function rendererFor(file: FileSchema): ReactNode {
           totalChunks={file.total_chunks}
         />
       );
+    case "pptx":
+      return (
+        <PptxView
+          key={file.id}
+          fileId={file.id}
+          fileUrl={contentUrl}
+          fileName={file.file_name}
+          totalChunks={file.total_chunks}
+        />
+      );
     case "image":
       return (
         <ImageView
@@ -138,7 +151,7 @@ interface FileRendererProps {
 /**
  * The reusable body of a file preview: cited chunk plus the actual renderer.
  * Both the Library preview modal and the Chat inspector use this component, so
- * PDF/DOCX/spreadsheet/image/text behavior has one implementation.
+ * PDF/DOCX/PPTX/spreadsheet/image/text behavior has one implementation.
  */
 export function FileRenderer({ file, chunk = null }: FileRendererProps) {
   const { t } = useI18n();

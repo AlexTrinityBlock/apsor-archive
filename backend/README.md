@@ -110,8 +110,9 @@ data-directory backup. If `APSOR_R2_BUCKET` is absent from the host shell, pass
 ### Supported file types
 
 The upload allowlist covers Markdown, plain text, CSV, JSON, log, PDF, DOCX,
-spreadsheet, and image files. The spreadsheet formats are `.xlsx`, `.xls`,
-`.xlsm`, and `.ods`.
+PPTX, spreadsheet, and image files. The spreadsheet formats are `.xlsx`, `.xls`,
+`.xlsm`, and `.ods`; presentations must be OOXML `.pptx`, and legacy binary
+`.ppt` stays unsupported.
 
 Spreadsheets are extracted as text, never through the vision provider. Each
 worksheet becomes a GitHub-Flavored Markdown table under a
@@ -160,7 +161,8 @@ for the same account is `409 ingest_job_conflict`; an ineligible retry is
 so another account's job id resolves as not found.
 
 `POST /api/v1/files/{file_id}/reingest` accepts `{expected_version}` and queues
-a forced vision pass for a current image, PDF, or DOCX with a stored original.
+a forced vision pass for a current image, PDF, DOCX, or PPTX with a stored
+original.
 The job keeps `storage_key = NULL` and `storage_backend = NULL` and reads the
 source original through the same owner-scoped file service. It stages a new
 file version and only publishes it after extraction and indexing succeed; the
@@ -262,9 +264,9 @@ ranges and the overlap rule; request validation failures map to
 `English`, `Traditional Chinese`, and `Japanese`; the stored value is never
 localized. It controls only the visual description, caption, title, summary, and
 tags. OCR text and table cell text stay verbatim in the source language and are
-never translated. Standalone images and DOCX embedded images use image mode: a
-complete visual description, GitHub-Flavored Markdown tables, and every visible
-non-table text string in reading order. Scanned PDF pages use document-page
+never translated. Standalone images and DOCX/PPTX embedded images use image
+mode: a complete visual description, GitHub-Flavored Markdown tables, and every
+visible non-table text string in reading order. Scanned PDF pages use document-page
 mode: OCR plus tables plus a brief layout note. Tables use GitHub-Flavored
 Markdown, a merged cell repeats its value in every covered cell, and complex
 `rowspan`/`colspan` is a documented limitation. A saved language applies only to
@@ -304,8 +306,8 @@ passes the exact system prompt to the extractor. Every vision-extracted file
 records `vision_prompt_sha256`, `vision_prompt_mode`, and
 `vision_description_language`; text, filename-fallback, and legacy rows keep
 `NULL`. Copy operations clone the fingerprint fields; move and rename keep the
-same row. A DOCX re-ingest with no embedded images keeps a text-only result and
-records no fingerprint.
+same row. A DOCX or PPTX re-ingest with no embedded images keeps a text-only
+result and records no fingerprint.
 
 ## Agent conversations
 
@@ -1011,8 +1013,8 @@ If a record claims an original but `/content` returns
 
 The frontend opens files in the File Library preview modal and memories in the
 memory reader; legacy `/viewer/file/:fileId` and `/viewer/memory/:memoryId`
-links redirect there. PDF, DOCX, image, and text engines are lazy-loaded and
-never execute uploaded scripts. Images are served through the normal file
+links redirect there. PDF, DOCX, PPTX, image, and text engines are lazy-loaded
+and never execute uploaded scripts. Images are served through the normal file
 content endpoint.
 PDF.js CMaps and standard fonts are copied into `frontend/public/pdfjs` by
 `frontend/scripts/copy-pdfjs-assets.mjs`, then emitted into

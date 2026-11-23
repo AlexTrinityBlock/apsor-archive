@@ -7,6 +7,7 @@ export const INGEST_STAGE_UNITS = [
   "sheet",
   "paragraph",
   "image",
+  "slide",
 ] as const;
 
 export type IngestStageUnit = (typeof INGEST_STAGE_UNITS)[number];

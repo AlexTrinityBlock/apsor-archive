@@ -25,7 +25,7 @@ from app.module.knowledge.domain.spreadsheet_domain import (
     render_spreadsheet,
 )
 from app.module.knowledge.service.spreadsheet_extractor import extract_spreadsheet_text
-from tests.helpers import create_text
+from tests.helpers import build_pptx_deck, create_text
 
 # A 1x1 blue PNG; enough to exercise the image extension and original storage.
 BLUE_PNG = base64.b64decode(
@@ -33,6 +33,7 @@ BLUE_PNG = base64.b64decode(
 )
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 ODS_MIME = "application/vnd.oasis.opendocument.spreadsheet"
+PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
 
 def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
@@ -1127,6 +1128,114 @@ def test_spreadsheet_ods_upload_extracts_table(client: TestClient) -> None:
     )
     assert search.status_code == 200, search.text
     assert file_id in {item["file_id"] for item in search.json()["file_results"]}
+
+
+def test_pptx_upload_extracts_slides_tables_and_notes(client: TestClient) -> None:
+    """A real pptx upload indexes slide markers, table cells, and speaker notes."""
+    payload = build_pptx_deck()
+
+    uploaded = client.post(
+        "/api/v1/files",
+        data={"path": "/workshop/quarterly-review.pptx"},
+        files={"file": ("quarterly-review.pptx", payload, PPTX_MIME)},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    file = uploaded.json()
+    file_id = int(file["id"])
+    assert file["extension"] == ".pptx"
+    assert file["mime_type"] == PPTX_MIME
+    assert file["document_type"] == "pptx"
+    assert file["extraction_method"] == "text"
+    assert int(file["total_chunks"]) >= 1
+    assert file["has_original"] is True
+
+    chunk_window = client.get(
+        f"/api/v1/files/{file_id}/chunks/1",
+        params={"chunk_range": 25},
+    )
+    assert chunk_window.status_code == 200, chunk_window.text
+    extracted_text = "\n".join(
+        chunk["content"] for chunk in chunk_window.json()["chunks"]
+    )
+    assert "[Slide 1]" in extracted_text
+    assert "[Slide 2]" in extracted_text
+    assert "Quarterly review of the workshop budget" in extracted_text
+    assert "Item | Qty" in extracted_text
+    assert "Bearing | 12" in extracted_text
+    assert "Mention the bearing replacement timeline." in extracted_text
+
+    search = client.get(
+        "/api/v1/search",
+        params={"query": "bearing", "result_number": 5},
+    )
+    assert search.status_code == 200, search.text
+    assert file_id in {item["file_id"] for item in search.json()["file_results"]}
+
+    original = client.get(f"/api/v1/files/{file_id}/content")
+    assert original.status_code == 200
+    assert original.content == payload
+    assert original.headers["content-type"] == PPTX_MIME
+
+
+def test_pptx_allowed_extension_and_legacy_ppt_rejection(client: TestClient) -> None:
+    """PPTX is an allowed upload/job type; a legacy binary .ppt is not."""
+    from app.module.knowledge.service.file_service import ALLOWED_EXTENSIONS
+
+    assert ".pptx" in ALLOWED_EXTENSIONS
+    assert ".ppt" not in ALLOWED_EXTENSIONS
+
+    payload = build_pptx_deck()
+    worker = client.app.state.ingest_worker
+
+    # The job-enqueue path stores the guessed OOXML MIME on the job and file.
+    queued = client.post(
+        "/api/v1/files/async",
+        data={"path": "/workshop/queued-deck.pptx"},
+        files={"file": ("queued-deck.pptx", payload, PPTX_MIME)},
+    )
+    assert queued.status_code == 202, queued.text
+    job = queued.json()
+    assert job["mime_type"] == PPTX_MIME
+    assert client.portal is not None
+    assert client.portal.call(worker.process_job, job["id"]) is not None
+    state = client.get(f"/api/v1/files/ingest-jobs/{job['id']}").json()
+    assert state["status"] == "ready"
+
+    queued_file = client.get(f"/api/v1/files/{int(state['file_id'])}")
+    assert queued_file.status_code == 200
+    assert queued_file.json()["mime_type"] == PPTX_MIME
+    assert queued_file.json()["document_type"] == "pptx"
+
+    # Omitting the browser content type still resolves the OOXML MIME from .pptx.
+    guessed = client.post(
+        "/api/v1/files",
+        data={"path": "/workshop/guessed-mime.pptx"},
+        files={"file": ("guessed-mime.pptx", payload)},
+    )
+    assert guessed.status_code == 201, guessed.text
+    assert guessed.json()["mime_type"] == PPTX_MIME
+
+    legacy = client.post(
+        "/api/v1/files",
+        data={"path": "/workshop/legacy.ppt"},
+        files={"file": ("legacy.ppt", b"legacy binary deck", "application/vnd.ms-powerpoint")},
+    )
+    assert legacy.status_code == 422, legacy.text
+    assert legacy.json()["error"] == "unsupported_file_type"
+
+    legacy_async = client.post(
+        "/api/v1/files/async",
+        data={"path": "/workshop/legacy-async.ppt"},
+        files={
+            "file": (
+                "legacy-async.ppt",
+                b"legacy binary deck",
+                "application/vnd.ms-powerpoint",
+            )
+        },
+    )
+    assert legacy_async.status_code == 422, legacy_async.text
+    assert legacy_async.json()["error"] == "unsupported_file_type"
 
 
 def test_spreadsheet_rejects_unsafe_or_unsupported_files(client: TestClient) -> None:

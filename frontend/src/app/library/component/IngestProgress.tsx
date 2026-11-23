@@ -48,6 +48,10 @@ const UNIT_KEYS: Record<IngestStageUnit, UnitKey> = {
     one: "library.ingest.unit.imageOne",
     other: "library.ingest.unit.imageOther",
   },
+  slide: {
+    one: "library.ingest.unit.slideOne",
+    other: "library.ingest.unit.slideOther",
+  },
 };
 
 function clampPercent(value: number): number {

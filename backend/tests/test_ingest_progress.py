@@ -29,6 +29,8 @@ from app.module.knowledge.domain.ingest_progress_domain import (
     PHASE_CHUNKING,
     PHASE_IDLE,
     PHASE_PARSING,
+    ProgressPhase,
+    ProgressSnapshot,
     ProgressTracker,
 )
 from app.module.knowledge.domain.vision_prompt_domain import (
@@ -50,6 +52,7 @@ from app.module.knowledge.service.file_service import FileService
 from app.module.knowledge.service.ingest_job_service import IngestWorker, _JobProgress
 from app.module.knowledge.service.ingest_progress_service import IngestProgressService
 from app.shared.time import utcnow
+from tests.helpers import build_pptx_deck
 
 
 class _FakeVisionExtractor:
@@ -260,6 +263,40 @@ def test_pdf_text_reports_one_page_per_advance(monkeypatch: pytest.MonkeyPatch) 
     assert snapshot.done == 3
     assert snapshot.total == 3
     assert snapshot.unit == "page"
+
+
+def test_pptx_text_reports_one_slide_per_advance() -> None:
+    """PPTX parsing begins as parsing/slide and ends at the slide count."""
+
+    class _RecordingTracker(ProgressTracker):
+        def __init__(self) -> None:
+            super().__init__()
+            self.begins: list[tuple[str, int, str]] = []
+
+        def begin(
+            self,
+            phase: ProgressPhase,
+            total: int,
+            unit: str,
+        ) -> ProgressSnapshot:
+            self.begins.append((phase, total, unit))
+            return super().begin(phase, total, unit)
+
+    tracker = _RecordingTracker()
+
+    text = FileService._pptx_text(build_pptx_deck(), tracker)
+
+    assert tracker.begins == [(PHASE_PARSING, 2, "slide")]
+    snapshot = tracker.snapshot()
+    assert snapshot.phase == PHASE_PARSING
+    assert snapshot.done == 2
+    assert snapshot.total == 2
+    assert snapshot.unit == "slide"
+    assert "[Slide 1]" in text
+    assert "[Slide 2]" in text
+    assert "Item | Qty" in text
+    assert "Bearing | 12" in text
+    assert "Mention the bearing replacement timeline." in text
 
 
 def test_pdf_vision_reports_after_each_page(monkeypatch: pytest.MonkeyPatch) -> None:

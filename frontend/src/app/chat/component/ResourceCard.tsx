@@ -68,6 +68,8 @@ function thumbnailBadge(kind: ViewerKind, title: string | null): string {
       return "PDF";
     case "docx":
       return "DOC";
+    case "pptx":
+      return "PPT";
     case "spreadsheet":
       return "XLS";
     case "image":

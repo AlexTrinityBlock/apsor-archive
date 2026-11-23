@@ -1,11 +1,11 @@
 """Editable vision/OCR prompt rules and rendering.
 
 The prompt text is global configuration, not archive content. It is stored as
-two independent templates: ``image`` covers standalone images and DOCX media,
-and ``document`` covers rendered PDF pages. Rendering replaces the optional
-``{language}`` placeholder with a JSON-quoted language name and hashes the exact
-system prompt that is sent to the provider. That hash is a per-file fingerprint,
-not a version history.
+two independent templates: ``image`` covers standalone images and DOCX/PPTX
+media, and ``document`` covers rendered PDF pages. Rendering replaces the
+optional ``{language}`` placeholder with a JSON-quoted language name and hashes
+the exact system prompt that is sent to the provider. That hash is a per-file
+fingerprint, not a version history.
 """
 
 import hashlib
@@ -40,7 +40,7 @@ VISION_SAFETY_WARNING_TERMS = (
 
 VisionPromptMode = Literal["image", "document"]
 
-VISION_IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".docx"})
+VISION_IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".docx", ".pptx"})
 VISION_DOCUMENT_EXTENSIONS = frozenset({".pdf"})
 
 VISION_IMAGE_PROMPT_TEMPLATE = """\
