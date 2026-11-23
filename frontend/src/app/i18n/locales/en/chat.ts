@@ -349,6 +349,9 @@ export const chat = {
     errorDetail: "Error detail",
     untitledResult: "Untitled result",
     arguments: "Arguments",
+    details: "Details",
+    detailsChart: "chart",
+    detailsResource: "resource",
   },
   citation: {
     fileTitle: "File: {title}",
