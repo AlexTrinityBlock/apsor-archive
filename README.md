@@ -73,7 +73,7 @@ result carries its source, chunk number, and time.
 > Status: v0.1.0 — file/memory archive, root plus per-user accounts, persistent
 > Pi-shaped agent with database-backed runtime limits, compaction, parallel
 > tools, SSE chat, a saved-question Q&A library, durable async ingestion,
-> dedicated PDF/DOCX/spreadsheet/image/text preview engines, a folder workspace,
+> dedicated PDF/DOCX/PPTX/spreadsheet/image/text preview engines, a folder workspace,
 > and a three-panel chat workspace.
 
 ## Highlights
@@ -143,8 +143,8 @@ result carries its source, chunk number, and time.
   `ingest_config`. Existing files keep their extraction until an explicit
   re-ingest creates a new file version.
 - **Documents choose their extractor.** PDFs try text first and fall back to
-  vision for scanned pages. DOCX, TXT, JSON, CSV, and logs use text, with AI
-  structured metadata; images use vision or the filename fallback. XLSX, XLS,
+  vision for scanned pages. DOCX, PPTX, TXT, JSON, CSV, and logs use text, with
+  AI structured metadata; images use vision or the filename fallback. XLSX, XLS,
   XLSM, and ODS workbooks are read sheet by sheet into Markdown tables, including
   dates, numbers, merged headers, hidden sheets, and formula fallbacks; they
   never enter the vision path.
@@ -622,7 +622,8 @@ invalid_vision_prompt`). The response also returns warnings when the prompt
 omits `verbatim`, `do not translate`, or GitHub-Flavored Markdown wording.
 
 `POST /api/v1/files/{file_id}/reingest` accepts `{expected_version}` and queues
-a forced vision pass for a current image, PDF, or DOCX with a stored original.
+a forced vision pass for a current image, PDF, DOCX, or PPTX with a stored
+original.
 The job creates a new file version only after extraction and indexing succeed;
 the previous version remains current and readable until then. The original
 bytes are shared, never copied or deleted by the job. If the path changes or a
@@ -806,9 +807,9 @@ browsing, and it is the fallback layout on narrow screens.
   the current folder surface. The upload uses the same intake path, extension
   allowlist, and server limits as the upload dialog: 10 MB per uploaded file
   and `.md`, `.markdown`, `.txt`, `.csv`, `.json`, `.log`, `.pdf`, `.docx`,
-  `.xlsx`, `.xls`, `.xlsm`, `.ods`, `.jpg`, `.jpeg`, `.png`, or `.webp`. The
-  dialog also supports a 2 MB plain-text creation. Dropped files are never
-  opened or executed.
+  `.pptx`, `.xlsx`, `.xls`, `.xlsm`, `.ods`, `.jpg`, `.jpeg`, `.png`, or
+  `.webp`. The dialog also supports a 2 MB plain-text creation. Dropped files
+  are never opened or executed.
 - **Move versus copy** is explicit. A normal drag onto a folder moves the file;
   holding Alt/Option while dropping copies it. Touch and keyboard users get
   separate **Move** and **Copy** actions instead of drag.
@@ -1263,6 +1264,7 @@ those surfaces, so old citations and bookmarks keep working.
 |---|---|
 | PDF | `react-pdf` 11 + bundled `pdfjs-dist` 6, page navigation, zoom, fit width, text layer |
 | DOCX | `docx-preview` inside a script-disabled sandbox |
+| PPTX | `pptxviewjs` Canvas renderer with slide navigation and keyboard arrows |
 | Spreadsheet (XLSX/XLS/XLSM/ODS) | lazy SheetJS grid with sheet tabs, hidden-sheet markers, sticky headers and a bounded 500 × 50 preview |
 | Image | native image with the standard file content endpoint |
 | Text / JSON / Markdown / CSV | archive sheet with wrap/copy/download, pretty JSON, GFM Markdown |
@@ -1375,6 +1377,9 @@ Document intake (`POST /api/v1/files`) supports:
   and run document-page vision: OCR, tables, and a brief layout note.
 - **DOCX** — python-docx paragraphs and tables; embedded images can provide a
   vision fallback with full image-mode descriptions and tables.
+- **PPTX** — python-pptx slide text frames, tables, grouped shapes, and speaker
+  notes; embedded `ppt/media` images can provide a vision fallback with full
+  image-mode descriptions and tables. Legacy binary `.ppt` is not supported.
 - **XLSX / XLS / XLSM / ODS** — python-calamine reads worksheets in order,
   including hidden sheets and merged cells, and renders each sheet as a
   GitHub-Flavored Markdown table. Cached formula values are preferred; for OOXML
@@ -1393,8 +1398,8 @@ Every vision-extracted file records `vision_prompt_sha256`,
 `vision_description_language`; legacy rows keep `null`, meaning the prompt was
 not recorded. A custom prompt applies only to future ingests. Use the re-ingest
 route above to create a new version from the stored original; text files are not
-eligible, and a DOCX with no embedded images keeps a text-only result without a
-prompt fingerprint.
+eligible, and a DOCX or PPTX with no embedded images keeps a text-only result
+without a prompt fingerprint.
 
 The same intake is available asynchronously through
 `POST /api/v1/files/async` and `POST /api/v1/files/text/async`; poll
@@ -1868,8 +1873,8 @@ docker/caddy/                   non-root reverse proxy for the tunnel
   over-long values. Uploads are capped at 10 MB and restricted to an extension
   allowlist.
 - HTML from files and memories is rendered as text through React. Agent Markdown
-  uses `skipHtml`; DOCX previews run in a script-disabled sandbox. The UI never
-  uses `dangerouslySetInnerHTML`.
+  uses `skipHtml`; DOCX previews run in a script-disabled sandbox and PPTX slides
+  render to a local canvas. The UI never uses `dangerouslySetInnerHTML`.
 - The DeepSeek key lives in `.secrets/deepseek.env` or the environment. It is
   never logged, returned, or committed. Keys saved from the Settings page are
   encrypted in PostgreSQL and returned only as a four-character hint.

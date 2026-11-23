@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Final, Literal, cast
 
 ProgressPhase = Literal["idle", "parsing", "chunking"]
-ProgressUnit = Literal["page", "chunk", "sheet", "paragraph", "image"]
+ProgressUnit = Literal["page", "chunk", "sheet", "paragraph", "image", "slide"]
 
 PHASE_IDLE: Final[ProgressPhase] = "idle"
 PHASE_PARSING: Final[ProgressPhase] = "parsing"
@@ -22,7 +22,7 @@ PROGRESS_PHASES: Final[frozenset[str]] = frozenset(
 )
 
 STAGE_UNITS: Final[frozenset[str]] = frozenset(
-    {"page", "chunk", "sheet", "paragraph", "image"}
+    {"page", "chunk", "sheet", "paragraph", "image", "slide"}
 )
 
 MAX_STAGE_UNIT_LENGTH: Final[int] = 16

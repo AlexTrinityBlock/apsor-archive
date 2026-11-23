@@ -1,29 +1,8 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentProps,
-} from "react";
-import { Document, Page, pdfjs } from "react-pdf";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?worker&url";
+import { useEffect, useRef, useState } from "react";
+import { Document, Page } from "react-pdf";
 
+import { PDF_THUMB_OPTIONS } from "../../viewer/pdfjs-config";
 import { fileContentUrl } from "../../viewer/component/viewer-utils";
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
-
-// The bubble only needs the first page as a still image. Range loading keeps
-// the request small for large PDFs, and both layers are disabled because the
-// thumbnail is not interactive.
-const PDF_THUMB_OPTIONS = {
-  cMapUrl: "/pdfjs/cmaps/",
-  cMapPacked: true,
-  standardFontDataUrl: "/pdfjs/standard_fonts/",
-  isEvalSupported: false,
-  withCredentials: true,
-  rangeChunkSize: 256 * 1024,
-  disableStream: true,
-  disableAutoFetch: true,
-} as unknown as NonNullable<ComponentProps<typeof Document>["options"]>;
 
 // The page is rendered at the bubble's visible width. PDF.js backs the canvas
 // with devicePixelRatio pixels, so the thumbnail stays sharp on high-density

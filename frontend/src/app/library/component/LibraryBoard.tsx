@@ -22,13 +22,13 @@ import { Icon } from "../../component/Icon";
 import { useI18n, type Translate } from "../../i18n";
 import {
   contextMenuTriggerFromKeyboard,
-  fileKindLabel,
   isContextMenuKey,
   isMarkdownFile,
   sameArchivePath,
   type FileOperationMode,
   type LibraryContextMenuTrigger,
 } from "./library-utils";
+import { FileThumb } from "./thumbnail/FileThumb";
 
 const INTERNAL_DRAG_MIME = "application/x-apsor-archive-file";
 
@@ -247,23 +247,22 @@ function FileCard({
         onKeyDown={handleContextMenuKeyDown}
         aria-label={t("library.a11y.openPreviewOf", { name: file.file_name })}
       >
-        <span className="library-file-card__top">
-          <span className="file-type-pill">{fileKindLabel(file.raw_file_path)}</span>
-          <Icon name="leaf" size={15} className="library-file-card__leaf" />
-        </span>
-        <span className="library-file-card__name">{file.file_name}</span>
-        <code className="library-file-card__path">{file.raw_file_path}</code>
-        <span className="library-file-card__meta">
-          <span>
-            {formatBytes(file.size_bytes)} ·{" "}
-            {t(
-              file.total_chunks === 1
-                ? "library.units.chunkOne"
-                : "library.units.chunkOther",
-              { count: formatNumber(file.total_chunks) },
-            )}
+        <FileThumb file={file} variant="card" />
+        <span className="library-file-card__body">
+          <span className="library-file-card__name">{file.file_name}</span>
+          <code className="library-file-card__path">{file.raw_file_path}</code>
+          <span className="library-file-card__meta">
+            <span>
+              {formatBytes(file.size_bytes)} ·{" "}
+              {t(
+                file.total_chunks === 1
+                  ? "library.units.chunkOne"
+                  : "library.units.chunkOther",
+                { count: formatNumber(file.total_chunks) },
+              )}
+            </span>
+            <time dateTime={file.update_time}>{formatDateTime(file.update_time)}</time>
           </span>
-          <time dateTime={file.update_time}>{formatDateTime(file.update_time)}</time>
         </span>
       </button>
 

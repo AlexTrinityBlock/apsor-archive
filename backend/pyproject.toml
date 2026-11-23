@@ -30,6 +30,7 @@ dependencies = [
     "python-calamine>=0.9.1",
     "python-docx>=1.2.0",
     "python-multipart>=0.0.20",
+    "python-pptx>=1.0.2",
     "redis>=6.4.0",
     "simpleeval>=1.0.8",
     "sqlalchemy[asyncio]>=2.0.44",
