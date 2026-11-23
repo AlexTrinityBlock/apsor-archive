@@ -387,8 +387,8 @@ and maps failures to `400 invalid_request`.
 `/library` is a folder-first board backed by `useReadPath`. The breadcrumb and
 folder rail change the `path` query parameter; folder and file cards open the
 next path or the existing reader. The `view` query parameter selects `board` or
-`list`; board is the desktop default, while list is the default below 761 px and
-remains the compact table fallback.
+`list`; board is the default at every width, while list remains the compact
+table fallback and is only used when selected explicitly.
 
 - **Board vs list** — the board is the default for folders and file cards; the
   list view keeps the compact metadata table. Both read the same `useReadPath`
@@ -444,7 +444,7 @@ remains the compact table fallback.
 - **Mobile** — drag is never the only path. Each folder card exposes its full
   action menu and each file card exposes **Move** and **Copy** actions, and the
   destination is chosen in the dialog. Selection mode and **Move selected** also
-  work in the mobile list view, which is the default below 761 px. The selection
+  work in the mobile list view selectable with `?view=list`. The selection
   checkbox is rendered only in selection mode, fixed at the card's top-left,
   and the list's select column stays first and sticky while the table scrolls.
   The layout must not overflow at 390 px.

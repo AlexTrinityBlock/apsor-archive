@@ -799,7 +799,7 @@ Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 `/library` is a folder-first workspace. A breadcrumb and folder rail describe
 where you are; the main area shows folder cards and file cards for the current
 path. The previous table remains available as a compact list view for dense
-browsing, and it is the fallback layout on narrow screens.
+browsing, selected explicitly with `view=list`.
 
 - **New folder** creates the requested folder and any missing ancestors. The
   operation is idempotent: repeating it returns the same folder with `201`.
