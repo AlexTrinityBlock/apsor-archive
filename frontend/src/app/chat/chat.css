@@ -1443,6 +1443,29 @@
   white-space: pre;
 }
 
+.chat-markdown .chat-code-block__bar {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 22px;
+  margin-bottom: 2px;
+}
+
+.chat-markdown .chat-code-block__copy.copy-button {
+  width: 22px;
+  height: 22px;
+  opacity: 0.6;
+}
+
+.chat-markdown .chat-code-block__copy.copy-button:hover:not(:disabled),
+.chat-markdown .chat-code-block__copy.copy-button:focus-visible {
+  opacity: 1;
+}
+
+.chat-markdown .chat-code-block__copy.copy-button:focus-visible {
+  outline: 2px solid var(--accent-seal);
+  outline-offset: 1px;
+}
+
 .chat-markdown hr {
   margin: 1em 0;
   border: 0;
