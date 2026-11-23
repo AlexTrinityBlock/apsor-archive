@@ -9,6 +9,11 @@ prompt-cache lineage stay byte-identical.
 
 Only limits the model can act on belong here. Attributes render in sorted key
 order, so identical inputs produce byte-identical output.
+
+The five optional context-budget values are the only mutable telemetry allowed:
+they tell the model how much of the effective input budget this exact request
+uses, how much remains, and how far away auto-compaction is. Identifiers,
+content, paths, usage counters, and tool names stay out.
 """
 
 from dataclasses import dataclass
@@ -25,6 +30,14 @@ class AgentStatus:
     max_expression_chars: int
     output_limit_tokens: int
     retry_notice: str | None = None
+    # Estimated tokens of the complete ordered request including this block, the
+    # effective input budget for the call, the tokens left before that budget,
+    # the effective auto-compaction threshold, and the tokens left before it.
+    context_used: int | None = None
+    context_limit: int | None = None
+    context_remaining: int | None = None
+    compaction_at: int | None = None
+    compaction_in: int | None = None
 
 
 def render_agent_status(status: AgentStatus) -> str:
@@ -36,6 +49,15 @@ def render_agent_status(status: AgentStatus) -> str:
     }
     if status.output_limit_tokens:
         values["output_limit_tokens"] = status.output_limit_tokens
+    for key, value in (
+        ("context_used", status.context_used),
+        ("context_limit", status.context_limit),
+        ("context_remaining", status.context_remaining),
+        ("compaction_at", status.compaction_at),
+        ("compaction_in", status.compaction_in),
+    ):
+        if value is not None:
+            values[key] = value
     opening = "<agent_status" + attributes(values, sort_keys=True)
     if not status.retry_notice:
         return f"{opening} />"

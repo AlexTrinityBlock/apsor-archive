@@ -36,6 +36,8 @@ from app.module.agent.domain.context_domain import (
 from app.module.agent.domain.xml_domain import TRUNCATION_MARKER, clip, xml_text
 
 MAX_SUMMARY_ITEM_CHARS = 280
+MAX_SUMMARY_ARGUMENT_CHARS = 80
+MAX_SUMMARY_ARGUMENT_VALUES = 3
 MAX_COMPACTION_CARRY_CHARS = 1_200
 MAX_SUMMARY_ITEMS = 40
 CHARS_PER_ESTIMATED_TOKEN = 3
@@ -64,6 +66,19 @@ _FORMATTER = Formatter()
 _CITATION_PATTERN = re.compile(
     r"\[(?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+)\]"
 )
+# Primary argument keys for a concrete tool line. The first key that exists
+# wins, so a tool line names what the call was actually asked to do. Unknown
+# tools fall back to the first scalar argument in sorted key order.
+_TOOL_ARGUMENT_KEYS: dict[str, tuple[str, ...]] = {
+    "web_search": ("query",),
+    "search_knowledge": ("query",),
+    "history_message": ("query", "id"),
+    "web_fetch": ("url",),
+    "read_memory": ("id", "title", "query"),
+    "read_file": ("id", "title", "query"),
+    "calculate": ("expression",),
+    "render_plot": ("title",),
+}
 
 
 def active_context_entries(
@@ -282,8 +297,8 @@ def build_compaction_draft(
         lines: list[str] = []
         if omitted > 0:
             lines.append(f"[{omitted} earlier entries omitted]")
-        lines.extend(_summary_line(entry) for entry in selected)
-        summary = "\n".join(line for line in lines if line)
+        lines.extend(_summary_lines(selected))
+        summary = "\n".join(lines)
         if not summary:
             summary = "No active conversation content to compact."
         summary = clip(summary, max_summary_chars)
@@ -378,8 +393,8 @@ def _bounded_summary(
         lines: list[str] = []
         if omitted > 0:
             lines.append(f"[{omitted} earlier entries omitted]")
-        lines.extend(_summary_line(entry) for entry in selected)
-        summary = "\n".join(line for line in lines if line)
+        lines.extend(_summary_lines(selected))
+        summary = "\n".join(lines)
         if count == 0:
             if not summary:
                 summary = "No active conversation content to compact."
@@ -393,7 +408,188 @@ def _bounded_summary(
     return [], ""
 
 
+def _summary_lines(entries: Sequence[TranscriptEntry]) -> list[str]:
+    """Render selected entries into compact summary lines.
+
+    Consecutive tool-result entries with the same tool, status, and error code
+    collapse into one counted line. Grouping happens here, on the selected
+    window, so a run split by the window boundary is merged only inside it.
+    Non-tool entries always break a run.
+    """
+    lines: list[str] = []
+    index = 0
+    while index < len(entries):
+        entry = entries[index]
+        data = entry.data if isinstance(entry.data, dict) else {}
+        if entry.kind == KIND_TOOL_RESULT:
+            end = index + 1
+            if _mergeable_tool_result(data):
+                key = _tool_group_key(data)
+                while end < len(entries):
+                    candidate = entries[end]
+                    candidate_data = (
+                        candidate.data if isinstance(candidate.data, dict) else {}
+                    )
+                    if candidate.kind != KIND_TOOL_RESULT:
+                        break
+                    if not _mergeable_tool_result(candidate_data):
+                        break
+                    if _tool_group_key(candidate_data) != key:
+                        break
+                    end += 1
+            lines.append(_tool_line(data, entries[index:end]))
+            index = end
+            continue
+        line = _summary_line(entry)
+        if line:
+            lines.append(line)
+        index += 1
+    return lines
+
+
+def _mergeable_tool_result(data: dict[str, Any]) -> bool:
+    """Return whether a tool result may join an identical consecutive run.
+
+    A failed call stays individually visible and never joins a run.
+    """
+    if data.get("error_code"):
+        return False
+    return str(data.get("status") or "unknown") != "error"
+
+
+def _tool_group_key(data: dict[str, Any]) -> tuple[str, str, str]:
+    """Return the fields that must match for two tool results to merge."""
+    return (
+        str(data.get("tool") or "tool"),
+        str(data.get("status") or "unknown"),
+        str(data.get("error_code") or ""),
+    )
+
+
+def _tool_line(
+    data: dict[str, Any],
+    run: Sequence[TranscriptEntry],
+) -> str:
+    """Render one tool result, or one merged run of identical results."""
+    name = str(data.get("tool") or "tool")
+    status = str(data.get("status") or "unknown")
+    error_code = data.get("error_code")
+    label = f"Tool {name}"
+    if len(run) > 1:
+        label += f" ×{len(run)}"
+    if error_code:
+        return _clip_inline(
+            f"{label}: {status} — code={error_code}",
+            MAX_SUMMARY_ITEM_CHARS,
+        )
+    if status == "error":
+        return _clip_inline(f"{label}: {status}", MAX_SUMMARY_ITEM_CHARS)
+    values = _tool_argument_values(name, run)
+    if not values:
+        return _clip_inline(f"{label}: {status}", MAX_SUMMARY_ITEM_CHARS)
+    return _clip_inline(
+        f"{label}: {status} — {' | '.join(values)}",
+        MAX_SUMMARY_ITEM_CHARS,
+    )
+
+
+def _tool_argument_values(
+    name: str,
+    run: Sequence[TranscriptEntry],
+) -> list[str]:
+    """Return distinct concrete arguments from a merged run, capped.
+
+    Identical values are shown once; after three distinct values the line
+    reports how many more were folded away.
+    """
+    values: list[str] = []
+    seen: set[str] = set()
+    for entry in run:
+        data = entry.data if isinstance(entry.data, dict) else {}
+        value = _tool_argument_value(name, data)
+        if value is None or value in seen:
+            continue
+        seen.add(value)
+        values.append(value)
+    if len(values) > MAX_SUMMARY_ARGUMENT_VALUES:
+        extra = len(values) - MAX_SUMMARY_ARGUMENT_VALUES
+        return [*values[:MAX_SUMMARY_ARGUMENT_VALUES], f"+{extra} more"]
+    return values
+
+
+def _tool_argument_value(name: str, data: dict[str, Any]) -> str | None:
+    """Pick one bounded, concrete argument value for a tool line."""
+    arguments = data.get("arguments")
+    if not isinstance(arguments, dict):
+        return None
+    if name == "present_resource":
+        resource_type = _scalar_text(arguments.get("resource_type"))
+        resource_id = _scalar_text(arguments.get("resource_id"))
+        if resource_type and resource_id:
+            return f"{resource_type}#{resource_id}"
+        return resource_type or resource_id
+    if name == "save_memory":
+        title = _scalar_text(arguments.get("title"))
+        if title:
+            return _quote_argument(title)
+        content = arguments.get("content")
+        if isinstance(content, str):
+            first_line = next(
+                (line for line in content.splitlines() if line.strip()),
+                "",
+            )
+            text = _scalar_text(first_line)
+            if text:
+                return _quote_argument(text)
+        return None
+    keys = _TOOL_ARGUMENT_KEYS.get(name)
+    if keys is not None:
+        for key in keys:
+            value = _scalar_text(arguments.get(key))
+            if value is None:
+                continue
+            if key == "id":
+                return f"id={value}"
+            return _quote_argument(value)
+        return None
+    for key in sorted(key for key in arguments if isinstance(key, str)):
+        value = _scalar_text(arguments[key])
+        if value is not None:
+            return f"{key}={_quote_argument(value)}"
+    return None
+
+
+def _scalar_text(value: Any) -> str | None:
+    """Return a bounded one-line scalar, or ``None`` for unusable values."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return str(value)
+    if not isinstance(value, str):
+        return None
+    text = _one_line(value)
+    if not text:
+        return None
+    return _clip_inline(text, MAX_SUMMARY_ARGUMENT_CHARS)
+
+
+def _quote_argument(value: str) -> str:
+    return f'"{value}"'
+
+
+def _clip_inline(value: str, limit: int) -> str:
+    """Clip to a hard character budget without introducing a new line."""
+    if limit <= 0:
+        return ""
+    if len(value) <= limit:
+        return value
+    if limit == 1:
+        return "…"
+    return value[: limit - 1].rstrip() + "…"
+
+
 def _summary_line(entry: TranscriptEntry) -> str:
+    """Render one non-tool entry, or an empty string when it has no content."""
     data = entry.data if isinstance(entry.data, dict) else {}
     if entry.kind == KIND_USER:
         return f"User: {clip(_one_line(_user_text(entry)), MAX_SUMMARY_ITEM_CHARS)}"
@@ -405,13 +601,7 @@ def _summary_line(entry: TranscriptEntry) -> str:
         )
         citations = ",".join(sorted(set(_CITATION_PATTERN.findall(assistant_text))))
         suffix = f" citations={citations}" if citations else ""
-        return f"Assistant: {text}{suffix}" if text else "Assistant: (empty)"
-    if entry.kind == KIND_TOOL_RESULT:
-        name = str(data.get("tool") or "tool")
-        status = str(data.get("status") or "unknown")
-        error_code = data.get("error_code")
-        suffix = f" error={error_code}" if error_code else ""
-        return f"Tool {name}: {status}{suffix}"
+        return f"Assistant: {text}{suffix}" if text else ""
     if entry.kind == KIND_PAGE_CONTEXT:
         key = data.get("page_key")
         path = data.get("path")

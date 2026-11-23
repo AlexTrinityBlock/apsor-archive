@@ -2,6 +2,7 @@
 
 import json
 import re
+import xml.etree.ElementTree as ElementTree
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -11,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 
 from app.infrastructure.ai.deepseek_client import DeepSeekClient, _is_context_window_error
+from app.infrastructure.ai.model_catalog import chars_per_token_for
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
 from app.module.agent.domain.agent_domain import (
@@ -23,8 +25,16 @@ from app.module.agent.domain.agent_status_domain import (
 )
 from app.module.agent.domain.compaction_domain import estimate_provider_context_tokens
 from app.module.agent.domain.context_domain import _prefix_hash
-from app.module.agent.service.agent_service import _output_limit_text
-from app.module.agent.service.tool_registry import _web_fetch_footer
+from app.module.agent.service import agent_service as agent_service_module
+from app.module.agent.service.agent_service import (
+    _estimated_provider_request_tokens,
+    _output_limit_text,
+    _provider_messages,
+)
+from app.module.agent.service.tool_registry import (
+    WEB_RESULT_CONTENT_LIMIT,
+    _web_fetch_footer,
+)
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
     text_result,
@@ -73,8 +83,8 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v13"
-TOOLS_VERSION = "archive-tools-v13"
+PROMPT_VERSION = "archive-agent-v14"
+TOOLS_VERSION = "archive-tools-v14"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -113,6 +123,13 @@ def _context_messages(request: Any) -> list[dict[str, Any]]:
     return messages
 
 
+def _agent_status_attributes(request: Any) -> dict[str, str]:
+    """Parse the attributes of the trailing provider-only status block."""
+    content = request.messages[-1]["content"]
+    opening = content.split(">", 1)[0]
+    return dict(re.findall(r'([a-z_]+)="([^"]*)"', opening))
+
+
 def _agent_status_snapshot(*, retry_notice: str | None = None) -> AgentStatus:
     """Build a fixed status snapshot so two renders can be compared byte for byte."""
     return AgentStatus(
@@ -121,17 +138,30 @@ def _agent_status_snapshot(*, retry_notice: str | None = None) -> AgentStatus:
         max_expression_chars=300,
         output_limit_tokens=10_000,
         retry_notice=retry_notice,
+        context_used=42_000,
+        context_limit=1_000_000,
+        context_remaining=958_000,
+        compaction_at=75_000,
+        compaction_in=33_000,
     )
 
 
 class FakeWebResearchService:
     """Deterministic web service injected through ``app.state``."""
 
-    def __init__(self, fetch_document: str | None = None) -> None:
+    def __init__(
+        self,
+        fetch_document: str | None = None,
+        *,
+        search_results: list[WebSearchHit] | None = None,
+        search_truncated: bool = False,
+    ) -> None:
         self.retrieved_at = datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
         self.searches: list[dict[str, Any]] = []
         self.fetches: list[dict[str, Any]] = []
         self.fetch_document = DEFAULT_FETCH_DOCUMENT if fetch_document is None else fetch_document
+        self.search_results = search_results
+        self.search_truncated = search_truncated
 
     async def search(
         self,
@@ -156,22 +186,26 @@ class FakeWebResearchService:
         return WebSearchResponse(
             provider="tavily",
             query=query,
-            results=[
-                WebSearchHit(
-                    title="Tavily search guide",
-                    url="https://example.com/tavily-search",
-                    content="Tavily is a search API for agents.",
-                    score=0.93,
-                ),
-                WebSearchHit(
-                    title="Research notes",
-                    url="https://example.com/search-notes",
-                    content="Use web_fetch when the excerpt is insufficient.",
-                    score=0.71,
-                ),
-            ][:max_results],
+            results=(
+                self.search_results
+                if self.search_results is not None
+                else [
+                    WebSearchHit(
+                        title="Tavily search guide",
+                        url="https://example.com/tavily-search",
+                        content="Tavily is a search API for agents.",
+                        score=0.93,
+                    ),
+                    WebSearchHit(
+                        title="Research notes",
+                        url="https://example.com/search-notes",
+                        content="Use web_fetch when the excerpt is insufficient.",
+                        score=0.71,
+                    ),
+                ]
+            )[:max_results],
             elapsed_ms=3,
-            truncated=False,
+            truncated=self.search_truncated,
             cached=False,
             retrieved_at=self.retrieved_at,
         )
@@ -2676,6 +2710,175 @@ def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
     ]
 
 
+def _run_web_search(
+    client: TestClient,
+    hits: list[WebSearchHit],
+    *,
+    provider_truncated: bool,
+    call_id: str,
+) -> dict[str, Any]:
+    """Run one web_search tool call and return its persisted tool result."""
+    client.app.state.web_research_service = FakeWebResearchService(
+        search_results=hits,
+        search_truncated=provider_truncated,
+    )
+    client.app.state.agent_chat_generator = FakeChatGenerator(
+        [
+            tool_call_result(
+                "web_search",
+                {
+                    "query": "search hint probe",
+                    "objective": "Inspect the search hint.",
+                },
+                call_id=call_id,
+                usage=TOOL_USAGE,
+            ),
+            text_result("Search hint inspected.", usage=ANSWER_USAGE),
+        ]
+    )
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": f"Search hint {call_id}"},
+    )
+    assert conversation.status_code == 201, conversation.text
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation.json()['id']}/messages",
+        json={"content": "Check how the search result reports truncation."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    results = body["tool_results"]
+    assert len(results) == 1
+    assert results[0]["model"][0]["tool_call_id"] == call_id
+    return results[0]
+
+
+def _parse_web_search(xml: str) -> tuple[ElementTree.Element, str]:
+    """Parse the complete <web_search> block and return it with its raw text."""
+    start = xml.index("<web_search ")
+    end = xml.index("</web_search>") + len("</web_search>")
+    block = xml[start:end]
+    return ElementTree.fromstring(block), block
+
+
+def test_web_search_hint_reports_truncation_layers(client: TestClient) -> None:
+    """Every search result names clipping locally and points to web_fetch."""
+    long_content = "A & B <section> carries a long parameter note. " * 120
+    long_result = _run_web_search(
+        client,
+        [
+            WebSearchHit(
+                title="Cats & <dogs>",
+                url="https://example.com/long?a=1&b=2",
+                content=long_content,
+                score=0.9,
+            )
+        ],
+        provider_truncated=False,
+        call_id="call_long_excerpt",
+    )
+    long_xml = long_result["model"][0]["content"]
+    long_root, long_block = _parse_web_search(long_xml)
+    long_hit = long_root.find("result")
+    assert long_hit is not None
+    excerpt_chars = int(long_hit.attrib["excerpt_chars"])
+    assert long_hit.attrib["content_chars"] == str(len(long_content))
+    assert excerpt_chars <= WEB_RESULT_CONTENT_LIMIT
+    assert excerpt_chars < len(long_content)
+    assert long_hit.attrib["excerpt_truncated"] == "true"
+
+    long_hint = long_root.find("search_hint")
+    assert long_hint is not None
+    assert long_hint.attrib == {
+        "truncated": "true",
+        "excerpts_clipped": "true",
+        "provider_truncated": "false",
+        "excerpt_limit": str(WEB_RESULT_CONTENT_LIMIT),
+    }
+    assert long_hint.text is not None
+    assert "bounded excerpts" in long_hint.text
+    assert "web_fetch" in long_hint.text
+    assert "excerpt limit" in long_hint.text
+    # The hint is deterministic, follows the last result, and escapes untrusted
+    # title, URL, and content instead of injecting raw markup.
+    assert long_block.index("<search_hint") > long_block.rindex("<result")
+    assert long_block.endswith("</search_hint></web_search>")
+    assert "Cats &amp; &lt;dogs&gt;" in long_block
+    assert "?a=1&amp;b=2" in long_block
+    assert "&lt;section&gt;" in long_block
+    assert "A &amp; B" in long_block
+    assert "Cats & <dogs>" not in long_block
+    assert "?a=1&b=2" not in long_block
+    assert "<section>" not in long_block
+    # UI data semantics stay provider-only: the excerpt flag does not change the
+    # provider truncation flag.
+    assert long_result["data"]["truncated"] is False
+    assert long_result["data"]["excerpt_truncated"] is True
+
+    short_content = "Short and complete."
+    short_result = _run_web_search(
+        client,
+        [
+            WebSearchHit(
+                title="Short note",
+                url="https://example.com/short",
+                content=short_content,
+                score=0.5,
+            )
+        ],
+        provider_truncated=False,
+        call_id="call_short_excerpt",
+    )
+    short_root, _ = _parse_web_search(short_result["model"][0]["content"])
+    short_hit = short_root.find("result")
+    assert short_hit is not None
+    assert short_hit.attrib["content_chars"] == str(len(short_content))
+    assert short_hit.attrib["excerpt_chars"] == str(len(short_content))
+    assert short_hit.attrib["excerpt_truncated"] == "false"
+    short_hint = short_root.find("search_hint")
+    assert short_hint is not None
+    assert short_hint.attrib == {
+        "truncated": "false",
+        "excerpts_clipped": "false",
+        "provider_truncated": "false",
+        "excerpt_limit": str(WEB_RESULT_CONTENT_LIMIT),
+    }
+    assert short_hint.text is not None
+    assert "bounded excerpts" in short_hint.text
+    assert "web_fetch" in short_hint.text
+    assert "clipped" not in short_hint.text
+
+    provider_result = _run_web_search(
+        client,
+        [
+            WebSearchHit(
+                title="Provider page",
+                url="https://example.com/provider",
+                content=short_content,
+                score=0.4,
+            )
+        ],
+        provider_truncated=True,
+        call_id="call_provider_cap",
+    )
+    provider_root, _ = _parse_web_search(provider_result["model"][0]["content"])
+    provider_hint = provider_root.find("search_hint")
+    assert provider_hint is not None
+    assert provider_hint.attrib == {
+        "truncated": "true",
+        "excerpts_clipped": "false",
+        "provider_truncated": "true",
+        "excerpt_limit": str(WEB_RESULT_CONTENT_LIMIT),
+    }
+    assert provider_hint.text is not None
+    assert "provider capped" in provider_hint.text
+    assert "web_fetch" in provider_hint.text
+    assert provider_result["data"]["truncated"] is True
+    assert provider_result["data"]["excerpt_truncated"] is False
+
+
 class ContextOverflowChatGenerator:
     """Raise one context-overflow provider error, then answer normally."""
 
@@ -2822,12 +3025,33 @@ def test_agent_status_system_message_exposes_runtime_limits(
     first_block = fake.requests[0].messages[-1]
     assert first_block["role"] == "system"
     first_content = first_block["content"]
-    expected_block = (
-        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
-        'max_tool_result_chars="100000" output_limit_tokens="10000" />'
-    )
-    assert first_content == expected_block
+    first = _agent_status_attributes(fake.requests[0])
+    expected_keys = {
+        "max_expression_chars",
+        "max_page_context_chars",
+        "max_tool_result_chars",
+        "output_limit_tokens",
+        "context_used",
+        "context_limit",
+        "context_remaining",
+        "compaction_at",
+        "compaction_in",
+    }
+    assert set(first) == expected_keys
+    assert re.findall(r' ([a-z_]+)="', first_content) == sorted(expected_keys)
+
+    runtime = client.get("/api/v1/agent/settings").json()["config"]
+    context_limit = runtime["context_window_tokens"]
+    compaction_at = runtime["compaction_threshold_tokens"]
+    context_used = int(first["context_used"])
+    assert int(first["context_limit"]) == context_limit
+    assert int(first["compaction_at"]) == compaction_at
+    assert context_used > 0
+    assert int(first["context_remaining"]) == max(0, context_limit - context_used)
+    assert int(first["compaction_in"]) == max(0, compaction_at - context_used)
+
     assert "active_provider" not in first_content
+    assert "account_id" not in first_content
     assert "conversation_id" not in first_content
     assert "run_id" not in first_content
     assert "tool_count" not in first_content
@@ -2837,12 +3061,21 @@ def test_agent_status_system_message_exposes_runtime_limits(
     assert "context_window_tokens" not in first_content
     assert "max_parallel_tools" not in first_content
     assert "max_plot_traces" not in first_content
+    assert "path" not in first_content
     assert "usage" not in first_content
 
-    # A step without a retry notice renders the same minimal block.
+    # A step after a tool result sees more context, and every derived value
+    # stays consistent with the same effective budget.
     second_block = fake.requests[1].messages[-1]
     assert second_block["role"] == "system"
-    assert second_block["content"] == expected_block
+    second = _agent_status_attributes(fake.requests[1])
+    assert set(second) == expected_keys
+    second_used = int(second["context_used"])
+    assert second_used > context_used
+    assert int(second["context_limit"]) == context_limit
+    assert int(second["compaction_at"]) == compaction_at
+    assert int(second["context_remaining"]) == max(0, context_limit - second_used)
+    assert int(second["compaction_in"]) == max(0, compaction_at - second_used)
 
     # The frozen system message is unchanged and remains first.
     frozen_system = fake.requests[0].messages[0]
@@ -2873,8 +3106,11 @@ def test_agent_status_block_is_deterministic() -> None:
 
     assert first == second
     assert first == (
-        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
-        'max_tool_result_chars="100000" output_limit_tokens="10000" />'
+        '<agent_status compaction_at="75000" compaction_in="33000" '
+        'context_limit="1000000" context_remaining="958000" '
+        'context_used="42000" max_expression_chars="300" '
+        'max_page_context_chars="6000" max_tool_result_chars="100000" '
+        'output_limit_tokens="10000" />'
     )
     keys = re.findall(r' ([a-z_]+)="', first)
     assert keys == sorted(keys)
@@ -2885,15 +3121,18 @@ def test_agent_status_block_is_deterministic() -> None:
         _agent_status_snapshot(retry_notice=notice)
     )
     assert with_notice == (
-        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
-        'max_tool_result_chars="100000" output_limit_tokens="10000">\n'
+        '<agent_status compaction_at="75000" compaction_in="33000" '
+        'context_limit="1000000" context_remaining="958000" '
+        'context_used="42000" max_expression_chars="300" '
+        'max_page_context_chars="6000" max_tool_result_chars="100000" '
+        'output_limit_tokens="10000">\n'
         f"  {notice}\n"
         "</agent_status>"
     )
 
 
 def test_agent_status_block_omits_output_limit_when_unlimited() -> None:
-    """An unlimited output cap drops the attribute instead of rendering zero."""
+    """An unlimited output cap and absent telemetry drop their attributes."""
     unlimited = render_agent_status(
         AgentStatus(
             max_tool_result_chars=100_000,
@@ -2904,12 +3143,43 @@ def test_agent_status_block_omits_output_limit_when_unlimited() -> None:
     )
 
     assert "output_limit_tokens" not in unlimited
+    for key in (
+        "context_used",
+        "context_limit",
+        "context_remaining",
+        "compaction_at",
+        "compaction_in",
+    ):
+        assert key not in unlimited
     assert unlimited == (
         '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
         'max_tool_result_chars="100000" />'
     )
     keys = re.findall(r' ([a-z_]+)="', unlimited)
     assert keys == sorted(keys)
+
+    with_context = render_agent_status(
+        AgentStatus(
+            max_tool_result_chars=100_000,
+            max_page_context_chars=6_000,
+            max_expression_chars=300,
+            output_limit_tokens=10_000,
+            context_used=42_000,
+            context_limit=1_000_000,
+            context_remaining=958_000,
+            compaction_at=75_000,
+            compaction_in=33_000,
+        )
+    )
+    assert with_context == (
+        '<agent_status compaction_at="75000" compaction_in="33000" '
+        'context_limit="1000000" context_remaining="958000" '
+        'context_used="42000" max_expression_chars="300" '
+        'max_page_context_chars="6000" max_tool_result_chars="100000" '
+        'output_limit_tokens="10000" />'
+    )
+    context_keys = re.findall(r' ([a-z_]+)="', with_context)
+    assert context_keys == sorted(context_keys)
 
 
 def test_provider_message_order_is_absolute(client: TestClient) -> None:
@@ -2979,6 +3249,129 @@ def test_provider_message_order_is_absolute(client: TestClient) -> None:
     ).json()["entries"]
     assert body["answer"] == "Both answers are ready."
     assert "<agent_status" not in json.dumps(entries)
+
+
+def test_agent_status_is_last_in_the_exact_request_order(
+    client: TestClient,
+    settings: Settings,
+) -> None:
+    """The estimate and the provider request share one ordered message list."""
+    fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "calculate",
+                {"expression": "1 + 1"},
+                call_id="call_exact_order",
+            ),
+            text_result("The answer is 2."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Exact provider order"},
+    ).json()
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation['id']}/messages",
+        json={"content": "Add one and one."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+
+    assert len(fake.requests) == 2
+    first = fake.requests[0]
+    assert [message["role"] for message in first.messages] == [
+        "system",
+        "user",
+        "system",
+    ]
+    assert first.messages[0]["content"].startswith("# Identity")
+    assert "Add one and one." in first.messages[1]["content"]
+    assert first.messages[-1]["content"].startswith("<agent_status")
+    assert _context_messages(first) == first.messages[:-1]
+
+    second = fake.requests[1]
+    assert [message["role"] for message in second.messages] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "system",
+    ]
+    assert second.messages[2]["tool_calls"][0]["id"] == "call_exact_order"
+    assert second.messages[3]["tool_call_id"] == "call_exact_order"
+    assert second.messages[-1]["content"].startswith("<agent_status")
+    assert _context_messages(second) == second.messages[:-1]
+    status_blocks = [
+        message
+        for message in second.messages
+        if isinstance(message.get("content"), str)
+        and message["content"].startswith("<agent_status")
+    ]
+    assert len(status_blocks) == 1
+
+    # The rendered estimate is the estimate of exactly the request the provider
+    # saw, including the trailing block that carries the estimate.
+    assignment = client.get("/api/v1/model-assignments/me").json()
+    model = assignment["effective_chat_model"] or settings.deepseek_model
+    chars_per_token = chars_per_token_for(model)
+    for request in fake.requests:
+        attributes = _agent_status_attributes(request)
+        assert int(attributes["context_used"]) == estimate_provider_context_tokens(
+            ProviderContext(
+                system_message=request.messages[0],
+                tools=request.tools,
+                messages=request.messages[1:],
+                source_entry_ids=[],
+                cache_prefix_hash="",
+            ),
+            strip_image_data=True,
+            chars_per_token=chars_per_token,
+        )
+
+
+def test_agent_status_estimate_uses_the_exact_provider_order(
+    monkeypatch: Any,
+) -> None:
+    """The estimator is handed the same ordered list ``_provider_messages`` sends."""
+    context = ProviderContext(
+        system_message={"role": "system", "content": "# Identity\nYou are Apsor Archive."},
+        tools=[{"type": "function", "function": {"name": "calculate"}}],
+        messages=[
+            {"role": "user", "content": "first question"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"id": "call_1", "type": "function"}],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "tool output"},
+        ],
+        source_entry_ids=[1, 2, 3],
+        cache_prefix_hash="hash",
+    )
+    block = render_agent_status(_agent_status_snapshot())
+    captured: dict[str, ProviderContext] = {}
+    original = agent_service_module.estimate_provider_context_tokens
+
+    def recording(candidate: ProviderContext, **kwargs: Any) -> int:
+        captured["context"] = candidate
+        return original(candidate, **kwargs)
+
+    monkeypatch.setattr(
+        agent_service_module,
+        "estimate_provider_context_tokens",
+        recording,
+    )
+    _estimated_provider_request_tokens(context, block, chars_per_token=3.0)
+
+    estimated = captured["context"]
+    assert [estimated.system_message, *estimated.messages] == _provider_messages(
+        context,
+        block,
+    )
+    assert estimated.messages[-1] == {"role": "system", "content": block}
+    assert estimated.tools == context.tools
+    assert estimated.system_message == context.system_message
 
 
 def test_agent_status_block_does_not_change_cache_prefix_hash(

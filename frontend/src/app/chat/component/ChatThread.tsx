@@ -6,8 +6,6 @@ import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
 import { useI18n } from "../../i18n";
 import {
   assistantText,
-  readToolCalls,
-  readToolResultCallId,
   readToolResultInfo,
   readUserAttachments,
   userText,
@@ -15,6 +13,7 @@ import {
   type ResourceMeta,
   type ToolResultInfo,
 } from "../types";
+import { buildTimeline } from "../timeline";
 import { PageContextCard } from "../../agent/component/PageContextCard";
 import { isPageContextEntry } from "../../agent/page-context";
 import { AssistantEntry } from "./AssistantEntry";
@@ -86,6 +85,16 @@ function CopyEntryAction({ value }: { readonly value: string }) {
   );
 }
 
+function entryCopyValue(entry: AgentEntrySchema): string {
+  if (entry.kind === "pi.user") {
+    return userText(entry);
+  }
+  if (entry.kind === "pi.assistant") {
+    return assistantText(entry);
+  }
+  return "";
+}
+
 function ThreadEntry({
   entry,
   toolResults,
@@ -121,12 +130,7 @@ function ThreadEntry({
         onFork={onForkEntry}
       />
     ) : null;
-  let copyValue = "";
-  if (entry.kind === "pi.user") {
-    copyValue = userText(entry);
-  } else if (entry.kind === "pi.assistant") {
-    copyValue = assistantText(entry);
-  }
+  const copyValue = entryCopyValue(entry);
   const headerAction = forkAction ? (
     <span className="chat-entry__actions">{forkAction}</span>
   ) : null;
@@ -154,12 +158,16 @@ function ThreadEntry({
           selectedTraceId={selectedTraceId}
           onSelectTrace={onSelectTrace}
           onOpenCitation={onOpenCitation}
-          onOpenResource={onOpenResource}
         />
       );
     case "pi.tool-result":
       return (
-        <ToolResultCard entry={entry} onOpenResource={onOpenResource} />
+        <ToolResultCard
+          entry={entry}
+          selectedTraceId={selectedTraceId}
+          onSelectTrace={onSelectTrace}
+          onOpenResource={onOpenResource}
+        />
       );
     case "pi.compaction":
     case "pi.reset":
@@ -171,7 +179,11 @@ function ThreadEntry({
   }
 }
 
-/** The reading view for one transcript: turns, tool steps, and the method drawer. */
+function entryClassName(highlighted: boolean): string {
+  return highlighted ? "chat-entry is-highlighted" : "chat-entry";
+}
+
+/** The reading view for one transcript: turns, tool steps, and context boundaries. */
 export const ChatThread = memo(function ChatThread({
   entries,
   memoryTitles,
@@ -198,61 +210,98 @@ export const ChatThread = memo(function ChatThread({
     return result;
   }, [entries]);
 
-  // Linked results are already rendered inside their assistant tool chips.
-  const linkedResultIds = useMemo(() => {
-    const ids = new Set<number>();
-    for (const entry of entries) {
-      if (entry.kind !== "pi.assistant") {
-        continue;
-      }
-      for (const call of readToolCalls(entry)) {
-        if (call.id.length === 0) {
-          continue;
-        }
-        for (const resultEntry of entries) {
-          if (
-            resultEntry.kind === "pi.tool-result" &&
-            readToolResultCallId(resultEntry) === call.id
-          ) {
-            ids.add(resultEntry.id);
-          }
-        }
-      }
-    }
-    return ids;
-  }, [entries]);
-
-  const visible = entries.filter(
-    (entry) => !HIDDEN_KINDS.has(entry.kind) && !linkedResultIds.has(entry.id),
-  );
+  // Every assistant step and its immediately following tool results stay in
+  // transcript order. Nothing linked is folded out of the reading view.
+  const timeline = useMemo(() => buildTimeline(entries), [entries]);
 
   return (
     <div className="chat-thread">
       <div className="chat-thread__list">
-        {visible.map((entry) => (
-          <div
-            className={
-              entry.id === highlightedEntryId
-                ? "chat-entry is-highlighted"
-                : "chat-entry"
+        {timeline.map((item) => {
+          if (item.kind === "entry") {
+            if (HIDDEN_KINDS.has(item.entry.kind)) {
+              return null;
             }
-            id={`entry-${entry.id}`}
-            key={entry.id}
-          >
-            <ThreadEntry
-              entry={entry}
-              toolResults={toolResults}
-              memoryTitles={memoryTitles}
-              onForkEntry={onForkEntry}
-              forkingEntryId={forkingEntryId}
-              forkDisabled={forkDisabled}
-              selectedTraceId={selectedTraceId}
-              onSelectTrace={onSelectTrace}
-              onOpenCitation={onOpenCitation}
-              onOpenResource={onOpenResource}
-            />
-          </div>
-        ))}
+            return (
+              <div
+                className={entryClassName(item.entry.id === highlightedEntryId)}
+                id={`entry-${item.entry.id}`}
+                key={item.entry.id}
+              >
+                <ThreadEntry
+                  entry={item.entry}
+                  toolResults={toolResults}
+                  memoryTitles={memoryTitles}
+                  onForkEntry={onForkEntry}
+                  forkingEntryId={forkingEntryId}
+                  forkDisabled={forkDisabled}
+                  selectedTraceId={selectedTraceId}
+                  onSelectTrace={onSelectTrace}
+                  onOpenCitation={onOpenCitation}
+                  onOpenResource={onOpenResource}
+                />
+              </div>
+            );
+          }
+
+          const forkAction =
+            onForkEntry !== undefined ? (
+              <ForkEntryAction
+                entryId={item.entry.id}
+                disabled={
+                  forkDisabled === true || forkingEntryId === item.entry.id
+                }
+                forking={forkingEntryId === item.entry.id}
+                onFork={onForkEntry}
+              />
+            ) : null;
+          const copyValue = item.text;
+          const headerAction = forkAction ? (
+            <span className="chat-entry__actions">{forkAction}</span>
+          ) : null;
+          const copyAction =
+            copyValue.trim().length > 0 ? (
+              <CopyEntryAction value={copyValue} />
+            ) : null;
+
+          return (
+            <div className="chat-timeline__turn" key={`assistant-${item.entry.id}`}>
+              <div
+                className={entryClassName(item.entry.id === highlightedEntryId)}
+                id={`entry-${item.entry.id}`}
+              >
+                <AssistantEntry
+                  entry={item.entry}
+                  toolResults={toolResults}
+                  memoryTitles={memoryTitles}
+                  action={headerAction}
+                  copyAction={copyAction}
+                  hasToolStep={item.results.length > 0}
+                  selectedTraceId={selectedTraceId}
+                  onSelectTrace={onSelectTrace}
+                  onOpenCitation={onOpenCitation}
+                />
+              </div>
+              {item.results.map((result) => (
+                <div
+                  className={entryClassName(
+                    result.entry.id === highlightedEntryId,
+                  )}
+                  id={`entry-${result.entry.id}`}
+                  key={result.entry.id}
+                >
+                  <ToolResultCard
+                    entry={result.entry}
+                    step={item.step}
+                    selectedTraceId={selectedTraceId}
+                    onSelectTrace={onSelectTrace}
+                    onOpenResource={onOpenResource}
+                  />
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
