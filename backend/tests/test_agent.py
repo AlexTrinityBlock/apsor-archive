@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 
 from app.infrastructure.ai.deepseek_client import DeepSeekClient, _is_context_window_error
+from app.infrastructure.ai.model_catalog import chars_per_token_for
 from app.infrastructure.config.settings import Settings
 from app.main import create_app
 from app.module.agent.domain.agent_domain import (
@@ -24,7 +25,12 @@ from app.module.agent.domain.agent_status_domain import (
 )
 from app.module.agent.domain.compaction_domain import estimate_provider_context_tokens
 from app.module.agent.domain.context_domain import _prefix_hash
-from app.module.agent.service.agent_service import _output_limit_text
+from app.module.agent.service import agent_service as agent_service_module
+from app.module.agent.service.agent_service import (
+    _estimated_provider_request_tokens,
+    _output_limit_text,
+    _provider_messages,
+)
 from app.module.agent.service.tool_registry import (
     WEB_RESULT_CONTENT_LIMIT,
     _web_fetch_footer,
@@ -117,6 +123,13 @@ def _context_messages(request: Any) -> list[dict[str, Any]]:
     return messages
 
 
+def _agent_status_attributes(request: Any) -> dict[str, str]:
+    """Parse the attributes of the trailing provider-only status block."""
+    content = request.messages[-1]["content"]
+    opening = content.split(">", 1)[0]
+    return dict(re.findall(r'([a-z_]+)="([^"]*)"', opening))
+
+
 def _agent_status_snapshot(*, retry_notice: str | None = None) -> AgentStatus:
     """Build a fixed status snapshot so two renders can be compared byte for byte."""
     return AgentStatus(
@@ -125,6 +138,11 @@ def _agent_status_snapshot(*, retry_notice: str | None = None) -> AgentStatus:
         max_expression_chars=300,
         output_limit_tokens=10_000,
         retry_notice=retry_notice,
+        context_used=42_000,
+        context_limit=1_000_000,
+        context_remaining=958_000,
+        compaction_at=75_000,
+        compaction_in=33_000,
     )
 
 
@@ -3007,12 +3025,33 @@ def test_agent_status_system_message_exposes_runtime_limits(
     first_block = fake.requests[0].messages[-1]
     assert first_block["role"] == "system"
     first_content = first_block["content"]
-    expected_block = (
-        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
-        'max_tool_result_chars="100000" output_limit_tokens="10000" />'
-    )
-    assert first_content == expected_block
+    first = _agent_status_attributes(fake.requests[0])
+    expected_keys = {
+        "max_expression_chars",
+        "max_page_context_chars",
+        "max_tool_result_chars",
+        "output_limit_tokens",
+        "context_used",
+        "context_limit",
+        "context_remaining",
+        "compaction_at",
+        "compaction_in",
+    }
+    assert set(first) == expected_keys
+    assert re.findall(r' ([a-z_]+)="', first_content) == sorted(expected_keys)
+
+    runtime = client.get("/api/v1/agent/settings").json()["config"]
+    context_limit = runtime["context_window_tokens"]
+    compaction_at = runtime["compaction_threshold_tokens"]
+    context_used = int(first["context_used"])
+    assert int(first["context_limit"]) == context_limit
+    assert int(first["compaction_at"]) == compaction_at
+    assert context_used > 0
+    assert int(first["context_remaining"]) == max(0, context_limit - context_used)
+    assert int(first["compaction_in"]) == max(0, compaction_at - context_used)
+
     assert "active_provider" not in first_content
+    assert "account_id" not in first_content
     assert "conversation_id" not in first_content
     assert "run_id" not in first_content
     assert "tool_count" not in first_content
@@ -3022,12 +3061,21 @@ def test_agent_status_system_message_exposes_runtime_limits(
     assert "context_window_tokens" not in first_content
     assert "max_parallel_tools" not in first_content
     assert "max_plot_traces" not in first_content
+    assert "path" not in first_content
     assert "usage" not in first_content
 
-    # A step without a retry notice renders the same minimal block.
+    # A step after a tool result sees more context, and every derived value
+    # stays consistent with the same effective budget.
     second_block = fake.requests[1].messages[-1]
     assert second_block["role"] == "system"
-    assert second_block["content"] == expected_block
+    second = _agent_status_attributes(fake.requests[1])
+    assert set(second) == expected_keys
+    second_used = int(second["context_used"])
+    assert second_used > context_used
+    assert int(second["context_limit"]) == context_limit
+    assert int(second["compaction_at"]) == compaction_at
+    assert int(second["context_remaining"]) == max(0, context_limit - second_used)
+    assert int(second["compaction_in"]) == max(0, compaction_at - second_used)
 
     # The frozen system message is unchanged and remains first.
     frozen_system = fake.requests[0].messages[0]
@@ -3058,8 +3106,11 @@ def test_agent_status_block_is_deterministic() -> None:
 
     assert first == second
     assert first == (
-        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
-        'max_tool_result_chars="100000" output_limit_tokens="10000" />'
+        '<agent_status compaction_at="75000" compaction_in="33000" '
+        'context_limit="1000000" context_remaining="958000" '
+        'context_used="42000" max_expression_chars="300" '
+        'max_page_context_chars="6000" max_tool_result_chars="100000" '
+        'output_limit_tokens="10000" />'
     )
     keys = re.findall(r' ([a-z_]+)="', first)
     assert keys == sorted(keys)
@@ -3070,15 +3121,18 @@ def test_agent_status_block_is_deterministic() -> None:
         _agent_status_snapshot(retry_notice=notice)
     )
     assert with_notice == (
-        '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
-        'max_tool_result_chars="100000" output_limit_tokens="10000">\n'
+        '<agent_status compaction_at="75000" compaction_in="33000" '
+        'context_limit="1000000" context_remaining="958000" '
+        'context_used="42000" max_expression_chars="300" '
+        'max_page_context_chars="6000" max_tool_result_chars="100000" '
+        'output_limit_tokens="10000">\n'
         f"  {notice}\n"
         "</agent_status>"
     )
 
 
 def test_agent_status_block_omits_output_limit_when_unlimited() -> None:
-    """An unlimited output cap drops the attribute instead of rendering zero."""
+    """An unlimited output cap and absent telemetry drop their attributes."""
     unlimited = render_agent_status(
         AgentStatus(
             max_tool_result_chars=100_000,
@@ -3089,12 +3143,43 @@ def test_agent_status_block_omits_output_limit_when_unlimited() -> None:
     )
 
     assert "output_limit_tokens" not in unlimited
+    for key in (
+        "context_used",
+        "context_limit",
+        "context_remaining",
+        "compaction_at",
+        "compaction_in",
+    ):
+        assert key not in unlimited
     assert unlimited == (
         '<agent_status max_expression_chars="300" max_page_context_chars="6000" '
         'max_tool_result_chars="100000" />'
     )
     keys = re.findall(r' ([a-z_]+)="', unlimited)
     assert keys == sorted(keys)
+
+    with_context = render_agent_status(
+        AgentStatus(
+            max_tool_result_chars=100_000,
+            max_page_context_chars=6_000,
+            max_expression_chars=300,
+            output_limit_tokens=10_000,
+            context_used=42_000,
+            context_limit=1_000_000,
+            context_remaining=958_000,
+            compaction_at=75_000,
+            compaction_in=33_000,
+        )
+    )
+    assert with_context == (
+        '<agent_status compaction_at="75000" compaction_in="33000" '
+        'context_limit="1000000" context_remaining="958000" '
+        'context_used="42000" max_expression_chars="300" '
+        'max_page_context_chars="6000" max_tool_result_chars="100000" '
+        'output_limit_tokens="10000" />'
+    )
+    context_keys = re.findall(r' ([a-z_]+)="', with_context)
+    assert context_keys == sorted(context_keys)
 
 
 def test_provider_message_order_is_absolute(client: TestClient) -> None:
@@ -3164,6 +3249,129 @@ def test_provider_message_order_is_absolute(client: TestClient) -> None:
     ).json()["entries"]
     assert body["answer"] == "Both answers are ready."
     assert "<agent_status" not in json.dumps(entries)
+
+
+def test_agent_status_is_last_in_the_exact_request_order(
+    client: TestClient,
+    settings: Settings,
+) -> None:
+    """The estimate and the provider request share one ordered message list."""
+    fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "calculate",
+                {"expression": "1 + 1"},
+                call_id="call_exact_order",
+            ),
+            text_result("The answer is 2."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Exact provider order"},
+    ).json()
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation['id']}/messages",
+        json={"content": "Add one and one."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+
+    assert len(fake.requests) == 2
+    first = fake.requests[0]
+    assert [message["role"] for message in first.messages] == [
+        "system",
+        "user",
+        "system",
+    ]
+    assert first.messages[0]["content"].startswith("# Identity")
+    assert "Add one and one." in first.messages[1]["content"]
+    assert first.messages[-1]["content"].startswith("<agent_status")
+    assert _context_messages(first) == first.messages[:-1]
+
+    second = fake.requests[1]
+    assert [message["role"] for message in second.messages] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "system",
+    ]
+    assert second.messages[2]["tool_calls"][0]["id"] == "call_exact_order"
+    assert second.messages[3]["tool_call_id"] == "call_exact_order"
+    assert second.messages[-1]["content"].startswith("<agent_status")
+    assert _context_messages(second) == second.messages[:-1]
+    status_blocks = [
+        message
+        for message in second.messages
+        if isinstance(message.get("content"), str)
+        and message["content"].startswith("<agent_status")
+    ]
+    assert len(status_blocks) == 1
+
+    # The rendered estimate is the estimate of exactly the request the provider
+    # saw, including the trailing block that carries the estimate.
+    assignment = client.get("/api/v1/model-assignments/me").json()
+    model = assignment["effective_chat_model"] or settings.deepseek_model
+    chars_per_token = chars_per_token_for(model)
+    for request in fake.requests:
+        attributes = _agent_status_attributes(request)
+        assert int(attributes["context_used"]) == estimate_provider_context_tokens(
+            ProviderContext(
+                system_message=request.messages[0],
+                tools=request.tools,
+                messages=request.messages[1:],
+                source_entry_ids=[],
+                cache_prefix_hash="",
+            ),
+            strip_image_data=True,
+            chars_per_token=chars_per_token,
+        )
+
+
+def test_agent_status_estimate_uses_the_exact_provider_order(
+    monkeypatch: Any,
+) -> None:
+    """The estimator is handed the same ordered list ``_provider_messages`` sends."""
+    context = ProviderContext(
+        system_message={"role": "system", "content": "# Identity\nYou are Apsor Archive."},
+        tools=[{"type": "function", "function": {"name": "calculate"}}],
+        messages=[
+            {"role": "user", "content": "first question"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"id": "call_1", "type": "function"}],
+            },
+            {"role": "tool", "tool_call_id": "call_1", "content": "tool output"},
+        ],
+        source_entry_ids=[1, 2, 3],
+        cache_prefix_hash="hash",
+    )
+    block = render_agent_status(_agent_status_snapshot())
+    captured: dict[str, ProviderContext] = {}
+    original = agent_service_module.estimate_provider_context_tokens
+
+    def recording(candidate: ProviderContext, **kwargs: Any) -> int:
+        captured["context"] = candidate
+        return original(candidate, **kwargs)
+
+    monkeypatch.setattr(
+        agent_service_module,
+        "estimate_provider_context_tokens",
+        recording,
+    )
+    _estimated_provider_request_tokens(context, block, chars_per_token=3.0)
+
+    estimated = captured["context"]
+    assert [estimated.system_message, *estimated.messages] == _provider_messages(
+        context,
+        block,
+    )
+    assert estimated.messages[-1] == {"role": "system", "content": block}
+    assert estimated.tools == context.tools
+    assert estimated.system_message == context.system_message
 
 
 def test_agent_status_block_does_not_change_cache_prefix_hash(

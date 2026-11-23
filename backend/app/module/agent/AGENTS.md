@@ -54,10 +54,17 @@ Keep one conversation resumable and auditable across model steps and process res
 `domain/agent_status_domain.py` renders the one trailing status message each provider call receives; `_provider_messages` places it.
 
 - The chat loop appends one `<agent_status>` message as the **final** `system` message of every provider call: `[frozen system] + context.messages + [agent_status]`.
-- It contains only the runtime limits the model may need (`max_expression_chars`, `max_page_context_chars`, `max_tool_result_chars`, and `output_limit_tokens` unless the cap is disabled), plus an optional `<retry_notice>`.
+- It contains the runtime limits the model may need (`max_expression_chars`, `max_page_context_chars`, `max_tool_result_chars`, and `output_limit_tokens` unless the cap is disabled), plus an optional `<retry_notice>`, plus five context-budget values:
+  - `context_used` — estimated tokens of the complete ordered request for this call: the frozen system message, the tool snapshot, every replayed context message in order, and this trailing status block itself.
+  - `context_limit` — the effective input budget (`context_window_tokens` after the account override is applied).
+  - `context_remaining` — `max(0, context_limit - context_used)`.
+  - `compaction_at` — the effective `compaction_threshold_tokens`.
+  - `compaction_in` — `max(0, compaction_at - context_used)`.
+- `_agent_status_message` estimates with `estimate_provider_context_tokens` and the same chars-per-token ratio as the budget ladder. It assumes the `_provider_messages` order above and never calls a provider or tokenizer. Because the block renders its own estimate, a bounded fixed-point loop (at most three render/estimate passes) converges the total, and the final block carries the final estimate. Inline image data URLs are stripped so raw base64 bytes are not counted.
+- If the estimate is at or above `context_limit`, the block reports `context_remaining="0"` and `compaction_in="0"`; the local budget never raises a context-limit error.
 - Attributes are rendered in sorted order; identical inputs must produce byte-identical output.
 - The block is provider-only: it is never persisted and never enters `cache_prefix_hash`, and the frozen prompt/tool prefix must not change because of it.
-- Do not add user/account ids, titles, archive content, paths, usage counters, or any other mutable telemetry back into the block; the minimal shape is intentional.
+- Only these five bounded context-budget numbers may be added as mutable telemetry. User/account/conversation/run ids, titles, archive content, paths, provider keys or base URLs, usage counters, and tool names remain forbidden; the minimal shape is intentional.
 
 ## Conventions
 
