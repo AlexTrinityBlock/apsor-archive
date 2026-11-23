@@ -91,7 +91,10 @@ auxiliary slot inherits the primary row id and model **only** when both
 auxiliary effort (`low` by default). A `NULL` row with a non-`NULL` model, or the
 reverse, is a broken slot reported as degraded, not inherited. The Q1 backfill
 copies the lowest active non-`none` chat row id and model into accounts with no
-assignment; a deployment with no such row leaves every account unassigned.
+assignment; a deployment with no such row leaves every account unassigned. The
+same rule creates a new account: it inherits that primary endpoint and model at
+insert time, and only starts unassigned when the deployment has no active chat
+row yet.
 
 Model names and effort strings are free text; the catalog is advisory. A known
 model may add prices, a tier, and a characters-per-token ratio. An unknown model
@@ -1342,7 +1345,9 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   `agent_config` columns (`compaction_prompt`, `compaction_max_output_tokens`,
   `model_escalation_enabled`, `agent_max_output_tokens`). It backfills the lowest
   active non-`none` chat row id and its model into accounts with no assignment;
-  no row leaves every account unassigned. `app_user` stays outside RLS, so no
+  no row leaves every account unassigned. New accounts inherit the same primary
+  endpoint and model at creation and start unassigned only when no active chat
+  row exists. `app_user` stays outside RLS, so no
   policy or grant changes are needed. The downgrade drops the assignment columns
   and refuses to restore the narrower provider check while an `anthropic` row
   exists.

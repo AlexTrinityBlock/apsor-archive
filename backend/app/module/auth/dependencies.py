@@ -3,6 +3,7 @@
 from typing import cast
 
 from fastapi import Depends, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.config.settings import Settings
@@ -12,6 +13,7 @@ from app.infrastructure.security.session_token import SessionTokenGenerator
 from app.module.auth.repository.auth_repository import SessionRepository, UserRepository
 from app.module.auth.service.account_service import AccountService
 from app.module.auth.service.auth_service import AuthService
+from app.module.knowledge.model.provider_config_model import ChatProviderConfigModel
 
 
 def get_auth_settings(request: Request) -> Settings:
@@ -49,6 +51,40 @@ def get_auth_service(
     return build_auth_service(session, get_auth_settings(request))
 
 
+class ChatProviderDefaults:
+    """Resolve the deployment's primary chat endpoint for new accounts.
+
+    This adapter lives in the auth composition root because it reads the
+    knowledge slice's provider table. ``AccountService`` only sees the narrow
+    ``ChatDefaultsProtocol``.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def primary_endpoint(self) -> tuple[int, str] | None:
+        row = (
+            await self._session.execute(
+                select(
+                    ChatProviderConfigModel.id,
+                    ChatProviderConfigModel.model,
+                )
+                .where(
+                    ChatProviderConfigModel.is_active.is_(True),
+                    ChatProviderConfigModel.provider != "none",
+                )
+                .order_by(
+                    ChatProviderConfigModel.priority,
+                    ChatProviderConfigModel.id,
+                )
+                .limit(1)
+            )
+        ).first()
+        if row is None or not row.model:
+            return None
+        return (int(row.id), str(row.model))
+
+
 def get_account_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> AccountService:
@@ -57,4 +93,5 @@ def get_account_service(
         user_repository=UserRepository(session),
         session_repository=SessionRepository(session),
         password_hasher=Argon2PasswordHasher(),
+        chat_defaults=ChatProviderDefaults(session),
     )
