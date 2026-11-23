@@ -372,6 +372,8 @@ export const chat = {
     imageOmitted: "对话记录中省略了图片",
     imageOmittedAlt: "对话记录中省略了图片：{alt}",
     tableAria: "表格，可水平滚动以阅读所有列",
+    copyCode: "复制代码",
+    copyCodeTitle: "复制这段代码",
   },
   plot: {
     title: "图表",

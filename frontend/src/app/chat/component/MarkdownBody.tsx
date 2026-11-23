@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 
 import { CitationChip } from "./CitationChip";
+import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
 import { remarkCitations } from "./remarkCitations";
 import { useI18n, type Translate } from "../../i18n";
 import type { CitationToken } from "../types";
@@ -167,6 +168,7 @@ function buildComponents(
         <table>{children}</table>
       </div>
     ),
+    pre: ({ children }) => <MarkdownCodeBlock>{children}</MarkdownCodeBlock>,
   };
 }
 

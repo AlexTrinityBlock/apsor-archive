@@ -60,6 +60,7 @@ The application layer does not define backend behavior. API shapes come from `ge
 - The live stream keeps an ordered segment list: assistant prose for one step, then that step's tools, then the next assistant step. A new `message_start` appends a segment; it never erases earlier prose.
 - Tool steps show their concrete arguments and a bounded structured preview. The model-facing tool XML is never rendered, and hidden provider reasoning is not invented when the contract does not persist it.
 - Tool steps and thinking blocks preserve every recorded detail but are collapsed by default, including live steps. The always-visible tool header and meta line keep status, duration, call id, and error code readable while the disclosure is closed.
+- Fenced code blocks in the transcript offer one-click copy of the raw code text; inline backtick code has no copy control.
 - On mobile the fixed chat shell follows the visual viewport while the on-screen keyboard is open, so the transcript top and the composer stay reachable. The inner transcript remains the scroll owner; do not replace this with scroll padding or by letting the page body scroll.
 
 ## Verification
