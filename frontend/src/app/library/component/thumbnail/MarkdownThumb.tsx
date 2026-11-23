@@ -94,6 +94,10 @@ export function MarkdownThumb({ fileId, cacheKey, onFailure }: MarkdownThumbProp
 
   const ready = state.kind === "ready";
   const scale = hostWidth > 0 ? hostWidth / MARKDOWN_PAGE_WIDTH : 0;
+  // A ready snippet still waits one frame for the width observer; a failed
+  // snippet is replaced by the parent's type tile, so neither may keep a
+  // spinner on screen.
+  const busy = state.kind === "loading" || (ready && scale <= 0);
 
   return (
     <span ref={setHostElement} className="library-thumb__markdown" aria-hidden="true">
@@ -124,7 +128,12 @@ export function MarkdownThumb({ fileId, cacheKey, onFailure }: MarkdownThumbProp
           <span className="library-thumb__markdown-fade" />
         </>
       ) : (
-        <span className="library-thumb__paper library-thumb__paper--overlay" />
+        <>
+          <span className="library-thumb__paper library-thumb__paper--overlay" />
+          {busy ? (
+            <span className="library-thumb__spinner" aria-hidden="true" />
+          ) : null}
+        </>
       )}
     </span>
   );

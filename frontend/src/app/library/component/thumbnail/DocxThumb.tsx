@@ -165,7 +165,10 @@ export function DocxThumb({ fileId, fileName, onFailure }: DocxThumbProps) {
         />
       ) : null}
       {phase !== "done" && phase !== "failed" ? (
-        <span className="library-thumb__paper library-thumb__paper--overlay" />
+        <>
+          <span className="library-thumb__paper library-thumb__paper--overlay" />
+          <span className="library-thumb__spinner" aria-hidden="true" />
+        </>
       ) : null}
     </span>
   );
