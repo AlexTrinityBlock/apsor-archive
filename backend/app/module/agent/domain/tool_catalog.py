@@ -29,10 +29,11 @@ from app.module.agent.domain.tool_args import (
 # v12 unifies custom sections and the four seeded defaults into one ordered
 # collection: every row uses ``system_prompt:<id>`` and there is no read-time
 # built-in append. v13 adds the Exa search-tool ``objective`` instruction.
+# v14 adds the ``<search_hint>`` sentence to the Context protocol section.
 # Composition changed, so the new-conversation prefix changes; existing
 # conversations keep their frozen ``pi.system`` and old version string, so their
 # KV cache lineage is untouched.
-PROMPT_VERSION = "archive-agent-v13"
+PROMPT_VERSION = "archive-agent-v14"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -44,8 +45,10 @@ PROMPT_VERSION = "archive-agent-v13"
 # the model to pass a complete figure instead of a placeholder. v13 removes the
 # fixed point/byte/node numbers from render_plot's description because those
 # budgets now come from the deployer-editable agent_config row; the tool still
-# enforces them. Existing conversations keep their frozen pi.system snapshot.
-TOOLS_VERSION = "archive-tools-v13"
+# enforces them. v14 adds per-result content_chars/excerpt_chars/excerpt_truncated
+# and the trailing <search_hint> to web_search. Existing conversations keep their
+# frozen pi.system snapshot.
+TOOLS_VERSION = "archive-tools-v14"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -209,8 +212,10 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         description=(
             "Search the public web with the configured web-search provider. "
             "Use for current external facts not in the archive. Provide both "
-            "query and objective. Results include title, URL, score, and an "
-            "excerpt. Cite the URL. Read-only."
+            "query and objective. Results are bounded excerpts with title, URL, "
+            "score, and excerpt metadata; the <search_hint> element states when "
+            "content was clipped and that web_fetch recovers the rest. Cite the "
+            "URL. Read-only."
         ),
         args_model=WebSearchArgs,
         requires_confirmation=False,
