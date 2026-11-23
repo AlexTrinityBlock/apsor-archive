@@ -2,6 +2,7 @@
 
 import json
 import re
+import xml.etree.ElementTree as ElementTree
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -24,7 +25,10 @@ from app.module.agent.domain.agent_status_domain import (
 from app.module.agent.domain.compaction_domain import estimate_provider_context_tokens
 from app.module.agent.domain.context_domain import _prefix_hash
 from app.module.agent.service.agent_service import _output_limit_text
-from app.module.agent.service.tool_registry import _web_fetch_footer
+from app.module.agent.service.tool_registry import (
+    WEB_RESULT_CONTENT_LIMIT,
+    _web_fetch_footer,
+)
 from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
     text_result,
@@ -73,8 +77,8 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v13"
-TOOLS_VERSION = "archive-tools-v13"
+PROMPT_VERSION = "archive-agent-v14"
+TOOLS_VERSION = "archive-tools-v14"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -127,11 +131,19 @@ def _agent_status_snapshot(*, retry_notice: str | None = None) -> AgentStatus:
 class FakeWebResearchService:
     """Deterministic web service injected through ``app.state``."""
 
-    def __init__(self, fetch_document: str | None = None) -> None:
+    def __init__(
+        self,
+        fetch_document: str | None = None,
+        *,
+        search_results: list[WebSearchHit] | None = None,
+        search_truncated: bool = False,
+    ) -> None:
         self.retrieved_at = datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
         self.searches: list[dict[str, Any]] = []
         self.fetches: list[dict[str, Any]] = []
         self.fetch_document = DEFAULT_FETCH_DOCUMENT if fetch_document is None else fetch_document
+        self.search_results = search_results
+        self.search_truncated = search_truncated
 
     async def search(
         self,
@@ -156,22 +168,26 @@ class FakeWebResearchService:
         return WebSearchResponse(
             provider="tavily",
             query=query,
-            results=[
-                WebSearchHit(
-                    title="Tavily search guide",
-                    url="https://example.com/tavily-search",
-                    content="Tavily is a search API for agents.",
-                    score=0.93,
-                ),
-                WebSearchHit(
-                    title="Research notes",
-                    url="https://example.com/search-notes",
-                    content="Use web_fetch when the excerpt is insufficient.",
-                    score=0.71,
-                ),
-            ][:max_results],
+            results=(
+                self.search_results
+                if self.search_results is not None
+                else [
+                    WebSearchHit(
+                        title="Tavily search guide",
+                        url="https://example.com/tavily-search",
+                        content="Tavily is a search API for agents.",
+                        score=0.93,
+                    ),
+                    WebSearchHit(
+                        title="Research notes",
+                        url="https://example.com/search-notes",
+                        content="Use web_fetch when the excerpt is insufficient.",
+                        score=0.71,
+                    ),
+                ]
+            )[:max_results],
             elapsed_ms=3,
-            truncated=False,
+            truncated=self.search_truncated,
             cached=False,
             retrieved_at=self.retrieved_at,
         )
@@ -2674,6 +2690,175 @@ def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
             "offset": None,
         },
     ]
+
+
+def _run_web_search(
+    client: TestClient,
+    hits: list[WebSearchHit],
+    *,
+    provider_truncated: bool,
+    call_id: str,
+) -> dict[str, Any]:
+    """Run one web_search tool call and return its persisted tool result."""
+    client.app.state.web_research_service = FakeWebResearchService(
+        search_results=hits,
+        search_truncated=provider_truncated,
+    )
+    client.app.state.agent_chat_generator = FakeChatGenerator(
+        [
+            tool_call_result(
+                "web_search",
+                {
+                    "query": "search hint probe",
+                    "objective": "Inspect the search hint.",
+                },
+                call_id=call_id,
+                usage=TOOL_USAGE,
+            ),
+            text_result("Search hint inspected.", usage=ANSWER_USAGE),
+        ]
+    )
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": f"Search hint {call_id}"},
+    )
+    assert conversation.status_code == 201, conversation.text
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation.json()['id']}/messages",
+        json={"content": "Check how the search result reports truncation."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    results = body["tool_results"]
+    assert len(results) == 1
+    assert results[0]["model"][0]["tool_call_id"] == call_id
+    return results[0]
+
+
+def _parse_web_search(xml: str) -> tuple[ElementTree.Element, str]:
+    """Parse the complete <web_search> block and return it with its raw text."""
+    start = xml.index("<web_search ")
+    end = xml.index("</web_search>") + len("</web_search>")
+    block = xml[start:end]
+    return ElementTree.fromstring(block), block
+
+
+def test_web_search_hint_reports_truncation_layers(client: TestClient) -> None:
+    """Every search result names clipping locally and points to web_fetch."""
+    long_content = "A & B <section> carries a long parameter note. " * 120
+    long_result = _run_web_search(
+        client,
+        [
+            WebSearchHit(
+                title="Cats & <dogs>",
+                url="https://example.com/long?a=1&b=2",
+                content=long_content,
+                score=0.9,
+            )
+        ],
+        provider_truncated=False,
+        call_id="call_long_excerpt",
+    )
+    long_xml = long_result["model"][0]["content"]
+    long_root, long_block = _parse_web_search(long_xml)
+    long_hit = long_root.find("result")
+    assert long_hit is not None
+    excerpt_chars = int(long_hit.attrib["excerpt_chars"])
+    assert long_hit.attrib["content_chars"] == str(len(long_content))
+    assert excerpt_chars <= WEB_RESULT_CONTENT_LIMIT
+    assert excerpt_chars < len(long_content)
+    assert long_hit.attrib["excerpt_truncated"] == "true"
+
+    long_hint = long_root.find("search_hint")
+    assert long_hint is not None
+    assert long_hint.attrib == {
+        "truncated": "true",
+        "excerpts_clipped": "true",
+        "provider_truncated": "false",
+        "excerpt_limit": str(WEB_RESULT_CONTENT_LIMIT),
+    }
+    assert long_hint.text is not None
+    assert "bounded excerpts" in long_hint.text
+    assert "web_fetch" in long_hint.text
+    assert "excerpt limit" in long_hint.text
+    # The hint is deterministic, follows the last result, and escapes untrusted
+    # title, URL, and content instead of injecting raw markup.
+    assert long_block.index("<search_hint") > long_block.rindex("<result")
+    assert long_block.endswith("</search_hint></web_search>")
+    assert "Cats &amp; &lt;dogs&gt;" in long_block
+    assert "?a=1&amp;b=2" in long_block
+    assert "&lt;section&gt;" in long_block
+    assert "A &amp; B" in long_block
+    assert "Cats & <dogs>" not in long_block
+    assert "?a=1&b=2" not in long_block
+    assert "<section>" not in long_block
+    # UI data semantics stay provider-only: the excerpt flag does not change the
+    # provider truncation flag.
+    assert long_result["data"]["truncated"] is False
+    assert long_result["data"]["excerpt_truncated"] is True
+
+    short_content = "Short and complete."
+    short_result = _run_web_search(
+        client,
+        [
+            WebSearchHit(
+                title="Short note",
+                url="https://example.com/short",
+                content=short_content,
+                score=0.5,
+            )
+        ],
+        provider_truncated=False,
+        call_id="call_short_excerpt",
+    )
+    short_root, _ = _parse_web_search(short_result["model"][0]["content"])
+    short_hit = short_root.find("result")
+    assert short_hit is not None
+    assert short_hit.attrib["content_chars"] == str(len(short_content))
+    assert short_hit.attrib["excerpt_chars"] == str(len(short_content))
+    assert short_hit.attrib["excerpt_truncated"] == "false"
+    short_hint = short_root.find("search_hint")
+    assert short_hint is not None
+    assert short_hint.attrib == {
+        "truncated": "false",
+        "excerpts_clipped": "false",
+        "provider_truncated": "false",
+        "excerpt_limit": str(WEB_RESULT_CONTENT_LIMIT),
+    }
+    assert short_hint.text is not None
+    assert "bounded excerpts" in short_hint.text
+    assert "web_fetch" in short_hint.text
+    assert "clipped" not in short_hint.text
+
+    provider_result = _run_web_search(
+        client,
+        [
+            WebSearchHit(
+                title="Provider page",
+                url="https://example.com/provider",
+                content=short_content,
+                score=0.4,
+            )
+        ],
+        provider_truncated=True,
+        call_id="call_provider_cap",
+    )
+    provider_root, _ = _parse_web_search(provider_result["model"][0]["content"])
+    provider_hint = provider_root.find("search_hint")
+    assert provider_hint is not None
+    assert provider_hint.attrib == {
+        "truncated": "true",
+        "excerpts_clipped": "false",
+        "provider_truncated": "true",
+        "excerpt_limit": str(WEB_RESULT_CONTENT_LIMIT),
+    }
+    assert provider_hint.text is not None
+    assert "provider capped" in provider_hint.text
+    assert "web_fetch" in provider_hint.text
+    assert provider_result["data"]["truncated"] is True
+    assert provider_result["data"]["excerpt_truncated"] is False
 
 
 class ContextOverflowChatGenerator:

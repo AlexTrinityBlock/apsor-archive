@@ -81,6 +81,16 @@ PREVIEW_EXCERPT_LIMIT = 600
 # needs the full text it should switch to web_fetch. Capping here keeps 10 results
 # inside a single tool result.
 WEB_RESULT_CONTENT_LIMIT = 2_000
+# Fixed provider-only caution appended to every web_search result. It must stay
+# free of titles, URLs, counts, or other untrusted content so the bytes are
+# deterministic for prompt caching and the hint body cannot break the XML.
+WEB_SEARCH_HINT = (
+    "These are bounded excerpts, not full documents. Information can continue "
+    "past an excerpt, on later pages of the URL, or in matches the provider did "
+    "not return; absence from these results is not proof that the source lacks "
+    "the detail. If a result matters, call web_fetch with its url, start at "
+    "page=1, and follow page, total_pages, has_more, and next_page."
+)
 
 WEB_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
 COMPRESSED_VIEW = "compressed"
@@ -945,12 +955,19 @@ async def _web_search(
 ) -> tuple[str, dict[str, Any], None]:
     """Search the public web and render bounded, citable results.
 
-    The XML shape is fixed: ``<web_search>`` containing ``<result>`` elements.
-    provider and retrieved_at sit on the root element because they are the source
-    facts for the whole batch of results, so the model only has to look at the
-    root attributes when citing. ``cached`` / ``truncated`` are on the root as
-    well, telling the model that this is a cached result or clipped text and
-    keeping it from mistaking cached content for a live observation.
+    The XML shape is fixed: ``<web_search>`` containing ``<result>`` elements and
+    one trailing ``<search_hint>``. provider and retrieved_at sit on the root
+    element because they are the source facts for the whole batch of results, so
+    the model only has to look at the root attributes when citing. ``cached`` /
+    ``truncated`` are on the root as well, telling the model that this is a
+    cached result or clipped text and keeping it from mistaking cached content
+    for a live observation.
+
+    Every result exposes ``content_chars`` / ``excerpt_chars`` /
+    ``excerpt_truncated`` so clipping is local and visible instead of only a
+    root flag. The unconditional ``<search_hint>`` names the clipping layer and
+    the ``web_fetch`` recovery path, because a search result is always an
+    excerpt, never the full document.
     """
     result = await services.web_research_service.search(
         args.query,
@@ -964,7 +981,9 @@ async def _web_search(
     rendered: list[str] = []
     clipped_any = False
     for index, item in enumerate(result.results, start=1):
-        clipped_any = clipped_any or len(item.content) > WEB_RESULT_CONTENT_LIMIT
+        excerpt = clip(item.content, WEB_RESULT_CONTENT_LIMIT)
+        excerpt_truncated = len(item.content) > WEB_RESULT_CONTENT_LIMIT
+        clipped_any = clipped_any or excerpt_truncated
         rendered.append(
             _open(
                 "result",
@@ -975,11 +994,15 @@ async def _web_search(
                     # A provider does not always return a score; None is filtered
                     # out by _defined in _open.
                     "score": round(item.score, 4) if item.score is not None else None,
+                    "content_chars": len(item.content),
+                    "excerpt_chars": len(excerpt),
+                    "excerpt_truncated": _xml_bool(excerpt_truncated),
                 },
             )
-            + xml_text(clip(item.content, WEB_RESULT_CONTENT_LIMIT))
+            + xml_text(excerpt)
             + _close("result")
         )
+    provider_truncated = result.truncated
     content = (
         _open(
             "web_search",
@@ -990,10 +1013,14 @@ async def _web_search(
                 "retrieved_at": retrieved_at,
                 "cached": _xml_bool(result.cached),
                 # If any layer clipped, provider or agent, the XML is marked truncated.
-                "truncated": _xml_bool(result.truncated or clipped_any),
+                "truncated": _xml_bool(provider_truncated or clipped_any),
             },
         )
         + "".join(rendered)
+        + _search_hint(
+            provider_truncated=provider_truncated,
+            excerpts_clipped=clipped_any,
+        )
         + _close("web_search")
     )
     data = {
@@ -1014,6 +1041,46 @@ async def _web_search(
         "excerpt_truncated": clipped_any,
     }
     return content, data, None
+
+
+def _search_hint(*, provider_truncated: bool, excerpts_clipped: bool) -> str:
+    """Render the unconditional, fixed-text ``<search_hint>`` child.
+
+    Search results are always bounded excerpts, so the hint is present even when
+    nothing was clipped. Only the attributes and one fixed sentence vary; no
+    title, URL, or provider text is interpolated, which keeps the output
+    deterministic and the XML body safe.
+    """
+    body = WEB_SEARCH_HINT
+    if excerpts_clipped and provider_truncated:
+        body += (
+            " Both the excerpt limit and the provider's result cap clipped this "
+            "reply, so call web_fetch with the source url before concluding the "
+            "fact is absent."
+        )
+    elif excerpts_clipped:
+        body += (
+            " The excerpt limit clipped at least one result, so call web_fetch "
+            "with the source url before concluding the fact is absent."
+        )
+    elif provider_truncated:
+        body += (
+            " The provider capped its own result set, so call web_fetch with the "
+            "source url before concluding the fact is absent."
+        )
+    return (
+        _open(
+            "search_hint",
+            {
+                "truncated": _xml_bool(provider_truncated or excerpts_clipped),
+                "excerpts_clipped": _xml_bool(excerpts_clipped),
+                "provider_truncated": _xml_bool(provider_truncated),
+                "excerpt_limit": WEB_RESULT_CONTENT_LIMIT,
+            },
+        )
+        + xml_text(body)
+        + _close("search_hint")
+    )
 
 
 async def _web_fetch(
