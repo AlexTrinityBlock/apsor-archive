@@ -1062,7 +1062,12 @@ no cumulative per-turn token ceiling; a turn ends only on a final answer, the
 step or tool-call limits, a user cancellation, or a provider failure. The
 effective context window is the deployment default (1,000,000) unless the
 account assigns its own budget; it is the real outbound input budget enforced by
-the local overflow ladder, and the compaction threshold must stay below it. Each
+the local overflow ladder, and the compaction threshold must stay below it. The
+budget estimate weights CJK characters at roughly 1.6 characters per token while
+ASCII text keeps the model catalog ratio, and the largest successful
+provider-reported `prompt_tokens` in the current context segment is used as a
+floor. `context_used` in the provider-only status block is therefore
+conservative, not a provider-exact token count. Each
 result is clipped independently at that per-result cap with a visible
 `[truncated]` marker; there is no turn-wide result budget or second summarization
 call. A 100,000-character cap spans roughly twenty-five 4,000-character chunks.

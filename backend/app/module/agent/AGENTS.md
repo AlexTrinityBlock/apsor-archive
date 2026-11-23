@@ -55,16 +55,24 @@ Keep one conversation resumable and auditable across model steps and process res
 
 - The chat loop appends one `<agent_status>` message as the **final** `system` message of every provider call: `[frozen system] + context.messages + [agent_status]`.
 - It contains the runtime limits the model may need (`max_expression_chars`, `max_page_context_chars`, `max_tool_result_chars`, and `output_limit_tokens` unless the cap is disabled), plus an optional `<retry_notice>`, plus five context-budget values:
-  - `context_used` — estimated tokens of the complete ordered request for this call: the frozen system message, the tool snapshot, every replayed context message in order, and this trailing status block itself.
+  - `context_used` — conservative estimated tokens of the complete ordered request for this call: the frozen system message, the tool snapshot, every replayed context message in order, and this trailing status block itself. It is `max(character estimate, reported prompt tokens)` for the current segment, not a provider-exact count.
   - `context_limit` — the effective input budget (`context_window_tokens` after the account override is applied).
   - `context_remaining` — `max(0, context_limit - context_used)`.
   - `compaction_at` — the effective `compaction_threshold_tokens`.
   - `compaction_in` — `max(0, compaction_at - context_used)`.
-- `_agent_status_message` estimates with `estimate_provider_context_tokens` and the same chars-per-token ratio as the budget ladder. It assumes the `_provider_messages` order above and never calls a provider or tokenizer. Because the block renders its own estimate, a bounded fixed-point loop (at most three render/estimate passes) converges the total, and the final block carries the final estimate. Inline image data URLs are stripped so raw base64 bytes are not counted.
+- `_agent_status_message` estimates with `estimate_provider_context_tokens`, the same script-weighted ratio as the budget ladder, and the provider-reported prompt floor. It assumes the `_provider_messages` order above and never calls a provider or tokenizer. Because the block renders its own estimate, a bounded fixed-point loop (at most three render/estimate passes) converges the total, and the final block carries the final estimate. Inline image data URLs are stripped so raw base64 bytes are not counted.
 - If the estimate is at or above `context_limit`, the block reports `context_remaining="0"` and `compaction_in="0"`; the local budget never raises a context-limit error.
 - Attributes are rendered in sorted order; identical inputs must produce byte-identical output.
 - The block is provider-only: it is never persisted and never enters `cache_prefix_hash`, and the frozen prompt/tool prefix must not change because of it.
 - Only these five bounded context-budget numbers may be added as mutable telemetry. User/account/conversation/run ids, titles, archive content, paths, provider keys or base URLs, usage counters, and tool names remain forbidden; the minimal shape is intentional.
+
+## Context accounting
+
+- `estimate_provider_context_tokens` and `estimate_context_tokens` stay deterministic and offline. Their input estimate is script-weighted: non-CJK characters keep the model catalog's `chars_per_token` ratio unchanged, while CJK characters (Han, kana, Hangul, CJK punctuation, and fullwidth blocks) are charged at `1.6` characters per token. The weight is applied to the serialized request, so a pure-ASCII request produces exactly the previous estimate and a Chinese request is materially more conservative. Only the input estimate changes; `render_compaction_prompt`, `_char_budget`, and every output-token character budget keep the catalog ratio.
+- The configured `context_window_tokens` is never lowered and the account's setting is never rewritten to compensate for an estimate. The estimate becomes accurate enough for the configured budget to be meaningful.
+- `AgentService` remembers the largest successful `usage["prompt_tokens"]` reported by the provider for the current context segment. Every budget decision uses `max(character estimate, reported prompt tokens)`. A compaction that starts a new context segment (persisted compaction, forced overflow compaction, or the start of a resumed loop) clears the floor because the old prompt size no longer describes the new request.
+- `_enforce_context_budget` and `_agent_status_message` both use that floor. After a provider reports an overshoot, the next step runs the existing ladder (forced compaction, page-context drop, tool-result clipping, outbound truncation) instead of repeating the same oversized prompt; there is no new hard error. A single call can still overshoot only when the provider ignores the configured local budget, never because the next step ignored a reported prompt size.
+- `context_used` is therefore conservative, not a provider-exact token count. It must never be described as the provider's authoritative usage; the authoritative figure is the `prompt_tokens` in entry `data.usage`.
 
 ## Conventions
 

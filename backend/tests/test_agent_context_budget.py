@@ -6,6 +6,7 @@ fakes. The pure cases exercise the message-level ladder without a database.
 """
 
 import json
+import re
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -17,7 +18,11 @@ from app.module.agent.domain.compaction_domain import (
 )
 from app.module.agent.service import agent_service as agent_service_module
 from app.module.agent.service.agent_service import _fit_provider_context
-from app.module.agent.test.fake_chat_generator import FakeChatGenerator
+from app.module.agent.test.fake_chat_generator import (
+    FakeChatGenerator,
+    text_result,
+    tool_call_result,
+)
 from tests.conftest import UserClient
 
 CHARS_PER_TOKEN = 3.0
@@ -88,6 +93,15 @@ def _context_from_request(request: Any) -> ProviderContext:
         source_entry_ids=[],
         cache_prefix_hash="",
     )
+
+
+def _status_attributes(request: Any) -> dict[str, int]:
+    """Read the numeric attributes from the trailing agent status block."""
+    content = request.messages[-1]["content"]
+    return {
+        name: int(value)
+        for name, value in re.findall(r' ([a-z_]+)="(\d+)"', content)
+    }
 
 
 def _baseline_tokens(client: TestClient) -> int:
@@ -166,6 +180,121 @@ def test_three_hundred_k_context_truncates_once_and_completes(
     assert len(outbound) < len(user_text)
     assert outbound.startswith("BEGIN")
     assert TRUNCATION_PREFIX in outbound
+
+
+def test_chinese_context_is_counted_conservatively_before_the_call(
+    client: TestClient,
+) -> None:
+    """A CJK-heavy request that fits the old ratio must still hit the ladder."""
+    baseline = _baseline_tokens(client)
+    defaults = client.get("/api/v1/agent/settings").json()["defaults"]
+    window = baseline + 9_000
+    updated = client.put(
+        "/api/v1/agent/settings",
+        json={
+            **defaults,
+            "context_window_tokens": window,
+            "compaction_threshold_tokens": max(1_000, window - 1_000),
+            "auto_compaction_enabled": False,
+        },
+    )
+    assert updated.status_code == 200, updated.text
+
+    fake = FakeChatGenerator.from_texts("收到。")
+    client.app.state.agent_chat_generator = fake
+    conversation = _new_conversation(client)
+    user_text = "這是一段需要被計入上下文的中文內容。" * 1_200
+    assert 20_000 <= len(user_text) <= 32_000
+    # The historical English ratio would keep this request under the budget.
+    assert baseline + len(user_text) / CHARS_PER_TOKEN < window
+    # A conservative CJK density makes it exceed the budget before the call.
+    assert baseline + len(user_text) / 1.6 > window
+
+    turn = _send(client, int(conversation["id"]), user_text)
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    assert body["answer"] == "收到。"
+
+    notices = [entry for entry in body["entries"] if entry["kind"] == "ui.notice"]
+    assert len(notices) == 1
+    assert notices[0]["data"]["reason"] == "context_budget_truncated"
+    assert notices[0]["data"]["truncated_user_chars"] > 0
+
+    # The provider never saw the full message, and the status block reports the
+    # same conservative estimate for exactly the request that was sent.
+    request = fake.requests[0]
+    status = _status_attributes(request)
+    exact = estimate_provider_context_tokens(
+        ProviderContext(
+            system_message=request.messages[0],
+            tools=request.tools,
+            messages=request.messages[1:],
+            source_entry_ids=[],
+            cache_prefix_hash="",
+        ),
+        strip_image_data=True,
+        chars_per_token=CHARS_PER_TOKEN,
+    )
+    assert int(status["context_used"]) == exact
+    assert int(status["context_used"]) <= window
+    assert int(status["context_limit"]) == window
+
+
+def test_provider_reported_prompt_tokens_force_the_next_step_to_fit(
+    client: TestClient,
+) -> None:
+    """A reported overshoot becomes the floor for the next outbound request."""
+    defaults = client.get("/api/v1/agent/settings").json()["defaults"]
+    window = 8_000
+    updated = client.put(
+        "/api/v1/agent/settings",
+        json={
+            **defaults,
+            "context_window_tokens": window,
+            "compaction_threshold_tokens": 1_000,
+            "auto_compaction_enabled": False,
+        },
+    )
+    assert updated.status_code == 200, updated.text
+
+    fake = FakeChatGenerator(
+        [
+            tool_call_result(
+                "calculate",
+                {"expression": "1 + 1"},
+                call_id="call_floor",
+                usage={
+                    "prompt_tokens": 8_100,
+                    "completion_tokens": 20,
+                    "total_tokens": 8_120,
+                },
+            ),
+            text_result("The answer is 2."),
+        ]
+    )
+    client.app.state.agent_chat_generator = fake
+    conversation = _new_conversation(client)
+    turn = _send(client, int(conversation["id"]), "Add one and one.")
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+
+    notices = [entry for entry in body["entries"] if entry["kind"] == "ui.notice"]
+    assert len(notices) == 1
+    notice = notices[0]["data"]
+    assert notice["reason"] == "context_budget_truncated"
+    assert notice["dropped_messages"] >= 1
+    assert notice["truncated_user_chars"] > 0
+
+    # The next request cannot drop the provider floor, so every removable
+    # message is gone and the status block reports the reported prompt size.
+    second = fake.requests[1]
+    assert [message["role"] for message in second.messages] == ["system", "system"]
+    status = _status_attributes(second)
+    assert int(status["context_used"]) == 8_100
+    assert int(status["context_remaining"]) == 0
+    assert int(status["compaction_in"]) == 0
 
 
 def test_forced_compaction_targets_sixty_percent_of_the_budget(

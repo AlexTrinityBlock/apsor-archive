@@ -290,6 +290,11 @@ class AgentService:
         self._model_status = model_status
         self._escalations = 0
         self._budget_notice_emitted = False
+        # The largest prompt size the provider has actually reported for the
+        # current context segment. Local character estimation can undercount
+        # CJK-heavy requests, so this floor is the second opinion that cannot be
+        # ignored once a real response reports it.
+        self._prompt_token_floor = 0
 
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
@@ -738,16 +743,16 @@ class AgentService:
         drop, tool-result clipping oldest-first, then outbound truncation of the
         current user message. The stored transcript is never modified; one
         ``ui.notice`` per run records what the model did not see.
+
+        The entry check uses ``max(character estimate, reported prompt tokens)``
+        so a provider-reported overshoot makes the next step compact or clip
+        instead of repeating it. A forced compaction replaces the earlier
+        transcript with a summary, so it starts a new estimate segment and the
+        old floor is cleared. The stored transcript is unchanged.
         """
         budget = self.config.context_window_tokens
         chars_per_token = self._chars_per_token()
-        if (
-            estimate_provider_context_tokens(
-                context,
-                chars_per_token=chars_per_token,
-            )
-            <= budget
-        ):
+        if self._context_token_estimate(context) <= budget:
             return context, last_entry_id, last_compaction_entry_id
         target_tokens = max(1, math.floor(budget * _FORCED_COMPACTION_BUDGET_RATIO))
         forced = await self._forced_compaction_context(
@@ -756,12 +761,16 @@ class AgentService:
             target_tokens=target_tokens,
             keep_plot_run_id=run_id,
         )
+        floor_tokens = self._prompt_token_floor
         if forced is not None:
             context = forced
+            self._reset_provider_prompt_floor()
+            floor_tokens = 0
         fitted, stats = _fit_provider_context(
             context,
             budget_tokens=budget,
             chars_per_token=chars_per_token,
+            floor_tokens=floor_tokens,
         )
         if stats.lost_input() and not self._budget_notice_emitted:
             notice = EntryDraft(
@@ -902,6 +911,46 @@ class AgentService:
         """Return the current model's catalog density (2.3 when unknown)."""
         return chars_per_token_for(self._current_model)
 
+    def _note_provider_prompt_tokens(self, usage: Mapping[str, int]) -> None:
+        """Remember the prompt size a successful provider call reported.
+
+        The local estimate is character-based and necessarily approximate. Once
+        a real response says the prompt was larger, the next budget check must
+        treat that figure as a floor so an overshoot cannot be silently
+        repeated. Only integers are trusted; a missing or zero value changes
+        nothing.
+        """
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        if isinstance(prompt_tokens, int) and not isinstance(prompt_tokens, bool):
+            if prompt_tokens > self._prompt_token_floor:
+                self._prompt_token_floor = prompt_tokens
+
+    def _reset_provider_prompt_floor(self) -> None:
+        """Forget a reported prompt size when a compaction starts a new segment.
+
+        A compacted request no longer replays the old transcript, so its prompt
+        size stops describing the new context. Keeping the floor would clip the
+        fresh summary and user input against a request the provider will never
+        see again.
+        """
+        self._prompt_token_floor = 0
+
+    def _context_token_estimate(self, context: ProviderContext) -> int:
+        """Return the conservative request estimate including the provider floor.
+
+        ``max(character estimate, reported prompt tokens)`` is the value every
+        budget decision uses. The character estimate stays the primary signal
+        for a new segment; the floor only wins when a provider has already
+        reported a larger request than the local ratio predicted.
+        """
+        return max(
+            estimate_provider_context_tokens(
+                context,
+                chars_per_token=self._chars_per_token(),
+            ),
+            self._prompt_token_floor,
+        )
+
     async def _compact_active_context(
         self,
         conversation_id: int,
@@ -929,6 +978,10 @@ class AgentService:
             draft=draft,
             now=utcnow(),
         )
+        # The persisted boundary starts a new context segment. The previous
+        # provider-reported prompt size described the hidden transcript, not the
+        # summary the next request will send.
+        self._reset_provider_prompt_floor()
         return (
             await self._context(
                 conversation_id,
@@ -965,6 +1018,10 @@ class AgentService:
         """Continue one durable turn from a deterministic loop snapshot."""
         conversation_id = turn.conversation.id
         run_id = turn.run.id
+        # The reported prompt floor is scoped to this run. A resumed approval
+        # starts a fresh loop snapshot, so it re-learns the floor from the first
+        # successful call in the resumed segment.
+        self._reset_provider_prompt_floor()
         terminal = False
         loop_started = time.monotonic()
         completed_steps = 0
@@ -2201,6 +2258,7 @@ class AgentService:
                     len(result.text),
                     len(result.tool_calls),
                 )
+                self._note_provider_prompt_tokens(result.usage)
                 await queue.put(("result", result))
                 return
 
@@ -2241,7 +2299,11 @@ class AgentService:
         ``_provider_messages``: the frozen system message, every replayed context
         message in entry order, and this trailing block. The estimate uses the
         same chars-per-token ratio as the budget ladder and runs after chat-image
-        enrichment, so raw base64 image payloads are stripped.
+        enrichment, so raw base64 image payloads are stripped. It is a
+        conservative estimate, not a provider-exact token count: a reported
+        prompt size from an earlier successful call in the same context segment
+        is used as a floor, so the block never claims less than the provider
+        already observed.
 
         Because the block renders its own estimate, its digit count can change
         the total. A bounded fixed-point loop re-estimates after each render
@@ -2251,10 +2313,13 @@ class AgentService:
         chars_per_token = self._chars_per_token()
         limit = self.config.context_window_tokens
         compaction_at = self.config.compaction_threshold_tokens
-        total = estimate_provider_context_tokens(
-            context,
-            strip_image_data=True,
-            chars_per_token=chars_per_token,
+        total = max(
+            estimate_provider_context_tokens(
+                context,
+                strip_image_data=True,
+                chars_per_token=chars_per_token,
+            ),
+            self._prompt_token_floor,
         )
 
         def render(used: int) -> str:
@@ -2275,10 +2340,13 @@ class AgentService:
 
         block = render(total)
         for _ in range(_AGENT_STATUS_ESTIMATE_ATTEMPTS):
-            with_block = _estimated_provider_request_tokens(
-                context,
-                block,
-                chars_per_token=chars_per_token,
+            with_block = max(
+                _estimated_provider_request_tokens(
+                    context,
+                    block,
+                    chars_per_token=chars_per_token,
+                ),
+                self._prompt_token_floor,
             )
             if with_block == total:
                 return block
@@ -3077,6 +3145,7 @@ def _fit_provider_context(
     *,
     budget_tokens: int,
     chars_per_token: float,
+    floor_tokens: int = 0,
 ) -> tuple[ProviderContext, _BudgetStats]:
     """Apply the message-level part of the overflow ladder to one request.
 
@@ -3087,13 +3156,21 @@ def _fit_provider_context(
     its inline attachments. If even that cannot fit, the request keeps the
     system prompt only. The stored transcript is never touched; this function
     only rewrites the provider projection.
+
+    ``floor_tokens`` is the provider-reported prompt size for the current
+    context segment. It is not content and cannot be reduced here, so a request
+    whose floor already meets the budget runs every step: the ladder still
+    removes all removable input instead of silently retrying an overshoot.
     """
     stats = _BudgetStats()
 
     def estimate(candidate: ProviderContext) -> int:
-        return estimate_provider_context_tokens(
-            candidate,
-            chars_per_token=chars_per_token,
+        return max(
+            estimate_provider_context_tokens(
+                candidate,
+                chars_per_token=chars_per_token,
+            ),
+            floor_tokens,
         )
 
     current = context

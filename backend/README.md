@@ -551,7 +551,17 @@ with a visible truncation marker; there is no turn-wide result budget.
 `context_window_tokens` (default 1,000,000) is the deployment-default outbound
 input budget. An account's `chat_context_window_tokens` replaces it when set, and
 the account threshold must stay below the effective window. The budget is
-enforced by the local overflow ladder, not by a local turn failure. All of these
+enforced by the local overflow ladder, not by a local turn failure. The
+deterministic input estimate keeps the model catalog's characters-per-token ratio
+for non-CJK text and charges CJK characters at about 1.6 characters per token,
+so a Chinese conversation is not undercounted by an English ratio; output-token
+character budgets are unchanged. `AgentService` also treats the largest
+successful provider-reported `prompt_tokens` in the current context segment as a
+floor, and every budget/status decision uses the larger of that floor and the
+character estimate. A compaction boundary clears the floor because the old
+prompt no longer describes the new context. The status block's `context_used` is
+therefore a conservative estimate rather than a provider-exact count, and a
+reported overshoot cannot be silently repeated on the next step. All of these
 come from the immutable `agent_config` snapshot (with the account budget applied
 over it), not from module constants. The loop uses
 `app.state.db.session_factory()` for appends and a short-lived session for each
