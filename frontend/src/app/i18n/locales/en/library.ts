@@ -210,7 +210,7 @@ export const library = {
     queueNote: "Uploads continue in the intake queue after this dialog closes.",
     fileLabel: "Files",
     fileHint:
-      "One or more files · up to 10 MB each · .md, .txt, .csv, .json, .log, .pdf, .docx, .xlsx, .xls, .xlsm, .ods, .jpg, .jpeg, .png, .webp",
+      "One or more files · up to 10 MB each · .md, .txt, .csv, .json, .log, .pdf, .docx, .pptx, .xlsx, .xls, .xlsm, .ods, .jpg, .jpeg, .png, .webp",
     selectedAria: "Selected files",
     removeFile: "Remove {name}",
     textFileNameLabel: "File name",
@@ -411,6 +411,8 @@ export const library = {
       paragraphOther: "paragraphs",
       imageOne: "image",
       imageOther: "images",
+      slideOne: "slide",
+      slideOther: "slides",
     },
     streamUnavailable: "Live progress is unavailable; checking the job directly.",
     percent: "{percent}%",
@@ -531,6 +533,7 @@ export const library = {
     kind: {
       pdf: "PDF document",
       docx: "Word document",
+      pptx: "PowerPoint presentation",
       image: "Image",
       markdown: "Markdown",
       json: "JSON",
@@ -544,7 +547,7 @@ export const library = {
       title: "This original is safe to download, but not to render here.",
       descriptionBefore: "The stored type is ",
       descriptionAfter:
-        ". The viewer deliberately renders only PDF, DOCX, spreadsheets, images, and text-like formats; other binaries never execute in the archive.",
+        ". The viewer deliberately renders only PDF, DOCX, PPTX, spreadsheets, images, and text-like formats; other binaries never execute in the archive.",
       fileName: "File name",
       size: "Size",
       indexedChunks: "Indexed chunks",
@@ -572,6 +575,20 @@ export const library = {
         "Rendered in a script-disabled frame. External images and active media stay blocked; the extracted text remains available if layout fails.",
       frameTitle: "{name} preview",
     },
+    pptx: {
+      engineFallback: "The PPTX renderer could not read this presentation.",
+      renderFallback: "The PPTX slides could not be rendered ({reason}).",
+      errorOriginal: "The PPTX original could not be read",
+      chip: "Canvas preview",
+      notice:
+        "Rendered to a local canvas from the stored package. External media stays blocked; the extracted text remains available if layout fails.",
+      frameTitle: "{name} preview",
+      previousSlide: "Previous slide",
+      nextSlide: "Next slide",
+      slideOf: "Slide {page} of {total}",
+      keyboardHint: "Use ← and → to change slides",
+      canvasLabel: "Slide {page} of {total}",
+    },
     image: {
       unavailableEyebrow: "Image unavailable",
       unavailableTitle: "The browser could not decode this image.",
@@ -594,6 +611,8 @@ export const library = {
       image: "Loading the image",
       docxOriginal: "Fetching the DOCX original",
       docxLayout: "Laying out the Word document",
+      pptxOriginal: "Fetching the PPTX original",
+      pptxLayout: "Laying out the slides",
       xlsxOriginal: "Fetching the spreadsheet original",
       xlsxLayout: "Laying out the spreadsheet",
       markdown: "Typesetting the Markdown",
@@ -761,7 +780,7 @@ export const library = {
       noOriginal:
         "The stored original is unavailable, so this file cannot be re-ingested.",
       unsupported:
-        "Re-ingest is available only for images, PDF, and DOCX files.",
+        "Re-ingest is available only for images, PDF, DOCX, and PPTX files.",
       active: "A re-ingest is already running. Wait for it to finish.",
     },
   },

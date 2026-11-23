@@ -45,7 +45,7 @@ src/
     chat/                       persistent agent workspace
     questions/                  saved-question Q&A library
     profile/                    display name and profile cards
-    viewer/                     PDF, DOCX, image, and text renderers
+    viewer/                     PDF, DOCX, PPTX, image, and text renderers
     about/ settings/            method page, provider and runtime settings
     i18n/                       locale provider, dictionaries, formatters
     not-found/                  unmatched-route page
@@ -481,9 +481,10 @@ into the Library or the Memory reader, so deep links keep working:
 
 - `/viewer/file/:fileId` → `/library?tab=files&file=…` — `react-pdf` 11 +
   `pdfjs-dist` 6.3.289 for PDF, `docx-preview` 0.4.1 in a script-disabled
-  sandbox for DOCX, native image with `react-zoom-pan-pinch` 4.2.0, and an
-  archive sheet for text/JSON/Markdown/CSV (`react-markdown` 10.1.0 +
-  `remark-gfm` 4.0.1, `skipHtml`).
+  sandbox for DOCX, `pptxviewjs` 1.1.9 Canvas rendering for PPTX, native image
+  with `react-zoom-pan-pinch` 4.2.0, and an archive sheet for
+  text/JSON/Markdown/CSV (`react-markdown` 10.1.0 + `remark-gfm` 4.0.1,
+  `skipHtml`).
 - `/viewer/media/:mediaId` → `/library?tab=media&media=…` — the same file
   preview for image files.
 - `/viewer/memory/:memoryId` → `/memory/:memoryId` — the memory leaf with

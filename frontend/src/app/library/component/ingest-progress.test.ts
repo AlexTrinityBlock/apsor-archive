@@ -42,6 +42,21 @@ test("chunking with a chunk count is determinate", () => {
   expect(resolution.stageCount?.unit).toBe("chunk");
 });
 
+test("a slide count is a first-class parsing unit", () => {
+  const resolution = resolveIngestProgress({
+    ...base,
+    stage: "parsing",
+    progressPct: 12,
+    stageDone: 3,
+    stageTotal: 14,
+    stageUnit: "slide",
+  });
+
+  expect(resolution.indeterminate).toBe(false);
+  expect(resolution.percent).toBe(12);
+  expect(resolution.stageCount).toEqual({ done: 3, total: 14, unit: "slide" });
+});
+
 test("early stages stay indeterminate without a positive stage total", () => {
   const parsing = resolveIngestProgress({ ...base, stage: "parsing" });
   const zeroTotal = resolveIngestProgress({
