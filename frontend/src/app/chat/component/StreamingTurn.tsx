@@ -13,6 +13,7 @@ import type {
   ToolResultMeta,
 } from "../types";
 import { MarkdownBody } from "./MarkdownBody";
+import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolStepCard } from "./ToolStepCard";
 import { UserMarginalia } from "./UserMarginalia";
 import { finishReasonTone } from "./status";
@@ -63,7 +64,10 @@ export const StreamingTurn = memo(function StreamingTurn({
   const { t, formatNumber } = useI18n();
   const total = stream.usage.total_tokens;
   const visibleSegments = stream.segments.filter(
-    (segment) => segment.text.trim().length > 0 || segment.toolCalls.length > 0,
+    (segment) =>
+      segment.text.trim().length > 0 ||
+      segment.toolCalls.length > 0 ||
+      segment.reasoning.trim().length > 0,
   );
   const hasHistory = visibleSegments.length > 0;
 
@@ -99,18 +103,29 @@ export const StreamingTurn = memo(function StreamingTurn({
           <div className="chat-timeline chat-timeline--live">
             {visibleSegments.map((segment) => (
               <div className="chat-timeline__segment" key={segment.index}>
-                {segment.text.trim().length > 0 ? (
+                {segment.reasoning.trim().length > 0 ||
+                segment.text.trim().length > 0 ? (
                   <div className="chat-timeline__prose">
                     <p className="chat-timeline__step">
                       {t("chat.timeline.step", { step: segment.index })}
                     </p>
-                    <div className="chat-turn__bubble">
-                      <MarkdownBody
-                        markdown={segment.text}
-                        memoryTitles={memoryTitles}
-                        onOpenCitation={onOpenCitation}
-                      />
-                    </div>
+                    <ThinkingBlock
+                      text={segment.reasoning}
+                      tokens={segment.reasoningTokens}
+                      defaultOpen={
+                        stream.status === "running" &&
+                        segment.index === visibleSegments.at(-1)?.index
+                      }
+                    />
+                    {segment.text.trim().length > 0 ? (
+                      <div className="chat-turn__bubble">
+                        <MarkdownBody
+                          markdown={segment.text}
+                          memoryTitles={memoryTitles}
+                          onOpenCitation={onOpenCitation}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 {segment.toolCalls.length > 0 ? (

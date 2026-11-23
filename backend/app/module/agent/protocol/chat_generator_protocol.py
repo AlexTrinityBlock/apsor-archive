@@ -28,6 +28,9 @@ class ChatResult:
     model: str = ""
     usage: dict[str, int] = field(default_factory=dict)
     raw_assistant_message: dict[str, Any] = field(default_factory=dict)
+    # Provider-reported reasoning/thinking text for this completion. Empty when
+    # the provider returned none; it is never synthesized or inferred.
+    reasoning: str = ""
 
 
 class ChatGeneratorProtocol(Protocol):
@@ -52,4 +55,5 @@ class ChatGeneratorProtocol(Protocol):
         model: str | None = None,
         stream: bool = False,
         on_text_delta: TextDeltaCallback | None = None,
+        on_reasoning_delta: TextDeltaCallback | None = None,
     ) -> ChatResult: ...

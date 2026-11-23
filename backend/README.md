@@ -527,10 +527,15 @@ outside the source.
 
 Messages and retry stream `text/event-stream` by default; send
 `Accept: application/json` for the completed turn. Event names are `run_start`,
-`message_start`, `message_delta`, `message_end`, `tool_start`, `tool_end`,
-`approval_required`, `run_end`, and `error`. `message_start` carries
+`message_start`, `message_delta`, `reasoning_delta`, `message_end`, `tool_start`,
+`tool_end`, `approval_required`, `run_end`, and `error`. `reasoning_delta`
+carries provider reasoning text before the corresponding answer or tool call;
+its payload is `{"entry_id": null, "delta": "..."}` and it never mixes into
+`message_delta`. `message_start` carries
 `entry_id=null`; the assistant entry id arrives at `message_end`, and deltas are
-never persisted. `tool_start` and `tool_end` include `parallel`, `batch_size`,
+never persisted. A completion's reasoning is stored in the assistant entry
+`data` as bounded display telemetry, never in the provider-facing `model`
+messages. `tool_start` and `tool_end` include `parallel`, `batch_size`,
 and `parallel_index` for the current batch. `approval_required` carries the
 approval id, tool-call id, safe preview, and requested time; the stream then
 ends with `run_end {status: "waiting"}`. SSE headers disable proxy buffering
@@ -551,7 +556,17 @@ with a visible truncation marker; there is no turn-wide result budget.
 `context_window_tokens` (default 1,000,000) is the deployment-default outbound
 input budget. An account's `chat_context_window_tokens` replaces it when set, and
 the account threshold must stay below the effective window. The budget is
-enforced by the local overflow ladder, not by a local turn failure. All of these
+enforced by the local overflow ladder, not by a local turn failure. The
+deterministic input estimate keeps the model catalog's characters-per-token ratio
+for non-CJK text and charges CJK characters at about 1.6 characters per token,
+so a Chinese conversation is not undercounted by an English ratio; output-token
+character budgets are unchanged. `AgentService` also treats the largest
+successful provider-reported `prompt_tokens` in the current context segment as a
+floor, and every budget/status decision uses the larger of that floor and the
+character estimate. A compaction boundary clears the floor because the old
+prompt no longer describes the new context. The status block's `context_used` is
+therefore a conservative estimate rather than a provider-exact count, and a
+reported overshoot cannot be silently repeated on the next step. All of these
 come from the immutable `agent_config` snapshot (with the account budget applied
 over it), not from module constants. The loop uses
 `app.state.db.session_factory()` for appends and a short-lived session for each

@@ -24,6 +24,7 @@ from app.module.agent.domain.agent_domain import (
     KIND_SYSTEM,
     KIND_TOOL_RESULT,
     KIND_USER,
+    MAX_ASSISTANT_REASONING_CHARS,
     RUN_CANCELLED,
     RUN_COMPLETED,
     RUN_FAILED,
@@ -201,6 +202,9 @@ class _CompletionOutcome:
     result: ChatResult | None = None
     error: Exception | None = None
     text: str = ""
+    # Provider-reported reasoning streamed before the visible answer. It is
+    # transport/UI telemetry and never part of the provider messages.
+    reasoning: str = ""
 
 
 @dataclass
@@ -290,6 +294,11 @@ class AgentService:
         self._model_status = model_status
         self._escalations = 0
         self._budget_notice_emitted = False
+        # The largest prompt size the provider has actually reported for the
+        # current context segment. Local character estimation can undercount
+        # CJK-heavy requests, so this floor is the second opinion that cannot be
+        # ignored once a real response reports it.
+        self._prompt_token_floor = 0
 
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
@@ -738,16 +747,16 @@ class AgentService:
         drop, tool-result clipping oldest-first, then outbound truncation of the
         current user message. The stored transcript is never modified; one
         ``ui.notice`` per run records what the model did not see.
+
+        The entry check uses ``max(character estimate, reported prompt tokens)``
+        so a provider-reported overshoot makes the next step compact or clip
+        instead of repeating it. A forced compaction replaces the earlier
+        transcript with a summary, so it starts a new estimate segment and the
+        old floor is cleared. The stored transcript is unchanged.
         """
         budget = self.config.context_window_tokens
         chars_per_token = self._chars_per_token()
-        if (
-            estimate_provider_context_tokens(
-                context,
-                chars_per_token=chars_per_token,
-            )
-            <= budget
-        ):
+        if self._context_token_estimate(context) <= budget:
             return context, last_entry_id, last_compaction_entry_id
         target_tokens = max(1, math.floor(budget * _FORCED_COMPACTION_BUDGET_RATIO))
         forced = await self._forced_compaction_context(
@@ -756,12 +765,16 @@ class AgentService:
             target_tokens=target_tokens,
             keep_plot_run_id=run_id,
         )
+        floor_tokens = self._prompt_token_floor
         if forced is not None:
             context = forced
+            self._reset_provider_prompt_floor()
+            floor_tokens = 0
         fitted, stats = _fit_provider_context(
             context,
             budget_tokens=budget,
             chars_per_token=chars_per_token,
+            floor_tokens=floor_tokens,
         )
         if stats.lost_input() and not self._budget_notice_emitted:
             notice = EntryDraft(
@@ -902,6 +915,46 @@ class AgentService:
         """Return the current model's catalog density (2.3 when unknown)."""
         return chars_per_token_for(self._current_model)
 
+    def _note_provider_prompt_tokens(self, usage: Mapping[str, int]) -> None:
+        """Remember the prompt size a successful provider call reported.
+
+        The local estimate is character-based and necessarily approximate. Once
+        a real response says the prompt was larger, the next budget check must
+        treat that figure as a floor so an overshoot cannot be silently
+        repeated. Only integers are trusted; a missing or zero value changes
+        nothing.
+        """
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        if isinstance(prompt_tokens, int) and not isinstance(prompt_tokens, bool):
+            if prompt_tokens > self._prompt_token_floor:
+                self._prompt_token_floor = prompt_tokens
+
+    def _reset_provider_prompt_floor(self) -> None:
+        """Forget a reported prompt size when a compaction starts a new segment.
+
+        A compacted request no longer replays the old transcript, so its prompt
+        size stops describing the new context. Keeping the floor would clip the
+        fresh summary and user input against a request the provider will never
+        see again.
+        """
+        self._prompt_token_floor = 0
+
+    def _context_token_estimate(self, context: ProviderContext) -> int:
+        """Return the conservative request estimate including the provider floor.
+
+        ``max(character estimate, reported prompt tokens)`` is the value every
+        budget decision uses. The character estimate stays the primary signal
+        for a new segment; the floor only wins when a provider has already
+        reported a larger request than the local ratio predicted.
+        """
+        return max(
+            estimate_provider_context_tokens(
+                context,
+                chars_per_token=self._chars_per_token(),
+            ),
+            self._prompt_token_floor,
+        )
+
     async def _compact_active_context(
         self,
         conversation_id: int,
@@ -929,6 +982,10 @@ class AgentService:
             draft=draft,
             now=utcnow(),
         )
+        # The persisted boundary starts a new context segment. The previous
+        # provider-reported prompt size described the hidden transcript, not the
+        # summary the next request will send.
+        self._reset_provider_prompt_floor()
         return (
             await self._context(
                 conversation_id,
@@ -965,6 +1022,10 @@ class AgentService:
         """Continue one durable turn from a deterministic loop snapshot."""
         conversation_id = turn.conversation.id
         run_id = turn.run.id
+        # The reported prompt floor is scoped to this run. A resumed approval
+        # starts a fresh loop snapshot, so it re-learns the floor from the first
+        # successful call in the resumed segment.
+        self._reset_provider_prompt_floor()
         terminal = False
         loop_started = time.monotonic()
         completed_steps = 0
@@ -1239,6 +1300,7 @@ class AgentService:
                             usage=retry_usage,
                             cache_prefix_hash=context.cache_prefix_hash,
                             emit_message_start=True,
+                            reasoning=completion.reasoning,
                         ):
                             yield event
                         terminal = True
@@ -1762,6 +1824,7 @@ class AgentService:
                         usage={},
                         cache_prefix_hash=context.cache_prefix_hash,
                         emit_message_start=True,
+                        reasoning=completion.reasoning,
                     ):
                         yield event
                     terminal = True
@@ -2117,6 +2180,12 @@ class AgentService:
                     outcome.text += delta
                     await queue.put(("delta", delta))
 
+                async def on_reasoning(delta: str) -> None:
+                    nonlocal emitted
+                    emitted = True
+                    outcome.reasoning += delta
+                    await queue.put(("reasoning", delta))
+
                 attempt_started = time.monotonic()
                 try:
                     result = await self.chat_generator.complete_chat(
@@ -2125,6 +2194,7 @@ class AgentService:
                         model=model,
                         stream=True,
                         on_text_delta=on_delta,
+                        on_reasoning_delta=on_reasoning,
                     )
                 except AiProviderError as exc:
                     duration_ms = int((time.monotonic() - attempt_started) * 1000)
@@ -2201,6 +2271,7 @@ class AgentService:
                     len(result.text),
                     len(result.tool_calls),
                 )
+                self._note_provider_prompt_tokens(result.usage)
                 await queue.put(("result", result))
                 return
 
@@ -2214,10 +2285,21 @@ class AgentService:
                         {"entry_id": None, "delta": payload},
                     )
                     continue
+                if kind == "reasoning":
+                    yield AgentStreamEvent(
+                        "reasoning_delta",
+                        {"entry_id": None, "delta": payload},
+                    )
+                    continue
                 if kind == "result":
                     outcome.result = payload if isinstance(payload, ChatResult) else None
                     if outcome.result is None:
                         outcome.error = RuntimeError("provider returned an invalid result")
+                    elif outcome.result.reasoning and not outcome.reasoning:
+                        # A provider may report reasoning only in the final
+                        # result (no streamed deltas). Keep it without inventing
+                        # a duplicate stream.
+                        outcome.reasoning = outcome.result.reasoning
                     return
                 outcome.error = (
                     payload if isinstance(payload, Exception) else RuntimeError("provider")
@@ -2241,7 +2323,11 @@ class AgentService:
         ``_provider_messages``: the frozen system message, every replayed context
         message in entry order, and this trailing block. The estimate uses the
         same chars-per-token ratio as the budget ladder and runs after chat-image
-        enrichment, so raw base64 image payloads are stripped.
+        enrichment, so raw base64 image payloads are stripped. It is a
+        conservative estimate, not a provider-exact token count: a reported
+        prompt size from an earlier successful call in the same context segment
+        is used as a floor, so the block never claims less than the provider
+        already observed.
 
         Because the block renders its own estimate, its digit count can change
         the total. A bounded fixed-point loop re-estimates after each render
@@ -2251,10 +2337,13 @@ class AgentService:
         chars_per_token = self._chars_per_token()
         limit = self.config.context_window_tokens
         compaction_at = self.config.compaction_threshold_tokens
-        total = estimate_provider_context_tokens(
-            context,
-            strip_image_data=True,
-            chars_per_token=chars_per_token,
+        total = max(
+            estimate_provider_context_tokens(
+                context,
+                strip_image_data=True,
+                chars_per_token=chars_per_token,
+            ),
+            self._prompt_token_floor,
         )
 
         def render(used: int) -> str:
@@ -2275,10 +2364,13 @@ class AgentService:
 
         block = render(total)
         for _ in range(_AGENT_STATUS_ESTIMATE_ATTEMPTS):
-            with_block = _estimated_provider_request_tokens(
-                context,
-                block,
-                chars_per_token=chars_per_token,
+            with_block = max(
+                _estimated_provider_request_tokens(
+                    context,
+                    block,
+                    chars_per_token=chars_per_token,
+                ),
+                self._prompt_token_floor,
             )
             if with_block == total:
                 return block
@@ -2296,11 +2388,14 @@ class AgentService:
         usage: dict[str, int],
         cache_prefix_hash: str,
         emit_message_start: bool,
+        reasoning: str = "",
     ) -> AsyncIterator[AgentStreamEvent]:
         """Persist a normal assistant answer and complete the run.
 
         Recoverable limit outcomes use this path: the user receives an
         explanation, the run completes normally, and no error entry is written.
+        ``reasoning`` is carried only when a caller already has provider
+        reasoning for this exact completion; otherwise it stays empty.
         """
         run_id = turn.run.id
         conversation_id = turn.conversation.id
@@ -2318,6 +2413,7 @@ class AgentService:
             finish_reason="stop",
             model=self._current_model,
             usage=dict(usage),
+            reasoning=reasoning,
         )
         try:
             entry = await self.repository.append_assistant(
@@ -3043,7 +3139,7 @@ def _assistant_data(
     *,
     model: str,
 ) -> dict[str, Any]:
-    return {
+    data: dict[str, Any] = {
         "finish_reason": finish_reason,
         "usage": dict(result.usage),
         "model": result.model or model,
@@ -3052,6 +3148,17 @@ def _assistant_data(
         "cache_prefix_hash": cache_prefix_hash,
         "citations": list(dict.fromkeys(CITATION_PATTERN.findall(result.text))),
     }
+    reasoning = result.reasoning
+    if reasoning:
+        clipped = clip(reasoning, MAX_ASSISTANT_REASONING_CHARS)
+        data["reasoning"] = clipped
+        data["reasoning_chars"] = len(reasoning)
+        data["reasoning_truncated"] = clipped != reasoning
+    reasoning_tokens = result.usage.get("reasoning_tokens", 0)
+    if isinstance(reasoning_tokens, int) and not isinstance(reasoning_tokens, bool):
+        if reasoning_tokens > 0:
+            data["reasoning_tokens"] = reasoning_tokens
+    return data
 
 
 def _normalize_finish(result: ChatResult) -> str | None:
@@ -3077,6 +3184,7 @@ def _fit_provider_context(
     *,
     budget_tokens: int,
     chars_per_token: float,
+    floor_tokens: int = 0,
 ) -> tuple[ProviderContext, _BudgetStats]:
     """Apply the message-level part of the overflow ladder to one request.
 
@@ -3087,13 +3195,21 @@ def _fit_provider_context(
     its inline attachments. If even that cannot fit, the request keeps the
     system prompt only. The stored transcript is never touched; this function
     only rewrites the provider projection.
+
+    ``floor_tokens`` is the provider-reported prompt size for the current
+    context segment. It is not content and cannot be reduced here, so a request
+    whose floor already meets the budget runs every step: the ladder still
+    removes all removable input instead of silently retrying an overshoot.
     """
     stats = _BudgetStats()
 
     def estimate(candidate: ProviderContext) -> int:
-        return estimate_provider_context_tokens(
-            candidate,
-            chars_per_token=chars_per_token,
+        return max(
+            estimate_provider_context_tokens(
+                candidate,
+                chars_per_token=chars_per_token,
+            ),
+            floor_tokens,
         )
 
     current = context

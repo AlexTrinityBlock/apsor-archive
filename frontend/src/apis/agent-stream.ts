@@ -38,6 +38,11 @@ export interface AgentMessageDeltaData {
   readonly delta: string;
 }
 
+export interface AgentReasoningDeltaData {
+  readonly entry_id: number | null;
+  readonly delta: string;
+}
+
 export interface AgentMessageEndData {
   readonly entry_id: number | null;
   readonly usage: Readonly<Record<string, number>>;
@@ -88,6 +93,10 @@ export type AgentStreamEvent =
   | { readonly type: "run_start"; readonly data: AgentRunStartData }
   | { readonly type: "message_start"; readonly data: AgentMessageStartData }
   | { readonly type: "message_delta"; readonly data: AgentMessageDeltaData }
+  | {
+      readonly type: "reasoning_delta";
+      readonly data: AgentReasoningDeltaData;
+    }
   | { readonly type: "message_end"; readonly data: AgentMessageEndData }
   | { readonly type: "tool_start"; readonly data: AgentToolStartData }
   | { readonly type: "tool_end"; readonly data: AgentToolEndData }
@@ -286,6 +295,28 @@ function toApprovalRequiredEvent(
   };
 }
 
+/** Normalize one text or reasoning delta frame into the matching union member. */
+function toDeltaEvent(
+  frame: SseFrame,
+  parsed: UnknownRecord,
+): AgentStreamEvent | null {
+  const delta = stringValue(parsed.delta);
+  if (delta === null) {
+    return null;
+  }
+  const entryId = numberValue(parsed.entry_id);
+  if (frame.event === "reasoning_delta") {
+    return {
+      type: "reasoning_delta",
+      data: { entry_id: entryId, delta },
+    };
+  }
+  return {
+    type: "message_delta",
+    data: { entry_id: entryId, delta },
+  };
+}
+
 /** Normalize one SSE frame into the small event union the UI understands. */
 function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
   let parsed: unknown;
@@ -327,15 +358,8 @@ function toStreamEvent(frame: SseFrame): AgentStreamEvent | null {
     };
   }
 
-  if (frame.event === "message_delta") {
-    const delta = stringValue(parsed.delta);
-    if (delta === null) {
-      return null;
-    }
-    return {
-      type: "message_delta",
-      data: { entry_id: numberValue(parsed.entry_id), delta },
-    };
+  if (frame.event === "message_delta" || frame.event === "reasoning_delta") {
+    return toDeltaEvent(frame, parsed);
   }
 
   if (frame.event === "message_end") {

@@ -19,6 +19,7 @@ import {
   translateApiErrorWithActiveLocale,
 } from "../../i18n";
 import { invalidateConversation } from "../query";
+import { appendReasoningDelta } from "./reasoning-stream";
 import {
   readResource,
   type ChatAttachmentView,
@@ -44,6 +45,10 @@ export interface ChatStreamSegment {
   readonly index: number;
   readonly text: string;
   readonly toolCalls: readonly ChatStreamTool[];
+  /** Provider reasoning streamed before this step's visible text. */
+  readonly reasoning: string;
+  /** Provider-reported reasoning tokens for this step, when available. */
+  readonly reasoningTokens: number;
 }
 
 export interface ChatStreamView {
@@ -144,7 +149,15 @@ function ensureSegments(
 ): ChatStreamSegment[] {
   return segments.length > 0
     ? [...segments]
-    : [{ index: 1, text: "", toolCalls: [] }];
+    : [
+        {
+          index: 1,
+          text: "",
+          toolCalls: [],
+          reasoning: "",
+          reasoningTokens: 0,
+        },
+      ];
 }
 
 function updateLastSegment(
@@ -186,12 +199,15 @@ function startAssistantSegment(state: ChatStreamView): ChatStreamView {
   const fresh =
     current === undefined ||
     current.text.length > 0 ||
-    current.toolCalls.length > 0;
+    current.toolCalls.length > 0 ||
+    current.reasoning.length > 0;
   if (fresh) {
     segments.push({
       index: segments.length + 1,
       text: "",
       toolCalls: [],
+      reasoning: "",
+      reasoningTokens: 0,
     });
   }
   return {
@@ -223,12 +239,26 @@ function applyEvent(
       }));
       return withSegments(state, segments);
     }
-    case "message_end":
+    case "reasoning_delta":
+      return withSegments(
+        state,
+        appendReasoningDelta(state.segments, event.data.delta),
+      );
+    case "message_end": {
+      const reasoningTokens = event.data.usage.reasoning_tokens ?? 0;
+      const segments =
+        reasoningTokens > 0
+          ? updateLastSegment(state.segments, (segment) => ({
+              ...segment,
+              reasoningTokens,
+            }))
+          : state.segments;
       return {
-        ...state,
+        ...withSegments(state, segments),
         usage: event.data.usage,
         finishReason: event.data.finish_reason,
       };
+    }
     case "tool_start": {
       const patch = {
         name: event.data.name,

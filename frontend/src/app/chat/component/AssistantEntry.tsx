@@ -14,6 +14,7 @@ import {
 } from "../types";
 import { CitationChip } from "./CitationChip";
 import { MarkdownBody } from "./MarkdownBody";
+import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallCard } from "./ToolCallCard";
 import { finishReasonTone } from "./status";
 
@@ -30,7 +31,13 @@ interface AssistantEntryProps {
   readonly onOpenCitation?: (token: CitationToken) => void;
 }
 
-type UsageKey = "prompt" | "completion" | "total" | "cacheHit" | "cacheMiss";
+type UsageKey =
+  | "prompt"
+  | "completion"
+  | "total"
+  | "reasoning"
+  | "cacheHit"
+  | "cacheMiss";
 
 function usageRows(
   usage: Readonly<Record<string, number>>,
@@ -39,6 +46,7 @@ function usageRows(
     { key: "prompt", value: usage.prompt_tokens ?? 0 },
     { key: "completion", value: usage.completion_tokens ?? 0 },
     { key: "total", value: usage.total_tokens ?? 0 },
+    { key: "reasoning", value: usage.reasoning_tokens ?? 0 },
     { key: "cacheHit", value: usage.prompt_cache_hit_tokens ?? 0 },
     { key: "cacheMiss", value: usage.prompt_cache_miss_tokens ?? 0 },
   ];
@@ -49,6 +57,7 @@ const USAGE_LABEL_KEYS: Readonly<Record<UsageKey, TranslationKey>> = {
   prompt: "chat.assistant.usagePrompt",
   completion: "chat.assistant.usageCompletion",
   total: "chat.assistant.usageTotal",
+  reasoning: "chat.assistant.usageReasoning",
   cacheHit: "chat.assistant.usageCacheHit",
   cacheMiss: "chat.assistant.usageCacheMiss",
 };
@@ -142,6 +151,12 @@ export function AssistantEntry({
           ))}
         </div>
       ) : null}
+
+      <ThinkingBlock
+        text={meta.reasoning}
+        tokens={meta.reasoningTokens}
+        defaultOpen={false}
+      />
 
       {body}
 

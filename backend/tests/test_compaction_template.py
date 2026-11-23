@@ -5,6 +5,8 @@ compaction builder must be reproducible byte for byte, because the same input
 feeds both the stored transcript projection and the overflow ladder.
 """
 
+import json
+import math
 from typing import Any
 
 import httpx
@@ -29,6 +31,7 @@ from app.module.agent.domain.compaction_domain import (
     MAX_COMPACTION_SUMMARY_CHARS,
     MAX_SUMMARY_ITEM_CHARS,
     MAX_SUMMARY_ITEMS,
+    MAX_SUMMARY_THINKING_CHARS,
     _summary_lines,
     build_compaction_draft,
     estimate_context_tokens,
@@ -510,6 +513,63 @@ def test_summary_tool_line_stays_within_the_item_cap() -> None:
         assert len(line) <= MAX_SUMMARY_ITEM_CHARS
 
 
+def test_summary_includes_thinking_only_when_reasoning_exists() -> None:
+    """A provider reasoning trace becomes one bounded summary line."""
+    entries = [
+        _entry(1, KIND_USER, text="Hello"),
+        _entry(
+            2,
+            KIND_ASSISTANT,
+            text="Useful answer",
+            data={"reasoning": "I checked the wrench first."},
+        ),
+        _entry(3, KIND_ASSISTANT, text="No reasoning here"),
+    ]
+
+    summary = _summary_text(entries)
+
+    assert summary.splitlines() == [
+        "User: Hello",
+        "Assistant: Useful answer",
+        "Thinking: I checked the wrench first.",
+        "Assistant: No reasoning here",
+    ]
+
+
+def test_summary_omits_thinking_when_no_reasoning_was_returned() -> None:
+    """No placeholder line appears for a completion without reasoning."""
+    entries = [
+        _entry(1, KIND_USER, text="Hello"),
+        _entry(2, KIND_ASSISTANT, text="Useful answer"),
+        _entry(3, KIND_ASSISTANT, text="Still no reasoning", data={"reasoning": ""}),
+    ]
+
+    summary = _summary_text(entries)
+
+    assert "Thinking:" not in summary
+
+
+def test_summary_clips_long_thinking_to_one_bounded_line() -> None:
+    """The summary keeps only an orientation-sized reasoning prefix."""
+    entries = [
+        _entry(
+            1,
+            KIND_ASSISTANT,
+            text="Answer",
+            data={"reasoning": "長" * 5_000},
+        )
+    ]
+
+    summary = _summary_text(entries)
+
+    thinking_lines = [
+        line for line in summary.splitlines() if line.startswith("Thinking: ")
+    ]
+    assert len(thinking_lines) == 1
+    assert len(thinking_lines[0]) <= len("Thinking: ") + MAX_SUMMARY_THINKING_CHARS
+    assert thinking_lines[0].endswith("…")
+
+
 def test_summary_total_cap_still_applies_to_merged_tool_lines() -> None:
     """The configured summary cap bounds the rendered, grouped summary."""
     entries = [
@@ -702,6 +762,55 @@ def test_estimate_provider_context_tokens_uses_the_given_ratio() -> None:
         context,
         chars_per_token=float(CHARS_PER_ESTIMATED_TOKEN),
     )
+
+
+def test_cjk_input_estimate_is_more_conservative_than_the_catalog_ratio() -> None:
+    """A Chinese request must not be estimated at an English chars-per-token ratio."""
+    ascii_context = ProviderContext(
+        system_message={"role": "system", "content": "You are Apsor Archive."},
+        tools=[],
+        messages=[{"role": "user", "content": "x" * 600}],
+        source_entry_ids=[1],
+        cache_prefix_hash="hash",
+    )
+    chinese_context = ProviderContext(
+        system_message={"role": "system", "content": "You are Apsor Archive."},
+        tools=[],
+        messages=[{"role": "user", "content": "這是一段中文對話內容。" * 50}],
+        source_entry_ids=[1],
+        cache_prefix_hash="hash",
+    )
+
+    ascii_estimate = estimate_provider_context_tokens(
+        ascii_context,
+        chars_per_token=3.0,
+    )
+    chinese_estimate = estimate_provider_context_tokens(
+        chinese_context,
+        chars_per_token=3.0,
+    )
+    chinese_chars = len(chinese_context.messages[0]["content"])
+
+    # Pure ASCII keeps its historical estimate exactly.
+    ascii_serialized = len(
+        json.dumps(
+            {
+                "system": ascii_context.system_message,
+                "tools": ascii_context.tools,
+                "messages": ascii_context.messages,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+    )
+    assert ascii_estimate == math.ceil(ascii_serialized / 3.0)
+
+    # The CJK payload is roughly one token per character, not one per three.
+    assert chinese_estimate > math.ceil(chinese_chars / 3.0)
+    assert chinese_estimate >= math.ceil(chinese_chars / 1.7)
+    assert chinese_estimate > ascii_estimate
 
 
 def test_estimate_context_tokens_threads_the_ratio() -> None:

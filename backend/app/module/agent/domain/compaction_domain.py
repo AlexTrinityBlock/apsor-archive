@@ -38,9 +38,33 @@ from app.module.agent.domain.xml_domain import TRUNCATION_MARKER, clip, xml_text
 MAX_SUMMARY_ITEM_CHARS = 280
 MAX_SUMMARY_ARGUMENT_CHARS = 80
 MAX_SUMMARY_ARGUMENT_VALUES = 3
+MAX_SUMMARY_THINKING_CHARS = 200
 MAX_COMPACTION_CARRY_CHARS = 1_200
 MAX_SUMMARY_ITEMS = 40
 CHARS_PER_ESTIMATED_TOKEN = 3
+# The catalog chars-per-token ratio describes English-heavy text. One CJK code
+# point costs about one token even though it is one character, so charging it at
+# 2.3-3.0 characters per token undercounts a Chinese or Japanese request by two
+# to three times. The input estimate charges CJK characters at this tighter
+# density; output-token character budgets keep the catalog ratio.
+CJK_CHARS_PER_ESTIMATED_TOKEN = 1.6
+_CJK_CODE_RANGES = (
+    (0x1100, 0x11FF),  # Hangul Jamo
+    (0x2E80, 0x2EFF),  # CJK radicals
+    (0x3000, 0x303F),  # CJK symbols and punctuation
+    (0x3040, 0x30FF),  # Hiragana and Katakana
+    (0x3130, 0x318F),  # Hangul compatibility Jamo
+    (0x31C0, 0x31EF),  # CJK strokes
+    (0x3400, 0x4DBF),  # CJK Unified Ideographs Extension A
+    (0x4E00, 0x9FFF),  # CJK Unified Ideographs
+    (0xA960, 0xA97F),  # Hangul Jamo Extended-A
+    (0xAC00, 0xD7AF),  # Hangul syllables
+    (0xF900, 0xFAFF),  # CJK Compatibility Ideographs
+    (0xFE30, 0xFE4F),  # CJK Compatibility Forms
+    (0xFF00, 0xFFEF),  # Halfwidth and Fullwidth Forms
+    (0x1B000, 0x1B16F),  # Kana Extended and Supplement
+    (0x20000, 0x2FA1F),  # CJK Unified Ideographs Extension B-F
+)
 # Fixed XML envelope sizes. The bounded path reserves these before spending the
 # remaining characters on the carry line and the summary items.
 _COMPACTION_ENVELOPE_CHARS = len("<compaction><summary></summary></compaction>")
@@ -177,9 +201,9 @@ def estimate_context_tokens(
     """Estimate provider tokens without calling the provider.
 
     The estimate is intentionally conservative: a serialized character count at
-    the caller's characters-per-token ratio, compared against the latest valid
-    assistant usage. The larger value wins so the auto-compaction threshold
-    cannot be bypassed by a terse usage report.
+    the caller's characters-per-token ratio (with a tighter CJK density),
+    compared against the latest valid assistant usage. The larger value wins so
+    the auto-compaction threshold cannot be bypassed by a terse usage report.
     """
     _validate_chars_per_token(chars_per_token)
     ordered = sorted(entries, key=lambda entry: entry.id)
@@ -226,7 +250,9 @@ def estimate_provider_context_tokens(
     their behavior is unchanged; the provider-only self block opts in because it
     runs after chat-image enrichment. ``chars_per_token`` is the primary model's
     catalog ratio, so an unknown or non-Claude model uses the conservative
-    default.
+    default. The serialized character count is weighted per script: ASCII keeps
+    the catalog ratio, while CJK characters use the tighter density above, so a
+    CJK-heavy request is never undercounted by an English ratio.
     """
     _validate_chars_per_token(chars_per_token)
     messages = (
@@ -245,7 +271,38 @@ def estimate_provider_context_tokens(
         separators=(",", ":"),
         default=str,
     )
-    return math.ceil(len(serialized) / chars_per_token)
+    return _cjk_aware_token_estimate(serialized, chars_per_token)
+
+
+def _is_cjk_character(character: str) -> bool:
+    """Return whether one code point belongs to a CJK or fullwidth block."""
+    code = ord(character)
+    if code < 0x1100:
+        # Latin, digits, punctuation, and the JSON envelope are the common
+        # case; rejecting them before scanning the range table keeps a large
+        # ASCII request cheap.
+        return False
+    return any(start <= code <= end for start, end in _CJK_CODE_RANGES)
+
+
+def _cjk_aware_token_estimate(value: str, chars_per_token: float) -> int:
+    """Estimate tokens from one serialized request using per-script density.
+
+    The caller's ratio stays exact for non-CJK characters, so a pure-ASCII
+    request produces the same estimate as before. CJK characters are charged at
+    ``CJK_CHARS_PER_ESTIMATED_TOKEN`` instead, which makes a Chinese or Japanese
+    conversation materially more conservative without a tokenizer, network, or
+    randomness. Only the input estimate changes; output-token character budgets
+    still use ``_char_budget`` and the catalog ratio.
+    """
+    cjk_chars = sum(1 for character in value if _is_cjk_character(character))
+    if cjk_chars == 0:
+        return math.ceil(len(value) / chars_per_token)
+    other_chars = len(value) - cjk_chars
+    weighted = other_chars / chars_per_token + (
+        cjk_chars / CJK_CHARS_PER_ESTIMATED_TOKEN
+    )
+    return math.ceil(weighted)
 
 
 IMAGE_DATA_PLACEHOLDER = "[image-data-url]"
@@ -443,8 +500,27 @@ def _summary_lines(entries: Sequence[TranscriptEntry]) -> list[str]:
         line = _summary_line(entry)
         if line:
             lines.append(line)
+        if entry.kind == KIND_ASSISTANT:
+            thinking_line = _thinking_line(data)
+            if thinking_line:
+                lines.append(thinking_line)
         index += 1
     return lines
+
+
+def _thinking_line(data: dict[str, Any]) -> str:
+    """Render one bounded reasoning trace for an assistant entry.
+
+    This is the only place provider reasoning becomes visible to a later model.
+    It is a bounded trace, not a verified fact: the summary keeps the first
+    characters as an orientation hint and never the full thinking stream.
+    Entries without reasoning add no line at all.
+    """
+    reasoning = data.get("reasoning")
+    if not isinstance(reasoning, str):
+        return ""
+    text = _clip_inline(_one_line(reasoning), MAX_SUMMARY_THINKING_CHARS)
+    return f"Thinking: {text}" if text else ""
 
 
 def _mergeable_tool_result(data: dict[str, Any]) -> bool:
