@@ -2,9 +2,22 @@ import type { PathFileSchema } from "../../../generated-apis-types/schemas";
 import { basename } from "../../../../lib/format";
 
 /** The preview a library file card can show for a stored original. */
-export type ThumbKind = "image" | "pdf" | "docx" | "pptx" | "file";
+export type ThumbKind =
+  | "image"
+  | "pdf"
+  | "docx"
+  | "pptx"
+  | "xlsx"
+  | "markdown"
+  | "file";
 
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
+
+// The backend extracts these as spreadsheets and the full viewer renders them
+// through SheetJS. Keep the classification aligned with `classifyFile`.
+const SPREADSHEET_EXTENSIONS = new Set([".xlsx", ".xls", ".xlsm", ".ods"]);
+
+const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
 
 /**
  * Classify a stored path by the lowercase extension of its real basename.
@@ -27,6 +40,12 @@ export function thumbKindFor(rawPath: string): ThumbKind {
   }
   if (extension === ".pptx") {
     return "pptx";
+  }
+  if (SPREADSHEET_EXTENSIONS.has(extension)) {
+    return "xlsx";
+  }
+  if (MARKDOWN_EXTENSIONS.has(extension)) {
+    return "markdown";
   }
   return "file";
 }

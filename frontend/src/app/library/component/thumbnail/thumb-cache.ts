@@ -1,9 +1,9 @@
 /**
  * Session cache for rendered document thumbnails.
  *
- * PDF and PPTX thumbnails are small WebP data URLs, so they can be shared by
- * the board and the list while the user browses a folder. Images are not
- * stored here: their HTTP response already lives in the browser cache. A
+ * PDF, PPTX, and XLSX thumbnails are small WebP data URLs, so they can be
+ * shared by the board and the list while the user browses a folder. Images are
+ * not stored here: their HTTP response already lives in the browser cache. A
  * failure marker is kept for the session so a broken original is not fetched
  * again on every render or scroll.
  */
@@ -27,7 +27,7 @@ export function getThumb(key: string): ThumbEntry | undefined {
   return entry;
 }
 
-/** Store a rendered first page or slide and evict the oldest entry. */
+/** Store a rendered first page, slide, or sheet and evict the oldest entry. */
 export function setThumbImage(key: string, dataUrl: string): void {
   entries.delete(key);
   entries.set(key, { kind: "image", dataUrl });
