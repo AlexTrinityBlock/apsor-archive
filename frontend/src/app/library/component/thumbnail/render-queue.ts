@@ -1,9 +1,10 @@
 /**
  * A small FIFO scheduler for document thumbnail renders.
  *
- * PDF, DOCX, and PPTX rendering share one budget of two concurrent jobs so a
- * folder with many documents cannot start a burst of PDF.js workers or canvas
- * layouts. Running jobs are allowed to finish because their result is cached;
+ * PDF, DOCX, PPTX, and XLSX rendering share one budget of two concurrent jobs
+ * so a folder with many documents cannot start a burst of PDF.js workers,
+ * spreadsheet workers, or canvas layouts. Running jobs are allowed to finish
+ * because their result is cached;
  * queued jobs can be withdrawn through their `AbortSignal`. New jobs wait
  * while the page is hidden and resume on the next `visibilitychange`, without
  * polling.

@@ -7,11 +7,12 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { read as readWorkbook, type ParsingOptions, type WorkBook } from "xlsx";
+import { read as readWorkbook, type WorkBook } from "xlsx";
 
 import { useI18n } from "../../i18n";
 import { ChunkFallback } from "./ChunkFallback";
 import { ViewerErrorState, ViewerLoading } from "./ViewerStates";
+import { XLSX_READ_OPTIONS } from "./xlsx-options";
 import {
   fetchViewerBinary,
   fileDownloadUrl,
@@ -29,28 +30,6 @@ interface XlsxViewProps {
   readonly fileName: string;
   readonly totalChunks: number;
 }
-
-/**
- * Parse options keep SheetJS to values only: no HTML strings, no styles, no
- * number-format metadata, no VBA, and no extra book parts. The dense cell
- * layout avoids one object per addressed cell on large sheets. `dateNF`
- * replaces the locale-dependent default date format with sortable ISO text;
- * midnight-only values are shortened again when the grid renders them.
- */
-const XLSX_READ_OPTIONS: ParsingOptions = {
-  type: "array",
-  dense: true,
-  cellDates: true,
-  cellHTML: false,
-  cellNF: false,
-  cellStyles: false,
-  bookVBA: false,
-  bookProps: false,
-  bookFiles: false,
-  bookSheets: false,
-  WTF: false,
-  dateNF: "yyyy-mm-dd hh:mm:ss",
-};
 
 type ParseOutcome =
   | { readonly workbook: WorkBook; readonly error: null }

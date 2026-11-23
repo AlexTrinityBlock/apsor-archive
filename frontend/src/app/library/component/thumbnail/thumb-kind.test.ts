@@ -18,14 +18,29 @@ test("document extensions map to their renderer", () => {
   expect(thumbKindFor("/slides/deck.Pptx")).toBe("pptx");
 });
 
+test("spreadsheet extensions map to the xlsx preview regardless of case", () => {
+  for (const extension of ["xlsx", "xls", "xlsm", "ods", "XLSX", "Xlsm", "ODS"]) {
+    expect(thumbKindFor(`/tables/budget.${extension}`)).toBe("xlsx");
+  }
+});
+
+test("markdown extensions map to the rendered page", () => {
+  expect(thumbKindFor("/notes/readme.md")).toBe("markdown");
+  expect(thumbKindFor("/notes/README.MD")).toBe("markdown");
+  expect(thumbKindFor("/notes/guide.markdown")).toBe("markdown");
+  expect(thumbKindFor("/notes/guide.Markdown")).toBe("markdown");
+});
+
 test("nested folders use the real basename, not a directory dot", () => {
   expect(thumbKindFor("/archive.v2/photos/cover.png")).toBe("image");
   expect(thumbKindFor("/archive.v2/notes/summary.pdf")).toBe("pdf");
+  expect(thumbKindFor("/archive.v2/tables/budget.xlsx")).toBe("xlsx");
+  expect(thumbKindFor("/archive.v2/notes/readme.md")).toBe("markdown");
   expect(thumbKindFor("/archive.v2/notes/summary")).toBe("file");
 });
 
 test("unknown, missing, and trailing-dot extensions fall back to file", () => {
-  expect(thumbKindFor("/notes/readme.md")).toBe("file");
+  expect(thumbKindFor("/notes/readme.txt")).toBe("file");
   expect(thumbKindFor("/notes/readme")).toBe("file");
   expect(thumbKindFor("/notes/readme.")).toBe("file");
   expect(thumbKindFor("")).toBe("file");
