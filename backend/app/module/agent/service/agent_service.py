@@ -24,6 +24,7 @@ from app.module.agent.domain.agent_domain import (
     KIND_SYSTEM,
     KIND_TOOL_RESULT,
     KIND_USER,
+    MAX_ASSISTANT_REASONING_CHARS,
     RUN_CANCELLED,
     RUN_COMPLETED,
     RUN_FAILED,
@@ -201,6 +202,9 @@ class _CompletionOutcome:
     result: ChatResult | None = None
     error: Exception | None = None
     text: str = ""
+    # Provider-reported reasoning streamed before the visible answer. It is
+    # transport/UI telemetry and never part of the provider messages.
+    reasoning: str = ""
 
 
 @dataclass
@@ -1296,6 +1300,7 @@ class AgentService:
                             usage=retry_usage,
                             cache_prefix_hash=context.cache_prefix_hash,
                             emit_message_start=True,
+                            reasoning=completion.reasoning,
                         ):
                             yield event
                         terminal = True
@@ -1819,6 +1824,7 @@ class AgentService:
                         usage={},
                         cache_prefix_hash=context.cache_prefix_hash,
                         emit_message_start=True,
+                        reasoning=completion.reasoning,
                     ):
                         yield event
                     terminal = True
@@ -2174,6 +2180,12 @@ class AgentService:
                     outcome.text += delta
                     await queue.put(("delta", delta))
 
+                async def on_reasoning(delta: str) -> None:
+                    nonlocal emitted
+                    emitted = True
+                    outcome.reasoning += delta
+                    await queue.put(("reasoning", delta))
+
                 attempt_started = time.monotonic()
                 try:
                     result = await self.chat_generator.complete_chat(
@@ -2182,6 +2194,7 @@ class AgentService:
                         model=model,
                         stream=True,
                         on_text_delta=on_delta,
+                        on_reasoning_delta=on_reasoning,
                     )
                 except AiProviderError as exc:
                     duration_ms = int((time.monotonic() - attempt_started) * 1000)
@@ -2272,10 +2285,21 @@ class AgentService:
                         {"entry_id": None, "delta": payload},
                     )
                     continue
+                if kind == "reasoning":
+                    yield AgentStreamEvent(
+                        "reasoning_delta",
+                        {"entry_id": None, "delta": payload},
+                    )
+                    continue
                 if kind == "result":
                     outcome.result = payload if isinstance(payload, ChatResult) else None
                     if outcome.result is None:
                         outcome.error = RuntimeError("provider returned an invalid result")
+                    elif outcome.result.reasoning and not outcome.reasoning:
+                        # A provider may report reasoning only in the final
+                        # result (no streamed deltas). Keep it without inventing
+                        # a duplicate stream.
+                        outcome.reasoning = outcome.result.reasoning
                     return
                 outcome.error = (
                     payload if isinstance(payload, Exception) else RuntimeError("provider")
@@ -2364,11 +2388,14 @@ class AgentService:
         usage: dict[str, int],
         cache_prefix_hash: str,
         emit_message_start: bool,
+        reasoning: str = "",
     ) -> AsyncIterator[AgentStreamEvent]:
         """Persist a normal assistant answer and complete the run.
 
         Recoverable limit outcomes use this path: the user receives an
         explanation, the run completes normally, and no error entry is written.
+        ``reasoning`` is carried only when a caller already has provider
+        reasoning for this exact completion; otherwise it stays empty.
         """
         run_id = turn.run.id
         conversation_id = turn.conversation.id
@@ -2386,6 +2413,7 @@ class AgentService:
             finish_reason="stop",
             model=self._current_model,
             usage=dict(usage),
+            reasoning=reasoning,
         )
         try:
             entry = await self.repository.append_assistant(
@@ -3111,7 +3139,7 @@ def _assistant_data(
     *,
     model: str,
 ) -> dict[str, Any]:
-    return {
+    data: dict[str, Any] = {
         "finish_reason": finish_reason,
         "usage": dict(result.usage),
         "model": result.model or model,
@@ -3120,6 +3148,17 @@ def _assistant_data(
         "cache_prefix_hash": cache_prefix_hash,
         "citations": list(dict.fromkeys(CITATION_PATTERN.findall(result.text))),
     }
+    reasoning = result.reasoning
+    if reasoning:
+        clipped = clip(reasoning, MAX_ASSISTANT_REASONING_CHARS)
+        data["reasoning"] = clipped
+        data["reasoning_chars"] = len(reasoning)
+        data["reasoning_truncated"] = clipped != reasoning
+    reasoning_tokens = result.usage.get("reasoning_tokens", 0)
+    if isinstance(reasoning_tokens, int) and not isinstance(reasoning_tokens, bool):
+        if reasoning_tokens > 0:
+            data["reasoning_tokens"] = reasoning_tokens
+    return data
 
 
 def _normalize_finish(result: ChatResult) -> str | None:

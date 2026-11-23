@@ -45,6 +45,7 @@ class FakeChatGenerator:
         self.chunk_size = max(1, chunk_size)
         self.requests: list[FakeChatRequest] = []
         self.streamed_text: list[str] = []
+        self.streamed_reasoning: list[str] = []
 
     def enqueue(self, result: ChatResult) -> None:
         """Append one scripted completion."""
@@ -63,6 +64,7 @@ class FakeChatGenerator:
         model: str | None = None,
         stream: bool = False,
         on_text_delta: TextDeltaCallback | None = None,
+        on_reasoning_delta: TextDeltaCallback | None = None,
     ) -> ChatResult:
         del stream
         self.requests.append(
@@ -75,6 +77,11 @@ class FakeChatGenerator:
         if not self._results:
             raise RuntimeError("FakeChatGenerator has no scripted completion left.")
         result = self._results.popleft()
+        if on_reasoning_delta is not None and result.reasoning:
+            for start in range(0, len(result.reasoning), self.chunk_size):
+                chunk = result.reasoning[start : start + self.chunk_size]
+                self.streamed_reasoning.append(chunk)
+                await on_reasoning_delta(chunk)
         if on_text_delta is not None and result.text:
             for start in range(0, len(result.text), self.chunk_size):
                 chunk = result.text[start : start + self.chunk_size]
@@ -97,6 +104,7 @@ def text_result(
     *,
     usage: dict[str, int] | None = None,
     finish_reason: str = "stop",
+    reasoning: str = "",
 ) -> ChatResult:
     """Build a normal assistant text result."""
     resolved_usage = usage or {
@@ -112,6 +120,7 @@ def text_result(
         model="fake-chat",
         usage=resolved_usage,
         raw_assistant_message={"role": "assistant", "content": text},
+        reasoning=reasoning,
     )
 
 
@@ -122,6 +131,7 @@ def tool_call_result(
     call_id: str = "call_1",
     text: str = "",
     usage: dict[str, int] | None = None,
+    reasoning: str = "",
 ) -> ChatResult:
     """Build a tool-call-only assistant result."""
     return tool_calls_result(
@@ -129,6 +139,7 @@ def tool_call_result(
         call_ids=[call_id],
         text=text,
         usage=usage,
+        reasoning=reasoning,
     )
 
 
@@ -138,6 +149,7 @@ def tool_calls_result(
     call_ids: Sequence[str] | None = None,
     text: str = "",
     usage: dict[str, int] | None = None,
+    reasoning: str = "",
 ) -> ChatResult:
     """Build one assistant result that requests multiple tools in order."""
     resolved_ids = list(call_ids or [f"call_{index}" for index in range(1, len(calls) + 1)])
@@ -188,6 +200,7 @@ def tool_calls_result(
             "content": text,
             "tool_calls": raw_tool_calls,
         },
+        reasoning=reasoning,
     )
 
 

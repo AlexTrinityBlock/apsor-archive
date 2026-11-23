@@ -47,6 +47,7 @@ class TransientChatGenerator(FakeChatGenerator):
         model: str | None = None,
         stream: bool = False,
         on_text_delta: TextDeltaCallback | None = None,
+        on_reasoning_delta: TextDeltaCallback | None = None,
     ) -> ChatResult:
         self.calls += 1
         if self.calls == 1:
@@ -63,6 +64,7 @@ class TransientChatGenerator(FakeChatGenerator):
             model=model,
             stream=stream,
             on_text_delta=on_text_delta,
+            on_reasoning_delta=on_reasoning_delta,
         )
 
 
@@ -81,6 +83,7 @@ class PartialThenFailChatGenerator(FakeChatGenerator):
         model: str | None = None,
         stream: bool = False,
         on_text_delta: TextDeltaCallback | None = None,
+        on_reasoning_delta: TextDeltaCallback | None = None,
     ) -> ChatResult:
         self.calls += 1
         if on_text_delta is not None:

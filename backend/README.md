@@ -527,10 +527,15 @@ outside the source.
 
 Messages and retry stream `text/event-stream` by default; send
 `Accept: application/json` for the completed turn. Event names are `run_start`,
-`message_start`, `message_delta`, `message_end`, `tool_start`, `tool_end`,
-`approval_required`, `run_end`, and `error`. `message_start` carries
+`message_start`, `message_delta`, `reasoning_delta`, `message_end`, `tool_start`,
+`tool_end`, `approval_required`, `run_end`, and `error`. `reasoning_delta`
+carries provider reasoning text before the corresponding answer or tool call;
+its payload is `{"entry_id": null, "delta": "..."}` and it never mixes into
+`message_delta`. `message_start` carries
 `entry_id=null`; the assistant entry id arrives at `message_end`, and deltas are
-never persisted. `tool_start` and `tool_end` include `parallel`, `batch_size`,
+never persisted. A completion's reasoning is stored in the assistant entry
+`data` as bounded display telemetry, never in the provider-facing `model`
+messages. `tool_start` and `tool_end` include `parallel`, `batch_size`,
 and `parallel_index` for the current batch. `approval_required` carries the
 approval id, tool-call id, safe preview, and requested time; the stream then
 ends with `run_end {status: "waiting"}`. SSE headers disable proxy buffering

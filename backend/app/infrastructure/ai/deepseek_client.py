@@ -314,6 +314,7 @@ class DeepSeekClient:
         model: str | None = None,
         stream: bool = False,
         on_text_delta: TextDeltaCallback | None = None,
+        on_reasoning_delta: TextDeltaCallback | None = None,
     ) -> ChatResult:
         """Run one chat completion, optionally streaming text deltas."""
         payload = self._base_payload(model, chat=True)
@@ -321,11 +322,17 @@ class DeepSeekClient:
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
-        should_stream = stream or on_text_delta is not None
+        should_stream = (
+            stream or on_text_delta is not None or on_reasoning_delta is not None
+        )
         payload["stream"] = should_stream
         if should_stream:
             payload["stream_options"] = {"include_usage": True}
-            return await self._stream_chat(payload, on_text_delta)
+            return await self._stream_chat(
+                payload,
+                on_text_delta,
+                on_reasoning_delta,
+            )
         return await self._chat_once(payload)
 
     async def _chat_once(self, payload: dict[str, Any]) -> ChatResult:
@@ -463,6 +470,9 @@ class DeepSeekClient:
             )
         finish_reason = str(choice.get("finish_reason") or ("tool_calls" if tool_calls else "stop"))
         usage = _normalize_usage(body.get("usage"))
+        reasoning = message.get("reasoning_content")
+        if not isinstance(reasoning, str):
+            reasoning = ""
         response_model = body.get("model") or payload.get("model") or self.model_name
         result = ChatResult(
             text=text,
@@ -471,6 +481,7 @@ class DeepSeekClient:
             model=str(response_model),
             usage=usage,
             raw_assistant_message=message,
+            reasoning=reasoning,
         )
         _log_request_completed(
             operation=operation,
@@ -494,8 +505,10 @@ class DeepSeekClient:
         self,
         payload: dict[str, Any],
         on_text_delta: TextDeltaCallback | None,
+        on_reasoning_delta: TextDeltaCallback | None,
     ) -> ChatResult:
         content_parts: list[str] = []
+        reasoning_parts: list[str] = []
         call_slots: dict[int, dict[str, str]] = {}
         finish_reason = ""
         usage: dict[str, int] = {}
@@ -588,6 +601,11 @@ class DeepSeekClient:
                             delta = choice.get("delta")
                             if not isinstance(delta, dict):
                                 delta = {}
+                            reasoning_piece = delta.get("reasoning_content")
+                            if isinstance(reasoning_piece, str) and reasoning_piece:
+                                reasoning_parts.append(reasoning_piece)
+                                if on_reasoning_delta is not None:
+                                    await on_reasoning_delta(reasoning_piece)
                             piece = delta.get("content")
                             if isinstance(piece, str) and piece:
                                 content_parts.append(piece)
@@ -643,6 +661,7 @@ class DeepSeekClient:
             model=model_name,
             usage=usage,
             raw_assistant_message=_raw_assistant_message(text, tool_calls),
+            reasoning="".join(reasoning_parts),
         )
         _log_request_completed(
             operation=operation,
@@ -694,6 +713,7 @@ class NullTextGenerator:
         model: str | None = None,
         stream: bool = False,
         on_text_delta: TextDeltaCallback | None = None,
+        on_reasoning_delta: TextDeltaCallback | None = None,
     ) -> ChatResult:
         raise AiNotConfiguredError()
 
@@ -972,6 +992,11 @@ def _normalize_usage(raw: object) -> dict[str, int]:
         cached = details.get("cached_tokens")
         if isinstance(cached, int) and not isinstance(cached, bool):
             usage.setdefault("prompt_cache_hit_tokens", cached)
+    completion_details = raw.get("completion_tokens_details")
+    if isinstance(completion_details, dict):
+        reasoning_tokens = completion_details.get("reasoning_tokens")
+        if isinstance(reasoning_tokens, int) and not isinstance(reasoning_tokens, bool):
+            usage["reasoning_tokens"] = reasoning_tokens
     return usage
 
 

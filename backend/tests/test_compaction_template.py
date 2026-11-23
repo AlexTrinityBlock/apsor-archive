@@ -31,6 +31,7 @@ from app.module.agent.domain.compaction_domain import (
     MAX_COMPACTION_SUMMARY_CHARS,
     MAX_SUMMARY_ITEM_CHARS,
     MAX_SUMMARY_ITEMS,
+    MAX_SUMMARY_THINKING_CHARS,
     _summary_lines,
     build_compaction_draft,
     estimate_context_tokens,
@@ -510,6 +511,63 @@ def test_summary_tool_line_stays_within_the_item_cap() -> None:
     assert summary.startswith("Tool web_search ×3: ok — ")
     for line in summary.splitlines():
         assert len(line) <= MAX_SUMMARY_ITEM_CHARS
+
+
+def test_summary_includes_thinking_only_when_reasoning_exists() -> None:
+    """A provider reasoning trace becomes one bounded summary line."""
+    entries = [
+        _entry(1, KIND_USER, text="Hello"),
+        _entry(
+            2,
+            KIND_ASSISTANT,
+            text="Useful answer",
+            data={"reasoning": "I checked the wrench first."},
+        ),
+        _entry(3, KIND_ASSISTANT, text="No reasoning here"),
+    ]
+
+    summary = _summary_text(entries)
+
+    assert summary.splitlines() == [
+        "User: Hello",
+        "Assistant: Useful answer",
+        "Thinking: I checked the wrench first.",
+        "Assistant: No reasoning here",
+    ]
+
+
+def test_summary_omits_thinking_when_no_reasoning_was_returned() -> None:
+    """No placeholder line appears for a completion without reasoning."""
+    entries = [
+        _entry(1, KIND_USER, text="Hello"),
+        _entry(2, KIND_ASSISTANT, text="Useful answer"),
+        _entry(3, KIND_ASSISTANT, text="Still no reasoning", data={"reasoning": ""}),
+    ]
+
+    summary = _summary_text(entries)
+
+    assert "Thinking:" not in summary
+
+
+def test_summary_clips_long_thinking_to_one_bounded_line() -> None:
+    """The summary keeps only an orientation-sized reasoning prefix."""
+    entries = [
+        _entry(
+            1,
+            KIND_ASSISTANT,
+            text="Answer",
+            data={"reasoning": "長" * 5_000},
+        )
+    ]
+
+    summary = _summary_text(entries)
+
+    thinking_lines = [
+        line for line in summary.splitlines() if line.startswith("Thinking: ")
+    ]
+    assert len(thinking_lines) == 1
+    assert len(thinking_lines[0]) <= len("Thinking: ") + MAX_SUMMARY_THINKING_CHARS
+    assert thinking_lines[0].endswith("…")
 
 
 def test_summary_total_cap_still_applies_to_merged_tool_lines() -> None:

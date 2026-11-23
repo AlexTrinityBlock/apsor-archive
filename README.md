@@ -1041,8 +1041,10 @@ after the message text exactly once. The ordered system prompt sections are
 written at conversation creation and frozen into that thread. The four defaults
 are seeded as ordinary rows; Settings lets the root account edit, delete, or
 reorder every row for the whole deployment. The event names are
-`run_start`, `message_start`, `message_delta`, `message_end`, `tool_start`,
-`tool_end`, `approval_required`, `run_end`, and `error`. `run_start` reports
+`run_start`, `message_start`, `message_delta`, `reasoning_delta`, `message_end`,
+`tool_start`, `tool_end`, `approval_required`, `run_end`, and `error`.
+`reasoning_delta` carries provider reasoning text that arrived before the
+corresponding answer or tool call and is never merged into `message_delta`. `run_start` reports
 `page_context_entry_id` (or `null`), `page_context_attached`, and `resumed` so
 the client can mark whether a new snapshot was written and whether the stream
 continues a durable waiting run. `tool_start` and `tool_end` also carry
@@ -1050,7 +1052,11 @@ continues a durable waiting run. `tool_start` and `tool_end` also carry
 `tool_end` carries the persisted tool-result `data` payload plus `duration_ms`
 and `error_code`, so the inspector can render previews before the transcript
 refetch settles. `message_start` has `entry_id=null` because the assistant entry
-is persisted only at `message_end`; deltas are transport-only. Send
+is persisted only at `message_end`; deltas are transport-only. Provider
+reasoning is kept as bounded display telemetry in the assistant entry and shown
+as a plain-text `Thinking` block; it never enters provider messages, the frozen
+system prefix, or the cache-prefix hash. A deterministic compaction summary may
+carry one bounded `Thinking:` line. Send
 `Accept: application/json` for the completed turn instead. SSE responses set
 `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, and
 Starlette's GZip middleware excludes `text/event-stream`.

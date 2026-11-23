@@ -275,6 +275,7 @@ class FallbackTextGenerator:
         model: str | None = None,
         stream: bool = False,
         on_text_delta: TextDeltaCallback | None = None,
+        on_reasoning_delta: TextDeltaCallback | None = None,
     ) -> ChatResult:
         entries = [
             (index, name, client)
@@ -294,6 +295,12 @@ class FallbackTextGenerator:
                 if on_text_delta is not None:
                     await on_text_delta(piece)
 
+            async def tracked_reasoning(piece: str) -> None:
+                nonlocal emitted
+                emitted = True
+                if on_reasoning_delta is not None:
+                    await on_reasoning_delta(piece)
+
             try:
                 return await cast(ChatGeneratorProtocol, client).complete_chat(
                     messages,
@@ -303,6 +310,9 @@ class FallbackTextGenerator:
                     model=model if chain_index == 0 else None,
                     stream=stream,
                     on_text_delta=tracked_delta if on_text_delta is not None else None,
+                    on_reasoning_delta=(
+                        tracked_reasoning if on_reasoning_delta is not None else None
+                    ),
                 )
             except Exception as exc:
                 if _is_non_failover_chat_error(exc):

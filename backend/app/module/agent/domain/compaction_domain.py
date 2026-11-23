@@ -38,6 +38,7 @@ from app.module.agent.domain.xml_domain import TRUNCATION_MARKER, clip, xml_text
 MAX_SUMMARY_ITEM_CHARS = 280
 MAX_SUMMARY_ARGUMENT_CHARS = 80
 MAX_SUMMARY_ARGUMENT_VALUES = 3
+MAX_SUMMARY_THINKING_CHARS = 200
 MAX_COMPACTION_CARRY_CHARS = 1_200
 MAX_SUMMARY_ITEMS = 40
 CHARS_PER_ESTIMATED_TOKEN = 3
@@ -499,8 +500,27 @@ def _summary_lines(entries: Sequence[TranscriptEntry]) -> list[str]:
         line = _summary_line(entry)
         if line:
             lines.append(line)
+        if entry.kind == KIND_ASSISTANT:
+            thinking_line = _thinking_line(data)
+            if thinking_line:
+                lines.append(thinking_line)
         index += 1
     return lines
+
+
+def _thinking_line(data: dict[str, Any]) -> str:
+    """Render one bounded reasoning trace for an assistant entry.
+
+    This is the only place provider reasoning becomes visible to a later model.
+    It is a bounded trace, not a verified fact: the summary keeps the first
+    characters as an orientation hint and never the full thinking stream.
+    Entries without reasoning add no line at all.
+    """
+    reasoning = data.get("reasoning")
+    if not isinstance(reasoning, str):
+        return ""
+    text = _clip_inline(_one_line(reasoning), MAX_SUMMARY_THINKING_CHARS)
+    return f"Thinking: {text}" if text else ""
 
 
 def _mergeable_tool_result(data: dict[str, Any]) -> bool:

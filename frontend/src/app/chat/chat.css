@@ -1046,6 +1046,45 @@
   font-size: 9px;
 }
 
+.chat-thinking {
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--mono-grid);
+  border-radius: var(--radius-sm);
+  background: var(--mono-card-bg);
+  color: var(--mono-l2);
+  font-family: var(--mono-font-mono);
+  font-size: 10px;
+}
+
+.chat-thinking__summary {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--mono-muted);
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chat-thinking__tokens {
+  color: var(--mono-faint);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.chat-thinking__body {
+  max-height: 180px;
+  margin-top: 4px;
+  padding-top: 4px;
+  overflow: auto;
+  border-top: 1px solid var(--mono-grid);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
 .chat-live-turn {
   display: flex;
   flex-direction: column;
