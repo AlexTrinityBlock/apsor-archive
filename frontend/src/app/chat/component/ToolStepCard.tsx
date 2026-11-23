@@ -324,6 +324,52 @@ function collectionCount(
   });
 }
 
+/** A short, non-interactive hint for the details disclosure. */
+function detailsHint(
+  preview: ToolPreview,
+  hasPlot: boolean,
+  hasResource: boolean,
+  t: Translate,
+  formatNumber: (value: number) => string,
+): string | null {
+  if (hasPlot) {
+    return t("chat.timeline.detailsChart");
+  }
+  if (hasResource) {
+    return t("chat.timeline.detailsResource");
+  }
+  switch (preview.kind) {
+    case "search":
+      return t(
+        preview.total === 1
+          ? "chat.timeline.searchResultsOne"
+          : "chat.timeline.searchResultsOther",
+        { count: formatNumber(preview.total) },
+      );
+    case "fetch":
+      if (preview.page === null) {
+        return null;
+      }
+      return preview.totalPages !== null
+        ? t("chat.timeline.page", {
+            page: formatNumber(preview.page),
+            total: formatNumber(preview.totalPages),
+          })
+        : t("chat.timeline.pageOnly", {
+            page: formatNumber(preview.page),
+          });
+    case "excerpts":
+      return t(
+        preview.total === 1
+          ? "chat.timeline.matchOne"
+          : "chat.timeline.matchOther",
+        { count: formatNumber(preview.total) },
+      );
+    default:
+      return null;
+  }
+}
+
 function CollectionList({
   collections,
 }: {
@@ -415,6 +461,13 @@ export function ToolStepCard({
     hasPlot || meta.resource
       ? { kind: "none" }
       : buildToolPreview(meta.tool, meta.data);
+  const hint = detailsHint(
+    preview,
+    hasPlot,
+    meta.resource !== null,
+    t,
+    formatNumber,
+  );
   const argumentsList = meta.arguments ? Object.entries(meta.arguments) : [];
   const argumentPairs =
     meta.tool === "render_plot"
@@ -513,43 +566,55 @@ export function ToolStepCard({
         ) : null}
       </p>
 
-      {argumentPairs.length > 0 ? (
-        <p className="chat-tool-step__args-line">
-          <span className="chat-tool-step__args-label">
-            {t("chat.timeline.arguments")}
+      <details className="chat-tool-step__details">
+        <summary className="chat-tool-step__details-summary">
+          <span className="chat-tool-step__details-label">
+            {t("chat.timeline.details")}
           </span>
-          {argumentPairs.map((pair) => (
-            <span key={pair.key}>
-              <code>{pair.key}</code>
-              {pair.value}
-            </span>
-          ))}
-        </p>
-      ) : null}
+          {hint ? (
+            <span className="chat-tool-step__details-hint">{hint}</span>
+          ) : null}
+        </summary>
+        <div className="chat-tool-step__details-body">
+          {argumentPairs.length > 0 ? (
+            <p className="chat-tool-step__args-line">
+              <span className="chat-tool-step__args-label">
+                {t("chat.timeline.arguments")}
+              </span>
+              {argumentPairs.map((pair) => (
+                <span key={pair.key}>
+                  <code>{pair.key}</code>
+                  {pair.value}
+                </span>
+              ))}
+            </p>
+          ) : null}
 
-      {meta.resource ? (
-        <ResourceCard resource={meta.resource} onOpen={onOpenResource} />
-      ) : null}
+          {meta.resource ? (
+            <ResourceCard resource={meta.resource} onOpen={onOpenResource} />
+          ) : null}
 
-      {hasPlot ? <PlotBlock data={meta.data} /> : null}
+          {hasPlot ? <PlotBlock data={meta.data} /> : null}
 
-      {!hasPlot && !meta.resource ? (
-        <ToolPreviewBody preview={preview} running={running} />
-      ) : null}
+          {!hasPlot && !meta.resource ? (
+            <ToolPreviewBody preview={preview} running={running} />
+          ) : null}
 
-      {argumentsBody ? (
-        <details className="chat-result__args">
-          <summary>{t("chat.tool.argumentsUsed")}</summary>
-          {argumentsBody}
-        </details>
-      ) : null}
+          {argumentsBody ? (
+            <details className="chat-result__args">
+              <summary>{t("chat.tool.argumentsUsed")}</summary>
+              {argumentsBody}
+            </details>
+          ) : null}
 
-      {failed && meta.detail ? (
-        <div className="chat-tool-step__error-detail">
-          <strong>{t("chat.timeline.errorDetail")}</strong>
-          <p>{clipText(meta.detail, 800)}</p>
+          {failed && meta.detail ? (
+            <div className="chat-tool-step__error-detail">
+              <strong>{t("chat.timeline.errorDetail")}</strong>
+              <p>{clipText(meta.detail, 800)}</p>
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </details>
     </article>
   );
 }
