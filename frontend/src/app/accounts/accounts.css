@@ -1179,6 +1179,23 @@
   line-height: 1.5;
 }
 
+.accounts-model__save-reason {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-right: auto;
+  max-width: 58ch;
+  color: var(--mono-ink);
+  font-size: 10.5px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.accounts-model__test-hint--required {
+  color: var(--mono-ink);
+  font-weight: 600;
+}
+
 /* --------------------------------------------------------------------------
    Responsive
    -------------------------------------------------------------------------- */

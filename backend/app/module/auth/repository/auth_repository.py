@@ -53,6 +53,8 @@ class UserRepository:
         created_by_user_id: int | None = None,
         is_active: bool = True,
         must_change_password: bool = False,
+        chat_provider_config_id: int | None = None,
+        chat_model: str | None = None,
     ) -> AppUserModel:
         user = AppUserModel(
             username=username,
@@ -62,6 +64,8 @@ class UserRepository:
             is_active=is_active,
             must_change_password=must_change_password,
             created_by_user_id=created_by_user_id,
+            chat_provider_config_id=chat_provider_config_id,
+            chat_model=chat_model,
         )
         self.session.add(user)
         await self.session.flush()
