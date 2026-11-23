@@ -61,11 +61,14 @@ CHAT_TABLE_SPEC = ProviderTableSpec(
         "Large-language-model providers used for summaries, extraction, and agent answers."
     ),
     model=ChatProviderConfigModel,
-    allowed_providers=frozenset({"deepseek", "openai-compatible", "none"}),
+    allowed_providers=frozenset({"anthropic", "deepseek", "openai-compatible", "none"}),
     keyless_providers=frozenset({"none"}),
     default_base_url="https://api.deepseek.com",
     supports_model=True,
     supports_dimension=False,
+    # Anthropic rows default to the native Messages origin. A DeepSeek
+    # Anthropic-compatible row is a legal explicit ``base_url``, never a default.
+    default_base_urls={"anthropic": "https://api.anthropic.com"},
 )
 
 EMBEDDING_TABLE_SPEC = ProviderTableSpec(

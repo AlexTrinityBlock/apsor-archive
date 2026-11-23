@@ -50,6 +50,7 @@ class DeepSeekClient:
         chat_max_tokens: int | None = None,
         temperature: float,
         supports_thinking: bool = True,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -67,6 +68,9 @@ class DeepSeekClient:
         self._chat_cap_warning_logged = False
         self.temperature = temperature
         self.supports_thinking = supports_thinking
+        # Free-text effort from the account assignment. Empty means "omit the
+        # field and let the provider default apply"; it is never validated here.
+        self.reasoning_effort = reasoning_effort
 
     @property
     def _headers(self) -> dict[str, str]:
@@ -82,15 +86,38 @@ class DeepSeekClient:
             return 0
         return self.chat_max_tokens
 
-    def _base_payload(self, model: str | None, *, chat: bool = False) -> dict[str, Any]:
+    def _effective_effort(self, override: str | None) -> str | None:
+        """Return the effort to send, or ``None`` when the field must be omitted."""
+        value = self.reasoning_effort if override is None else override
+        if isinstance(value, str) and value.strip():
+            return value
+        return None
+
+    def _base_payload(
+        self,
+        model: str | None,
+        *,
+        chat: bool = False,
+        reasoning_effort: str | None = None,
+        max_tokens: int | None = None,
+    ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model or self.model_name,
             "temperature": self.temperature,
         }
-        max_tokens = self.chat_max_tokens if chat else self.max_tokens
-        if max_tokens and not (chat and self._chat_cap_rejected):
-            payload["max_tokens"] = max_tokens
-        if self.supports_thinking:
+        cap = (
+            max_tokens
+            if max_tokens is not None
+            else (self.chat_max_tokens if chat else self.max_tokens)
+        )
+        if cap and not (chat and self._chat_cap_rejected):
+            payload["max_tokens"] = cap
+        effort = self._effective_effort(reasoning_effort)
+        if effort is not None:
+            # The modern OpenAI-style field replaces the legacy switch: sending
+            # both would make some gateways reject the request.
+            payload["reasoning_effort"] = effort
+        elif self.supports_thinking:
             payload["thinking"] = {"type": "disabled"}
         return payload
 
@@ -124,12 +151,19 @@ class DeepSeekClient:
         system_prompt: str,
         user_prompt: str,
         json_mode: bool,
+        model: str | None = None,
+        max_tokens: int | None = None,
+        reasoning_effort: str | None = None,
     ) -> AiCompletion:
         operation = "complete_json" if json_mode else "complete_text"
         call_id = uuid4().hex[:12]
-        model = self.model_name
+        request_model = model or self.model_name
         started = time.monotonic()
-        payload = self._base_payload(None)
+        payload = self._base_payload(
+            model,
+            reasoning_effort=reasoning_effort,
+            max_tokens=max_tokens,
+        )
         payload["messages"] = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -140,7 +174,7 @@ class DeepSeekClient:
         _log_request_started(
             operation=operation,
             call_id=call_id,
-            model=model,
+            model=request_model,
             stream=False,
             messages=2,
             tools=0,
@@ -161,7 +195,7 @@ class DeepSeekClient:
                 exc,
                 operation=operation,
                 call_id=call_id,
-                model=model,
+                model=request_model,
                 stream=False,
                 started=started,
             ) from exc
@@ -173,7 +207,7 @@ class DeepSeekClient:
             raise _http_error(
                 operation=operation,
                 call_id=call_id,
-                model=model,
+                model=request_model,
                 stream=False,
                 status_code=response.status_code,
                 request_id=request_id,
@@ -188,7 +222,7 @@ class DeepSeekClient:
             _log_invalid_response(
                 operation=operation,
                 call_id=call_id,
-                model=model,
+                model=request_model,
                 stream=False,
                 response=response,
                 started=started,
@@ -203,7 +237,7 @@ class DeepSeekClient:
             _log_invalid_response(
                 operation=operation,
                 call_id=call_id,
-                model=model,
+                model=request_model,
                 stream=False,
                 response=response,
                 started=started,
@@ -220,13 +254,13 @@ class DeepSeekClient:
         response_model = body.get("model") if isinstance(body, dict) else None
         result = AiCompletion(
             text=text.strip(),
-            model=str(response_model or self.model_name),
+            model=str(response_model or request_model),
             usage=usage,
         )
         _log_request_completed(
             operation=operation,
             call_id=call_id,
-            model=model,
+            model=request_model,
             stream=False,
             status_code=response.status_code,
             request_id=request_id,
@@ -253,6 +287,23 @@ class DeepSeekClient:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             json_mode=True,
+        )
+
+    async def probe(
+        self,
+        *,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+        max_tokens: int = 16,
+    ) -> AiCompletion:
+        """Run one tiny non-streaming generation to validate a connection."""
+        return await self._complete(
+            system_prompt="You are a connection test.",
+            user_prompt="Reply with the single word OK.",
+            json_mode=False,
+            model=model,
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
         )
 
     async def complete_chat(
@@ -624,6 +675,16 @@ class NullTextGenerator:
 
     async def complete_json(self, system_prompt: str, user_prompt: str) -> AiCompletion:
         raise AiNotConfiguredError()
+
+    async def probe(
+        self,
+        *,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
+        max_tokens: int = 16,
+    ) -> AiCompletion:
+        del model, reasoning_effort, max_tokens
+        raise AiProviderError("provider not configured", retryable=False)
 
     async def complete_chat(
         self,

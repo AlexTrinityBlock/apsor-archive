@@ -4,6 +4,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from app.infrastructure.ai.anthropic_client import AnthropicClient
+
 
 def _capability(registry: dict[str, Any], name: str) -> dict[str, Any]:
     return next(item for item in registry["capabilities"] if item["capability"] == name)
@@ -198,3 +200,115 @@ def test_embedding_chain_requires_one_model_and_dimension(client: TestClient) ->
     assert rejected.json()["error"] == "invalid_provider_config"
     group = _capability(client.get("/api/v1/settings/providers").json(), "embedding")
     assert _active_ids(group) == [primary_id, backup_id]
+
+
+def test_anthropic_row_is_accepted_and_builds_the_native_client(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/settings/providers/chat",
+        json={
+            "provider": "anthropic",
+            "label": "Claude primary",
+            "model": "claude-haiku-5-5",
+            "api_key": "sk-ant-chain-1234",
+            "max_output_tokens": 64_000,
+        },
+    )
+    assert response.status_code == 200, response.text
+    group = _capability(response.json(), "chat")
+    active = group["active"]
+    assert active["provider"] == "anthropic"
+    # No base URL was sent, so the provider-specific default applies.
+    assert active["base_url"] == "https://api.anthropic.com"
+    assert active["max_output_tokens"] == 64_000
+    assert active["configured"] is True
+    assert active["key_hint"] == "...1234"
+    assert "anthropic" in group["allowed_providers"]
+
+    runtime = client.app.state.ai_runtime
+    assert isinstance(runtime.text_generator, AnthropicClient)
+    assert runtime.text_generator.max_output_tokens == 64_000
+    assert runtime.text_generator.reasoning_effort is None
+
+
+def test_anthropic_row_accepts_a_deepseek_compatible_base_url(
+    client: TestClient,
+) -> None:
+    """The compatible origin is a legal row value, not a provider default."""
+    response = client.post(
+        "/api/v1/settings/providers/chat",
+        json={
+            "provider": "anthropic",
+            "label": "Claude-compatible DeepSeek",
+            "model": "deepseek-flash",
+            "base_url": "https://api.deepseek.com/anthropic",
+            "api_key": "sk-ant-compatible-5678",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    group = _capability(response.json(), "chat")
+    assert group["active"]["provider"] == "anthropic"
+    assert group["active"]["base_url"] == "https://api.deepseek.com/anthropic"
+
+
+def test_chat_max_output_tokens_round_trips_through_the_registry(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/api/v1/settings/providers/chat",
+        json={
+            "provider": "deepseek",
+            "label": "capped chat",
+            "model": "deepseek-flash",
+            "base_url": "https://api.deepseek.com",
+            "api_key": "sk-cap-key-1234",
+            "max_output_tokens": 64_000,
+        },
+    )
+    assert created.status_code == 200, created.text
+    group = _capability(created.json(), "chat")
+    row_id = _row_id(group, "capped chat")
+    assert group["providers"][0]["max_output_tokens"] == 64_000
+
+    updated = client.put(
+        f"/api/v1/settings/providers/chat/{row_id}",
+        json={
+            "provider": "deepseek",
+            "label": "capped chat",
+            "model": "deepseek-flash",
+            "base_url": "https://api.deepseek.com",
+            "max_output_tokens": 32_000,
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    group = _capability(updated.json(), "chat")
+    assert group["active"]["max_output_tokens"] == 32_000
+
+    cleared = client.put(
+        f"/api/v1/settings/providers/chat/{row_id}",
+        json={
+            "provider": "deepseek",
+            "label": "capped chat",
+            "model": "deepseek-flash",
+            "base_url": "https://api.deepseek.com",
+            "max_output_tokens": None,
+        },
+    )
+    assert cleared.status_code == 200, cleared.text
+    group = _capability(cleared.json(), "chat")
+    assert group["active"]["max_output_tokens"] is None
+
+    out_of_range = client.put(
+        f"/api/v1/settings/providers/chat/{row_id}",
+        json={
+            "provider": "deepseek",
+            "label": "capped chat",
+            "model": "deepseek-flash",
+            "base_url": "https://api.deepseek.com",
+            "max_output_tokens": 128,
+        },
+    )
+    assert out_of_range.status_code == 400, out_of_range.text
+    assert out_of_range.json()["error"] == "invalid_request"

@@ -75,6 +75,7 @@ class _NormalizedProvider:
     model: str | None
     base_url: str | None
     dimension: int | None
+    max_output_tokens: int | None
 
 
 class ProviderConfigService:
@@ -178,6 +179,7 @@ class ProviderConfigService:
             model=row.model,
             base_url=row.base_url,
             dimension=row.dimension,
+            max_output_tokens=getattr(row, "max_output_tokens", None),
             is_active=row.is_active,
             priority=row.priority,
             configured=self._row_configured(spec, row),
@@ -221,6 +223,7 @@ class ProviderConfigService:
             model=row.model,
             base_url=row.base_url,
             dimension=row.dimension,
+            max_output_tokens=getattr(row, "max_output_tokens", None),
             is_active=True,
             priority=row.priority,
             configured=(
@@ -251,6 +254,7 @@ class ProviderConfigService:
             model=config.model,
             base_url=config.base_url,
             dimension=config.dimension,
+            max_output_tokens=config.max_output_tokens,
             is_active=config.enabled,
             priority=0,
             configured=self._active_configured(spec),
@@ -381,17 +385,21 @@ class ProviderConfigService:
         # The mixin has no typed __init__; the concrete declarative class accepts
         # these mapped-column keywords. The cast only tells mypy about that shape.
         model_factory = cast(type[Any], spec.model)
-        row: ProviderConfigMixin = model_factory(
-            provider=normalized.provider,
-            label=normalized.label,
-            model=normalized.model,
-            base_url=normalized.base_url,
-            dimension=normalized.dimension,
-            is_active=False,
-            priority=0,
-            created_at=now,
-            updated_at=now,
-        )
+        row_options: dict[str, Any] = {
+            "provider": normalized.provider,
+            "label": normalized.label,
+            "model": normalized.model,
+            "base_url": normalized.base_url,
+            "dimension": normalized.dimension,
+            "is_active": False,
+            "priority": 0,
+            "created_at": now,
+            "updated_at": now,
+        }
+        if spec.capability == CAPABILITY_CHAT:
+            # Only the chat table has the per-row output cap column.
+            row_options["max_output_tokens"] = normalized.max_output_tokens
+        row: ProviderConfigMixin = model_factory(**row_options)
         self._apply_key(
             row=row,
             payload=payload,
@@ -421,6 +429,9 @@ class ProviderConfigService:
         row.model = normalized.model
         row.base_url = normalized.base_url
         row.dimension = normalized.dimension
+        if spec.capability == CAPABILITY_CHAT:
+            # Only the chat table has the per-row output cap column.
+            cast(Any, row).max_output_tokens = normalized.max_output_tokens
         row.updated_at = utcnow()
         self._apply_key(
             row=row,
@@ -640,12 +651,24 @@ class ProviderConfigService:
                 )
             dimension = None
 
+        if spec.capability == CAPABILITY_CHAT:
+            # A disabled chat row has no meaningful output cap; ignore a value
+            # the dialog may still hold while the provider is "none".
+            max_output_tokens = None if provider == "none" else payload.max_output_tokens
+        else:
+            if payload.max_output_tokens is not None:
+                raise InvalidProviderConfigError(
+                    "max_output_tokens is only supported by the chat capability."
+                )
+            max_output_tokens = None
+
         return _NormalizedProvider(
             provider=provider,
             label=label,
             model=model,
             base_url=base_url,
             dimension=dimension,
+            max_output_tokens=max_output_tokens,
         )
 
     @staticmethod
@@ -889,7 +912,10 @@ class ProviderConfigService:
         force_enabled: bool = False,
     ) -> ProviderConfig:
         key = self._decrypt_key(row)
-        if key is None:
+        if not row.api_key_ciphertext:
+            # Environment enrichment applies only to a row with no stored
+            # ciphertext. A failed decryption stays keyless so a corrupted key is
+            # reported instead of silently borrowing another secret.
             key = self._environment_key(spec.capability, row.provider)
         return ProviderConfig(
             capability=spec.capability,
@@ -901,6 +927,11 @@ class ProviderConfigService:
             dimension=row.dimension,
             enabled=force_enabled or row.is_active,
             source="database",
+            row_id=row.id,
+            # Effort is supplied by the account assignment; the shared endpoint
+            # row never stores it.
+            reasoning_effort=None,
+            max_output_tokens=getattr(row, "max_output_tokens", None),
         )
 
     def _decrypt_key(self, row: ProviderConfigMixin) -> str | None:
@@ -922,7 +953,13 @@ class ProviderConfigService:
         provider: str,
     ) -> str | None:
         if capability == CAPABILITY_CHAT:
-            return self.defaults.chat_api_key
+            # Provider-aware, exactly like ``AiRuntime``: an Anthropic row may
+            # receive only the Anthropic deployment key, never the DeepSeek one.
+            if provider == "anthropic":
+                return self.defaults.anthropic_api_key
+            if provider == "deepseek":
+                return self.defaults.deepseek_api_key
+            return None
         if capability == CAPABILITY_EMBEDDING:
             return self.defaults.embedding_api_key
         if provider == "exa":

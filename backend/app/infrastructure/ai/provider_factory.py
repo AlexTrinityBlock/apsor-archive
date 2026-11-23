@@ -3,6 +3,7 @@
 import logging
 from typing import cast
 
+from app.infrastructure.ai.anthropic_client import AnthropicClient
 from app.infrastructure.ai.deepseek_client import DeepSeekClient, NullTextGenerator
 from app.infrastructure.config.settings import Settings
 from app.infrastructure.embedding.http_embedder import (
@@ -68,6 +69,11 @@ def provider_defaults_from_settings(settings: Settings) -> ProviderDefaults:
         if settings.deepseek_api_key is not None
         else None
     )
+    anthropic_key = (
+        settings.anthropic_api_key.get_secret_value()
+        if settings.anthropic_api_key is not None
+        else None
+    )
     # Both web capabilities prefer DeepSeek when its key exists, then Tavily,
     # then Exa. The two capabilities remain independently selectable in
     # Settings, and a saved database row always takes precedence.
@@ -116,6 +122,7 @@ def provider_defaults_from_settings(settings: Settings) -> ProviderDefaults:
         tavily_api_key=tavily_key,
         exa_api_key=exa_key,
         deepseek_api_key=deepseek_key,
+        anthropic_api_key=anthropic_key,
     )
 
 
@@ -144,6 +151,22 @@ class ProviderFactory:
             or not config.api_key
         ):
             return NullTextGenerator()
+        if config.provider == "anthropic":
+            # ``max_tokens`` is required by the Messages API, so the row cap (or
+            # the deployment chat cap) is always passed. Base URL, model, key,
+            # version, and effort all come from the resolved configuration.
+            return AnthropicClient(
+                api_key=config.api_key,
+                base_url=config.base_url or self.settings.anthropic_base_url,
+                model=config.model or self.settings.anthropic_model,
+                timeout_seconds=self.settings.anthropic_timeout_seconds,
+                max_tokens=self.settings.anthropic_max_tokens,
+                chat_max_tokens=(
+                    config.max_output_tokens or self.settings.chat_agent_max_output_tokens
+                ),
+                reasoning_effort=config.reasoning_effort,
+                anthropic_version=self.settings.anthropic_version,
+            )
         return DeepSeekClient(
             api_key=config.api_key,
             base_url=config.base_url or self.settings.deepseek_base_url,
@@ -153,6 +176,7 @@ class ProviderFactory:
             chat_max_tokens=self.settings.deepseek_chat_max_tokens,
             temperature=self.settings.deepseek_temperature,
             supports_thinking=config.provider == "deepseek",
+            reasoning_effort=config.reasoning_effort,
         )
 
     def build_embedder(self, config: ProviderConfig) -> EmbedderProtocol:

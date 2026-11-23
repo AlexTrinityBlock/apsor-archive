@@ -28,6 +28,17 @@ class ProviderConfig(BaseModel):
     dimension: int | None
     enabled: bool
     source: ProviderSource
+    # Database rows carry their identity so an account assignment can resolve
+    # one exact endpoint. Environment and default fallbacks keep ``None`` so a
+    # row-id lookup can never match them.
+    row_id: int | None = None
+    # Reasoning effort belongs to the account assignment, not to the shared
+    # endpoint row. It is filled with ``model_copy(update=...)`` by the per-user
+    # resolver and stays ``None`` on every runtime/registry read.
+    reasoning_effort: str | None = None
+    # Per-row output cap for a chat endpoint. ``None`` means the deployment
+    # default; only chat rows persist this column.
+    max_output_tokens: int | None = None
 
 
 class ProviderDefaults(BaseModel):
@@ -55,6 +66,7 @@ class ProviderDefaults(BaseModel):
     tavily_api_key: str | None = None
     exa_api_key: str | None = None
     deepseek_api_key: str | None = None
+    anthropic_api_key: str | None = None
 
 
 @dataclass(frozen=True)
