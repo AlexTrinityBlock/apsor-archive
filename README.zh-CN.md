@@ -34,6 +34,7 @@
   - [Docker Compose（常规）](#docker-compose常规)
   - [对象存储（本地或 R2）](#对象存储本地或-r2)
   - [在应用中配置提供商](#在应用中配置提供商)
+  - [每个账户的模型分配](#每个账户的模型分配)
   - [网页研究工具](#网页研究工具)
   - [常用提示词](#常用提示词)
   - [Agent 运行时设置](#agent-运行时设置)
@@ -87,10 +88,15 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 - **Agent 只有一个工作区。** 聊天是一张三栏工作台：可折叠的对话抽屉、
   流式对话记录，以及带有可拖动且会持久化的分隔条的工具检查器。
   没有第二个输入框，也没有命令面板。
-- **Agent 的限制由数据库支撑。** 模型上下文窗口、
-  压缩阈值、步骤与工具上限、并行宽度和结果预算都存放在一行经过校验的
-  `agent_config` 记录中，无需重启即可应用于新的运行。上下文窗口是模型
-  元数据；压缩是长对话的控制机制。
+- **Agent 的限制由数据库支撑。** 步骤与工具上限、并行宽度、结果预算和
+  压缩控制都存放在一行经过校验的 `agent_config` 记录中，无需重启即可
+  应用于新的运行。每个账户的主模型与上下文预算是独立的分配：上下文窗口
+  是真正的每账户输入预算，而不是模型元数据，Agent 会在本地强制执行它，
+  而不是让轮次失败。
+- **聊天模型按账户分配。** root 会把每个账户关联到一个已保存的聊天端点，
+  以及供 Agent 聊天使用的自由文本模型和推理力度，并为摘要、记忆、摄取和
+  视觉关联第二个端点。变更后的连接必须通过真实的提供商探测才能保存。
+  提供商行持有加密密钥，因此轮换密钥会影响分配到该端点的每个账户。
 - **长线程可以被折叠或清空。** 压缩会写入一个摘要边界；清空会启动
   一个空的活动上下文。两种情况下，完整的对话记录仍然可读。
 - **记忆是线性的、可追溯的。** 新的判断可以取代旧的判断。
@@ -100,8 +106,9 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 - **时间采样是诚实的。** 时间线为每种事件类型最多返回五个锚点，
   并准确报告跳过了多少事件。人类时间线页面则用 `complete=true`
   获取所选窗口的全部事件，并在向下滚动时自动加载更早的窗口。
-- **AI 回答有据可依。** DeepSeek 收到的是检索到的段落，而不是整个
-  文件库；每条论断都必须带引用。没有密钥时，Agent 轮次会失败关闭。
+- **AI 回答有据可依。** 分配的聊天模型收到的是检索到的段落，而不是整个
+  文件库；每条论断都必须带引用。没有可用的分配时，Agent 轮次会以稳定
+  代码失败关闭。
 - **问题比对话更长久。** 可以在还没有答案时保存问题，稍后再提问，
   并把答案、引用、运行状态以及指向对话的链接保留在同一行。编辑问题
   会清除过期的答案，而不是在屏幕上留下一对不匹配的内容。
@@ -142,7 +149,7 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 | 存储 | PostgreSQL 17（`pg_trgm` 用于路径模糊搜索）；原始字节位于本地磁盘或私有 Cloudflare R2 |
 | 缓存 | Valkey / Redis 兼容，带内存回退 |
 | 检索 | CJK 二元组 + 拉丁词元 n-gram、BM25、带符号哈希向量、RRF |
-| AI | DeepSeek `deepseek-flash`（OpenAI 兼容的聊天补全） |
+| AI | DeepSeek `deepseek-flash`、Anthropic Claude，或任何 OpenAI 兼容的聊天端点 |
 | 前端 | React 19、TypeScript、Vite、React Router、React Query、Orval |
 | 部署 | Docker Compose、可选的 Cloudflare Tunnel，或使用 `uv` 的裸机 |
 
@@ -254,8 +261,9 @@ PostgreSQL 转储、数据目录备份和 R2 存储桶内容作为一个备份�
 设置页面是配置提供商的常规方式，只有 root 账户可以编辑全局注册表。
 它会写入四张独立的能力表，因此一种能力永远不会覆盖另一种：
 
-- **聊天** — `chat_provider_config`：DeepSeek 或任何 OpenAI 兼容的聊天
-  端点。允许保存多行；恰好有一行处于活动状态。
+- **聊天** — `chat_provider_config`：DeepSeek、Anthropic Claude 或任何
+  OpenAI 兼容的聊天端点。聊天行是账户所分配的 **端点**；它有一个可选的
+  `max_output_tokens` 上限（256–131,072）。
 - **嵌入** — `embedding_provider_config`：离线 `hashing`、`openai` 或
   `openai-compatible`。允许保存多行；恰好有一行处于活动状态。
 - **网页搜索** — `web_search_provider_config`：目前是 Tavily，并为未来
@@ -265,19 +273,31 @@ PostgreSQL 转储、数据目录备份和 R2 存储桶内容作为一个备份�
   网页搜索和网页抓取刻意分成不同的行，因此它们可以使用不同的
   提供商或不同的凭据。
 
-每张表都在 `is_active` 上有一个部分唯一索引；PostgreSQL 强制每种
-能力最多只有一行活动记录。删除一行不会复用其标识 id。提供商行是
-全局部署配置：只有 root 账户可以列出、编辑、测试或删除它们，
-普通用户永远不会收到提供商密钥或全局运行时设置。API 从不返回
-明文密钥：浏览器只会收到诸如 `...14f8` 的提示。`APSOR_SECRET_KEY`
-提供 Fernet 主密钥。如果未设置，会在 `data/.secret_key`
-（Docker 中为 `/data/.secret_key`）创建一个 `0600` 密钥文件，
-因此加密值在重启后仍然有效。`APSOR_TAVILY_API_KEY` 是两种网页能力
-的可选环境回退。
+每张表都存储从零开始的 `priority`，并在 `priority WHERE is_active` 上有
+部分唯一索引。对嵌入、网页搜索和网页抓取而言，链中的第一行是主行，其余
+是备用行；只有在提供商或传输失败时才会前进到下一行，并且所有行都失败后
+操作才会失败。聊天不同：每个账户分配到一个确切的聊天行，Agent 轮次永远
+不会故障转移到另一个聊天行。嵌入备用行必须与主行使用相同的模型和维度，
+因为混合向量空间会破坏每个所有者的索引。删除一行不会复用其标识 id。
 
-优先级是：**活动数据库行 → 环境 → 内置默认值**。设置页面会为每个
-提供商标注其来源。更改嵌入模型不会重写现有向量；`reindex_required`
-会发出警告。运行 **重新嵌入文件库**（或
+提供商行是全局部署配置：只有 root 账户可以列出、编辑、测试或删除它们，
+普通用户永远不会收到提供商密钥或全局运行时设置。API 从不返回明文密钥：
+浏览器只会收到诸如 `...14f8` 的提示。`APSOR_SECRET_KEY` 提供 Fernet
+主密钥。如果未设置，会在 `data/.secret_key`（Docker 中为
+`/data/.secret_key`）创建一个 `0600` 密钥文件，因此加密值在重启后仍然
+有效。`APSOR_TAVILY_API_KEY` 是两种网页能力的可选环境回退。Anthropic
+密钥可以放在 `.secrets/anthropic.env` 中，名为 `ANTHROPIC_API_KEY`（或
+`APSOR_ANTHROPIC_API_KEY`）；端点行上的数据库密钥仍然优先。
+
+聊天端点拥有自己的密钥，而不是账户。多个账户可以共享一个端点，轮换或
+清除该端点的密钥会影响分配到它的每个账户。没有加密密钥的行可以使用
+提供商范围的环境密钥作为行补充，但不存在每用户密钥，也不存在部署级聊天
+回退：未分配的账户永远不会被另一个活动行或单独的环境密钥拯救。
+
+嵌入、网页搜索和网页抓取的优先级是：**活动数据库链 → 环境 → 内置默认值**。
+对于聊天，账户分配会按 id 选择端点行；提供商范围的环境密钥只能补足该行。
+设置页面会为每个提供商标注其来源和链顺序。更改嵌入模型不会重写现有向量；
+`reindex_required` 会发出警告。运行 **重新嵌入文件库**（或
 `POST /api/v1/settings/providers/embedding/reindex`）以刷新当前分块。
 向量搜索会跳过维度与当前嵌入器不匹配的分块。
 
@@ -290,13 +310,89 @@ PostgreSQL 转储、数据目录备份和 R2 存储桶内容作为一个备份�
 | `PUT` | `/api/v1/settings/providers/{capability}/{provider_id}` | 替换一个已保存的提供商 |
 | `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | 删除一个已保存的提供商 |
 | `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | 使其成为该能力唯一的活动行 |
-| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | 清除活动行并回退到环境/默认值 |
+| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | 清除整条链；嵌入/网页回退到环境/默认值，聊天分配变为未激活 |
 | `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/test` | 一次小型提供商请求及延迟 |
 | `POST` | `/api/v1/settings/providers/embedding/reindex` | 使用活动提供商重新嵌入每个当前分块 |
 
 `{capability}` 是 `chat`、`embedding`、`web_search` 或 `web_fetch`
 之一。注册表响应在 `providers` 缓存作用域下缓存 30 秒；每次写入
 提供商都会递增该作用域的版本。
+
+### 每个账户的模型分配
+
+每个账户都有两个聊天槽位。**主** 槽位负责 Agent 聊天。**辅助** 槽位负责
+摘要、记忆整合、摄取标题与标签、文档分析、提取以及视觉。root 从
+**账户 → 模型** 分配两者：选择一个已保存的聊天端点，输入模型名称和推理
+力度，设置可选的上下文预算，然后对每个连接发生变更的槽位按下 **测试**。
+普通账户从 **设置 → 模型** 读取同样的两个槽位；该视图是只读的。
+
+模型名称和力度字符串是自由文本，上限分别为 128 和 32 个字符。模型目录
+只是建议，永远不是允许列表。已知模型可能会提供价格、层级和分词比例；未知
+模型以 `tier=None` 接受，不进行路由、不自动升级，成本显示为 `unpriced`。
+对话框中的力度提示只是提供商指引：DeepSeek 接受 `low | high | max`
+（默认 `high`，并有 `minimal`→`low`、`medium`/`xhigh`→`high`、
+`ultra`→`max` 别名），Anthropic 接受 `low | medium | high | xhigh | max`，
+OpenAI/GPT 依模型接受 `none | minimal | low | medium | high | xhigh | max`。
+探测才是验证。
+
+端点行拥有 Fernet 加密密钥。多个账户可以共享一个端点；轮换或清除其密钥
+会影响分配到该端点的每个账户。不存在每用户密钥，也不存在全局或环境聊天
+回退：缺失、未激活、已禁用或没有密钥的端点会失败关闭。辅助槽位只有在
+两个辅助字段都为 `NULL` 时（升级回填的形状）才继承主端点和模型；该继承
+工作使用辅助力度，默认 `low`。有辅助行但没有模型，或有模型但没有行，
+会报告为降级，而不是静默回退。
+
+保存受探测门控。服务器会对每个连接指纹（端点行、基础 URL、密钥密文、
+模型和力度）发生变更的槽位执行一次真实的 16 令牌生成；即使浏览器已经
+按下 **测试**，`PUT` 仍会在服务器端重新检查该门控。只有预算变更时会跳过
+探测。如果探测失败，请求返回 `422 model_probe_failed`，并且不写入任何
+内容。删除分配会清除两个槽位，使账户保持未分配。
+
+上下文窗口和压缩阈值是可选的每账户覆盖值；空白值继承 `agent_config` 的
+部署默认值。上下文窗口是真正的对外发送输入预算，不是模型元数据。每次
+提供商调用前，Agent 会估算请求，并且绝不引发本地上下文错误：超出预算
+时，先按预算的 60% 强制执行确定性压缩，再丢弃页面上下文，然后从最旧的
+开始把工具结果正文裁剪为 8,000、2,000、500 个字符（保留
+`<tool_result>` 信封），最后只截断当前用户消息的对外副本（必要时丢弃其
+附件）。一条 `ui.notice` 记录模型未看到的内容。存储的对话记录不变。不
+存在 `agent_context_limit_exceeded` 代码。
+
+压缩始终是确定性的，永不调用提供商。root 可以在 `agent_config` 编辑其
+指令模板；模板必须包含 `{max_output_tokens}`，并可使用
+`{max_output_chars}`、`{max_items}`、`{max_line_chars}` 和
+`{max_last_user_chars}`。缺少输出上限、使用未知占位符或含有不成对大括号
+的模板会返回 `422 compaction_prompt_invalid`，并且不会保存。
+
+开启 `model_escalation_enabled` 时，Agent 每次运行最多升级一次，沿目录
+上升一层，并在同一个端点上。触发条件为：经过一次压缩后仍被上下文窗口
+拒绝、重试后仍未产生文本且达到输出上限、连续三次无效参数的工具调用、
+无法使用的补全，或拒绝回答。5xx、超时、401/403 或配额错误永不升级。
+一条 `ui.notice` 记录 `reason`、`from_model` 和 `to_model`。未知模型没有
+层级，因此永不升级。
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| `GET` | `/api/v1/model-assignments` | 每个账户的存储值、有效值和警告字段（仅 root） |
+| `GET` | `/api/v1/model-assignments/me` | 调用者自己的分配（每个已认证账户） |
+| `PUT` | `/api/v1/model-assignments/{user_id}` | 探测已变更槽位并保存两个分配（仅 root） |
+| `DELETE` | `/api/v1/model-assignments/{user_id}` | 清除两个分配（仅 root） |
+| `GET` | `/api/v1/chat-endpoints` | 已保存的聊天端点，只有主机名，绝不包含密钥或完整 URL |
+| `POST` | `/api/v1/chat-endpoints/{provider_config_id}/probe` | 测试一个候选模型/力度；不写入任何内容 |
+| `GET` | `/api/v1/model-catalog` | 按升级顺序排列的建议目录；其他模型字符串仍然合法 |
+
+稳定的分配错误：
+
+| 状态 | 代码 | 时机 |
+|---|---|---|
+| `409` | `model_not_assigned` | 账户没有主端点/模型 |
+| `409` | `provider_inactive` | 分配的端点未激活、已禁用或没有密钥 |
+| `422` | `invalid_model_assignment` | 端点不可用，或预算配对无效 |
+| `422` | `model_probe_failed` | 已变更的槽位探测失败；未写入任何内容 |
+| `422` | `compaction_prompt_invalid` | 压缩模板缺少 `{max_output_tokens}` 或含有未知占位符 |
+
+目录价格仅供参考；现有的每账户令牌配额仍是强制执行机制，并且没有美元
+成本读数。`GET /api/v1/ai/status` 仍报告部署级运行时供 root 诊断；它不是
+每账户的分配。
 
 ### 网页研究工具
 
@@ -367,14 +463,16 @@ Agent 会在工具结果本身中看到 `view="compressed"`、覆盖窗口和原
 ### Agent 运行时设置
 
 `/settings` 上的 **Agent 运行时** 面板（仅 root）编辑单例
-`agent_config` 行（`id=1`）。提供商和模型选择仍留在上方的 AI 设置中，
-因此哪个模型作答仍然只有一个事实来源。全部十二个运行时值都存储在
-PostgreSQL 中，无需重启即可应用于新的运行，并由每个账户共享。
+`agent_config` 行（`id=1`）。聊天端点和模型选择是每账户的分配（见
+**每个账户的模型分配**）；该行包含步骤与工具预算、部署默认的上下文预算，
+以及压缩和升级控制。这些运行时值都存储在 PostgreSQL 中，无需重启即可
+应用于新的运行，并由每个账户共享。账户自己的上下文窗口和压缩阈值在设置
+后会覆盖这些部署默认值。
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | 有效配置、默认值、来源、`updated_at` |
-| `PUT` | `/api/v1/agent/settings` | 完整替换；全部十二个字段都是必填 |
+| `PUT` | `/api/v1/agent/settings` | 完整替换；所有字段都是必填 |
 | `POST` | `/api/v1/agent/settings/reset` | 持久化并返回内置默认值 |
 
 生成的操作是 `getAgentSettings`、`updateAgentSettings` 和
@@ -387,7 +485,7 @@ PostgreSQL 中，无需重启即可应用于新的运行，并由每个账户共
 | 字段 | 默认值 | 范围 |
 |---|---|---|
 | `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000；低于上下文窗口 |
-| `context_window_tokens` | 1,000,000 | 8,000–2,000,000；模型元数据 |
+| `context_window_tokens` | 1,000,000 | 8,000–2,000,000；部署默认预算 |
 | `max_steps` | 24 | 1–32 |
 | `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
@@ -395,18 +493,27 @@ PostgreSQL 中，无需重启即可应用于新的运行，并由每个账户共
 | `max_page_context_chars` | 6,000 | 500–50,000 |
 | `max_compaction_summary_chars` | 6,000 | 1,000–20,000 |
 | `max_compaction_last_user_chars` | 4,000 | 500–10,000 |
+| `compaction_prompt` | 内置模板 | 1–20,000 个字符；必须包含 `{max_output_tokens}` |
+| `compaction_max_output_tokens` | 2,600 | 256–16,384 |
+| `model_escalation_enabled` | `true` | 布尔值 |
+| `agent_max_output_tokens` | 64,000 | 256–131,072 |
 | `auto_compaction_enabled` | `true` | 布尔值 |
 | `parallel_tools_enabled` | `true` | 布尔值 |
 | `save_memory_requires_approval` | `true` | 布尔值；`save_memory` 需要人工审批 |
 
-Pydantic 和匹配的 PostgreSQL 检查约束会强制执行范围以及两条
-跨字段规则：压缩阈值必须低于模型上下文窗口，并行宽度不得超过每轮
-工具调用数。应用的全局校验封装会把请求校验失败映射为 `400 invalid_request`，
-而不是 422。
+Pydantic 和匹配的 PostgreSQL 检查约束会强制执行范围以及两条跨字段规则：
+压缩阈值必须低于模型上下文窗口，并行宽度不得超过每轮工具调用数。压缩
+模板还必须包含 `{max_output_tokens}`；未知占位符、转换、格式说明或缺少
+输出上限会返回 `422 compaction_prompt_invalid`，而不是
+`400 invalid_request`。应用的全局校验封装会把其他请求校验失败映射为
+`400 invalid_request`，而不是 422。
 
-一次请求会在短生命周期的数据库会话中加载一个不可变的运行时快照。
-活动的 SSE 运行会保留它启动时的快照；后续运行使用更改后的设置。
-后端契约描述于 `backend/README.md`。
+一次请求会在短生命周期的数据库会话中加载一个不可变的运行时快照。活动
+的 SSE 运行会保留它启动时的快照；后续运行使用更改后的设置。已存储的
+账户预算对会应用到快照上；如果继承的配对不再满足阈值规则，会报告为
+`invalid_threshold` 并保留部署值。主提供商和模型仍来自账户分配，而不是
+`/api/v1/ai/status` 或 `runtime.chat_config`。后端契约描述于
+`backend/README.md`。
 
 ### 摄取运行时
 
@@ -712,7 +819,7 @@ Pi coding-agent harness 的持久化对话记录模型：对话是一份由不�
   已批准/已拒绝/已过期人工决定，包括经过校验的参数、安全预览，以及
   用于恢复等待运行的循环快照。
 - `agent_config` — 单例运行时配置（`id=1`），保存经过校验的令牌、
-  步骤、工具、页面上下文和压缩限制。
+  步骤、工具、页面上下文和压缩限制，以及压缩模板、其输出上限和升级开关。
 
 第一个条目是冻结的 `pi.system` 提示词和工具快照。上下文构建器会
 确定性地重放条目：它遵循 `head_entry_id` 和 `edits`，保留系统条目，
@@ -848,6 +955,11 @@ API 重启时，陈旧的 `running` 运行会以 `interrupted` 失败。带有�
 
 这会启动新的 KV 缓存谱系。系统提示词和工具快照保持冻结，旧对话
 记录在 `/chat` 和停靠区仍然可读。
+
+压缩始终是确定性的：永不调用提供商。摘要受
+`compaction_max_output_tokens`（默认 2,600）限制，并由 root 可编辑的
+`compaction_prompt` 渲染；模板必须包含 `{max_output_tokens}`，旧的字符
+上限仍然适用。溢出阶梯也可以为单个对外请求构建临时压缩，而不追加边界。
 
 `POST .../compact` 会从当前活动上下文手动追加相同的边界。
 `POST .../clear` 会追加带有自身 `head_entry_id` 且没有提供商消息的
@@ -1104,6 +1216,11 @@ agent 用量：总令牌、提示词令牌、补全令牌和缓存令牌、API �
 显示可读的零状态。用量按 agent 运行计数，并由数据库触发器汇总，
 因此卡片仍然是一次廉价的 root 专用列表读取，而不是跨账户对话扫描。
 
+每张卡片还会汇总该账户的模型分配。root 会在令牌配额旁打开 **模型**，
+分配主端点和辅助端点、其自由文本模型与力度，以及可选的上下文预算，或
+重置两个槽位。账户本身会在 **设置 → 模型** 以只读方式看到同样的两个
+槽位；只有 root 可以更改它们。
+
 root 可以从页脚用户切换器或从普通活动账户卡片启动模拟会话。对话框
 会在仅 root 可见的账户列表中本地搜索，排除 root 账户，并拒绝已禁用
 或必须更改密码的账户。模拟是刻意的受信任 root 能力：cookie 变成
@@ -1122,8 +1239,9 @@ DOM、草稿、对话框和账户范围的查询行无法存活；最近聊天�
 例外：root 可以签发临时密码或打开目标账户的会话，因此可能以该账户
 身份登录。请相应地保护 root 凭据；RLS 并不是针对恶意 root 使用这些
 能力的防御。普通用户看不到全局设置标签或 **账户** 页面；他们的设置
-只显示 **常用提示词** 和 **语言**，而 root 看到全部八个标签。仪表盘
-和统计计数限定在登录账户内；AI 状态是全局且只读的。密码使用 Argon2
+只显示 **常用提示词**、**模型** 和 **语言**，而 root 看到全部九个标签。
+仪表盘和统计计数限定在登录账户内；AI 状态是部署级运行时诊断，而不是
+账户的模型分配。密码使用 Argon2
 哈希；数据库只存储每个会话令牌的 SHA-256 哈希。cookie 是 HttpOnly、
 SameSite=Lax，并在 `APSOR_COOKIE_SECURE=true` 时启用 Secure
 （Cloudflare compose 会设置它）。每个账户可以在 `/profile` 编辑其
@@ -1356,11 +1474,17 @@ memory_summary ───┘
 - `chat_provider_config` / `embedding_provider_config` /
   `web_search_provider_config` / `web_fetch_provider_config`：每个
   已保存提供商一行，带有加密的 API 密钥、安全提示，以及模型/基础
-  URL/维度。`is_active` 上的部分唯一索引强制每种能力只有一行活动
-  记录。`web_search` 和 `web_fetch` 是独立的凭据。
+  URL/维度。`chat_provider_config` 还存储可选的 `max_output_tokens`，
+  并接受 `anthropic`、`deepseek`、`openai-compatible` 和 `none`；聊天行
+  是账户所分配的端点。`is_active` 上的部分唯一索引强制每种能力只有一行
+  活动记录。`web_search` 和 `web_fetch` 是独立的凭据。
 - `app_user`：每个账户一行。`role` 是 `root` 或 `user`；`is_active`、
   `must_change_password`、`disabled_at`、`created_by_user_id` 以及
-  密码审计时间戳描述账户生命周期。部分唯一索引强制恰好一个 root，
+  密码审计时间戳描述账户生命周期。八个分配字段是
+  `chat_provider_config_id`、`chat_model`、`chat_reasoning_effort`、
+  `aux_provider_config_id`、`aux_model`、`aux_reasoning_effort`（非空，
+  默认 `low`）、`chat_context_window_tokens` 和
+  `chat_compaction_threshold_tokens`。部分唯一索引强制恰好一个 root，
   用户名保持全局唯一且不可变。
 - `user_profile_card`：描述账户的有序标题/内容卡片；完整集合会作为
   `user_profile` 区段冻结到新对话中。
@@ -1437,7 +1561,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `f7a3c2d9e1b4`，位于 `c2f6a8d4e1b3` 之后。此分支上
+最新的迁移是 `a4c9e2f7b1d6`。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1512,12 +1636,22 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   `ingest_config.vision_description_language` 添加为非空 `varchar(80)`，
   服务器默认值为 `English`，并带有去除首尾空白后的长度检查。降级会删除
   检查约束和列；
-- `f7a3c2d9e1b4`（当前 head）新增可为空的
+- `f7a3c2d9e1b4` 新增可为空的
   `ingest_config.vision_image_prompt` / `vision_document_prompt` 模板、
   `file` 提示词指纹列，以及 `file_ingest_job.source_file_id` 与其
   拥有者安全的复合外键、重新摄取检查、活动来源唯一索引和查询索引。
   它不会预置或回填提示词／指纹值。降级会先删除重新摄取任务，再恢复旧的
-  来源类型检查。
+  来源类型检查；
+- `a4c9e2f7b1d6`（当前 head）新增八个 `app_user` 分配列及两个指向
+  `chat_provider_config` 的 `ON DELETE SET NULL` 外键、七项检查约束、
+  `chat_provider_config.max_output_tokens`（256–131,072）、允许 `anthropic`
+  的更宽聊天提供商检查，以及四个新的 `agent_config` 列
+  （`compaction_prompt`、`compaction_max_output_tokens`、
+  `model_escalation_enabled`、`agent_max_output_tokens`）。它会把优先级
+  最低的活动非 `none` 聊天行及其模型回填到尚未分配的账户；如果没有这样的
+  行，每个账户都会保持未分配。`app_user` 仍在 RLS 之外，因此不需要更改
+  策略或授权。降级会删除分配列，并在仍有 `anthropic` 行时拒绝恢复较窄的
+  提供商检查。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，
