@@ -16,6 +16,8 @@ from uuid import uuid4
 
 import pypdfium2 as pdfium
 from docx import Document
+from pptx import Presentation
+from pptx.shapes.group import GroupShape
 from pypdf import PdfReader
 from sqlalchemy.exc import IntegrityError
 
@@ -110,7 +112,7 @@ CpuRunner = Callable[..., Awaitable[Any]]
 T = TypeVar("T")
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-DOCUMENT_EXTENSIONS = {".pdf", ".docx"} | set(SPREADSHEET_EXTENSIONS)
+DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx"} | set(SPREADSHEET_EXTENSIONS)
 MARKDOWN_EXTENSIONS = {".md", ".markdown"}
 TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".csv", ".json", ".log"}
 ALLOWED_EXTENSIONS = TEXT_EXTENSIONS | DOCUMENT_EXTENSIONS | IMAGE_EXTENSIONS
@@ -126,10 +128,10 @@ FOLDER_COPY_MAX_BYTES = 256 * 1024 * 1024
 DOCUMENT_ANALYSIS_PROMPT = (
     "You analyze a document before it enters a personal knowledge library. "
     "Return JSON with the keys: has_meaningful_text (boolean), use_vision "
-    "(boolean), document_type (short string such as pdf, docx, text, json, "
-    "spreadsheet, image, scanned_pdf), title (short string), summary (1 to 2 "
-    "sentences), tags (3 to 6 short strings), and language. Set use_vision to "
-    "true only when the extracted text is empty, garbled, or clearly not the "
+    "(boolean), document_type (short string such as pdf, docx, pptx, text, "
+    "json, spreadsheet, image, scanned_pdf), title (short string), summary (1 "
+    "to 2 sentences), tags (3 to 6 short strings), and language. Set use_vision "
+    "to true only when the extracted text is empty, garbled, or clearly not the "
     "document's main content and a vision pass over its pages or images could "
     "recover it. For plain text files and spreadsheets use_vision must be false. "
     "Do not invent content."
@@ -646,11 +648,104 @@ class FileService:
                 images.append((archive.read(name), mime))
         return images
 
+    @staticmethod
+    def _pptx_shape_lines(shape: Any) -> list[str]:
+        """Read one shape's text frame or table, recursing into groups.
+
+        Slide shapes are visited in their XML tree order, so the extracted text
+        is deterministic for the same deck. A group's children are read in place
+        of the group itself; the group frame has no text of its own.
+        """
+        if isinstance(shape, GroupShape):
+            lines: list[str] = []
+            for child in shape.shapes:
+                lines.extend(FileService._pptx_shape_lines(child))
+            return lines
+        if getattr(shape, "has_table", False):
+            rows: list[str] = []
+            for row in shape.table.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                if any(cells):
+                    rows.append(" | ".join(cells))
+            return rows
+        if getattr(shape, "has_text_frame", False):
+            return [
+                paragraph.text.strip()
+                for paragraph in shape.text_frame.paragraphs
+                if paragraph.text.strip()
+            ]
+        return []
+
+    @staticmethod
+    def _pptx_notes_lines(slide: Any) -> list[str]:
+        """Read speaker notes when the slide has a valid notes text frame."""
+        try:
+            if not slide.has_notes_slide:
+                return []
+            notes_frame = slide.notes_slide.notes_text_frame
+        except Exception:
+            return []
+        if notes_frame is None:
+            return []
+        return [
+            paragraph.text.strip()
+            for paragraph in notes_frame.paragraphs
+            if paragraph.text.strip()
+        ]
+
+    @staticmethod
+    def _pptx_text(data: bytes, tracker: ProgressTracker | None = None) -> str:
+        """Read slide text frames, tables, grouped shapes, and speaker notes.
+
+        One slide is one progress unit. The slide count is known once the
+        presentation parses; every slide advances the tracker even when it
+        contributes no text, and a slide's ``[Slide N]`` marker is emitted only
+        when that slide produced content.
+        """
+        presentation = Presentation(BytesIO(data))
+        slides = list(presentation.slides)
+        if tracker is not None:
+            tracker.begin(PHASE_PARSING, len(slides), "slide")
+        parts: list[str] = []
+        for index, slide in enumerate(slides, start=1):
+            lines: list[str] = []
+            for shape in slide.shapes:
+                lines.extend(FileService._pptx_shape_lines(shape))
+            lines.extend(FileService._pptx_notes_lines(slide))
+            if lines:
+                parts.append(f"[Slide {index}]")
+                parts.extend(lines)
+            if tracker is not None:
+                tracker.advance()
+        return "\n".join(parts)
+
+    @staticmethod
+    def _pptx_images(data: bytes) -> list[tuple[bytes, str]]:
+        """Read embedded PPTX media in package order, mirroring DOCX media."""
+        images: list[tuple[bytes, str]] = []
+        with zipfile.ZipFile(BytesIO(data)) as archive:
+            for name in archive.namelist():
+                if not name.startswith("ppt/media/"):
+                    continue
+                suffix = extension(name)
+                if suffix not in IMAGE_EXTENSIONS:
+                    continue
+                mime = {
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".png": "image/png",
+                    ".webp": "image/webp",
+                }[suffix]
+                images.append((archive.read(name), mime))
+        return images
+
     async def _vision_images(
         self,
         images: list[tuple[bytes, str]],
+        *,
+        default_document_type: str = "docx",
     ) -> tuple[str, str | None, list[str], str, RenderedVisionPrompt]:
-        """Extract text, tables, and visual descriptions from DOCX media."""
+        """Extract text, tables, and visual descriptions from document media."""
         rendered = self._vision_prompts["image"]
         texts: list[str] = []
         tables: list[str] = []
@@ -658,7 +753,7 @@ class FileService:
         captions: list[str] = []
         summary: str | None = None
         tags: list[str] = []
-        document_type = "docx"
+        document_type = default_document_type
         for data, mime_type in images[: self.vision_max_pages]:
             if not await self._vision_allowed():
                 logger.warning(
@@ -827,6 +922,53 @@ class FileService:
                         return ExtractedDocument(
                             text=combined,
                             document_type=document_type or "docx",
+                            extraction_method="mixed" if text.strip() else "vision",
+                            ai_summary=summary or analysis.summary or None,
+                            ai_tags=list(dict.fromkeys([*analysis.tags, *tags]))[:8],
+                            vision_prompt_sha256=rendered.sha256,
+                            vision_prompt_mode=rendered.mode,
+                            vision_description_language=rendered.description_language,
+                        )
+            if not text.strip():
+                raise EmptyContentError()
+            return ExtractedDocument(
+                text=text,
+                document_type=analysis.document_type,
+                extraction_method="text",
+                ai_summary=analysis.summary or None,
+                ai_tags=analysis.tags,
+            )
+        if suffix == ".pptx":
+            try:
+                text = await self._run_cpu(self._pptx_text, data, self.progress_tracker)
+            except Exception as exc:
+                raise EmptyContentError() from exc
+            analysis = await self._analyze_text(
+                text,
+                file_name_value=file_name_value,
+                document_type="pptx",
+            )
+            needs_vision = (
+                force_vision or not analysis.has_meaningful_text or analysis.use_vision
+            )
+            if needs_vision and self.vision_extractor.configured:
+                images = await self._run_cpu(self._pptx_images, data)
+                if images:
+                    (
+                        vision_text,
+                        summary,
+                        tags,
+                        document_type,
+                        rendered,
+                    ) = await self._vision_images(
+                        images,
+                        default_document_type="pptx",
+                    )
+                    combined = "\n\n".join(part for part in (text.strip(), vision_text) if part)
+                    if combined:
+                        return ExtractedDocument(
+                            text=combined,
+                            document_type=document_type or "pptx",
                             extraction_method="mixed" if text.strip() else "vision",
                             ai_summary=summary or analysis.summary or None,
                             ai_tags=list(dict.fromkeys([*analysis.tags, *tags]))[:8],
