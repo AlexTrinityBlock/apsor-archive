@@ -14,6 +14,7 @@ import { ChangePasswordDialog } from "../auth/component/ChangePasswordDialog";
 import { ImpersonateUserDialog } from "../auth/component/ImpersonateUserDialog";
 import { StopImpersonationDialog } from "../auth/component/StopImpersonationDialog";
 import { useScrollLock } from "../hook/useScrollLock";
+import { useVisualViewport } from "../hook/useVisualViewport";
 import { useDrawerAccessibility } from "./useDrawerAccessibility";
 import {
   localizeStatus,
@@ -339,6 +340,9 @@ export function AppShell() {
     t("core.impersonation.root");
 
   useScrollLock(drawerOpen);
+  // One app-level owner mirrors the visual viewport for the mobile shell and
+  // every full-screen editor that consumes the root variables.
+  useVisualViewport();
 
   useEffect(() => {
     window.scrollTo(0, 0);

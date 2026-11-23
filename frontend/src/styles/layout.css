@@ -763,6 +763,34 @@
     height: calc(100dvh - var(--mobile-bar-height));
   }
 
+  /* The on-screen keyboard shrinks the visual viewport without changing
+     100dvh. Follow the visible band so the app header and the end of the chat
+     transcript stay reachable, and shift fixed chrome by the same offset. The
+     transcript keeps its own scroll owner; this only changes the space it can
+     show, never its scroll position. */
+  html[data-visual-keyboard="open"] .app-shell {
+    position: relative;
+    top: var(--app-visual-viewport-top, 0px);
+    height: var(--app-visual-viewport-height, 100dvh);
+  }
+
+  html[data-visual-keyboard="open"] .app-main {
+    height: calc(
+      var(--app-visual-viewport-height, 100dvh) - var(--mobile-bar-height)
+    );
+  }
+
+  html[data-visual-keyboard="open"] .mobile-bar {
+    top: var(--app-visual-viewport-top, 0px);
+  }
+
+  html[data-visual-keyboard="open"] .app-shell .nav-rail,
+  html[data-visual-keyboard="open"] .rail-scrim {
+    top: var(--app-visual-viewport-top, 0px);
+    bottom: auto;
+    height: var(--app-visual-viewport-height, 100dvh);
+  }
+
   .impersonation-banner {
     padding: 9px 16px;
   }

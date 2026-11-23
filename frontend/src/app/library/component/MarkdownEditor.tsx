@@ -23,7 +23,6 @@ import {
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useToast } from "../../component/Toast";
-import { useVisualViewport } from "../../hook/useVisualViewport";
 import { useI18n, type Translate, type TranslationKey } from "../../i18n";
 import { ViewerLoading } from "../../viewer/component/ViewerStates";
 import { countLines } from "../../viewer/component/viewer-utils";
@@ -449,9 +448,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     const { t, formatNumber } = useI18n();
     const queryClient = useQueryClient();
     const toast = useToast();
-    // The editor is full-screen on mobile; keep it inside the visual viewport so
-    // the on-screen keyboard cannot cover the textarea and action footer.
-    useVisualViewport();
+    // The editor is full-screen on mobile; its layer consumes the app-level
+    // visual viewport variables so the on-screen keyboard cannot cover the
+    // textarea and action footer.
     const discardBodyId = useId();
     const rootRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
