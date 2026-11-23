@@ -250,6 +250,48 @@ function canSave(input: CanSaveInput): boolean {
   return true;
 }
 
+interface SaveBlockInput {
+  readonly endpointsReady: boolean;
+  readonly primaryComplete: boolean;
+  readonly auxComplete: boolean;
+  readonly budgetError: BudgetParse["error"];
+  readonly primaryNeedsTest: boolean;
+  readonly auxNeedsTest: boolean;
+  readonly probing: boolean;
+}
+
+/** Explain exactly what still blocks the save, in the order the user sees it. */
+function resolveSaveBlock(input: SaveBlockInput): SaveBlockReason | null {
+  if (!input.endpointsReady) {
+    return { key: "core.accounts.modelSaveNeedsEndpoints" };
+  }
+  if (!input.primaryComplete) {
+    return { key: "core.accounts.modelSaveNeedsPrimaryFields" };
+  }
+  if (!input.auxComplete) {
+    return { key: "core.accounts.modelSaveNeedsAuxFields" };
+  }
+  if (input.budgetError === "order") {
+    return { key: "core.accounts.modelSaveNeedsBudgetOrder" };
+  }
+  if (input.budgetError === "range") {
+    return { key: "core.accounts.modelSaveNeedsBudgetRange" };
+  }
+  if (input.primaryNeedsTest && input.auxNeedsTest) {
+    return { key: "core.accounts.modelSaveNeedsBothTests" };
+  }
+  if (input.primaryNeedsTest) {
+    return { key: "core.accounts.modelSaveNeedsPrimaryTest" };
+  }
+  if (input.auxNeedsTest) {
+    return { key: "core.accounts.modelSaveNeedsAuxTest" };
+  }
+  if (input.probing) {
+    return { key: "core.accounts.modelSaveWaitingForTest" };
+  }
+  return null;
+}
+
 interface BuildPayloadInput {
   readonly primaryEndpointId: string;
   readonly primaryModel: string;
@@ -345,6 +387,7 @@ interface SlotFieldsProps {
   readonly disabled: boolean;
   readonly testing: boolean;
   readonly effortRequired: boolean;
+  readonly needsTest: boolean;
   readonly onEndpointChange: (value: string) => void;
   readonly onModelChange: (value: string) => void;
   readonly onEffortChange: (value: string) => void;
@@ -368,6 +411,7 @@ function SlotFields({
   disabled,
   testing,
   effortRequired,
+  needsTest,
   onEndpointChange,
   onModelChange,
   onEffortChange,
@@ -519,8 +563,14 @@ function SlotFields({
             ? t("core.accounts.modelTesting")
             : t("core.accounts.modelTest")}
         </Button>
-        <span className="accounts-model__test-hint">
-          {t("core.accounts.modelTestHint")}
+        <span
+          className={`accounts-model__test-hint${
+            needsTest ? " accounts-model__test-hint--required" : ""
+          }`}
+        >
+          {needsTest
+            ? t("core.accounts.modelTestRequired")
+            : t("core.accounts.modelTestHint")}
         </span>
       </div>
       <SlotTestLine test={visibleTest} />
@@ -758,17 +808,22 @@ function ResetSection({
   );
 }
 
+interface SaveBlockReason {
+  readonly key: TranslationKey;
+  readonly params?: Record<string, string>;
+}
+
 interface DialogFeedbackProps {
   readonly localError: string | null;
   readonly error: string | null;
-  readonly blockedByTest: boolean;
+  readonly blockReason: SaveBlockReason | null;
 }
 
-/** Local validation, server rejection, or the test-before-save note. */
+/** Local validation, server rejection, or the specific save blocker. */
 function DialogFeedback({
   localError,
   error,
-  blockedByTest,
+  blockReason,
 }: DialogFeedbackProps) {
   const { t } = useI18n();
   if (localError || error) {
@@ -779,10 +834,11 @@ function DialogFeedback({
       </p>
     );
   }
-  if (blockedByTest) {
+  if (blockReason) {
     return (
-      <p className="accounts-model__save-note">
-        {t("core.accounts.modelSaveBlocked")}
+      <p className="accounts-model__save-note" role="status">
+        <Icon name="info" size={14} />
+        {t(blockReason.key, blockReason.params)}
       </p>
     );
   }
@@ -853,12 +909,31 @@ export function ModelDialog({
   const name = account.display_name ?? account.username;
   const budget = parseBudget(windowText, thresholdText);
 
+  // A legacy account with no assignment opens with both slots empty. Derive
+  // the deployment's first usable endpoint as a fallback value instead of
+  // writing state during render; the first edit or test promotes it into the
+  // controlled fields.
+  const fallbackEndpoint =
+    assignment.chat_provider_config_id === null ? endpoints[0] : undefined;
+  const fallbackEndpointId = fallbackEndpoint
+    ? String(fallbackEndpoint.id)
+    : "";
+  const fallbackModel = fallbackEndpoint?.model ?? "";
+  const primaryEndpointValue = primaryEndpointId || fallbackEndpointId;
+  const primaryModelValue = primaryModel || fallbackModel;
+  const auxEndpointValue = auxEndpointId || fallbackEndpointId;
+  const auxModelValue = auxModel || fallbackModel;
+
   const primaryFingerprint = fingerprint(
-    primaryEndpointId,
-    primaryModel,
+    primaryEndpointValue,
+    primaryModelValue,
     primaryEffort,
   );
-  const auxFingerprint = fingerprint(auxEndpointId, auxModel, auxEffort);
+  const auxFingerprint = fingerprint(
+    auxEndpointValue,
+    auxModelValue,
+    auxEffort,
+  );
   const primaryChanged =
     primaryFingerprint !== initial.initialPrimaryFingerprint;
   const auxChanged = auxFingerprint !== initial.initialAuxFingerprint;
@@ -871,10 +946,10 @@ export function ModelDialog({
     (auxTest.status === "ok" && auxTest.fingerprint === auxFingerprint);
   const endpointsReady = !endpointsQuery.isPending && !endpointsQuery.isError;
   const primaryComplete =
-    primaryEndpointId.length > 0 && primaryModel.trim().length > 0;
+    primaryEndpointValue.length > 0 && primaryModelValue.trim().length > 0;
   const auxComplete =
-    auxEndpointId.length > 0 &&
-    auxModel.trim().length > 0 &&
+    auxEndpointValue.length > 0 &&
+    auxModelValue.trim().length > 0 &&
     auxEffort.trim().length > 0;
   const saveAllowed = canSave({
     submitting,
@@ -888,7 +963,18 @@ export function ModelDialog({
     auxChanged,
     auxTested,
   });
-  const blockedByTest = !primaryTested || !auxTested;
+  const primaryNeedsTest = primaryChanged && !primaryTested;
+  const auxNeedsTest = auxChanged && !auxTested;
+  const saveBlock = resolveSaveBlock({
+    endpointsReady,
+    primaryComplete,
+    auxComplete,
+    budgetError: budget.error,
+    primaryNeedsTest,
+    auxNeedsTest,
+    probing: probe.isPending,
+  });
+  const saveReasonId = `${idPrefix}-save-reason`;
 
   const setSlotTest = (slot: Slot, next: SlotTestState) => {
     if (slot === "primary") {
@@ -900,8 +986,8 @@ export function ModelDialog({
 
   const runTest = async (slot: Slot) => {
     const endpointId =
-      slot === "primary" ? primaryEndpointId : auxEndpointId;
-    const model = slot === "primary" ? primaryModel : auxModel;
+      slot === "primary" ? primaryEndpointValue : auxEndpointValue;
+    const model = slot === "primary" ? primaryModelValue : auxModelValue;
     const effort = slot === "primary" ? primaryEffort : auxEffort;
     if (effort.trim().length === 0 && slot === "auxiliary") {
       setLocalError(t("core.accounts.modelAuxEffortRequired"));
@@ -946,11 +1032,11 @@ export function ModelDialog({
   const submit = () => {
     setLocalError(null);
     const built = buildPayload({
-      primaryEndpointId,
-      primaryModel,
+      primaryEndpointId: primaryEndpointValue,
+      primaryModel: primaryModelValue,
       primaryEffort,
-      auxEndpointId,
-      auxModel,
+      auxEndpointId: auxEndpointValue,
+      auxModel: auxModelValue,
       auxEffort,
       budget,
     });
@@ -976,6 +1062,16 @@ export function ModelDialog({
       size="md"
       actions={
         <>
+          {saveBlock ? (
+            <span
+              id={saveReasonId}
+              className="accounts-model__save-reason"
+              role="status"
+            >
+              <Icon name="info" size={14} />
+              {t(saveBlock.key, saveBlock.params)}
+            </span>
+          ) : null}
           <Button
             type="button"
             variant="ghost"
@@ -989,9 +1085,8 @@ export function ModelDialog({
             variant="ink"
             onClick={submit}
             disabled={!saveAllowed}
-            title={
-              blockedByTest ? t("core.accounts.modelSaveBlocked") : undefined
-            }
+            aria-describedby={saveBlock ? saveReasonId : undefined}
+            title={saveBlock ? t(saveBlock.key, saveBlock.params) : undefined}
           >
             {submitting
               ? t("core.accounts.modelSaving")
@@ -1026,14 +1121,15 @@ export function ModelDialog({
           slot="primary"
           endpoints={endpoints}
           catalog={catalog}
-          endpointId={primaryEndpointId}
-          model={primaryModel}
+          endpointId={primaryEndpointValue}
+          model={primaryModelValue}
           effort={primaryEffort}
           endpointLabelOverride={assignment.chat_provider_label}
           test={primaryTest}
           disabled={submitting}
           testing={probe.isPending}
           effortRequired={false}
+          needsTest={primaryNeedsTest}
           onEndpointChange={(value) => {
             setPrimaryEndpointId(value);
             setLocalError(null);
@@ -1054,8 +1150,8 @@ export function ModelDialog({
           slot="auxiliary"
           endpoints={endpoints}
           catalog={catalog}
-          endpointId={auxEndpointId}
-          model={auxModel}
+          endpointId={auxEndpointValue}
+          model={auxModelValue}
           effort={auxEffort}
           endpointLabelOverride={
             initial.inheritedAux
@@ -1066,6 +1162,7 @@ export function ModelDialog({
           disabled={submitting}
           testing={probe.isPending}
           effortRequired
+          needsTest={auxNeedsTest}
           onEndpointChange={(value) => {
             setAuxEndpointId(value);
             setLocalError(null);
@@ -1119,7 +1216,7 @@ export function ModelDialog({
       <DialogFeedback
         localError={localError}
         error={error}
-        blockedByTest={blockedByTest}
+        blockReason={saveBlock}
       />
     </AccountDialog>
   );

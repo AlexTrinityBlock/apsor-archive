@@ -1417,7 +1417,11 @@ On the first visit the app asks you to create the root account. There is no
 default password and no email recovery. The root can then create normal
 accounts from **Accounts**; a new account is created with a generated
 20-character temporary password that is shown once, and it must choose a new
-password before any archive content loads. Root can disable, enable, reset, and
+password before any archive content loads. A new account also inherits the
+deployment's primary chat endpoint and model, so chat and background AI work
+immediately; if the deployment has no active chat endpoint, the account starts
+unassigned and root must assign one before AI features respond. Root can
+disable, enable, reset, and
 impersonate other accounts. Disabling an account or resetting its password
 revokes its sessions; revocation is checked at request start, so an SSE turn
 that was already streaming may finish its current run. Accounts are never
@@ -1928,7 +1932,9 @@ this branch are:
   provider check that admits `anthropic`, and the four new `agent_config`
   columns. It backfills the lowest active non-`none` chat row and its model into
   any account with no assignment; if no such row exists, every account stays
-  unassigned. The downgrade drops the assignment columns and refuses to restore
+  unassigned. Accounts created after the migration inherit the same primary
+  endpoint and model when one exists; without one they start unassigned. The
+  downgrade drops the assignment columns and refuses to restore
   the narrower provider check while an `anthropic` row exists.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded

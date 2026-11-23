@@ -340,6 +340,7 @@ export const core = {
     modelTestError: "The connection test did not answer.",
     modelTestHint:
       "Test the endpoint, model, and effort before saving a change.",
+    modelTestRequired: "Test this slot to enable saving.",
     modelSlotPrimaryTitle: "Primary slot",
     modelSlotPrimaryDescription: "Agent chat uses the primary endpoint.",
     modelSlotAuxiliaryTitle: "Auxiliary slot",
@@ -397,6 +398,22 @@ export const core = {
     modelSave: "Save assignment",
     modelSaving: "Saving…",
     modelSaveBlocked: "Test every changed slot before saving.",
+    modelSaveNeedsPrimaryTest:
+      "The primary endpoint changed. Run Test on it before saving.",
+    modelSaveNeedsAuxTest:
+      "The auxiliary endpoint changed. Run Test on it before saving.",
+    modelSaveNeedsBothTests:
+      "Both endpoints changed. Run Test on each before saving.",
+    modelSaveNeedsPrimaryFields:
+      "Choose a primary endpoint and enter a model.",
+    modelSaveNeedsAuxFields:
+      "Choose an auxiliary endpoint, model, and reasoning effort.",
+    modelSaveNeedsBudgetRange:
+      "The context window or compaction threshold is outside the allowed range.",
+    modelSaveNeedsBudgetOrder:
+      "The compaction threshold must be lower than the context window.",
+    modelSaveNeedsEndpoints: "Loading chat endpoints…",
+    modelSaveWaitingForTest: "Waiting for the connection test to finish…",
     modelClose: "Close",
     modelSaveSuccess: "Model assignment saved.",
     modelResetSuccess: "Model assignment reset.",

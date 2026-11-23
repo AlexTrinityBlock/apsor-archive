@@ -32,6 +32,8 @@ class UserRepositoryProtocol(Protocol):
         created_by_user_id: int | None = None,
         is_active: bool = True,
         must_change_password: bool = False,
+        chat_provider_config_id: int | None = None,
+        chat_model: str | None = None,
     ) -> AppUserModel: ...
 
     async def touch_login(self, user: AppUserModel, now: datetime) -> None: ...

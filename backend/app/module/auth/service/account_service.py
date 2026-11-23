@@ -31,6 +31,7 @@ from app.module.auth.protocol.auth_repository_protocol import (
     SessionRepositoryProtocol,
     UserRepositoryProtocol,
 )
+from app.module.auth.protocol.chat_defaults_protocol import ChatDefaultsProtocol
 from app.module.auth.protocol.security_protocol import PasswordHasherProtocol
 from app.module.auth.schema.account_schema import (
     AccountCreateSchema,
@@ -81,10 +82,12 @@ class AccountService:
         user_repository: UserRepositoryProtocol,
         session_repository: SessionRepositoryProtocol,
         password_hasher: PasswordHasherProtocol,
+        chat_defaults: ChatDefaultsProtocol | None = None,
     ) -> None:
         self.user_repository = user_repository
         self.session_repository = session_repository
         self.password_hasher = password_hasher
+        self.chat_defaults = chat_defaults
 
     @staticmethod
     def _to_schema(user: AppUserModel) -> AccountSchema:
@@ -169,6 +172,11 @@ class AccountService:
             raise UsernameTakenError(username)
 
         temporary_password = _generate_temporary_password()
+        default_chat = (
+            await self.chat_defaults.primary_endpoint()
+            if self.chat_defaults is not None
+            else None
+        )
         user = await self.user_repository.create(
             username,
             self.password_hasher.hash(temporary_password),
@@ -177,6 +185,8 @@ class AccountService:
             created_by_user_id=actor_user_id,
             is_active=True,
             must_change_password=True,
+            chat_provider_config_id=default_chat[0] if default_chat else None,
+            chat_model=default_chat[1] if default_chat else None,
         )
         return AccountTemporaryPasswordSchema(
             user=self._to_schema(user),
