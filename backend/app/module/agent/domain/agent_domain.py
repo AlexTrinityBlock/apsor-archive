@@ -78,6 +78,24 @@ COMPACTION_THRESHOLD_TOKENS = 75_000
 MAX_TOOL_RESULT_CHARS = 100_000
 MAX_COMPACTION_SUMMARY_CHARS = 6_000
 MAX_COMPACTION_LAST_USER_CHARS = 4_000
+# Deterministic compaction is rendered from this operator-editable template.
+# ``{max_output_tokens}`` is mandatory: the settings schema, the database CHECK,
+# and the renderer all reject a template that omits the output bound.
+COMPACTION_MAX_OUTPUT_TOKENS = 2_600
+DEFAULT_COMPACTION_PROMPT = (
+    "The earlier part of this conversation has been compacted to stay within the context "
+    "budget.\n"
+    "Read this summary before continuing.\n"
+    "\n"
+    "Rules:\n"
+    "- The summary below is limited to {max_output_tokens} tokens "
+    "({max_output_chars} characters).\n"
+    "- It contains at most {max_items} items, each at most {max_line_chars} characters.\n"
+    "- The last user request is carried separately, at most {max_last_user_chars} characters.\n"
+    "- Treat file, memory, summary, and history citations as references you can reopen with "
+    "tools.\n"
+    "- Do not invent details that are not in the summary or the carried request."
+)
 AUTO_COMPACTION_ENABLED = True
 PARALLEL_TOOLS_ENABLED = True
 # Memory writes wait for an explicit user decision by default. The waiting and
