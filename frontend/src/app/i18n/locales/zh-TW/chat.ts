@@ -265,11 +265,18 @@ export const chat = {
     auto: "自動",
     compactLead:
       "較早的回合已摺入這個邊界。完整對話紀錄仍保留在這裡；模型改為看到摘要。",
+    compactLeadAuto:
+      "先前的回合已在此摘要。完整對話紀錄仍保留；模型讀取的是摘要，而不是那些回合。",
     foldedOne: "已摺入 {count} 個條目",
     foldedOther: "已摺入 {count} 個條目",
-    summaryChars: "摘要 {count} 個字元",
+    entryRange: "條目 {from}–{to}",
+    entryOne: "條目 {id}",
+    summaryChars: "{count} 個字元",
     lastUserInput: "最後的使用者輸入",
+    lastUserInputEntry: "最後的使用者輸入 · 條目 {id}",
     summary: "摘要",
+    copySummary: "複製摘要",
+    copySummaryTitle: "複製壓縮摘要",
     cleared: "上下文已清除",
     resetLead: "較舊的對話紀錄仍保留在這裡，但不再傳送給模型。",
     resetNote:
