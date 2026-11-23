@@ -1172,6 +1172,21 @@ button.library-crumb:hover {
   transform: translateX(-50%);
 }
 
+.library-thumb__spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 2px solid var(--mono-grid);
+  border-top-color: var(--accent-moss);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: library-thumb-spin 0.9s linear infinite;
+}
+
 .library-thumb__docx {
   position: absolute;
   inset: 0;
@@ -1361,10 +1376,21 @@ button.library-crumb:hover {
   }
 }
 
+@keyframes library-thumb-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .library-thumb__paper {
     animation: none;
     opacity: 0.8;
+  }
+
+  /* Keep the still moss arc instead of a blank or uniform ring. */
+  .library-thumb__spinner {
+    animation: none;
   }
 }
 
@@ -1680,6 +1706,7 @@ button.library-crumb:hover {
 }
 
 .library-row__thumb {
+  position: relative;
   display: grid;
   width: 32px;
   height: 34px;
@@ -1689,6 +1716,13 @@ button.library-crumb:hover {
   background: var(--mono-paper);
   border: 0.7px solid var(--mono-grid);
   border-radius: 4px;
+}
+
+.library-row__thumb .library-thumb__spinner {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-width: 1.5px;
 }
 
 .library-row__thumb .library-thumb__tile {

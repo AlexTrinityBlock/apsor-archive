@@ -36,8 +36,19 @@ function TypeTile({ variant }: { readonly variant: "card" | "row" }) {
   );
 }
 
-function PaperSkeleton() {
-  return <span className="library-thumb__paper" />;
+// Decorative: the stage is already `aria-hidden`, and the spinner carries no
+// text or state. The same class is used by the lazy DOCX and Markdown chunks.
+function ThumbSpinner() {
+  return <span className="library-thumb__spinner" aria-hidden="true" />;
+}
+
+function PaperSkeleton({ busy = false }: { readonly busy?: boolean }) {
+  return (
+    <>
+      <span className="library-thumb__paper" />
+      {busy ? <ThumbSpinner /> : null}
+    </>
+  );
 }
 
 /**
@@ -65,12 +76,15 @@ interface ThumbContentProps {
   readonly kind: ThumbKind;
   readonly entry: ThumbEntry | undefined;
   readonly inView: boolean;
+  readonly imageLoaded: boolean;
   readonly imageBroken: boolean;
   readonly docxBroken: boolean;
   readonly markdownBroken: boolean;
   readonly cacheKey: string;
   readonly onDocxFailure: () => void;
   readonly onMarkdownFailure: () => void;
+  readonly onImageLoad: () => void;
+  readonly onImageRef: (image: HTMLImageElement | null) => void;
   readonly onImageFailure: () => void;
   readonly onDocumentFailure: () => void;
 }
@@ -86,7 +100,7 @@ function docxThumbContent(props: ThumbContentProps): ReactNode {
     return <PaperSkeleton />;
   }
   return (
-    <Suspense fallback={<PaperSkeleton />}>
+    <Suspense fallback={<PaperSkeleton busy />}>
       <DocxThumb
         fileId={props.file.file_id}
         fileName={props.file.file_name}
@@ -107,7 +121,7 @@ function markdownThumbContent(props: ThumbContentProps): ReactNode {
     return <PaperSkeleton />;
   }
   return (
-    <Suspense fallback={<PaperSkeleton />}>
+    <Suspense fallback={<PaperSkeleton busy />}>
       <MarkdownThumb
         fileId={props.file.file_id}
         cacheKey={props.cacheKey}
@@ -122,15 +136,20 @@ function imageThumbContent(props: ThumbContentProps): ReactNode {
     return <TypeTile variant={props.variant} />;
   }
   return (
-    <img
-      className="library-thumb__image"
-      src={getGetFileContentUrl(props.file.file_id)}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      draggable={false}
-      onError={props.onImageFailure}
-    />
+    <>
+      <img
+        ref={props.onImageRef}
+        className="library-thumb__image"
+        src={getGetFileContentUrl(props.file.file_id)}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        onLoad={props.onImageLoad}
+        onError={props.onImageFailure}
+      />
+      {props.inView && !props.imageLoaded ? <ThumbSpinner /> : null}
+    </>
   );
 }
 
@@ -156,7 +175,9 @@ function documentThumbContent(props: ThumbContentProps): ReactNode {
   if (props.kind === "xlsx" && props.variant === "row") {
     return <TypeTile variant="row" />;
   }
-  return <PaperSkeleton />;
+  // The effect starts only once the stage is in view, so an off-screen card
+  // keeps the quiet static paper instead of spinning forever.
+  return <PaperSkeleton busy={props.inView} />;
 }
 
 function thumbContent(props: ThumbContentProps): ReactNode {
@@ -183,6 +204,7 @@ function FileThumbContent({ file, variant }: FileThumbProps) {
   const kind = thumbKindFor(file.raw_file_path);
   const key = thumbCacheKey(file);
   const [entry, setEntry] = useState<ThumbEntry | undefined>(() => getThumb(key));
+  const [imageLoaded, setImageLoaded] = useState(false);
   const [imageBroken, setImageBroken] = useState(false);
   const [docxBroken, setDocxBroken] = useState(false);
   const [markdownBroken, setMarkdownBroken] = useState(false);
@@ -244,6 +266,7 @@ function FileThumbContent({ file, variant }: FileThumbProps) {
     kind,
     entry,
     inView,
+    imageLoaded,
     imageBroken,
     docxBroken,
     markdownBroken,
@@ -253,6 +276,15 @@ function FileThumbContent({ file, variant }: FileThumbProps) {
       setMarkdownBroken(true);
       setThumbFailed(key);
       setEntry({ kind: "failed" });
+    },
+    onImageLoad: () => setImageLoaded(true),
+    // A cached image can finish before the load event is observed. Checking
+    // `complete` in the callback ref keeps an already-decoded image from
+    // flashing the spinner for one frame.
+    onImageRef: (image) => {
+      if (image !== null && image.complete && image.naturalWidth > 0) {
+        setImageLoaded(true);
+      }
     },
     onImageFailure: () => setImageBroken(true),
     onDocumentFailure: () => {
