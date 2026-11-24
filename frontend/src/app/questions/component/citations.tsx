@@ -19,7 +19,11 @@ function parseSavedCitation(label: string): CitationToken | null {
   if (trimmed.length === 0) {
     return null;
   }
-  return parseCitationLabel(trimmed.startsWith("[") ? trimmed : `[${trimmed}]`);
+  // Saved labels normally keep their brackets, in ASCII or full-width form.
+  // Older rows may store the bare token, so fall back to wrapping it.
+  return (
+    parseCitationLabel(trimmed) ?? parseCitationLabel(`[${trimmed}]`)
+  );
 }
 
 function fileHref(token: CitationToken): string {
