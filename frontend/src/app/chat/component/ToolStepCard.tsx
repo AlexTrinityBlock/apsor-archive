@@ -4,7 +4,6 @@ import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import { useI18n, type Translate } from "../../i18n";
 import { formatArgumentValue } from "../format";
-import { readPlotSpec } from "../plot";
 import type { ResourceMeta, ToolResultMeta } from "../types";
 import {
   buildToolPreview,
@@ -14,6 +13,7 @@ import {
   type ToolPreviewField,
   type ToolPreviewHit,
 } from "../tool-preview";
+import { readToolOutput, type ToolOutput } from "../tool-output";
 import { PlotBlock } from "./PlotBlock";
 import { PlotSummary } from "./PlotSummary";
 import { ResourceCard } from "./ResourceCard";
@@ -327,17 +327,9 @@ function collectionCount(
 /** A short, non-interactive hint for the details disclosure. */
 function detailsHint(
   preview: ToolPreview,
-  hasPlot: boolean,
-  hasResource: boolean,
   t: Translate,
   formatNumber: (value: number) => string,
 ): string | null {
-  if (hasPlot) {
-    return t("chat.timeline.detailsChart");
-  }
-  if (hasResource) {
-    return t("chat.timeline.detailsResource");
-  }
   switch (preview.kind) {
     case "search":
       return t(
@@ -439,6 +431,29 @@ function ToolPreviewBody({
   }
 }
 
+/** The model's visible output: a chart, a presented resource, or both. */
+function ToolOutputBlock({
+  output,
+  meta,
+  onOpenResource,
+}: {
+  readonly output: ToolOutput;
+  readonly meta: ToolResultMeta;
+  readonly onOpenResource?: (resource: ResourceMeta) => void;
+}) {
+  if (!output.presented) {
+    return null;
+  }
+  return (
+    <div className="chat-tool-step__output">
+      {meta.resource ? (
+        <ResourceCard resource={meta.resource} onOpen={onOpenResource} />
+      ) : null}
+      {output.hasPlot ? <PlotBlock data={meta.data} /> : null}
+    </div>
+  );
+}
+
 /** One readable tool step shared by persisted history and the live stream. */
 export function ToolStepCard({
   meta,
@@ -456,18 +471,11 @@ export function ToolStepCard({
     meta.status?.toLowerCase() === "running" ||
     meta.status?.toLowerCase() === "pending";
   const duration = durationLabel(meta.durationMs, t, formatNumber);
-  const hasPlot = readPlotSpec(meta.data) !== null;
-  const preview: ToolPreview =
-    hasPlot || meta.resource
-      ? { kind: "none" }
-      : buildToolPreview(meta.tool, meta.data);
-  const hint = detailsHint(
-    preview,
-    hasPlot,
-    meta.resource !== null,
-    t,
-    formatNumber,
-  );
+  const output = readToolOutput(meta);
+  const preview: ToolPreview = output.presented
+    ? { kind: "none" }
+    : buildToolPreview(meta.tool, meta.data);
+  const hint = detailsHint(preview, t, formatNumber);
   const argumentsList = meta.arguments ? Object.entries(meta.arguments) : [];
   const argumentPairs =
     meta.tool === "render_plot"
@@ -566,6 +574,12 @@ export function ToolStepCard({
         ) : null}
       </p>
 
+      <ToolOutputBlock
+        output={output}
+        meta={meta}
+        onOpenResource={onOpenResource}
+      />
+
       <details className="chat-tool-step__details">
         <summary className="chat-tool-step__details-summary">
           <span className="chat-tool-step__details-label">
@@ -590,13 +604,7 @@ export function ToolStepCard({
             </p>
           ) : null}
 
-          {meta.resource ? (
-            <ResourceCard resource={meta.resource} onOpen={onOpenResource} />
-          ) : null}
-
-          {hasPlot ? <PlotBlock data={meta.data} /> : null}
-
-          {!hasPlot && !meta.resource ? (
+          {!output.presented ? (
             <ToolPreviewBody preview={preview} running={running} />
           ) : null}
 
