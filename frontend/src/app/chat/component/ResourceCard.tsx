@@ -48,7 +48,7 @@ function FileTile({
       aria-hidden="true"
       title={title}
     >
-      <Icon name={icon} size={20} />
+      <Icon name={icon} size={56} />
       <span className="chat-resource__badge">{badge}</span>
     </span>
   );
@@ -194,6 +194,7 @@ export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
     (item): item is string => item !== null && item.length > 0,
   );
   const href = resourceHref(resource);
+  const actionable = onOpen !== undefined || href !== null;
   const actionLabel =
     resource.resourceType === "file"
       ? t("chat.resource.preview")
@@ -205,18 +206,25 @@ export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
 
   const body = (
     <>
-      <ResourceThumb resource={resource} kind={kind} />
-      <span className="chat-resource__body">
-        <span className="mono-label">
-          {t(PRESENTED_LABEL_KEYS[resource.resourceType])}
-        </span>
-        <span className="chat-resource__title">{title}</span>
-        <span className="chat-resource__meta">
-          {details.length > 0 ? details.join(" · ") : fallbackDetail}
-        </span>
+      <span className="chat-resource__preview">
+        <ResourceThumb resource={resource} kind={kind} />
       </span>
-      <span className="chat-resource__go" aria-hidden="true">
-        <Icon name={onOpen ? "maximize" : "arrow-up-right"} size={14} />
+      <span className="chat-resource__body">
+        <span className="chat-resource__body-text">
+          <span className="mono-label">
+            {t(PRESENTED_LABEL_KEYS[resource.resourceType])}
+          </span>
+          <span className="chat-resource__title">{title}</span>
+          <span className="chat-resource__meta">
+            {details.length > 0 ? details.join(" · ") : fallbackDetail}
+          </span>
+        </span>
+        {actionable ? (
+          <span className="chat-resource__action" aria-hidden="true">
+            <span>{actionLabel}</span>
+            <Icon name={onOpen ? "maximize" : "arrow-up-right"} size={13} />
+          </span>
+        ) : null}
       </span>
     </>
   );
