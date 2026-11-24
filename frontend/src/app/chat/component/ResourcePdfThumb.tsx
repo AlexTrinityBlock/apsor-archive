@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Document, Page } from "react-pdf";
 
 import { PDF_THUMB_OPTIONS } from "../../viewer/pdfjs-config";
+import { useElementWidth } from "../../viewer/component/useElementWidth";
 import { fileContentUrl } from "../../viewer/component/viewer-utils";
 
-// The page is rendered at the bubble's visible width. PDF.js backs the canvas
-// with devicePixelRatio pixels, so the thumbnail stays sharp on high-density
-// screens without a CSS transform.
-const THUMB_RENDER_WIDTH = 58;
+// Keep a portrait page readable without letting it dominate a wide transcript.
+// The rendered width follows the card, so a phone gets a full-width page too.
+const PREVIEW_MAX_WIDTH = 420;
 
 interface ResourcePdfThumbProps {
   readonly fileId: number;
@@ -15,9 +15,9 @@ interface ResourcePdfThumbProps {
 }
 
 /**
- * The first page of a presented PDF, rendered inside the chat bubble.
+ * The first page of a presented PDF, rendered inside the chat transcript.
  *
- * Loading waits until the bubble approaches the viewport, so a long transcript
+ * Loading waits until the card approaches the viewport, so a long transcript
  * does not fetch every PDF at once. A failed load reports to the parent, which
  * swaps in the ordinary file tile.
  */
@@ -25,7 +25,16 @@ export function ResourcePdfThumb({
   fileId,
   onError,
 }: ResourcePdfThumbProps) {
-  const hostRef = useRef<HTMLSpanElement>(null);
+  const [setMeasuredElement, measuredWidth] =
+    useElementWidth<HTMLSpanElement>();
+  const hostRef = useRef<HTMLSpanElement | null>(null);
+  const setHost = useCallback(
+    (element: HTMLSpanElement | null) => {
+      hostRef.current = element;
+      setMeasuredElement(element);
+    },
+    [setMeasuredElement],
+  );
   const [visible, setVisible] = useState(
     () => typeof IntersectionObserver === "undefined",
   );
@@ -56,13 +65,20 @@ export function ResourcePdfThumb({
     return () => observer.disconnect();
   }, [visible]);
 
+  const canMeasure = typeof ResizeObserver !== "undefined";
+  const pageWidth =
+    measuredWidth > 0
+      ? Math.min(PREVIEW_MAX_WIDTH, measuredWidth)
+      : PREVIEW_MAX_WIDTH;
+  const ready = visible && (measuredWidth > 0 || !canMeasure);
+
   return (
     <span
-      ref={hostRef}
+      ref={setHost}
       className="chat-resource__thumb chat-resource__thumb--pdf"
       aria-hidden="true"
     >
-      {visible ? (
+      {ready ? (
         <Document
           file={fileContentUrl(fileId)}
           options={PDF_THUMB_OPTIONS}
@@ -72,7 +88,7 @@ export function ResourcePdfThumb({
         >
           <Page
             pageNumber={1}
-            width={THUMB_RENDER_WIDTH}
+            width={pageWidth}
             devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)}
             renderTextLayer={false}
             renderAnnotationLayer={false}
