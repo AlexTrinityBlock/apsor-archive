@@ -350,8 +350,6 @@ export const chat = {
     untitledResult: "Untitled result",
     arguments: "Arguments",
     details: "Details",
-    detailsChart: "chart",
-    detailsResource: "resource",
   },
   citation: {
     fileTitle: "File: {title}",

@@ -3632,6 +3632,17 @@
   white-space: nowrap;
 }
 
+.chat-tool-step__output {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-tool-step__output .chat-plot {
+  margin: 0;
+}
+
 .chat-tool-step__details {
   min-width: 0;
   padding-top: 1px;
