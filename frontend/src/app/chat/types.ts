@@ -547,10 +547,12 @@ export function safeViewerPath(value: unknown): string | null {
   }
 }
 
-// The alternatives are literal and each digit run is anchored, so this is
-// linear in the label length; the security plugin flags it heuristically.
+// The bracket classes combine ASCII and full-width forms: `[［[]` matches the
+// opening `[` or `［`, and `[］\]]` matches the closing `]` or `］`. The
+// alternatives are literal and each digit run is anchored, so this is linear in
+// the label length; the security plugin flags it heuristically.
 // eslint-disable-next-line security/detect-unsafe-regex
-const CITATION_LABEL = /^\[(file|memory|summary|history):(\d+)(?:#(\d+))?\]$/;
+const CITATION_LABEL = /^[［[](file|memory|summary|history):(\d+)(?:#(\d+))?[］\]]$/;
 
 export function parseCitationLabel(value: string): CitationToken | null {
   const match = CITATION_LABEL.exec(value.trim());

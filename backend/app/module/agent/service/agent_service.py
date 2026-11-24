@@ -122,8 +122,9 @@ from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
 
+# Pasted briefs and IME output may use full-width brackets around a token.
 CITATION_PATTERN = re.compile(
-    r"\[(?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+)\]"
+    r"[\[［](?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+)[\]］]"
 )
 _PAGE_CONTEXT_LINE_WS = re.compile(r"[ \t\f\v]+")
 _PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")

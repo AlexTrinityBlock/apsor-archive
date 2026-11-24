@@ -1,7 +1,9 @@
 /**
  * Turns `[file:10#2]`, `[memory:7]`, `[summary:4]`, and `[history:123]` text
- * into ordinary Markdown link nodes before rendering. Code, existing links, and
- * images are left untouched, so the transform cannot create nested links.
+ * into ordinary Markdown link nodes before rendering. Full-width brackets are
+ * accepted too, because pasted briefs and IMEs commonly emit them. Code,
+ * existing links, and images are left untouched, so the transform cannot
+ * create nested links.
  */
 import type { Parent, PhrasingContent, Root, RootContent, Text } from "mdast";
 
@@ -10,7 +12,7 @@ import { getActiveLocale, translate } from "../../i18n";
 
 // Literal alternatives plus one digit run: linear, but flagged heuristically.
 // eslint-disable-next-line security/detect-unsafe-regex
-const CITATION = /\[(?:file|memory|summary|history):\d+(?:#\d+)?\]/g;
+const CITATION = /[［[](?:file|memory|summary|history):\d+(?:#\d+)?[］\]]/g;
 const SKIP = new Set([
   "link",
   "linkReference",
