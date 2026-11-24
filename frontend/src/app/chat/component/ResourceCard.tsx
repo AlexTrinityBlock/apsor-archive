@@ -1,4 +1,11 @@
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router-dom";
 
 import { Icon, type IconName } from "../../component/Icon";
@@ -99,6 +106,7 @@ function ResourceThumb({
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const handlePdfError = useCallback(() => setFailed(true), []);
   const resourceId = resource.resourceId;
   const isImage = kind === "image" && resourceId !== null;
   const title = resource.title ?? t(RESOURCE_LABEL_KEYS[resource.resourceType]);
@@ -143,10 +151,7 @@ function ResourceThumb({
     }
     return (
       <Suspense fallback={tile}>
-        <ResourcePdfThumb
-          fileId={resourceId}
-          onError={() => setFailed(true)}
-        />
+        <ResourcePdfThumb fileId={resourceId} onError={handlePdfError} />
       </Suspense>
     );
   }
@@ -168,7 +173,10 @@ interface ResourceCardProps {
  * transcript never needs to send the reader to another page just to recognise
  * what the agent presented.
  */
-export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
+export const ResourceCard = memo(function ResourceCard({
+  resource,
+  onOpen,
+}: ResourceCardProps) {
   const { t } = useI18n();
   const resourceLabel = t(RESOURCE_LABEL_KEYS[resource.resourceType]);
   const title =
@@ -257,4 +265,4 @@ export function ResourceCard({ resource, onOpen }: ResourceCardProps) {
   }
 
   return <div className="chat-resource-row">{card}</div>;
-}
+});
