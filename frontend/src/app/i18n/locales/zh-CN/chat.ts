@@ -335,8 +335,6 @@ export const chat = {
     untitledResult: "未命名结果",
     arguments: "参数",
     details: "详细内容",
-    detailsChart: "图表",
-    detailsResource: "资源",
   },
   citation: {
     fileTitle: "文件：{title}",
