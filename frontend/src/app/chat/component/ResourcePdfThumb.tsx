@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Document, Page } from "react-pdf";
 
 import { PDF_THUMB_OPTIONS } from "../../viewer/pdfjs-config";
@@ -21,7 +21,7 @@ interface ResourcePdfThumbProps {
  * does not fetch every PDF at once. A failed load reports to the parent, which
  * swaps in the ordinary file tile.
  */
-export function ResourcePdfThumb({
+export const ResourcePdfThumb = memo(function ResourcePdfThumb({
   fileId,
   onError,
 }: ResourcePdfThumbProps) {
@@ -68,7 +68,7 @@ export function ResourcePdfThumb({
   const canMeasure = typeof ResizeObserver !== "undefined";
   const pageWidth =
     measuredWidth > 0
-      ? Math.min(PREVIEW_MAX_WIDTH, measuredWidth)
+      ? Math.min(PREVIEW_MAX_WIDTH, Math.round(measuredWidth))
       : PREVIEW_MAX_WIDTH;
   const ready = visible && (measuredWidth > 0 || !canMeasure);
 
@@ -103,4 +103,4 @@ export function ResourcePdfThumb({
       )}
     </span>
   );
-}
+});

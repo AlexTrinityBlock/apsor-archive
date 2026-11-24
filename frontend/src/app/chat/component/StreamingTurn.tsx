@@ -52,6 +52,41 @@ function asResult(tool: ChatStreamTool): ToolResultMeta {
   };
 }
 
+interface StreamingToolStepProps {
+  readonly tool: ChatStreamTool;
+  readonly step: number;
+  readonly selected: boolean;
+  readonly onSelect?: (callId: string) => void;
+  readonly onOpenResource?: (resource: ResourceMeta) => void;
+}
+
+/**
+ * One live tool step whose render is owned by the tool's own events.
+ *
+ * The reducer replaces only the tool object that changed, so a token delta
+ * leaves this card's props untouched. Memoizing the card keeps a presented PDF
+ * or chart mounted and untouched while the assistant prose streams above it.
+ */
+const StreamingToolStep = memo(function StreamingToolStep({
+  tool,
+  step,
+  selected,
+  onSelect,
+  onOpenResource,
+}: StreamingToolStepProps) {
+  return (
+    <ToolStepCard
+      meta={asResult(tool)}
+      step={step}
+      entryId={tool.entryId}
+      callId={tool.id}
+      selected={selected}
+      onSelect={onSelect}
+      onOpenResource={onOpenResource}
+    />
+  );
+});
+
 /** The optimistic turn shown while the SSE stream is open. */
 export const StreamingTurn = memo(function StreamingTurn({
   stream,
@@ -127,12 +162,10 @@ export const StreamingTurn = memo(function StreamingTurn({
                 {segment.toolCalls.length > 0 ? (
                   <div className="chat-tool-flow">
                     {segment.toolCalls.map((tool) => (
-                      <ToolStepCard
+                      <StreamingToolStep
                         key={tool.id}
-                        meta={asResult(tool)}
+                        tool={tool}
                         step={segment.index}
-                        entryId={tool.entryId}
-                        callId={tool.id}
                         selected={selectedTraceId === tool.id}
                         onSelect={onSelectTrace}
                         onOpenResource={onOpenResource}

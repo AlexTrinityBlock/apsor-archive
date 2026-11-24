@@ -22,7 +22,9 @@ export function useElementWidth<T extends HTMLElement>(): [
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry) {
-        setWidth(entry.contentRect.width);
+        // Whole-pixel widths keep document canvases on a stable scale; a
+        // subpixel jitter would otherwise redraw and briefly hide a PDF page.
+        setWidth(Math.round(entry.contentRect.width));
       }
     });
     // ResizeObserver reports the current size when observation starts, so the
