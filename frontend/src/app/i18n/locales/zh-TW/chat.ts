@@ -383,6 +383,7 @@ export const chat = {
     dataTableEmpty: "這張圖表沒有可顯示的表格資料。",
     truncated: "顯示前 {shown} 個資料點，共 {total} 個。",
     zoomHint: "捲動以縮放 · 拖曳以旋轉",
+    scrollHint: "左右捲動可查看完整圖表",
     summaryTitle: "標題",
     summaryCaption: "說明",
     summaryTraces: "數列",
