@@ -8,6 +8,7 @@ import type {
 
 import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
+import { plotMinimumWidth } from "../plot-layout";
 import { readPlotSpec, type PlotSpec } from "../plot";
 import { isRecord } from "../types";
 
@@ -131,6 +132,10 @@ function themedLayout(
     const tickfont = isRecord(value.tickfont) ? value.tickfont : {};
     layout[key] = {
       ...value,
+      // The model often pins a tick angle and leaves margins at a guess. Let
+      // Plotly grow every side to fit tick labels and axis titles so a narrow
+      // card cannot clip them against the plot or each other.
+      automargin: true,
       gridcolor: gridColor,
       zerolinecolor: gridColor,
       linecolor: gridColor,
@@ -282,11 +287,37 @@ export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
   const is3d = useMemo(() => (spec ? isThreeDimensional(spec) : false), [spec]);
   const config = useMemo(() => plotConfig(is3d), [is3d]);
   const table = useMemo(() => (spec ? buildPlotTable(spec) : null), [spec]);
+  const minimumWidth = useMemo(
+    // A 3D scene owns its touch gestures, so it cannot scroll sideways.
+    () => (spec && !is3d ? plotMinimumWidth(spec) : 0),
+    [spec, is3d],
+  );
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const plotlyRef = useRef<PlotlyRuntime | null>(null);
   const [status, setStatus] = useState<PlotStatus>("loading");
   const [downloading, setDownloading] = useState(false);
   const [downloadFailed, setDownloadFailed] = useState(false);
+  const [scrollable, setScrollable] = useState(false);
+
+  useEffect(() => {
+    const target = canvasRef.current;
+    const canvas = target?.parentElement;
+    if (!target || !canvas) {
+      return;
+    }
+    const update = (): void => {
+      setScrollable(canvas.scrollWidth > canvas.clientWidth + 1);
+    };
+    update();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    // The target is fixed at its minimum width, so the canvas is the element
+    // that changes when the reading column gets wider or narrower.
+    const observer = new ResizeObserver(update);
+    observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [minimumWidth, status]);
 
   useEffect(() => {
     const element = canvasRef.current;
@@ -426,6 +457,11 @@ export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
           className={
             is3d ? "chat-plot__target chat-plot__target--3d" : "chat-plot__target"
           }
+          style={
+            minimumWidth > 0
+              ? { width: `max(100%, ${minimumWidth}px)` }
+              : undefined
+          }
           aria-hidden="true"
         />
         {status === "loading" ? (
@@ -439,6 +475,10 @@ export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
           </p>
         ) : null}
       </div>
+
+      {scrollable ? (
+        <p className="chat-plot__hint">{t("chat.plot.scrollHint")}</p>
+      ) : null}
 
       {downloadFailed ? (
         <p className="chat-plot__error" role="alert">

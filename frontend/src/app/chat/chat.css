@@ -1953,12 +1953,15 @@
   position: relative;
   width: 100%;
   height: clamp(280px, 40vh, 420px);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
 }
 
+/* A wide chart keeps its labels readable and scrolls inside the card. */
 .chat-plot__target {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  height: 100%;
 }
 
 /* Let the 3D scene own touch gestures so the page does not pan instead. */

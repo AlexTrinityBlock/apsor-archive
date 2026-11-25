@@ -382,6 +382,7 @@ export const chat = {
     dataTableEmpty: "这张图表没有可显示的表格数据。",
     truncated: "显示前 {shown} 个数据点，共 {total} 个。",
     zoomHint: "滚动以缩放 · 拖拽以旋转",
+    scrollHint: "左右滚动可查看完整图表",
     summaryTitle: "标题",
     summaryCaption: "说明",
     summaryTraces: "序列",
