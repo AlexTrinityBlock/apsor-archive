@@ -583,6 +583,69 @@ export function joinArchivePath(folderPath: string, fileName: string): string {
   return folder === "/" ? `/${name}` : `${folder}/${name}`;
 }
 
+/**
+ * Returns a free leaf name and path in `folderPath`.
+ *
+ * A collision with an existing file or folder adds the first free ` (n)` suffix
+ * before the extension. Clipboard pastes use this so a second file with the
+ * same browser-supplied name becomes a sibling instead of a new version that
+ * hides the first one.
+ */
+export function uniqueArchivePath(
+  folderPath: string,
+  fileName: string,
+  takenPaths: ReadonlySet<string>,
+): { readonly fileName: string; readonly path: string } {
+  const directPath = joinArchivePath(folderPath, fileName);
+  if (!takenPaths.has(directPath)) {
+    return { fileName, path: directPath };
+  }
+
+  const dot = fileName.lastIndexOf(".");
+  const hasExtension = dot > 0 && dot < fileName.length - 1;
+  const stem = hasExtension ? fileName.slice(0, dot) : fileName;
+  const extension = hasExtension ? fileName.slice(dot) : "";
+  for (let index = 1; ; index += 1) {
+    const candidate = `${stem} (${index})${extension}`;
+    const path = joinArchivePath(folderPath, candidate);
+    if (!takenPaths.has(path)) {
+      return { fileName: candidate, path };
+    }
+  }
+}
+
+/** One clipboard file after its archive name has been made collision-free. */
+export interface PlannedUpload {
+  readonly file: File;
+  readonly fileName: string;
+  readonly targetPath: string;
+}
+
+/**
+ * Resolves every file in one batch against the folder's occupied paths and
+ * against earlier files in the same batch.
+ *
+ * Only the archive path changes; the clipboard file keeps its bytes and local
+ * name. The upload endpoint names the stored file from that path, so wrapping
+ * the bytes in a renamed `File` is unnecessary.
+ */
+export function planUploadTargets(
+  files: readonly File[],
+  targetFolder: string,
+  takenPaths: ReadonlySet<string>,
+): PlannedUpload[] {
+  const taken = new Set(takenPaths);
+  return files.map((file) => {
+    const { fileName, path } = uniqueArchivePath(
+      targetFolder,
+      file.name,
+      taken,
+    );
+    taken.add(path);
+    return { file, fileName, targetPath: path };
+  });
+}
+
 /** Compares two archive paths after tolerant normalization. */
 export function sameArchivePath(left: string, right: string): boolean {
   return normalizeArchivePath(left) === normalizeArchivePath(right);

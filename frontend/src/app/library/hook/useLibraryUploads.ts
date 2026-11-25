@@ -19,14 +19,29 @@ import {
   isAcceptedFileName,
   isSafeUploadName,
   joinArchivePath,
+  planUploadTargets,
   taskProgressFromJob,
   watchIngestJob,
   type LibraryUploadTask,
 } from "../component/library-utils";
 
+/** Options that change how one upload batch resolves its archive names. */
+export interface LibraryEnqueueOptions {
+  /**
+   * Paths already occupied in the target folder. When present, a colliding
+   * clipboard file gets a ` (n)` suffix instead of becoming a new version that
+   * hides the file it would otherwise replace.
+   */
+  readonly takenPaths?: ReadonlySet<string>;
+}
+
 export interface LibraryUploadsState {
   readonly tasks: readonly LibraryUploadTask[];
-  readonly enqueueFiles: (files: readonly File[], targetFolder: string) => Promise<void>;
+  readonly enqueueFiles: (
+    files: readonly File[],
+    targetFolder: string,
+    options?: LibraryEnqueueOptions,
+  ) => Promise<void>;
   readonly retryTask: (task: LibraryUploadTask) => void;
   readonly dismiss: () => void;
 }
@@ -42,6 +57,10 @@ export function useLibraryUploads(): LibraryUploadsState {
   const { t, formatNumber } = useI18n();
   const nextUploadId = useRef(1);
   const controllers = useRef<Map<number, AbortController>>(new Map());
+  // Names chosen by earlier batches in this page session. React state is not
+  // synchronous, so a second paste in the same tick must not reuse a path that
+  // the first batch has already claimed.
+  const reservedPaths = useRef<Set<string>>(new Set());
   const [tasks, setTasks] = useState<readonly LibraryUploadTask[]>([]);
 
   useEffect(() => {
@@ -192,20 +211,36 @@ export function useLibraryUploads(): LibraryUploadsState {
   );
 
   const enqueueFiles = useCallback(
-    async (files: readonly File[], targetFolder: string) => {
+    async (
+      files: readonly File[],
+      targetFolder: string,
+      options?: LibraryEnqueueOptions,
+    ) => {
+      const planned = options?.takenPaths
+        ? planUploadTargets(
+            files,
+            targetFolder,
+            new Set([...options.takenPaths, ...reservedPaths.current]),
+          )
+        : files.map((file) => ({
+            file,
+            fileName: file.name,
+            targetPath: joinArchivePath(targetFolder, file.name),
+          }));
+
       const accepted: Array<{
         readonly id: number;
         readonly file: File;
+        readonly name: string;
         readonly targetPath: string;
       }> = [];
       const rejected: LibraryUploadTask[] = [];
 
-      for (const file of files) {
+      for (const { file, fileName, targetPath } of planned) {
         const id = nextUploadId.current;
         nextUploadId.current += 1;
-        const displayName = file.name.trim() || t("library.tray.unnamedFile");
-        const targetPath = joinArchivePath(targetFolder, file.name);
-        if (!isSafeUploadName(file.name) || !isAcceptedFileName(file.name)) {
+        const displayName = fileName.trim() || t("library.tray.unnamedFile");
+        if (!isSafeUploadName(fileName) || !isAcceptedFileName(fileName)) {
           rejected.push({
             id,
             name: displayName,
@@ -227,17 +262,20 @@ export function useLibraryUploads(): LibraryUploadsState {
           });
           continue;
         }
-        accepted.push({ id, file, targetPath });
+        reservedPaths.current.add(targetPath);
+        accepted.push({ id, file, name: fileName, targetPath });
       }
 
-      const queued: LibraryUploadTask[] = accepted.map(({ id, file, targetPath }) => ({
-        id,
-        name: file.name,
-        targetPath,
-        status: "queued",
-        stage: "queued",
-        sourceFile: file,
-      }));
+      const queued: LibraryUploadTask[] = accepted.map(
+        ({ id, file, name, targetPath }) => ({
+          id,
+          name,
+          targetPath,
+          status: "queued",
+          stage: "queued",
+          sourceFile: file,
+        }),
+      );
 
       if (queued.length > 0 || rejected.length > 0) {
         setTasks((current) => [...current, ...queued, ...rejected]);
