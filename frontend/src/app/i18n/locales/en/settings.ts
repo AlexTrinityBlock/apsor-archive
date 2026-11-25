@@ -60,8 +60,6 @@ export const settings = {
       range: "Enter a value between {min} and {max}.",
       maxLength: "Enter {max} characters or fewer.",
       thresholdBelowContext: "Must be lower than the model context window ({context}).",
-      parallelWithinCalls:
-        "Must not exceed tool calls per turn ({calls}).",
       plotNodesAtLeastPoints: "Must be at least the data point limit ({points}).",
       overlapBelowTarget: "Must be lower than target chars ({target}).",
     },
@@ -70,7 +68,6 @@ export const settings = {
     title: "Agent runtime",
     lede:
       "These bounds are stored in PostgreSQL and apply to new runs. An active run keeps the snapshot it started with.",
-    badge: "{steps} steps · {calls} tool calls",
     statusSummary:
       "{context} model context · {compaction} compaction",
     budgetLabel: "Auto-compaction threshold",
@@ -85,7 +82,7 @@ export const settings = {
     groupToolsSlot: "Group 02",
     groupToolsTitle: "Tool execution",
     groupToolsDescription:
-      "How many tools may run, how often they may be called, and how much their results may carry.",
+      "How many tools may run at once and how much each result may carry.",
     groupAttachmentsSlot: "Group 03",
     groupAttachmentsTitle: "Chat image lifetime",
     groupAttachmentsDescription:
@@ -102,10 +99,6 @@ export const settings = {
     fieldThresholdUnit: "tokens",
     fieldThresholdHint:
       "Auto compaction starts before a new turn once the active transcript passes this share of the model context window.",
-    fieldMaxStepsLabel: "Max steps",
-    fieldMaxStepsUnit: "steps",
-    fieldMaxStepsHint:
-      "Think-and-act rounds allowed in a single turn; 24 is the default, 32 the max.",
     fieldPageContextLabel: "Page context",
     fieldPageContextUnit: "chars",
     fieldPageContextHint: "Maximum page text attached to a turn.",
@@ -116,9 +109,6 @@ export const settings = {
     fieldParallelToolsLabel: "Max parallel tools",
     fieldParallelToolsUnit: "tools",
     fieldParallelToolsHint: "Tools that may execute at the same time.",
-    fieldToolCallsLabel: "Tool calls per turn",
-    fieldToolCallsUnit: "calls",
-    fieldToolCallsHint: "Total tool invocations allowed in one turn.",
     fieldToolResultCharsLabel: "Chars per tool result",
     fieldToolResultCharsUnit: "chars",
     fieldToolResultCharsHint:

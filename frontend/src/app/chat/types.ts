@@ -334,8 +334,9 @@ export interface RetryState {
 // Mirrors the backend's retryable finish reasons.
 const RETRY_FINISH_REASONS = new Set(["error", "aborted", "cancelled", "canceled"]);
 
-// Only hard run limits make a trailing tool error retryable. Ordinary tool
-// failures are followed by a successful assistant answer and must stay quiet.
+// Legacy turn-limit codes stay retryable for transcripts written before the
+// cumulative caps were removed. New runs no longer produce them, and ordinary
+// tool failures are followed by a successful answer, so they stay quiet.
 const RETRY_LIMIT_CODES = new Set([
   "step_limit",
   "token_limit",

@@ -425,6 +425,14 @@ function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
     { query: { enabled: !resolvingPath } },
   );
 
+  // Clipboard naming must see every sibling, including files a fuzzy search
+  // currently hides, so it reads the unfiltered folder listing. With no active
+  // search this shares the browse query's cache entry.
+  const pasteListingQuery = useReadPath(
+    { path, path_depth: 1, fuzzy_search: undefined },
+    { query: { enabled: !resolvingPath } },
+  );
+
   const resetSelection = useCallback(() => {
     setSelecting(false);
     setSelectedFileIds(new Set<number>());
@@ -667,6 +675,9 @@ function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
 
   // Clipboard files use the same ingest queue as drag/drop. Text paste in
   // inputs, textareas, and contenteditable regions is left to the browser.
+  // Pasting is the one intake path that renames a colliding file: clipboard
+  // names are often generic (`image.png`), and versioning over the previous
+  // paste would silently hide it.
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
       if (isEditablePasteTarget(event.target)) {
@@ -677,12 +688,19 @@ function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
         return;
       }
       event.preventDefault();
+      const takenPaths = new Set<string>();
+      for (const file of pasteListingQuery.data?.files ?? []) {
+        takenPaths.add(file.raw_file_path);
+      }
+      for (const folder of pasteListingQuery.data?.directories ?? []) {
+        takenPaths.add(folder.path);
+      }
       const named = files.map((file, index) => nameClipboardFile(file, index));
-      void enqueueFiles(named, path);
+      void enqueueFiles(named, path, { takenPaths });
     };
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [enqueueFiles, path]);
+  }, [enqueueFiles, pasteListingQuery.data, path]);
 
   const handleMediaInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);

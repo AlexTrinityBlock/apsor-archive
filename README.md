@@ -555,9 +555,9 @@ prompt text; it does not send the message. The API is
 
 The **Agent runtime** panel on `/settings` (root only) edits the singleton
 `agent_config` row (`id=1`). Chat endpoint and model selection are per-account
-assignments (see **Per-account model assignment**); this row carries the step and
-tool budgets, the deployment-default context budget, and the compaction and
-escalation controls. All twenty-one runtime values are stored in PostgreSQL,
+assignments (see **Per-account model assignment**); this row carries the
+parallel-tool and per-result tool budgets, the deployment-default context
+budget, and the compaction and escalation controls. All nineteen runtime values are stored in PostgreSQL,
 apply to new runs without a restart, and are shared by every account. An
 account's own context window and compaction threshold override these deployment
 defaults when set. The two chat-image lifetime values are also read by the
@@ -566,7 +566,7 @@ background cleanup loop from this row; they are not environment variables.
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | Effective config, defaults, source, `updated_at` |
-| `PUT` | `/api/v1/agent/settings` | Full replacement; all twenty-one fields are required |
+| `PUT` | `/api/v1/agent/settings` | Full replacement; all nineteen fields are required |
 | `POST` | `/api/v1/agent/settings/reset` | Persist and return the built-in defaults |
 
 The generated operations are `getAgentSettings`, `updateAgentSettings`, and
@@ -581,8 +581,6 @@ fields are rejected.
 |---|---|---|
 | `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000; below the context window |
 | `context_window_tokens` | 1,000,000 | 8,000–2,000,000; deployment default budget |
-| `max_steps` | 24 | 1–32 |
-| `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
 | `max_tool_result_chars` | 100,000 | 1,000–200,000 |
 | `max_page_context_chars` | 6,000 | 500–50,000 |
@@ -932,6 +930,11 @@ browsing, selected explicitly with `view=list`.
   `.pptx`, `.xlsx`, `.xls`, `.xlsm`, `.ods`, `.jpg`, `.jpeg`, `.png`, or
   `.webp`. The dialog also supports a 2 MB plain-text creation. Dropped files
   are never opened or executed.
+- **Clipboard paste** uploads files through the same intake path. When the
+  clipboard name already exists in the target folder, the paste gets the first
+  free ` (n)` suffix (`image (1).png`) instead of silently becoming a new
+  version; pasting several files with one name numbers each in order. Dragging
+  or using the upload dialog keeps the explicit same-name version behavior.
 - **Move versus copy** is explicit. A normal drag onto a folder moves the file;
   holding Alt/Option while dropping copies it. Touch and keyboard users get
   separate **Move** and **Copy** actions instead of drag.
@@ -1061,12 +1064,12 @@ carry one bounded `Thinking:` line. Send
 `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`, and
 Starlette's GZip middleware excludes `text/event-stream`.
 
-Each conversation allows one active run at a time. The defaults allow 24 model
-steps, 20 tool calls per user turn, 6 parallel tools, 75,000 tokens of active
-context before auto compaction, and 100,000 result characters per tool. There is
-no cumulative per-turn token ceiling; a turn ends only on a final answer, the
-step or tool-call limits, a user cancellation, or a provider failure. The
-effective context window is the deployment default (1,000,000) unless the
+Each conversation allows one active run at a time. The defaults allow 6
+parallel tools, 75,000 tokens of active context before auto compaction, and
+100,000 result characters per tool. There is no step cap, tool-call cap, or
+cumulative per-turn token ceiling; a turn ends only on a final answer, a user
+cancellation, or a provider failure. The effective context window is the
+deployment default (1,000,000) unless the
 account assigns its own budget; it is the real outbound input budget enforced by
 the local overflow ladder, and the compaction threshold must stay below it. The
 budget estimate weights CJK characters at roughly 1.6 characters per token while
@@ -1849,7 +1852,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `a4c9e2f7b1d6`. The migrations after `agent_config` on
+The latest migration is `d8f2a6c4e1b9`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1937,7 +1940,7 @@ this branch are:
   its owner-safe composite FK, re-ingest check, active-source unique index, and
   lookup index. It does not seed or backfill prompt/fingerprint values. The
   downgrade removes re-ingest jobs before restoring the old source-kind check;
-- `a4c9e2f7b1d6` (current head) adds the eight per-account assignment columns and
+- `a4c9e2f7b1d6` adds the eight per-account assignment columns and
   their two `ON DELETE SET NULL` endpoint foreign keys, the seven assignment
   check constraints, `chat_provider_config.max_output_tokens`, the widened chat
   provider check that admits `anthropic`, and the four new `agent_config`
@@ -1946,7 +1949,13 @@ this branch are:
   unassigned. Accounts created after the migration inherit the same primary
   endpoint and model when one exists; without one they start unassigned. The
   downgrade drops the assignment columns and refuses to restore
-  the narrower provider check while an `anthropic` row exists.
+  the narrower provider check while an `anthropic` row exists;
+- `d8f2a6c4e1b9` (current head) drops `agent_config.max_steps` and
+  `agent_config.max_tool_calls_per_turn` with their checks and the
+  `parallel_within_tool_calls` relation, so a tool-heavy turn keeps running
+  until the model answers. The concurrency bound `max_parallel_tools` stays.
+  The downgrade restores both columns and raises the restored call cap to at
+  least `max_parallel_tools`.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

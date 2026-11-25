@@ -26,8 +26,6 @@ from app.module.agent.domain.agent_domain import (
     MAX_PLOT_BYTES,
     MAX_PLOT_NODES,
     MAX_PLOT_POINTS,
-    MAX_STEPS,
-    MAX_TOOL_CALLS_PER_TURN,
     MAX_TOOL_RESULT_CHARS,
     PARALLEL_TOOLS_ENABLED,
     SAVE_MEMORY_REQUIRES_APPROVAL,
@@ -41,8 +39,6 @@ class AgentRuntimeConfig:
 
     compaction_threshold_tokens: int = COMPACTION_THRESHOLD_TOKENS
     context_window_tokens: int = CONTEXT_WINDOW_TOKENS
-    max_steps: int = MAX_STEPS
-    max_tool_calls_per_turn: int = MAX_TOOL_CALLS_PER_TURN
     max_parallel_tools: int = MAX_PARALLEL_TOOLS
     max_tool_result_chars: int = MAX_TOOL_RESULT_CHARS
     max_page_context_chars: int = MAX_PAGE_CONTEXT_CHARS
@@ -77,13 +73,6 @@ class AgentRuntimeConfig:
                 self.context_window_tokens,
                 8_000,
                 2_000_000,
-            ),
-            ("max_steps", self.max_steps, 1, 32),
-            (
-                "max_tool_calls_per_turn",
-                self.max_tool_calls_per_turn,
-                1,
-                24,
             ),
             ("max_parallel_tools", self.max_parallel_tools, 1, 24),
             ("max_tool_result_chars", self.max_tool_result_chars, 1_000, 200_000),
@@ -147,8 +136,6 @@ class AgentRuntimeConfig:
             raise ValueError(
                 "compaction_threshold_tokens must be less than context_window_tokens."
             )
-        if self.max_parallel_tools > self.max_tool_calls_per_turn:
-            raise ValueError("max_parallel_tools must not exceed max_tool_calls_per_turn.")
         if self.max_plot_nodes < self.max_plot_points:
             raise ValueError("max_plot_nodes must be greater than or equal to max_plot_points.")
 
