@@ -932,6 +932,11 @@ browsing, selected explicitly with `view=list`.
   `.pptx`, `.xlsx`, `.xls`, `.xlsm`, `.ods`, `.jpg`, `.jpeg`, `.png`, or
   `.webp`. The dialog also supports a 2 MB plain-text creation. Dropped files
   are never opened or executed.
+- **Clipboard paste** uploads files through the same intake path. When the
+  clipboard name already exists in the target folder, the paste gets the first
+  free ` (n)` suffix (`image (1).png`) instead of silently becoming a new
+  version; pasting several files with one name numbers each in order. Dragging
+  or using the upload dialog keeps the explicit same-name version behavior.
 - **Move versus copy** is explicit. A normal drag onto a folder moves the file;
   holding Alt/Option while dropping copies it. Touch and keyboard users get
   separate **Move** and **Copy** actions instead of drag.
