@@ -1,6 +1,7 @@
 """Conversation orchestration, the Pi-shaped tool loop, and SSE turn events."""
 
 import asyncio
+import itertools
 import json
 import logging
 import math
@@ -128,9 +129,6 @@ CITATION_PATTERN = re.compile(
 )
 _PAGE_CONTEXT_LINE_WS = re.compile(r"[ \t\f\v]+")
 _PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")
-LIMIT_CODES = frozenset(
-    {"step_limit", "tool_call_limit", "tool_result_budget_exhausted"}
-)
 DUPLICATE_PLOT_STOP_TEXT = (
     "The chart is already visible in the chat, so I did not render another copy. "
     "If you want a different chart, describe it in your next message."
@@ -1002,7 +1000,6 @@ class AgentService:
             turn,
             start_step=1,
             total_usage={},
-            tool_calls_used=0,
             last_entry_id=turn.cutoff_entry_id,
             resumed=False,
             emit_start=True,
@@ -1015,7 +1012,6 @@ class AgentService:
         *,
         start_step: int,
         total_usage: dict[str, int],
-        tool_calls_used: int,
         last_entry_id: int,
         resumed: bool,
         emit_start: bool,
@@ -1032,13 +1028,12 @@ class AgentService:
         completed_steps = 0
         logger.info(
             "agent run started run_id=%s conversation_id=%s provider=%s "
-            "model=%s resumed=%s max_steps=%d page_context=%s",
+            "model=%s resumed=%s page_context=%s",
             run_id,
             conversation_id,
             turn.conversation.provider,
             turn.conversation.model or "-",
             resumed,
-            self.config.max_steps,
             turn.page_context_entry_id is not None,
         )
 
@@ -1061,7 +1056,7 @@ class AgentService:
             invalid_arguments_streak = 0
             pending_retry_notice: str | None = None
 
-            for step in range(start_step, self.config.max_steps + 1):
+            for step in itertools.count(start_step):
                 if await self.repository.is_abort_requested(conversation_id, run_id):
                     await self._best_effort_cancel(turn, last_entry_id)
                     terminal = True
@@ -1452,41 +1447,6 @@ class AgentService:
                     return
 
                 calls = result.tool_calls
-                if step >= self.config.max_steps:
-                    limit_entries, limit_events = await self._limit_tool_batch(
-                        turn,
-                        calls,
-                        "step_limit",
-                        "The step limit was reached before the tool calls could run.",
-                    )
-                    for event in limit_events:
-                        yield event
-                    if limit_entries is None:
-                        await self._best_effort_cancel(turn, last_entry_id)
-                        terminal = True
-                        yield AgentStreamEvent(
-                            "run_end",
-                            {"run_id": run_id, "status": RUN_CANCELLED},
-                        )
-                        return
-                    last_entry_id = limit_entries[-1].id if limit_entries else last_entry_id
-                    await self._fail_run(
-                        turn,
-                        last_entry_id,
-                        "step_limit",
-                        "The step limit was reached.",
-                    )
-                    terminal = True
-                    yield AgentStreamEvent(
-                        "error",
-                        {"code": "step_limit", "detail": "The step limit was reached."},
-                    )
-                    yield AgentStreamEvent(
-                        "run_end",
-                        {"run_id": run_id, "status": RUN_FAILED},
-                    )
-                    return
-
                 batch_size = len(calls)
                 parallel = self.config.parallel_tools_enabled and batch_size > 1
                 planned: list[tuple[ChatToolCall, ToolOutcome] | None] = [None] * batch_size
@@ -1507,17 +1467,6 @@ class AgentService:
                             "parallel_index": index,
                         },
                     )
-                    if tool_calls_used >= self.config.max_tool_calls_per_turn:
-                        planned[index] = (
-                            call,
-                            _limit_outcome(
-                                call.name,
-                                "tool_call_limit",
-                                "The tool-call limit was reached for this turn.",
-                            ),
-                        )
-                        continue
-                    tool_calls_used += 1
                     plot_title = (
                         _plot_title_key(call.arguments)
                         if call.name == "render_plot"
@@ -1588,61 +1537,6 @@ class AgentService:
                     if plot_title is not None and _is_rendered_plot(planned_result):
                         rendered_plot_titles.add(plot_title)
 
-                # Hard turn limits end the run; pending writes must not outlive a
-                # failed run, so confirmation calls receive the same limit result.
-                limit_codes = {
-                    outcome[1].error_code
-                    for outcome in planned
-                    if outcome is not None and outcome[1].error_code in LIMIT_CODES
-                }
-                if limit_codes:
-                    code = sorted(limit_codes)[0]
-                    detail = "A turn limit was reached."
-                    if approval_specs:
-                        for index, call, _arguments in approval_specs:
-                            planned[index] = (
-                                call,
-                                _limit_outcome(call.name, code, detail),
-                            )
-                    outcomes = _planned_outcomes(calls, planned)
-                    try:
-                        result_entries = await self.repository.append_tool_results(
-                            conversation_id=conversation_id,
-                            run_id=run_id,
-                            drafts=[
-                                _tool_result_draft(call, outcome) for call, outcome in outcomes
-                            ],
-                            now=utcnow(),
-                        )
-                    except AgentRunNotActiveError:
-                        await self._best_effort_cancel(turn, last_entry_id)
-                        terminal = True
-                        yield AgentStreamEvent(
-                            "run_end",
-                            {"run_id": run_id, "status": RUN_CANCELLED},
-                        )
-                        return
-                    last_entry_id = result_entries[-1].id if result_entries else last_entry_id
-                    for index, ((call, outcome), entry) in enumerate(
-                        zip(outcomes, result_entries, strict=True)
-                    ):
-                        yield _tool_end_event(
-                            call,
-                            outcome,
-                            entry.id,
-                            parallel=parallel,
-                            batch_size=batch_size,
-                            parallel_index=index,
-                        )
-                    await self._fail_run(turn, last_entry_id, code, detail)
-                    terminal = True
-                    yield AgentStreamEvent("error", {"code": code, "detail": detail})
-                    yield AgentStreamEvent(
-                        "run_end",
-                        {"run_id": run_id, "status": RUN_FAILED},
-                    )
-                    return
-
                 if approval_specs:
                     # Batch rule: every non-confirmation call runs normally;
                     # each valid confirmation call becomes a pending approval
@@ -1668,7 +1562,6 @@ class AgentService:
                             resume_state={
                                 "step": step,
                                 "total_usage": dict(total_usage),
-                                "tool_calls_used": tool_calls_used,
                                 "assistant_entry_id": assistant_entry.id,
                                 "batch_size": batch_size,
                                 "parallel": parallel,
@@ -1831,28 +1724,6 @@ class AgentService:
                     terminal = True
                     return
 
-            last_entry_id = await self._append_failure_assistant(
-                turn,
-                last_entry_id,
-                "step_limit",
-                "The step limit was reached.",
-                self.config.max_steps + 1,
-            )
-            await self._fail_run(
-                turn,
-                last_entry_id,
-                "step_limit",
-                "The step limit was reached.",
-            )
-            terminal = True
-            yield AgentStreamEvent(
-                "error",
-                {"code": "step_limit", "detail": "The step limit was reached."},
-            )
-            yield AgentStreamEvent(
-                "run_end",
-                {"run_id": run_id, "status": RUN_FAILED},
-            )
         except asyncio.CancelledError:
             await self._best_effort_cancel(turn, last_entry_id)
             terminal = True
@@ -2036,12 +1907,10 @@ class AgentService:
             if isinstance(usage, dict)
             else {}
         )
-        tool_calls_used = int(approval_turn.resume_state.get("tool_calls_used", 0))
         async for event in self._run_loop(
             approval_turn.turn,
             start_step=start_step,
             total_usage=total_usage,
-            tool_calls_used=tool_calls_used,
             last_entry_id=approval_turn.turn.cutoff_entry_id,
             resumed=True,
             emit_start=False,
@@ -2733,54 +2602,6 @@ class AgentService:
             partial_text=partial_text,
         )
         return entry_id, code, detail
-
-    async def _limit_tool_batch(
-        self,
-        turn: AgentTurnState,
-        calls: list[ChatToolCall],
-        code: str,
-        detail: str,
-    ) -> tuple[list[AgentEntryModel] | None, list[AgentStreamEvent]]:
-        """Persist error results for calls that could not run due to a cap."""
-        events = [
-            AgentStreamEvent(
-                "tool_start",
-                {
-                    "entry_id": None,
-                    "tool_call_id": call.call_id,
-                    "name": call.name,
-                    "arguments": display_arguments(call.name, call.arguments),
-                },
-            )
-            for call in calls
-        ]
-        outcomes = [_limit_outcome(call.name, code, detail) for call in calls]
-        try:
-            entries = await self.repository.append_tool_results(
-                conversation_id=turn.conversation.id,
-                run_id=turn.run.id,
-                drafts=[
-                    _tool_result_draft(call, outcome)
-                    for call, outcome in zip(calls, outcomes, strict=True)
-                ],
-                now=utcnow(),
-            )
-        except AgentRunNotActiveError:
-            return None, events
-        events.extend(
-            _tool_end_event(
-                call,
-                outcome,
-                entry.id,
-                parallel=len(calls) > 1,
-                batch_size=len(calls),
-                parallel_index=index,
-            )
-            for index, (call, outcome, entry) in enumerate(
-                zip(calls, outcomes, entries, strict=True)
-            )
-        )
-        return entries, events
 
     async def _fail_run(
         self,
@@ -3646,20 +3467,6 @@ def _tool_end_event(
     if outcome.resource is not None:
         data["resource"] = outcome.resource
     return AgentStreamEvent("tool_end", data)
-
-
-def _limit_outcome(name: str, code: str, detail: str) -> ToolOutcome:
-    return ToolOutcome(
-        content=f"<error{attributes({'code': code})}>{xml_text(detail)}</error>",
-        data={
-            "tool": name,
-            "status": "error",
-            "error_code": code,
-            "detail": detail,
-        },
-        status="error",
-        error_code=code,
-    )
 
 
 def _merge_usage(total: dict[str, int], usage: dict[str, int]) -> None:

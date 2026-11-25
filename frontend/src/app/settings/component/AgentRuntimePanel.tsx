@@ -8,7 +8,6 @@ import {
 } from "react";
 
 import { useI18n, type Translate, type TranslationKey } from "../../i18n";
-import { Badge } from "../../component/Badge";
 import { Icon } from "../../component/Icon";
 import { Panel } from "../../component/Panel";
 import {
@@ -25,8 +24,6 @@ import { SwitchField } from "./SwitchField";
 export interface AgentRuntimeValues {
   readonly compaction_threshold_tokens: number;
   readonly context_window_tokens: number;
-  readonly max_steps: number;
-  readonly max_tool_calls_per_turn: number;
   readonly max_parallel_tools: number;
   readonly max_tool_result_chars: number;
   readonly max_page_context_chars: number;
@@ -103,15 +100,6 @@ const CONTEXT_FIELDS: readonly NumericFieldSpec[] = [
     hintKey: "settings.agent.fieldThresholdHint",
   },
   {
-    key: "max_steps",
-    labelKey: "settings.agent.fieldMaxStepsLabel",
-    unitKey: "settings.agent.fieldMaxStepsUnit",
-    min: 1,
-    max: 32,
-    step: 1,
-    hintKey: "settings.agent.fieldMaxStepsHint",
-  },
-  {
     key: "max_page_context_chars",
     labelKey: "settings.agent.fieldPageContextLabel",
     unitKey: "settings.agent.fieldPageContextUnit",
@@ -140,15 +128,6 @@ const TOOL_FIELDS: readonly NumericFieldSpec[] = [
     max: 24,
     step: 1,
     hintKey: "settings.agent.fieldParallelToolsHint",
-  },
-  {
-    key: "max_tool_calls_per_turn",
-    labelKey: "settings.agent.fieldToolCallsLabel",
-    unitKey: "settings.agent.fieldToolCallsUnit",
-    min: 1,
-    max: 24,
-    step: 1,
-    hintKey: "settings.agent.fieldToolCallsHint",
   },
   {
     key: "max_tool_result_chars",
@@ -261,8 +240,6 @@ const ALL_FIELD_SPECS: readonly NumericFieldSpec[] = [
 const VALUE_KEYS: readonly (keyof AgentRuntimeValues)[] = [
   "compaction_threshold_tokens",
   "context_window_tokens",
-  "max_steps",
-  "max_tool_calls_per_turn",
   "max_parallel_tools",
   "max_tool_result_chars",
   "max_page_context_chars",
@@ -286,8 +263,6 @@ function toDraft(values: AgentRuntimeValues): DraftValues {
   return {
     compaction_threshold_tokens: String(values.compaction_threshold_tokens),
     context_window_tokens: String(values.context_window_tokens),
-    max_steps: String(values.max_steps),
-    max_tool_calls_per_turn: String(values.max_tool_calls_per_turn),
     max_parallel_tools: String(values.max_parallel_tools),
     max_tool_result_chars: String(values.max_tool_result_chars),
     max_page_context_chars: String(values.max_page_context_chars),
@@ -316,8 +291,6 @@ function fromDraft(draft: DraftValues): AgentRuntimeValues {
   return {
     compaction_threshold_tokens: Number(draft.compaction_threshold_tokens),
     context_window_tokens: Number(draft.context_window_tokens),
-    max_steps: Number(draft.max_steps),
-    max_tool_calls_per_turn: Number(draft.max_tool_calls_per_turn),
     max_parallel_tools: Number(draft.max_parallel_tools),
     max_tool_result_chars: Number(draft.max_tool_result_chars),
     max_page_context_chars: Number(draft.max_page_context_chars),
@@ -426,20 +399,6 @@ function validateDraft(
     fieldErrors.compaction_threshold_tokens = t(
       "settings.runtime.errors.thresholdBelowContext",
       { context: formatNumber(contextWindow) },
-    );
-  }
-
-  const parallelTools = numbers.max_parallel_tools;
-  const toolCalls = numbers.max_tool_calls_per_turn;
-  if (
-    parallelTools !== undefined &&
-    toolCalls !== undefined &&
-    parallelTools > toolCalls &&
-    fieldErrors.max_parallel_tools === undefined
-  ) {
-    fieldErrors.max_parallel_tools = t(
-      "settings.runtime.errors.parallelWithinCalls",
-      { calls: formatNumber(toolCalls) },
     );
   }
 
@@ -573,14 +532,6 @@ export function AgentRuntimePanel({
           {t("settings.agent.title")}
         </span>
       }
-      action={
-        <Badge>
-          {t("settings.agent.badge", {
-            steps: formatNumber(values.max_steps),
-            calls: formatNumber(values.max_tool_calls_per_turn),
-          })}
-        </Badge>
-      }
       className={panelClassName}
     >
       <p className="settings-lede">{t("settings.agent.lede")}</p>
@@ -678,14 +629,6 @@ export function AgentRuntimePanel({
             </div>
             <RuntimeNumberField
               spec={contextFields[2]}
-              value={draft.max_steps}
-              defaultValue={defaults.max_steps}
-              disabled={saving}
-              error={validation.fieldErrors.max_steps}
-              onValueChange={(next) => updateNumber("max_steps", next)}
-            />
-            <RuntimeNumberField
-              spec={contextFields[3]}
               value={draft.max_page_context_chars}
               defaultValue={defaults.max_page_context_chars}
               disabled={saving}
@@ -695,7 +638,7 @@ export function AgentRuntimePanel({
               }
             />
             <RuntimeNumberField
-              spec={contextFields[4]}
+              spec={contextFields[3]}
               value={draft.agent_max_output_tokens}
               defaultValue={defaults.agent_max_output_tokens}
               disabled={saving}
@@ -754,16 +697,6 @@ export function AgentRuntimePanel({
             />
             <RuntimeNumberField
               spec={toolFields[1]}
-              value={draft.max_tool_calls_per_turn}
-              defaultValue={defaults.max_tool_calls_per_turn}
-              disabled={saving}
-              error={validation.fieldErrors.max_tool_calls_per_turn}
-              onValueChange={(next) =>
-                updateNumber("max_tool_calls_per_turn", next)
-              }
-            />
-            <RuntimeNumberField
-              spec={toolFields[2]}
               value={draft.max_tool_result_chars}
               defaultValue={defaults.max_tool_result_chars}
               disabled={saving}
@@ -773,7 +706,7 @@ export function AgentRuntimePanel({
               }
             />
             <RuntimeNumberField
-              spec={toolFields[3]}
+              spec={toolFields[2]}
               value={draft.max_plot_points}
               defaultValue={defaults.max_plot_points}
               disabled={saving}
@@ -781,7 +714,7 @@ export function AgentRuntimePanel({
               onValueChange={(next) => updateNumber("max_plot_points", next)}
             />
             <RuntimeNumberField
-              spec={toolFields[4]}
+              spec={toolFields[3]}
               value={draft.max_plot_bytes}
               defaultValue={defaults.max_plot_bytes}
               disabled={saving}
@@ -789,7 +722,7 @@ export function AgentRuntimePanel({
               onValueChange={(next) => updateNumber("max_plot_bytes", next)}
             />
             <RuntimeNumberField
-              spec={toolFields[5]}
+              spec={toolFields[4]}
               value={draft.max_plot_nodes}
               defaultValue={defaults.max_plot_nodes}
               disabled={saving}

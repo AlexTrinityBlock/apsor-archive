@@ -19,8 +19,6 @@ class AgentSettingsValuesSchema(BaseModel):
 
     compaction_threshold_tokens: int = Field(ge=1_000, le=1_000_000)
     context_window_tokens: int = Field(ge=8_000, le=2_000_000)
-    max_steps: int = Field(ge=1, le=32)
-    max_tool_calls_per_turn: int = Field(ge=1, le=24)
     max_parallel_tools: int = Field(ge=1, le=24)
     max_tool_result_chars: int = Field(ge=1_000, le=200_000)
     max_page_context_chars: int = Field(ge=500, le=50_000)
@@ -50,8 +48,6 @@ class AgentSettingsValuesSchema(BaseModel):
             raise ValueError(
                 "compaction_threshold_tokens must be less than context_window_tokens."
             )
-        if self.max_parallel_tools > self.max_tool_calls_per_turn:
-            raise ValueError("max_parallel_tools must not exceed max_tool_calls_per_turn.")
         if self.max_plot_nodes < self.max_plot_points:
             raise ValueError(
                 "max_plot_nodes must be greater than or equal to max_plot_points."

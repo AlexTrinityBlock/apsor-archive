@@ -59,7 +59,6 @@ export const settings = {
       range: "请输入 {min} 到 {max} 之间的值。",
       maxLength: "最多只能输入 {max} 个字符。",
       thresholdBelowContext: "必须低于模型上下文窗口（{context}）。",
-      parallelWithinCalls: "不得超过每轮工具调用数（{calls}）。",
       plotNodesAtLeastPoints: "必须至少等于数据点上限（{points}）。",
       overlapBelowTarget: "必须低于目标字符数（{target}）。",
     },
@@ -68,7 +67,6 @@ export const settings = {
     title: "代理运行环境",
     lede:
       "这些边界存储在 PostgreSQL 中，并应用于新的运行。正在进行的运行会保留开始时的快照。",
-    badge: "{steps} 步 · {calls} 次工具调用",
     statusSummary:
       "{context} 模型上下文 · {compaction} 压缩",
     budgetLabel: "自动压缩阈值",
@@ -83,7 +81,7 @@ export const settings = {
     groupToolsSlot: "分组 02",
     groupToolsTitle: "工具执行",
     groupToolsDescription:
-      "可以同时运行多少工具、工具可以被调用几次，以及工具结果可以承载多少内容。",
+      "可以同时运行多少工具，以及每个工具结果可以承载多少内容。",
     groupAttachmentsSlot: "分组 03",
     groupAttachmentsTitle: "对话图片生命周期",
     groupAttachmentsDescription:
@@ -100,10 +98,6 @@ export const settings = {
     fieldThresholdUnit: "token",
     fieldThresholdHint:
       "当活动对话记录超过模型上下文窗口的这个比例时，自动压缩会在下一轮开始前启动。",
-    fieldMaxStepsLabel: "最大步数",
-    fieldMaxStepsUnit: "步",
-    fieldMaxStepsHint:
-      "单个轮次允许的思考与行动回合；默认为 24，上限为 32。",
     fieldPageContextLabel: "页面上下文",
     fieldPageContextUnit: "字符",
     fieldPageContextHint: "单个轮次可附加的最大页面文本量。",
@@ -114,9 +108,6 @@ export const settings = {
     fieldParallelToolsLabel: "最大并行工具数",
     fieldParallelToolsUnit: "个工具",
     fieldParallelToolsHint: "可同时执行的工具数量。",
-    fieldToolCallsLabel: "每轮工具调用数",
-    fieldToolCallsUnit: "次调用",
-    fieldToolCallsHint: "单个轮次允许的工具调用总数。",
     fieldToolResultCharsLabel: "每个工具结果的字符数",
     fieldToolResultCharsUnit: "字符",
     fieldToolResultCharsHint:
