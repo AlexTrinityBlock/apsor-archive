@@ -81,16 +81,6 @@ export interface AgentSettingsUpdateSchema {
      */
   max_plot_points: number;
   /**
-     * @minimum 1
-     * @maximum 32
-     */
-  max_steps: number;
-  /**
-     * @minimum 1
-     * @maximum 24
-     */
-  max_tool_calls_per_turn: number;
-  /**
      * @minimum 1000
      * @maximum 200000
      */

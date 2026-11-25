@@ -103,8 +103,6 @@ def _config_from_model(row: AgentConfigModel) -> AgentRuntimeConfig:
     return AgentRuntimeConfig(
         compaction_threshold_tokens=row.compaction_threshold_tokens,
         context_window_tokens=row.context_window_tokens,
-        max_steps=row.max_steps,
-        max_tool_calls_per_turn=row.max_tool_calls_per_turn,
         max_parallel_tools=row.max_parallel_tools,
         max_tool_result_chars=row.max_tool_result_chars,
         max_page_context_chars=row.max_page_context_chars,
@@ -135,8 +133,6 @@ def _apply_config(
 ) -> None:
     row.compaction_threshold_tokens = config.compaction_threshold_tokens
     row.context_window_tokens = config.context_window_tokens
-    row.max_steps = config.max_steps
-    row.max_tool_calls_per_turn = config.max_tool_calls_per_turn
     row.max_parallel_tools = config.max_parallel_tools
     row.max_tool_result_chars = config.max_tool_result_chars
     row.max_page_context_chars = config.max_page_context_chars
@@ -163,8 +159,6 @@ def _values_schema(config: AgentRuntimeConfig) -> AgentSettingsValuesSchema:
     return AgentSettingsValuesSchema(
         compaction_threshold_tokens=config.compaction_threshold_tokens,
         context_window_tokens=config.context_window_tokens,
-        max_steps=config.max_steps,
-        max_tool_calls_per_turn=config.max_tool_calls_per_turn,
         max_parallel_tools=config.max_parallel_tools,
         max_tool_result_chars=config.max_tool_result_chars,
         max_page_context_chars=config.max_page_context_chars,

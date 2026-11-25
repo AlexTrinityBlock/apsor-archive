@@ -21,8 +21,6 @@ from app.module.agent.domain.agent_domain import (
     MAX_PLOT_BYTES,
     MAX_PLOT_NODES,
     MAX_PLOT_POINTS,
-    MAX_STEPS,
-    MAX_TOOL_CALLS_PER_TURN,
     MAX_TOOL_RESULT_CHARS,
     PARALLEL_TOOLS_ENABLED,
     SAVE_MEMORY_REQUIRES_APPROVAL,
@@ -47,11 +45,6 @@ class AgentConfigModel(Base):
         CheckConstraint(
             "context_window_tokens BETWEEN 8000 AND 2000000",
             name="context_window_tokens_range",
-        ),
-        CheckConstraint("max_steps BETWEEN 1 AND 32", name="max_steps_range"),
-        CheckConstraint(
-            "max_tool_calls_per_turn BETWEEN 1 AND 24",
-            name="max_tool_calls_per_turn_range",
         ),
         CheckConstraint(
             "max_parallel_tools BETWEEN 1 AND 24",
@@ -117,10 +110,6 @@ class AgentConfigModel(Base):
             "compaction_threshold_tokens < context_window_tokens",
             name="compaction_below_context",
         ),
-        CheckConstraint(
-            "max_parallel_tools <= max_tool_calls_per_turn",
-            name="parallel_within_tool_calls",
-        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -135,18 +124,6 @@ class AgentConfigModel(Base):
         nullable=False,
         default=CONTEXT_WINDOW_TOKENS,
         server_default=text(str(CONTEXT_WINDOW_TOKENS)),
-    )
-    max_steps: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=MAX_STEPS,
-        server_default=text(str(MAX_STEPS)),
-    )
-    max_tool_calls_per_turn: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=MAX_TOOL_CALLS_PER_TURN,
-        server_default=text(str(MAX_TOOL_CALLS_PER_TURN)),
     )
     max_parallel_tools: Mapped[int] = mapped_column(
         Integer,

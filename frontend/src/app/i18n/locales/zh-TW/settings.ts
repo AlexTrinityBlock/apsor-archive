@@ -59,7 +59,6 @@ export const settings = {
       range: "請輸入 {min} 到 {max} 之間的值。",
       maxLength: "最多只能輸入 {max} 個字元。",
       thresholdBelowContext: "必須低於模型上下文視窗（{context}）。",
-      parallelWithinCalls: "不得超過每輪工具呼叫數（{calls}）。",
       plotNodesAtLeastPoints: "必須至少等於資料點上限（{points}）。",
       overlapBelowTarget: "必須低於目標字元數（{target}）。",
     },
@@ -68,7 +67,6 @@ export const settings = {
     title: "代理執行環境",
     lede:
       "這些界線儲存在 PostgreSQL 中，並套用於新的執行。正在進行的執行會保留開始時的快照。",
-    badge: "{steps} 步 · {calls} 次工具呼叫",
     statusSummary:
       "{context} 模型上下文 · {compaction} 壓縮",
     budgetLabel: "自動壓縮閾值",
@@ -83,7 +81,7 @@ export const settings = {
     groupToolsSlot: "群組 02",
     groupToolsTitle: "工具執行",
     groupToolsDescription:
-      "可以同時執行多少工具、工具可以被呼叫幾次，以及工具結果可以承載多少內容。",
+      "可以同時執行多少工具，以及每個工具結果可以承載多少內容。",
     groupAttachmentsSlot: "群組 03",
     groupAttachmentsTitle: "對話圖片生命週期",
     groupAttachmentsDescription:
@@ -100,10 +98,6 @@ export const settings = {
     fieldThresholdUnit: "token",
     fieldThresholdHint:
       "當使用中的對話紀錄超過模型上下文視窗的這個比例時，自動壓縮會在下一個輪次開始前啟動。",
-    fieldMaxStepsLabel: "最大步數",
-    fieldMaxStepsUnit: "步",
-    fieldMaxStepsHint:
-      "單一輪次允許的思考與行動回合；預設為 24，上限為 32。",
     fieldPageContextLabel: "頁面上下文",
     fieldPageContextUnit: "字元",
     fieldPageContextHint: "單一輪次可附加的最大頁面文字量。",
@@ -114,9 +108,6 @@ export const settings = {
     fieldParallelToolsLabel: "最大平行工具數",
     fieldParallelToolsUnit: "個工具",
     fieldParallelToolsHint: "可同時執行的工具數量。",
-    fieldToolCallsLabel: "每輪工具呼叫數",
-    fieldToolCallsUnit: "次呼叫",
-    fieldToolCallsHint: "單一輪次允許的工具呼叫總數。",
     fieldToolResultCharsLabel: "每個工具結果的字元數",
     fieldToolResultCharsUnit: "字元",
     fieldToolResultCharsHint:

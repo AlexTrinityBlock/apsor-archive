@@ -1551,18 +1551,6 @@
             "title": "Max Plot Points",
             "type": "integer"
           },
-          "max_steps": {
-            "maximum": 32.0,
-            "minimum": 1.0,
-            "title": "Max Steps",
-            "type": "integer"
-          },
-          "max_tool_calls_per_turn": {
-            "maximum": 24.0,
-            "minimum": 1.0,
-            "title": "Max Tool Calls Per Turn",
-            "type": "integer"
-          },
           "max_tool_result_chars": {
             "maximum": 200000.0,
             "minimum": 1000.0,
@@ -1585,8 +1573,6 @@
         "required": [
           "compaction_threshold_tokens",
           "context_window_tokens",
-          "max_steps",
-          "max_tool_calls_per_turn",
           "max_parallel_tools",
           "max_tool_result_chars",
           "max_page_context_chars",
@@ -1700,18 +1686,6 @@
             "title": "Max Plot Points",
             "type": "integer"
           },
-          "max_steps": {
-            "maximum": 32.0,
-            "minimum": 1.0,
-            "title": "Max Steps",
-            "type": "integer"
-          },
-          "max_tool_calls_per_turn": {
-            "maximum": 24.0,
-            "minimum": 1.0,
-            "title": "Max Tool Calls Per Turn",
-            "type": "integer"
-          },
           "max_tool_result_chars": {
             "maximum": 200000.0,
             "minimum": 1000.0,
@@ -1734,8 +1708,6 @@
         "required": [
           "compaction_threshold_tokens",
           "context_window_tokens",
-          "max_steps",
-          "max_tool_calls_per_turn",
           "max_parallel_tools",
           "max_tool_result_chars",
           "max_page_context_chars",

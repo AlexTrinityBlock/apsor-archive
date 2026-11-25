@@ -332,8 +332,6 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     assert defaults == {
         "compaction_threshold_tokens": 75_000,
         "context_window_tokens": 1_000_000,
-        "max_steps": 24,
-        "max_tool_calls_per_turn": 20,
         "max_parallel_tools": 6,
         "max_tool_result_chars": 100_000,
         "max_page_context_chars": 6_000,
@@ -378,7 +376,7 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "/api/v1/agent/settings",
         json={
             **defaults,
-            "max_parallel_tools": defaults["max_tool_calls_per_turn"] + 1,
+            "max_parallel_tools": 25,
         },
     )
     assert invalid_parallel.status_code == 400
@@ -440,8 +438,6 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         **defaults,
         "context_window_tokens": 1_500_000,
         "compaction_threshold_tokens": 1_000_000,
-        "max_steps": 4,
-        "max_tool_calls_per_turn": 4,
         "max_parallel_tools": 2,
         "max_page_context_chars": 5_000,
         "max_compaction_summary_chars": 5_000,
@@ -2606,6 +2602,94 @@ def test_cumulative_token_usage_does_not_abort_a_turn(
         entry for entry in body["entries"] if entry["kind"] == "pi.compaction"
     )
     assert compaction["data"]["reason"] == "auto_context_threshold"
+
+
+def test_tool_batch_past_the_old_call_cap_completes(
+    client: TestClient,
+) -> None:
+    """One step may invoke more tools than the removed per-turn call cap."""
+    created_file = create_text(
+        client,
+        "/agent/many-reads.md",
+        "The wrench is a hand tool for chassis repair.",
+        "2026-11-25T09:00:00Z",
+    )
+    file_id = int(created_file["id"])
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Many reads"},
+    ).json()
+
+    calls = [
+        ("read_file", {"file_id": file_id, "chunk": 1}) for _ in range(21)
+    ]
+    client.app.state.agent_chat_generator = FakeChatGenerator(
+        [
+            tool_calls_result(
+                calls,
+                call_ids=[f"call_many_{index}" for index in range(1, 22)],
+                usage=TOOL_USAGE,
+            ),
+            text_result("Every read finished.", usage=ANSWER_USAGE),
+        ]
+    )
+
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation['id']}/messages",
+        json={"content": "Read the note from every angle."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    assert body["error_code"] is None
+    results = [
+        entry for entry in body["entries"] if entry["kind"] == "pi.tool-result"
+    ]
+    assert len(results) == 21
+    assert all(entry["data"]["status"] == "ok" for entry in results)
+
+
+def test_turn_past_the_old_step_cap_completes(client: TestClient) -> None:
+    """A long tool loop keeps going until the model answers."""
+    created_file = create_text(
+        client,
+        "/agent/many-steps.md",
+        "The wrench is a hand tool for chassis repair.",
+        "2026-11-25T09:05:00Z",
+    )
+    file_id = int(created_file["id"])
+    conversation = client.post(
+        "/api/v1/agent/conversations",
+        json={"title": "Many steps"},
+    ).json()
+
+    scripted = [
+        tool_call_result(
+            "read_file",
+            {"file_id": file_id, "chunk": 1},
+            call_id=f"call_step_{index}",
+            usage=TOOL_USAGE,
+        )
+        for index in range(1, 26)
+    ]
+    scripted.append(text_result("Finished after many steps.", usage=ANSWER_USAGE))
+    client.app.state.agent_chat_generator = FakeChatGenerator(scripted)
+
+    turn = client.post(
+        f"/api/v1/agent/conversations/{conversation['id']}/messages",
+        json={"content": "Keep reading until the note is clear."},
+        headers={"Accept": "application/json"},
+    )
+    assert turn.status_code == 200, turn.text
+    body = turn.json()
+    assert body["run"]["status"] == "completed"
+    assert body["error_code"] is None
+    results = [
+        entry for entry in body["entries"] if entry["kind"] == "pi.tool-result"
+    ]
+    assert len(results) == 25
+    assert all(entry["data"]["status"] == "ok" for entry in results)
 
 
 def test_web_fetch_paginates_across_two_calls(client: TestClient) -> None:
