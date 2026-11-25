@@ -397,6 +397,7 @@ export const chat = {
     dataTableEmpty: "No tabular data is available for this chart.",
     truncated: "Showing the first {shown} of {total} points.",
     zoomHint: "Scroll to zoom · drag to rotate",
+    scrollHint: "Scroll sideways to see the whole chart",
     summaryTitle: "Title",
     summaryCaption: "Caption",
     summaryTraces: "Traces",

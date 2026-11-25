@@ -62,6 +62,7 @@ The application layer does not define backend behavior. API shapes come from `ge
 - Tool steps and thinking blocks preserve every recorded detail. Arguments, text previews, and error detail stay collapsed by default, including live steps, together with the agent's reasoning. Charts and presented resources (images, documents, memory cards) render expanded above the disclosure with a large preview area because they are the model's output to the reader. The always-visible tool header and meta line keep status, duration, call id, and error code readable while the disclosure is closed.
 - A live tool step is isolated from assistant prose tokens. Streaming a token must not re-render or remount a presented PDF, chart, or resource card; keep the live step memoized and its callbacks stable so the preview stays on screen.
 - Fenced code blocks in the transcript offer one-click copy of the raw code text; inline backtick code has no copy control.
+- Inline charts enable Plotly `automargin` on every cartesian axis. A chart whose long category labels cannot fit the reading column gets a minimum width and scrolls horizontally inside its card instead of compressing labels into each other; the scroll hint appears only while the canvas overflows.
 - On mobile the fixed chat shell follows the visual viewport while the on-screen keyboard is open, so the transcript top and the composer stay reachable. The inner transcript remains the scroll owner; do not replace this with scroll padding or by letting the page body scroll.
 
 ## Verification
