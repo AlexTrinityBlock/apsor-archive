@@ -4,6 +4,7 @@ import { truncate } from "../../../lib/format";
 import { formatArgumentValue } from "../format";
 import { readCalculationResult } from "../plot";
 import type { ToolCallMeta, ToolResultMeta } from "../types";
+import { toolStepLabel } from "../tool-label";
 import { toolStatusLabel } from "./status";
 
 interface ToolCallCardProps {
@@ -57,6 +58,12 @@ export function ToolCallCard({
   onSelect,
 }: ToolCallCardProps) {
   const { t } = useI18n();
+  const resourceType =
+    call.arguments?.resource_type === "file" ||
+    call.arguments?.resource_type === "memory"
+      ? call.arguments.resource_type
+      : null;
+  const toolName = toolStepLabel(call.name, resourceType, t);
   const status = result?.status ?? null;
   const statusLabel = toolStatusLabel(
     status,
@@ -89,7 +96,7 @@ export function ToolCallCard({
           {String(index + 1).padStart(2, "0")}
         </span>
         <Icon name="spark" size={12} />
-        <code className="tool-step-chip__name">{call.name}</code>
+        <code className="tool-step-chip__name">{toolName}</code>
         <span className="tool-step-chip__args">
           {argumentSummary(call, t("chat.tool.noArguments"))}
         </span>

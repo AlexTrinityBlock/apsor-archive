@@ -151,32 +151,42 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 | 检索 | CJK 二元组 + 拉丁词元 n-gram、BM25、带符号哈希向量、RRF |
 | AI | DeepSeek `deepseek-flash`、Anthropic Claude，或任何 OpenAI 兼容的聊天端点 |
 | 前端 | React 19、TypeScript、Vite、React Router、React Query、Orval |
-| 部署 | Docker Compose、可选的 Cloudflare Tunnel，或使用 `uv` 的裸机 |
+| 部署 | Docker Compose（Caddy + Cloudflare Tunnel），或使用 `uv` 的裸机 |
 
 ## 快速开始
 
-### Docker Compose（常规）
+### Docker Compose（生产环境）
+
+生产栈是 **Cloudflare Tunnel → Caddy → API**，不发布任何主机端口。
+请准备 tunnel 令牌、公开主机名和数据目录：
 
 ```bash
-mkdir -p data
+mkdir -p data secrets
 sudo chown -R 10001:10001 data
-# The production Compose default is R2; local disk is the simplest first run.
-APSOR_STORAGE_BACKEND=local docker compose up --build
+# Write the tunnel token; no trailing newline.
+printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
+chmod 755 secrets
+sudo chown 65532 secrets/cf_token.txt && chmod 640 secrets/cf_token.txt
+# The production default is R2; local disk is the simplest first run.
+export APSOR_STORAGE_BACKEND=local
+export APSOR_PUBLIC_HOST=archive.example.com
+docker compose up -d --build
 ```
+
+把 Cloudflare Tunnel 的公开主机指向 **HTTP `caddy:80`**，然后打开
+`https://$APSOR_PUBLIC_HOST`。请把 `APSOR_PUBLIC_HOST` 放进 `.env`，重启后
+才能保留主机匹配设置。首次访问会要求创建 root 账户。root 随后可以从
+**账户** 创建普通账户；每个新账户会收到一次性临时密码，并必须在首次登录时
+更改。新账户还会继承部署的主要聊天端点与模型，因此聊天和后台 AI 可立即
+使用；如果部署没有活动的聊天端点，账户会保持未分配，root 必须先分配。
+PostgreSQL 使用命名卷；本地原始字节和生成的密钥文件位于宿主机的 `./data`
+目录下。生产 Compose 文件默认使用 `APSOR_STORAGE_BACKEND=r2`；其所需凭据见
+[对象存储](#对象存储本地或-r2)，或者为自包含主机保留本地存储。
 
 > 注意：`./data` 会以绑定挂载方式挂入容器，容器进程以 uid `10001`
 > 运行。请在首次启动前创建该目录并修正其所有者，否则上传和
 > 原始字节写入会失败。如果宿主用户已经是 uid `10001`，可以跳过
 > `sudo chown`。
-
-打开 <http://127.0.0.1:8000>。首次访问会要求创建 root 账户。
-root 随后可以从 **账户** 创建普通账户；每个新账户会收到一次性
-临时密码，并必须在首次登录时更改。新账户还会继承部署的主要聊天端点
-与模型，因此聊天和后台 AI 可立即使用；如果部署没有活动的聊天端点，
-账户会保持未分配，root 必须先分配。PostgreSQL 使用命名卷；
-本地原始字节和生成的密钥文件位于宿主机的 `./data` 目录下。
-生产 Compose 文件默认使用 `APSOR_STORAGE_BACKEND=r2`；其所需凭据见
-[对象存储](#对象存储本地或-r2)，或者为自包含主机保留本地存储。
 
 `postgres-data` 卷被固定为显式的物理名称：
 `docker-compose.yml` 使用 `apsor-archive_postgres-data`，
@@ -658,25 +668,16 @@ psycopg 的异步模式拒绝 uvicorn 在 Windows 上默认选择的
 
 ### Cloudflare Tunnel
 
-这是 **Tunnel** 部署变体。未来纯 Cloudflare Serverless 部署应使用
-自己的 compose 文件；tunnel 栈保留在
-`docker-compose.cloudflare-tunnel.yml`。它不发布任何主机端口。
-`cloudflared` 连接到非 root 的 Caddy 反向代理，后者再转发到 API。
+生产 Compose 栈已包含 `cloudflared`、Caddy 和 API。请在 Cloudflare
+仪表板添加一个公开主机：
 
-```bash
-mkdir -p secrets
-# Write the tunnel token; no trailing newline.
-printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
-chmod 644 secrets/cf_token.txt
-export APSOR_PUBLIC_HOST=archive.example.com
-docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
-```
+- **Service type**：`HTTP`
+- **URL**：`caddy:80`
 
-把 `archive.example.com` 的 tunnel 入口指向 `http://caddy:80`。
-令牌文件被 gitignore。Caddy 只服务 `APSOR_PUBLIC_HOST` 指定的主机，并对
-其他所有主机返回 `404`，因此不要把第二个公网主机名加入 tunnel 入口。
-权限说明见
-`secrets/README.md`，完整的英语部署、备份、安全和故障排除指南见
+`cloudflared` 主动向外连接，因此不需要路由器端口转发。Caddy 只服务
+`APSOR_PUBLIC_HOST` 指定的主机，并对其他所有主机返回 `404`；不要把第二个
+公网主机名加入 tunnel 入口。令牌权限见 `secrets/README.md`，完整的英文
+部署、备份、安全与疑难解答指南见
 [`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md)。
 
 ## 工具接口
@@ -776,9 +777,9 @@ Agent 工具与 `/api/v1/tools/read_timeline` 始终使用稀疏默认值；时�
 - **拖放上传** 接受从桌面拖放到文件夹卡片或当前文件夹表面的文件。
   上传使用与上传对话框相同的摄取路径、扩展名允许列表和服务器限制：
   每个上传文件 10 MB，以及 `.md`、`.markdown`、`.txt`、`.csv`、
-  `.json`、`.log`、`.pdf`、`.docx`、`.xlsx`、`.xls`、`.xlsm`、`.ods`、
-  `.jpg`、`.jpeg`、`.png` 或 `.webp`。对话框还支持 2 MB 的纯文本创建。
-  拖放的文件永远不会被打开或执行。
+  `.json`、`.jsonl`、`.toml`、`.ini`、`.env`、`.log`、`.pdf`、`.docx`、
+  `.pptx`、`.xlsx`、`.xls`、`.xlsm`、`.ods`、`.jpg`、`.jpeg`、`.png` 或
+  `.webp`。对话框还支持 2 MB 的纯文本创建。拖放的文件永远不会被打开或执行。
 - **移动与复制** 是显式的。普通拖放到文件夹会移动文件；拖放时按住
   Alt/Option 则会复制它。触摸和键盘用户会得到单独的 **移动** 和
   **复制** 操作，而不是拖拽。
@@ -1708,11 +1709,10 @@ frontend/
   src/styles/                   paper / night archive tokens
   scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
   dist/                         generated build output, gitignored
-docker-compose.yml              normal deployment
+docker-compose.yml              production stack: Caddy + Cloudflare Tunnel
 docker-compose.dev.yml          local dependencies
-docker-compose.cloudflare-tunnel.yml   Cloudflare Tunnel deployment
-docs/cloudflare-tunnel.md       Tunnel deployment, backup, and security guide
-docker/caddy/                   non-root reverse proxy for the tunnel
+docs/cloudflare-tunnel.md       tunnel deployment, backup, and security guide
+docker/caddy/                   non-root reverse proxy
 ```
 
 ## 安全与隐私
@@ -1739,8 +1739,8 @@ docker/caddy/                   non-root reverse proxy for the tunnel
   把数据库和缓存绑定到 localhost 或内部网络，使用不同的主机账户，
   为任何共享主机设置强数据库/缓存密码，并在暴露后轮换凭据。未来的
   加固步骤是专用的非超级用户运行时登录加上单独的维护凭据。
-- 常规 Compose 文件把 API 绑定到 `127.0.0.1`；Cloudflare 文件不
-  发布任何主机端口。登录限流在内存中，因此是单进程的；请运行一个
+- 生产 Compose 文件不发布任何主机端口；Cloudflare Tunnel 连接到 Caddy，
+  Caddy 再连接到 API。登录限流在内存中，因此是单进程的；请运行一个
   API 进程，或在横向扩展前把限流迁移到 Valkey。
 - 路径会拒绝遍历段、反斜杠、控制字符和过长的值。上传限制为 10 MB，
   并受扩展名允许列表限制。

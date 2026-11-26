@@ -7,9 +7,8 @@ the local Caddy reverse proxy over that tunnel. The deployed archive serves one
 root account plus normal accounts, each with a private archive; originals are
 stored on local disk or in a private Cloudflare R2 bucket.
 
-This is the **Cloudflare Tunnel** deployment. A future pure Cloudflare
-Serverless deployment is a separate architecture and must use its own
-configuration file; do not mix the two.
+This is the single production deployment. A pure Cloudflare Serverless
+deployment would be a separate architecture; it is not part of this stack.
 
 ## Architecture
 
@@ -24,7 +23,8 @@ cloudflared ──► Caddy :80 ──► API :8000
                                │
                                ├── PostgreSQL 17 (private rows + RLS)
                                ├── Valkey
-                               ├── host ./data-cloudflare (bound to /data)
+                               ├── RabbitMQ (ingestion wake-ups)
+                               ├── host ./data (bound to /data)
                                ├── ./.secrets/r2.env (read-only R2 credentials)
                                └── Cloudflare R2 (private original bytes)
                                       ▲
@@ -37,14 +37,16 @@ Compose services:
 |---|---|
 | `db` | PostgreSQL 17 with a persistent named volume |
 | `cache` | Valkey, used for the optional cache |
-| `api` | FastAPI, serves the API and committed SPA build; local originals live in `./data-cloudflare` |
+| `rabbitmq` | Ingestion dispatch wake-ups; PostgreSQL remains the job ledger |
+| `api` | FastAPI, serves the API and committed SPA build; local originals live in `./data` |
 | `worker` | Dedicated durable-ingestion worker sharing the same host directory and R2 credentials |
 | `caddy` | Non-root reverse proxy, port 80 inside the Compose network only |
 | `cloudflare-tunnel` | `cloudflared` connector with the tunnel token |
 
-The Compose project is `apsor-archive-cloudflare`. The API lifespan worker is
-disabled in this stack. The separate `worker` service owns the ingestion queue,
-so exactly one process drains jobs.
+The Compose project is `apsor-archive`. The API lifespan worker is disabled in
+this stack. The separate `worker` service owns the ingestion queue, so exactly
+one process drains jobs. No service publishes a host port; the tunnel is the
+only ingress.
 
 ## Prerequisites
 
@@ -54,11 +56,11 @@ so exactly one process drains jobs.
   public IP is required.
 - A Cloudflare tunnel token.
 - A Cloudflare R2 bucket for original bytes and an S3-compatible access key
-  pair. The Compose files default to the private `apsor-archive` bucket. If you
+  pair. The production Compose file defaults to the private `apsor-archive` bucket. If you
   keep everything on local disk, set `APSOR_STORAGE_BACKEND=local`.
 - A host data directory owned by the container uid:
-  `mkdir -p data-cloudflare && sudo chown -R 10001:10001 data-cloudflare`.
-- At least 2 GB of RAM for the database, API, worker, Caddy, and connector.
+  `mkdir -p data && sudo chown -R 10001:10001 data`.
+- At least 2 GB of RAM for the database, cache, broker, API, worker, Caddy, and connector.
   The stack is designed for one root plus a small family or team on a single
   host; it is not a multi-tenant service.
 
@@ -99,7 +101,7 @@ The image build compiles the frontend from `frontend/` in its own Bun stage, so
 no manual build step is needed:
 
 ```bash
-docker compose -f docker-compose.cloudflare-tunnel.yml build
+docker compose build
 ```
 
 ## 3. Store the tunnel token
@@ -125,7 +127,7 @@ See `secrets/README.md` for the same permission guidance.
 
 ### Object storage (R2)
 
-The production Compose files default to `APSOR_STORAGE_BACKEND=r2`. The API and
+The production Compose file defaults to `APSOR_STORAGE_BACKEND=r2`. The API and
 worker read R2 credentials from `.secrets/r2.env`, mounted read-only; the file
 must be readable by uid `10001`:
 
@@ -146,7 +148,7 @@ environment (`APSOR_R2_ENDPOINT_URL` has no default and must be set in `.env`;
 defaults). The bucket stays private: do not
 enable public access or presigned URLs, and do not add a lifecycle expiry rule
 for `files/`. Keep the Fernet key (`/data/.secret_key` in the container,
-`data-cloudflare/.secret_key` on the host) on local storage and back it up; it
+`data/.secret_key` on the host) on local storage and back it up; it
 is the master key for provider credentials.
 
 For a trial with no R2 bucket, start with `APSOR_STORAGE_BACKEND=local`. To move
@@ -158,7 +160,7 @@ both services.
 
 ```bash
 export APSOR_PUBLIC_HOST=archive.example.com
-docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
+docker compose up -d --build
 ```
 
 `APSOR_PUBLIC_HOST` is used by Caddy for its host matcher. It is not the
@@ -175,8 +177,8 @@ debugging on a trusted host.
 Check the services:
 
 ```bash
-docker compose -f docker-compose.cloudflare-tunnel.yml ps
-docker compose -f docker-compose.cloudflare-tunnel.yml logs -f cloudflare-tunnel caddy api
+docker compose ps
+docker compose logs -f cloudflare-tunnel caddy api
 ```
 
 ## 5. Verify the deployment
@@ -205,7 +207,7 @@ password is delivered out of band and is not stored in this guide.
 Check the worker separately:
 
 ```bash
-docker compose -f docker-compose.cloudflare-tunnel.yml logs -f worker
+docker compose logs -f worker
 ```
 
 Upload a small text file and confirm the job reaches `ready` with the desired
@@ -262,7 +264,7 @@ files keep their current boundaries until re-ingested.
 
 ## 7. Backups
 
-The backup set is PostgreSQL, the host `./data-cloudflare` directory (local
+The backup set is PostgreSQL, the host `./data` directory (local
 originals and `.secret_key`), the private R2 bucket contents, and the external
 `.secrets/r2.env` credentials. Keep them together and verify a restore before
 relying on them.
@@ -270,14 +272,14 @@ relying on them.
 Database dump:
 
 ```bash
-docker compose -f docker-compose.cloudflare-tunnel.yml exec -T db \
+docker compose exec -T db \
   pg_dump -U apsor -d apsor_archive | gzip > apsor-archive-$(date +%F).sql.gz
 ```
 
 Data directory snapshot (local originals and the Fernet key):
 
 ```bash
-sudo tar czf apsor-archive-data-$(date +%F).tar.gz -C data-cloudflare .
+sudo tar czf apsor-archive-data-$(date +%F).tar.gz -C data .
 ```
 
 R2 backup:
@@ -291,7 +293,7 @@ R2 backup:
 
 Stop the stack before restoring the database and data directory, then restore
 the PostgreSQL dump with `pg_restore`/`psql`, extract the data archive back into
-`./data-cloudflare`, and restore or re-sync the R2 objects. Keep at least one
+`./data`, and restore or re-sync the R2 objects. Keep at least one
 backup of `/data/.secret_key` separate from the database; without it, encrypted
 provider keys cannot be recovered.
 
@@ -340,19 +342,19 @@ Update after pulling a new revision:
 ```bash
 git pull
 cd frontend && bun install --frozen-lockfile && bun run build && cd ..
-docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
+docker compose up -d --build
 ```
 
 View logs:
 
 ```bash
-docker compose -f docker-compose.cloudflare-tunnel.yml logs -f --tail=200
+docker compose logs -f --tail=200
 ```
 
 Restart one service:
 
 ```bash
-docker compose -f docker-compose.cloudflare-tunnel.yml restart api worker
+docker compose restart api worker
 ```
 
 The `worker` service shares the PostgreSQL queue with the API. If you ever run
@@ -384,7 +386,7 @@ bytes by itself.
 
 | File | Purpose |
 |---|---|
-| `docker-compose.cloudflare-tunnel.yml` | Tunnel stack |
+| `docker-compose.yml` | Production stack with Caddy and Cloudflare Tunnel |
 | `docker/caddy/Caddyfile` | Reverse proxy and access logs |
 | `docker/caddy/Dockerfile` | Non-root Caddy image |
 | `secrets/cf_token.txt` | Tunnel token, gitignored |
@@ -392,8 +394,9 @@ bytes by itself.
 | `.secrets/deepseek.env` | Optional provider fallback, gitignored |
 | `Dockerfile` | API/worker image with the committed SPA build |
 
-For local development, use `docker-compose.dev.yml`; for a host-only deployment
-with a published loopback port, use `docker-compose.yml`.
+For local development, use `docker-compose.dev.yml` with the API and Vite on
+the host. The production `docker-compose.yml` is tunnel-only and publishes no
+host port.
 
 ## 12. Upgrade an existing archive
 
@@ -405,7 +408,7 @@ bytes until the new version and the R2 copies are verified.
 2. Back up PostgreSQL:
 
    ```bash
-   docker compose -f docker-compose.cloudflare-tunnel.yml exec -T db \
+   docker compose exec -T db \
      pg_dump -U apsor -d apsor_archive | gzip > apsor-pre-upgrade-$(date +%F).sql.gz
    pg_restore -l apsor-pre-upgrade-$(date +%F).sql.gz > /dev/null
    ```
@@ -413,7 +416,7 @@ bytes until the new version and the R2 copies are verified.
 3. Back up the data directory and copy `.secret_key` separately:
 
    ```bash
-   sudo tar czf apsor-pre-upgrade-data-$(date +%F).tar.gz -C data-cloudflare .
+   sudo tar czf apsor-pre-upgrade-data-$(date +%F).tar.gz -C data .
    ```
 
 4. Stop `api` and `worker`. Run the Alembic upgrade once as the owning login
@@ -431,10 +434,10 @@ bytes until the new version and the R2 copies are verified.
    `--verify`:
 
    ```bash
-   docker compose -f docker-compose.cloudflare-tunnel.yml run --rm \
+   docker compose run --rm \
      -e APSOR_STORAGE_BACKEND=local api \
      /app/backend/.venv/bin/python -m script.migrate_storage_to_r2 --copy
-   docker compose -f docker-compose.cloudflare-tunnel.yml run --rm \
+   docker compose run --rm \
      -e APSOR_STORAGE_BACKEND=local api \
      /app/backend/.venv/bin/python -m script.migrate_storage_to_r2 --verify
    ```

@@ -1,5 +1,8 @@
 name: apsor-archive
 
+# Single production stack: Cloudflare Tunnel -> Caddy -> API. No service
+# publishes a host port; the tunnel is the only ingress. Local development
+# dependencies live in docker-compose.dev.yml.
 services:
   db:
     image: postgres:17-alpine
@@ -7,8 +10,6 @@ services:
       POSTGRES_USER: apsor
       POSTGRES_PASSWORD: apsor
       POSTGRES_DB: apsor_archive
-    ports:
-      - "127.0.0.1:55432:5432"
     command:
       - postgres
       - -c
@@ -32,8 +33,6 @@ services:
       - 64mb
       - --maxmemory-policy
       - allkeys-lru
-    ports:
-      - "127.0.0.1:56379:6379"
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
@@ -44,7 +43,7 @@ services:
   # Demo dispatch queue. PostgreSQL remains the job ledger; RabbitMQ only wakes
   # the worker and provides manual-ack redelivery plus a delayed retry queue.
   # The credentials below are local demo defaults: change them for any shared
-  # deployment before exposing the management UI.
+  # deployment. The broker stays on the Compose network only.
   rabbitmq:
     image: rabbitmq:4-management-alpine
     # Keep the broker small on a laptop. rabbitmq.conf lowers the watermark.
@@ -53,10 +52,6 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-apsor}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-apsor}
       RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "+S 2:2 +sbwt none +sbwtdcpu none +sbwtdio none"
-    ports:
-      # 5672 is AMQP; 15672 is the management UI at http://127.0.0.1:15672.
-      - "127.0.0.1:5672:5672"
-      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
       - ./docker/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -77,6 +72,9 @@ services:
       APSOR_DATA_DIR: /data
       APSOR_STATIC_DIR: /app/frontend/dist
       APSOR_TIMEZONE: Asia/Taipei
+      # The tunnel terminates TLS at Cloudflare, so the browser always reaches
+      # the app over HTTPS. Keep the session cookie Secure.
+      APSOR_COOKIE_SECURE: "true"
       # New originals use R2 by default. Set APSOR_STORAGE_BACKEND=local for
       # the first cutover boot, then run the storage migration and switch back.
       APSOR_STORAGE_BACKEND: ${APSOR_STORAGE_BACKEND:-r2}
@@ -96,8 +94,8 @@ services:
       # any shared or internet-reachable deployment.
       APSOR_RABBITMQ_ENABLED: "true"
       APSOR_RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-apsor}:${RABBITMQ_DEFAULT_PASS:-apsor}@rabbitmq:5672/
-    ports:
-      - "127.0.0.1:8000:8000"
+    expose:
+      - "8000"
     volumes:
       - ./data:/data
       # Read-only local secrets. The app reads .secrets/deepseek.env and
@@ -156,6 +154,33 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  caddy:
+    build:
+      context: ./docker/caddy
+    environment:
+      APSOR_PUBLIC_HOST: ${APSOR_PUBLIC_HOST:?set APSOR_PUBLIC_HOST in .env}
+    expose:
+      - "80"
+    volumes:
+      - caddy-logs:/var/log/caddy
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  cloudflare-tunnel:
+    image: cloudflare/cloudflared:2026.10.4
+    command: tunnel --no-autoupdate run --token-file /run/secrets/cf_token
+    secrets:
+      - cf_token
+    depends_on:
+      - caddy
+    restart: unless-stopped
+
+secrets:
+  cf_token:
+    file: ./secrets/cf_token.txt
+
 volumes:
   postgres-data:
     # The physical name is explicit so a Compose project rename cannot silently
@@ -163,3 +188,5 @@ volumes:
     name: apsor-archive_postgres-data
   rabbitmq-data:
     name: apsor-archive_rabbitmq-data
+  caddy-logs:
+    name: apsor-archive_caddy-logs

@@ -213,10 +213,11 @@ data-directory backup. If `APSOR_R2_BUCKET` is absent from the host shell, pass
 
 ### Supported file types
 
-The upload allowlist covers Markdown, plain text, CSV, JSON, log, PDF, DOCX,
-PPTX, spreadsheet, and image files. The spreadsheet formats are `.xlsx`, `.xls`,
-`.xlsm`, and `.ods`; presentations must be OOXML `.pptx`, and legacy binary
-`.ppt` stays unsupported.
+The upload allowlist covers Markdown, plain text, CSV, JSON, JSON Lines, TOML,
+INI, dotenv, log, PDF, DOCX, PPTX, spreadsheet, and image files. The spreadsheet
+formats are `.xlsx`, `.xls`, `.xlsm`, and `.ods`; presentations must be OOXML
+`.pptx`, and legacy binary `.ppt` stays unsupported. JSON Lines, TOML, INI, and
+dotenv files are stored and indexed as plain text.
 
 Spreadsheets are extracted as text, never through the vision provider. Each
 worksheet becomes a GitHub-Flavored Markdown table under a

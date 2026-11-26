@@ -17,7 +17,7 @@ Use this guide to choose the right subsystem, respect cross-cutting invariants, 
 - Authentication tables (`app_user`, `user_session`) are deliberately outside RLS because login and session lookup happen before a user context exists. Global config tables are read-all/root-write; private tables use owner-only policies.
 - `frontend/` is a React 19 + TypeScript + Vite SPA. It uses React Query for server state and a committed Orval client generated from `frontend/openapi.json`. The production bundle is compiled inside the Docker image and is not tracked.
 - FastAPI serves the SPA and `/api/v1` from the same origin. API routes win before the SPA fallback. The container image compiles the client in a Bun stage and copies the result; the runtime image runs no frontend build.
-- Root deployment files are `Dockerfile`, `docker-compose.yml`, `docker-compose.dev.yml`, `docker-compose.cloudflare-tunnel.yml`, and `docker/caddy/`. The production Compose files run separate API and ingestion-worker services; only the worker drains ingestion jobs.
+- Root deployment files are `Dockerfile`, `docker-compose.yml`, `docker-compose.dev.yml`, and `docker/caddy/`. The production Compose file runs Caddy and the Cloudflare Tunnel connector ahead of separate API and ingestion-worker services; only the worker drains ingestion jobs.
 - `docs/cloudflare-tunnel.md` is the deployment/security guide; `secrets/README.md` documents local secret-file handling. `Makefile` and `start.sh` are the supported local command paths.
 - A normal request path is router → service → repository. Cross-cutting resources are created in the app lifespan and exposed through `app.state`; each vertical slice assembles its own dependencies.
 - A durable ingestion job and an agent run are separate asynchronous workflows. Neither workflow may hold a request-scoped database session for its full lifetime.
@@ -28,7 +28,7 @@ Use this guide to choose the right subsystem, respect cross-cutting invariants, 
 - `Makefile` — canonical lint, test, build, API-contract, and Compose commands.
 - `backend/AGENTS.md` — backend service rules and verification.
 - `frontend/AGENTS.md` — frontend architecture, generated-client, and UI rules.
-- `Dockerfile` / `docker-compose*.yml` — production, dev-dependency, and tunnel runtimes.
+- `Dockerfile` / `docker-compose.yml` / `docker-compose.dev.yml` — production and dev-dependency runtimes.
 - `.env.example` / `secrets/README.md` — configuration names and secret-file expectations.
 
 ## Conventions
