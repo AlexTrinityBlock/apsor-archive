@@ -156,7 +156,10 @@ export function classifyFile(
   if (extension === ".md" || extension === ".markdown" || mime === "text/markdown") {
     return "markdown";
   }
-  if (mime.startsWith("text/") || extension === ".txt" || extension === ".log") {
+  if (
+    mime.startsWith("text/") ||
+    [".txt", ".log", ".jsonl", ".toml", ".ini", ".env"].includes(extension)
+  ) {
     return "text";
   }
   return "unsupported";

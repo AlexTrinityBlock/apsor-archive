@@ -114,7 +114,18 @@ T = TypeVar("T")
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx"} | set(SPREADSHEET_EXTENSIONS)
 MARKDOWN_EXTENSIONS = {".md", ".markdown"}
-TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".csv", ".json", ".log"}
+TEXT_EXTENSIONS = {
+    ".md",
+    ".markdown",
+    ".txt",
+    ".csv",
+    ".json",
+    ".jsonl",
+    ".toml",
+    ".ini",
+    ".env",
+    ".log",
+}
 ALLOWED_EXTENSIONS = TEXT_EXTENSIONS | DOCUMENT_EXTENSIONS | IMAGE_EXTENSIONS
 
 # PDFium documents are not thread-safe, even across separate documents. The
