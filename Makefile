@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: help dev-deps api web build test lint up down tunnel api-export api-generate api-check
+.PHONY: help dev-deps api web build test lint up down api-export api-generate api-check
 
 help:
 	@printf '%s\n' \
@@ -10,9 +10,8 @@ help:
 	  'make build        Build the frontend into frontend/dist' \
 	  'make test         Run the backend integration test suite' \
 	  'make lint         Run backend and frontend checks' \
-	  'make up           Build and start the normal Compose stack' \
-	  'make down         Stop the normal Compose stack' \
-	  'make tunnel       Build and start the Cloudflare Compose stack' \
+	  'make up           Build and start the production Compose stack' \
+	  'make down         Stop the production Compose stack' \
 	  'make api-export   Export OpenAPI to frontend/openapi.json' \
 	  'make api-generate Regenerate the committed Orval client' \
 	  'make api-check    Fail if the committed contract/client is stale'
@@ -41,9 +40,6 @@ up:
 
 down:
 	docker compose down
-
-tunnel:
-	docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
 
 api-export:
 	cd backend && uv run python -m script.export_openapi

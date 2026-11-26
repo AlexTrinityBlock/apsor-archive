@@ -12,7 +12,6 @@ secrets/
 docs/plan
 template
 data
-data-cloudflare
 private
 private-docs
 backend/.venv

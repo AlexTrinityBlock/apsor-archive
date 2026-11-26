@@ -184,32 +184,43 @@ result carries its source, chunk number, and time.
 | Retrieval | CJK bigram + Latin token n-grams, BM25, signed hashing vectors, RRF |
 | AI | DeepSeek `deepseek-flash`, Anthropic Claude, or any OpenAI-compatible chat endpoint |
 | Frontend | React 19, TypeScript, Vite, React Router, React Query, Orval |
-| Deploy | Docker Compose, optional Cloudflare Tunnel, or bare metal with `uv` |
+| Deploy | Docker Compose with Caddy and Cloudflare Tunnel, or bare metal with `uv` |
 
 ## Quick start
 
-### Docker Compose (normal)
+### Docker Compose (production)
+
+The production stack is **Cloudflare Tunnel → Caddy → API**. It publishes no
+host port. Prepare the tunnel token, the public host, and the data directory:
 
 ```bash
-mkdir -p data
+mkdir -p data secrets
 sudo chown -R 10001:10001 data
-# The production Compose default is R2; local disk is the simplest first run.
-APSOR_STORAGE_BACKEND=local docker compose up --build
+# Write the tunnel token; no trailing newline.
+printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
+chmod 755 secrets
+sudo chown 65532 secrets/cf_token.txt && chmod 640 secrets/cf_token.txt
+# The production default is R2; local disk is the simplest first run.
+export APSOR_STORAGE_BACKEND=local
+export APSOR_PUBLIC_HOST=archive.example.com
+docker compose up -d --build
 ```
+
+Point the Cloudflare Tunnel public hostname at **HTTP `caddy:80`**, then open
+`https://$APSOR_PUBLIC_HOST`. Put `APSOR_PUBLIC_HOST` in `.env` so restarts keep
+the host matcher. The first visit asks you to create the root account. The root
+can then create normal accounts from **Accounts**; each new account receives a
+one-time temporary password and must change it at first sign-in. PostgreSQL
+uses a named volume; local original bytes and the generated secret key live
+under the host's `./data` directory. The production Compose file defaults to
+`APSOR_STORAGE_BACKEND=r2`; see
+[Object storage](#object-storage-local-or-r2) for the credentials it needs, or
+keep local storage for a self-contained host.
 
 > Note: `./data` is bind-mounted into the container and the container process
 > runs as uid `10001`. Create the directory and fix its owner before the first
 > boot, otherwise uploads and original-byte writes fail. If the host user is
 > already uid `10001`, the `sudo chown` can be skipped.
-
-Open <http://127.0.0.1:8000>. The first visit asks you to create the root
-account. The root can then create normal accounts from **Accounts**; each new
-account receives a one-time temporary password and must change it at first
-sign-in. PostgreSQL uses a named volume; local original bytes and the generated
-secret key live under the host's `./data` directory. The production Compose
-files default to `APSOR_STORAGE_BACKEND=r2`; see
-[Object storage](#object-storage-local-or-r2) for the credentials it needs, or
-keep local storage for a self-contained host.
 
 The `postgres-data` volume is pinned to an explicit physical name:
 `apsor-archive_postgres-data` for `docker-compose.yml` and
@@ -249,8 +260,8 @@ uploads use the filename caption, and agent messages return
 
 - `local` writes under `APSOR_DATA_DIR` and is the default for development and
   tests.
-- `r2` writes to a private Cloudflare R2 bucket. Both production Compose files
-  default to `r2`; set `APSOR_STORAGE_BACKEND=local` for a first boot or a
+- `r2` writes to a private Cloudflare R2 bucket. The production Compose file
+  defaults to `r2`; set `APSOR_STORAGE_BACKEND=local` for a first boot or a
   rollback.
 
 The non-secret R2 values are `APSOR_R2_ENDPOINT_URL`, `APSOR_R2_BUCKET`
@@ -680,10 +691,10 @@ second source of truth.
   main queue. Dispatch retries are capped at 20 so a broken job cannot loop
   forever.
 - The container is capped at 384 MB with a 200 MB VM watermark
-  (`docker/rabbitmq/rabbitmq.conf`). The management UI is
-  http://127.0.0.1:15672; the local demo credentials are `apsor` / `apsor` and
-  must be changed through `RABBITMQ_DEFAULT_USER`/`RABBITMQ_DEFAULT_PASS` before
-  any shared deployment.
+  (`docker/rabbitmq/rabbitmq.conf`). The management UI stays on the Compose
+  network and is not published on the host; the local demo credentials are
+  `apsor` / `apsor` and must be changed through
+  `RABBITMQ_DEFAULT_USER`/`RABBITMQ_DEFAULT_PASS` before any shared deployment.
 - Disable dispatch with `APSOR_RABBITMQ_ENABLED=false`. The API then uses the
   no-op notifier and the worker keeps polling PostgreSQL every second, so no job
   is lost. The same polling fallback applies while the broker is down or a
@@ -795,26 +806,18 @@ default on Windows.
 
 ### Cloudflare Tunnel
 
-This is the **Tunnel** deployment variant. A future pure Cloudflare Serverless
-deployment should use its own compose file; the tunnel stack stays in
-`docker-compose.cloudflare-tunnel.yml`. It publishes no host port. `cloudflared`
-connects to a non-root Caddy reverse proxy, which forwards to the API.
+The production Compose stack already contains `cloudflared`, Caddy, and the
+API. In the Cloudflare dashboard, add one public hostname:
 
-```bash
-mkdir -p secrets
-# Write the tunnel token; no trailing newline.
-printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
-chmod 644 secrets/cf_token.txt
-export APSOR_PUBLIC_HOST=archive.example.com
-docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
-```
+- **Service type**: `HTTP`
+- **URL**: `caddy:80`
 
-Point the tunnel ingress for `archive.example.com` at `http://caddy:80`. The
-token file is gitignored. Caddy serves only the host named by
-`APSOR_PUBLIC_HOST` and answers `404` for every other host, so do not add a
-second public hostname to the tunnel ingress. See
-`secrets/README.md` for permissions and [`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md) for the
-complete English deployment, backup, security, and troubleshooting guide.
+`cloudflared` makes outbound connections, so no router port forwarding is
+needed. Caddy serves only the host named by `APSOR_PUBLIC_HOST` and answers
+`404` for every other host; do not add a second public hostname to the tunnel
+ingress. See `secrets/README.md` for token permissions and
+[`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md) for the complete
+deployment, backup, security, and troubleshooting guide.
 
 ## Tool surface
 
@@ -2007,11 +2010,10 @@ frontend/
   src/styles/                   paper / night archive tokens
   scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
   dist/                         generated build output, gitignored
-docker-compose.yml              normal deployment
+docker-compose.yml              production stack: Caddy + Cloudflare Tunnel
 docker-compose.dev.yml          local dependencies
-docker-compose.cloudflare-tunnel.yml   Cloudflare Tunnel deployment
-docs/cloudflare-tunnel.md       Tunnel deployment, backup, and security guide
-docker/caddy/                   non-root reverse proxy for the tunnel
+docs/cloudflare-tunnel.md       tunnel deployment, backup, and security guide
+docker/caddy/                   non-root reverse proxy
 ```
 
 ## Security and privacy
@@ -2043,8 +2045,8 @@ docker/caddy/                   non-root reverse proxy for the tunnel
   host accounts, set a strong database/cache password for any shared host, and
   rotate credentials after exposure. A future hardening step is a dedicated
   non-superuser runtime login plus a separate maintenance credential.
-- The normal Compose file binds the API to `127.0.0.1`; the Cloudflare file
-  publishes no host port. Login throttling is in-memory and therefore
+- The production Compose file publishes no host port; Cloudflare Tunnel reaches
+  Caddy, and Caddy reaches the API. Login throttling is in-memory and therefore
   single-process; run one API process, or move the throttle to Valkey before
   scaling out.
 - Paths reject traversal segments, backslashes, control characters, and

@@ -150,31 +150,42 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
 | 檢索 | CJK 雙字組 + 拉丁詞元 n-gram、BM25、帶符號雜湊向量、RRF |
 | AI | DeepSeek `deepseek-flash`、Anthropic Claude，或任何 OpenAI 相容的對話端點 |
 | 前端 | React 19、TypeScript、Vite、React Router、React Query、Orval |
-| 部署 | Docker Compose、可選的 Cloudflare Tunnel，或使用 `uv` 的裸機部署 |
+| 部署 | Docker Compose（Caddy + Cloudflare Tunnel），或使用 `uv` 的裸機部署 |
 
 ## 快速開始
 
-### Docker Compose（一般）
+### Docker Compose（正式環境）
+
+正式堆疊是 **Cloudflare Tunnel → Caddy → API**，不發布任何主機連接埠。
+請準備 tunnel 權杖、公開主機名稱與資料目錄：
 
 ```bash
-mkdir -p data
+mkdir -p data secrets
 sudo chown -R 10001:10001 data
-# The production Compose default is R2; local disk is the simplest first run.
-APSOR_STORAGE_BACKEND=local docker compose up --build
+# Write the tunnel token; no trailing newline.
+printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
+chmod 755 secrets
+sudo chown 65532 secrets/cf_token.txt && chmod 640 secrets/cf_token.txt
+# The production default is R2; local disk is the simplest first run.
+export APSOR_STORAGE_BACKEND=local
+export APSOR_PUBLIC_HOST=archive.example.com
+docker compose up -d --build
 ```
+
+將 Cloudflare Tunnel 的公開主機指向 **HTTP `caddy:80`**，再開啟
+`https://$APSOR_PUBLIC_HOST`。請把 `APSOR_PUBLIC_HOST` 放進 `.env`，重啟後
+才能保留主機比對設定。第一次造訪時會要求你建立 root 帳號。root 接著可以從
+**帳號** 建立一般帳號；每個新帳號會收到一組一次性臨時密碼，並且必須在第一次
+登入時變更。新帳號也會繼承部署的主要對話端點與模型，因此對話與背景 AI 可
+立即使用；若部署沒有任何使用中的對話端點，帳號會保持未指派，root 必須先
+指派。PostgreSQL 使用具名磁碟區；本機的原始位元組與產生的祕密金鑰位於主機的
+`./data` 目錄下。正式環境的 Compose 檔案預設為
+`APSOR_STORAGE_BACKEND=r2`；其所需憑證請見
+[物件儲存](#物件儲存本機或-r2)，或者為自成一體的主機保留本機儲存。
 
 > 注意：`./data` 會綁定掛載到容器中，且容器程序以 uid `10001` 執行。請在
 > 第一次開機前建立目錄並修正其擁有者，否則上傳與原始位元組寫入都會失敗。
 > 若主機使用者已經是 uid `10001`，可以略過 `sudo chown`。
-
-開啟 <http://127.0.0.1:8000>。第一次造訪時會要求你建立 root 帳號。root 接著
-可以從 **帳號** 建立一般帳號；每個新帳號會收到一組一次性臨時密碼，並且必須
-在第一次登入時變更。新帳號也會繼承部署的主要對話端點與模型，因此對話與
-背景 AI 可立即使用；若部署沒有任何使用中的對話端點，帳號會保持未指派，
-root 必須先指派。PostgreSQL 使用具名磁碟區；本機的原始位元組與產生的
-祕密金鑰位於主機的 `./data` 目錄下。正式環境的 Compose 檔案預設為
-`APSOR_STORAGE_BACKEND=r2`；其所需憑證請見
-[物件儲存](#物件儲存本機或-r2)，或者為自成一體的主機保留本機儲存。
 
 `postgres-data` 磁碟區固定使用明確的實體名稱：`docker-compose.yml` 為
 `apsor-archive_postgres-data`，`docker-compose.dev.yml` 為
@@ -649,25 +660,16 @@ uvicorn 在 Windows 上預設選用的 `ProactorEventLoop`。
 
 ### Cloudflare Tunnel
 
-這是 **Tunnel** 部署變體。未來純 Cloudflare Serverless 部署應使用自己的
-compose 檔案；tunnel 堆疊留在 `docker-compose.cloudflare-tunnel.yml`。它
-不發佈任何主機連接埠。`cloudflared` 連線至非 root 的 Caddy 反向代理，
-再由其轉送至 API。
+正式 Compose 堆疊已包含 `cloudflared`、Caddy 與 API。請在 Cloudflare
+儀表板新增一個公開主機：
 
-```bash
-mkdir -p secrets
-# Write the tunnel token; no trailing newline.
-printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
-chmod 644 secrets/cf_token.txt
-export APSOR_PUBLIC_HOST=archive.example.com
-docker compose -f docker-compose.cloudflare-tunnel.yml up -d --build
-```
+- **Service type**：`HTTP`
+- **URL**：`caddy:80`
 
-將 `archive.example.com` 的 tunnel ingress 指向 `http://caddy:80`。權杖
-檔案已列入 gitignore。Caddy 只服務 `APSOR_PUBLIC_HOST` 指定的主機，並對
-其他所有主機回應 `404`，因此請勿在 tunnel ingress 加入第二個公開主機名。
-權限說明請見
-`secrets/README.md`，完整的英文部署、備份、安全性與疑難排解指南請見
+`cloudflared` 主動向外連線，因此不需要路由器連接埠轉送。Caddy 只服務
+`APSOR_PUBLIC_HOST` 指定的主機，並對其他所有主機回應 `404`；請勿在 tunnel
+ingress 加入第二個公開主機名。權杖權限請見 `secrets/README.md`，完整的英文
+部署、備份、安全性與疑難排解指南請見
 [`docs/cloudflare-tunnel.md`](docs/cloudflare-tunnel.md)。
 
 ## 工具介面
@@ -1676,11 +1678,10 @@ frontend/
   src/styles/                   paper / night archive tokens
   scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
   dist/                         generated build output, gitignored
-docker-compose.yml              normal deployment
+docker-compose.yml              production stack: Caddy + Cloudflare Tunnel
 docker-compose.dev.yml          local dependencies
-docker-compose.cloudflare-tunnel.yml   Cloudflare Tunnel deployment
-docs/cloudflare-tunnel.md       Tunnel deployment, backup, and security guide
-docker/caddy/                   non-root reverse proxy for the tunnel
+docs/cloudflare-tunnel.md       tunnel deployment, backup, and security guide
+docker/caddy/                   non-root reverse proxy
 ```
 
 ## 安全性與隱私
@@ -1707,8 +1708,8 @@ docker/caddy/                   non-root reverse proxy for the tunnel
   資料庫與快取綁定至 localhost 或內部網路、使用不同的主機帳號、為任何
   共用主機設定高強度的資料庫／快取密碼，並在暴露後輪替憑證。未來的強化
   步驟是專用的非超級使用者執行階段登入，加上分開的維護憑證。
-- 一般 Compose 檔案會將 API 綁定至 `127.0.0.1`；Cloudflare 檔案不發佈
-  任何主機連接埠。登入節流是記憶體內實作，因此僅限單一程序；請執行一個
+- 正式 Compose 檔案不發佈任何主機連接埠；Cloudflare Tunnel 連到 Caddy，
+  Caddy 再連到 API。登入節流是記憶體內實作，因此僅限單一程序；請執行一個
   API 程序，或在擴充前將節流移至 Valkey。
 - 路徑會拒絕穿越區段、反斜線、控制字元與過長的值。上傳上限為 10 MB，
   且僅限於副檔名允許清單。
