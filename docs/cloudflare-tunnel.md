@@ -60,7 +60,7 @@ only ingress.
   keep everything on local disk, set `APSOR_STORAGE_BACKEND=local`.
 - A host data directory owned by the container uid:
   `mkdir -p data && sudo chown -R 10001:10001 data`.
-- At least 2 GB of RAM for the database, API, worker, Caddy, and connector.
+- At least 2 GB of RAM for the database, cache, broker, API, worker, Caddy, and connector.
   The stack is designed for one root plus a small family or team on a single
   host; it is not a multi-tenant service.
 
