@@ -1,7 +1,11 @@
 // @ts-expect-error -- `bun:test` is provided by the Bun runtime; the frontend tsconfig does not load @types/bun.
 import { describe, expect, test } from "bun:test";
 
-import { planUploadTargets, uniqueArchivePath } from "./library-utils";
+import {
+  isAcceptedFileName,
+  planUploadTargets,
+  uniqueArchivePath,
+} from "./library-utils";
 
 describe("uniqueArchivePath", () => {
   test("keeps a free name unchanged", () => {
@@ -42,6 +46,27 @@ describe("uniqueArchivePath", () => {
         new Set(["/archive/report.pdf", "/docs/other/report.pdf"]),
       ),
     ).toEqual({ fileName: "report.pdf", path: "/docs/report.pdf" });
+  });
+});
+
+describe("isAcceptedFileName", () => {
+  test("accepts structured text and dotfiles", () => {
+    for (const name of [
+      "events.jsonl",
+      "settings.toml",
+      "settings.ini",
+      ".env",
+      "report.csv",
+      "notes.md",
+      "data.json",
+    ]) {
+      expect(isAcceptedFileName(name)).toBe(true);
+    }
+  });
+
+  test("still rejects unsupported archives", () => {
+    expect(isAcceptedFileName("deck.ppt")).toBe(false);
+    expect(isAcceptedFileName("budget.numbers")).toBe(false);
   });
 });
 

@@ -1238,6 +1238,63 @@ def test_pptx_allowed_extension_and_legacy_ppt_rejection(client: TestClient) -> 
     assert legacy_async.json()["error"] == "unsupported_file_type"
 
 
+@pytest.mark.parametrize(
+    ("path", "payload", "content_type"),
+    [
+        (
+            "/workshop/config/events.jsonl",
+            b'{"event":"boot"}\n{"event":"ready"}\n',
+            "application/x-ndjson",
+        ),
+        (
+            "/workshop/config/settings.toml",
+            b'title = "Apsor Archive"\n[server]\nport = 8000\n',
+            "application/toml",
+        ),
+        (
+            "/workshop/config/settings.ini",
+            b"[server]\nport = 8000\n",
+            "text/plain",
+        ),
+        (
+            "/workshop/config/.env",
+            b"APSOR_STORAGE_BACKEND=local\nAPSOR_PUBLIC_HOST=archive.example.com\n",
+            "text/plain",
+        ),
+    ],
+)
+def test_structured_text_upload_types(
+    client: TestClient,
+    path: str,
+    payload: bytes,
+    content_type: str,
+) -> None:
+    """JSONL, TOML, INI, and dotenv files ingest as plain text originals."""
+    uploaded = client.post(
+        "/api/v1/files",
+        data={"path": path},
+        files={"file": (path.rsplit("/", 1)[-1], payload, content_type)},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    body = uploaded.json()
+    assert body["raw_file_path"] == path
+    assert body["extension"] == "." + path.rsplit(".", 1)[-1].lower()
+    assert body["mime_type"] == content_type
+
+    content = client.get(f"/api/v1/files/{int(body['id'])}/content")
+    assert content.status_code == 200
+    assert content.content == payload
+
+    # The durable upload path shares the same allowlist.
+    queued = client.post(
+        "/api/v1/files/async",
+        data={"path": path.replace("/workshop/", "/workshop/queued/")},
+        files={"file": ("queued" + body["extension"], payload, content_type)},
+    )
+    assert queued.status_code == 202, queued.text
+    assert queued.json()["source_kind"] == "upload"
+
+
 def test_spreadsheet_rejects_unsafe_or_unsupported_files(client: TestClient) -> None:
     """Corrupt, unsupported, and oversized archives keep the stable error envelope."""
     corrupt = client.post(

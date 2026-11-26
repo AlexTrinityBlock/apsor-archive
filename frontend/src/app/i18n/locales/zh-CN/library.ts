@@ -207,7 +207,7 @@ export const library = {
     queueNote: "关闭此对话框后，上传会继续在收录队列中进行。",
     fileLabel: "文件",
     fileHint:
-      "一次可选择多个文件 · 每个上限 10 MB · .md、.txt、.csv、.json、.log、.pdf、.docx、.pptx、.xlsx、.xls、.xlsm、.ods、.jpg、.jpeg、.png、.webp",
+      "一次可选择多个文件 · 每个上限 10 MB · .md、.txt、.csv、.json、.jsonl、.toml、.ini、.env、.log、.pdf、.docx、.pptx、.xlsx、.xls、.xlsm、.ods、.jpg、.jpeg、.png、.webp",
     selectedAria: "已选文件",
     removeFile: "移除 {name}",
     textFileNameLabel: "文件名",

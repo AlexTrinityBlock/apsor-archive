@@ -210,7 +210,7 @@ export const library = {
     queueNote: "Uploads continue in the intake queue after this dialog closes.",
     fileLabel: "Files",
     fileHint:
-      "One or more files · up to 10 MB each · .md, .txt, .csv, .json, .log, .pdf, .docx, .pptx, .xlsx, .xls, .xlsm, .ods, .jpg, .jpeg, .png, .webp",
+      "One or more files · up to 10 MB each · .md, .txt, .csv, .json, .jsonl, .toml, .ini, .env, .log, .pdf, .docx, .pptx, .xlsx, .xls, .xlsm, .ods, .jpg, .jpeg, .png, .webp",
     selectedAria: "Selected files",
     removeFile: "Remove {name}",
     textFileNameLabel: "File name",

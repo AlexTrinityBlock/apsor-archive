@@ -929,10 +929,10 @@ browsing, selected explicitly with `view=list`.
 - **Drag upload** accepts files dropped from the desktop onto a folder card or
   the current folder surface. The upload uses the same intake path, extension
   allowlist, and server limits as the upload dialog: 10 MB per uploaded file
-  and `.md`, `.markdown`, `.txt`, `.csv`, `.json`, `.log`, `.pdf`, `.docx`,
-  `.pptx`, `.xlsx`, `.xls`, `.xlsm`, `.ods`, `.jpg`, `.jpeg`, `.png`, or
-  `.webp`. The dialog also supports a 2 MB plain-text creation. Dropped files
-  are never opened or executed.
+  and `.md`, `.markdown`, `.txt`, `.csv`, `.json`, `.jsonl`, `.toml`, `.ini`,
+  `.env`, `.log`, `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.xls`, `.xlsm`, `.ods`,
+  `.jpg`, `.jpeg`, `.png`, or `.webp`. The dialog also supports a 2 MB
+  plain-text creation. Dropped files are never opened or executed.
 - **Clipboard paste** uploads files through the same intake path. When the
   clipboard name already exists in the target folder, the paste gets the first
   free ` (n)` suffix (`image (1).png`) instead of silently becoming a new
