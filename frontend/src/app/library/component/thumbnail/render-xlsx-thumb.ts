@@ -32,55 +32,71 @@ function parseWorkbookInWorker(
   const worker = new Worker(new URL("./xlsx-thumb.worker.ts", import.meta.url), {
     type: "module",
   });
-  let timer: number | undefined;
-  let onAbort: (() => void) | undefined;
 
-  try {
-    return new Promise<XlsxThumbSheet>((resolve, reject) => {
-      let settled = false;
-      const settle = (action: () => void) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        action();
-      };
-      const fail = (reason: unknown) => {
-        settle(() => reject(reason));
-      };
+  const parsed = new Promise<XlsxThumbSheet>((resolve, reject) => {
+    let settled = false;
+    let timer: number | undefined;
 
-      timer = window.setTimeout(() => {
-        fail(new Error("Spreadsheet thumbnail timed out"));
-      }, WORKER_TIMEOUT_MS);
-      onAbort = () => fail(abortReason(signal));
-      signal.addEventListener("abort", onAbort, { once: true });
-
-      worker.addEventListener("message", (event: MessageEvent<XlsxThumbWorkerMessage>) => {
-        const message = event.data;
-        if (message.type === "ok") {
-          settle(() => resolve(message.sheet));
-          return;
-        }
-        fail(new Error(message.message));
-      });
-      worker.addEventListener("error", (event) => {
-        fail(new Error(event.message || "Spreadsheet worker failed"));
-      });
-      worker.addEventListener("messageerror", () => {
-        fail(new Error("Spreadsheet worker returned an unreadable result"));
-      });
-
-      worker.postMessage(buffer, [buffer]);
-    });
-  } finally {
-    if (timer !== undefined) {
-      window.clearTimeout(timer);
-    }
-    if (onAbort !== undefined) {
+    function cleanup(): void {
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+        timer = undefined;
+      }
       signal.removeEventListener("abort", onAbort);
     }
-    worker.terminate();
-  }
+
+    function settle(action: () => void): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      action();
+    }
+
+    function fail(reason: unknown): void {
+      settle(() => reject(reason));
+    }
+
+    function onAbort(): void {
+      fail(abortReason(signal));
+    }
+
+    timer = window.setTimeout(() => {
+      fail(new Error("Spreadsheet thumbnail timed out"));
+    }, WORKER_TIMEOUT_MS);
+    signal.addEventListener("abort", onAbort, { once: true });
+
+    worker.addEventListener("message", (event: MessageEvent<XlsxThumbWorkerMessage>) => {
+      const message = event.data;
+      if (message.type === "ok") {
+        settle(() => resolve(message.sheet));
+        return;
+      }
+      fail(new Error(message.message));
+    });
+    worker.addEventListener("error", (event) => {
+      fail(new Error(event.message || "Spreadsheet worker failed"));
+    });
+    worker.addEventListener("messageerror", () => {
+      fail(new Error("Spreadsheet worker returned an unreadable result"));
+    });
+
+    if (signal.aborted) {
+      fail(abortReason(signal));
+      return;
+    }
+    try {
+      worker.postMessage(buffer, [buffer]);
+    } catch (error) {
+      fail(error);
+    }
+  });
+
+  // The worker has to outlive the Promise constructor. Returning the Promise
+  // from inside a `try/finally` would terminate the worker immediately and
+  // leave the caller pending forever.
+  return parsed.finally(() => worker.terminate());
 }
 
 function fitText(
