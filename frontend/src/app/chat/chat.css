@@ -268,7 +268,9 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  /* Reserve the same gutter on both sides so a classic scrollbar cannot make
+     the agent's left inset and the user's right inset disagree. */
+  scrollbar-gutter: stable both-edges;
 }
 
 .chat-stream__inner {
@@ -791,7 +793,9 @@
 }
 
 .chat-entry {
+  display: flex;
   min-width: 0;
+  flex-direction: column;
   scroll-margin-block: 24px;
 }
 
