@@ -14,6 +14,7 @@ import {
   type ToolPreviewHit,
 } from "../tool-preview";
 import { readToolOutput, type ToolOutput } from "../tool-output";
+import { toolStepLabel } from "../tool-label";
 import { PlotBlock } from "./PlotBlock";
 import { PlotSummary } from "./PlotSummary";
 import { ResourceCard } from "./ResourceCard";
@@ -465,7 +466,11 @@ export function ToolStepCard({
   onOpenResource,
 }: ToolStepCardProps) {
   const { t, formatNumber } = useI18n();
-  const toolName = meta.tool ?? t("chat.tool.resultFallback");
+  const toolName = toolStepLabel(
+    meta.tool,
+    meta.resource?.resourceType ?? null,
+    t,
+  );
   const failed = isToolFailure(meta.status);
   const running =
     meta.status?.toLowerCase() === "running" ||
