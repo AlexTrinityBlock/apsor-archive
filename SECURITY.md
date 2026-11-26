@@ -81,9 +81,9 @@ disclosure after a fix is available.
   `environment:` entries.
 - Terminate TLS at the Cloudflare Tunnel or a reverse proxy. Set
   `APSOR_COOKIE_SECURE=true` for HTTPS.
-- Do not expose PostgreSQL or Valkey beyond loopback or an internal network.
-  The normal Compose file binds both to `127.0.0.1`; the tunnel file publishes
-  no host port.
+- Do not expose PostgreSQL, Valkey, RabbitMQ, or the API beyond the Compose
+  network. The production Compose file publishes no host port; the Cloudflare
+  Tunnel reaches Caddy, and Caddy reaches the API.
 - Keep the host, images, and database login trusted; RLS does not constrain a
   host administrator or the owner login.
 

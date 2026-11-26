@@ -5,7 +5,7 @@
 	}
 }
 
-{$APSOR_PUBLIC_HOST:archive.example.com}:80 {
+{$APSOR_PUBLIC_HOST}:80 {
 	log {
 		output file /var/log/caddy/access.log {
 			roll_size 100MiB
@@ -13,7 +13,20 @@
 			roll_keep_for 168h
 		}
 	}
-	reverse_proxy api:8000
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+
+	reverse_proxy api:8000 {
+		# Chat responses are Server-Sent Events; never buffer them.
+		flush_interval -1
+	}
 }
 
 :80 {

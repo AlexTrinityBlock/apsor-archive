@@ -3,7 +3,7 @@
 There are two secret locations:
 
 - `secrets/` holds the Cloudflare Tunnel token file named by
-  `docker-compose.cloudflare-tunnel.yml`.
+  `docker-compose.yml`.
 - `.secrets/` holds application env files that the API and worker read
   themselves: `deepseek.env`, `anthropic.env`, `openai.env`, `r2.env`, and the
   optional `exa.env`. Compose mounts `.secrets/` read-only, so these values
