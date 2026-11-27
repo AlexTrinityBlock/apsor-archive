@@ -12,6 +12,7 @@ Requests keep using ``apsor_app`` with transaction-local settings; nothing here
 disables or bypasses row-level security.
 """
 
+import os
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -37,8 +38,10 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 # Cluster maintenance and migrations connect to the maintenance database, not
 # to the live archive. The disposable database name must stay test-only.
 ADMIN_DATABASE_URL = "postgresql+psycopg://apsor:apsor@127.0.0.1:55432/postgres"
-TEST_DATABASE_URL = "postgresql+psycopg://apsor:apsor@127.0.0.1:55432/apsor_archive_test"
-TEST_DATABASE_NAME = "apsor_archive_test"
+# APSOR_TEST_DATABASE_NAME lets parallel worktrees use separate disposable
+# databases on the same development cluster; it must still end with "_test".
+TEST_DATABASE_NAME = os.environ.get("APSOR_TEST_DATABASE_NAME", "apsor_archive_test")
+TEST_DATABASE_URL = f"postgresql+psycopg://apsor:apsor@127.0.0.1:55432/{TEST_DATABASE_NAME}"
 APP_ROLE = "apsor_app"
 
 # Expected schema classification. A new application table must be added here
