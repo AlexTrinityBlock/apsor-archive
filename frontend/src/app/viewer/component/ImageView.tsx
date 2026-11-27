@@ -11,13 +11,21 @@ interface ImageViewProps {
   readonly alt: string;
   readonly downloadUrl?: string;
   readonly downloadName?: string;
+  /** Tiny server thumbnail painted in place of the spinner while loading. */
+  readonly placeholderSrc?: string | null;
 }
 
 /**
  * Native image rendering with wheel/pinch zoom, pan, fit reset, and a true
  * 1:1 control based on the image's natural width.
  */
-export function ImageView({ src, alt, downloadUrl, downloadName }: ImageViewProps) {
+export function ImageView({
+  src,
+  alt,
+  downloadUrl,
+  downloadName,
+  placeholderSrc = null,
+}: ImageViewProps) {
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -125,11 +133,21 @@ export function ImageView({ src, alt, downloadUrl, downloadName }: ImageViewProp
             />
             {loaded ? null : (
               <span className="viewer-image__loading" aria-hidden="true">
-                <Loader
-                  size={30}
-                  label={t("library.viewer.loading.image")}
-                  className="viewer-image__loader"
-                />
+                {placeholderSrc ? (
+                  <img
+                    className="viewer-image__placeholder"
+                    src={placeholderSrc}
+                    alt=""
+                    decoding="async"
+                    draggable={false}
+                  />
+                ) : (
+                  <Loader
+                    size={30}
+                    label={t("library.viewer.loading.image")}
+                    className="viewer-image__loader"
+                  />
+                )}
               </span>
             )}
           </TransformComponent>

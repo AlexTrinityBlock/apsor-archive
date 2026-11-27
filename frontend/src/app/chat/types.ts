@@ -10,6 +10,7 @@ import type {
 } from "../generated-apis-types/schemas";
 import { libraryFileUrl } from "../../lib/library-url";
 import { getActiveLocale, translate, type Locale } from "../i18n";
+import { readThumbnail, type ThumbnailInfo } from "../viewer/component/thumbnail";
 
 export type JsonRecord = Record<string, unknown>;
 
@@ -37,6 +38,8 @@ export interface ResourceMeta {
   readonly mimeType: string | null;
   readonly rawFilePath: string | null;
   readonly chunk: number | null;
+  /** Server WebP thumbnail; absent on older transcripts and non-visual files. */
+  readonly thumbnail: ThumbnailInfo | null;
 }
 
 export interface AssistantMeta {
@@ -516,6 +519,7 @@ export function readResource(value: unknown): ResourceMeta | null {
     mimeType: stringValue(record.mime_type),
     rawFilePath: stringValue(record.raw_file_path),
     chunk: numberValue(record.chunk),
+    thumbnail: readThumbnail(record.thumbnail),
   };
 }
 

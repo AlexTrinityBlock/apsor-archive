@@ -4,7 +4,9 @@ import type { PathFileSchema } from "../../../generated-apis-types/schemas";
 import { getGetFileContentUrl } from "../../../generated-apis-types/files/files";
 import { Icon } from "../../../component/Icon";
 import { fileKindLabel } from "../library-utils";
+import { fileThumbnailUrl } from "../../../viewer/component/thumbnail";
 import { schedule } from "./render-queue";
+import { serverThumbnailClass, serverThumbnailFor } from "./server-thumb";
 import {
   getThumb,
   setThumbFailed,
@@ -208,10 +210,15 @@ function FileThumbContent({ file, variant }: FileThumbProps) {
   const [imageBroken, setImageBroken] = useState(false);
   const [docxBroken, setDocxBroken] = useState(false);
   const [markdownBroken, setMarkdownBroken] = useState(false);
+  const [serverBroken, setServerBroken] = useState(false);
   const [hostRef, inView] = useInView<HTMLSpanElement>();
+  // A server WebP thumbnail replaces every client renderer: no original is
+  // downloaded and no pdf.js, PPTX, or spreadsheet work runs for the card.
+  const serverThumbnail = serverThumbnailFor(file, serverBroken);
+  const usesServer = serverThumbnail !== null;
 
   useEffect(() => {
-    if (!inView || entry !== undefined || !file.has_original) {
+    if (usesServer || !inView || entry !== undefined || !file.has_original) {
       return;
     }
     if (kind !== "pdf" && kind !== "pptx" && kind !== "xlsx") {
@@ -258,9 +265,21 @@ function FileThumbContent({ file, variant }: FileThumbProps) {
       disposed = true;
       controller.abort();
     };
-  }, [entry, file.file_id, file.has_original, inView, key, kind, variant]);
+  }, [entry, file.file_id, file.has_original, inView, key, kind, usesServer, variant]);
 
-  const content = thumbContent({
+  const content = serverThumbnail ? (
+    <img
+      className={serverThumbnailClass(kind)}
+      src={fileThumbnailUrl(file.file_id, serverThumbnail.version)}
+      width={serverThumbnail.width}
+      height={serverThumbnail.height}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      draggable={false}
+      onError={() => setServerBroken(true)}
+    />
+  ) : thumbContent({
     file,
     variant,
     kind,

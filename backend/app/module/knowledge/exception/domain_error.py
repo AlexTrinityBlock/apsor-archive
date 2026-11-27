@@ -50,6 +50,13 @@ class FileContentUnavailableError(KnowledgeError):
         super().__init__(f"File {file_id} has no stored original bytes.")
 
 
+class FileThumbnailNotFoundError(KnowledgeError):
+    """The file exists but has no ready thumbnail."""
+
+    def __init__(self, file_id: int) -> None:
+        super().__init__(f"File {file_id} has no thumbnail.")
+
+
 class FileStorageUnavailableError(KnowledgeError):
     """The object-storage backend could not be reached.
 

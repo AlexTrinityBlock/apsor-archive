@@ -76,6 +76,9 @@ from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorP
 from app.module.knowledge.protocol.vision_extractor_protocol import VisionExtractorProtocol
 from app.module.knowledge.repository.chunk_repository import ChunkRepository
 from app.module.knowledge.repository.file_repository import FileRepository
+from app.module.knowledge.repository.file_thumbnail_repository import (
+    FileThumbnailRepository,
+)
 from app.module.knowledge.repository.folder_repository import FolderRepository
 from app.module.knowledge.repository.ingest_config_repository import (
     IngestConfigRepository,
@@ -110,6 +113,7 @@ from app.module.knowledge.service.related_memory_service import RelatedMemorySer
 from app.module.knowledge.service.search_service import SearchService
 from app.module.knowledge.service.stats_service import StatsService
 from app.module.knowledge.service.summary_service import SummaryService
+from app.module.knowledge.service.thumbnail_backfill import FileThumbnailBackfill
 from app.module.knowledge.service.timeline_service import TimelineService
 
 
@@ -356,6 +360,9 @@ async def build_file_service(
         chat_quota=quota,
         cpu_runner=cpu_runner,
         progress_tracker=progress_tracker,
+        thumbnail_repository=FileThumbnailRepository(session, user_id),
+        # Tests may inject ``app.state.thumbnail_renderer`` as an offline seam.
+        thumbnail_renderer=getattr(state, "thumbnail_renderer", None),
     )
 
 
@@ -608,6 +615,26 @@ def build_provider_refresh(
         return runtime.embedder
 
     return refresh
+
+
+def build_thumbnail_backfill(
+    state: State,
+    database: Database,
+    *,
+    user_id: int | None = None,
+    regenerate: bool = False,
+) -> FileThumbnailBackfill:
+    """Compose the cross-account thumbnail backfill used by the worker and CLI."""
+
+    async def service_factory(session: AsyncSession, owner_id: int) -> FileService:
+        return await build_file_service(state, session, user_id=owner_id)
+
+    return FileThumbnailBackfill(
+        database=database,
+        service_factory=service_factory,
+        user_id=user_id,
+        regenerate=regenerate,
+    )
 
 
 def build_ingest_worker(

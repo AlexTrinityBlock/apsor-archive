@@ -849,6 +849,11 @@ async def _present_resource(
             "mime_type": file.mime_type,
             "raw_file_path": file.raw_file_path,
             "chunk": args.chunk,
+            # UI-only: lets the chat card reserve its box and paint the tiny
+            # WebP immediately. The model-facing XML never includes it.
+            "thumbnail": (
+                file.thumbnail.model_dump(mode="json") if file.thumbnail is not None else None
+            ),
         }
     elif args.resource_type == "memory":
         result = await services.memory_service.read_memory(

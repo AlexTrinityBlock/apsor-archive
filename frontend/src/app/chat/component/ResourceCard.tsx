@@ -17,7 +17,10 @@ import {
   kindLabel,
   type ViewerKind,
 } from "../../viewer/component/viewer-utils";
+import { FileThumbnail } from "../../viewer/component/FileThumbnail";
+import type { ThumbnailInfo } from "../../viewer/component/thumbnail";
 import { resourceHref, type ResourceMeta } from "../types";
+import { framedThumbnailStyle } from "./resource-frame";
 
 const RESOURCE_ICONS: Record<ResourceMeta["resourceType"], IconName> = {
   file: "file",
@@ -113,6 +116,77 @@ function thumbnailBadge(kind: ViewerKind, title: string | null): string {
   }
 }
 
+function FramedThumbnail({
+  fileId,
+  thumbnail,
+  title,
+  onFailed,
+}: {
+  readonly fileId: number;
+  readonly thumbnail: ThumbnailInfo;
+  readonly title: string;
+  readonly onFailed?: () => void;
+}) {
+  return (
+    <span
+      className="chat-resource__thumb chat-resource__thumb--framed"
+      style={framedThumbnailStyle(thumbnail)}
+      aria-hidden="true"
+      title={title}
+    >
+      <FileThumbnail
+        fileId={fileId}
+        thumbnail={thumbnail}
+        sizing="fill"
+        onError={onFailed}
+      />
+    </span>
+  );
+}
+
+/**
+ * An image with a server thumbnail: the tiny WebP paints first inside a fixed
+ * box and the original fades in over it. A failed original keeps the
+ * thumbnail on screen instead of collapsing the card.
+ */
+function ThumbnailImage({
+  fileId,
+  thumbnail,
+  onFailed,
+}: {
+  readonly fileId: number;
+  readonly thumbnail: ThumbnailInfo;
+  readonly onFailed: () => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [originalFailed, setOriginalFailed] = useState(false);
+  return (
+    <span
+      className="chat-resource__thumb chat-resource__thumb--framed"
+      style={framedThumbnailStyle(thumbnail)}
+    >
+      <FileThumbnail
+        fileId={fileId}
+        thumbnail={thumbnail}
+        sizing="fill"
+        onError={onFailed}
+      >
+        {originalFailed ? null : (
+          <img
+            className={`file-thumbnail__overlay${loaded ? " is-loaded" : ""}`}
+            src={fileContentUrl(fileId)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setLoaded(true)}
+            onError={() => setOriginalFailed(true)}
+          />
+        )}
+      </FileThumbnail>
+    </span>
+  );
+}
+
 function ResourceThumb({
   resource,
   kind,
@@ -123,10 +197,33 @@ function ResourceThumb({
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const handlePdfError = useCallback(() => setFailed(true), []);
+  const markFailed = useCallback(() => setFailed(true), []);
   const resourceId = resource.resourceId;
   const isImage = kind === "image" && resourceId !== null;
   const title = resource.title ?? t(RESOURCE_LABEL_KEYS[resource.resourceType]);
+  const thumbnail = resource.resourceType === "file" ? resource.thumbnail : null;
+
+  // Order: server thumbnail → original image → PDF page 1 → file tile. A
+  // thumbnail fixes the box size up front, so nothing below it can shift.
+  if (thumbnail !== null && resourceId !== null && kind !== "pdf" && !failed) {
+    if (kind === "image") {
+      return (
+        <ThumbnailImage
+          fileId={resourceId}
+          thumbnail={thumbnail}
+          onFailed={markFailed}
+        />
+      );
+    }
+    return (
+      <FramedThumbnail
+        fileId={resourceId}
+        thumbnail={thumbnail}
+        title={title}
+        onFailed={markFailed}
+      />
+    );
+  }
 
   if (isImage && !failed) {
     return (
@@ -163,12 +260,31 @@ function ResourceThumb({
   // A PDF shows its first page instead of a generic file tile. The lazy chunk
   // keeps pdf.js out of the transcript until a PDF is actually presented.
   if (resource.resourceType === "file" && kind === "pdf" && resourceId !== null) {
+    if (thumbnail !== null) {
+      // The thumbnail is both the Suspense fallback and the layer under the
+      // pdf.js canvas, so the box keeps one size from first paint onwards.
+      const still = (
+        <FramedThumbnail fileId={resourceId} thumbnail={thumbnail} title={title} />
+      );
+      if (failed) {
+        return still;
+      }
+      return (
+        <Suspense fallback={still}>
+          <ResourcePdfThumb
+            fileId={resourceId}
+            thumbnail={thumbnail}
+            onError={markFailed}
+          />
+        </Suspense>
+      );
+    }
     if (failed) {
       return tile;
     }
     return (
       <Suspense fallback={tile}>
-        <ResourcePdfThumb fileId={resourceId} onError={handlePdfError} />
+        <ResourcePdfThumb fileId={resourceId} thumbnail={null} onError={markFailed} />
       </Suspense>
     );
   }

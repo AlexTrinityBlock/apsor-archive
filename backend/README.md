@@ -1160,6 +1160,25 @@ distinct from `/download`:
 - `Cache-Control: private, max-age=0, must-revalidate`;
 - 404 `file_content_unavailable` when a legacy text-only record has no original.
 
+`GET /api/v1/files/{file_id}/thumbnail` (`getFileThumbnail`) returns the
+file's tiny WebP thumbnail. `FileSchema.thumbnail` and `PathFileSchema.thumbnail`
+carry `{version, width, height}` when one is ready, so a card can reserve its
+box before loading:
+
+- `image/webp`, `nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`,
+  `Vary: Cookie`, and a strong `ETag` with `304`;
+- `Cache-Control: private, max-age=31536000, immutable` when `?v=` matches the
+  current version, otherwise `private, max-age=0, must-revalidate`;
+- 404 `thumbnail_not_found` for a file without a visual thumbnail, and
+  `file_not_found` for a missing or another account's file.
+
+Thumbnails are rendered during ingestion (images, PDF page 1, embedded
+Office/OpenDocument previews), stored in the private `file_thumbnail` table, and
+reused for byte-identical copies. The dedicated worker backfills older files in
+the background; `uv run python -m script.backfill_thumbnails --dry-run|--apply`
+finishes the job immediately. On R2 the backfill reads each candidate original
+once.
+
 The `FileSchema.has_original` flag tells the UI whether to show **Open original**
 and **Download**. Text-only records skip the `/content` probe entirely and read
 indexed chunks; if they have no chunks either, the viewer shows a readable error.

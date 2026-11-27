@@ -3,7 +3,8 @@
 Run ``python -m app.worker`` (or ``apsor-archive worker``) as its own service
 when the API should stay responsive under long uploads. The worker uses the
 same PostgreSQL job queue and lease as the lifespan fallback, so either mode
-can drain a queue left by the other.
+can drain a queue left by the other. Only this process backfills WebP
+thumbnails for files that predate them (``APSOR_THUMBNAIL_BACKFILL_ENABLED``).
 
 The loop polls immediately, processes every claimable job without sleeping,
 and waits ``APSOR_INGEST_POLL_SECONDS`` (one second by default) only when the
@@ -50,6 +51,7 @@ from app.module.knowledge.dependencies import (
     build_ingest_worker,
     build_job_consumer,
     build_provider_refresh,
+    build_thumbnail_backfill,
     ingest_runtime_defaults,
     load_ingest_runtime_config,
 )
@@ -141,7 +143,13 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
             ),
             cache=cache,
         )
+        thumbnail_backfill = (
+            build_thumbnail_backfill(state, database)
+            if settings.thumbnail_backfill_enabled
+            else None
+        )
         cleanup_task: asyncio.Task[None] | None = None
+        thumbnail_task: asyncio.Task[None] | None = None
         history_task: asyncio.Task[None] | None = None
         consumer_task: asyncio.Task[None] | None = None
         consumer: RabbitMQJobConsumer | None = None
@@ -154,13 +162,19 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                 removed = await cleanup.run_once()
                 history_batch = await history_indexer.run_once()
                 processed = await worker.run_once()
+                thumbnails = (
+                    (await thumbnail_backfill.run_once()).processed
+                    if thumbnail_backfill is not None
+                    else 0
+                )
                 logger.info(
                     "Worker --once finished; processed=%s attachments_removed=%s "
-                    "history_examined=%s history_indexed=%s",
+                    "history_examined=%s history_indexed=%s thumbnails=%s",
                     processed,
                     removed,
                     history_batch.examined,
                     history_batch.indexed,
+                    thumbnails,
                 )
             else:
                 consumer = build_job_consumer(settings, worker)
@@ -177,6 +191,11 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                     history_indexer.run_forever(stop_event),
                     name="conversation-history-indexer",
                 )
+                if thumbnail_backfill is not None:
+                    thumbnail_task = asyncio.create_task(
+                        thumbnail_backfill.run_forever(stop_event),
+                        name="file-thumbnail-backfill",
+                    )
                 await worker.run_forever(stop_event)
         finally:
             if consumer_task is not None:
@@ -189,6 +208,10 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                 cleanup_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await cleanup_task
+            if thumbnail_task is not None:
+                thumbnail_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await thumbnail_task
             if history_task is not None:
                 history_task.cancel()
                 with suppress(asyncio.CancelledError):

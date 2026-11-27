@@ -139,6 +139,9 @@ class Settings(BaseSettings):
     # These values seed the database-backed singleton on a fresh installation;
     # the worker reads the database row and uses these only as a fallback.
     ingest_worker_enabled: bool = True
+    # The dedicated worker backfills WebP thumbnails for files that predate
+    # them. Disable only to keep a constrained host from reading every original.
+    thumbnail_backfill_enabled: bool = True
     ingest_poll_seconds: float = 1.0
     ingest_extract_workers: int = 2
     ingest_max_inflight_jobs: int = 2

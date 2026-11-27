@@ -21,6 +21,16 @@ IngestSourceKind = Literal["upload", "text", "reingest"]
 MAX_TEXT_CONTENT_CHARS = 2_000_000
 
 
+class FileThumbnailSchema(BaseModel):
+    """A ready WebP thumbnail: its cache-busting version and pixel size."""
+
+    model_config = ConfigDict(frozen=True)
+
+    version: str = Field(description="First 16 hex characters of the thumbnail SHA-256.")
+    width: int
+    height: int
+
+
 class FileSchema(BaseModel):
     """File metadata returned by the API."""
 
@@ -47,6 +57,7 @@ class FileSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+    thumbnail: FileThumbnailSchema | None = None
 
 
 class FileTextCreateSchema(BaseModel):
@@ -290,6 +301,7 @@ class PathFileSchema(BaseModel):
     size_bytes: int
     has_original: bool
     update_time: datetime
+    thumbnail: FileThumbnailSchema | None = None
 
 
 class PathListingSchema(BaseModel):

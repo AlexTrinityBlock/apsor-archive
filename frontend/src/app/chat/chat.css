@@ -2190,6 +2190,39 @@
   height: auto;
 }
 
+/* A server thumbnail fixes the preview box from first paint: the inline
+   width and aspect-ratio come from the thumbnail's known pixel size. */
+.chat-resource__thumb--framed {
+  display: block;
+  min-height: 0;
+  max-width: 100%;
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 2px;
+  box-shadow: 0 10px 24px -20px rgba(20, 20, 20, 0.65);
+}
+
+.chat-resource__thumb--framed.chat-resource__thumb--pdf {
+  position: relative;
+}
+
+.chat-resource__thumb--framed .chat-resource__pdf-base {
+  position: absolute;
+  inset: 0;
+}
+
+.chat-resource__thumb--framed.chat-resource__thumb--pdf .react-pdf__Document {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.chat-resource__thumb--framed.chat-resource__thumb--pdf .react-pdf__Page {
+  /* Transparent until the canvas paints, so the thumbnail never flashes white. */
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
 .chat-resource__pdf-sheet {
   display: block;
   width: 420px;
