@@ -2610,6 +2610,16 @@
             ],
             "title": "Supersedes File Id"
           },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileThumbnailSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total_chunks": {
             "title": "Total Chunks",
             "type": "integer"
@@ -2810,6 +2820,31 @@
           "expected_version"
         ],
         "title": "FileTextUpdateSchema",
+        "type": "object"
+      },
+      "FileThumbnailSchema": {
+        "description": "A ready WebP thumbnail: its cache-busting version and pixel size.",
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "version": {
+            "description": "First 16 hex characters of the thumbnail SHA-256.",
+            "title": "Version",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "width",
+          "height"
+        ],
+        "title": "FileThumbnailSchema",
         "type": "object"
       },
       "FolderCopySchema": {
@@ -4817,6 +4852,16 @@
           "size_bytes": {
             "title": "Size Bytes",
             "type": "integer"
+          },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileThumbnailSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "total_chunks": {
             "title": "Total Chunks",
@@ -10309,6 +10354,89 @@
           }
         },
         "summary": "Rename File",
+        "tags": [
+          "files"
+        ]
+      }
+    },
+    "/api/v1/files/{file_id}/thumbnail": {
+      "get": {
+        "description": "Serve a file's WebP thumbnail.\n\nA file id never changes its bytes, so a request whose ``v`` matches the\ncurrent thumbnail version may be cached as immutable. Any other request\nrevalidates with the strong ETag. ``Vary: Cookie`` keeps shared browsers\nfrom reusing one account's cached image for another session.",
+        "operationId": "getFileThumbnail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The tiny WebP thumbnail of one file version."
+          },
+          "304": {
+            "description": "The cached thumbnail is still current."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get File Thumbnail",
         "tags": [
           "files"
         ]

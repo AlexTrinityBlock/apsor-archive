@@ -56,6 +56,7 @@ PRIVATE_TABLES: tuple[str, ...] = (
     "chunk_ngram",
     "file",
     "file_ingest_job",
+    "file_thumbnail",
     "folder",
     "frequently_used_prompt",
     "memory",

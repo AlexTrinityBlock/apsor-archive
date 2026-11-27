@@ -34,6 +34,7 @@ import type {
   FileSchema,
   FileTextCreateSchema,
   FileTextUpdateSchema,
+  GetFileThumbnailParams,
   HTTPValidationError,
   IngestJobListSchema,
   IngestJobSchema,
@@ -1827,3 +1828,124 @@ export const useRenameFile = <TError = HTTPValidationError,
       > => {
       return useMutation(getRenameFileMutationOptions(options), queryClient);
     }
+    export const getGetFileThumbnailUrl = (fileId: number,
+    params?: GetFileThumbnailParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/files/${fileId}/thumbnail?${stringifiedParams}` : `/api/v1/files/${fileId}/thumbnail`
+}
+
+/**
+ * Serve a file's WebP thumbnail.
+ *
+ * A file id never changes its bytes, so a request whose ``v`` matches the
+ * current thumbnail version may be cached as immutable. Any other request
+ * revalidates with the strong ETag. ``Vary: Cookie`` keeps shared browsers
+ * from reusing one account's cached image for another session.
+ * @summary Get File Thumbnail
+ */
+export const getFileThumbnail = async (fileId: number,
+    params?: GetFileThumbnailParams, options?: Parameters<typeof apiFetch>[1]): Promise<unknown | Blob> => {
+
+  return apiFetch<unknown | Blob>(getGetFileThumbnailUrl(fileId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetFileThumbnailQueryKey = (fileId: number,
+    params?: GetFileThumbnailParams,) => {
+    return [
+    `/api/v1/files/${fileId}/thumbnail`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetFileThumbnailQueryOptions = <TData = Awaited<ReturnType<typeof getFileThumbnail>>, TError = void | HTTPValidationError>(fileId: number,
+    params?: GetFileThumbnailParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileThumbnail>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetFileThumbnailQueryKey(fileId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFileThumbnail>>> = ({ signal }) => getFileThumbnail(fileId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: fileId !== null && fileId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFileThumbnail>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetFileThumbnailQueryResult = NonNullable<Awaited<ReturnType<typeof getFileThumbnail>>>
+export type GetFileThumbnailQueryError = void | HTTPValidationError
+
+
+export function useGetFileThumbnail<TData = Awaited<ReturnType<typeof getFileThumbnail>>, TError = void | HTTPValidationError>(
+ fileId: number,
+    params: undefined |  GetFileThumbnailParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileThumbnail>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getFileThumbnail>>,
+          TError,
+          Awaited<ReturnType<typeof getFileThumbnail>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetFileThumbnail<TData = Awaited<ReturnType<typeof getFileThumbnail>>, TError = void | HTTPValidationError>(
+ fileId: number,
+    params?: GetFileThumbnailParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileThumbnail>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getFileThumbnail>>,
+          TError,
+          Awaited<ReturnType<typeof getFileThumbnail>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetFileThumbnail<TData = Awaited<ReturnType<typeof getFileThumbnail>>, TError = void | HTTPValidationError>(
+ fileId: number,
+    params?: GetFileThumbnailParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileThumbnail>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get File Thumbnail
+ */
+
+export function useGetFileThumbnail<TData = Awaited<ReturnType<typeof getFileThumbnail>>, TError = void | HTTPValidationError>(
+ fileId: number,
+    params?: GetFileThumbnailParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getFileThumbnail>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetFileThumbnailQueryOptions(fileId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+

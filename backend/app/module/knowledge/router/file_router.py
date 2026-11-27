@@ -25,6 +25,7 @@ from app.module.knowledge.dependencies import (
     get_ingest_job_service,
     get_upload_file_service,
 )
+from app.module.knowledge.domain.thumbnail_domain import thumbnail_version
 from app.module.knowledge.schema.file_schema import (
     FileChunksSchema,
     FileCopySchema,
@@ -394,6 +395,48 @@ async def get_file_content(
         media_type=original.mime_type,
         headers=headers,
     )
+
+
+@router.get(
+    "/{file_id}/thumbnail",
+    operation_id="getFileThumbnail",
+    responses={
+        200: {
+            "description": "The tiny WebP thumbnail of one file version.",
+            "content": {"image/webp": {"schema": {"type": "string", "format": "binary"}}},
+        },
+        304: {"description": "The cached thumbnail is still current."},
+    },
+)
+async def get_file_thumbnail(
+    file_id: int,
+    v: Annotated[str | None, Query(max_length=64)] = None,
+    if_none_match: Annotated[str | None, Header(alias="If-None-Match")] = None,
+    file_service: FileService = Depends(get_file_service),
+) -> Response:
+    """Serve a file's WebP thumbnail.
+
+    A file id never changes its bytes, so a request whose ``v`` matches the
+    current thumbnail version may be cached as immutable. Any other request
+    revalidates with the strong ETag. ``Vary: Cookie`` keeps shared browsers
+    from reusing one account's cached image for another session.
+    """
+    thumbnail = await file_service.read_thumbnail(file_id)
+    current = v is not None and v == thumbnail_version(thumbnail.sha256)
+    headers = {
+        "ETag": f'"{thumbnail.sha256}"',
+        "Cache-Control": (
+            "private, max-age=31536000, immutable"
+            if current
+            else "private, max-age=0, must-revalidate"
+        ),
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Vary": "Cookie",
+    }
+    if if_none_match and _etag_matches(if_none_match, thumbnail.sha256):
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+    return Response(content=thumbnail.data, media_type="image/webp", headers=headers)
 
 
 @router.put(
