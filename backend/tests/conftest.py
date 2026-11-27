@@ -524,6 +524,8 @@ def settings(tmp_path: Path) -> Settings:
         _env_file=None,
         database_url=TEST_DATABASE_URL,
         data_dir=tmp_path,
+        # Never let a developer .env or secret file point tests at object storage.
+        storage_backend="local",
         static_dir=tmp_path / "no-spa",
         cors_origins=[],
         cache_url="memory://",
