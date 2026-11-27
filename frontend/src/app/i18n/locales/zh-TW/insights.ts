@@ -263,159 +263,161 @@ export const insights = {
       jumpToday: "跳到今天",
     },
   },
-  method: {
+  about: {
     hero: {
-      kicker: "方法 · 田野筆記 // 2026.10 修訂",
-      eyebrow: "兩座檔案庫。一個索引。",
-      titleLine1: "兩座檔案庫。",
-      titleLine2Prefix: "一棵",
-      titleAccent: "樹。",
+      kicker: "關於 Apsor Archive",
+      title: "一座會附上出處的私人檔案館。",
       lede:
-        "多數知識工具會把檔案館攤平成一大袋向量。Apsor Archive 同時保留兩種形狀：檔案的分支路徑，以及記憶的線性紋理。兩者都在同一座檔案館中被索引、引用與閱讀。",
-      note:
-        "樹是一個概念性的比喻，用來說明路徑與記憶如何被歸檔。它不是工作區、不是資料來源，也不是這個介面中的任何一條路由。",
-      metaArchiveKey: "檔案館",
-      metaArchiveValue: "檔案、記憶、摘要",
-      metaRetrievalKey: "檢索",
-      metaRetrievalValue: "BM25 + 向量路徑",
-      metaFusionKey: "融合",
-      metaFusionValue: "倒數排名融合",
-      metaContractKey: "約定",
-      metaContractValue: "分段層級的收據",
+        "Apsor Archive 把家庭或小團隊的檔案與記憶保存在你自己掌控的機器上，並讓你用日常語言提問。每個回答都會指回它所依據的段落，讓你可以自己查證。",
+      glanceAria: "重點一覽",
+      glancePrivacyKey: "隱私",
+      glancePrivacyValue: "每個帳號一座私人檔案館",
+      glanceAnswersKey: "回答",
+      glanceAnswersValue: "依據你的檔案館，並附上引用",
+      glanceHostingKey: "部署",
+      glanceHostingValue: "在你自己的機器上單一部署",
+      glanceLicenseKey: "授權",
+      glanceLicenseValue: "開放原始碼，MIT 授權",
+      tocAria: "本頁目錄",
     },
-    principles: {
-      eyebrow: "結構原則",
-      title: "檔案館遵守的四項承諾。",
-      twoLibrariesEyebrow: "兩座檔案庫",
-      twoLibrariesTitle: "檔案依路徑，記憶依時刻。",
-      twoLibrariesFileLabel: "檔案庫：",
-      twoLibrariesFileBody:
-        "每個檔案都保有穩定的路徑座標與不可變的位元組。重新上傳同一個路徑會建立新版本，而不是覆寫。",
-      twoLibrariesMemoryLabel: "記憶庫：",
-      twoLibrariesMemoryBody:
-        "每筆記憶都帶著自己的時刻，可以取代先前的信念，而不必抹除它。同一個索引同時搜尋兩者。",
-      hybridEyebrow: "混合檢索",
-      hybridTitle: "詞彙的精準，加上語意的觸及。",
-      hybridBodyBefore:
-        "BM25 會讀取中日韓雙字詞、詞 n-gram 與字元 trigram；向量路徑則讀取餘弦相似度。每條路徑各自回傳候選，倒數排名融合會將它們合併，而回應會回報 ",
-      hybridBodyAnd: " 與 ",
-      hybridBodyAfter: "，讓搜尋結果可以被稽核。",
-      timelineEyebrow: "時間軸取樣",
-      timelineTitle: "稀疏錨點，明確空隙。",
-      timelineBodyBefore:
-        "較長的範圍會為每種事件類型回傳五個錨點，而不是逐列回傳。空隙會以 ",
-      timelineBodyMid: " 回報，還有一條逐日的 ",
-      timelineBodyAfter:
-        " 密度帶，讓區間的形狀保持可見。空範圍會回傳空清單，而不是憑空生成的事件。",
-      citationEyebrow: "引用約定",
-      citationTitle: "沒有收據的答案只是傳聞。",
-      citationBodyBefore: "答案只能根據檢索到的段落撰寫，並且必須引用 ",
-      citationBodyOr: " 或 ",
-      citationBodyAfter: "。沒有設定供應商時，端點會回傳 ",
-      citationBodyTail: "，而不是生成文字。",
+    toc: {
+      what: "這是什麼",
+      flow: "資料如何流動",
+      privacy: "誰能看到什麼",
+      deploy: "在哪裡執行",
+      author: "作者",
     },
-    pullquote: "路徑回答在哪裡。時間戳回答在何時。單獨任何一個都不夠。",
-    twoLibraries: {
-      eyebrow: "兩種來源形狀",
-      title: "檔案以路徑被辨識。記憶以時刻被辨識。",
-      paragraph1Before: "把檔案放進 ",
-      paragraph1After:
-        "，你同時做出了兩個宣告：它屬於這裡，而且這就是它的名字。路徑是可檢索的座標，檔案的每一個分段都會對應它建立索引，原始位元組則保持不變。",
-      paragraph2:
-        "記憶沒有資料夾。它依序到來、累積，有時會取代先前的信念。儲存新記憶時，可以指向它所取代的項目；那些較早的項目會變成已淘汰，離開預設搜尋範圍，但仍留在明確的追蹤紀錄之後。",
-      paragraph3:
-        "兩座檔案庫共用一個搜尋索引、一套引用文法，以及同一間閱覽室。它們的差異在於幾何形狀：路徑是空間的，時間戳是時間的。",
+    what: {
+      eyebrow: "這是什麼",
+      title: "三件事，放在同一個地方。",
+      intro:
+        "可以把它想成一個檔案櫃、一本筆記本，以及一位只讀你放進櫃子裡內容的研究助理。",
+      filesTitle: "保留歷史的檔案",
+      filesBody:
+        "把文件、試算表、PDF 和圖片上傳到資料夾。在同一路徑上傳新版本時，舊版本會保留為歷史，而不會被覆寫。",
+      memoriesTitle: "可以改變想法的記憶",
+      memoriesBody:
+        "寫下你知道或決定的事；記憶就放在檔案庫裡，與你的檔案並列。新的記憶可以取代舊的記憶；舊記憶會離開搜尋結果，但仍可閱讀，讓你看見想法如何改變。",
+      chatTitle: "會出示來源的對話",
+      chatBody:
+        "提出問題後，助理會先搜尋你的檔案館，再根據找到的內容回答。每項陳述都附有引用，點一下就能開啟確切的段落。",
     },
-    hybrid: {
-      eyebrow: "混合檢索",
-      title: "兩條路徑輸入，一組排序輸出。",
-      paragraph1Before:
-        "只用一個索引會比較容易解釋，卻比較難用。像「",
-      semanticExample: "我對都市樹木的想法是何時改變的？",
-      paragraph1Middle: "」這樣的語意查詢需要向量；像 ",
-      paragraph1After:
-        " 這樣精確的查詢則需要字面比對。檔案館兩者都問。",
-      paragraph2:
-        "BM25 會處理中日韓雙字詞、拉丁詞 n-gram 與字元 trigram；餘弦相似度則處理設定好的嵌入向量。每條路徑各自回傳前 N 名，預設為 2。兩條路徑透過倒數排名融合合併，並依來源類型、來源 ID 與分段索引去重，因此同時被兩條路徑找到的段落會自然浮上來。",
-      paragraph3Before: "回應會坦白說明自己的天氣：",
-      paragraph3And: "、",
-      paragraph3After: "。你可以稽核這場搜尋，而不只是相信它。",
-      noteEyebrow: "優雅降級",
-      noteBody:
-        "如果嵌入不可用，向量路徑會被略過，而不會阻擋寫入。如果雙字詞查詢沒有結果，unigram 召回會讓搜尋不至於全然熄滅。回應會說明是哪一條路徑給出了答案。",
-    },
-    citation: {
-      eyebrow: "引用約定",
-      title: "收據是答案的一部分。",
-      paragraph:
-        "在鬆散的檢索流程裡，段落沒有來源資訊，讀者無從查證哪一頁支撐了某個說法。在這裡，引用會同時指出來源與回答問題的確切區段：分段索引從 1 開始，而每一個可搜尋的段落都帶著來源類型、來源 ID 與分段索引。",
-      retrieveTitle: "檢索",
-      retrieveBody:
-        "一次混合查詢會從檔案、記憶與摘要中選出段落。每個段落都保留來源類型、來源 ID 與分段索引。",
+    flow: {
+      eyebrow: "資料如何流動",
+      title: "從上傳到附有引用的回答。",
+      intro: "以下說明一個檔案從你上傳的那一刻，到它幫忙回答問題之間，經歷了什麼。",
+      phaseAdd: "當你新增內容",
+      phaseAsk: "當你提問",
+      uploadTitle: "上傳",
+      uploadBody:
+        "你可以加入一個檔案、一整個資料夾，或一段文字。原始內容會按照收到時的樣子原封不動保存。",
+      prepareTitle: "整理",
+      prepareBody:
+        "背景工作程序會讀取檔案、切成短段落並建立索引。你可以看到處理進度；只有完整處理好的檔案才會出現在搜尋中。",
+      prepareTag: "擷取工作",
+      storeTitle: "保存",
+      storeBody:
+        "段落、歷史與設定存放在 PostgreSQL。原始檔案則放在私人的物件儲存：預設是內建的 RustFS 服務，也可以使用 Cloudflare R2 或任何相容 S3 的儲存桶。",
+      storeDiskTag: "RustFS、R2 或 S3",
+      searchTitle: "搜尋",
+      searchBody:
+        "當你提問時，兩種搜尋會同時進行：一種比對你用的確切字詞，另一種尋找措辭相近的內容。結果會合併成一份精簡的最佳段落清單。",
+      laneWords: "確切字詞",
+      laneSimilar: "相近措辭",
       answerTitle: "回答",
       answerBody:
-        "模型只根據這些摘錄回答，並輸出引用標籤。那些標籤是答案的收據，不是裝飾。",
-      verifyTitle: "驗證",
-      verifyBody:
-        "檔案引用會在檔案庫中開啟被引用的分段；記憶引用則會在記憶庫中開啟該筆記憶。",
-      keepTitle: "留存",
-      keepBody:
-        "答案、引用標籤與對話都會留在已儲存的問題旁，因此驗證可以重複進行。",
-      closing:
-        "摘要也遵循同一條規則。摘要引用會直接顯示在答案中，因為這個介面沒有為摘要保留另一個房間；追蹤仍然會指回產生它的紀錄。",
+        "對話模型只會收到這些段落，而不是整座檔案館，而且必須為用到的每個段落加上引用。如果尚未設定模型，它會直接說明，而不是猜測。",
+      returnNote: "點一下回答中的任何引用，就能開啟它所指向的段落。",
+      caption:
+        "圖 1 — 一個檔案的旅程。新增與提問是兩段獨立的流程：一段負責保存與建立索引，另一段負責搜尋與回答。",
+    },
+    tech: {
+      summary: "給好奇的技術讀者",
+      ingest:
+        "上傳會在 PostgreSQL 中建立一筆持久的擷取工作。獨立於網頁 API 之外的專屬工作程序會領取這筆工作，解析並切分檔案、為各段落計算向量、產生供即時預覽的 WebP 迷你縮圖，最後一次性發布，因此絕不會看到只索引一半的檔案。RabbitMQ 只負責喚醒工作程序；PostgreSQL 仍是工作的正式紀錄，工作在重新啟動後也會保留。",
+      storage:
+        "PostgreSQL 17 是唯一的事實來源，Valkey 只是可丟棄的快取。原始檔案存放在相容 S3 的儲存桶：預設是 Docker Compose 內附的 RustFS 服務，也可以使用 Cloudflare R2 或其他 S3 供應商。儲存桶保持私人，檔案只會經由已登入的應用程式送到瀏覽器。",
+      retrieval:
+        "文字會先正規化，再以中日韓雙字詞、拉丁單字與拉丁三字元片段建立 BM25 索引。向量路徑與它並行；預設使用離線的帶號雜湊嵌入器，屬於字面比對而非語意理解。接上相容 OpenAI 的嵌入端點，即可加入語意召回。兩條路徑以倒數排名融合合併，並依段落去除重複。",
+      agent:
+        "代理會呼叫搜尋、閱讀與時間軸等工具，再寫出以穩定 ID 引用檔案段落、記憶與摘要的回答。執行過程會串流到瀏覽器，並連同每個工具步驟一起保存。根帳號會為每個帳號指派對話模型，支援 DeepSeek、Anthropic Claude，以及相容 OpenAI 的端點。",
+      web: "如果根帳號啟用了網路研究，代理也可以搜尋網路。網路結果會以網址引用，且絕不會被當作檔案館的證據。",
+      citationFormatsLabel: "引用格式",
+    },
+    privacy: {
+      eyebrow: "誰能看到什麼",
+      title: "每個帳號都有自己的私人檔案館。",
+      intro:
+        "一個部署可以容納許多人。每個人都有獨立的檔案館，而資料庫本身會拒絕把它們混在一起。",
+      databaseLabel: "資料庫 · 列層級安全性",
+      yourArchive: "你的檔案館",
+      otherArchive: "另一位成員的檔案館",
+      ownerYou: "擁有者：你",
+      ownerOther: "擁有者：該成員",
+      contents: "檔案 · 記憶 · 對話",
+      denied: "預設拒絕跨帳號存取",
+      rootTitle: "根帳號",
+      rootBody: "管理帳號與全域設定",
+      rootNoData: "不是資料超級使用者",
+      impersonationTitle: "模擬登入",
+      impersonationBody: "提示橫幅全程顯示；返回根帳號需要根帳號密碼",
+      caption:
+        "圖 2 — 隱私邊界。每一列私人資料都標記了擁有者，資料庫只會回傳屬於目前登入者的資料。",
+      ownerTitle: "擁有權由資料庫檢查。",
+      ownerBody:
+        "每一筆私人紀錄都帶有擁有者。PostgreSQL 的列層級安全性預設拒絕存取，因此即使應用程式漏掉了某個篩選條件，也不會把一個人的檔案館顯示給另一個人。",
+      rootPointTitle: "管理員不是資料超級使用者。",
+      rootPointBody:
+        "根帳號負責建立帳號與管理全域設定，但一般畫面與 API 呼叫都不會讓根帳號讀取別人的檔案館。",
+      impersonationPointTitle: "代替他人登入時一目了然。",
+      impersonationPointBody:
+        "為了可信任的帳號救援，根帳號可以模擬登入另一個帳號。整段期間畫面都會顯示提示橫幅，返回根帳號時必須再次輸入根帳號密碼。",
+      providerTitle: "只有相關段落會送到 AI。",
+      providerBody:
+        "你提問時，為該問題找到的段落會傳送給根帳號設定的對話模型供應商。整座檔案館永遠不會被送出。",
+      secretsTitle: "密碼與金鑰受到保護。",
+      secretsBody:
+        "密碼以 Argon2 雜湊，工作階段使用 HttpOnly Cookie，供應商金鑰在資料庫中加密保存，之後不會再完整顯示。",
+      caveatTitle: "這些機制無法防範的事",
+      caveatBody:
+        "根帳號是最受信任的憑證：它可以重設密碼並模擬登入其他帳號，因此請慎選由誰持有。列層級安全性保護的是應用程式內的檔案館；能存取主機、資料庫或機密檔案的人都可以繞過它。請確保機器本身值得信任。",
+    },
+    deploy: {
+      eyebrow: "在哪裡執行",
+      title: "一台機器，不開放任何連入埠。",
+      intro:
+        "Apsor Archive 是你用 Docker Compose 自行執行的單一部署，通常放在家用伺服器或小型辦公室的機器上。它不是託管的雲端服務，也沒有共用的廠商資料庫。",
+      browser: "你的瀏覽器",
+      exampleHost: "範例網址",
+      edge: "Cloudflare 邊緣網路",
+      edgeDetail: "HTTPS 與選用的存取規則",
+      tunnel: "通道連接器",
+      tunnelDetail: "只建立對外連線",
+      caddyDetail: "機器內部的反向代理",
+      appDetail: "網頁應用程式與 API，另有獨立的擷取工作程序",
+      data: "資料服務",
+      dataDetail: "資料庫、快取、工作喚醒與檔案儲存",
+      machineLabel: "你的機器 · 沒有連入埠",
+      caption:
+        "圖 3 — 正式環境堆疊。機器不開放任何連入埠；通道連接器主動向 Cloudflare 建立對外連線，所有請求都經由它抵達應用程式。",
+      noteTunnel:
+        "由於連接器是主動對外連線，你不需要公開 IP 位址，也不需要在路由器設定連接埠轉送。",
+      noteSetup:
+        "透過通道公開新的執行個體之前，請先建立根帳號；在那之前，首次設定頁面依設計是公開的。",
+    },
+    author: {
+      eyebrow: "作者",
+      title: "由一個人打造，獻給家庭與小團隊。",
+      name: "Wei-Chun Hsiao (Alex)",
+      role: "作者與維護者",
+      body: "Apsor Archive 由 Wei-Chun Hsiao (Alex) 設計與撰寫。它以 MIT 授權開放原始碼，歡迎貢獻。",
+      license: "Copyright © 2026 Wei-Chun, Hsiao。以 MIT 授權釋出。",
+      sourceLink: "GitHub 上的原始碼",
+      opensNewTab: "（在新分頁開啟）",
     },
     colophon: {
-      tag: "方法",
-      line: "Apsor Archive · 年輪檔案館 · 2026.10 修訂",
-      linksAria: "檔案館連結",
-      questions: "問題",
-    },
-    fileDiagram: {
-      fileLabel: "檔案庫",
-      fileTitle: "以路徑辨識",
-      fileBadge: "依路徑",
-      treeAria: "檔案階層範例",
-      folder: "資料夾",
-      softDelete: "軟刪除",
-      versionsBranch: "版本分支",
-      memoryLabel: "記憶庫",
-      memoryTitle: "以時刻辨識",
-      memoryBadge: "依時間",
-      axisAria: "記憶時間軸範例",
-      memoryOneTime: "6 月 1 日",
-      memoryOneCopy: "檔案館就是索引。",
-      memoryTwoTime: "10 月 16 日",
-      memoryTwoCopy: "路徑是關於位置的論證。",
-      memoryThreeTime: "10 月 18 日",
-      memoryThreeCopy: "被取代，但從未抹除。",
-      supersedeChain: "取代鏈",
-      traceOpen: "追蹤保持開放",
-      captionBefore: "圖 01 —— 兩種來源形狀。路徑回答「",
-      captionWhere: "在哪裡",
-      captionMiddle: "」；時間戳回答「",
-      captionWhen: "在何時",
-      captionAfter: "」。檔案館兩者都索引。",
-    },
-    hybridDiagram: {
-      queryLabel: "查詢",
-      queryExample: "我對都市樹木的想法是何時改變的？",
-      resultNumber: "result_number = 2",
-      textLane: "文字路徑",
-      vectorLane: "向量路徑",
-      chunkA: "分段 A",
-      chunkB: "分段 B",
-      chunkC: "分段 C",
-      textDetail: "雙字詞 · 詞 n-gram · trigram",
-      vectorDetail: "雜湊嵌入器 · 維度來自設定",
-      fusionLabel: "倒數排名融合",
-      deduplicateBy: "去重依據",
-      outputAria: "去重後的結果",
-      foundTwice: "找到兩次 · 只回傳一次",
-      perKind: "每種來源類型",
-      kinds: "檔案 · 記憶 · 摘要",
-      captionBefore:
-        "圖 02 —— 混合檢索。兩條路徑都有貢獻，重複項目會被收合，最終集合依來源類型設定上限。回應會帶有",
-      captionAfter: "與融合計數。",
+      linksAria: "開始使用檔案館",
+      ask: "提出問題",
     },
   },
 };
