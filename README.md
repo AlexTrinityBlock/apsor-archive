@@ -925,7 +925,9 @@ Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 `GET /api/v1/memories`, `POST /api/v1/memories`,
 `PATCH /api/v1/memories/{memory_id}` (edit text; the title is regenerated),
 `POST /api/v1/memories/{memory_id}/deprecate` (retire directly with an optional
-`reason`), `POST /api/v1/summaries`, `GET /api/v1/stats`,
+`reason`), `GET /api/v1/memories/{memory_id}/related` and
+`GET /api/v1/memories/related/files/{file_id}` (related memories from stored
+embeddings and keywords; no provider call), `POST /api/v1/summaries`, `GET /api/v1/stats`,
 `GET /api/v1/health`, and `GET /api/v1/ai/status`. `ai/status` reports the
 deployment-global runtime for root diagnostics; it is not an account's model
 assignment.
@@ -1359,7 +1361,8 @@ citations resolve to File Library previews or memory readers. Saved questions
 remain available at `/questions` for later agent turns.
 
 The rail is grouped rather than flat. The archive workspaces come first (Chat,
-File library, Timeline, Memory, Search, Dashboard), then a personal block with
+File library, Timeline, Search, Dashboard; memories are the File library's
+Memories tab), then a personal block with
 **User profile**, then the system block (Settings, **Change password**,
 **Accounts** for the root account only, About), and a separate **Session**
 block with **Sign out**. The footer identity is also the root user switcher:
@@ -1415,9 +1418,11 @@ from `frontend/`, so a frontend change only needs an image rebuild.
 
 ### Resource preview
 
-Files open in an in-situ preview modal inside the File Library; the Memory
-reader is a normal route at `/memory/:id`. Legacy `/viewer/*` URLs redirect into
-those surfaces, so old citations and bookmarks keep working.
+Files open in an in-situ preview modal inside the File Library; memories live
+in its Memories tab, with the reader at `/library/memories/:id` and a Related
+memories section ranked from stored embeddings, shared keywords, and shared
+summaries. Legacy `/memory/*` and `/viewer/*` URLs redirect into those surfaces,
+so old citations and bookmarks keep working.
 
 | Resource | Renderer |
 |---|---|
@@ -2016,8 +2021,8 @@ frontend/
     chat/                       reading room, retry, context actions
     questions/                  saved-question Q&A library
     settings/                   role-filtered provider and runtime panels
-    library/                    files, media gallery, preview modal, intake
-    home/ search/ timeline/ memory/ about/ ...
+    library/                    files, media gallery, memories, preview modal, intake
+    home/ search/ timeline/ about/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting

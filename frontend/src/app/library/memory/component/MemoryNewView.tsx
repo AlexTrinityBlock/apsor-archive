@@ -2,13 +2,13 @@ import { useId, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { Button, ButtonLink } from "../../component/Button";
-import { Icon } from "../../component/Icon";
-import { PageHeader } from "../../component/PageHeader";
-import { Panel } from "../../component/Panel";
-import { useToast } from "../../component/Toast";
-import { useSaveMemory } from "../../generated-apis-types/memories/memories";
-import { useApiErrorMessage, useI18n } from "../../i18n";
+import { Button, ButtonLink } from "../../../component/Button";
+import { Icon } from "../../../component/Icon";
+import { PageHeader } from "../../../component/PageHeader";
+import { Panel } from "../../../component/Panel";
+import { useToast } from "../../../component/Toast";
+import { useSaveMemory } from "../../../generated-apis-types/memories/memories";
+import { useApiErrorMessage, useI18n } from "../../../i18n";
 
 import {
   invalidateMemoryQueries,
@@ -17,6 +17,10 @@ import {
   savedMemoryMessage,
   type MemorySaveReceipt,
 } from "./helpers";
+import {
+  libraryMemoriesUrl,
+  libraryMemoryUrl,
+} from "../../../../lib/library-url";
 
 /** Full-page pressing room for a new memory. */
 export function MemoryNewView() {
@@ -120,7 +124,7 @@ export function MemoryNewView() {
             deprecated: result.deprecated,
             summary: result.summary,
           };
-          navigate(`/memory/${result.memory.memory_id}`, { state: receipt });
+          navigate(libraryMemoryUrl(result.memory.memory_id), { state: receipt });
         },
         onError: (error) => {
           const message = apiErrorMessage(error, "memory.common.genericError");
@@ -134,7 +138,7 @@ export function MemoryNewView() {
   return (
     <div className="content-container memory-page memory-new-page">
       <nav className="memory-breadcrumb" aria-label={t("memory.common.breadcrumbAria")}>
-        <Link to="/memory">{t("memory.vault.title")}</Link>
+        <Link to={libraryMemoriesUrl()}>{t("memory.vault.title")}</Link>
         <span aria-hidden="true">/</span>
         <span className="memory-breadcrumb__current" aria-current="page">
           {t("memory.newView.breadcrumbCurrent")}
@@ -142,6 +146,7 @@ export function MemoryNewView() {
       </nav>
 
       <PageHeader
+        headingLevel={2}
         eyebrow={t("memory.newView.eyebrow")}
         title={t("memory.newView.title")}
         description={t("memory.newView.description")}
@@ -151,7 +156,7 @@ export function MemoryNewView() {
           </span>
         }
         actions={
-          <ButtonLink to="/memory" variant="ghost" size="sm">
+          <ButtonLink to={libraryMemoriesUrl()} variant="ghost" size="sm">
             <Icon name="arrow-right" size={15} className="memory-back-icon" />
             {t("memory.newView.backToVault")}
           </ButtonLink>
@@ -345,7 +350,7 @@ export function MemoryNewView() {
                 <ul className="memory-deprecation-list">
                   {parsedSupersedes.ids.map((id) => (
                     <li key={id}>
-                      <Link to={`/memory/${id}`}>
+                      <Link to={libraryMemoryUrl(id)}>
                         {t("memory.common.crystal", { id })}
                       </Link>
                     </li>

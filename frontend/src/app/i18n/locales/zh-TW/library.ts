@@ -80,6 +80,8 @@ export const library = {
     workspaceTabs: "檔案庫工作區",
     filesTab: "檔案",
     mediaTab: "媒體庫",
+    memoriesTab: "記憶",
+    memoriesTabCountAria: "{count} 則記憶",
     viewLabel: "檔案檢視",
     board: "看板",
     list: "清單",
@@ -455,6 +457,8 @@ export const library = {
     archivedToastOther: "已將 {count} 個檔案歸檔於 {folder}。",
   },
   preview: {
+    relatedMemoriesTitle: "關聯記憶",
+    relatedMemoriesHistorical: "只有目前版本會顯示關聯記憶。",
     pageTab: "頁面預覽",
     chunkTab: "分段檢查",
     metaTab: "中繼資料",

@@ -8,6 +8,9 @@ import {
   type CitationToken,
 } from "../../chat/types";
 import { useI18n } from "../../i18n";
+import {
+  libraryMemoryUrl,
+} from "../../../lib/library-url";
 
 interface QuestionCitationsProps {
   readonly citations: readonly string[];
@@ -64,7 +67,7 @@ function CitationTokenChip({ label }: { readonly label: string }) {
     return (
       <Link
         className="citation-chip memory question-citation"
-        to={`/memory/${token.id}`}
+        to={libraryMemoryUrl(token.id)}
         title={t("memory.questions.citations.openMemory", { label: text })}
       >
         <Icon name="memory" size={11} />

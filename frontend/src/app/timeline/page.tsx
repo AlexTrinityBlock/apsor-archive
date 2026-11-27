@@ -21,7 +21,7 @@ import {
   MemoryDeprecateDialog,
   MemoryEditDialog,
   type MemoryActionTarget,
-} from "../memory/component/MemoryActionDialogs";
+} from "../component/memory/MemoryActionDialogs";
 import { useListMemories } from "../generated-apis-types/memories/memories";
 import {
   getReadTimelineQueryOptions,

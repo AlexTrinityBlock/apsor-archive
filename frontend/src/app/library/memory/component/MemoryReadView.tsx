@@ -4,30 +4,36 @@ import { Link, useLocation } from "react-router-dom";
 import type {
   MemoryReadSchema,
   MemorySchema,
-} from "../../generated-apis-types/schemas";
+} from "../../../generated-apis-types/schemas";
 
-import { ApiError } from "../../../apis/fetch-client";
-import { Badge } from "../../component/Badge";
-import { Button, ButtonLink } from "../../component/Button";
-import { CopyButton } from "../../component/CopyButton";
-import { Icon } from "../../component/Icon";
-import { PageHeader } from "../../component/PageHeader";
-import { Panel } from "../../component/Panel";
-import { useReadMemory } from "../../generated-apis-types/memories/memories";
-import { useI18n } from "../../i18n";
-import { truncate } from "../../../lib/format";
+import { ApiError } from "../../../../apis/fetch-client";
+import { Badge } from "../../../component/Badge";
+import { Button, ButtonLink } from "../../../component/Button";
+import { CopyButton } from "../../../component/CopyButton";
+import { Icon } from "../../../component/Icon";
+import { PageHeader } from "../../../component/PageHeader";
+import { Panel } from "../../../component/Panel";
+import { useReadMemory } from "../../../generated-apis-types/memories/memories";
+import { useI18n } from "../../../i18n";
+import { truncate } from "../../../../lib/format";
 
 import {
   MemoryDeprecateDialog,
   MemoryEditDialog,
-} from "./MemoryActionDialogs";
+} from "../../../component/memory/MemoryActionDialogs";
 import { MemoryMissing } from "./MemoryMissing";
+import { RelatedMemories } from "./RelatedMemories";
 import { MemoryErrorState, MemorySkeleton } from "./MemoryStates";
-import { MemoryStatus } from "./MemoryStatus";
+import { MemoryStatus } from "../../../component/memory/MemoryStatus";
 import {
   parseMemorySaveReceipt,
   type MemorySaveReceipt,
 } from "./helpers";
+import {
+  libraryMemoriesUrl,
+  libraryMemoryUrl,
+  libraryNewMemoryUrl,
+} from "../../../../lib/library-url";
 
 interface MemoryReadViewProps {
   readonly memoryId: number;
@@ -42,7 +48,7 @@ function MemoryMiniCard({ memory }: { readonly memory: MemorySchema }) {
         "memory-mini",
         memory.status === "active" ? "is-active" : "is-deprecated",
       ].join(" ")}
-      to={`/memory/${memory.memory_id}`}
+      to={libraryMemoryUrl(memory.memory_id)}
     >
       <span className="memory-mini__head">
         <span className="memory-mini__id">
@@ -155,7 +161,7 @@ function MemoryRecord({ target }: { readonly target: MemorySchema }) {
           <p>
             {t("memory.reader.record.deprecatedNote")}{" "}
             {target.superseded_by_id ? (
-              <Link to={`/memory/${target.superseded_by_id}`}>
+              <Link to={libraryMemoryUrl(target.superseded_by_id)}>
                 {t("memory.reader.record.readSuccessor", {
                   id: target.superseded_by_id,
                 })}
@@ -312,7 +318,7 @@ function Chain({ data }: { readonly data: MemoryReadSchema }) {
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  to={`/memory/${memory.memory_id}`}
+                  to={libraryMemoryUrl(memory.memory_id)}
                   aria-current={memory.memory_id === data.target.memory_id ? "page" : undefined}
                 >
                   <span className="memory-chain__head">
@@ -356,7 +362,7 @@ function SupersedeAction({ target }: { readonly target: MemorySchema }) {
   }
   return (
     <ButtonLink
-      to={`/memory/new?supersedes=${target.memory_id}`}
+      to={libraryNewMemoryUrl([target.memory_id])}
       variant="primary"
       size="sm"
     >
@@ -378,6 +384,9 @@ function ReadBody({
       <div className="memory-reader__main">
         {receipt ? <SaveReceipt receipt={receipt} /> : null}
         <MemoryRecord target={data.target} />
+        <RelatedMemories
+          source={{ kind: "memory", memoryId: data.target.memory_id }}
+        />
         <Lineage data={data} />
         <Neighbours data={data} />
       </div>
@@ -410,7 +419,7 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
   return (
     <div className="content-container memory-page memory-reader-page">
       <nav className="memory-breadcrumb" aria-label={t("memory.common.breadcrumbAria")}>
-        <Link to="/memory">{t("memory.vault.title")}</Link>
+        <Link to={libraryMemoriesUrl()}>{t("memory.vault.title")}</Link>
         <span aria-hidden="true">/</span>
         <span className="memory-breadcrumb__current" aria-current="page">
           {t("memory.common.crystal", { id: memoryId })}
@@ -418,6 +427,7 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
       </nav>
 
       <PageHeader
+        headingLevel={2}
         eyebrow={t("memory.reader.eyebrow")}
         title={t("memory.common.crystal", { id: memoryId })}
         description={t("memory.reader.description")}
@@ -460,7 +470,7 @@ export function MemoryReadView({ memoryId }: MemoryReadViewProps) {
               </Button>
             ) : null}
             {target ? <SupersedeAction target={target} /> : null}
-            <ButtonLink to="/memory" variant="ghost" size="sm">
+            <ButtonLink to={libraryMemoriesUrl()} variant="ghost" size="sm">
               <Icon name="arrow-right" size={15} className="memory-back-icon" />
               {t("memory.reader.backToVault")}
             </ButtonLink>

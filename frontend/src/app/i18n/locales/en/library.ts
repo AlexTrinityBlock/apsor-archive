@@ -81,6 +81,8 @@ export const library = {
     workspaceTabs: "Library workspace",
     filesTab: "Files",
     mediaTab: "Media gallery",
+    memoriesTab: "Memories",
+    memoriesTabCountAria: "{count} memories",
     viewLabel: "File view",
     board: "Board",
     list: "List",
@@ -466,6 +468,8 @@ export const library = {
     archivedToastOther: "{count} files archived in {folder}.",
   },
   preview: {
+    relatedMemoriesTitle: "Related memories",
+    relatedMemoriesHistorical: "Related memories are shown for the current version only.",
     pageTab: "Page Preview",
     chunkTab: "Chunk Inspection",
     metaTab: "Metadata",

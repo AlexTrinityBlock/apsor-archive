@@ -2,7 +2,11 @@
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.module.knowledge.dependencies import get_memory_service, get_summary_service
+from app.module.knowledge.dependencies import (
+    get_memory_service,
+    get_related_memory_service,
+    get_summary_service,
+)
 from app.module.knowledge.schema.memory_schema import (
     MemoryCreateSchema,
     MemoryDeprecateSchema,
@@ -10,10 +14,12 @@ from app.module.knowledge.schema.memory_schema import (
     MemorySaveSchema,
     MemorySchema,
     MemoryUpdateSchema,
+    RelatedMemoriesSchema,
     SummaryCreateSchema,
     SummarySchema,
 )
 from app.module.knowledge.service.memory_service import MemoryService
+from app.module.knowledge.service.related_memory_service import RelatedMemoryService
 from app.module.knowledge.service.summary_service import SummaryService
 from app.shared.types.list_response import ListResponseSchema
 
@@ -87,6 +93,39 @@ async def list_memories(
         start_index=offset + 1,
         items_per_page=limit,
         resources=resources,
+    )
+
+
+@router.get(
+    "/memories/related/files/{file_id}",
+    response_model=RelatedMemoriesSchema,
+    operation_id="listFileRelatedMemories",
+)
+async def list_file_related_memories(
+    file_id: int,
+    limit: int = Query(default=6, ge=1, le=20),
+    related_service: RelatedMemoryService = Depends(get_related_memory_service),
+) -> RelatedMemoriesSchema:
+    """Rank memories related to one file by stored similarity and shared keywords."""
+    return await related_service.related_to_file(file_id, limit=limit)
+
+
+@router.get(
+    "/memories/{memory_id}/related",
+    response_model=RelatedMemoriesSchema,
+    operation_id="listRelatedMemories",
+)
+async def list_related_memories(
+    memory_id: int,
+    limit: int = Query(default=6, ge=1, le=20),
+    include_deprecated: bool = False,
+    related_service: RelatedMemoryService = Depends(get_related_memory_service),
+) -> RelatedMemoriesSchema:
+    """Rank memories related to one memory, excluding its supersession chain."""
+    return await related_service.related_to_memory(
+        memory_id,
+        limit=limit,
+        include_deprecated=include_deprecated,
     )
 
 

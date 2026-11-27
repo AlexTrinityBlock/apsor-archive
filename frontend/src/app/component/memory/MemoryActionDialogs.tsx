@@ -1,16 +1,21 @@
 import { useId, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { Button } from "../../component/Button";
-import { Icon } from "../../component/Icon";
-import { useToast } from "../../component/Toast";
+import { Button } from "../Button";
+import { Icon } from "../Icon";
+import { useToast } from "../Toast";
 import {
   useDeprecateMemory,
   useUpdateMemory,
 } from "../../generated-apis-types/memories/memories";
 import { useApiErrorMessage, useI18n } from "../../i18n";
+// SettingsDialog's frame uses the global modal classes; its two
+// `.settings-dialog__*` heading rules still live in settings/settings.css.
+// Promote it to a shared ConfirmDialog (architecture tidy) to drop this
+// cross-workspace import.
 import { SettingsDialog } from "../../settings/component/SettingsDialog";
-import { invalidateMemorySurfaces } from "../query";
+import { invalidateMemorySurfaces } from "./query";
+import "./memory-shared.css";
 
 /** The subset of a memory needed by the edit and deprecate dialogs. */
 export interface MemoryActionTarget {

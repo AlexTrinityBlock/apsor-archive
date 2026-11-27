@@ -106,6 +106,7 @@ from app.module.knowledge.service.provider_config_service import ProviderConfigS
 from app.module.knowledge.service.provider_error_notice_service import (
     ProviderErrorNoticeService,
 )
+from app.module.knowledge.service.related_memory_service import RelatedMemoryService
 from app.module.knowledge.service.search_service import SearchService
 from app.module.knowledge.service.stats_service import StatsService
 from app.module.knowledge.service.summary_service import SummaryService
@@ -446,6 +447,26 @@ def build_search_service(state: State, session: AsyncSession, *, user_id: int) -
     )
 
 
+def build_related_memory_service(
+    state: State,
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> RelatedMemoryService:
+    """Compose an owner-scoped related-memory ranker over stored chunks."""
+    settings = cast(Settings, state.settings)
+    return RelatedMemoryService(
+        user_id=user_id,
+        memory_repository=MemoryRepository(session, user_id),
+        file_repository=FileRepository(session, user_id),
+        chunk_repository=ChunkRepository(session, user_id),
+        summary_repository=SummaryRepository(session, user_id),
+        cache=cast(CacheProtocol, state.cache),
+        cache_ttl_seconds=settings.cache_ttl_seconds,
+        vector_scan_limit=settings.search_vector_scan_limit,
+    )
+
+
 def build_timeline_service(
     state: State,
     session: AsyncSession,
@@ -744,6 +765,14 @@ def get_search_service(
     user: UserSchema = Depends(require_authenticated),
 ) -> SearchService:
     return build_search_service(request.app.state, session, user_id=user.user_id)
+
+
+def get_related_memory_service(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    user: UserSchema = Depends(require_authenticated),
+) -> RelatedMemoryService:
+    return build_related_memory_service(request.app.state, session, user_id=user.user_id)
 
 
 def get_ai_service(

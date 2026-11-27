@@ -5563,6 +5563,82 @@
         "title": "ProviderUpdateSchema",
         "type": "object"
       },
+      "RelatedMemoriesSchema": {
+        "description": "Memories ranked by similarity, shared keywords, and shared summaries.",
+        "properties": {
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedMemorySchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "similarity_available": {
+            "title": "Similarity Available",
+            "type": "boolean"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "integer"
+          },
+          "source_kind": {
+            "enum": [
+              "memory",
+              "file"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_kind",
+          "source_id",
+          "similarity_available",
+          "resources"
+        ],
+        "title": "RelatedMemoriesSchema",
+        "type": "object"
+      },
+      "RelatedMemorySchema": {
+        "description": "One memory related to a source memory or file.",
+        "properties": {
+          "memory": {
+            "$ref": "#/components/schemas/MemorySchema"
+          },
+          "reasons": {
+            "items": {
+              "enum": [
+                "similar",
+                "keyword",
+                "summary",
+                "nearby"
+              ],
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "shared_summary_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Shared Summary Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memory",
+          "score",
+          "reasons",
+          "shared_summary_ids"
+        ],
+        "title": "RelatedMemorySchema",
+        "type": "object"
+      },
       "SavedQuestionCreateSchema": {
         "additionalProperties": false,
         "description": "Capture a question without accepting an answer from the client.",
@@ -10600,6 +10676,61 @@
         ]
       }
     },
+    "/api/v1/memories/related/files/{file_id}": {
+      "get": {
+        "description": "Rank memories related to one file by stored similarity and shared keywords.",
+        "operationId": "listFileRelatedMemories",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 6,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedMemoriesSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List File Related Memories",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
     "/api/v1/memories/{memory_id}": {
       "get": {
         "description": "Read a memory, its neighbors, and its supersession chain.",
@@ -10771,6 +10902,71 @@
           }
         },
         "summary": "Deprecate Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/api/v1/memories/{memory_id}/related": {
+      "get": {
+        "description": "Rank memories related to one memory, excluding its supersession chain.",
+        "operationId": "listRelatedMemories",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 6,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_deprecated",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Deprecated",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedMemoriesSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Related Memories",
         "tags": [
           "memories"
         ]

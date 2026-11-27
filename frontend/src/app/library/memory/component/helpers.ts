@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import type { Translate } from "../../i18n";
-import type { MemorySchema, SummarySchema } from "../../generated-apis-types/schemas";
+import type { Translate } from "../../../i18n";
+import type { MemorySchema, SummarySchema } from "../../../generated-apis-types/schemas";
 
 export interface MemorySaveReceipt {
   readonly deprecated: MemorySchema[];

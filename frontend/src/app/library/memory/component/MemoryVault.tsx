@@ -2,36 +2,40 @@ import { useId, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
-import { Button, ButtonLink } from "../../component/Button";
-import { CopyButton } from "../../component/CopyButton";
-import { Icon } from "../../component/Icon";
-import { PageHeader } from "../../component/PageHeader";
+import { Button, ButtonLink } from "../../../component/Button";
+import { CopyButton } from "../../../component/CopyButton";
+import { Icon } from "../../../component/Icon";
+import { PageHeader } from "../../../component/PageHeader";
 import {
   getListMemoriesQueryOptions,
   useListMemories,
-} from "../../generated-apis-types/memories/memories";
-import type { MemorySchema } from "../../generated-apis-types/schemas";
-import { useSearchKnowledge } from "../../generated-apis-types/search/search";
-import { useGetStats } from "../../generated-apis-types/system/system";
-import { useDebouncedValue } from "../../hook/useDebouncedValue";
+} from "../../../generated-apis-types/memories/memories";
+import type { MemorySchema } from "../../../generated-apis-types/schemas";
+import { useSearchKnowledge } from "../../../generated-apis-types/search/search";
+import { useGetStats } from "../../../generated-apis-types/system/system";
+import { useDebouncedValue } from "../../../hook/useDebouncedValue";
 import {
   useI18n,
   type Translate,
   type TranslationKey,
-} from "../../i18n";
+} from "../../../i18n";
 
 import {
   MemoryDeprecateDialog,
   MemoryEditDialog,
   type MemoryActionTarget,
-} from "./MemoryActionDialogs";
+} from "../../../component/memory/MemoryActionDialogs";
 import {
   MemoryEmptyState,
   MemoryErrorState,
   MemorySkeleton,
 } from "./MemoryStates";
-import { MemoryStatus } from "./MemoryStatus";
+import { MemoryStatus } from "../../../component/memory/MemoryStatus";
 import { splitMemoryPreview } from "./helpers";
+import {
+  libraryMemoryUrl,
+  libraryNewMemoryUrl,
+} from "../../../../lib/library-url";
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -157,7 +161,7 @@ function SupersedeBanner({ memory }: { readonly memory: MemoryCardModel }) {
           {memory.superseded_by_id !== null && memory.superseded_by_id !== undefined ? (
             <>
               {t("memory.card.supersededByPrefix")}
-              <Link to={`/memory/${memory.superseded_by_id}`}>
+              <Link to={libraryMemoryUrl(memory.superseded_by_id)}>
                 {t("memory.common.crystal", { id: memory.superseded_by_id })}
               </Link>
               {t("memory.card.supersededBySuffix")}
@@ -182,7 +186,7 @@ function SupersedeBanner({ memory }: { readonly memory: MemoryCardModel }) {
           {memory.supersedes_ids.map((id, index) => (
             <span key={id}>
               {index > 0 ? ", " : null}
-              <Link to={`/memory/${id}`}>
+              <Link to={libraryMemoryUrl(id)}>
                 {t("memory.common.crystal", { id })}
               </Link>
             </span>
@@ -211,7 +215,7 @@ function MemoryCard({
     memory.content,
     t("memory.common.untitledMemory"),
   );
-  const href = `/memory/${memory.memory_id}`;
+  const href = libraryMemoryUrl(memory.memory_id);
   return (
     <article
       className={["memory-card", memory.status === "deprecated" ? "is-deprecated" : null]
@@ -553,7 +557,7 @@ function BrowseResults({
         title={t("memory.vault.emptyTitle")}
         description={t("memory.vault.emptyDescription")}
         action={
-          <ButtonLink to="/memory/new" variant="ink" size="sm">
+          <ButtonLink to={libraryNewMemoryUrl()} variant="ink" size="sm">
             <Icon name="plus" size={15} />
             {t("memory.vault.pressFirstMemory")}
           </ButtonLink>
@@ -676,7 +680,7 @@ function toActionTarget(memory: MemoryCardModel): MemoryActionTarget {
   };
 }
 
-/** The vault index at `/memory`: browse, search, filter, and load older pages. */
+/** The Memories index at `/library/memories`: browse, search, filter, and load older pages. */
 export function MemoryVault() {
   const { t, formatNumber } = useI18n();
   const searchInputId = useId();
@@ -820,6 +824,7 @@ export function MemoryVault() {
   return (
     <div className="content-container memory-page memory-vault">
       <PageHeader
+        headingLevel={2}
         eyebrow={t("memory.vault.eyebrow")}
         title={t("memory.vault.title")}
         description={t("memory.vault.description")}
@@ -843,7 +848,7 @@ export function MemoryVault() {
           </span>
         }
         actions={
-          <ButtonLink to="/memory/new" variant="primary" size="md">
+          <ButtonLink to={libraryNewMemoryUrl()} variant="primary" size="md">
             <Icon name="plus" size={15} />
             {t("memory.vault.pressMemory")}
           </ButtonLink>
