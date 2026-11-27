@@ -99,8 +99,8 @@ export const chat = {
     formAria: "Write to the archive",
     message: "Message",
     placeholder: "Ask about the archive, or ask it to open a resource…",
-    enterHint: "Enter to send · Shift+Enter for newline",
-    enterHintMobile: "Enter adds a new line · Use Send to submit",
+    enterHint: "Enter to send · Shift+Enter for newline · Ctrl/⌘+Enter always sends",
+    enterHintMobile: "Enter adds a new line · Use Send or Ctrl/⌘+Enter to submit",
     note: "The transcript is persistent; citations open in the inspector.",
     noteStreaming: "A run is open. Stop it to keep the completed entries.",
     noteDisabled: "This thread cannot accept new notes right now.",
@@ -110,6 +110,27 @@ export const chat = {
     send: "Send",
     opening: "Opening…",
     openingLabel: "Opening a thread",
+    noteAwaitingApproval:
+      "Approve or reject the pending write above to continue.",
+    stopHint: "Esc to stop",
+    charCount: "{count} / {max} characters",
+  },
+  leaveGuard: {
+    title: "Leave while the answer is still streaming?",
+    body: "Leaving now stops this run. Entries already written stay in the transcript.",
+    stay: "Stay",
+    leave: "Stop and leave",
+  },
+  scroll: {
+    jumpToLatest: "Jump to latest",
+    newActivity: "New activity below",
+  },
+  live: {
+    responding: "The archive agent is responding.",
+    waitingApproval: "The run is waiting for your approval.",
+    complete: "The answer is complete.",
+    stopped: "The run was stopped.",
+    failed: "The run failed.",
   },
   attachments: {
     add: "Add an image",

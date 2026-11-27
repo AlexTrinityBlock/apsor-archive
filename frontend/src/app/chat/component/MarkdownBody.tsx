@@ -179,6 +179,8 @@ interface MarkdownBodyProps {
 }
 
 const NO_MEMORY_TITLES: ReadonlyMap<number, string> = new Map();
+// A stable plugin list keeps ReactMarkdown from rebuilding its processor per token.
+const REMARK_PLUGINS = [remarkGfm, remarkCitations];
 
 /**
  * Renders model prose with GFM and safe citation links. Raw HTML is skipped,
@@ -198,7 +200,7 @@ export const MarkdownBody = memo(function MarkdownBody({
   return (
     <div className="chat-markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkCitations]}
+        remarkPlugins={REMARK_PLUGINS}
         components={components}
         skipHtml
       >

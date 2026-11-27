@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { memo, type RefObject } from "react";
 import { Link } from "react-router-dom";
 
 import { Icon } from "../../component/Icon";
@@ -97,8 +97,11 @@ function ChatPreview({ target }: { readonly target: ResourceTarget | null }) {
   );
 }
 
-/** The inspector column: tool telemetry and in-situ document preview. */
-export function ChatInspector({
+/**
+ * The inspector column: tool telemetry and in-situ document preview. Memoized
+ * so assistant prose tokens re-render it only when its own inputs change.
+ */
+export const ChatInspector = memo(function ChatInspector({
   inspectorRef,
   tab,
   onTab,
@@ -177,4 +180,4 @@ export function ChatInspector({
       </div>
     </aside>
   );
-}
+});

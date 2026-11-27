@@ -49,7 +49,12 @@ interface UseChatStreamResult {
     decision: "approve" | "reject",
   ) => Promise<boolean>;
   readonly stop: () => void;
+  /** How the most recent turn ended; null while a turn runs or before any. */
+  readonly outcome: StreamOutcome | null;
 }
+
+/** The settled result of the last turn, announced to screen readers. */
+export type StreamOutcome = "complete" | "stopped" | "failed";
 
 function describeError(error: unknown): string {
   if (error instanceof ApiError) {
@@ -70,6 +75,7 @@ export function useChatStream(
 ): UseChatStreamResult {
   const queryClient = useQueryClient();
   const [stream, setStream] = useState<ChatStreamView | null>(null);
+  const [outcome, setOutcome] = useState<StreamOutcome | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const activeRef = useRef(false);
   const mountedRef = useRef(true);
@@ -103,6 +109,7 @@ export function useChatStream(
       }
 
       activeRef.current = true;
+      setOutcome(null);
       let ok = true;
       const controller = new AbortController();
       controllerRef.current = controller;
@@ -179,6 +186,15 @@ export function useChatStream(
           // The stream still settles; the next read can refetch the thread.
         } finally {
           activeRef.current = false;
+          if (mountedRef.current) {
+            let settled: StreamOutcome = "complete";
+            if (controller.signal.aborted) {
+              settled = "stopped";
+            } else if (!ok) {
+              settled = "failed";
+            }
+            setOutcome(settled);
+          }
           controllerRef.current = null;
           if (mountedRef.current) {
             setStream(null);
@@ -266,5 +282,13 @@ export function useChatStream(
     [runTurn],
   );
 
-  return { stream, isStreaming: stream !== null, start, retry, resolveApproval, stop };
+  return {
+    stream,
+    isStreaming: stream !== null,
+    start,
+    retry,
+    resolveApproval,
+    stop,
+    outcome,
+  };
 }

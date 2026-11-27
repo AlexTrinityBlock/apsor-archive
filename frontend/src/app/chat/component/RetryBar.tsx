@@ -22,11 +22,14 @@ export function RetryBar({ state, disabled, onRetry }: RetryBarProps) {
     return null;
   }
 
+  // A stream failure has no other surface, so it is announced as an alert;
+  // a limit stop sits under an assistant entry that already explains it.
+  const urgent = state.reason === "stream_failure";
   return (
     <section
       className="chat-retry"
-      role="status"
-      aria-live="polite"
+      role={urgent ? "alert" : "status"}
+      aria-live={urgent ? "assertive" : "polite"}
       aria-label={t("chat.retry.aria")}
     >
       <span className="chat-retry__mark" aria-hidden="true">
