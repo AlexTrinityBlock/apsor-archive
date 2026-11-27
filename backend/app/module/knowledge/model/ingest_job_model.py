@@ -126,7 +126,7 @@ class FileIngestJobModel(Base):
             "source_file_id",
         ),
         CheckConstraint(
-            "storage_backend IN ('local', 'r2')",
+            "storage_backend IN ('local', 'r2', 's3')",
             name="storage_backend_valid",
         ),
         CheckConstraint(

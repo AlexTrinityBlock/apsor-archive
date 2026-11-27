@@ -1,9 +1,10 @@
 SHELL := /bin/bash
 
-.PHONY: help dev-deps api web build test lint up down api-export api-generate api-check
+.PHONY: help setup dev-deps api web build test lint up down api-export api-generate api-check
 
 help:
 	@printf '%s\n' \
+	  'make setup        Run the setup wizard (writes .env and secret files)' \
 	  'make dev-deps     Start PostgreSQL + Valkey for local development' \
 	  'make api          Run the FastAPI server with reload' \
 	  'make web          Run the Vite dev server' \
@@ -15,6 +16,9 @@ help:
 	  'make api-export   Export OpenAPI to frontend/openapi.json' \
 	  'make api-generate Regenerate the committed Orval client' \
 	  'make api-check    Fail if the committed contract/client is stale'
+
+setup:
+	./setup.sh
 
 dev-deps:
 	docker compose -f docker-compose.dev.yml up -d --wait

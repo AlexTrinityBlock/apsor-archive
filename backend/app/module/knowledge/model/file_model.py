@@ -58,7 +58,7 @@ class FileModel(Base):
         CheckConstraint("version >= 1", name="version_positive"),
         CheckConstraint("size_bytes >= 0", name="size_non_negative"),
         CheckConstraint(
-            "storage_backend IN ('local', 'r2')",
+            "storage_backend IN ('local', 'r2', 's3')",
             name="storage_backend_valid",
         ),
         CheckConstraint(
