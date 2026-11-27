@@ -1,4 +1,4 @@
-import type { ChatStreamSegment } from "./useChatStream";
+import type { ChatStreamSegment } from "./stream-reducer";
 
 /** Append one streamed reasoning piece to the newest assistant segment. */
 export function appendReasoningDelta(
