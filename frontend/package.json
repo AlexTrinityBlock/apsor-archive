@@ -13,6 +13,8 @@
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "i18n:check": "bun scripts/check-i18n.ts",
+    "check:boundaries": "bun scripts/check-boundaries.ts",
+    "test": "bun test",
     "lint:fix": "eslint . --fix",
     "api:generate": "orval",
     "api:generate:live": "VITE_OPENAPI_SPEC=http://127.0.0.1:8000/openapi.json orval",
