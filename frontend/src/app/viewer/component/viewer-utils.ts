@@ -148,6 +148,7 @@ export function classifyFile(
   if (
     mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
     mime === "application/vnd.ms-excel" ||
+    mime === "application/vnd.ms-excel.sheet.macroenabled.12" ||
     mime === "application/vnd.oasis.opendocument.spreadsheet" ||
     [".xlsx", ".xls", ".xlsm", ".ods"].includes(extension)
   ) {
@@ -232,11 +233,12 @@ export function viewerErrorMessage(error: unknown, t: Translate): string {
 
 /** Pretty-print JSON without ever executing or transforming its values. */
 export function prettyJson(content: string): { formatted: string; valid: boolean } {
+  const text = content.replace(/^\uFEFF/, "");
   try {
-    const parsed: unknown = JSON.parse(content);
+    const parsed: unknown = JSON.parse(text);
     return { formatted: JSON.stringify(parsed, null, 2), valid: true };
   } catch {
-    return { formatted: content, valid: false };
+    return { formatted: text, valid: false };
   }
 }
 
@@ -316,13 +318,55 @@ interface CsvTable {
 const CSV_MAX_ROWS = 500;
 const CSV_MAX_COLUMNS = 40;
 
+/**
+ * Count delimiter characters outside quoted fields.
+ *
+ * A quote opens a field only at its start, matching `parseCsvRows`, so commas
+ * inside `"a, b"` cannot outvote the delimiter that actually separates cells.
+ */
+function countDelimiters(text: string, delimiter: string): number {
+  let count = 0;
+  let quoted = false;
+  let atFieldStart = true;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (quoted) {
+      if (character === '"') {
+        if (text[index + 1] === '"') {
+          index += 1;
+        } else {
+          quoted = false;
+        }
+      }
+      continue;
+    }
+    if (character === '"' && atFieldStart) {
+      quoted = true;
+      atFieldStart = false;
+    } else if (character === "," || character === ";" || character === "\t") {
+      // Every candidate can begin a new field, so a quote after any of them
+      // starts a quoted value for this scan as well.
+      if (character === delimiter) {
+        count += 1;
+      }
+      atFieldStart = true;
+    } else if (character === "\n" || character === "\r") {
+      atFieldStart = true;
+    } else if (character !== " " && character !== "\t") {
+      atFieldStart = false;
+    }
+  }
+  return count;
+}
+
 function detectDelimiter(text: string): string {
   const sample = text.slice(0, 4_000);
   const candidates = [",", ";", "\t"];
   let best = ",";
   let bestCount = -1;
   for (const candidate of candidates) {
-    const count = sample.split(candidate).length - 1;
+    const count = countDelimiters(sample, candidate);
     if (count > bestCount) {
       best = candidate;
       bestCount = count;
@@ -350,7 +394,10 @@ function parseCsvRows(text: string, delimiter: string): string[][] {
       } else {
         field += character;
       }
-    } else if (character === '"' && field.length === 0) {
+    } else if (character === '"' && field.trim().length === 0) {
+      // A quote starts a field after optional whitespace; that indentation is
+      // not part of the value.
+      field = "";
       quoted = true;
     } else if (character === delimiter) {
       row.push(field);

@@ -24,6 +24,7 @@ from app.module.knowledge.domain.spreadsheet_domain import (
     SpreadsheetSheet,
     render_spreadsheet,
 )
+from app.module.knowledge.exception.domain_error import SpreadsheetArchiveTooLargeError
 from app.module.knowledge.service.spreadsheet_extractor import extract_spreadsheet_text
 from tests.helpers import build_pptx_deck, create_text
 
@@ -34,6 +35,28 @@ BLUE_PNG = base64.b64decode(
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 ODS_MIME = "application/vnd.oasis.opendocument.spreadsheet"
 PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+_ODS_MANIFEST_XML = (
+    b'<?xml version="1.0" encoding="UTF-8"?>'
+    b'<manifest:manifest '
+    b'xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" '
+    b'manifest:version="1.2">'
+    b'<manifest:file-entry manifest:full-path="/" '
+    b'manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>'
+    b'<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
+    b"</manifest:manifest>"
+)
+
+
+def _build_ods(content_xml: bytes) -> bytes:
+    """Build a minimal ODS archive around one content.xml document."""
+    archive_buffer = io.BytesIO()
+    with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        mimetype_info = zipfile.ZipInfo("mimetype")
+        mimetype_info.compress_type = zipfile.ZIP_STORED
+        archive.writestr(mimetype_info, ODS_MIME)
+        archive.writestr("META-INF/manifest.xml", _ODS_MANIFEST_XML)
+        archive.writestr("content.xml", content_xml)
+    return archive_buffer.getvalue()
 
 
 def test_file_ingest_path_read_and_soft_delete(client: TestClient) -> None:
@@ -1053,7 +1076,7 @@ def test_spreadsheet_formula_fallback_and_limits() -> None:
 
 
 def test_spreadsheet_ods_upload_extracts_table(client: TestClient) -> None:
-    """A minimal ODS archive uploads, extracts its table, and becomes searchable."""
+    """A pretty-printed ODS uploads, extracts its table, and keeps its bytes."""
     content_xml = (
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<office:document-content '
@@ -1077,25 +1100,11 @@ def test_spreadsheet_ods_upload_extracts_table(client: TestClient) -> None:
         "</office:spreadsheet></office:body>"
         "</office:document-content>"
     ).encode()
-    manifest_xml = (
-        b'<?xml version="1.0" encoding="UTF-8"?>'
-        b'<manifest:manifest '
-        b'xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" '
-        b'manifest:version="1.2">'
-        b'<manifest:file-entry manifest:full-path="/" '
-        b'manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/>'
-        b'<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>'
-        b"</manifest:manifest>"
-    )
-
-    archive_buffer = io.BytesIO()
-    with zipfile.ZipFile(archive_buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        mimetype_info = zipfile.ZipInfo("mimetype")
-        mimetype_info.compress_type = zipfile.ZIP_STORED
-        archive.writestr(mimetype_info, ODS_MIME)
-        archive.writestr("META-INF/manifest.xml", manifest_xml)
-        archive.writestr("content.xml", content_xml)
-    payload = archive_buffer.getvalue()
+    # SheetJS and other writers pretty-print content.xml between tags; calamine
+    # rejects that archive shape, so extraction must normalize an in-memory copy.
+    pretty_content_xml = content_xml.replace(b"><", b">\n  <")
+    assert b">\n  <" in pretty_content_xml
+    payload = _build_ods(pretty_content_xml)
 
     uploaded = client.post(
         "/api/v1/files",
@@ -1128,6 +1137,72 @@ def test_spreadsheet_ods_upload_extracts_table(client: TestClient) -> None:
     )
     assert search.status_code == 200, search.text
     assert file_id in {item["file_id"] for item in search.json()["file_results"]}
+
+    # The fallback only feeds a normalized copy to calamine; the stored original
+    # must remain byte-identical.
+    original = client.get(f"/api/v1/files/{file_id}/content")
+    assert original.status_code == 200
+    assert original.content == payload
+    assert original.headers["content-type"] == ODS_MIME
+
+
+def test_spreadsheet_ods_repeated_empty_row_is_accepted() -> None:
+    """LibreOffice's million-row empty padding is not a declared-grid bomb."""
+    content_xml = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<office:document-content '
+        b'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+        b'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
+        b'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+        b'office:version="1.2">'
+        b"<office:body><office:spreadsheet>"
+        b'<table:table table:name="Padded">'
+        b"<table:table-row>"
+        b'<table:table-cell office:value-type="string"><text:p>Item</text:p>'
+        b"</table:table-cell>"
+        b'<table:table-cell office:value-type="string"><text:p>Qty</text:p>'
+        b"</table:table-cell>"
+        b"</table:table-row>"
+        b"<table:table-row>"
+        b'<table:table-cell office:value-type="string"><text:p>Bearing</text:p>'
+        b"</table:table-cell>"
+        b'<table:table-cell office:value-type="float" office:value="12">'
+        b"<text:p>12</text:p></table:table-cell>"
+        b"</table:table-row>"
+        b'<table:table-row table:number-rows-repeated="1048568">'
+        b'<table:table-cell table:number-columns-repeated="2"/>'
+        b"</table:table-row>"
+        b"</table:table></office:spreadsheet></office:body>"
+        b"</office:document-content>"
+    )
+
+    text = extract_spreadsheet_text(_build_ods(content_xml), ".ods")
+
+    assert "## Sheet: Padded" in text
+    assert "| Item | Qty |" in text
+    assert "Bearing" in text
+
+
+def test_spreadsheet_ods_repeated_row_with_content_is_rejected() -> None:
+    """A repeated row that actually carries a value remains a declared bomb."""
+    content_xml = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<office:document-content '
+        b'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+        b'xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" '
+        b'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" '
+        b'office:version="1.2">'
+        b"<office:body><office:spreadsheet>"
+        b'<table:table table:name="Bomb">'
+        b'<table:table-row table:number-rows-repeated="1048568">'
+        b"<table:table-cell><text:p>x</text:p></table:table-cell>"
+        b"</table:table-row>"
+        b"</table:table></office:spreadsheet></office:body>"
+        b"</office:document-content>"
+    )
+
+    with pytest.raises(SpreadsheetArchiveTooLargeError):
+        extract_spreadsheet_text(_build_ods(content_xml), ".ods")
 
 
 def test_pptx_upload_extracts_slides_tables_and_notes(client: TestClient) -> None:

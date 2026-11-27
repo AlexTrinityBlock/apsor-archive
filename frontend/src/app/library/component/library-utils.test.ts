@@ -28,11 +28,17 @@ describe("uniqueArchivePath", () => {
     ).toEqual({ fileName: "report (2).pdf", path: "/docs/report (2).pdf" });
   });
 
-  test("keeps dotfiles and extensionless names readable", () => {
-    expect(uniqueArchivePath("/", ".env", new Set(["/.env"]))).toEqual({
-      fileName: ".env (1)",
-      path: "/.env (1)",
+  test("keeps a duplicate dotfile's accepted suffix", () => {
+    const result = uniqueArchivePath("/", ".env", new Set(["/.env"]));
+
+    expect(result).toEqual({
+      fileName: "copy (1).env",
+      path: "/copy (1).env",
     });
+    expect(isAcceptedFileName(result.fileName)).toBe(true);
+  });
+
+  test("keeps extensionless names readable", () => {
     expect(
       uniqueArchivePath("/notes", "README", new Set(["/notes/README"])),
     ).toEqual({ fileName: "README (1)", path: "/notes/README (1)" });
@@ -90,6 +96,23 @@ describe("planUploadTargets", () => {
     expect(plan[0].file).toBe(files[0]);
     expect(plan[0].file.size).toBe(3);
     expect(plan[0].file.type).toBe("image/png");
+  });
+
+  test("keeps every dotfile in one paste accepted", () => {
+    const files = [
+      new File(["one"], ".env", { type: "text/plain" }),
+      new File(["two"], ".env", { type: "text/plain" }),
+      new File(["three"], ".env", { type: "text/plain" }),
+    ];
+
+    const plan = planUploadTargets(files, "/", new Set());
+
+    expect(plan.map((item) => item.fileName)).toEqual([
+      ".env",
+      "copy (1).env",
+      "copy (2).env",
+    ]);
+    expect(plan.every((item) => isAcceptedFileName(item.fileName))).toBe(true);
   });
 
   test("keeps free files byte-for-byte and does not mutate the taken set", () => {

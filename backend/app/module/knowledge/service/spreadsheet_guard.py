@@ -28,6 +28,8 @@ from app.module.knowledge.exception.domain_error import (
 )
 
 _ODS_TABLE_NAMESPACE = "urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+_ODS_OFFICE_NAMESPACE = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+_ODS_TEXT_NAMESPACE = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
 _XLSX_MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 _ODS_ROW = f"{{{_ODS_TABLE_NAMESPACE}}}table-row"
 _ODS_CELLS = {
@@ -36,6 +38,19 @@ _ODS_CELLS = {
 }
 _ODS_ROW_REPEAT = f"{{{_ODS_TABLE_NAMESPACE}}}number-rows-repeated"
 _ODS_COLUMN_REPEAT = f"{{{_ODS_TABLE_NAMESPACE}}}number-columns-repeated"
+_ODS_PARAGRAPH = f"{{{_ODS_TEXT_NAMESPACE}}}p"
+# A cell counts as content when any of these attributes is present. A repeated
+# row full of truly empty cells is how LibreOffice pads a sheet to the
+# 1,048,576-row limit, so it must not consume the declared grid budget.
+_ODS_CELL_CONTENT_ATTRIBUTES = (
+    f"{{{_ODS_OFFICE_NAMESPACE}}}value-type",
+    f"{{{_ODS_OFFICE_NAMESPACE}}}value",
+    f"{{{_ODS_OFFICE_NAMESPACE}}}date-value",
+    f"{{{_ODS_OFFICE_NAMESPACE}}}time-value",
+    f"{{{_ODS_OFFICE_NAMESPACE}}}boolean-value",
+    f"{{{_ODS_OFFICE_NAMESPACE}}}string-value",
+    f"{{{_ODS_TABLE_NAMESPACE}}}formula",
+)
 _XLSX_DIMENSION = f"{{{_XLSX_MAIN_NAMESPACE}}}dimension"
 _XLSX_ROW = f"{{{_XLSX_MAIN_NAMESPACE}}}row"
 _XLSX_CELL = f"{{{_XLSX_MAIN_NAMESPACE}}}c"
@@ -129,6 +144,7 @@ def _validate_ods_grid(archive: zipfile.ZipFile) -> None:
     cells = 0
     row_cells = 0
     row_repeat = 1
+    row_has_content = False
     try:
         with handle:
             for event, element in ElementTree.iterparse(handle, events=("start", "end")):
@@ -136,21 +152,40 @@ def _validate_ods_grid(archive: zipfile.ZipFile) -> None:
                 if event == "start" and tag == _ODS_ROW:
                     row_cells = 0
                     row_repeat = _positive_repeat(element.get(_ODS_ROW_REPEAT))
-                    if row_repeat > SPREADSHEET_MAX_DECLARED_ROWS:
-                        _raise_too_large(
-                            f"Workbook declares a repeated row count of {row_repeat}; "
-                            f"the pre-parse limit is {SPREADSHEET_MAX_DECLARED_ROWS}."
-                        )
+                    row_has_content = False
                 elif event == "start" and tag in _ODS_CELLS:
                     row_cells += _positive_repeat(element.get(_ODS_COLUMN_REPEAT))
-                    if row_cells > SPREADSHEET_MAX_DECLARED_COLUMNS:
-                        _raise_too_large(
-                            f"Workbook declares {row_cells} columns in one row; "
-                            f"the pre-parse limit is {SPREADSHEET_MAX_DECLARED_COLUMNS}."
-                        )
+                    if not row_has_content and any(
+                        element.get(attribute) is not None
+                        for attribute in _ODS_CELL_CONTENT_ATTRIBUTES
+                    ):
+                        row_has_content = True
+                elif event == "end" and tag == _ODS_PARAGRAPH:
+                    if not row_has_content and "".join(element.itertext()).strip():
+                        row_has_content = True
                 elif event == "end" and tag == _ODS_ROW:
-                    rows += row_repeat
-                    cells += row_repeat * max(1, row_cells)
+                    if row_has_content:
+                        # Only a repeated row that actually carries data can make
+                        # the parser materialize the declared repeats.
+                        if row_repeat > SPREADSHEET_MAX_DECLARED_ROWS:
+                            _raise_too_large(
+                                f"Workbook declares a repeated row count of "
+                                f"{row_repeat}; the pre-parse limit is "
+                                f"{SPREADSHEET_MAX_DECLARED_ROWS}."
+                            )
+                        if row_cells > SPREADSHEET_MAX_DECLARED_COLUMNS:
+                            _raise_too_large(
+                                f"Workbook declares {row_cells} columns in one row; "
+                                f"the pre-parse limit is "
+                                f"{SPREADSHEET_MAX_DECLARED_COLUMNS}."
+                            )
+                        rows += row_repeat
+                        cells += row_repeat * max(1, row_cells)
+                    else:
+                        # LibreOffice pads to the sheet limit with one repeated
+                        # row of empty cells; count it like one empty row.
+                        rows += 1
+                        cells += 1
                     _check_rows_and_cells(rows, cells)
                     element.clear()
     except (DefusedXmlException, ElementTree.ParseError, OSError, ValueError):

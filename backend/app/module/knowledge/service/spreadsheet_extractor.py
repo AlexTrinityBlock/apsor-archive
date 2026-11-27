@@ -7,6 +7,7 @@ formatting and limit rules live in the spreadsheet domain module.
 """
 
 import logging
+import re
 import zipfile
 from collections.abc import Mapping
 from io import BytesIO
@@ -41,7 +42,51 @@ from app.module.knowledge.service.spreadsheet_guard import (
 logger = logging.getLogger(__name__)
 
 _FORMULA_SCAN_CHUNK_BYTES = 1024 * 1024
+_ODS_INTER_TAG_WHITESPACE = re.compile(rb">\s+<")
 _FormulaMap = dict[tuple[int, int], str]
+
+
+def _ods_with_collapsed_whitespace(data: bytes) -> bytes:
+    """Rebuild an ODS archive with inter-tag whitespace removed from content.xml.
+
+    Some writers pretty-print ``content.xml`` between tags, which calamine's ODS
+    format probe rejects even though the document is valid. Only that entry is
+    rewritten; every other entry keeps its order, timestamp, and compression.
+    The caller's bytes and the stored original are never modified.
+    """
+    rebuilt = BytesIO()
+    with (
+        zipfile.ZipFile(BytesIO(data)) as source,
+        zipfile.ZipFile(rebuilt, "w") as target,
+    ):
+        target.comment = source.comment
+        for entry in source.infolist():
+            payload = source.read(entry)
+            if entry.filename == "content.xml":
+                payload = _ODS_INTER_TAG_WHITESPACE.sub(b"><", payload)
+            clone = zipfile.ZipInfo(entry.filename, entry.date_time)
+            clone.compress_type = entry.compress_type
+            clone.external_attr = entry.external_attr
+            clone.create_system = entry.create_system
+            clone.comment = entry.comment
+            target.writestr(clone, payload)
+    return rebuilt.getvalue()
+
+
+def _open_ods_workbook(data: bytes) -> CalamineWorkbook:
+    """Retry calamine once on a whitespace-normalized in-memory copy."""
+    try:
+        normalized = _ods_with_collapsed_whitespace(data)
+        return CalamineWorkbook.from_filelike(BytesIO(normalized))
+    except (
+        CalamineError,
+        NotImplementedError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        zipfile.BadZipFile,
+    ) as exc:
+        raise EmptyContentError() from exc
 
 
 def _sheet_start(sheet: CalamineSheet) -> tuple[int, int]:
@@ -341,7 +386,9 @@ def extract_spreadsheet_text(
         try:
             workbook = CalamineWorkbook.from_filelike(stream)
         except (CalamineError, OSError, ValueError) as exc:
-            raise EmptyContentError() from exc
+            if normalized_suffix != ".ods":
+                raise EmptyContentError() from exc
+            workbook = _open_ods_workbook(data)
 
         selected: list[tuple[SheetMetadata, CalamineSheet]] = []
         for metadata in workbook.sheets_metadata:

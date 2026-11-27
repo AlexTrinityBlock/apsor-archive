@@ -69,6 +69,23 @@ function extensionOf(title: string | null): string {
   return match ? match[0].toLowerCase() : "";
 }
 
+const TEXT_BADGES: Readonly<Record<string, string>> = {
+  ".txt": "TXT",
+  ".jsonl": "JSONL",
+  ".toml": "TOML",
+  ".ini": "INI",
+  ".env": "ENV",
+  ".log": "LOG",
+};
+
+/**
+ * The tile badge for a text file: the presented extension when it is one of
+ * the known text formats, otherwise the generic `TXT` badge.
+ */
+export function textThumbnailBadge(title: string | null): string {
+  return TEXT_BADGES[extensionOf(title)] ?? "TXT";
+}
+
 function thumbnailBadge(kind: ViewerKind, title: string | null): string {
   switch (kind) {
     case "pdf":
@@ -88,7 +105,7 @@ function thumbnailBadge(kind: ViewerKind, title: string | null): string {
     case "csv":
       return "CSV";
     case "text":
-      return "TXT";
+      return textThumbnailBadge(title);
     default: {
       const extension = extensionOf(title).replace(".", "").slice(0, 4);
       return extension.length > 0 ? extension.toUpperCase() : "FILE";
