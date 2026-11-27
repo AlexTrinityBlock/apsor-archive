@@ -24,7 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.module.knowledge.model.base import Base
+from app.infrastructure.database.base import Base
 from app.shared.time import utcnow
 
 INGEST_SOURCE_UPLOAD = "upload"

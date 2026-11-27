@@ -14,16 +14,16 @@ from app.infrastructure.ai.provider_factory import (
 )
 from app.infrastructure.ai.runtime import AiRuntime
 from app.infrastructure.config.settings import Settings
-from app.infrastructure.web.deepseek_client import DeepSeekWebClient
+from app.infrastructure.web.deepseek_web_client import DeepSeekWebClient
 from app.module.agent.dependencies import _available_web_provider
 from app.module.knowledge.domain.provider_config_domain import (
     CAPABILITY_WEB_FETCH,
     CAPABILITY_WEB_SEARCH,
 )
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.model.provider_config_model import (
     WebSearchProviderConfigModel,
 )
-from app.module.knowledge.protocol.provider_config import ProviderConfig
 from app.module.web_research.dependencies import WebClientFactory
 
 

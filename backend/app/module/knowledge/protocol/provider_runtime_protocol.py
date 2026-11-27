@@ -7,9 +7,9 @@ decides which implementation is injected.
 
 from typing import Protocol
 
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig, ProviderDefaults
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.provider_builder_protocol import WebClientProtocol
-from app.module.knowledge.protocol.provider_config import ProviderConfig, ProviderDefaults
 from app.module.knowledge.protocol.provider_config_repository_protocol import (
     ProviderConfigRepositoryProtocol,
 )

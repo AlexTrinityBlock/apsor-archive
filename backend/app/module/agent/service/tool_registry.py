@@ -57,7 +57,7 @@ from app.module.knowledge.exception.domain_error import (
 )
 from app.module.knowledge.schema.memory_schema import MemorySchema
 from app.module.knowledge.schema.timeline_schema import TimelineEventSchema
-from app.module.web_research.domain.fetch_quality import looks_structurally_incomplete
+from app.module.web_research.domain.fetch_quality_domain import looks_structurally_incomplete
 from app.module.web_research.exception.domain_error import (
     WebFetchNotConfiguredError,
     WebResearchError,

@@ -15,11 +15,11 @@ from app.infrastructure.ai.provider_factory import (
 from app.infrastructure.ai.runtime import AiRuntime
 from app.infrastructure.config.settings import Settings
 from app.infrastructure.security.secret_cipher import SecretCipher
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.model.provider_config_model import (
     ChatProviderConfigModel,
     EmbeddingProviderConfigModel,
 )
-from app.module.knowledge.protocol.provider_config import ProviderConfig
 
 
 class _ChainRepository:

@@ -30,7 +30,7 @@ from alembic import command
 from app.infrastructure.config.settings import Settings
 from app.infrastructure.security.password_hasher import Argon2PasswordHasher
 from app.main import create_app
-from app.module.agent.service.system_prompt import default_sections
+from app.module.agent.domain.system_entry_domain import default_sections
 from app.module.auth.domain.auth_domain import AuthDomain
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]

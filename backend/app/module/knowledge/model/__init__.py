@@ -1,6 +1,6 @@
 """ORM model exports used by Alembic and the repositories."""
 
-from app.module.knowledge.model.base import Base
+from app.infrastructure.database.base import Base
 from app.module.knowledge.model.chunk_model import (
     SOURCE_FILE,
     SOURCE_HISTORY,

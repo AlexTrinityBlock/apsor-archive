@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.module.knowledge.model.base import Base
+from app.infrastructure.database.base import Base
 from app.shared.time import utcnow
 
 

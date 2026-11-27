@@ -55,6 +55,8 @@ from app.module.agent.domain.compaction_domain import (
 )
 from app.module.agent.domain.context_domain import build_context, render_tool_result
 from app.module.agent.domain.plot_spec_domain import PlotLimits
+from app.module.agent.domain.system_entry_domain import build_system_data, build_system_model
+from app.module.agent.domain.time_context_domain import current_time_block
 from app.module.agent.domain.tool_args import MAX_EXPRESSION_CHARS
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
@@ -110,9 +112,7 @@ from app.module.agent.schema.agent_schema import (
     AgentToolSchema,
     AgentTurnResultSchema,
 )
-from app.module.agent.service.system_prompt import build_system_data, build_system_model
 from app.module.agent.service.system_prompt_service import SystemPromptService
-from app.module.agent.service.time_context import current_time_block
 from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.knowledge.exception.domain_error import (
     AiContextWindowError,

@@ -40,13 +40,13 @@ from app.module.knowledge.domain.provider_config_domain import (
     CHAT_TABLE_SPEC,
     default_base_url_for,
 )
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig, ProviderDefaults
 from app.module.knowledge.exception.domain_error import (
     InvalidModelAssignmentError,
     ModelProbeFailedError,
     ProviderNotFoundError,
 )
 from app.module.knowledge.model.provider_config_model import ChatProviderConfigModel
-from app.module.knowledge.protocol.provider_config import ProviderConfig, ProviderDefaults
 from app.module.knowledge.repository.model_assignment_repository import (
     AccountAssignment,
     ModelAssignmentRepository,

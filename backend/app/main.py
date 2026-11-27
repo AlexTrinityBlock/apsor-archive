@@ -47,7 +47,9 @@ from app.module.knowledge.dependencies import (
     ingest_runtime_defaults,
     load_ingest_runtime_config,
 )
-from app.module.knowledge.exception.handler import register_exceptions
+from app.module.knowledge.exception.handler import (
+    register_exceptions as register_knowledge_exceptions,
+)
 from app.module.knowledge.repository.provider_config_repository import (
     ProviderConfigRepository,
 )
@@ -59,7 +61,7 @@ from app.module.knowledge.router.ingest_progress_router import (
 from app.module.knowledge.service.provider_error_notice_service import (
     ProviderErrorNoticeService,
 )
-from app.module.prompt.exception.handler import register_prompt_exceptions
+from app.module.prompt.exception.handler import register_exceptions as register_prompt_exceptions
 from app.module.prompt.router import router as prompt_router
 from app.module.web_research.exception.handler import (
     register_exceptions as register_web_research_exceptions,
@@ -231,7 +233,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = resolved_settings
 
-    register_exceptions()
+    register_knowledge_exceptions()
     register_auth_exceptions()
     register_agent_exceptions()
     register_web_research_exceptions()

@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.ai.runtime import AiRuntime
@@ -15,6 +14,7 @@ from app.module.knowledge.dependencies import (
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 from app.module.knowledge.schema.system_schema import HealthSchema
+from app.module.knowledge.service.health_service import probe_database
 
 router = APIRouter(tags=["system"])
 
@@ -28,11 +28,7 @@ async def get_health(
     ai_runtime: AiRuntime = Depends(get_ai_runtime),
 ) -> HealthSchema | JSONResponse:
     """Check the database, cache, and AI configuration without leaking secrets."""
-    try:
-        await session.execute(text("SELECT 1"))
-        database_status = "ok"
-    except Exception:
-        database_status = "error"
+    database_status = await probe_database(session)
     cache_status = "ok" if await cache.ping() else "degraded"
     settings = request.app.state.settings
     payload = HealthSchema(
