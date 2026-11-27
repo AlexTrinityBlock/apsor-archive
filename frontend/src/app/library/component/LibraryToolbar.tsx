@@ -4,6 +4,7 @@ import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useI18n, type TranslationKey } from "../../i18n";
 import { LibraryBreadcrumbs } from "./LibraryBreadcrumbs";
+import { LibraryTabStrip } from "./LibraryTabStrip";
 import {
   LIBRARY_SORT_OPTIONS,
   type LibrarySort,
@@ -30,6 +31,7 @@ interface LibraryToolbarProps {
   readonly onClearQuery: () => void;
   readonly onSortChange: (sort: LibrarySort) => void;
   readonly onTabChange: (tab: LibraryTab) => void;
+  readonly onOpenMemories: () => void;
   readonly onViewChange: (view: LibraryView) => void;
   readonly onToggleSelecting: () => void;
   readonly onUpload: () => void;
@@ -141,6 +143,7 @@ export function LibraryToolbar({
   onClearQuery,
   onSortChange,
   onTabChange,
+  onOpenMemories,
   onViewChange,
   onToggleSelecting,
   onUpload,
@@ -148,7 +151,7 @@ export function LibraryToolbar({
   onDeleteFolder,
   onNewMarkdown,
 }: LibraryToolbarProps) {
-  const { t, formatNumber } = useI18n();
+  const { t } = useI18n();
   const searchId = useId();
   const sortId = useId();
 
@@ -236,36 +239,14 @@ export function LibraryToolbar({
       </div>
 
       <div className="library-viewstrip">
-        <div className="tabs" role="tablist" aria-label={t("library.toolbar.workspaceTabs")}>
-          <button
-            type="button"
-            role="tab"
-            id="library-tab-files"
-            aria-selected={tab === "files"}
-            aria-controls="library-panel"
-            className={tab === "files" ? "tab is-active" : "tab"}
-            onClick={() => onTabChange("files")}
-          >
-            {t("library.toolbar.filesTab")}
-            {loading ? null : (
-              <span className="library-tab-count">{formatNumber(fileCount)}</span>
-            )}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            id="library-tab-media"
-            aria-selected={tab === "media"}
-            aria-controls="library-panel"
-            className={tab === "media" ? "tab is-active" : "tab"}
-            onClick={() => onTabChange("media")}
-          >
-            {t("library.toolbar.mediaTab")}
-            {loading ? null : (
-              <span className="library-tab-count">{formatNumber(mediaCount)}</span>
-            )}
-          </button>
-        </div>
+        <LibraryTabStrip
+          active={tab}
+          fileCount={loading ? null : fileCount}
+          mediaCount={loading ? null : mediaCount}
+          onSelect={(collection) =>
+            collection === "memories" ? onOpenMemories() : onTabChange(collection)
+          }
+        />
 
         <div className="library-viewstrip__meta">
           <StatusLine

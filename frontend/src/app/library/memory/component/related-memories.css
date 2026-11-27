@@ -1,0 +1,120 @@
+/* Related memories (關聯記憶): shared by the memory reader and file preview. */
+
+.related-memories {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 4px;
+}
+
+.related-memories__header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.related-memories__title {
+  margin: 0;
+  color: var(--mono-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.related-memories__description,
+.related-memories__note {
+  margin: 0;
+  color: var(--mono-l3);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.related-memories__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  color: var(--mono-l2);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.related-memories__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.related-memory {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-left: 2px solid var(--accent-moss);
+  border-radius: 3px;
+  transition: border-color 120ms ease;
+}
+
+.related-memory.is-deprecated {
+  border-left-color: var(--accent-seal);
+}
+
+.related-memory:hover,
+.related-memory:focus-visible {
+  border-color: var(--mono-l3);
+}
+
+.related-memory__head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.related-memory__title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.related-memory__preview {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--mono-l2);
+  font-size: 11.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.related-memory__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--mono-l3);
+  font-family: var(--mono-font-mono);
+  font-size: 10.5px;
+}
+
+.related-memory__chip {
+  padding: 1px 6px;
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 999px;
+}

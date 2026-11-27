@@ -31,8 +31,8 @@ export const memory = {
     nounMatching: "符合",
   },
   vault: {
-    eyebrow: "记忆 · 记忆库",
-    title: "记忆库",
+    eyebrow: "文件库 · 记忆",
+    title: "记忆",
     description:
       "每一条压印的记忆，按发生时间从新到旧排列。有效的记忆仍会出现在搜索与时间线中；已淘汰的记忆仍可连同谱系阅读。",
     activeLabel: "条有效",
@@ -123,7 +123,7 @@ export const memory = {
     metaNewRecord: "新记录",
     metaSupersedesOne: "取代 {count} 条记录",
     metaSupersedesOther: "取代 {count} 条记录",
-    backToVault: "返回记忆库",
+    backToVault: "返回记忆",
     formEyebrow: "新记录",
     formTitle: "应该记住什么？",
     contentLabel: "内容",
@@ -181,7 +181,7 @@ export const memory = {
     readingRecord: "正在读取记录",
     editText: "编辑文本",
     deprecate: "淘汰",
-    backToVault: "返回记忆库",
+    backToVault: "返回记忆",
     skeleton: "正在读取记忆轨迹",
     errorTitle: "记忆轨迹没有响应。",
     errorDescription:
@@ -269,13 +269,30 @@ export const memory = {
       "记忆 {id} 不在档案馆中。它可能已被移除，或这个 ID 从未存在。",
     missingDescriptionFallback:
       "这个路由上的记忆不在档案馆中。它可能已被移除，或这个 ID 从未存在。",
-    backToVault: "返回记忆库",
+    backToVault: "返回记忆",
     emptyEyebrow: "这个地址没有记忆",
     emptyTitle: "这条记忆不在档案馆中。",
     emptyDescription:
       "已淘汰的记忆仍可阅读，因此找不到记录代表它确实不存在，而不只是被淘汰。请返回记忆库浏览仍存续的谱系。",
     browseVault: "浏览记忆库",
     pressNew: "压印一条新记忆",
+  },
+  related: {
+    title: "关联记忆",
+    description: "按相近措辞、共同关键词与共同摘要排序。谱系与取代链另行列出。",
+    loading: "正在查找关联记忆",
+    empty: "目前还没有关联记忆。",
+    error: "无法加载关联记忆。",
+    retry: "重试",
+    similarityUnavailable: "这条记录无法计算相似度；仅显示关键词与摘要关联。",
+    showDeprecated: "包含已弃用",
+    reason: {
+      similar: "内容相近",
+      keyword: "共同关键词",
+      summary: "同一摘要",
+      nearby: "时间相近",
+    },
+    scoreTitle: "关联分数 {score}",
   },
   questions: {
     eyebrow: "问题 · 已存问题架",

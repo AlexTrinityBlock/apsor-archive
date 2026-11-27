@@ -25,6 +25,9 @@ import {
   timelineNewestFirst,
   toDateInput,
 } from "./helpers";
+import {
+  libraryMemoryUrl,
+} from "../../../lib/library-url";
 
 export interface TimelineWindowView {
   readonly key: string;
@@ -207,7 +210,7 @@ function EventFooter({
               {t("insights.timeline.spine.deprecate")}
             </button>
           ) : null}
-          <Link className="timeline-node__link" to={`/memory/${event.memory_id}`}>
+          <Link className="timeline-node__link" to={libraryMemoryUrl(event.memory_id)}>
             {t("insights.timeline.spine.readMemory")}
             <Icon name="arrow-up-right" size={12} />
           </Link>

@@ -1,3 +1,5 @@
+import "./memory-shared.css";
+
 import type { MemorySchema } from "../../generated-apis-types/schemas";
 import { useI18n } from "../../i18n";
 

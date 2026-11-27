@@ -40,6 +40,7 @@ import {
   isNotFoundError,
   type FileOperationTarget,
 } from "./library-utils";
+import { RelatedMemories } from "../memory/component/RelatedMemories";
 
 type PreviewTab = "page" | "chunk" | "meta";
 
@@ -472,11 +473,20 @@ function PreviewBody({
   }
   if (activeTab === "meta") {
     return (
-      <MetadataPanel
-        file={file}
-        reingestActive={reingestActive}
-        onReingest={onReingest}
-      />
+      <>
+        <MetadataPanel
+          file={file}
+          reingestActive={reingestActive}
+          onReingest={onReingest}
+        />
+        <RelatedMemories
+          source={{
+            kind: "file",
+            fileId: file.id,
+            historical: !file.is_current || file.deleted_at !== null,
+          }}
+        />
+      </>
     );
   }
   return <PagePreview file={file} isImage={classifyFile(file) === "image"} />;

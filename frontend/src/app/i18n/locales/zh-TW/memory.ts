@@ -31,8 +31,8 @@ export const memory = {
     nounMatching: "符合",
   },
   vault: {
-    eyebrow: "記憶 · 記憶庫",
-    title: "記憶庫",
+    eyebrow: "檔案庫 · 記憶",
+    title: "記憶",
     description:
       "每一則壓印的記憶，依發生時間由新到舊排列。有效的記憶仍會出現在搜尋與時間軸；已淘汰的記憶仍可連同系譜閱讀。",
     activeLabel: "則有效",
@@ -123,7 +123,7 @@ export const memory = {
     metaNewRecord: "新紀錄",
     metaSupersedesOne: "取代 {count} 筆紀錄",
     metaSupersedesOther: "取代 {count} 筆紀錄",
-    backToVault: "返回記憶庫",
+    backToVault: "返回記憶",
     formEyebrow: "新紀錄",
     formTitle: "應該記住什麼？",
     contentLabel: "內容",
@@ -181,7 +181,7 @@ export const memory = {
     readingRecord: "正在讀取紀錄",
     editText: "編輯文字",
     deprecate: "淘汰",
-    backToVault: "返回記憶庫",
+    backToVault: "返回記憶",
     skeleton: "正在讀取記憶軌跡",
     errorTitle: "記憶軌跡沒有回應。",
     errorDescription:
@@ -270,13 +270,30 @@ export const memory = {
       "記憶 {id} 不在檔案館中。它可能已被移除，或這個 ID 從未存在。",
     missingDescriptionFallback:
       "這個路由上的記憶不在檔案館中。它可能已被移除，或這個 ID 從未存在。",
-    backToVault: "返回記憶庫",
+    backToVault: "返回記憶",
     emptyEyebrow: "這個位址沒有記憶",
     emptyTitle: "這則記憶不在檔案館中。",
     emptyDescription:
       "已淘汰的記憶仍可閱讀，因此找不到紀錄代表它確實不存在，而不只是被淘汰。請返回記憶庫瀏覽仍存續的系譜。",
     browseVault: "瀏覽記憶庫",
     pressNew: "壓印一則新記憶",
+  },
+  related: {
+    title: "關聯記憶",
+    description: "依相近措辭、共同關鍵字與共同摘要排序。系譜與取代鏈另行列出。",
+    loading: "正在尋找關聯記憶",
+    empty: "目前還沒有關聯記憶。",
+    error: "無法載入關聯記憶。",
+    retry: "重試",
+    similarityUnavailable: "這則紀錄無法計算相似度；僅顯示關鍵字與摘要關聯。",
+    showDeprecated: "包含已棄用",
+    reason: {
+      similar: "內容相近",
+      keyword: "共同關鍵字",
+      summary: "同一摘要",
+      nearby: "時間相近",
+    },
+    scoreTitle: "關聯分數 {score}",
   },
   questions: {
     eyebrow: "問題 · 已存問題架",

@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
-import { useApiErrorMessage, useI18n } from "../../i18n";
-import { Button } from "../../component/Button";
-import { Icon, type IconName } from "../../component/Icon";
+import { useApiErrorMessage, useI18n } from "../../../i18n";
+import { Button } from "../../../component/Button";
+import { Icon, type IconName } from "../../../component/Icon";
 
 interface MemorySkeletonProps {
   readonly label?: string;

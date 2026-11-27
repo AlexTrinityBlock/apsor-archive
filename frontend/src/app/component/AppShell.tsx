@@ -64,7 +64,6 @@ const NAV_SECTIONS: readonly NavSection[] = [
       { to: "/chat", labelKey: "core.nav.chat", icon: "chat" },
       { to: "/library", labelKey: "core.nav.library", icon: "library" },
       { to: "/timeline", labelKey: "core.nav.timeline", icon: "timeline" },
-      { to: "/memory", labelKey: "core.nav.memory", icon: "memory" },
       { to: "/search", labelKey: "core.nav.search", icon: "search" },
       {
         to: "/dashboard",

@@ -26,6 +26,7 @@ import { basename, parentPath, pathSegments } from "../../lib/format";
 import {
   libraryFileUrl,
   libraryFolderUrl,
+  libraryMemoriesUrl,
   type LibraryRoute,
 } from "../../lib/library-url";
 import { Button } from "../component/Button";
@@ -1277,6 +1278,7 @@ export function LibraryBrowser({ route }: { readonly route: LibraryRoute }) {
         onClearQuery={clearQuery}
         onSortChange={setSort}
         onTabChange={handleTabChange}
+        onOpenMemories={() => navigate(libraryMemoriesUrl())}
         onViewChange={handleViewChange}
         onToggleSelecting={toggleSelecting}
         onUpload={() => openUpload()}
