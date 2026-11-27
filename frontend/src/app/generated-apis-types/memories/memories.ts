@@ -25,7 +25,9 @@ import type {
 
 import type {
   HTTPValidationError,
+  ListFileRelatedMemoriesParams,
   ListMemoriesParams,
+  ListRelatedMemoriesParams,
   ListResponseSchemaMemorySchema,
   ListResponseSchemaSummarySchema,
   ListSummariesParams,
@@ -36,6 +38,7 @@ import type {
   MemorySchema,
   MemoryUpdateSchema,
   ReadMemoryParams,
+  RelatedMemoriesSchema,
   SummaryCreateSchema,
   SummarySchema
 } from '../schemas';
@@ -257,7 +260,123 @@ export const useSaveMemory = <TError = HTTPValidationError,
       > => {
       return useMutation(getSaveMemoryMutationOptions(options), queryClient);
     }
-    export const getReadMemoryUrl = (memoryId: number,
+    export const getListFileRelatedMemoriesUrl = (fileId: number,
+    params?: ListFileRelatedMemoriesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/memories/related/files/${fileId}?${stringifiedParams}` : `/api/v1/memories/related/files/${fileId}`
+}
+
+/**
+ * Rank memories related to one file by stored similarity and shared keywords.
+ * @summary List File Related Memories
+ */
+export const listFileRelatedMemories = async (fileId: number,
+    params?: ListFileRelatedMemoriesParams, options?: Parameters<typeof apiFetch>[1]): Promise<RelatedMemoriesSchema> => {
+
+  return apiFetch<RelatedMemoriesSchema>(getListFileRelatedMemoriesUrl(fileId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListFileRelatedMemoriesQueryKey = (fileId: number,
+    params?: ListFileRelatedMemoriesParams,) => {
+    return [
+    `/api/v1/memories/related/files/${fileId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListFileRelatedMemoriesQueryOptions = <TData = Awaited<ReturnType<typeof listFileRelatedMemories>>, TError = HTTPValidationError>(fileId: number,
+    params?: ListFileRelatedMemoriesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFileRelatedMemories>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListFileRelatedMemoriesQueryKey(fileId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listFileRelatedMemories>>> = ({ signal }) => listFileRelatedMemories(fileId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: fileId !== null && fileId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listFileRelatedMemories>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListFileRelatedMemoriesQueryResult = NonNullable<Awaited<ReturnType<typeof listFileRelatedMemories>>>
+export type ListFileRelatedMemoriesQueryError = HTTPValidationError
+
+
+export function useListFileRelatedMemories<TData = Awaited<ReturnType<typeof listFileRelatedMemories>>, TError = HTTPValidationError>(
+ fileId: number,
+    params: undefined |  ListFileRelatedMemoriesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFileRelatedMemories>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listFileRelatedMemories>>,
+          TError,
+          Awaited<ReturnType<typeof listFileRelatedMemories>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListFileRelatedMemories<TData = Awaited<ReturnType<typeof listFileRelatedMemories>>, TError = HTTPValidationError>(
+ fileId: number,
+    params?: ListFileRelatedMemoriesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFileRelatedMemories>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listFileRelatedMemories>>,
+          TError,
+          Awaited<ReturnType<typeof listFileRelatedMemories>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListFileRelatedMemories<TData = Awaited<ReturnType<typeof listFileRelatedMemories>>, TError = HTTPValidationError>(
+ fileId: number,
+    params?: ListFileRelatedMemoriesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFileRelatedMemories>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List File Related Memories
+ */
+
+export function useListFileRelatedMemories<TData = Awaited<ReturnType<typeof listFileRelatedMemories>>, TError = HTTPValidationError>(
+ fileId: number,
+    params?: ListFileRelatedMemoriesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listFileRelatedMemories>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListFileRelatedMemoriesQueryOptions(fileId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getReadMemoryUrl = (memoryId: number,
     params?: ReadMemoryParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -551,7 +670,123 @@ export const useDeprecateMemory = <TError = HTTPValidationError,
       > => {
       return useMutation(getDeprecateMemoryMutationOptions(options), queryClient);
     }
-    export const getListSummariesUrl = (params?: ListSummariesParams,) => {
+    export const getListRelatedMemoriesUrl = (memoryId: number,
+    params?: ListRelatedMemoriesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/memories/${memoryId}/related?${stringifiedParams}` : `/api/v1/memories/${memoryId}/related`
+}
+
+/**
+ * Rank memories related to one memory, excluding its supersession chain.
+ * @summary List Related Memories
+ */
+export const listRelatedMemories = async (memoryId: number,
+    params?: ListRelatedMemoriesParams, options?: Parameters<typeof apiFetch>[1]): Promise<RelatedMemoriesSchema> => {
+
+  return apiFetch<RelatedMemoriesSchema>(getListRelatedMemoriesUrl(memoryId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListRelatedMemoriesQueryKey = (memoryId: number,
+    params?: ListRelatedMemoriesParams,) => {
+    return [
+    `/api/v1/memories/${memoryId}/related`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListRelatedMemoriesQueryOptions = <TData = Awaited<ReturnType<typeof listRelatedMemories>>, TError = HTTPValidationError>(memoryId: number,
+    params?: ListRelatedMemoriesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRelatedMemories>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRelatedMemoriesQueryKey(memoryId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRelatedMemories>>> = ({ signal }) => listRelatedMemories(memoryId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: memoryId !== null && memoryId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRelatedMemories>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListRelatedMemoriesQueryResult = NonNullable<Awaited<ReturnType<typeof listRelatedMemories>>>
+export type ListRelatedMemoriesQueryError = HTTPValidationError
+
+
+export function useListRelatedMemories<TData = Awaited<ReturnType<typeof listRelatedMemories>>, TError = HTTPValidationError>(
+ memoryId: number,
+    params: undefined |  ListRelatedMemoriesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRelatedMemories>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listRelatedMemories>>,
+          TError,
+          Awaited<ReturnType<typeof listRelatedMemories>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListRelatedMemories<TData = Awaited<ReturnType<typeof listRelatedMemories>>, TError = HTTPValidationError>(
+ memoryId: number,
+    params?: ListRelatedMemoriesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRelatedMemories>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listRelatedMemories>>,
+          TError,
+          Awaited<ReturnType<typeof listRelatedMemories>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListRelatedMemories<TData = Awaited<ReturnType<typeof listRelatedMemories>>, TError = HTTPValidationError>(
+ memoryId: number,
+    params?: ListRelatedMemoriesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRelatedMemories>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Related Memories
+ */
+
+export function useListRelatedMemories<TData = Awaited<ReturnType<typeof listRelatedMemories>>, TError = HTTPValidationError>(
+ memoryId: number,
+    params?: ListRelatedMemoriesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listRelatedMemories>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListRelatedMemoriesQueryOptions(memoryId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListSummariesUrl = (params?: ListSummariesParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
