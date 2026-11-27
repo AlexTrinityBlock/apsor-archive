@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { PathFileSchema } from "../../generated-apis-types/schemas";
 import { getGetFileContentUrl } from "../../generated-apis-types/files/files";
 import { formatBytes } from "../../../lib/format";
@@ -5,7 +7,9 @@ import { Button } from "../../component/Button";
 import { EmptyState } from "../../component/EmptyState";
 import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
+import { fileThumbnailUrl } from "../../viewer/component/thumbnail";
 import { fileKindLabel } from "./library-utils";
+import { serverThumbnailFor } from "./thumbnail/server-thumb";
 
 interface LibraryMediaGalleryProps {
   readonly path: string;
@@ -103,6 +107,13 @@ function MediaToolbar({
 
 function MediaCard({ file, onOpen }: MediaCardProps) {
   const { t, formatDateTime, formatNumber } = useI18n();
+  // The tiny server WebP keeps the grid from downloading every original; a
+  // file without one, or a failed thumbnail, falls back to the original.
+  const [thumbnailFailed, setThumbnailFailed] = useState(false);
+  const thumbnail = serverThumbnailFor(file, thumbnailFailed);
+  const src = thumbnail
+    ? fileThumbnailUrl(file.file_id, thumbnail.version)
+    : getGetFileContentUrl(file.file_id);
   return (
     <article className="library-media-card">
       <button
@@ -113,10 +124,13 @@ function MediaCard({ file, onOpen }: MediaCardProps) {
       >
         <span className="library-media-card__figure">
           <img
-            src={getGetFileContentUrl(file.file_id)}
+            src={src}
             alt={file.file_name}
+            width={thumbnail?.width}
+            height={thumbnail?.height}
             loading="lazy"
             decoding="async"
+            onError={thumbnail ? () => setThumbnailFailed(true) : undefined}
           />
           <span className="file-type-pill library-media-card__type">
             {fileKindLabel(file.file_name)}

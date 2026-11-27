@@ -1422,6 +1422,14 @@ sandboxing CSP, ETag/Last-Modified, and single-range HTTP Range support
 Legacy text-only records have `has_original=false`; the sheet skips the
 `/content` probe entirely and reads indexed chunks.
 
+Every uploaded image, PDF, and Office file with an embedded preview also gets a
+tiny WebP thumbnail during ingestion (`GET /api/v1/files/{file_id}/thumbnail`).
+Library cards, the Media grid, chat resource cards, and preview loading states
+paint it first inside a box sized from its known dimensions, so nothing jumps
+or flickers while the full preview loads. The ingestion worker backfills
+thumbnails for files uploaded earlier (`APSOR_THUMBNAIL_BACKFILL_ENABLED`, on
+by default).
+
 PDF.js CMaps and standard fonts are copied from the pinned `pdfjs-dist` package
 into `frontend/public/pdfjs/` by `bun run pdf-assets`, which `dev` and `build`
 run automatically. Vite emits them into `frontend/dist/pdfjs/` during the image
@@ -1794,6 +1802,9 @@ user context exists; global config tables are read-all/root-write.
   error fields, and attempt/timestamps. A path can have only one active job per
   account. The job points at its staged file, clears that link on failure, and
   the file and chunks become current only when the job publishes them.
+- `file_thumbnail`: one tiny WebP per file version, keyed by `file_id`, with
+  `status` (`ready`, `none`, or `failed`), pixel size, SHA-256, generator
+  version, and attempt count. It cascades with its file.
 - `ingest_config`: one row (`id=1`) with the validated worker poll, extraction,
   in-flight, embedding, and chunk-size settings. It is not a chunk source; the
   queue references the file that is eventually published.
@@ -1855,7 +1866,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `d8f2a6c4e1b9`. The migrations after `agent_config` on
+The latest migration is `c7a3e9f1d5b2`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1953,12 +1964,17 @@ this branch are:
   endpoint and model when one exists; without one they start unassigned. The
   downgrade drops the assignment columns and refuses to restore
   the narrower provider check while an `anthropic` row exists;
-- `d8f2a6c4e1b9` (current head) drops `agent_config.max_steps` and
+- `d8f2a6c4e1b9` drops `agent_config.max_steps` and
   `agent_config.max_tool_calls_per_turn` with their checks and the
   `parallel_within_tool_calls` relation, so a tool-heavy turn keeps running
   until the model answers. The concurrency bound `max_parallel_tools` stays.
   The downgrade restores both columns and raises the restored call cap to at
   least `max_parallel_tools`.
+- `c7a3e9f1d5b2` (current head) creates the private `file_thumbnail` table:
+  one tiny WebP per file version (at most 32 KiB, 512 px), owner-safe composite
+  foreign key to `file` with `ON DELETE CASCADE`, forced RLS with an owner
+  policy, and `apsor_app` grants. Existing files are filled in by the worker
+  backfill. The downgrade drops the table.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

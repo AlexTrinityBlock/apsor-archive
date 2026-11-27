@@ -4,13 +4,18 @@ import { Document, Page } from "react-pdf";
 import { PDF_THUMB_OPTIONS } from "../../viewer/pdfjs-config";
 import { useElementWidth } from "../../viewer/component/useElementWidth";
 import { fileContentUrl } from "../../viewer/component/viewer-utils";
+import { FileThumbnail } from "../../viewer/component/FileThumbnail";
+import type { ThumbnailInfo } from "../../viewer/component/thumbnail";
+import { PREVIEW_MAX_EDGE, framedThumbnailStyle } from "./resource-frame";
 
 // Keep a portrait page readable without letting it dominate a wide transcript.
 // The rendered width follows the card, so a phone gets a full-width page too.
-const PREVIEW_MAX_WIDTH = 420;
+const PREVIEW_MAX_WIDTH = PREVIEW_MAX_EDGE;
 
 interface ResourcePdfThumbProps {
   readonly fileId: number;
+  /** Server thumbnail of page 1: fixes the box size and paints first. */
+  readonly thumbnail: ThumbnailInfo | null;
   readonly onError: () => void;
 }
 
@@ -19,10 +24,15 @@ interface ResourcePdfThumbProps {
  *
  * Loading waits until the card approaches the viewport, so a long transcript
  * does not fetch every PDF at once. A failed load reports to the parent, which
- * swaps in the ordinary file tile.
+ * swaps in the server thumbnail or the ordinary file tile.
+ *
+ * With a server thumbnail the host box takes the thumbnail's aspect ratio and
+ * paints it immediately; the sharper pdf.js canvas then draws over it at the
+ * same size, so the card never changes height while loading.
  */
 export const ResourcePdfThumb = memo(function ResourcePdfThumb({
   fileId,
+  thumbnail,
   onError,
 }: ResourcePdfThumbProps) {
   const [setMeasuredElement, measuredWidth] =
@@ -71,19 +81,38 @@ export const ResourcePdfThumb = memo(function ResourcePdfThumb({
       ? Math.min(PREVIEW_MAX_WIDTH, Math.round(measuredWidth))
       : PREVIEW_MAX_WIDTH;
   const ready = visible && (measuredWidth > 0 || !canMeasure);
+  // With a thumbnail underneath, pdf.js placeholders stay transparent so the
+  // thumbnail remains visible until the canvas is drawn.
+  const sheet =
+    thumbnail === null ? <span className="chat-resource__pdf-sheet" /> : null;
+  const pending =
+    thumbnail === null ? <span className="chat-resource__pdf-pending" /> : null;
 
   return (
     <span
       ref={setHost}
-      className="chat-resource__thumb chat-resource__thumb--pdf"
+      className={
+        thumbnail === null
+          ? "chat-resource__thumb chat-resource__thumb--pdf"
+          : "chat-resource__thumb chat-resource__thumb--pdf chat-resource__thumb--framed"
+      }
+      style={thumbnail === null ? undefined : framedThumbnailStyle(thumbnail)}
       aria-hidden="true"
     >
+      {thumbnail === null ? null : (
+        <FileThumbnail
+          fileId={fileId}
+          thumbnail={thumbnail}
+          sizing="fill"
+          className="chat-resource__pdf-base"
+        />
+      )}
       {ready ? (
         <Document
           file={fileContentUrl(fileId)}
           options={PDF_THUMB_OPTIONS}
-          loading={<span className="chat-resource__pdf-sheet" />}
-          error={<span className="chat-resource__pdf-sheet" />}
+          loading={sheet}
+          error={sheet}
           onLoadError={() => onErrorRef.current()}
         >
           <Page
@@ -92,14 +121,14 @@ export const ResourcePdfThumb = memo(function ResourcePdfThumb({
             devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)}
             renderTextLayer={false}
             renderAnnotationLayer={false}
-            loading={<span className="chat-resource__pdf-sheet" />}
-            error={<span className="chat-resource__pdf-sheet" />}
+            loading={sheet}
+            error={sheet}
             onLoadError={() => onErrorRef.current()}
             onRenderError={() => onErrorRef.current()}
           />
         </Document>
       ) : (
-        <span className="chat-resource__pdf-pending" />
+        pending
       )}
     </span>
   );

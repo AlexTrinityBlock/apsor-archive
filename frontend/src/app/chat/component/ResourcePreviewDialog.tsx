@@ -19,7 +19,9 @@ import { FileRenderer } from "../../viewer/component/FileViewer";
 import {
   ViewerErrorState,
   ViewerLoading,
+  ViewerThumbnailLoading,
 } from "../../viewer/component/ViewerStates";
+import type { ThumbnailInfo } from "../../viewer/component/thumbnail";
 import {
   classifyFile,
   kindLabel,
@@ -149,16 +151,25 @@ function FileResourceBody({
   fileId,
   chunk,
   fallbackTitle,
+  thumbnail,
 }: {
   readonly fileId: number;
   readonly chunk: number | null;
   readonly fallbackTitle: string | null;
+  readonly thumbnail: ThumbnailInfo | null;
 }) {
   const { t } = useI18n();
   const query = useGetFile(fileId, { query: { retry: false } });
 
   if (query.isLoading) {
-    return <ViewerLoading label={t("chat.resource.loadingPreview")} />;
+    // The presented resource already carries the thumbnail, so the dialog
+    // shows the page or picture at once instead of an empty spinner.
+    const label = t("chat.resource.loadingPreview");
+    return thumbnail ? (
+      <ViewerThumbnailLoading fileId={fileId} thumbnail={thumbnail} label={label} />
+    ) : (
+      <ViewerLoading label={label} />
+    );
   }
   if (query.error || !query.data) {
     return (
@@ -311,6 +322,7 @@ export function ResourcePreviewDialog({
         fileId={resource.resourceId}
         chunk={resource.chunk}
         fallbackTitle={resource.title}
+        thumbnail={resource.thumbnail}
       />
     </ResourceDialogShell>
   );
