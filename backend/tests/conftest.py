@@ -16,6 +16,7 @@ import os
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+from functools import partial
 from itertools import count
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.exc import ProgrammingError
 
 from alembic import command
+from app.bootstrap import build_state_ingest_worker
 from app.infrastructure.config.settings import Settings
 from app.infrastructure.security.password_hasher import Argon2PasswordHasher
 from app.main import create_app
@@ -542,10 +544,31 @@ def settings(tmp_path: Path) -> Settings:
     )
 
 
+@contextmanager
+def app_client(settings: Settings) -> Iterator[TestClient]:
+    """Start the app and attach an ingestion worker as a test seam.
+
+    The API no longer builds an ingestion worker unless the opt-in dev mode is
+    enabled. Tests that drive ingestion call ``client.app.state.ingest_worker``
+    directly (``run_once`` / ``process_job``), so this attaches one built over
+    the same process state, with environment defaults and no polling loop.
+    """
+    with TestClient(create_app(settings)) as test_client:
+        state = test_client.app.state
+        worker = test_client.portal.call(
+            partial(build_state_ingest_worker, state, settings, load_config=False)
+        )
+        state.ingest_worker = worker
+        try:
+            yield test_client
+        finally:
+            worker.close()
+
+
 @pytest.fixture
 def anonymous_client(settings: Settings) -> Iterator[TestClient]:
     """A TestClient with no owner account and no session."""
-    with TestClient(create_app(settings)) as test_client:
+    with app_client(settings) as test_client:
         yield test_client
 
 
@@ -587,7 +610,7 @@ def client_factory(settings: Settings) -> Iterator[Callable[[], TestClient]]:
     with ExitStack() as stack:
 
         def create() -> TestClient:
-            return stack.enter_context(TestClient(create_app(settings)))
+            return stack.enter_context(app_client(settings))
 
         yield create
 
@@ -669,7 +692,7 @@ def user_client_factory(
             must_change_password=must_change_password,
         )
 
-        test_client = stack.enter_context(TestClient(create_app(settings)))
+        test_client = stack.enter_context(app_client(settings))
         login = test_client.post(
             "/api/v1/auth/login",
             json={"username": normalized_username, "password": password},

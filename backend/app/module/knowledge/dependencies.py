@@ -565,6 +565,19 @@ async def build_ingest_job_service(
     )
 
 
+async def reload_ai_runtime(
+    runtime: AiRuntime,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Load the startup provider snapshot through a short system session.
+
+    Entrypoints call this instead of reaching into the provider repository, so
+    the process shell never imports a knowledge repository directly.
+    """
+    async with system_session(session_factory) as session:
+        await runtime.reload(ProviderConfigRepository(session))
+
+
 def build_provider_refresh(
     runtime: AiRuntime,
     session_factory: async_sessionmaker[AsyncSession],
