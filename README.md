@@ -32,7 +32,7 @@
 - [Stack](#stack)
 - [Quick start](#quick-start)
   - [Docker Compose (normal)](#docker-compose-normal)
-  - [Object storage (local or R2)](#object-storage-local-or-r2)
+  - [Object storage (RustFS, R2, S3, or local)](#object-storage-rustfs-r2-s3-or-local)
   - [Configure providers in the app](#configure-providers-in-the-app)
   - [Per-account model assignment](#per-account-model-assignment)
   - [Web research tools](#web-research-tools)
@@ -169,17 +169,18 @@ result carries its source, chunk number, and time.
   missing query filter cannot expose another person's archive. Passwords use
   Argon2 and sessions use HttpOnly cookies. Run it on your own machine; put it
   behind Cloudflare Tunnel only with your own access controls.
-- **Original bytes can live in Cloudflare R2.** `APSOR_STORAGE_BACKEND=local|r2`
-  selects where new originals are written. Reads follow the backend recorded on
-  each row, so a staged migration can serve a mixed archive. The R2 bucket is
-  private and the app never issues presigned or public URLs.
+- **Original bytes live in S3-compatible storage.** The bundled RustFS service
+  is the default; Cloudflare R2, any S3 endpoint, or local disk can be chosen
+  in the setup wizard. Reads follow the backend recorded on each row, so a
+  staged migration can serve a mixed archive. Buckets stay private and the app
+  never issues presigned or public URLs.
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
 | API | Python 3.13, FastAPI, SQLAlchemy 2 async, Alembic, psycopg 3 |
-| Storage | PostgreSQL 17 (`pg_trgm` for path fuzzy search); original bytes on local disk or in private Cloudflare R2 |
+| Storage | PostgreSQL 17 (`pg_trgm` for path fuzzy search); original bytes in RustFS (default), Cloudflare R2, any S3-compatible bucket, or local disk |
 | Cache | Valkey / Redis-compatible, with a memory fallback |
 | Retrieval | CJK bigram + Latin token n-grams, BM25, signed hashing vectors, RRF |
 | AI | DeepSeek `deepseek-flash`, Anthropic Claude, or any OpenAI-compatible chat endpoint |
@@ -190,21 +191,27 @@ result carries its source, chunk number, and time.
 
 ### Docker Compose (production)
 
-The production stack is **Cloudflare Tunnel → Caddy → API**. It publishes no
-host port. Prepare the tunnel token, the public host, and the data directory:
+The production stack is **Cloudflare Tunnel → Caddy → API + ingestion worker**,
+with PostgreSQL, Valkey, RabbitMQ, and (by default) a bundled RustFS object
+store on the private Compose network. It publishes no host port.
+
+Run the setup wizard instead of writing environment variables by hand:
 
 ```bash
-mkdir -p data secrets
-sudo chown -R 10001:10001 data
-# Write the tunnel token; no trailing newline.
-printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
-chmod 755 secrets
-sudo chown 65532 secrets/cf_token.txt && chmod 640 secrets/cf_token.txt
-# The production default is R2; local disk is the simplest first run.
-export APSOR_STORAGE_BACKEND=local
-export APSOR_PUBLIC_HOST=archive.example.com
+./start.sh setup        # or: make setup
+mkdir -p data && sudo chown -R 10001:10001 data
 docker compose up -d --build
 ```
+
+The wizard asks for the public hostname, the storage backend (bundled
+**RustFS** by default, or Cloudflare R2, or any S3-compatible endpoint, or local
+disk), the session lifetime, an optional DeepSeek key, and the Cloudflare
+Tunnel token. It writes the non-secret `.env`, generates the RustFS and
+RabbitMQ credentials, stores pasted keys in `.secrets/*.env` and `secrets/*.txt`
+without echoing them, keeps any existing file unless you confirm an overwrite,
+and prints the `sudo chgrp` commands the containers need to read the secret
+files. `./setup.sh --defaults` runs the same flow non-interactively (production
+with RustFS); add `--dev` for a development `.env`.
 
 Point the Cloudflare Tunnel public hostname at **HTTP `caddy:80`**, then open
 `https://$APSOR_PUBLIC_HOST`. Put `APSOR_PUBLIC_HOST` in `.env` so restarts keep
@@ -212,10 +219,8 @@ the host matcher. The first visit asks you to create the root account. The root
 can then create normal accounts from **Accounts**; each new account receives a
 one-time temporary password and must change it at first sign-in. PostgreSQL
 uses a named volume; local original bytes and the generated secret key live
-under the host's `./data` directory. The production Compose file defaults to
-`APSOR_STORAGE_BACKEND=r2`; see
-[Object storage](#object-storage-local-or-r2) for the credentials it needs, or
-keep local storage for a self-contained host.
+under the host's `./data` directory. Original file bytes go to the backend the
+wizard selected; see [Object storage](#object-storage-rustfs-r2-s3-or-local).
 
 > Note: `./data` is bind-mounted into the container and the container process
 > runs as uid `10001`. Create the directory and fix its owner before the first
@@ -254,41 +259,45 @@ Without it, summaries fall back to a deterministic extractive form, image
 uploads use the filename caption, and agent messages return
 `503 agent_not_configured`.
 
-### Object storage (local or R2)
+### Object storage (RustFS, R2, S3, or local)
 
-`APSOR_STORAGE_BACKEND` chooses the default for new original bytes:
+`APSOR_STORAGE_BACKEND` chooses the default for new original bytes. The setup
+wizard sets it; every option uses the same S3-compatible adapter except `local`.
 
-- `local` writes under `APSOR_DATA_DIR` and is the default for development and
-  tests.
-- `r2` writes to a private Cloudflare R2 bucket. The production Compose file
-  defaults to `r2`; set `APSOR_STORAGE_BACKEND=local` for a first boot or a
-  rollback.
+| Value | Where bytes go | Credentials |
+|---|---|---|
+| `rustfs` | The bundled RustFS service (`COMPOSE_PROFILES=rustfs` starts it). Default for new installs. | Generated by the wizard into `.secrets/s3.env` and `secrets/rustfs_*_key.txt` |
+| `r2` | A private Cloudflare R2 bucket | `.secrets/r2.env` |
+| `s3` | Any S3-compatible endpoint (AWS S3, MinIO, another RustFS) | `.secrets/s3.env` |
+| `local` | `APSOR_DATA_DIR`; the default for development and tests | none |
+| `auto` | R2 when `.secrets/r2.env` is complete, else S3, else local | — |
 
-The non-secret R2 values are `APSOR_R2_ENDPOINT_URL`, `APSOR_R2_BUCKET`
-(`apsor-archive` in the deployment), `APSOR_R2_REGION` (`auto`), and
-`APSOR_R2_PREFIX`. The account endpoint has no default: put
-`APSOR_R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com` in a
-gitignored `.env` file next to the Compose file, or export it, before running
-with the `r2` backend. Credentials live in the gitignored `.secrets/r2.env`,
-which Compose mounts read-only and the app reads itself, so they never become
-container environment variables:
+`rustfs` is an alias of `s3`. When `APSOR_STORAGE_BACKEND` is unset, the
+production Compose file uses `auto`, so an existing R2 deployment keeps writing
+to R2 without an `.env` change. Each row records the backend that holds its
+bytes (`local`, `r2`, or `s3`), and every backend whose settings are complete
+stays readable, so a staged migration can serve a mixed archive.
 
-```bash
-mkdir -p .secrets
-# Fill these in locally; never commit the file.
-printf 'APSOR_R2_ACCESS_KEY_ID=...\nAPSOR_R2_SECRET_ACCESS_KEY=...\n' \
-  > .secrets/r2.env
-chmod 755 .secrets
-# Container uid 10001 needs read access; other host users do not.
-sudo chgrp 10001 .secrets/r2.env
-chmod 640 .secrets/r2.env
-```
+Non-secret settings live in `.env`:
 
-The file must be readable by container uid `10001` (mode `640` with group
-`10001`, or `644` on a single-user host). The bucket stays private:
-no presigned URLs, no public bucket access, and no lifecycle expiry on `files/`.
-`data/.secret_key` is the Fernet master key and remains local; back it up
-separately from PostgreSQL.
+- R2: `APSOR_R2_ENDPOINT_URL` (`https://<account-id>.r2.cloudflarestorage.com`,
+  no default), `APSOR_R2_BUCKET` (`apsor-archive`), `APSOR_R2_REGION` (`auto`),
+  `APSOR_R2_PREFIX`.
+- S3 / RustFS: `APSOR_S3_ENDPOINT_URL` (Compose default `http://rustfs:9000`),
+  `APSOR_S3_BUCKET` (`apsor-archive`), `APSOR_S3_REGION` (`us-east-1`),
+  `APSOR_S3_PREFIX`, `APSOR_S3_ADDRESSING_STYLE` (`path` or `virtual`), and
+  `APSOR_S3_CREATE_BUCKET` (create a missing bucket on the first write; the
+  bundled RustFS needs it).
+
+Access keys never go in `.env` or container environment variables. Compose
+mounts `.secrets/` read-only and the app reads `r2.env` / `s3.env` itself; the
+RustFS container reads its pair as Docker secrets. All of them run as uid
+`10001`, so the files need group `10001` with mode `640` (the wizard prints the
+`sudo chgrp` command). Buckets stay private: no presigned URLs, no public
+access, and no lifecycle expiry on `files/`. `data/.secret_key` is the Fernet
+master key and remains local; back it up separately from PostgreSQL. Back up
+the `apsor-archive_rustfs-data` volume (or the external bucket) with the
+database as one backup set.
 
 To move an existing archive from local disk to R2, stop the API and worker and
 run the storage CLI from `backend/`:
@@ -787,10 +796,14 @@ the container serves:
 cd frontend && bun run build
 ```
 
-`./start.sh` is the shortest bare-metal path: it starts the dev database/cache
-if Docker is available, sources `.secrets/deepseek.env`, syncs the backend, and
-serves the API and the built client at <http://127.0.0.1:8000>. Run
-`cd frontend && bun run build` once before the first bare-metal start.
+`./start.sh` is the shortest bare-metal path. Run `./start.sh setup --dev`
+once to write a development `.env` (local storage by default), then
+`./start.sh` starts the dev database/cache if Docker is available, syncs the
+backend, and runs the API at <http://127.0.0.1:8000> together with the dedicated
+ingestion worker; Ctrl+C stops both. Set `APSOR_START_WORKER=false` to run the
+API alone. Run `cd frontend && bun run build` once before the first bare-metal
+start. To try the S3 path locally, choose `rustfs` in the wizard and start the
+dev store with `docker compose -f docker-compose.dev.yml --profile rustfs up -d`.
 
 On Windows, `./start.sh` needs a bash shell. `./run-local.ps1` is the PowerShell
 equivalent: it starts the dev database/cache if Docker is available, syncs the
@@ -1740,8 +1753,8 @@ user context exists; global config tables are read-all/root-write.
 
 - `file`: one row per version. `is_current` and `deleted_at` are soft state;
   ids are never reused. File leaves are not duplicated in the folder table:
-  their placement is `raw_file_path`. `storage_backend` records `local` or `r2`
-  for the original bytes and is null exactly when `storage_key` is null.
+  their placement is `raw_file_path`. `storage_backend` records `local`, `r2`, or
+  `s3` for the original bytes and is null exactly when `storage_key` is null.
 - `folder`: explicit folder records (`parent_id`, `path`, `name`, `depth`).
   Empty folders and folder identity survive independently of files. Uniqueness
   is per account: `(user_id, path)`.
@@ -1798,8 +1811,9 @@ user context exists; global config tables are read-all/root-write.
   in-flight, embedding, and chunk-size settings. It is not a chunk source; the
   queue references the file that is eventually published.
 
-Original bytes are not stored in PostgreSQL. They live on local disk or in the
-private R2 bucket, selected per file by `storage_backend`; the extracted chunks
+Original bytes are not stored in PostgreSQL. They live on local disk, in the private R2
+bucket, or in an S3-compatible bucket (RustFS by default), selected per file by
+`storage_backend`; the extracted chunks
 and their n-grams remain in PostgreSQL.
 
 The committed code, comments, UI copy, and documentation are English.
@@ -2058,9 +2072,10 @@ docker/caddy/                   non-root reverse proxy
 - The DeepSeek key lives in `.secrets/deepseek.env` or the environment. It is
   never logged, returned, or committed. Keys saved from the Settings page are
   encrypted in PostgreSQL and returned only as a four-character hint.
-- R2 credentials live in the gitignored `.secrets/r2.env`, are mounted
-  read-only, and never become container environment variables. The bucket is
-  private, with no presigned or public URLs.
+- Object-store credentials live in the gitignored `.secrets/r2.env` or
+  `.secrets/s3.env` (and, for the bundled RustFS, Docker secret files under
+  `secrets/`), are mounted read-only, and never become container environment
+  variables. Buckets are private, with no presigned or public URLs.
 - AI calls happen for summaries and agent turns. If the provider fails, the API
   returns a stable error instead of inventing an answer.
 
