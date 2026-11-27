@@ -49,6 +49,7 @@ Keep file lineage, search visibility, and memory history consistent across synch
 - `service/history_chunk_store.py` — knowledge-side write adapter for conversation-history windows; still routes through `IndexerService`.
 - `service/search_service.py` — BM25 + vector recall + RRF + caching, including the separate history lane.
 - `service/memory_service.py`, `service/timeline_service.py` — memory lineage and sparse/complete time reads.
+- `service/related_memory_service.py` — owner-scoped related memories for a memory or a file: RRF over stored-embedding cosine and top n-gram BM25, plus shared-summary and time-proximity signals. It never calls a provider or spends embedding quota, excludes the supersession chain, and scans non-current memory chunks only when deprecated memories are requested.
 - `service/provider_config_service.py` — capability registry, encryption, activation, reindexing.
 - `dependencies.py` — composition of all knowledge services, worker factories, provider runtime.
 - `router/` — files, folders, paths, memories, summaries, search, timeline, settings, tool facade.
