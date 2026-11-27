@@ -1,7 +1,7 @@
 """tiny WebP thumbnails for file versions
 
 Revision ID: c7a3e9f1d5b2
-Revises: d8f2a6c4e1b9
+Revises: c3e7a1f5b9d2
 Create Date: 2026-11-28 00:00:00.000000
 
 Migration decisions:
@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "c7a3e9f1d5b2"
-down_revision: str | None = "d8f2a6c4e1b9"
+down_revision: str | None = "c3e7a1f5b9d2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
