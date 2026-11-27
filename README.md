@@ -2007,8 +2007,8 @@ frontend/
     chat/                       reading room, retry, context actions
     questions/                  saved-question Q&A library
     settings/                   role-filtered provider and runtime panels
-    library/                    files, media gallery, preview modal, intake
-    home/ search/ timeline/ memory/ about/ ...
+    library/                    files, media gallery, memories, preview modal, intake
+    home/ search/ timeline/ about/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting
