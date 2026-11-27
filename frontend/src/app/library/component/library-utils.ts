@@ -594,6 +594,11 @@ export function joinArchivePath(folderPath: string, fileName: string): string {
  * before the extension. Clipboard pastes use this so a second file with the
  * same browser-supplied name becomes a sibling instead of a new version that
  * hides the first one.
+ *
+ * A leading-dot-only name such as `.env` has no stem, so the suffix cannot sit
+ * after the whole name without losing the accepted dotfile ending. Such a name
+ * is renamed to `copy (n).env` instead, which keeps the extension allowlist
+ * satisfied.
  */
 export function uniqueArchivePath(
   folderPath: string,
@@ -606,9 +611,17 @@ export function uniqueArchivePath(
   }
 
   const dot = fileName.lastIndexOf(".");
+  const isDotfile = dot === 0 && fileName.length > 1;
   const hasExtension = dot > 0 && dot < fileName.length - 1;
-  const stem = hasExtension ? fileName.slice(0, dot) : fileName;
-  const extension = hasExtension ? fileName.slice(dot) : "";
+  let stem = fileName;
+  let extension = "";
+  if (hasExtension) {
+    stem = fileName.slice(0, dot);
+    extension = fileName.slice(dot);
+  } else if (isDotfile) {
+    stem = "copy";
+    extension = fileName.slice(dot);
+  }
   for (let index = 1; ; index += 1) {
     const candidate = `${stem} (${index})${extension}`;
     const path = joinArchivePath(folderPath, candidate);

@@ -27,11 +27,21 @@ interface SplitFileName {
   readonly extension: string;
 }
 
-/** Splits at the last dot; a leading dot belongs to the stem, not an extension. */
+/**
+ * Splits at the last dot. A leading-dot-only name such as `.env` has no stem,
+ * so the dot and the name become the fixed extension and `env` becomes the
+ * editable stem. A rename then keeps the suffix the backend's path validation
+ * requires (`.env` -> `newname.env`) instead of dropping it.
+ */
 function splitFileName(fileName: string): SplitFileName {
   const dotIndex = fileName.lastIndexOf(".");
-  if (dotIndex <= 0) {
+  if (dotIndex < 0) {
     return { stem: fileName, extension: "" };
+  }
+  if (dotIndex === 0) {
+    return fileName.length > 1
+      ? { stem: fileName.slice(1), extension: fileName }
+      : { stem: fileName, extension: "" };
   }
   return {
     stem: fileName.slice(0, dotIndex),
@@ -78,7 +88,11 @@ export function RenameFileDialog({
   const fullName = `${normalizedStem}${extension}`;
   const folder = parentPath(file.raw_file_path);
   const invalid = !isValidStem(stem);
-  const unchanged = fullName === file.file_name;
+  // A dotfile starts as stem `env` plus extension `.env`, so joining them would
+  // read `env.env`. An untouched value still previews and submits as `.env`.
+  const unchanged =
+    normalizedStem === initialSplit.stem.trim() || fullName === file.file_name;
+  const previewName = unchanged ? file.file_name : fullName;
 
   const renameMutation = useRenameFile({
     mutation: {
@@ -160,7 +174,7 @@ export function RenameFileDialog({
             ) : null}
           </span>
           <span id={previewId} className="library-field__hint">
-            <code>{fullName || "—"}</code>
+            <code>{previewName || "—"}</code>
           </span>
         </div>
 
