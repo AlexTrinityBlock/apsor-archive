@@ -46,7 +46,7 @@ src/
     questions/                  saved-question Q&A library
     profile/                    display name and profile cards
     viewer/                     PDF, DOCX, PPTX, image, and text renderers
-    about/ settings/            method page, provider and runtime settings
+    about/ settings/            about page, provider and runtime settings
     i18n/                       locale provider, dictionaries, formatters
     not-found/                  unmatched-route page
   lib/                          formatting, safe text highlighting

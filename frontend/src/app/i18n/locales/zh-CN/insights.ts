@@ -263,158 +263,161 @@ export const insights = {
       jumpToday: "跳到今天",
     },
   },
-  method: {
+  about: {
     hero: {
-      kicker: "方法 · 田野笔记 // 2026.10 修订",
-      eyebrow: "两座文件库。一个索引。",
-      titleLine1: "两座文件库。",
-      titleLine2Prefix: "一棵",
-      titleAccent: "树。",
+      kicker: "关于 Apsor Archive",
+      title: "一座会附上出处的私人档案馆。",
       lede:
-        "多数知识工具会把档案馆摊平成一大袋向量。Apsor Archive 同时保留两种形状：文件的分支路径，以及记忆的线性纹理。两者都在同一座档案馆中被索引、引用与阅读。",
-      note:
-        "树是一个概念性的比喻，用来说明路径与记忆如何被归档。它不是工作区、不是数据源，也不是这个界面中的任何一条路由。",
-      metaArchiveKey: "档案馆",
-      metaArchiveValue: "文件、记忆、摘要",
-      metaRetrievalKey: "检索",
-      metaRetrievalValue: "BM25 + 向量路径",
-      metaFusionKey: "融合",
-      metaFusionValue: "倒数排名融合",
-      metaContractKey: "约定",
-      metaContractValue: "分段级别的收据",
+        "Apsor Archive 把家庭或小团队的文件与记忆保存在你自己掌控的机器上，并让你用日常语言提问。每个回答都会指回它所依据的段落，让你可以自己核实。",
+      glanceAria: "要点一览",
+      glancePrivacyKey: "隐私",
+      glancePrivacyValue: "每个账号一座私人档案馆",
+      glanceAnswersKey: "回答",
+      glanceAnswersValue: "依据你的档案馆，并附上引用",
+      glanceHostingKey: "部署",
+      glanceHostingValue: "在你自己的机器上单一部署",
+      glanceLicenseKey: "许可",
+      glanceLicenseValue: "开源，MIT 许可",
+      tocAria: "本页目录",
     },
-    principles: {
-      eyebrow: "结构原则",
-      title: "档案馆遵守的四项承诺。",
-      twoLibrariesEyebrow: "两座文件库",
-      twoLibrariesTitle: "文件依路径，记忆依时刻。",
-      twoLibrariesFileLabel: "文件库：",
-      twoLibrariesFileBody:
-        "每个文件都保留稳定的路径坐标与不可变的字节。重新上传同一个路径会创建新版本，而不是覆盖。",
-      twoLibrariesMemoryLabel: "记忆库：",
-      twoLibrariesMemoryBody:
-        "每条记忆都带着自己的时刻，可以取代先前的信念，而不必抹除它。同一个索引同时搜索两者。",
-      hybridEyebrow: "混合检索",
-      hybridTitle: "词法的精准，加上语义的触达。",
-      hybridBodyBefore:
-        "BM25 会读取中日韩双字词、词 n-gram 与字符 trigram；向量路径则读取余弦相似度。每条路径各自返回候选，倒数排名融合会将它们合并，而响应会报告 ",
-      hybridBodyAnd: " 与 ",
-      hybridBodyAfter: "，让搜索结果可以被审计。",
-      timelineEyebrow: "时间线采样",
-      timelineTitle: "稀疏锚点，明确空隙。",
-      timelineBodyBefore:
-        "较长的范围会为每种事件类型返回五个锚点，而不是逐行返回。空隙会以 ",
-      timelineBodyMid: " 报告，还有一条逐日的 ",
-      timelineBodyAfter:
-        " 密度带，让区间的形状保持可见。空范围会返回空列表，而不是凭空生成的事件。",
-      citationEyebrow: "引用约定",
-      citationTitle: "没有收据的答案只是传闻。",
-      citationBodyBefore: "答案只能根据检索到的段落撰写，并且必须引用 ",
-      citationBodyOr: " 或 ",
-      citationBodyAfter: "。没有配置供应商时，端点会返回 ",
-      citationBodyTail: "，而不是生成文字。",
+    toc: {
+      what: "这是什么",
+      flow: "数据如何流动",
+      privacy: "谁能看到什么",
+      deploy: "在哪里运行",
+      author: "作者",
     },
-    pullquote: "路径回答在哪里。时间戳回答在何时。单独任何一个都不够。",
-    twoLibraries: {
-      eyebrow: "两种来源形状",
-      title: "文件以路径被辨识。记忆以时刻被辨识。",
-      paragraph1Before: "把文件放进 ",
-      paragraph1After:
-        "，你同时做出了两个声明：它属于这里，而且这就是它的名字。路径是可检索的坐标，文件的每一个分段都会对应它建立索引，原始字节则保持不变。",
-      paragraph2:
-        "记忆没有文件夹。它依序到来、累积，有时会取代先前的信念。保存新记忆时，可以指向它所取代的条目；那些较早的条目会变成已淘汰，离开默认搜索范围，但仍留在明确的追踪记录之后。",
-      paragraph3:
-        "两座文件库共用一个搜索索引、一套引用语法，以及同一间阅览室。它们的差异在于几何形状：路径是空间的，时间戳是时间的。",
+    what: {
+      eyebrow: "这是什么",
+      title: "三件事，放在同一个地方。",
+      intro:
+        "可以把它想成一个文件柜、一本笔记本，以及一位只读你放进柜子里内容的研究助理。",
+      filesTitle: "保留历史的文件",
+      filesBody:
+        "把文档、电子表格、PDF 和图片上传到文件夹。在同一路径上传新版本时，旧版本会保留为历史，而不会被覆盖。",
+      memoriesTitle: "可以改变想法的记忆",
+      memoriesBody:
+        "写下你知道或决定的事；记忆就放在文件库里，与你的文件并列。新的记忆可以取代旧的记忆；旧记忆会离开搜索结果，但仍可阅读，让你看见想法如何改变。",
+      chatTitle: "会出示来源的对话",
+      chatBody:
+        "提出问题后，助理会先搜索你的档案馆，再根据找到的内容回答。每项陈述都附有引用，点一下就能打开确切的段落。",
     },
-    hybrid: {
-      eyebrow: "混合检索",
-      title: "两条路径输入，一组排序输出。",
-      paragraph1Before: "只用一个索引会比较容易解释，却比较难用。像“",
-      semanticExample: "我对城市树木的想法是何时改变的？",
-      paragraph1Middle: "”这样的语义查询需要向量；像 ",
-      paragraph1After:
-        " 这样精确的查询则需要字面匹配。档案馆两者都问。",
-      paragraph2:
-        "BM25 会处理中日韩双字词、拉丁词 n-gram 与字符 trigram；余弦相似度则处理配置好的嵌入向量。每条路径各自返回前 N 名，默认为 2。两条路径通过倒数排名融合合并，并按来源类型、来源 ID 与分段索引去重，因此同时被两条路径找到的段落会自然浮现。",
-      paragraph3Before: "响应会坦白说明自己的天气：",
-      paragraph3And: "、",
-      paragraph3After: "。你可以审计这场搜索，而不只是相信它。",
-      noteEyebrow: "优雅降级",
-      noteBody:
-        "如果嵌入不可用，向量路径会被跳过，而不会阻塞写入。如果双字词查询没有结果，unigram 召回会让搜索不至于完全熄灭。响应会说明是哪一条路径给出了答案。",
-    },
-    citation: {
-      eyebrow: "引用约定",
-      title: "收据是答案的一部分。",
-      paragraph:
-        "在松散的检索流程里，段落没有来源信息，读者无从查证哪一页支撑了某个说法。在这里，引用会同时指出来源与回答问题的确切区段：分段索引从 1 开始，而每一个可搜索的段落都带着来源类型、来源 ID 与分段索引。",
-      retrieveTitle: "检索",
-      retrieveBody:
-        "一次混合查询会从文件、记忆与摘要中选出段落。每个段落都保留来源类型、来源 ID 与分段索引。",
+    flow: {
+      eyebrow: "数据如何流动",
+      title: "从上传到附有引用的回答。",
+      intro: "以下说明一个文件从你上传的那一刻，到它帮助回答问题之间，经历了什么。",
+      phaseAdd: "当你添加内容",
+      phaseAsk: "当你提问",
+      uploadTitle: "上传",
+      uploadBody:
+        "你可以添加一个文件、一整个文件夹，或一段文字。原始内容会按收到时的样子原封不动保存。",
+      prepareTitle: "整理",
+      prepareBody:
+        "后台工作进程会读取文件、切成短段落并建立索引。你可以看到处理进度；只有完整处理好的文件才会出现在搜索中。",
+      prepareTag: "摄取任务",
+      storeTitle: "保存",
+      storeBody:
+        "段落、历史与设置存放在 PostgreSQL。原始文件则放在私有的对象存储：默认是内置的 RustFS 服务，也可以使用 Cloudflare R2 或任何兼容 S3 的存储桶。",
+      storeDiskTag: "RustFS、R2 或 S3",
+      searchTitle: "搜索",
+      searchBody:
+        "当你提问时，两种搜索会同时进行：一种匹配你用的确切词语，另一种寻找措辞相近的内容。结果会合并成一份精简的最佳段落清单。",
+      laneWords: "确切词语",
+      laneSimilar: "相近措辞",
       answerTitle: "回答",
       answerBody:
-        "模型只根据这些摘录回答，并输出引用标签。那些标签是答案的收据，不是装饰。",
-      verifyTitle: "验证",
-      verifyBody:
-        "文件引用会在文件库中打开被引用的分段；记忆引用则会在记忆库中打开该条记忆。",
-      keepTitle: "留存",
-      keepBody:
-        "答案、引用标签与对话都会留在已保存的问题旁，因此验证可以重复进行。",
-      closing:
-        "摘要也遵循同一条规则。摘要引用会直接显示在答案中，因为这个界面没有为摘要保留另一个房间；追踪仍然会指回产生它的记录。",
+        "对话模型只会收到这些段落，而不是整座档案馆，并且必须为用到的每个段落加上引用。如果尚未设置模型，它会直接说明，而不是猜测。",
+      returnNote: "点一下回答中的任何引用，就能打开它所指向的段落。",
+      caption:
+        "图 1 — 一个文件的旅程。添加与提问是两段独立的流程：一段负责保存与建立索引，另一段负责搜索与回答。",
+    },
+    tech: {
+      summary: "给好奇的技术读者",
+      ingest:
+        "上传会在 PostgreSQL 中创建一条持久的摄取任务。独立于网页 API 之外的专用工作进程会领取该任务，解析并切分文件、为各段落计算向量、生成供即时预览的 WebP 迷你缩略图，最后一次性发布，因此绝不会看到只索引了一半的文件。RabbitMQ 只负责唤醒工作进程；PostgreSQL 仍是任务的正式记录，任务在重启后也会保留。",
+      storage:
+        "PostgreSQL 17 是唯一的事实来源，Valkey 只是可丢弃的缓存。原始文件存放在兼容 S3 的存储桶：默认是 Docker Compose 自带的 RustFS 服务，也可以使用 Cloudflare R2 或其他 S3 提供方。存储桶保持私有，文件只会经由已登录的应用发送到浏览器。",
+      retrieval:
+        "文本会先规范化，再以中日韩双字词、拉丁单词与拉丁三字符片段建立 BM25 索引。向量通道与之并行；默认使用离线的带符号哈希嵌入器，属于字面匹配而非语义理解。接入兼容 OpenAI 的嵌入端点，即可加入语义召回。两条通道以倒数排名融合合并，并按段落去重。",
+      agent:
+        "代理会调用搜索、阅读与时间线等工具，再写出以稳定 ID 引用文件段落、记忆与摘要的回答。运行过程会流式传输到浏览器，并连同每个工具步骤一起保存。根账号会为每个账号指派对话模型，支持 DeepSeek、Anthropic Claude，以及兼容 OpenAI 的端点。",
+      web: "如果根账号启用了网络研究，代理也可以搜索网络。网络结果会以网址引用，且绝不会被当作档案馆的证据。",
+      citationFormatsLabel: "引用格式",
+    },
+    privacy: {
+      eyebrow: "谁能看到什么",
+      title: "每个账号都有自己的私人档案馆。",
+      intro:
+        "一个部署可以容纳许多人。每个人都有独立的档案馆，而数据库本身会拒绝把它们混在一起。",
+      databaseLabel: "数据库 · 行级安全",
+      yourArchive: "你的档案馆",
+      otherArchive: "另一位成员的档案馆",
+      ownerYou: "所有者：你",
+      ownerOther: "所有者：该成员",
+      contents: "文件 · 记忆 · 对话",
+      denied: "默认拒绝跨账号访问",
+      rootTitle: "根账号",
+      rootBody: "管理账号与全局设置",
+      rootNoData: "不是数据超级用户",
+      impersonationTitle: "模拟登录",
+      impersonationBody: "提示横幅全程显示；返回根账号需要根账号密码",
+      caption:
+        "图 2 — 隐私边界。每一行私人数据都标记了所有者，数据库只会返回属于当前登录者的数据。",
+      ownerTitle: "所有权由数据库检查。",
+      ownerBody:
+        "每一条私人记录都带有所有者。PostgreSQL 的行级安全默认拒绝访问，因此即使应用漏掉了某个筛选条件，也不会把一个人的档案馆显示给另一个人。",
+      rootPointTitle: "管理员不是数据超级用户。",
+      rootPointBody:
+        "根账号负责创建账号与管理全局设置，但普通页面与 API 调用都不会让根账号读取别人的档案馆。",
+      impersonationPointTitle: "代替他人登录时一目了然。",
+      impersonationPointBody:
+        "为了可信的账号救援，根账号可以模拟登录另一个账号。整个期间页面都会显示提示横幅，返回根账号时必须再次输入根账号密码。",
+      providerTitle: "只有相关段落会发送给 AI。",
+      providerBody:
+        "你提问时，为该问题找到的段落会发送给根账号配置的对话模型提供方。整座档案馆永远不会被发送。",
+      secretsTitle: "密码与密钥受到保护。",
+      secretsBody:
+        "密码以 Argon2 哈希，会话使用 HttpOnly Cookie，提供方密钥在数据库中加密保存，之后不会再完整显示。",
+      caveatTitle: "这些机制无法防范的事",
+      caveatBody:
+        "根账号是最受信任的凭据：它可以重置密码并模拟登录其他账号，因此请慎重选择由谁持有。行级安全保护的是应用内的档案馆；能访问主机、数据库或机密文件的人都可以绕过它。请确保机器本身值得信任。",
+    },
+    deploy: {
+      eyebrow: "在哪里运行",
+      title: "一台机器，不开放任何入站端口。",
+      intro:
+        "Apsor Archive 是你用 Docker Compose 自行运行的单一部署，通常放在家用服务器或小型办公室的机器上。它不是托管的云服务，也没有共享的厂商数据库。",
+      browser: "你的浏览器",
+      exampleHost: "示例网址",
+      edge: "Cloudflare 边缘网络",
+      edgeDetail: "HTTPS 与可选的访问规则",
+      tunnel: "隧道连接器",
+      tunnelDetail: "只建立出站连接",
+      caddyDetail: "机器内部的反向代理",
+      appDetail: "网页应用与 API，另有独立的摄取工作进程",
+      data: "数据服务",
+      dataDetail: "数据库、缓存、任务唤醒与文件存储",
+      machineLabel: "你的机器 · 没有入站端口",
+      caption:
+        "图 3 — 生产环境栈。机器不开放任何入站端口；隧道连接器主动向 Cloudflare 建立出站连接，所有请求都经由它到达应用。",
+      noteTunnel:
+        "由于连接器主动建立出站连接，你不需要公网 IP 地址，也不需要在路由器上设置端口转发。",
+      noteSetup:
+        "通过隧道公开新实例之前，请先创建根账号；在那之前，首次设置页面按设计是公开的。",
+    },
+    author: {
+      eyebrow: "作者",
+      title: "由一个人打造，献给家庭与小团队。",
+      name: "Wei-Chun Hsiao (Alex)",
+      role: "作者与维护者",
+      body: "Apsor Archive 由 Wei-Chun Hsiao (Alex) 设计与编写。它以 MIT 许可开源，欢迎贡献。",
+      license: "Copyright © 2026 Wei-Chun, Hsiao。以 MIT 许可发布。",
+      sourceLink: "GitHub 上的源代码",
+      opensNewTab: "（在新标签页打开）",
     },
     colophon: {
-      tag: "方法",
-      line: "Apsor Archive · 年轮档案馆 · 2026.10 修订",
-      linksAria: "档案馆链接",
-      questions: "问题",
-    },
-    fileDiagram: {
-      fileLabel: "文件库",
-      fileTitle: "以路径辨识",
-      fileBadge: "依路径",
-      treeAria: "文件层级示例",
-      folder: "文件夹",
-      softDelete: "软删除",
-      versionsBranch: "版本分支",
-      memoryLabel: "记忆库",
-      memoryTitle: "以时刻辨识",
-      memoryBadge: "依时间",
-      axisAria: "记忆时间线示例",
-      memoryOneTime: "6 月 1 日",
-      memoryOneCopy: "档案馆就是索引。",
-      memoryTwoTime: "10 月 16 日",
-      memoryTwoCopy: "路径是关于位置的论证。",
-      memoryThreeTime: "10 月 18 日",
-      memoryThreeCopy: "被取代，但从未抹除。",
-      supersedeChain: "取代链",
-      traceOpen: "追踪保持开放",
-      captionBefore: "图 01 —— 两种来源形状。路径回答“",
-      captionWhere: "在哪里",
-      captionMiddle: "”；时间戳回答“",
-      captionWhen: "在何时",
-      captionAfter: "”。档案馆两者都索引。",
-    },
-    hybridDiagram: {
-      queryLabel: "查询",
-      queryExample: "我对城市树木的想法是何时改变的？",
-      resultNumber: "result_number = 2",
-      textLane: "文本路径",
-      vectorLane: "向量路径",
-      chunkA: "分段 A",
-      chunkB: "分段 B",
-      chunkC: "分段 C",
-      textDetail: "双字词 · 词 n-gram · trigram",
-      vectorDetail: "哈希嵌入器 · 维度来自设置",
-      fusionLabel: "倒数排名融合",
-      deduplicateBy: "去重依据",
-      outputAria: "去重后的结果",
-      foundTwice: "找到两次 · 只返回一次",
-      perKind: "每种来源类型",
-      kinds: "文件 · 记忆 · 摘要",
-      captionBefore:
-        "图 02 —— 混合检索。两条路径都有贡献，重复项会被合并，最终集合按来源类型设置上限。响应会带有",
-      captionAfter: "与融合计数。",
+      linksAria: "开始使用档案馆",
+      ask: "提出问题",
     },
   },
 };
