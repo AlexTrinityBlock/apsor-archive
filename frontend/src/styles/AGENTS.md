@@ -31,8 +31,9 @@ The application is light-only: `tokens.css` declares `color-scheme: light` and t
 - `base.css` — reset, editorial defaults, focus, scrollbars, and motion preferences.
 - `layout.css` — shell, rail, mobile drawer, canvas, and responsive layout.
 - `components.css` — shared primitives and their breakpoints.
-- `../app/component/shared.css` — shared page-header, query-state, and fallback composition.
+- `../app/component/shared.css` — shared page-header, query-state, fallback, and confirmation-dialog copy composition.
 - `../app/component/ContextMenu.css` — portal menu styling and its reviewed z-index exception.
+- `../app/component/route-error.css` — the route error boundary screen.
 
 ## Conventions
 

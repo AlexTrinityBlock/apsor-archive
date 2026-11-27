@@ -58,15 +58,18 @@ Backend validation remains authoritative. The UI mirrors limits for fast feedbac
 - `component/ReingestDialog.tsx` — LibraryDialog shell for confirmation, durable-job progress, failure, already-processing, and success.
 - `hook/useFileReingest.ts` — page-level re-ingest enqueue/poll lifecycle with abort and generation guards.
 - `component/RenameFileDialog.tsx` — fixed folder + fixed extension, editable stem only.
-- `component/MarkdownEditor.tsx`, `MarkdownEditorDialog.tsx`, `MarkdownToolbar.tsx`, `markdown-edit.ts`, `useMarkdownDocument.ts` — editor, formatting, fixed-folder new-note form, content loading, and dirty guards.
+- `component/DeleteSelectionDialog.tsx` — batch delete confirmation for the current selection.
+- `component/LibraryEmptyState.tsx` — empty-folder and no-results states.
+- `component/thumbnail/` — card and list thumbnails: `FileThumb`, per-format renderers, the render queue, the thumbnail cache, and the spreadsheet worker.
+- `component/MarkdownEditor.tsx`, `MarkdownEditorDialog.tsx`, `MarkdownToolbar.tsx`, `markdown-edit.ts`, `useMarkdownDocument.ts`, `useKeepCaretVisible.ts` — editor, formatting, fixed-folder new-note form, content loading, caret scrolling, and dirty guards.
 - `component/LibrarySelectionBar.tsx` — selection count, select-all, clear, and batch move entry.
 - `library.css` — page composition and responsive rules; shared primitives remain in `src/styles/` and `app/component/`.
 
 ## Conventions
 
-- Use generated `useReadPath`, `useUploadFileAsync`, `useCreateTextFileAsync`, `useRetryIngestJob`, `useGetFile`, `useReadFile`, `useUpdateFileContent`, `useRenameFile`, `moveFile`, `copyFile`, `renameFolder`, `moveFolder`, `copyFolder`, and `useDeleteFile`. Do not add a Library-specific fetch client.
+- Use generated `useReadPath`, `useUploadFileAsync`, `useCreateTextFileAsync`, `useCreateTextFile` (the Markdown editor's synchronous save), `createFolder`, `deleteLibrarySelection`, `useRetryIngestJob`, `useGetFile`, `useReadFile`, `useUpdateFileContent`, `useRenameFile`, `moveFile`, `copyFile`, `renameFolder`, `moveFolder`, `copyFolder`, and `useDeleteFile`. Do not add a Library-specific fetch client.
 - Rename is filename-only. Never send a full path to the rename endpoint or expose the parent folder as an input. Move/copy remain the path-changing operations.
-- Reuse `../viewer/component/viewer-utils.ts` and `FileRenderer` for content and previews. Do not create a second renderer or download path.
+- Reuse `../viewer/component/viewer-utils.ts` and `FileRenderer` (exported from `../viewer/component/FileViewer.tsx`) for content and previews. Do not create a second renderer or download path.
 - After any mutation, call `invalidateLibraryQueries` with only the affected surfaces and file ids. Update the current preview path when a move changes its folder.
 - Normalize every archive path to an absolute path; reject empty, traversal-like, or separator-containing upload names before upload. The server repeats validation.
 - Keep version semantics explicit: never update content without `expected_version`, never silently retry a version conflict, and never reuse a moved file's id for a copy.

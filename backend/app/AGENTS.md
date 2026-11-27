@@ -8,14 +8,14 @@ Keep application assembly, infrastructure, and business slices separate so a fea
 
 ## Architecture
 
-- `main.py` is the composition shell. `create_app()` installs lifespan resources, exception handlers, middleware, routers, and the SPA fallback. `cli.py` starts the API; `worker.py` starts the durable-ingestion process.
-- `app.state` owns process-wide adapters: `db`, `cache`, `progress_bus`, `storage`, `secret_cipher`, `ai_runtime`, `ingest_worker`, and `settings`. Tests may replace `agent_chat_generator`, `web_research_service`, or `provider_tester`.
-- `dependency/` holds dependencies shared across slices. Today it exposes the authenticated account guard, the forced-password-change guard, and the root guard; it is not a home for feature services.
-- `infrastructure/` adapts external systems: config, async database/Alembic, cache, local/R2 storage, AI/embeddings, web clients, security, and logging. Adapters implement slice protocols but must not own archive policy.
+- `main.py` is the composition shell. `create_app()` installs lifespan resources, exception handlers, middleware, routers, and the SPA fallback. `cli.py` starts the API; `worker.py` starts the durable-ingestion process; `bootstrap.py` builds the process state and background loops both share; `__main__.py` forwards `python -m app` to the CLI. These four entrypoint files are the only modules allowed at the package root besides `main.py`.
+- `app.state` owns process-wide adapters: `db`, `cache`, `progress_bus`, `storage`, `secret_cipher`, `ai_runtime`, `provider_notice_service`, `job_notifier`, and `settings`. `ingest_worker` and `job_consumer` exist only when the opt-in in-API worker mode (`APSOR_INGEST_WORKER_ENABLED=true`) is on; the test fixtures attach an `ingest_worker` explicitly. Tests may replace `agent_chat_generator`, `web_research_service`, `provider_tester`, or `vision_extractor`.
+- `dependency/` holds dependencies shared across slices. Today it exposes the authenticated account guard, its stateless SSE variant (`require_stateless_authenticated`), the forced-password-change guard, and the root guard; it is not a home for feature services.
+- `infrastructure/` adapts external systems: config, async database/Alembic, cache and progress bus, local/R2 storage, AI chat/vision clients, embedding (HTTP and offline hashing), RabbitMQ dispatch (`queue/`), web clients, security, and logging. Adapters implement slice protocols but must not own archive policy.
 - `module/` contains vertical slices: `auth`, `knowledge`, `agent`, `prompt`, and `web_research`. A slice may contain `domain/` (pure rules), `model/` (SQLAlchemy), `schema/` (Pydantic HTTP contracts), `protocol/` (ports), `repository/` (SQL), `service/` (orchestration), `router/` (HTTP), `exception/`, and `dependencies.py`.
-- `module/*/dependencies.py` is the allowed cross-slice assembly point. Routers must receive services from dependencies rather than constructing repositories directly.
-- `shared/` contains only genuinely cross-cutting primitives: the exception registry, the generic list envelope, shared time, and text n-gram helpers. It must not absorb slice-specific logic.
-- All ORM models share the declarative base in `infrastructure/database/base.py`. The model package exports are imported by Alembic and tests, so a new model must be reachable through the owning `model/__init__.py`.
+- `module/*/dependencies.py` is the allowed cross-slice assembly point. Routers must receive services from dependencies rather than constructing repositories directly. `uv run lint-imports` enforces the layer and slice contracts declared in `backend/pyproject.toml`; its `ignore_imports` lists are the documented debts (services that own short sessions, storage error types, model-catalog lookups, the history indexer's reuse of knowledge chunking/cache contracts, and model assignments touching `app_user`).
+- `shared/` contains only genuinely cross-cutting primitives: the exception registry, the generic list envelope (`types/`), shared time, the history-window retrieval constants used by knowledge and agent (`retrieval.py`), and text n-gram helpers. It must not absorb slice-specific logic.
+- All ORM models import the declarative base from `infrastructure/database/base.py` directly; Alembic's `env.py` imports every slice's `model` package for metadata, so a new model must be reachable through the owning `model/__init__.py`.
 - The request database session is created by `get_db_session`, starts as `apsor_app` with no owner context, and commits once at request exit. `get_current_user` applies `app.user_id`/`app.user_role` after resolving the cookie. Streaming agent turns and long-running workers must use `database.user_session(...)`, `database.system_session()`, or the explicit `maintenance_session(...)` helpers; never open a raw `session_factory()` for private data. Ingestion checkpoints must use `commit_and_reapply(...)`.
 - Authentication is mounted as a router-level dependency in `main.py`. Do not add a second session-cookie parser or an alternative account/role check in a feature router. Root-only global settings use `require_root`; ordinary private data uses `require_authenticated`.
 - `AiRuntime` is the single resolved view of chat, embedding, web-search, and web-fetch providers. Feature code should ask it for clients/config instead of reading provider rows or environment keys directly. Account chat calls go through `infrastructure/ai/user_models.py`, which resolves the assigned `chat_provider_config` row by id and never falls back to `runtime.chat_config` or another row; provider rows stay root-write.
@@ -25,6 +25,7 @@ Keep application assembly, infrastructure, and business slices separate so a fea
 
 - `main.py` — app factory, lifespan, middleware, protected/public router mounting, SPA.
 - `cli.py`, `worker.py` — executable entrypoints and worker lifecycle.
+- `bootstrap.py` — shared process state (`open_process_state` / `close_process_state`) and `BackgroundServices` for the worker loops.
 - `dependency/auth.py` — resolves the HttpOnly session cookie into the account principal and applies the RLS context; exposes account/root guards.
 - `infrastructure/database/session.py` — engine/session factory, RLS-scoped session helpers, request commit boundary, and checkpoint helper.
 - `infrastructure/ai/runtime.py` — four-capability provider snapshot.
@@ -50,8 +51,9 @@ Keep application assembly, infrastructure, and business slices separate so a fea
 
 ```bash
 cd backend
-uv run ruff check app
-uv run mypy app
+uv run ruff check .
+uv run mypy app script
+uv run lint-imports
 PYTHONUNBUFFERED=1 uv run pytest -q
 ```
 

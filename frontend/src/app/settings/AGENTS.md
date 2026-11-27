@@ -53,7 +53,10 @@ Settings does not own backend validation, generated API definitions, or global i
 - `component/ModelSettingsPanel.tsx` — read-only assignment view for the signed-in account.
 - `component/DiagnosticsPanel.tsx` — live health, stats, AI, vector, and reindex surfaces.
 - `component/MaintenancePanel.tsx` — access notes, version badge, and colophon.
-- `component/LanguagePanel.tsx` — immediate locale switching.
+- `component/LanguagePanel.tsx` / `LanguagePanel.css` — immediate locale switching and its option grid.
+- `component/RuntimeControls.tsx` — `RuntimeNumberField` and `RuntimeTextField` shared by the runtime panels.
+- `component/SwitchField.tsx`, `component/StatusPill.tsx` — the toggle and status-pill controls.
+- `component/SettingsDialog.tsx` — compatibility re-export of `app/component/ConfirmDialog.tsx`; new code imports `ConfirmDialog` directly.
 - `component/settings-utils.ts` — status tones, labels, and localized API errors.
 - `component/settings-invalidation.ts` — scoped provider and reindex invalidation.
 - `settings.css` — page composition, tab strip, runtime forms, and responsive rules.
@@ -72,7 +75,7 @@ Settings does not own backend validation, generated API definitions, or global i
 - Inspect both prompt drafts before save, switch to the first invalid tab, and keep per-field errors and character counts associated through `aria-describedby`. Use 16px textarea text at 720px and below.
 - Treat destructive actions (reset, delete, deactivate, reindex, seed) as confirmed actions with pending and error states.
 - Keep labels, hints, validation messages, and ARIA copy under the `settings` or `core` namespaces; no hardcoded UI strings.
-- Reuse `settings.css`; new page CSS belongs in this workspace, not global styles. Respect reduced motion and avoid horizontal page overflow.
+- Reuse `settings.css` (the only other stylesheet is the Language panel's `LanguagePanel.css`); new page CSS belongs in this workspace, not global styles. Respect reduced motion and avoid horizontal page overflow.
 - Do not require backend changes to add a tab; the tab shell is frontend-only unless a panel adds a new API.
 
 ## Verification

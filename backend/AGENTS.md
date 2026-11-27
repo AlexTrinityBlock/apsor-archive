@@ -8,16 +8,16 @@ Serve the Apsor Archive API and the committed SPA, process asynchronous ingest j
 
 ## Architecture
 
-- `app/main.py` builds the FastAPI application. Its lifespan creates the database, cache, progress bus, storage router, secret cipher, AI runtime, and ingestion worker; it also recovers incomplete agent runs and optionally runs Alembic migrations.
-- The API is versioned at `/api/v1`. Auth, health, and SPA assets are public; knowledge, prompt, and agent routers require an authenticated, active account. Account management and global configuration routers additionally require `role='root'`.
+- `app/main.py` builds the FastAPI application. Its lifespan calls `app/bootstrap.py` to create the database, cache, progress bus, storage router, secret cipher, provider-error notices, and AI runtime; it also owns the RabbitMQ dispatch publisher, recovers incomplete agent runs, and optionally runs Alembic migrations. `app/worker.py` builds the same process state and runs the background loops.
+- The API is versioned at `/api/v1`. Auth, health, and SPA assets are public; knowledge and prompt routers are mounted behind `require_authenticated`. The agent and ingest-progress routers stream SSE, so they are mounted behind `require_stateless_authenticated`, which authenticates without holding the request session for the stream's lifetime. Account management and global configuration routers additionally require `role='root'`.
 - The codebase is organized as vertical slices under `app/module/`: `auth`, `knowledge`, `agent`, `prompt`, and `web_research`. Each slice owns its router, service, repository, protocol, domain, schema, exception, and model layers as needed. Account listing/create/disable/enable/reset live in the auth slice's account router/service.
 - A normal request flows router → service → repository. Routers translate HTTP; services make decisions and coordinate transactions; repositories contain SQL and do not own business rules. Every private repository method takes the acting `user_id` explicitly or captures it in the repository instance.
-- `app/module/*/dependencies.py` is each slice's composition root. It builds repositories, services, caches, provider clients, and worker helpers, and is the place to inject test seams. `app/dependency/` contains dependencies shared across slices: `get_current_user`, `require_authenticated`, and `require_root`.
-- Adapters live in `app/infrastructure/`: async SQLAlchemy sessions and RLS context, Alembic runner, Valkey-compatible cache, local and R2 original-byte storage, DeepSeek/OpenAI-compatible/Anthropic AI clients, embeddings, security primitives, Tavily/Exa web access, and logging.
+- `app/module/*/dependencies.py` is each slice's composition root. It builds repositories, services, caches, provider clients, and worker helpers, and is the place to inject test seams. `app/dependency/` contains dependencies shared across slices: `get_current_user`, `require_authenticated`, `require_stateless_authenticated`, and `require_root`. Cross-slice wiring happens only in a `dependencies.py` or the entrypoint tier (`main.py`, `worker.py`, `bootstrap.py`).
+- Adapters live in `app/infrastructure/`: async SQLAlchemy sessions and RLS context, Alembic runner, Valkey-compatible cache, local and R2 original-byte storage, DeepSeek/OpenAI-compatible/Anthropic chat and vision clients, embeddings (HTTP and the offline signed-hashing embedder), the RabbitMQ dispatch publisher/consumer (`queue/rabbitmq.py`), security primitives, DeepSeek/Tavily/Exa web access, and logging.
 - AI is selected per capability through `AiRuntime` (`chat`, `embedding`, `web_search`, `web_fetch`). Database provider rows override environment defaults; secrets are encrypted with Fernet and never serialized back to clients. Chat is additionally per account: `app_user` holds the primary/auxiliary `chat_provider_config` row ids, free-text model/effort, and optional budgets, resolved by exact row id with no global chat fallback. Provider rows stay global root-write configuration, and a shared endpoint key rotates for every assigned account.
 - PostgreSQL is authoritative. Alembic owns the schema and enables `pg_trgm`. The request session commits once on successful exit and rolls back on any exception. It starts as `apsor_app` with no user context; authentication sets `app.user_id` / `app.user_role` on the same transaction.
 - Every private table is protected by forced row-level security. The runtime connects with the owning login but every request or scoped worker transaction that touches private data runs `SET LOCAL ROLE apsor_app` and sets the transaction-local context through the session helpers. The owner connection is reserved for explicit worker claim/recovery maintenance and maintenance-only owner-id enumeration; it must never read another account's archive content.
-- Durable ingestion uses `file_ingest_job` plus `SELECT ... FOR UPDATE SKIP LOCKED`. A dedicated `apsor-archive worker` process should own the queue in production; the API lifespan worker is a local convenience controlled by `APSOR_INGEST_WORKER_ENABLED`. The worker claims across accounts with a maintenance session, then processes each job inside the owner's `user_session`.
+- Durable ingestion uses `file_ingest_job` plus `SELECT ... FOR UPDATE SKIP LOCKED`. The dedicated `apsor-archive worker` process (`make worker`) owns the queue, the RabbitMQ consumer, the chat-image cleanup sweep, and the conversation-history indexer. The API only enqueues jobs and publishes RabbitMQ wake-ups; RabbitMQ is an optional latency hint and PostgreSQL stays the only job ledger. `APSOR_INGEST_WORKER_ENABLED=true` (default `false`) is an opt-in single-process development mode that runs the same loops in the API lifespan. The worker claims across accounts with a maintenance session, then processes each job inside the owner's `user_session`. The deprecated synchronous `POST /files` (`uploadFile`) and `POST /files/text` still extract or embed inside the request; clients should use `uploadFileAsync`.
 - Agent SSE and tool calls use a scoped `user_session` rather than the request session, so a stream does not pin a database connection and never loses the owner's RLS context. Runtime settings are loaded as immutable snapshots in short-lived system sessions.
 - Every domain exception is registered with `ExceptionRegistry`. Unexpected exceptions still become the shared JSON envelope; request validation becomes `400 invalid_request`, not FastAPI's default 422.
 
@@ -25,10 +25,12 @@ Serve the Apsor Archive API and the committed SPA, process asynchronous ingest j
 
 - `app/main.py` — application factory, lifespan resources, middleware, router mounting, SPA fallback.
 - `app/cli.py` / `app/worker.py` — `apsor-archive` API and worker entrypoints.
-- `app/dependency/auth.py` — authenticated and root-only guards used by protected routers.
+- `app/bootstrap.py` — process state and background loops shared by the API lifespan and the worker.
+- `app/dependency/auth.py` — authenticated, stateless (SSE), and root-only guards used by protected routers.
 - `app/infrastructure/database/session.py` — engine, session factory, RLS helpers (`public_session`, `user_session`, `system_session`, `maintenance_session`, `commit_and_reapply`), and the request transaction boundary.
 - `app/infrastructure/config/settings.py` — all `APSOR_*` settings, storage backend selection, and local env-file loading.
-- `app/infrastructure/files/` — local/R2 storage adapters, router, provider-safe errors, and the migration CLI in `backend/script/`.
+- `app/infrastructure/files/` — local/R2 storage adapters, router, and provider-safe errors.
+- `script/` — operational entrypoints: OpenAPI export, storage and chat-attachment migrations, and the Wikipedia sample ingester.
 - `app/infrastructure/ai/runtime.py` — four-capability provider snapshot and reload behavior.
 - `app/shared/exception/registry.py` — global error and validation envelope.
 - `app/module/auth/router/account_router.py` — root-only account management.
@@ -63,13 +65,16 @@ cd backend
 uv sync
 uv run alembic upgrade head
 uv run ruff check .
-uv run mypy app
-PYTHONUTF8=1 uv run bandit -r app -c pyproject.toml
-uv run pip-audit
+uv run mypy app script
+uv run lint-imports                     # architecture contracts in pyproject.toml
+PYTHONUTF8=1 uv run bandit -q -r app script -c pyproject.toml
 PYTHONUNBUFFERED=1 uv run pytest -q
+uv run pip-audit                        # needs network; part of `make audit`
 ```
 
-Run the suite serially. It shares one disposable test database, builds it with `alembic upgrade head`, resets it before each test, verifies the `apsor_app` role/grants/policies, and treats warnings as errors. Migration downgrade is a separate check against a development database.
+`mypy` runs with `ignore_missing_imports`, so it does not catch a stale first-party import after a module move; `lint-imports` and the test suite do. Keep the `ignore_imports` debt lists in `pyproject.toml` shrinking: remove an entry when its layering fix lands, and do not add one without a reason comment.
+
+Run the suite serially. It shares one disposable test database (`APSOR_TEST_DATABASE_NAME`, default `apsor_archive_test`, must end with `_test`; give each parallel worktree its own name), builds it with `alembic upgrade head`, resets it before each test, verifies the `apsor_app` role/grants/policies, and treats warnings as errors. Migration downgrade is a separate check against a development database.
 
 ## Related guides
 

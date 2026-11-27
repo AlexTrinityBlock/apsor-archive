@@ -314,9 +314,10 @@ rows are removed; a job over its attempt limit becomes a terminal
 `ingest_worker_lost` failure. Embedding retries are bounded by the configured
 attempt count and backoff.
 
-The FastAPI lifespan starts one in-process worker by default. For production,
-run a dedicated process so parsing and embedding cannot starve request
-handlers:
+The API only enqueues jobs; a dedicated worker process drains them so parsing
+and embedding cannot starve request handlers. `APSOR_INGEST_WORKER_ENABLED=true`
+(default `false`) opts the API lifespan into running the same loops for
+single-process development:
 
 ```bash
 uv run apsor-archive worker
@@ -326,9 +327,9 @@ uv run python -m app.worker
 uv run python -m app.worker --once
 ```
 
-Both shapes use the same queue and leases. Multiple API replicas should disable
-the lifespan worker (`APSOR_INGEST_WORKER_ENABLED=false`) and run one or more
-dedicated workers.
+Both shapes use the same queue and leases. API replicas keep the default
+(`APSOR_INGEST_WORKER_ENABLED=false`) and one or more dedicated workers own the
+queue.
 
 ### Runtime settings
 

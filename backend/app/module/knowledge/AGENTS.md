@@ -20,6 +20,7 @@ Keep file lineage, search visibility, and memory history consistent across synch
 - Re-ingest is a durable `file_ingest_job` with `source_kind='reingest'` and `source_file_id`. It stores no payload (`storage_key`/`storage_backend` are NULL), reads the current source original through the owner-scoped file service, forces the vision pass, and stages a new version. `publish_pending(expected_current_file_id=...)` refuses to publish if a newer upload became current, and failure/recovery must never delete the shared source bytes.
 - Chunk boundaries are stored per file. The singleton `ingest_config` row supplies future chunk sizes; changing `chunk_target_chars` or `chunk_overlap_chars` affects only future ingests, and existing files keep their boundaries until re-ingested.
 - Durable ingestion uses `file_ingest_job` with `queued → parsing → chunking → embedding → summarizing → ready`, or `failed`. The worker claims with `SELECT ... FOR UPDATE SKIP LOCKED`, owns staged rows, publishes only on success, discards them on failure, and requeues stale leases after a crash. While parsing or chunking, nullable `stage_done`/`stage_total`/`stage_unit` describe the current page, chunk, DOCX paragraph/row, PPTX slide, or rendered PDF page; the worker's one-second reporter writes them, keeps `updated_at` fresh, and clears them at the embedding/publish/terminal boundary. Spreadsheet sheet progress remains coarse.
+- Only the dedicated worker process (or the API in the opt-in `APSOR_INGEST_WORKER_ENABLED=true` dev mode) drains durable jobs. The deprecated synchronous `POST /files` (`uploadFile`) still extracts inside the API request, and `POST /files/text`, Markdown updates, copies, memories, and summaries index in the request; new file-upload clients must use `uploadFileAsync`.
 - Live progress uses Valkey Pub/Sub as an ephemeral hint, never a second ledger. `GET /files/ingest-jobs/{id}/events` streams a compact snapshot over SSE and falls back to one-second owner-scoped polling if the broker is unavailable; the JSON job endpoint and the browser's polling helper remain the durable fallback.
 - RabbitMQ (`apsor.ingest`) is an optional low-latency dispatch path, never a second ledger. The API publishes persistent `{job_id, retry_count}` messages, the consumer uses manual ack with prefetch 1 so a crash redelivers the unacked delivery, and retry outcomes use a TTL retry queue capped by a dispatch-retry limit. Every message is re-read from `file_ingest_job` and claimed there; duplicate or missing messages only fall back to the one-second database polling worker.
 - `search_service.py` runs BM25 over CJK bigrams and Latin terms, optional vector recall by cosine similarity, and reciprocal-rank fusion. Results are selected per source kind, de-duplicated by chunk, hydrated, and cached under the archive cache version. Vector rows with a different dimension are skipped rather than mixed. Conversation history has its own lane: cosine recall of 128 history windows, BM25 scoring of every recalled window, RRF rerank, and the top 15 raw windows. It is always current-only and is returned alongside the archive results as `history_results`.
@@ -51,9 +52,14 @@ Keep file lineage, search visibility, and memory history consistent across synch
 - `service/memory_service.py`, `service/timeline_service.py` — memory lineage and sparse/complete time reads.
 - `service/provider_config_service.py` — capability registry, encryption, activation, reindexing.
 - `dependencies.py` — composition of all knowledge services, worker factories, provider runtime.
-- `router/` — files, folders, paths, memories, summaries, search, timeline, settings, tool facade.
-- `domain/` — path validation, chunking, hashing embedder, timeline sampling, provider specs.
-- `exception/domain_error.py` — stable knowledge errors and their handler mappings.
+- `service/summary_service.py`, `service/stats_service.py`, `service/ai_service.py` — summaries, dashboard stats, and the AI status/ask facade.
+- `service/model_assignment_service.py` — per-account chat endpoint/model assignments and probes.
+- `service/provider_error_notice_service.py` / `service/metered_text_generator.py` — provider failure notices and quota-metered text generation.
+- `service/cache_keys.py` — owner-scoped cache keys and version scopes.
+- `service/health_service.py` — database readiness probe behind `GET /health`.
+- `router/` — `file`, `folder`, `tree`, `memory`, `search`, `timeline`, `settings`, `ingest_settings`, `ingest_progress` (SSE, mounted separately), `model_assignment`, `provider_notice`, `ai`, `system`, `health`, and the `tool` facade.
+- `domain/` — path validation, chunking, timeline sampling, provider table specs (`provider_config_domain.py`), and resolved provider value objects (`provider_runtime_domain.py`). The signed-hashing embedder is an adapter in `app/infrastructure/embedding/hashing_embedder.py`.
+- `exception/domain_error.py` — stable knowledge errors; `exception/handler.py` maps them to HTTP status and codes.
 
 ## Conventions
 
@@ -76,6 +82,7 @@ Keep file lineage, search visibility, and memory history consistent across synch
 cd backend
 uv run ruff check app/module/knowledge tests/test_file_library.py tests/test_markdown_update.py tests/test_search.py tests/test_memories.py tests/test_summaries.py tests/test_timeline.py tests/test_versions.py
 uv run mypy app
+uv run lint-imports
 uv run pytest -q tests/test_file_library.py tests/test_markdown_update.py tests/test_search.py
 uv run pytest -q tests/test_memories.py tests/test_summaries.py tests/test_timeline.py tests/test_versions.py
 ```
