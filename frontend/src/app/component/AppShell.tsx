@@ -15,7 +15,7 @@ import { ImpersonateUserDialog } from "../auth/component/ImpersonateUserDialog";
 import { StopImpersonationDialog } from "../auth/component/StopImpersonationDialog";
 import { useScrollLock } from "../hook/useScrollLock";
 import { useVisualViewport } from "../hook/useVisualViewport";
-import { useDrawerAccessibility } from "./useDrawerAccessibility";
+import { useDrawerAccessibility } from "../hook/useDrawerAccessibility";
 import {
   localizeStatus,
   useI18n,
