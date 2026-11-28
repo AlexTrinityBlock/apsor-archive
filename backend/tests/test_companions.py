@@ -211,7 +211,7 @@ def test_companion_preference_round_trip(client: TestClient) -> None:
         "motion": "full",
         "size": "full",
         "scale": None,
-        "opacity_mode": "auto",
+        "opacity_mode": "opaque",
         "position": None,
         "updated_at": None,
     }
