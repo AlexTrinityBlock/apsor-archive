@@ -1,9 +1,8 @@
 import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
 
-const DATA_CHIPS = ["PostgreSQL 17", "Valkey", "RabbitMQ", "RustFS / S3"] as const;
 
-/** Figure 3: browser → Cloudflare → (machine: tunnel → Caddy → app → data). */
+/** Figure 3: your device → Cloudflare → (your computer: doorway → Caddy → app → storage). */
 export function DeploymentDiagram() {
   const { t } = useI18n();
   const captionId = "about-deploy-caption";
@@ -41,20 +40,13 @@ export function DeploymentDiagram() {
                 <h3>Apsor Archive</h3>
                 <p>{t("insights.about.deploy.appDetail")}</p>
                 <span className="about-deploy__chips">
-                  <span className="about-chip">API</span>
-                  <span className="about-chip">worker</span>
+                  <span className="about-chip">{t("insights.about.deploy.appChipWeb")}</span>
+                  <span className="about-chip">{t("insights.about.deploy.appChipWorker")}</span>
                 </span>
               </li>
               <li className="about-node about-deploy__node">
                 <h3>{t("insights.about.deploy.data")}</h3>
                 <p>{t("insights.about.deploy.dataDetail")}</p>
-                <span className="about-deploy__chips">
-                  {DATA_CHIPS.map((chip) => (
-                    <span className="about-chip" key={chip}>
-                      {chip}
-                    </span>
-                  ))}
-                </span>
               </li>
             </ol>
           </li>
@@ -65,6 +57,8 @@ export function DeploymentDiagram() {
       </figure>
       <ul className="about-deploy__notes">
         <li>{t("insights.about.deploy.noteTunnel")}</li>
+        <li>{t("insights.about.deploy.noteWizard")}</li>
+        <li>{t("insights.about.deploy.noteStorage")}</li>
         <li>{t("insights.about.deploy.noteSetup")}</li>
       </ul>
     </>
