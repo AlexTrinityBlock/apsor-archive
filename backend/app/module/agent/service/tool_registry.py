@@ -15,7 +15,12 @@ from pydantic import BaseModel, ValidationError
 
 from app.module.agent.domain.agent_domain import ToolOutcome
 from app.module.agent.domain.calculation_domain import evaluate_expression
-from app.module.agent.domain.companion_persona_domain import LibrarianMemory
+from app.module.agent.domain.companion_context_domain import (
+    CompanionTurnContext,
+    contribution_data,
+    render_contributions,
+    signal_text,
+)
 from app.module.agent.domain.history_domain import (
     HISTORY_MESSAGE_MAX_CHARS,
     HistoryMessage,
@@ -48,6 +53,7 @@ from app.module.agent.domain.tool_catalog import (
 )
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
 from app.module.agent.exception.domain_error import AgentError
+from app.module.agent.protocol.companion_protocol import ContextContribution, ContextSignal
 from app.module.agent.protocol.tool_service_protocol import (
     AgentToolServices,
     ToolServiceScopeProtocol,
@@ -58,7 +64,6 @@ from app.module.knowledge.exception.domain_error import (
     KnowledgeError,
 )
 from app.module.knowledge.schema.memory_schema import MemorySchema
-from app.module.knowledge.schema.search_schema import SearchResponseSchema
 from app.module.knowledge.schema.timeline_schema import TimelineEventSchema
 from app.module.web_research.domain.fetch_quality_domain import looks_structurally_incomplete
 from app.module.web_research.exception.domain_error import (
@@ -96,6 +101,22 @@ WEB_SEARCH_HINT = (
 )
 
 WEB_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
+# Tools whose successful results the companion may answer with its own
+# memories. Only search_knowledge carries the person's own question (its query),
+# so only it can be a question about the librarian itself.
+COMPANION_SIGNAL_TOOLS = frozenset(
+    {
+        "search_knowledge",
+        "read_file",
+        "read_memory",
+        "read_timeline",
+        "present_resource",
+        "web_fetch",
+    }
+)
+# The companion block may use at most this share of a tool result's budget; the
+# archive content keeps the rest, so lore can never crowd evidence out.
+COMPANION_BLOCK_SHARE = 0.4
 COMPRESSED_VIEW = "compressed"
 
 _SPECS: dict[str, ToolSpec] = {spec.name: spec for spec in TOOL_SPECS}
@@ -167,13 +188,16 @@ class AgentToolRegistry:
         parse_error: str | None = None,
         approved: bool = False,
         plot_limits: PlotLimits = DEFAULT_PLOT_LIMITS,
+        companion: CompanionTurnContext | None = None,
     ) -> ToolOutcome:
         """Execute one tool call and never raise for an expected failure.
 
         ``approved`` is set only by the backend after a human resolves a durable
         approval. Model-supplied ``user_confirmed`` never authorizes a write.
         ``plot_limits`` carries the stored render_plot budgets; its default keeps
-        direct callers on the module defaults.
+        direct callers on the module defaults. ``companion`` is the run's
+        companion state; when present, a successful result may carry the
+        companion's own memories in one separate block.
         """
         started = time.perf_counter()
         spec = _SPECS.get(name)
@@ -216,6 +240,14 @@ class AgentToolRegistry:
                     services,
                     plot_limits,
                 )
+                contributions = await _companion_contributions(
+                    name,
+                    parsed,
+                    content,
+                    resource,
+                    services,
+                    companion,
+                )
         except WebResearchError as exc:
             # A failure from the external web provider is a "tool failure", not a
             # stream failure: return a tool result with a stable code so the SSE
@@ -244,8 +276,16 @@ class AgentToolRegistry:
             )
 
         duration = _elapsed_ms(started)
-        tool_truncated = len(content) > max_chars
-        bounded = clip(content, max_chars)
+        block = render_contributions(contributions)
+        if block and len(block) > max_chars * COMPANION_BLOCK_SHARE:
+            block, contributions = "", []
+        archive_budget = max_chars - len(block)
+        tool_truncated = len(content) > archive_budget
+        bounded = clip(content, archive_budget) + block
+        if contributions:
+            data = {**data, "lore": contribution_data(contributions)}
+            if companion is not None:
+                companion.remember(contributions)
         payload: dict[str, Any] = {
             **data,
             "tool": name,
@@ -261,6 +301,65 @@ class AgentToolRegistry:
         else:
             payload["truncated"] = tool_truncated
         return ToolOutcome(content=bounded, data=payload, resource=resource)
+
+
+def _companion_signal(
+    name: str,
+    args: BaseModel,
+    content: str,
+    resource: dict[str, Any] | None,
+    companion: CompanionTurnContext,
+) -> ContextSignal | None:
+    """Return the signal one successful tool result gives the companion."""
+    if name not in COMPANION_SIGNAL_TOOLS:
+        return None
+    query = args.query if isinstance(args, SearchKnowledgeArgs) else None
+    resource_ref: tuple[str, int] | None = None
+    title: str | None = None
+    if resource is not None:
+        kind = resource.get("resource_type")
+        resource_id = resource.get("resource_id")
+        if isinstance(kind, str) and isinstance(resource_id, int):
+            resource_ref = (kind, resource_id)
+        raw_title = resource.get("title")
+        title = raw_title if isinstance(raw_title, str) else None
+    text = signal_text(query, title, content)
+    if not text:
+        return None
+    return ContextSignal(
+        site="tool_result",
+        conversation_id=companion.conversation_id,
+        text=text,
+        run_id=companion.run_id,
+        tool_name=name,
+        resource=resource_ref,
+        offered_this_run=frozenset(companion.offered),
+        query=query,
+    )
+
+
+async def _companion_contributions(
+    name: str,
+    args: BaseModel,
+    content: str,
+    resource: dict[str, Any] | None,
+    services: AgentToolServices,
+    companion: CompanionTurnContext | None,
+) -> list[ContextContribution]:
+    """Ask the companion contributor about one result, never raising."""
+    if companion is None:
+        return []
+    try:
+        contributor = getattr(services, "companion_context", None)
+        if contributor is None:
+            return []
+        signal = _companion_signal(name, args, content, resource, companion)
+        if signal is None:
+            return []
+        return await contributor.contribute(signal)
+    except Exception:
+        logger.warning("companion context failed for tool %s; continuing without it", name)
+        return []
 
 
 async def _dispatch(
@@ -296,8 +395,6 @@ async def _dispatch(
     if name == "companion_action" and isinstance(args, CompanionActionArgs):
         return await _companion_action(args)
     raise ValueError(f"No handler is registered for tool {name!r}.")
-
-
 
 
 async def _search_knowledge(
@@ -434,45 +531,7 @@ async def _search_knowledge(
             for item in result.history_results
         ],
     }
-    memories = await _librarian_memories(args.query, result, services)
-    if memories:
-        # The librarian's own lore is a separate block after every archive
-        # source; it never enters the source list or the citation vocabulary.
-        guidance = next((memory.guidance for memory in memories if memory.guidance), "")
-        content.append(_open("librarian_memories") + xml_text(guidance))
-        for memory in memories:
-            content.append(
-                _open("librarian_memory", {"id": memory.id, "tier": memory.tier})
-                + xml_text(memory.text)
-                + _close("librarian_memory")
-            )
-        content.append(_close("librarian_memories"))
-        data["lore"] = [
-            {"id": memory.id, "tier": memory.tier, "text": memory.text}
-            for memory in memories
-        ]
     return "".join(content), data, None
-
-
-async def _librarian_memories(
-    query: str,
-    result: SearchResponseSchema,
-    services: AgentToolServices,
-) -> list[LibrarianMemory]:
-    """Return the companion's own memories for this search, never raising."""
-    recall = services.librarian_memory
-    if recall is None:
-        return []
-    context = [
-        *(item.content for item in result.memory_results[:3]),
-        *(item.content for item in result.file_results[:3]),
-        *(item.content for item in result.summary_results[:2]),
-    ]
-    try:
-        return await recall.recall(query, [clip(text, 400) for text in context])
-    except Exception:
-        logger.warning("librarian memory recall failed; continuing without it")
-        return []
 
 
 async def _read_file(

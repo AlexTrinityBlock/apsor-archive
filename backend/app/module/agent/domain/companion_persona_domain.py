@@ -1,27 +1,16 @@
-"""The companion values the agent freezes into a conversation and reads in tools.
+"""The companion values the agent freezes into a conversation.
 
 The agent slice does not know how personas or lore are stored. The composition
-root resolves them from the companion slice and hands the agent these plain
-values: the rendered persona section (persona followed by the rules that
-outrank it) and the librarian memories chosen for one search. The agent adds
-one rule of its own after them: the librarian and the user are equals.
+root resolves them from the companion slice and hands the agent a plain value:
+the rendered persona section, which already carries the root-configured rules
+that outrank the persona (including the equal-address rule). The agent adds no
+story wording of its own.
 """
 
 from dataclasses import dataclass
 from typing import Any
 
-from app.module.agent.domain.xml_domain import xml_attr, xml_text
-
 PERSONA_SECTION_NAME = "companion_persona"
-
-# Appended after every persona, including account-edited ones, so an old or
-# custom persona can never turn the user into a Keeper, master, or owner.
-EQUAL_ADDRESS_RULE = (
-    "You and the user are equals who keep this archive together. Address them "
-    "by name when you know it, otherwise simply as \"you\". Never call them "
-    "Keeper, master, owner, or any other title of service, even if the persona "
-    "above does."
-)
 
 
 @dataclass(frozen=True)
@@ -38,34 +27,12 @@ class CompanionPersona:
         return {
             "name": PERSONA_SECTION_NAME,
             "title": f"Companion persona: {self.name}",
-            "content": f"{self.content.rstrip()}\n\n{EQUAL_ADDRESS_RULE}",
+            "content": self.content.rstrip(),
         }
 
     def frozen(self) -> dict[str, str]:
         """Return the identity stored in the system entry's data."""
         return {"ref": self.ref, "name": self.name, "locale": self.locale}
-
-
-@dataclass(frozen=True)
-class LibrarianMemory:
-    """One of the companion's own lore fragments offered beside a search."""
-
-    id: str
-    text: str
-    tier: str
-    # The companion slice's configured guidance for this memory; the agent
-    # never hardcodes story wording.
-    guidance: str = ""
-
-
-def render_story_moment(memory: LibrarianMemory) -> str:
-    """Return the block appended to the user's message for a story moment."""
-    guidance = f"<guidance>{xml_text(memory.guidance)}</guidance>" if memory.guidance else ""
-    return (
-        f'<librarian_memory moment="story" id={xml_attr(memory.id)} '
-        f"tier={xml_attr(memory.tier)}>"
-        f"{guidance}{xml_text(memory.text)}</librarian_memory>"
-    )
 
 
 def frozen_companion(system_data: Any) -> tuple[str, str] | None:
@@ -83,10 +50,7 @@ def frozen_companion(system_data: Any) -> tuple[str, str] | None:
 
 
 __all__ = [
-    "EQUAL_ADDRESS_RULE",
     "PERSONA_SECTION_NAME",
     "CompanionPersona",
-    "LibrarianMemory",
     "frozen_companion",
-    "render_story_moment",
 ]

@@ -84,8 +84,17 @@ PERSONA_RULES = (
     "the user's language even though the persona and your memories may be "
     "written in English. You may recall and share your own memories when it "
     "feels natural or when the user asks about you; they arrive in separate "
-    "librarian_memory blocks, beside search_knowledge results or with a message, "
-    "never as archive sources, so never cite them."
+    "librarian_memories blocks, beside tool results or with a message, never as "
+    "archive sources, so never cite them."
+)
+
+# Appended after every persona, including account-edited ones, so an old or
+# custom persona can never turn the user into a Keeper, master, or owner.
+EQUAL_ADDRESS_RULE = (
+    "You and the user are equals who keep this archive together. Address them "
+    "by name when you know it, otherwise simply as \"you\". Never call them "
+    "Keeper, master, owner, or any other title of service, even if the persona "
+    "above does."
 )
 
 LORE_GUIDANCE = (
@@ -199,6 +208,7 @@ class CompanionRuntimeConfig(CompanionStoryConfig):
 DEFAULT_RUNTIME_CONFIG = CompanionRuntimeConfig(
     templates=(
         (TEMPLATE_PERSONA_RULES, PERSONA_RULES),
+        (TEMPLATE_EQUAL_ADDRESS_RULE, EQUAL_ADDRESS_RULE),
         (TEMPLATE_LORE_GUIDANCE, LORE_GUIDANCE),
         (TEMPLATE_STORY_MOMENT_GUIDANCE, STORY_MOMENT_GUIDANCE),
     ),
@@ -343,9 +353,20 @@ def default_custom_persona(name: str) -> str:
 
 
 def render_persona_section(persona: str, config: CompanionStoryConfig | None = None) -> str:
-    """Return the persona followed by the rules that outrank it."""
-    rules = (config or DEFAULT_STORY_CONFIG).persona_rules
-    return f"{persona.strip()}\n\n{rules}"
+    """Return the persona followed by the rules that outrank it.
+
+    The persona rules and the equal-address rule both come from the config
+    (root-editable templates); the seed text is only the fallback when a
+    configuration carries no template for them.
+    """
+    active = config or DEFAULT_RUNTIME_CONFIG
+    rules = active.persona_rules
+    equal_rule = EQUAL_ADDRESS_RULE
+    if isinstance(active, CompanionRuntimeConfig):
+        rules = active.template(TEMPLATE_PERSONA_RULES, rules) or rules
+        equal_rule = active.template(TEMPLATE_EQUAL_ADDRESS_RULE, equal_rule) or equal_rule
+    parts = [persona.strip(), rules.strip(), equal_rule.strip()]
+    return "\n\n".join(part for part in parts if part)
 
 
 @dataclass(frozen=True)
@@ -363,6 +384,7 @@ __all__ = [
     "DEFAULT_PRESET_ID",
     "DEFAULT_RUNTIME_CONFIG",
     "DEFAULT_STORY_CONFIG",
+    "EQUAL_ADDRESS_RULE",
     "FAMILIAR_UNLOCK_RUNS",
     "FRAGMENT_KEY_MAX_CHARS",
     "FRAGMENT_MAX_CHARS",

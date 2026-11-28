@@ -27,6 +27,9 @@ from app.module.companion.repository.companion_repository import CompanionReposi
 from app.module.companion.repository.companion_story_repository import (
     CompanionStoryRepository,
 )
+from app.module.companion.service.companion_context_contributor import (
+    CompanionContextContributor,
+)
 from app.module.companion.service.companion_service import CompanionService
 from app.module.companion.service.companion_story_service import CompanionStoryService
 from app.module.companion.service.lore_recall import CompanionLoreRecall
@@ -149,7 +152,35 @@ def build_lore_recall(
     )
 
 
+# --- B: context ---
+
+
+def build_companion_context_contributor(
+    state: State,
+    session: AsyncSession,
+    *,
+    user_id: int,
+    companion_ref: str,
+    locale: StoryLocale,
+    quota: LoreEmbeddingQuotaProtocol | None = None,
+) -> CompanionContextContributor:
+    """Build the one context contributor for a conversation's frozen companion."""
+    return CompanionContextContributor(
+        recall=build_lore_recall(
+            state,
+            session,
+            user_id=user_id,
+            companion_ref=companion_ref,
+            locale=locale,
+            quota=quota,
+        ),
+        config=build_story_config_provider(state),
+        user_id=user_id,
+    )
+
+
 __all__ = [
+    "build_companion_context_contributor",
     "build_companion_story_service",
     "build_content_provider",
     "build_lore_recall",

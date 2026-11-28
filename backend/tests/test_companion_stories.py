@@ -78,8 +78,12 @@ def _search_results(turn: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _search_once(client: TestClient, query: str) -> dict[str, Any]:
-    """Run one turn whose only tool call is search_knowledge(query)."""
+def _search_turn(
+    client: TestClient,
+    query: str,
+    message: str | None = None,
+) -> dict[str, Any]:
+    """Run one turn (``message``, default the query) that calls search_knowledge(query)."""
     client.app.state.agent_chat_generator = FakeChatGenerator(
         [
             tool_call_result("search_knowledge", {"query": query}, call_id="call_search"),
@@ -87,9 +91,20 @@ def _search_once(client: TestClient, query: str) -> dict[str, Any]:
         ]
     )
     conversation_id = _new_conversation(client)
-    results = _search_results(_turn(client, conversation_id, query))
+    return _turn(client, conversation_id, message if message is not None else query)
+
+
+def _search_once(client: TestClient, query: str, message: str | None = None) -> dict[str, Any]:
+    """Run one search turn and return its only search_knowledge result."""
+    results = _search_results(_search_turn(client, query, message))
     assert len(results) == 1
     return results[0]
+
+
+def _user_entry(turn: dict[str, Any]) -> dict[str, Any]:
+    users = [entry for entry in turn["entries"] if entry["kind"] == "pi.user"]
+    assert len(users) == 1
+    return users[0]
 
 
 # --- persona -----------------------------------------------------------------
@@ -108,7 +123,7 @@ def test_default_persona_is_frozen_and_disabled_companion_has_none(
     persona = load_presets()["vellum"].persona
     # The persona comes first; the rules that outrank it follow.
     assert section["content"].index(persona) < section["content"].index(PERSONA_RULES)
-    assert system["data"]["prompt_version"] == "archive-agent-v19"
+    assert system["data"]["prompt_version"] == "archive-agent-v20"
 
     zh = _system_entry(client, _new_conversation(client, locale="zh-TW"))
     assert zh["data"]["companion"]["locale"] == "zh-TW"
@@ -159,9 +174,7 @@ def test_persona_override_is_per_locale_and_resettable(client: TestClient) -> No
 
     too_long = client.put(f"{STORIES}/{VELLUM}/persona", json={"persona": "x" * 4001})
     assert too_long.status_code == 400
-    assert client.get(f"{STORIES}/preset:nobody/persona").json()["error"] == (
-        "companion_not_found"
-    )
+    assert client.get(f"{STORIES}/preset:nobody/persona").json()["error"] == ("companion_not_found")
     assert client.get(f"{STORIES}/not-a-ref/persona").status_code == 404
 
 
@@ -248,9 +261,10 @@ def test_custom_companion_story_and_cascade(
     # Another locale falls back to what the owner wrote.
     zh = client.get(f"{STORIES}/{ref}/lore", params={"locale": "zh-TW"}).json()
     assert [item["text"] for item in zh["fragments"]] == ["I collect lost buttons."]
-    assert client.get(f"{STORIES}/{ref}/persona", params={"locale": "zh-TW"}).json()[
-        "persona"
-    ] == "You are Moth."
+    assert (
+        client.get(f"{STORIES}/{ref}/persona", params={"locale": "zh-TW"}).json()["persona"]
+        == "You are Moth."
+    )
 
     assert client.delete(f"/api/v1/companions/{companion_id}").status_code == 204
     assert client.get(f"{STORIES}/{ref}/lore").status_code == 404
@@ -314,24 +328,50 @@ def _progress(owner_engine: Engine) -> dict[str, tuple[int, str]]:
     return {row[0]: (row[1], row[2]) for row in rows}
 
 
-def test_self_query_offers_lore_in_a_separate_block(
+def test_self_query_in_the_message_answers_with_untold_story(
     client: TestClient,
     owner_engine: Engine,
 ) -> None:
-    """Asking about the librarian brings its own untold story, never as a source."""
+    """Asking the librarian about itself brings its own story with the message."""
     create_memory(
         client,
         "Grandmother taught me her braised pork recipe: soy sauce goes in last.",
         "2026-01-20T10:00:00+08:00",
     )
-    about_self = _search_once(client, "Vellum, tell me about your past")
+    turn = _search_turn(client, "braised pork", "Vellum, tell me about your past")
+    data = _user_entry(turn)["data"]
+    ids = data["companion_context_ids"]
+    assert 1 <= len(ids) <= 2
+    block = data["companion_context"]
+    assert block.startswith('<librarian_memories moment="self">')
+    assert DEFAULT_STORY_CONFIG.lore_guidance in block
+    assert {key: value[1] for key, value in _progress(owner_engine).items()} == {
+        key: "self_query" for key in ids
+    }
+    # The run never repeats a fragment: anything beside the search is new.
+    result = _search_results(turn)[0]
+    assert set(ids).isdisjoint({item["id"] for item in result["data"].get("lore", [])})
+
+
+def test_self_query_through_search_offers_lore_in_a_separate_block(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    """A search query about the librarian brings its untold story, never as a source."""
+    create_memory(
+        client,
+        "Grandmother taught me her braised pork recipe: soy sauce goes in last.",
+        "2026-01-20T10:00:00+08:00",
+    )
+    about_self = _search_once(client, "Vellum, tell me about your past", "Please look it up.")
     lore = about_self["data"]["lore"]
     assert 1 <= len(lore) <= 2
     assert {item["tier"] for item in lore} == {"first"}
+    assert {item["moment"] for item in lore} == {"self"}
     content = about_self["model"][0]["content"]
-    assert "<librarian_memories>" in content
+    assert '<librarian_memories moment="self">' in content
     assert DEFAULT_STORY_CONFIG.lore_guidance in content
-    assert content.index("<summary>") < content.index("<librarian_memories>")
+    assert content.index("<summary>") < content.index("<librarian_memories")
     lore_ids = {item["id"] for item in lore}
     for item in about_self["data"]["memory_results"]:
         assert str(item["memory_id"]) not in lore_ids
@@ -339,8 +379,9 @@ def test_self_query_offers_lore_in_a_separate_block(
         key: "self_query" for key in lore_ids
     }
 
-    # A second self query prefers fragments not told yet.
-    again = _search_once(client, "Tell me a story about yourself")
+    # A second self query prefers fragments not told yet (the message may also
+    # open a story moment now; it is never a repeat either).
+    again = _search_once(client, "Tell me a story about yourself", "Please look it up.")
     assert lore_ids.isdisjoint({item["id"] for item in again["data"]["lore"]})
 
 
@@ -379,15 +420,15 @@ def test_story_moments_pace_the_arc_whatever_the_topic(
 ) -> None:
     """A run may open with the next untold fragment, every few completed runs."""
     users = _complete_runs(client, 1 + 1 + STORY_MOMENT_EVERY_RUNS)
-    moments = [entry["data"].get("story_moment_id") for entry in users]
+    moments = [(entry["data"].get("companion_context_ids") or [None])[0] for entry in users]
     # Run 1 has no completed run yet; run 2 opens the first moment; the next
     # waits until STORY_MOMENT_EVERY_RUNS more runs have completed.
     assert moments[0] is None
     assert moments[1] == "vellum-001"
     assert all(value is None for value in moments[2:-1])
     assert moments[-1] == "vellum-002"
-    block = users[1]["data"]["story_moment"]
-    assert 'moment="story"' in block
+    block = users[1]["data"]["companion_context"]
+    assert block.startswith('<librarian_memories moment="story">')
     assert "keep it for another time" in block
     progress = _progress(owner_engine)
     assert progress["vellum-001"] == (1, "story_moment")
@@ -603,6 +644,7 @@ def test_shipped_lore_loads_in_every_locale() -> None:
         for preset_id, story in english.items()
     }
     from app.module.companion.service.preset_lore_catalog import LORE_DIRECTORY as seed_dir
+
     for preset_id, ids in english_ids.items():
         seed = json.loads((seed_dir / f"{preset_id}.json").read_text(encoding="utf-8"))
         assert ids == [fragment["id"] for fragment in seed["fragments"]]

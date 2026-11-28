@@ -53,11 +53,12 @@ from app.module.agent.domain.compaction_domain import (
     estimate_provider_context_tokens,
     render_compaction_prompt,
 )
-from app.module.agent.domain.companion_persona_domain import (
-    CompanionPersona,
-    LibrarianMemory,
-    render_story_moment,
+from app.module.agent.domain.companion_context_domain import (
+    CompanionTurnContext,
+    render_contributions,
+    signal_text,
 )
+from app.module.agent.domain.companion_persona_domain import CompanionPersona
 from app.module.agent.domain.context_domain import (
     build_context,
     prefix_hash,
@@ -104,8 +105,11 @@ from app.module.agent.protocol.chat_generator_protocol import (
     ChatToolCall,
 )
 from app.module.agent.protocol.companion_protocol import (
+    CompanionContextContributorProtocol,
     CompanionRunObserverProtocol,
-    CompanionStoryMomentProtocol,
+    ContextContribution,
+    ContextSignal,
+    ContextSite,
 )
 from app.module.agent.protocol.usage_quota_protocol import AgentQuotaProtocol
 from app.module.agent.schema.agent_schema import (
@@ -279,7 +283,7 @@ class AgentService:
         model_plan: AgentModelPlanProtocol | None = None,
         model_status: str = "assigned",
         companion_runs: CompanionRunObserverProtocol | None = None,
-        story_moments: CompanionStoryMomentProtocol | None = None,
+        companion_context: CompanionContextContributorProtocol | None = None,
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -291,7 +295,10 @@ class AgentService:
         self.chat_attachments = chat_attachments
         self.server_timezone = server_timezone
         self.companion_runs = companion_runs
-        self.story_moments = story_moments
+        self.companion_context = companion_context
+        # Per-run companion state for the run this service instance drives;
+        # every tool result of the run shares it.
+        self._companion_turn: CompanionTurnContext | None = None
         # Provider availability is resolved by the composition root from the
         # account assignment. They are safe names only; keys and base URLs never
         # reach the agent service.
@@ -351,19 +358,51 @@ class AgentService:
                 exc_info=True,
             )
 
-    async def _story_moment(self, conversation_id: int) -> LibrarianMemory | None:
-        """Return a paced story moment for this run; best-effort, never raising."""
-        if self.story_moments is None:
-            return None
-        try:
-            return await self.story_moments.story_moment(conversation_id)
-        except Exception:
-            logger.warning(
-                "companion story moment failed conversation_id=%s",
-                conversation_id,
-                exc_info=True,
+    async def _message_contributions(
+        self,
+        conversation_id: int,
+        *,
+        content: str,
+        page_context: AgentPageContextSchema | None,
+        attachment_names: Sequence[str],
+    ) -> list[ContextContribution]:
+        """Offer the companion's memories for a new message; best-effort.
+
+        One signal per input site (the user's own words, the page they are
+        viewing, the names of attached images), sharing one offered set, so the
+        per-run cap and the no-repeat rule hold across all of them.
+        """
+        if self.companion_context is None:
+            return []
+        page_text = None
+        if page_context is not None:
+            page_text = signal_text(page_context.title, page_context.text)
+        signals: list[tuple[ContextSite, str, str | None]] = [
+            ("user_message", signal_text(content), content or None),
+            ("page_context", page_text or "", None),
+            ("attachment", signal_text(*attachment_names), None),
+        ]
+        offered: list[ContextContribution] = []
+        for site, text, query in signals:
+            if not text:
+                continue
+            signal = ContextSignal(
+                site=site,
+                conversation_id=conversation_id,
+                text=text,
+                offered_this_run=frozenset(item.id for item in offered),
+                query=query,
             )
-            return None
+            try:
+                offered.extend(await self.companion_context.contribute(signal))
+            except Exception:
+                logger.warning(
+                    "companion context failed conversation_id=%s site=%s",
+                    conversation_id,
+                    site,
+                    exc_info=True,
+                )
+        return offered
 
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
@@ -574,10 +613,15 @@ class AgentService:
         }
         if attachments:
             data["attachments"] = [attachment.to_entry_data() for attachment in attachments]
-        story_moment = await self._story_moment(conversation_id)
-        if story_moment is not None:
-            data["story_moment"] = render_story_moment(story_moment)
-            data["story_moment_id"] = story_moment.id
+        contributions = await self._message_contributions(
+            conversation_id,
+            content=content,
+            page_context=payload.page_context,
+            attachment_names=[attachment.file_name for attachment in attachments],
+        )
+        if contributions:
+            data["companion_context"] = render_contributions(contributions)
+            data["companion_context_ids"] = [item.id for item in contributions]
         compaction_draft = await self._auto_compaction_draft(conversation_id)
         page_context_draft, page_context_key = _page_context_draft(
             payload.page_context,
@@ -1138,6 +1182,7 @@ class AgentService:
         """Continue one durable turn from a deterministic loop snapshot."""
         conversation_id = turn.conversation.id
         run_id = turn.run.id
+        self._companion_turn = _companion_turn(turn)
         # The reported prompt floor is scoped to this run. A resumed approval
         # starts a fresh loop snapshot, so it re-learns the floor from the first
         # successful call in the resumed segment.
@@ -1955,6 +2000,10 @@ class AgentService:
                 max_chars=self.config.max_tool_result_chars,
                 approved=True,
                 plot_limits=self._plot_limits(),
+                companion=CompanionTurnContext(
+                    conversation_id=approval.conversation_id,
+                    run_id=run.id,
+                ),
             )
         else:
             outcome = _rejection_outcome(call.name, approval_id)
@@ -2085,6 +2134,7 @@ class AgentService:
                 parse_error=call.parse_error,
                 approved=approved,
                 plot_limits=self._plot_limits(),
+                companion=self._companion_turn,
             )
         except Exception:
             logger.exception(
@@ -2943,6 +2993,20 @@ def _transcript_from_rows(rows: list[AgentEntryModel]) -> list[TranscriptEntry]:
             )
         )
     return transcript
+
+
+def _companion_turn(turn: AgentTurnState) -> CompanionTurnContext:
+    """Return the run's companion state, seeded with the message's offers."""
+    data = turn.user_entry.data if isinstance(turn.user_entry.data, dict) else {}
+    seeded = data.get("companion_context_ids")
+    offered: set[str] = set()
+    if isinstance(seeded, list):
+        offered = {item for item in seeded if isinstance(item, str)}
+    return CompanionTurnContext(
+        conversation_id=turn.conversation.id,
+        run_id=turn.run.id,
+        offered=offered,
+    )
 
 
 def _page_context_draft(

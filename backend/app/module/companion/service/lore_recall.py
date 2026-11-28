@@ -21,6 +21,7 @@ config provider, never from module constants.
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 from app.module.companion.domain.recall_domain import (
     RecalledFragment,
@@ -34,6 +35,10 @@ from app.module.companion.domain.recall_domain import (
     story_moment_due,
 )
 from app.module.companion.domain.story_domain import (
+    TEMPLATE_LORE_GUIDANCE,
+    TEMPLATE_STORY_MOMENT_GUIDANCE,
+    CompanionRuntimeConfig,
+    CompanionStoryConfig,
     LoreFragment,
     StoryLocale,
 )
@@ -53,7 +58,25 @@ from app.module.companion.service.story_config import StaticStoryConfigProvider
 
 logger = logging.getLogger(__name__)
 
+
+def _lore_guidance(config: CompanionStoryConfig) -> str:
+    """Return the configured topical/self guidance (template first)."""
+    if isinstance(config, CompanionRuntimeConfig):
+        return config.template(TEMPLATE_LORE_GUIDANCE, config.lore_guidance)
+    return config.lore_guidance
+
+
+def _story_moment_guidance(config: CompanionStoryConfig) -> str:
+    """Return the configured story-moment guidance (template first)."""
+    if isinstance(config, CompanionRuntimeConfig):
+        return config.template(TEMPLATE_STORY_MOMENT_GUIDANCE, config.story_moment_guidance)
+    return config.story_moment_guidance
+
+
 _CONTEXT_CHARS = 1200
+
+
+RecallMoment = Literal["story", "topical", "self"]
 
 
 @dataclass(frozen=True)
@@ -66,9 +89,16 @@ class RecalledLore:
     score: float
     # The configured guidance the model reads with this memory.
     guidance: str = ""
+    # How the fragment surfaced: a paced story moment, a topical match, or an
+    # answer to a question about the librarian itself.
+    moment: RecallMoment = "topical"
 
 
-def _offered(chosen: Sequence[RecalledFragment], guidance: str) -> list[RecalledLore]:
+def _offered(
+    chosen: Sequence[RecalledFragment],
+    guidance: str,
+    moment: RecallMoment,
+) -> list[RecalledLore]:
     return [
         RecalledLore(
             id=item.fragment.key,
@@ -76,6 +106,7 @@ def _offered(chosen: Sequence[RecalledFragment], guidance: str) -> list[Recalled
             tier=item.fragment.tier,
             score=item.score,
             guidance=guidance,
+            moment=moment,
         )
         for item in chosen
     ]
@@ -109,11 +140,24 @@ class CompanionLoreRecall:
         context: Sequence[str] = (),
         *,
         limit: int | None = None,
+        exclude: frozenset[str] = frozenset(),
+        allow_self_query: bool = True,
+        allow_topical: bool = True,
     ) -> list[RecalledLore]:
-        """Return the fragments worth offering beside one search."""
+        """Return the fragments worth offering for one input.
+
+        ``exclude`` lists fragment ids already offered in this run. A self
+        query is recognized only in ``query`` (the person's own words) and
+        only when ``allow_self_query``; otherwise ranking is topical, and
+        ``allow_topical=False`` turns topical recall off (a user message offers
+        only self-query answers or story moments, never topical asides).
+        """
         config = await self.config.load()
         size = config.max_recalled_fragments if limit is None else limit
         if size <= 0:
+            return []
+        self_query = allow_self_query and bool(query.strip())
+        if not allow_topical and not self_query:
             return []
         try:
             target = await self.stories.resolve(self.companion_ref)
@@ -123,12 +167,18 @@ class CompanionLoreRecall:
         if not fragments:
             return []
         unlocked = (await self.stories.bond(target.ref)).unlocked_tiers(config)
-        candidates = [fragment for fragment in fragments if fragment.tier in unlocked]
+        candidates = [
+            fragment
+            for fragment in fragments
+            if fragment.tier in unlocked and fragment.key not in exclude
+        ]
         if not candidates:
             return []
         told = await self.stories.told(target.ref)
-        scoring_text = " ".join([query, *context])[: _CONTEXT_CHARS + len(query)]
-        if is_self_query(query, self._names(target), config):
+        scoring_text = " ".join(part for part in [query, *context] if part)
+        scoring_text = scoring_text[: _CONTEXT_CHARS + len(query)]
+        moment: RecallMoment
+        if self_query and is_self_query(query, self._names(target), config):
             semantic = await self._semantic(scoring_text, candidates)
             relevance = (
                 semantic
@@ -139,20 +189,24 @@ class CompanionLoreRecall:
                 candidates, unlocked, told, relevance, limit=size, config=config
             )
             source = "self_query"
+            moment = "self"
+        elif not allow_topical:
+            return []
         else:
             semantic = await self._semantic(scoring_text, candidates)
             chosen = rank_topical(
                 candidates, unlocked, semantic, told, limit=size, config=config
             )
             source = "topical"
+            moment = "topical"
         await self.stories.record_told(
             target.ref,
             [item.fragment.key for item in chosen],
             source,
         )
-        return _offered(chosen, config.lore_guidance)
+        return _offered(chosen, _lore_guidance(config), moment)
 
-    async def story_moment(self) -> RecalledLore | None:
+    async def story_moment(self, *, exclude: frozenset[str] = frozenset()) -> RecalledLore | None:
         """Return the next untold fragment when a story moment is due, else ``None``.
 
         A due moment is counted at once, so the next one waits for a few more
@@ -166,7 +220,11 @@ class CompanionLoreRecall:
         bond = await self.stories.bond(target.ref)
         if not story_moment_due(bond, config):
             return None
-        fragments = await self.stories.fragments(target, self.locale)
+        fragments = [
+            fragment
+            for fragment in await self.stories.fragments(target, self.locale)
+            if fragment.key not in exclude
+        ]
         told = await self.stories.told(target.ref)
         upcoming = next_untold(fragments, bond.unlocked_tiers(config), told, limit=1)
         if not upcoming:
@@ -179,7 +237,8 @@ class CompanionLoreRecall:
             text=fragment.text,
             tier=fragment.tier,
             score=0.0,
-            guidance=config.story_moment_guidance,
+            guidance=_story_moment_guidance(config),
+            moment="story",
         )
 
     def _names(self, target: StoryTarget) -> list[str]:
@@ -227,4 +286,4 @@ class CompanionLoreRecall:
         return {key: cosine(query_vector, vector) for key, vector in known.items()}
 
 
-__all__ = ["CompanionLoreRecall", "RecalledLore"]
+__all__ = ["CompanionLoreRecall", "RecallMoment", "RecalledLore"]

@@ -1,11 +1,12 @@
 """The librarian treats the user as an equal in every persona section."""
 
-from app.module.agent.domain.companion_persona_domain import (
-    EQUAL_ADDRESS_RULE,
-    CompanionPersona,
-)
+from app.module.agent.domain.companion_persona_domain import CompanionPersona
 from app.module.companion.domain.story_domain import (
+    DEFAULT_RUNTIME_CONFIG,
+    EQUAL_ADDRESS_RULE,
     LORE_GUIDANCE,
+    TEMPLATE_EQUAL_ADDRESS_RULE,
+    CompanionRuntimeConfig,
     default_custom_persona,
     render_persona_section,
 )
@@ -36,3 +37,20 @@ def test_equal_address_rule_outranks_an_old_persona() -> None:
     assert content.index("Call the user Keeper") < content.index(EQUAL_ADDRESS_RULE)
     assert "equals" in EQUAL_ADDRESS_RULE
     assert "Never call them Keeper, master, owner" in EQUAL_ADDRESS_RULE
+
+
+def test_equal_address_rule_comes_from_the_config_template() -> None:
+    edited = "We are equals. Use their name."
+    config = CompanionRuntimeConfig(
+        templates=(
+            *(
+                item
+                for item in DEFAULT_RUNTIME_CONFIG.templates
+                if item[0] != TEMPLATE_EQUAL_ADDRESS_RULE
+            ),
+            (TEMPLATE_EQUAL_ADDRESS_RULE, edited),
+        )
+    )
+    content = render_persona_section("You are Wren.", config)
+    assert content.endswith(edited)
+    assert EQUAL_ADDRESS_RULE not in content

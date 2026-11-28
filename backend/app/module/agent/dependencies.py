@@ -11,7 +11,7 @@ settings routers; they never carry a ``user_id``.
 """
 
 import logging
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, replace
 from typing import cast
@@ -39,10 +39,7 @@ from app.infrastructure.ai.user_models import (
 from app.infrastructure.config.settings import Settings
 from app.infrastructure.database.session import Database, get_db_session
 from app.module.agent.domain.agent_config_domain import AgentRuntimeConfig
-from app.module.agent.domain.companion_persona_domain import (
-    CompanionPersona,
-    LibrarianMemory,
-)
+from app.module.agent.domain.companion_persona_domain import CompanionPersona
 from app.module.agent.domain.user_profile_domain import UserProfile, UserProfileCard
 from app.module.agent.protocol.chat_attachment_service_protocol import (
     ChatAttachmentServiceProtocol,
@@ -52,8 +49,10 @@ from app.module.agent.protocol.chat_attachment_storage_protocol import (
 )
 from app.module.agent.protocol.chat_generator_protocol import ChatGeneratorProtocol
 from app.module.agent.protocol.companion_protocol import (
+    CompanionContextContributorProtocol,
     CompanionPersonaLoaderProtocol,
-    LibrarianMemoryRecallProtocol,
+    ContextContribution,
+    ContextSignal,
 )
 from app.module.agent.protocol.system_prompt_cache_protocol import (
     SystemPromptCacheProtocol,
@@ -84,12 +83,14 @@ from app.module.auth.schema.auth_schema import UserSchema
 from app.module.auth.service.auth_service import AuthService
 from app.module.auth.service.quota_service import AccountQuotaService
 from app.module.companion.dependencies import (
+    build_companion_context_contributor,
     build_companion_story_service,
-    build_lore_recall,
     build_story_config_provider,
 )
 from app.module.companion.domain.story_domain import normalize_locale, render_persona_section
-from app.module.companion.service.lore_recall import CompanionLoreRecall
+from app.module.companion.service.companion_context_contributor import (
+    CompanionContextContributor,
+)
 from app.module.knowledge.dependencies import (
     build_file_service,
     build_memory_service,
@@ -329,36 +330,27 @@ class _ToolServiceScope:
         except (TypeError, ValueError):
             return None
 
-    async def _librarian_memory(
+    async def _companion_context(
         self,
         session: AsyncSession,
-    ) -> LibrarianMemoryRecallProtocol | None:
-        """Bind the lore recall to the companion frozen in this conversation."""
+    ) -> CompanionContextContributorProtocol | None:
+        """Bind the context contributor to the companion frozen in this conversation."""
         conversation_id = self._conversation_id()
         if conversation_id is None:
             return None
-        frozen = await CompanionContextRepository(
-            session,
-            self.user_id,
-        ).conversation_companion(conversation_id)
-        if frozen is None:
-            return None
-        companion_ref, locale = frozen
-        recall = build_lore_recall(
+        return await _conversation_contributor(
             self.request.app.state,
             session,
             user_id=self.user_id,
-            companion_ref=companion_ref,
-            locale=normalize_locale(locale),
+            conversation_id=conversation_id,
             quota=AccountQuotaService(self.database, self.user_id),
         )
-        return _LibrarianMemoryAdapter(recall)
 
     @asynccontextmanager
     async def _scope(self) -> AsyncIterator[AgentToolServices]:
         async with self.database.user_session(self.user_id, self.role) as session:
             state = self.request.app.state
-            librarian_memory = await self._librarian_memory(session)
+            companion_context = await self._companion_context(session)
             services = AgentToolServices(
                 search_service=build_search_service(
                     state,
@@ -394,23 +386,85 @@ class _ToolServiceScope:
                     self.request,
                     user_id=self.user_id,
                 ),
-                librarian_memory=librarian_memory,
+                companion_context=companion_context,
             )
             yield services
 
 
-class _LibrarianMemoryAdapter:
-    """Map the companion slice's recall onto the agent's own value type."""
+async def _conversation_contributor(
+    state: State,
+    session: AsyncSession,
+    *,
+    user_id: int,
+    conversation_id: int,
+    quota: AccountQuotaService | None = None,
+) -> CompanionContextContributorProtocol | None:
+    """Return the contributor for the companion frozen in one conversation."""
+    frozen = await CompanionContextRepository(
+        session,
+        user_id,
+    ).conversation_companion(conversation_id)
+    if frozen is None:
+        return None
+    companion_ref, locale = frozen
+    return _ContextContributorAdapter(
+        build_companion_context_contributor(
+            state,
+            session,
+            user_id=user_id,
+            companion_ref=companion_ref,
+            locale=normalize_locale(locale),
+            quota=quota,
+        )
+    )
 
-    def __init__(self, recall: CompanionLoreRecall) -> None:
-        self.recall_service = recall
 
-    async def recall(self, query: str, context: Sequence[str]) -> list[LibrarianMemory]:
-        recalled = await self.recall_service.recall(query, context)
+class _ContextContributorAdapter:
+    """Map the agent's context signal onto the companion slice's contributor."""
+
+    def __init__(self, contributor: CompanionContextContributor) -> None:
+        self.contributor = contributor
+
+    async def contribute(self, signal: ContextSignal) -> list[ContextContribution]:
+        recalled = await self.contributor.contribute(
+            site=signal.site,
+            text=signal.text,
+            query=signal.query,
+            offered=signal.offered_this_run,
+        )
         return [
-            LibrarianMemory(id=item.id, text=item.text, tier=item.tier, guidance=item.guidance)
+            ContextContribution(
+                id=item.id,
+                tier=item.tier,
+                text=item.text,
+                moment=item.moment,
+                guidance=item.guidance,
+            )
             for item in recalled
         ]
+
+
+class _MessageContextContributor:
+    """Offer companion memories for a new message in a short owner session."""
+
+    def __init__(self, database: Database, state: State, *, user_id: int, role: str) -> None:
+        self.database = database
+        self.state = state
+        self.user_id = user_id
+        self.role = role
+
+    async def contribute(self, signal: ContextSignal) -> list[ContextContribution]:
+        async with self.database.user_session(self.user_id, self.role) as session:
+            contributor = await _conversation_contributor(
+                self.state,
+                session,
+                user_id=self.user_id,
+                conversation_id=signal.conversation_id,
+                quota=AccountQuotaService(self.database, self.user_id),
+            )
+            if contributor is None:
+                return []
+            return await contributor.contribute(signal)
 
 
 class _CompanionPersonaLoader:
@@ -443,7 +497,7 @@ class _CompanionPersonaLoader:
 
 
 class _CompanionRunObserver:
-    """Count completed runs toward the bond, and pace the companion's story."""
+    """Count completed runs toward the conversation companion's bond."""
 
     def __init__(self, database: Database, state: State, *, user_id: int, role: str) -> None:
         self.database = database
@@ -463,33 +517,6 @@ class _CompanionRunObserver:
                 session,
                 user_id=self.user_id,
             ).record_completed_run(frozen[0])
-
-    async def story_moment(self, conversation_id: int) -> LibrarianMemory | None:
-        """Return the companion's next untold fragment when a story moment is due."""
-        async with self.database.user_session(self.user_id, self.role) as session:
-            frozen = await CompanionContextRepository(
-                session,
-                self.user_id,
-            ).conversation_companion(conversation_id)
-            if frozen is None:
-                return None
-            companion_ref, locale = frozen
-            recall = build_lore_recall(
-                self.state,
-                session,
-                user_id=self.user_id,
-                companion_ref=companion_ref,
-                locale=normalize_locale(locale),
-            )
-            moment = await recall.story_moment()
-        if moment is None:
-            return None
-        return LibrarianMemory(
-            id=moment.id,
-            text=moment.text,
-            tier=moment.tier,
-            guidance=moment.guidance,
-        )
 
 
 def get_companion_persona_loader(
@@ -690,7 +717,12 @@ def get_agent_service(
         ),
         quota=AccountQuotaService(database, user.user_id),
         companion_runs=companion_observer,
-        story_moments=companion_observer,
+        companion_context=_MessageContextContributor(
+            database,
+            request.app.state,
+            user_id=user.user_id,
+            role=user.role,
+        ),
     )
 
 
