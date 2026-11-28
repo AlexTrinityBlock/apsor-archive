@@ -1,3 +1,5 @@
+// Capture the native FileReader before any lazy chunk can replace it.
+import "./lib/native-file-reader";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { renderAsync } from "docx-preview";
 
+import { restoreNativeFileReader } from "../../../../lib/native-file-reader";
+
 import { useElementWidth } from "../../../viewer/component/useElementWidth";
 import {
   DOCX_FRAME,
@@ -121,6 +123,7 @@ export function DocxThumb({ fileId, fileName, onFailure }: DocxThumbProps) {
 
     const source = binary.slice(0);
     schedule(async () => {
+      restoreNativeFileReader();
       await renderAsync(source, frameDocument.body, frameDocument.head, {
         ...DOCX_OPTIONS,
       });
