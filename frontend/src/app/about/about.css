@@ -672,7 +672,180 @@
   gap: 10px 22px;
 }
 
+/* Librarian voice: welcome, epigraphs, roster ----------------------------- */
+
+.about-portrait {
+  display: block;
+  flex-shrink: 0;
+  object-fit: cover;
+  object-position: top center;
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 50%;
+}
+
+.about-portrait--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-ochre);
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+
+.about-welcome {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  margin: 0;
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--accent-ochre) 6%, var(--mono-card-bg));
+  border: 0.7px solid var(--mono-grid);
+  border-left: 2px solid var(--accent-ochre);
+  border-radius: var(--radius-md);
+}
+
+.about-welcome__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.about-welcome__quote {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  color: var(--mono-ink);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.6;
+}
+
+.about-welcome__signature,
+.about-epigraph figcaption,
+.about-colophon__by {
+  color: var(--mono-l3);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.about-epigraph {
+  margin: 0;
+  padding-left: 14px;
+  border-left: 1.5px solid var(--accent-ochre);
+}
+
+.about-epigraph blockquote {
+  margin: 0;
+}
+
+.about-epigraph p {
+  color: var(--mono-l2);
+  font-family: var(--font-display);
+  font-size: 14.5px;
+  font-style: italic;
+  line-height: 1.6;
+}
+
+.about-epigraph figcaption {
+  margin-top: 4px;
+}
+
+.about-roster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.about-roster__item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: var(--radius-md);
+}
+
+.about-roster__item > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.about-roster__item p {
+  color: var(--mono-l2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.about-tech__terms {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+
+.about-tech__term {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 0.7px solid var(--mono-grid);
+}
+
+.about-tech__term dt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.about-tech__term code {
+  color: var(--mono-ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.about-tech__plain {
+  color: var(--mono-ink);
+  font-size: 13px;
+}
+
+.about-tech__term dd {
+  margin: 0;
+  color: var(--mono-l2);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.about-page .about-colophon__farewell {
+  margin-bottom: 12px;
+  color: var(--mono-l2);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-style: italic;
+}
+
 /* Responsive -------------------------------------------------------------- */
+
+@media (max-width: 560px) {
+  .about-welcome {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 
 @media (max-width: 760px) {
   .about-page .about-glance,

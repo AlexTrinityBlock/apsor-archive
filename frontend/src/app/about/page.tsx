@@ -9,6 +9,8 @@ import { AboutSection } from "./component/AboutSection";
 import { AuthorCard } from "./component/AuthorCard";
 import { DataFlowDiagram } from "./component/DataFlowDiagram";
 import { DeploymentDiagram } from "./component/DeploymentDiagram";
+import { LibrarianRoster } from "./component/LibrarianRoster";
+import { LibrarianWelcome } from "./component/LibrarianWelcome";
 import { PrivacyBoundaryDiagram } from "./component/PrivacyBoundaryDiagram";
 import { TechnicalDetails } from "./component/TechnicalDetails";
 import "./about.css";
@@ -37,6 +39,7 @@ const TOC: readonly { id: string; label: TranslationKey }[] = [
   { id: "about-flow", label: "insights.about.toc.flow" },
   { id: "about-privacy", label: "insights.about.toc.privacy" },
   { id: "about-deploy", label: "insights.about.toc.deploy" },
+  { id: "about-librarians", label: "insights.about.toc.librarians" },
   { id: "about-author", label: "insights.about.toc.author" },
 ];
 
@@ -74,11 +77,13 @@ function jumpTo(event: MouseEvent<HTMLAnchorElement>, id: string) {
 }
 
 /**
- * About Apsor Archive: what it is, how data flows, the privacy boundary,
- * where it runs, and who made it — plain language first, detail on demand.
+ * About Apsor Archive, introduced by Vellum: what it is, what happens to your
+ * files, who can see what, where it lives, the librarians, and who made it.
+ * Plain language first; the real technical names wait in a collapsible block.
  */
 export function AboutPage() {
   const { t } = useI18n();
+  const by = t("insights.about.epigraphBy");
 
   return (
     <div className="page about-page">
@@ -86,6 +91,7 @@ export function AboutPage() {
         <header className="about-hero" id="about-top">
           <span className="shell-tag">{t("insights.about.hero.kicker")}</span>
           <h1 className="about-hero__title">{t("insights.about.hero.title")}</h1>
+          <LibrarianWelcome />
           <p className="about-hero__lede">{t("insights.about.hero.lede")}</p>
           <div role="group" aria-label={t("insights.about.hero.glanceAria")}>
           <dl className="meta-grid about-glance">
@@ -116,6 +122,8 @@ export function AboutPage() {
           number="01"
           eyebrow={t("insights.about.what.eyebrow")}
           title={t("insights.about.what.title")}
+          epigraph={t("insights.about.what.epigraph")}
+          epigraphBy={by}
           intro={t("insights.about.what.intro")}
         >
           <ul className="about-cards">
@@ -134,6 +142,8 @@ export function AboutPage() {
           number="02"
           eyebrow={t("insights.about.flow.eyebrow")}
           title={t("insights.about.flow.title")}
+          epigraph={t("insights.about.flow.epigraph")}
+          epigraphBy={by}
           intro={t("insights.about.flow.intro")}
         >
           <DataFlowDiagram />
@@ -145,6 +155,8 @@ export function AboutPage() {
           number="03"
           eyebrow={t("insights.about.privacy.eyebrow")}
           title={t("insights.about.privacy.title")}
+          epigraph={t("insights.about.privacy.epigraph")}
+          epigraphBy={by}
           intro={t("insights.about.privacy.intro")}
         >
           <PrivacyBoundaryDiagram />
@@ -155,21 +167,41 @@ export function AboutPage() {
           number="04"
           eyebrow={t("insights.about.deploy.eyebrow")}
           title={t("insights.about.deploy.title")}
+          epigraph={t("insights.about.deploy.epigraph")}
+          epigraphBy={by}
           intro={t("insights.about.deploy.intro")}
         >
           <DeploymentDiagram />
         </AboutSection>
 
         <AboutSection
-          id="about-author"
+          id="about-librarians"
           number="05"
+          eyebrow={t("insights.about.librarians.eyebrow")}
+          title={t("insights.about.librarians.title")}
+          epigraph={t("insights.about.librarians.epigraph")}
+          epigraphBy={by}
+          intro={t("insights.about.librarians.intro")}
+        >
+          <LibrarianRoster />
+        </AboutSection>
+
+        <AboutSection
+          id="about-author"
+          number="06"
           eyebrow={t("insights.about.author.eyebrow")}
           title={t("insights.about.author.title")}
+          epigraph={t("insights.about.author.epigraph")}
+          epigraphBy={by}
         >
           <AuthorCard />
         </AboutSection>
 
         <footer className="about-colophon">
+          <p className="about-colophon__farewell">
+            {t("insights.about.colophon.farewell")}
+            <span className="about-colophon__by"> — {by}</span>
+          </p>
           <nav aria-label={t("insights.about.colophon.linksAria")}>
             <Link className="text-link" to="/chat">
               {t("insights.about.colophon.ask")}

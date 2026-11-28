@@ -61,8 +61,8 @@ export function DataFlowDiagram() {
       case "store":
         return (
           <>
-            <span className="about-chip">PostgreSQL</span>
-            <span className="about-chip">{t("insights.about.flow.storeDiskTag")}</span>
+            <span className="about-chip">{t("insights.about.flow.storeTagCatalogue")}</span>
+            <span className="about-chip">{t("insights.about.flow.storeTagRoom")}</span>
           </>
         );
       case "search":
@@ -71,11 +71,13 @@ export function DataFlowDiagram() {
             <span className="about-chip">{t("insights.about.flow.laneWords")}</span>
             <span className="about-chip">{t("insights.about.flow.laneSimilar")}</span>
             <Icon name="arrow-down" size={12} aria-hidden="true" />
-            <span className="about-chip about-chip--moss">RRF</span>
+            <span className="about-chip about-chip--moss">
+              {t("insights.about.flow.laneMerge")}
+            </span>
           </span>
         );
       case "answer":
-        return <code className="about-chip about-chip--code">[file:12#3]</code>;
+        return <span className="about-chip about-chip--code">{t("insights.about.flow.answerTag")}</span>;
       default:
         return null;
     }

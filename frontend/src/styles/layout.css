@@ -93,6 +93,27 @@
   border-radius: 4px;
 }
 
+/* The librarian portrait replaces the inked seal; keep the same box. */
+.brand-seal--image {
+  overflow: hidden;
+  color: var(--mono-ink);
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 50%;
+}
+
+.brand-seal--small {
+  width: 28px;
+  height: 28px;
+}
+
+.brand-mark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .brand-meta {
   display: flex;
   flex-direction: column;
