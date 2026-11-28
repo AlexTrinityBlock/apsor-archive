@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.module.companion.domain.story_domain import (
-    LORE_TIERS,
+    LORE_WEIGHTS,
     Bond,
     CompanionStoryConfig,
     StoryItem,
@@ -134,9 +134,9 @@ def lexical_overlap(query: str, fragment: StoryItem) -> float:
 
 
 def arc_order(fragments: Iterable[StoryItem]) -> list[StoryItem]:
-    """Return fragments in story order: first, familiar, rare; then by id."""
-    rank = {tier: index for index, tier in enumerate(LORE_TIERS)}
-    return sorted(fragments, key=lambda item: (rank.get(item.tier, len(rank)), item.key))
+    """Return fragments in story order: everyday, past, heart; then by id."""
+    rank = {weight: index for index, weight in enumerate(LORE_WEIGHTS)}
+    return sorted(fragments, key=lambda item: (rank.get(item.weight, len(rank)), item.key))
 
 
 def story_moment_due(bond: Bond, config: CompanionStoryConfig) -> bool:
@@ -155,17 +155,17 @@ def _told(told: Mapping[str, ToldRecord], key: str) -> ToldRecord:
 
 def next_untold(
     fragments: Sequence[StoryItem],
-    unlocked: frozenset[str],
     told: Mapping[str, ToldRecord],
     *,
     limit: int = 1,
 ) -> list[StoryItem]:
     """Return the next fragments of the arc this account has not heard yet.
 
-    When every unlocked fragment has been told, the least-told (then the
-    longest-ago) ones come round again, so the story never simply stops.
+    This is only a suggestion; the librarian decides whether to share. When
+    every fragment has been told, the least-told (then the longest-ago) ones
+    come round again, so the story never simply stops.
     """
-    available = [item for item in arc_order(fragments) if item.tier in unlocked]
+    available = arc_order(fragments)
     untold = [item for item in available if _told(told, item.key).told_count == 0]
     if len(untold) >= limit:
         return untold[:limit]
@@ -182,14 +182,13 @@ def next_untold(
 
 def rank_topical(
     fragments: Sequence[StoryItem],
-    unlocked: frozenset[str],
     similarity: Mapping[str, float] | None,
     told: Mapping[str, ToldRecord],
     *,
     limit: int,
     config: CompanionStoryConfig,
 ) -> list[RecalledFragment]:
-    """Rank unlocked fragments by meaning; nothing without a semantic score.
+    """Rank fragments by meaning (any weight); nothing without a semantic score.
 
     Only the raw similarity must clear ``config.topical_min_similarity``; the
     untold bonus and telling penalty then order the survivors.
@@ -199,8 +198,6 @@ def rank_topical(
     settings = config
     ranked: list[RecalledFragment] = []
     for fragment in fragments:
-        if fragment.tier not in unlocked:
-            continue
         value = similarity.get(fragment.key)
         if value is None or value < settings.topical_min_similarity:
             continue
@@ -214,7 +211,6 @@ def rank_topical(
 
 def rank_self_query(
     fragments: Sequence[StoryItem],
-    unlocked: frozenset[str],
     told: Mapping[str, ToldRecord],
     relevance: Mapping[str, float],
     *,
@@ -223,7 +219,7 @@ def rank_self_query(
 ) -> list[RecalledFragment]:
     """Return the next untold fragments, the most relevant of a small window first."""
     window_size = config.self_query_window
-    window = next_untold(fragments, unlocked, told, limit=max(limit, window_size))
+    window = next_untold(fragments, told, limit=max(limit, window_size))
     order = {item.key: index for index, item in enumerate(window)}
     chosen = sorted(
         window,

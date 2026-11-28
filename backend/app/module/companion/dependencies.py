@@ -13,10 +13,15 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import State
 
-from app.dependency.auth import require_authenticated
+from app.dependency.auth import require_authenticated, require_root
 from app.infrastructure.ai.runtime import AiRuntime
 from app.infrastructure.ai.user_models import build_user_text_generator, load_assignment
-from app.infrastructure.database.session import Database, get_db_session
+from app.infrastructure.database.session import (
+    ADMIN_SCOPE_COMPANION,
+    Database,
+    apply_admin_scope,
+    get_db_session,
+)
 from app.module.auth.schema.auth_schema import UserSchema
 from app.module.auth.service.quota_service import AccountQuotaService
 from app.module.companion.domain.life_story_domain import (
@@ -28,6 +33,7 @@ from app.module.companion.domain.life_story_domain import (
     clip_text,
 )
 from app.module.companion.domain.story_domain import StoryLocale
+from app.module.companion.protocol.companion_admin_protocol import CompanionSeederProtocol
 from app.module.companion.protocol.companion_protocol import CompanionStorageProtocol
 from app.module.companion.protocol.companion_story_protocol import (
     CompanionContentProviderProtocol,
@@ -42,6 +48,7 @@ from app.module.companion.protocol.life_story_protocol import (
     LifeStoryMaterialRequest,
     LifeStoryTextGeneratorProtocol,
 )
+from app.module.companion.repository.companion_admin_repository import CompanionAdminRepository
 from app.module.companion.repository.companion_life_story_repository import (
     LifeStoryJobQueue,
     LifeStoryRepository,
@@ -55,10 +62,14 @@ from app.module.companion.repository.companion_repository import CompanionReposi
 from app.module.companion.repository.companion_story_repository import (
     CompanionStoryRepository,
 )
+from app.module.companion.service.companion_admin_service import (
+    CompanionAdminService,
+    CompanionCatalogService,
+)
 from app.module.companion.service.companion_context_contributor import (
     CompanionContextContributor,
 )
-from app.module.companion.service.companion_seeder import SeedResult, seed_companion_world
+from app.module.companion.service.companion_seeder import CompanionSeeder, SeedResult
 from app.module.companion.service.companion_service import CompanionService
 from app.module.companion.service.companion_story_service import CompanionStoryService
 from app.module.companion.service.life_story_scheduler import LifeStoryScheduler
@@ -83,6 +94,7 @@ from app.module.knowledge.exception.domain_error import (
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 from app.module.knowledge.repository.memory_repository import MemoryRepository
 from app.module.knowledge.service.metered_text_generator import MeteredTextGenerator
+from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -184,12 +196,27 @@ def install_companion_providers(state: State) -> None:
     build_policy_provider(state)
 
 
-async def seed_companion(state: State) -> SeedResult:
+class _StateSeeder:
+    """Root's "apply seed" action: re-apply the shipped bundle on this process."""
+
+    def __init__(self, state: State) -> None:
+        self.state = state
+
+    async def apply(self, *, force_keys: Sequence[str] = ()) -> None:
+        # Rows root edited are always kept (and flagged when the shipped text
+        # changed); per-row force overwrites are not supported yet.
+        del force_keys
+        await seed_companion(self.state, force=True)
+
+
+async def seed_companion(state: State, *, force: bool = False) -> SeedResult:
     """Apply the shipped seed bundle, then install the live providers."""
     database = _state_database(state)
     if database is None:
         return SeedResult()
-    result = await seed_companion_world(database)
+    result = await CompanionSeeder().run(database, force=force)
+    if getattr(state, "companion_seeder", None) is None:
+        state.companion_seeder = _StateSeeder(state)
     install_companion_providers(state)
     content = getattr(state, "companion_content", None)
     if isinstance(content, DbCompanionContentProvider):
@@ -477,6 +504,59 @@ def build_life_story_worker(state: State) -> LifeStoryWorker:
         repository=LifeStoryRepository,
         queue=LifeStoryJobQueue,
     )
+# --- D: admin ---------------------------------------------------------------
+
+
+async def get_companion_admin_service(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),  # noqa: B008
+    user: UserSchema = Depends(require_root),  # noqa: B008
+) -> CompanionAdminService:
+    """Build root's companion admin service on an admin-scoped request transaction.
+
+    ``require_root`` rejects normal accounts and impersonated sessions (they carry
+    the target's role). The companion admin scope then lets RLS expose companion
+    tables across accounts for this transaction only; archive tables stay owner-only.
+    """
+    await apply_admin_scope(session, ADMIN_SCOPE_COMPANION)
+    state = request.app.state
+    seeder = getattr(state, "companion_seeder", None)
+    return CompanionAdminService(
+        CompanionAdminRepository(session),
+        actor_user_id=user.user_id,
+        seeder=cast(CompanionSeederProtocol | None, seeder),
+        clock=utcnow,
+        invalidate=lambda user_id: _invalidate_providers(state, user_id),
+    )
+
+
+_CACHED_PROVIDERS = ("companion_story_config", "companion_content", "companion_policy")
+
+
+def _invalidate_providers(state: State, user_id: int | None) -> None:
+    """Drop cached config, content, and policy after a root write.
+
+    Database-backed providers installed on ``app.state`` expose ``invalidate``;
+    the static seed providers do not, so they are skipped.
+    """
+    for name in _CACHED_PROVIDERS:
+        provider = getattr(state, name, None)
+        invalidate = getattr(provider, "invalidate", None)
+        if not callable(invalidate):
+            continue
+        # The content cache is global; config and policy caches are per account.
+        if isinstance(provider, DbCompanionContentProvider):
+            invalidate()
+        else:
+            invalidate(user_id)
+
+
+def get_companion_catalog_service(
+    session: AsyncSession = Depends(get_db_session),  # noqa: B008
+    user: UserSchema = Depends(require_authenticated),  # noqa: B008
+) -> CompanionCatalogService:
+    """Build the account's preset catalog on its own owner-scoped transaction."""
+    return CompanionCatalogService(CompanionAdminRepository(session), user_id=user.user_id)
 
 
 __all__ = [
@@ -489,6 +569,8 @@ __all__ = [
     "build_lore_vector_warmer",
     "build_policy_provider",
     "build_story_config_provider",
+    "get_companion_admin_service",
+    "get_companion_catalog_service",
     "get_companion_service",
     "get_companion_story_service",
     "install_companion_providers",

@@ -4,7 +4,7 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
-import type { CompanionLoreUpdateSchemaTier } from './companionLoreUpdateSchemaTier';
+import type { CompanionLoreUpdateSchemaWeight } from './companionLoreUpdateSchemaWeight';
 
 /**
  * Edit one fragment; omitted fields keep their values.
@@ -13,5 +13,5 @@ export interface CompanionLoreUpdateSchema {
   position?: number | null;
   text?: string | null;
   themes?: string[] | null;
-  tier?: CompanionLoreUpdateSchemaTier;
+  weight?: CompanionLoreUpdateSchemaWeight;
 }

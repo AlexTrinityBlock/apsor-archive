@@ -75,7 +75,7 @@ class GeneratedStoryRowProtocol(Protocol):
 
     fragment_key: str
     text: str
-    tier: str
+    weight: str
     themes: list[Any]
 
 

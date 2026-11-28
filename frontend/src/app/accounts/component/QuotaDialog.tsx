@@ -44,6 +44,7 @@ interface QuotaDialogProps {
   readonly onReset: (category: QuotaCategory, granted: number | null) => void;
   readonly submitting: boolean;
   readonly error: string | null;
+  readonly inline?: boolean;
 }
 
 function parseGrant(raw: string): number | null | "invalid" {
@@ -351,6 +352,7 @@ export function QuotaDialog({
   onReset,
   submitting,
   error,
+  inline = false,
 }: QuotaDialogProps) {
   const { t, formatNumber } = useI18n();
   const [active, setActive] = useState<QuotaCategory>("chat");
@@ -377,6 +379,7 @@ export function QuotaDialog({
       onClose={onClose}
       busy={submitting}
       size="md"
+      inline={inline}
       actions={
         <Button
           type="button"

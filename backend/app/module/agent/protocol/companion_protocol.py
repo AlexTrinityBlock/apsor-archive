@@ -41,14 +41,57 @@ class ContextSignal:
 
 
 @dataclass(frozen=True)
+class RelationshipFacts:
+    """Plain facts about how long the person and the librarian have known each other."""
+
+    first_met: str | None
+    days_known: int
+    conversations: int
+
+
+@dataclass(frozen=True)
 class ContextContribution:
-    """One memory the companion offers, with the guidance the model reads."""
+    """One memory the companion offers, with the guidance the model reads.
+
+    ``weight`` (everyday, past, heart) is how much the memory means to her; it
+    is never a lock. ``relationship`` carries the relationship facts she weighs.
+    """
 
     id: str
-    tier: str
+    weight: str
     text: str
     moment: ContributionMoment
     guidance: str
+    relationship: RelationshipFacts | None = None
+
+
+@dataclass(frozen=True)
+class OwnMemory:
+    """One of the librarian's own memories (lore or a life story) for her own tool."""
+
+    id: str
+    weight: str
+    text: str
+
+
+@dataclass(frozen=True)
+class CompanionIdentity:
+    """Who the librarian of this conversation is."""
+
+    ref: str
+    name: str
+
+
+class CompanionOwnMemoriesProtocol(Protocol):
+    """The frozen companion's own memories, looked up by the companion herself."""
+
+    identity: CompanionIdentity
+
+    async def search_own(self, query: str, *, limit: int) -> list[OwnMemory]: ...
+
+    async def relationship(self) -> RelationshipFacts | None: ...
+
+    async def guidance(self) -> str: ...
 
 
 class CompanionContextContributorProtocol(Protocol):
@@ -71,10 +114,14 @@ class CompanionRunObserverProtocol(Protocol):
 
 __all__ = [
     "CompanionContextContributorProtocol",
+    "CompanionIdentity",
+    "CompanionOwnMemoriesProtocol",
     "CompanionPersonaLoaderProtocol",
     "CompanionRunObserverProtocol",
     "ContextContribution",
     "ContextSignal",
     "ContextSite",
     "ContributionMoment",
+    "OwnMemory",
+    "RelationshipFacts",
 ]

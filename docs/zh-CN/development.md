@@ -170,7 +170,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `e7b2d5a9c4f1`。此分支上
+最新的迁移是 `d6a1f3c8e2b7`。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -304,9 +304,14 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   追加的 `companion_admin_access_log`。
 - `b3e8f5a1d6c7` 新增 `companion_generated_story` 与 `companion_story_job`，
   供 worker 撰写生活故事。
-- `e7b2d5a9c4f1`（当前 head）新增 `chunk.embedding_failures` 与待嵌入的部分
+- `e7b2d5a9c4f1` 新增 `chunk.embedding_failures` 与待嵌入的部分
   索引，并把 JSON `null` 嵌入转为 SQL NULL，让 worker 能在供应商或额度中断后
   补上向量。
+- `d6a1f3c8e2b7`（当前 head）把所有传说表的层级换成分量（`first` →
+  `everyday`、`familiar` → `past`、`rare` → `heart`），移除解锁计数与解锁时间，
+  新增 `companion_bond.first_met_at`，让 `companion_lore_told.source` 可记录
+  `recall`，并按对话冻结的伙伴，给每条过去的助手回复盖上
+  `data.speaker = {ref, name}`。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，

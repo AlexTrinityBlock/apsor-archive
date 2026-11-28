@@ -7,6 +7,7 @@ import {
   groupLoreByTier,
   loreSnippet,
   parseLoreFragment,
+  splitHeardAndOwn,
   readSurfacedLore,
   validateLore,
   type LoreFragment,
@@ -29,6 +30,8 @@ describe("parseLoreFragment", () => {
       themes: ["ledgers"],
       isDefault: true,
       edited: false,
+      own: false,
+      heard: false,
     });
     expect(parseLoreFragment({ tier: "rare", text: "t" })).toBeNull();
     expect(parseLoreFragment({ id: "x", tier: "rare" })).toBeNull();
@@ -45,6 +48,8 @@ describe("groupLoreByTier", () => {
       themes: [],
       isDefault: true,
       edited: false,
+      own: false,
+      heard: false,
     });
     expect(
       groupLoreByTier([fragment("a", "rare"), fragment("b", "first"), fragment("c", "first")]).map(
@@ -54,6 +59,23 @@ describe("groupLoreByTier", () => {
       ["first", ["b", "c"]],
       ["rare", ["a"]],
     ]);
+  });
+});
+
+describe("splitHeardAndOwn", () => {
+  const row = (id: string, extra: Record<string, unknown>) =>
+    parseLoreFragment({ id, text: id, tier: "first", ...extra })!;
+
+  test("shows heard and own memories only, never untold ones", () => {
+    const split = splitHeardAndOwn([
+      row("heard", { heard: true }),
+      row("told-count", { told_count: 2 }),
+      row("untold", {}),
+      row("mine", { own: true }),
+      row("edited", { edited: true, heard: true }),
+    ]);
+    expect(split.heard.map((item) => item.id)).toEqual(["heard", "told-count"]);
+    expect(split.own.map((item) => item.id)).toEqual(["mine", "edited"]);
   });
 });
 

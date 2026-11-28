@@ -185,7 +185,7 @@ agent_entry ──────┘  (source_kind = history)
   夥伴、每個動作經編碼的 AVIF（或 WebP）影格及其位置、大小與 SHA-256，以及
   帳號的夥伴選擇、是否顯示、動態程度與位置。
 - `companion_story` / `companion_lore_fragment` / `companion_bond`：帳號依語言
-  覆寫的夥伴人設與傳說、其片段，以及解鎖更深層傳說的完成對話數。
+  覆寫的夥伴人設與傳說、其片段，以及完成的執行與對話次數，和初次相遇的時間。
 - `ingest_config`：一列（`id=1`），帶有經驗證的 worker 輪詢、擷取、
   進行中工作、嵌入與分塊大小設定。它不是分塊來源；佇列會參照最終發佈
   的檔案。

@@ -29,12 +29,12 @@ from app.module.companion.domain.seed_domain import USER_CONFIG_COLUMNS, build_r
 from app.module.companion.domain.story_domain import (
     CanonEntry,
     CompanionRuntimeConfig,
-    LoreTier,
     PresetStory,
     StoryItem,
     WorldDoc,
     WorldDocKind,
     normalize_themes,
+    normalize_weight,
 )
 from app.module.companion.protocol.companion_story_protocol import (
     CompanionContentProviderProtocol,
@@ -118,7 +118,7 @@ class DbCompanionContentProvider:
                         key=item.fragment_key,
                         text="",
                         themes=normalize_themes(_strings(item.themes)),
-                        tier=cast(LoreTier, item.tier),
+                        weight=normalize_weight(item.weight),
                         refs=_strings(item.refs),
                         origin="preset",
                     ),
@@ -146,7 +146,7 @@ class DbCompanionContentProvider:
                         key=item.key,
                         text=text,
                         themes=item.themes,
-                        tier=item.tier,
+                        weight=item.weight,
                         refs=item.refs,
                         origin="preset",
                     )

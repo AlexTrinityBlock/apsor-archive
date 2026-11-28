@@ -209,7 +209,7 @@ user context exists; global config tables are read-all/root-write.
   level, and position.
 - `companion_story` / `companion_lore_fragment` / `companion_bond`: an
   account's per-locale persona and lore overrides for a companion, their
-  fragments, and the completed runs that unlock deeper lore tiers.
+  fragments, and the run and conversation counts plus when they first met.
 - `ingest_config`: one row (`id=1`) with the validated worker poll, extraction,
   in-flight, embedding, and chunk-size settings. It is not a chunk source; the
   queue references the file that is eventually published.

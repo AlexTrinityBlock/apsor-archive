@@ -70,12 +70,16 @@ class CompanionSeeder:
     def __init__(self, bundle: SeedBundle | None = None) -> None:
         self.bundle = bundle or load_seed_bundle()
 
-    async def run(self, database: Database) -> SeedResult:
-        """Seed in one root transaction; a no-op when the bundle is unchanged."""
-        async with database.system_session() as session:
-            return await self.apply(session)
+    async def run(self, database: Database, *, force: bool = False) -> SeedResult:
+        """Seed in one root transaction; a no-op when the bundle is unchanged.
 
-    async def apply(self, session: AsyncSession) -> SeedResult:
+        ``force`` re-applies an unchanged bundle (root's "apply seed"); rows root
+        edited are still kept and only flagged when the shipped text differs.
+        """
+        async with database.system_session() as session:
+            return await self.apply(session, force=force)
+
+    async def apply(self, session: AsyncSession, *, force: bool = False) -> SeedResult:
         """Seed on an open session that may write global configuration."""
         await session.execute(
             text("SELECT pg_advisory_xact_lock(:key)"),
@@ -83,7 +87,11 @@ class CompanionSeeder:
         )
         state = await session.get(CompanionSeedStateModel, SEED_BUNDLE)
         result = SeedResult(content_version=state.content_version if state else 0)
-        if state is not None and state.content_hash == self.bundle.content_hash:
+        if (
+            not force
+            and state is not None
+            and state.content_hash == self.bundle.content_hash
+        ):
             return result
         await self._presets(session, result)
         await self._simple(

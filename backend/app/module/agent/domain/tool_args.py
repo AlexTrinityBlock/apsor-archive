@@ -134,6 +134,27 @@ class CalculateArgs(_ToolArgs):
     expression: str = Field(min_length=1, max_length=MAX_EXPRESSION_CHARS)
 
 
+class RecallMyMemoriesArgs(_ToolArgs):
+    """Arguments for the librarian looking up her own memories."""
+
+    query: str = Field(
+        default="",
+        max_length=200,
+        description=(
+            "What to remember. Leave empty to recall what comes to mind next."
+        ),
+    )
+    scope: Literal["story", "said", "all"] = Field(
+        default="all",
+        description=(
+            "story: your own memories and the life stories you wrote for this "
+            "person; said: what you and the other librarians said to this person "
+            "before; all: both."
+        ),
+    )
+    limit: int = Field(default=3, ge=1, le=5)
+
+
 class CompanionActionArgs(_ToolArgs):
     """Arguments for one visible companion gesture."""
 

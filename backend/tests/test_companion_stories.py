@@ -1,4 +1,4 @@
-"""Companion personas, lore editing, lore recall in search, tiers, and isolation."""
+"""Companion personas, lore editing, recall (no locks: weights), pacing, and isolation."""
 
 import dataclasses
 import json
@@ -29,7 +29,6 @@ from app.module.companion.domain.story_domain import (
     LoreFragment,
     ToldRecord,
     normalize_locale,
-    unlocked_tiers,
 )
 from app.module.companion.service import lore_vectors
 from app.module.companion.service.preset_lore_catalog import load_presets
@@ -40,7 +39,6 @@ from tests.helpers import create_memory
 
 # The live values come from the seed; tests read them instead of constants.
 SEED = seed_runtime_config()
-FAMILIAR_UNLOCK_RUNS = SEED.familiar_unlock_runs
 STORY_MOMENT_EVERY_RUNS = SEED.story_moment_every_runs
 TOPICAL_MIN_SIMILARITY = SEED.topical_min_similarity
 PERSONA_RULES = SEED.persona_rules
@@ -132,7 +130,7 @@ def test_default_persona_is_frozen_and_disabled_companion_has_none(
     persona = load_presets()["vellum"].persona
     # The persona comes first; the rules that outrank it follow.
     assert section["content"].index(persona) < section["content"].index(PERSONA_RULES)
-    assert system["data"]["prompt_version"] == "archive-agent-v20"
+    assert system["data"]["prompt_version"] == "archive-agent-v21"
 
     zh = _system_entry(client, _new_conversation(client, locale="zh-TW"))
     assert zh["data"]["companion"]["locale"] == "zh-TW"
@@ -194,7 +192,7 @@ def test_lore_is_copy_on_write_and_resettable(client: TestClient) -> None:
     """The first edit copies this locale's defaults; reset discards the copy."""
     initial = client.get(f"{STORIES}/{VELLUM}/lore").json()
     assert initial["customized"] is False
-    # The account never sees progress, tiers, or locks; nothing is heard yet.
+    # The account never sees progress or weights; nothing is heard yet.
     assert "bond" not in initial
     assert initial["fragments"] == []
     defaults = load_presets()["vellum"].fragments
@@ -211,13 +209,13 @@ def test_lore_is_copy_on_write_and_resettable(client: TestClient) -> None:
     assert first["text"] == "A rewritten memory."
     assert first["themes"] == ["books", "ink"]
     assert first["edited"] is True
-    assert "tier" not in first and "unlocked" not in first
+    assert "weight" not in first and "tier" not in first and "unlocked" not in first
     # Unheard, unedited passages stay hidden from the account.
     assert defaults[1].key not in {item["id"] for item in body["fragments"]}
 
     created = client.post(
         f"{STORIES}/{VELLUM}/lore",
-        json={"text": "A memory the user wrote.", "tier": "rare"},
+        json={"text": "A memory the user wrote.", "weight": "heart"},
     )
     assert created.status_code == 201, created.text
     added = created.json()["fragments"][-1]
@@ -350,7 +348,7 @@ def test_self_query_in_the_message_answers_with_untold_story(
     ids = data["companion_context_ids"]
     assert 1 <= len(ids) <= 2
     block = data["companion_context"]
-    assert block.startswith('<librarian_memories moment="self">')
+    assert block.startswith('<librarian_memories moment="self"')
     assert SEED.lore_guidance in block
     assert {key: value[1] for key, value in _progress(owner_engine).items()} == {
         key: "self_query" for key in ids
@@ -360,40 +358,20 @@ def test_self_query_in_the_message_answers_with_untold_story(
     assert set(ids).isdisjoint({item["id"] for item in result["data"].get("lore", [])})
 
 
-def test_self_query_through_search_offers_lore_in_a_separate_block(
+def test_search_knowledge_never_carries_lore(
     client: TestClient,
+    semantic_embedder: _KeywordEmbedder,
     owner_engine: Engine,
 ) -> None:
-    """A search query about the librarian brings its untold story, never as a source."""
-    create_memory(
-        client,
-        "Grandmother taught me her braised pork recipe: soy sauce goes in last.",
-        "2026-01-20T10:00:00+08:00",
-    )
+    """search_knowledge searches only the person's archive, even for a self question."""
+    create_memory(client, "Rain at night on the tin roof.", "2026-01-20T10:00:00+08:00")
     about_self = _search_once(client, "Vellum, tell me about your past", "Please look it up.")
-    lore = about_self["data"]["lore"]
-    assert 1 <= len(lore) <= 2
-    assert {item["tier"] for item in lore} == {"first"}
-    assert {item["moment"] for item in lore} == {"self"}
-    content = about_self["model"][0]["content"]
-    assert '<librarian_memories moment="self">' in content
-    assert SEED.lore_guidance in content
-    assert content.index("<summary>") < content.index("<librarian_memories")
-    lore_ids = {item["id"] for item in lore}
-    for item in about_self["data"]["memory_results"]:
-        assert str(item["memory_id"]) not in lore_ids
-    assert {key: value[1] for key, value in _progress(owner_engine).items()} == {
-        key: "self_query" for key in lore_ids
-    }
-
-    # A second self query prefers fragments not told yet (the message may also
-    # open a story moment now; it is never a repeat either).
-    again = _search_once(client, "Tell me a story about yourself", "Please look it up.")
-    assert lore_ids.isdisjoint({item["id"] for item in again["data"]["lore"]})
-
-    # What the librarian has told now appears in the account's view, as heard.
-    heard = client.get(f"{STORIES}/{VELLUM}/lore").json()["fragments"]
-    assert lore_ids <= {item["id"] for item in heard if item["heard"]}
+    assert "lore" not in about_self["data"]
+    assert "<librarian_memories" not in about_self["model"][0]["content"]
+    topical = _search_once(client, "rain at night", "Please look it up.")
+    assert "lore" not in topical["data"]
+    assert "<librarian_memories" not in topical["model"][0]["content"]
+    assert not any(source == "topical" for _, source in _progress(owner_engine).values())
 
 
 def test_topical_recall_is_semantic_only(client: TestClient) -> None:
@@ -404,27 +382,37 @@ def test_topical_recall_is_semantic_only(client: TestClient) -> None:
     assert plain["data"]["memory_results"], "the archive memory is still found"
 
 
-def test_topical_recall_respects_tiers_and_prefers_untold(
+def test_topical_recall_has_no_locks_and_shows_weights(
     client: TestClient,
     semantic_embedder: _KeywordEmbedder,
     owner_engine: Engine,
 ) -> None:
-    """Only rain passages are near a rain query; they are familiar-tier (vellum-016/018)."""
-    locked = _search_once(client, "rain at night")
-    assert "lore" not in locked["data"], "no first-tier fragment is about rain"
-
-    _complete_runs(client, FAMILIAR_UNLOCK_RUNS)
-    with owner_engine.connect() as connection:
-        familiar_at = connection.execute(
-            text("SELECT familiar_unlocked_at FROM companion_bond")
-        ).scalar_one()
-    assert familiar_at is not None
-
-    opened = _search_once(client, "rain at night")
-    first = [item["id"] for item in opened["data"]["lore"]]
-    assert first and set(first) <= {"vellum-016", "vellum-018"}
-    assert {item["tier"] for item in opened["data"]["lore"]} == {"familiar"}
-    assert all(_progress(owner_engine)[key][1] == "topical" for key in first)
+    """A past (formerly locked) memory can surface on the very first run, with its weight."""
+    memory = create_memory(client, "Rain at night on the tin roof.", "2026-01-20T10:00:00+08:00")
+    client.app.state.agent_chat_generator = FakeChatGenerator(
+        [
+            tool_call_result(
+                "read_memory",
+                {"memory_id": memory["memory"]["memory_id"]},
+                call_id="call_read",
+            ),
+            text_result("Here it is."),
+        ]
+    )
+    turn = _turn(client, _new_conversation(client), "What did I write about that night?")
+    result = next(
+        entry
+        for entry in turn["entries"]
+        if entry["kind"] == "pi.tool-result" and entry["data"].get("tool") == "read_memory"
+    )
+    lore = result["data"]["lore"]
+    assert lore, "a rain memory of hers is near a rain memory of the person's"
+    assert {item["weight"] for item in lore} <= {"everyday", "past", "heart"}
+    assert "past" in {item["weight"] for item in lore}
+    content = result["model"][0]["content"]
+    assert 'weight="past"' in content
+    assert 'days_known="0"' in content and "conversations_together=" in content
+    assert all(_progress(owner_engine)[item["id"]][1] == "topical" for item in lore)
     assert semantic_embedder.calls >= 1
 
 
@@ -442,7 +430,7 @@ def test_story_moments_pace_the_arc_whatever_the_topic(
     assert all(value is None for value in moments[2:-1])
     assert moments[-1] == "vellum-002"
     block = users[1]["data"]["companion_context"]
-    assert block.startswith('<librarian_memories moment="story">')
+    assert block.startswith('<librarian_memories moment="story"')
     assert "keep it for another time" in block
     progress = _progress(owner_engine)
     assert progress["vellum-001"] == (1, "story_moment")
@@ -453,14 +441,14 @@ def test_story_moments_pace_the_arc_whatever_the_topic(
 
 
 def _arc(count: int) -> list[LoreFragment]:
-    tiers = ["first"] * (count // 2) + ["familiar"] * (count - count // 2)
+    weights = ["everyday"] * (count // 2) + ["heart"] * (count - count // 2)
     return [
-        LoreFragment(key=f"f-{index:03d}", text=f"memory {index}", themes=(), tier=tier)  # type: ignore[arg-type]
-        for index, tier in enumerate(tiers)
+        LoreFragment(key=f"f-{index:03d}", text=f"memory {index}", themes=(), weight=weight)  # type: ignore[arg-type]
+        for index, weight in enumerate(weights)
     ]
 
 
-def test_a_narrow_life_still_hears_every_unlocked_fragment() -> None:
+def test_a_narrow_life_still_hears_every_fragment() -> None:
     """Someone who only ever talks about one thing still hears the whole story."""
     fragments = _arc(12)
     told: dict[str, ToldRecord] = {}
@@ -469,16 +457,14 @@ def test_a_narrow_life_still_hears_every_unlocked_fragment() -> None:
     for run in range(200):
         bond = Bond(completed_runs=run, last_story_run=last_story_run)
         if story_moment_due(bond, SEED):
-            upcoming = next_untold(fragments, bond.unlocked_tiers(SEED), told)
+            upcoming = next_untold(fragments, told)
             if upcoming:
                 key = upcoming[0].key
                 heard.append(key)
                 told[key] = ToldRecord(told_count=told.get(key, ToldRecord()).told_count + 1)
                 last_story_run = run
         # A single narrow topic with no semantic match never offers lore at all.
-        assert (
-            rank_topical(fragments, bond.unlocked_tiers(SEED), {}, told, limit=2, config=SEED) == []
-        )
+        assert rank_topical(fragments, {}, told, limit=2, config=SEED) == []
     assert set(heard[: len(fragments)]) == {item.key for item in fragments}
     first_half = [item.key for item in fragments[: len(fragments) // 2]]
     assert heard[: len(first_half)] == first_half
@@ -497,30 +483,28 @@ def test_pacing_and_ranking_rules() -> None:
     assert not story_moment_due(Bond(completed_runs=8), never)
 
     fragments = _arc(4)
-    unlocked = frozenset({"first", "familiar"})
     told = {"f-000": ToldRecord(told_count=2)}
-    assert [item.key for item in next_untold(fragments, unlocked, told, limit=2)] == [
+    assert [item.key for item in next_untold(fragments, told, limit=2)] == [
         "f-001",
         "f-002",
     ]
     everything = {item.key: ToldRecord(told_count=1) for item in fragments}
     everything["f-003"] = ToldRecord(told_count=3)
-    assert next_untold(fragments, unlocked, everything)[0].key == "f-000"
+    assert next_untold(fragments, everything)[0].key == "f-000"
 
     similarity = {"f-000": 0.9, "f-001": 0.85, "f-002": TOPICAL_MIN_SIMILARITY - 0.01}
-    ranked = rank_topical(fragments, unlocked, similarity, told, limit=2, config=SEED)
+    ranked = rank_topical(fragments, similarity, told, limit=2, config=SEED)
     assert [item.fragment.key for item in ranked] == ["f-001", "f-000"]
-    assert rank_topical(fragments, unlocked, None, told, limit=2, config=SEED) == []
+    assert rank_topical(fragments, None, told, limit=2, config=SEED) == []
     strict = _config(topical_min_similarity=0.95)
-    assert rank_topical(fragments, unlocked, similarity, told, limit=2, config=strict) == []
+    assert rank_topical(fragments, similarity, told, limit=2, config=strict) == []
 
-    chosen = rank_self_query(fragments, unlocked, told, {"f-002": 0.5}, limit=1, config=SEED)
+    chosen = rank_self_query(fragments, told, {"f-002": 0.5}, limit=1, config=SEED)
     assert [item.fragment.key for item in chosen] == ["f-002"]
 
     assert is_semantic_embedder("text-embedding-3-small", 1536)
     assert not is_semantic_embedder("apsor-hash-384", 384)
     assert not is_semantic_embedder("none", 0)
-    assert unlocked_tiers(3, _config(familiar_unlock_runs=2)) == {"first", "familiar"}
 
 
 def test_no_lore_without_a_frozen_companion(client: TestClient) -> None:
@@ -578,15 +562,12 @@ def test_stories_and_bonds_are_private_per_account(
 # --- pure rules -----------------------------------------------------------------
 
 
-def test_locale_tiers_and_selection_rules() -> None:
+def test_locale_and_selection_rules() -> None:
     assert normalize_locale(None) == "en"
     assert normalize_locale("zh_TW") == "zh-TW"
     assert normalize_locale("zh-Hant-HK") == "zh-TW"
     assert normalize_locale("zh-Hans") == "zh-CN"
     assert normalize_locale("fr-FR") == "en"
-    assert unlocked_tiers(0, SEED) == {"first"}
-    assert unlocked_tiers(FAMILIAR_UNLOCK_RUNS, SEED) == {"first", "familiar"}
-    assert "rare" in unlocked_tiers(1000, SEED)
     assert is_self_query("Tell me about Atlas", ["Vellum", "Atlas"], SEED)
     assert is_self_query("說說你的過去", ["Vellum"], SEED)
     assert is_self_query("What happened at your Vespers?", [], SEED)
@@ -629,7 +610,8 @@ def test_translation_overlay_falls_back_per_item(tmp_path: Path) -> None:
         assert translated.persona == "Translated persona."
         assert translated.name == "Demo"
         assert [fragment.text for fragment in translated.fragments] == ["A2.", "English B."]
-        assert [fragment.tier for fragment in translated.fragments] == ["first", "rare"]
+        # Seed files written with tiers read as weights.
+        assert [fragment.weight for fragment in translated.fragments] == ["everyday", "heart"]
         assert load_presets("zh-CN", tmp_path)["demo"].persona == "English persona."
     finally:
         load_presets.cache_clear()

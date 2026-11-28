@@ -22,6 +22,19 @@
   account; stopping impersonation requires the root password, deletes that
   session, and issues a fresh root session. Treat root as the highest-trust
   credential and do not model RLS as protection against a malicious root.
+- **Companion administration is a documented exception.** Under
+  `/api/v1/admin/companions`, a root request also sets the transaction-local
+  `app.admin_scope = 'companion'`. Database policies then let root read and
+  manage companion rows across accounts: the companion choice and policy,
+  story progress (bonds and told memories), root's persona and lore overrides,
+  life-story jobs, and the **full text of generated life stories**, which are
+  written from an account's own memories. The scope never reaches the archive
+  itself (`file`, `memory`, `chunk`, conversations), is refused for any role but
+  root, and does not apply in an impersonated session. Every full-text read of
+  a life story and every per-account companion change is appended to
+  `companion_admin_access_log` (root can insert and read it; nothing can update
+  or delete it), and story listings never carry the text. The account's
+  Companion page states that the administrator can read these stories.
 - **RLS is an application boundary, not a host boundary.** The deployment login
   is a PostgreSQL superuser used for migrations and maintenance; the app
   switches to `apsor_app` for request transactions. Any local OS user, any

@@ -17,6 +17,7 @@ function assistant(
 ): AgentEntrySchema {
   return {
     by_run_id: 1,
+    speaker: null,
     commit_seq: id,
     conversation_id: 1,
     created_at: "2026-01-01T00:00:00Z",
@@ -43,6 +44,7 @@ function assistant(
 function toolResult(id: number, callId: string): AgentEntrySchema {
   return {
     by_run_id: 1,
+    speaker: null,
     commit_seq: id,
     conversation_id: 1,
     created_at: "2026-01-01T00:00:00Z",
@@ -63,6 +65,7 @@ function toolResult(id: number, callId: string): AgentEntrySchema {
 function boundary(id: number, kind: "pi.compaction" | "pi.reset"): AgentEntrySchema {
   return {
     by_run_id: 1,
+    speaker: null,
     commit_seq: id,
     conversation_id: 1,
     created_at: "2026-01-01T00:00:00Z",

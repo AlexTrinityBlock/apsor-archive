@@ -105,7 +105,7 @@ class CompanionGeneratedStoryModel(Base):
     fragment_key: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(120), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
-    tier: Mapped[str] = mapped_column(String(16), nullable=False)
+    weight: Mapped[str] = mapped_column(String(16), nullable=False)
     themes: Mapped[list[Any]] = mapped_column(
         JSONB,
         nullable=False,

@@ -69,3 +69,23 @@
   color: var(--mono-l3);
   font-size: 12px;
 }
+
+.companions-world__door,
+.companions-world__dinner {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border-radius: var(--radius-md);
+  background: var(--paper-deep);
+  object-fit: cover;
+}
+
+.companions-world__door {
+  max-height: 260px;
+  aspect-ratio: 1024 / 683;
+}
+
+.companions-world__dinner {
+  aspect-ratio: 896 / 597;
+}

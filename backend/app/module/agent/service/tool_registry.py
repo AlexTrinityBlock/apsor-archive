@@ -18,6 +18,7 @@ from app.module.agent.domain.calculation_domain import evaluate_expression
 from app.module.agent.domain.companion_context_domain import (
     CompanionTurnContext,
     contribution_data,
+    relationship_attributes,
     render_contributions,
     signal_text,
 )
@@ -40,6 +41,7 @@ from app.module.agent.domain.tool_args import (
     ReadMemoryArgs,
     ReadPathArgs,
     ReadTimelineArgs,
+    RecallMyMemoriesArgs,
     RenderPlotArgs,
     SaveMemoryArgs,
     SearchKnowledgeArgs,
@@ -52,8 +54,15 @@ from app.module.agent.domain.tool_catalog import (
     tool_catalog,
 )
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
-from app.module.agent.exception.domain_error import AgentError
-from app.module.agent.protocol.companion_protocol import ContextContribution, ContextSignal
+from app.module.agent.exception.domain_error import (
+    AgentCompanionUnavailableError,
+    AgentError,
+)
+from app.module.agent.protocol.companion_protocol import (
+    ContextContribution,
+    ContextSignal,
+    OwnMemory,
+)
 from app.module.agent.protocol.tool_service_protocol import (
     AgentToolServices,
     ToolServiceScopeProtocol,
@@ -102,11 +111,11 @@ WEB_SEARCH_HINT = (
 
 WEB_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
 # Tools whose successful results the companion may answer with its own
-# memories. Only search_knowledge carries the person's own question (its query),
-# so only it can be a question about the librarian itself.
+# memories (topical asides only). search_knowledge searches only the person's
+# archive and never carries lore; the librarian looks her own memories up with
+# recall_my_memories.
 COMPANION_SIGNAL_TOOLS = frozenset(
     {
-        "search_knowledge",
         "read_file",
         "read_memory",
         "read_timeline",
@@ -313,7 +322,7 @@ def _companion_signal(
     """Return the signal one successful tool result gives the companion."""
     if name not in COMPANION_SIGNAL_TOOLS:
         return None
-    query = args.query if isinstance(args, SearchKnowledgeArgs) else None
+    query: str | None = None
     resource_ref: tuple[str, int] | None = None
     title: str | None = None
     if resource is not None:
@@ -370,6 +379,8 @@ async def _dispatch(
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
     if name == "search_knowledge" and isinstance(args, SearchKnowledgeArgs):
         return await _search_knowledge(args, services)
+    if name == "recall_my_memories" and isinstance(args, RecallMyMemoriesArgs):
+        return await _recall_my_memories(args, services)
     if name == "read_file" and isinstance(args, ReadFileArgs):
         return await _read_file(args, services)
     if name == "read_timeline" and isinstance(args, ReadTimelineArgs):
@@ -441,16 +452,22 @@ async def _search_knowledge(
             + xml_text(clip(memory_result.content, SOURCE_EXCERPT_LIMIT))
             + _close("source")
         )
+    speakers = await _history_speakers(
+        services,
+        [item.entry_id for item in result.history_results],
+    )
     for history_result in result.history_results:
+        role, speaker = speakers.get(history_result.entry_id, (None, None))
+        window_attrs: dict[str, object] = {
+            "id": history_result.entry_id,
+            "chunk": history_result.chunk,
+            "score": history_result.score,
+        }
+        if role is not None:
+            window_attrs["role"] = role
+            window_attrs["speaker"] = speaker
         content.append(
-            _open(
-                "history_message",
-                {
-                    "id": history_result.entry_id,
-                    "chunk": history_result.chunk,
-                    "score": history_result.score,
-                },
-            )
+            _open("history_message", window_attrs)
             + xml_text(history_result.content)
             + _close("history_message")
         )
@@ -527,6 +544,8 @@ async def _search_knowledge(
                 "text_score": item.text_score,
                 "matched_by": item.matched_by,
                 "excerpt": _excerpt(item.content),
+                "role": speakers.get(item.entry_id, (None, None))[0],
+                "speaker": speakers.get(item.entry_id, (None, None))[1],
             }
             for item in result.history_results
         ],
@@ -801,6 +820,7 @@ def _history_element(
     attributes: dict[str, object] = {
         "id": message.entry_id,
         "role": message.role,
+        "speaker": _speaker(message),
         "conversation_id": message.conversation_id,
         "title": message.conversation_title,
         "time": message.created_at.isoformat(),
@@ -814,6 +834,137 @@ def _history_element(
         + xml_text(clip(message.content, limit))
         + _close("history_message")
     )
+
+
+# Who said a past message, as the model reads it: the person, a librarian by
+# name, or the archive assistant (a reply from a conversation without a
+# companion).
+PERSON_SPEAKER = "the person"
+ARCHIVE_ASSISTANT_SPEAKER = "the archive assistant"
+
+
+def _speaker(message: HistoryMessage) -> str:
+    if message.role == "user":
+        return PERSON_SPEAKER
+    return message.speaker_name or ARCHIVE_ASSISTANT_SPEAKER
+
+
+async def _history_speakers(
+    services: AgentToolServices,
+    entry_ids: list[int],
+) -> dict[int, tuple[str | None, str | None]]:
+    """Return ``entry_id -> (role, speaker)`` for history windows (best effort)."""
+    if not entry_ids:
+        return {}
+    try:
+        messages = await services.history_service.read_messages(sorted(set(entry_ids)))
+    except Exception:
+        logger.warning("history speaker lookup failed; windows stay unlabeled")
+        return {}
+    return {message.entry_id: (message.role, _speaker(message)) for message in messages}
+
+
+async def _recall_my_memories(
+    args: RecallMyMemoriesArgs,
+    services: AgentToolServices,
+) -> tuple[str, dict[str, Any], None]:
+    """Let the librarian look up her own memories and what was said before.
+
+    ``story``: her lore (any weight) and the life stories she wrote for this
+    person. ``said``: past assistant replies in this person's conversations by
+    any librarian, each labeled with who said it; her own words come first.
+    The block is her memory, never archive evidence.
+    """
+    own = services.companion_memories
+    if own is None:
+        raise AgentCompanionUnavailableError()
+    query = " ".join(args.query.split())
+    limit = args.limit
+    stories: list[OwnMemory] = []
+    said: list[HistoryMessage] = []
+    if args.scope in {"story", "all"}:
+        stories = await own.search_own(query, limit=limit)
+    if args.scope in {"said", "all"}:
+        said = await _past_replies(services, query, limit)
+    my_ref = own.identity.ref
+    said.sort(key=lambda message: 0 if message.speaker_ref == my_ref else 1)
+    facts = await own.relationship()
+    block: dict[str, object] = {"scope": args.scope, "companion": own.identity.name}
+    if facts is not None:
+        block.update(relationship_attributes(facts))
+    parts = [_open("my_memories", block)]
+    guidance = (await own.guidance()).strip()
+    if guidance:
+        parts.append(_open("guidance", {}) + xml_text(guidance) + _close("guidance"))
+    for memory in stories:
+        parts.append(
+            _open("memory", {"kind": "story", "id": memory.id, "weight": memory.weight})
+            + xml_text(memory.text)
+            + _close("memory")
+        )
+    said_data: list[dict[str, Any]] = []
+    for message in said[:limit]:
+        own_words = message.speaker_ref == my_ref
+        said_by = "you" if own_words else _speaker(message)
+        parts.append(
+            _open(
+                "memory",
+                {
+                    "kind": "said",
+                    "id": message.entry_id,
+                    "said_by": said_by,
+                    "conversation_id": message.conversation_id,
+                    "time": message.created_at.isoformat(),
+                },
+            )
+            + xml_text(clip(message.content, HISTORY_NEIGHBOR_EXCERPT_LIMIT))
+            + _close("memory")
+        )
+        said_data.append(
+            {
+                "entry_id": message.entry_id,
+                "said_by": said_by,
+                "speaker_ref": message.speaker_ref,
+                "own": own_words,
+                "conversation_id": message.conversation_id,
+                "excerpt": _excerpt(message.content),
+            }
+        )
+    parts.append(_close("my_memories"))
+    data = {
+        "scope": args.scope,
+        "companion": {"ref": my_ref, "name": own.identity.name},
+        "lore": [
+            {"id": memory.id, "weight": memory.weight, "text": memory.text, "moment": "self"}
+            for memory in stories
+        ],
+        "said": said_data,
+    }
+    return "".join(parts), data, None
+
+
+async def _past_replies(
+    services: AgentToolServices,
+    query: str,
+    limit: int,
+) -> list[HistoryMessage]:
+    """Return past assistant replies (any librarian) relevant to ``query``."""
+    if not query:
+        return await services.history_service.recent_replies(limit * 2)
+    try:
+        result = await services.search_service.search(
+            query,
+            result_number=max(limit * 2, 4),
+            include_history=True,
+        )
+    except KnowledgeError:
+        return []
+    entry_ids = list(dict.fromkeys(item.entry_id for item in result.history_results))
+    messages = await services.history_service.read_messages(entry_ids)
+    order = {entry_id: index for index, entry_id in enumerate(entry_ids)}
+    replies = [message for message in messages if message.role == "assistant"]
+    replies.sort(key=lambda message: order.get(message.entry_id, len(order)))
+    return replies
 
 
 async def _history_message(
@@ -856,6 +1007,8 @@ async def _history_message(
         "conversation_id": target.conversation_id,
         "conversation_title": target.conversation_title,
         "role": target.role,
+        "speaker": _speaker(target),
+        "speaker_ref": target.speaker_ref,
         "time": target.created_at.isoformat(),
         "content_truncated": len(target.content) > HISTORY_MESSAGE_MAX_CHARS,
         "content": clip(target.content, HISTORY_MESSAGE_MAX_CHARS),
@@ -865,6 +1018,7 @@ async def _history_message(
             {
                 "entry_id": message.entry_id,
                 "role": message.role,
+                "speaker": _speaker(message),
                 "time": message.created_at.isoformat(),
                 "content": clip(message.content, HISTORY_NEIGHBOR_EXCERPT_LIMIT),
             }

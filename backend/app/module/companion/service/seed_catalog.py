@@ -33,7 +33,7 @@ from app.module.companion.domain.seed_domain import (
     build_runtime_config,
 )
 from app.module.companion.domain.story_domain import (
-    LORE_TIERS,
+    LORE_WEIGHTS,
     STORY_LOCALES,
     TEMPLATE_KEYS,
     CompanionRuntimeConfig,
@@ -58,8 +58,6 @@ _WORLD_DOC_FILES: dict[str, str] = {
 
 # Bounds mirror the companion_config CHECK constraints.
 _INT_BOUNDS: dict[str, tuple[int, int]] = {
-    "familiar_unlock_runs": (0, 1000),
-    "rare_unlock_runs": (0, 10000),
     "max_recalled_fragments": (0, 5),
     "told_penalty_cap": (0, 20),
     "story_moment_every_runs": (0, 100),
@@ -157,10 +155,8 @@ def _validate_config(raw: Any) -> tuple[dict[str, Any], tuple[str, ...], str]:
         if not isinstance(value, int | float) or isinstance(value, bool) or not 0 <= value <= 1:
             raise SeedBundleError(f"seed/config.json: {name} must be a number in [0, 1]")
         values[name] = float(value)
-    if values["rare_unlock_runs"] < values["familiar_unlock_runs"]:
-        raise SeedBundleError("seed/config.json: rare_unlock_runs < familiar_unlock_runs")
-    if values["life_story_tier"] not in LORE_TIERS:
-        raise SeedBundleError("seed/config.json: life_story.tier must be a lore tier")
+    if values["life_story_weight"] not in LORE_WEIGHTS:
+        raise SeedBundleError("seed/config.json: life_story.weight must be a lore weight")
     for name in ("life_story_enabled", "life_story_require_review"):
         if not isinstance(values[name], bool):
             raise SeedBundleError(f"seed/config.json: {name} must be a boolean")
@@ -285,7 +281,7 @@ def _preset_rows(
                 {
                     "preset_id": preset_id,
                     "fragment_key": fragment.key,
-                    "tier": fragment.tier,
+                    "weight": fragment.weight,
                     "themes": list(fragment.themes),
                     "refs": list(fragment.refs),
                     "position": index,

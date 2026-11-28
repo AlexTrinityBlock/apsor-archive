@@ -6,8 +6,6 @@
     "global_default": "vellum"
   },
   "tunables": {
-    "familiar_unlock_runs": 5,
-    "rare_unlock_runs": 20,
     "max_recalled_fragments": 2,
     "topical_min_similarity": 0.3,
     "untold_bonus": 0.06,
@@ -20,7 +18,7 @@
   "life_story": {
     "enabled": true,
     "every_conversations": 5,
-    "tier": "familiar",
+    "weight": "past",
     "max_per_30d": 4,
     "memory_limit": 8,
     "memory_chars": 6000,

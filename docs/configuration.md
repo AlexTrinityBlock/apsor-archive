@@ -294,12 +294,14 @@ order, frame delete, frame image, and `GET/PATCH /api/v1/companions/preference`)
 
 Each companion also has a story: a persona that becomes its voice in new
 conversations (frozen per conversation, in the conversation's language), and
-lore, its own memories. When the agent searches the user's archive, up to two
-relevant memories of the librarian's own may ride beside the results in a
-separate block; they are never archive evidence or citations. Asking the
-librarian about itself or the Archive lets it tell its own story. Deeper
-memories unlock as the account completes more conversations with that
-companion. The persona rules treat the user as an equal: the librarian uses
+lore, its own memories. Nothing is locked: every memory carries a weight
+(everyday, past, or heart) and the librarian decides whether, when, and how much
+to share, knowing how long she and the person have known each other. Relevant
+memories may ride beside a message or a tool result in a separate block, and she
+can look her own memories up with the `recall_my_memories` tool, including what
+she and the other librarians said to this person before (each past reply records
+who said it). Her memories are never archive evidence or citations;
+`search_knowledge` searches only the person's archive. The persona rules treat the user as an equal: the librarian uses
 their name or a plain "you", never a title such as Keeper or master. Every
 account can edit the persona and lore of any companion per language and reset
 to the default (`/api/v1/companions/stories/...`).

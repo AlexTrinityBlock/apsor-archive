@@ -187,7 +187,7 @@ agent_entry ──────┘  (source_kind = history)
   伙伴、每个动作经编码的 AVIF（或 WebP）帧及其位置、大小和 SHA-256，以及账户
   的伙伴选择、是否显示、动态程度和位置。
 - `companion_story` / `companion_lore_fragment` / `companion_bond`：账户按语言
-  覆写的伙伴人设与传说、其片段，以及解锁更深层传说的完成对话数。
+  覆写的伙伴人设与传说、其片段，以及完成的运行与对话次数，和初次相遇的时间。
 - `ingest_config`：一行（`id=1`），带有经过校验的 worker 轮询、
   提取、在途、嵌入和分块大小设置。它不是分块来源；队列引用最终
   发布的文件。

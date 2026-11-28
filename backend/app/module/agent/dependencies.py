@@ -50,9 +50,13 @@ from app.module.agent.protocol.chat_attachment_storage_protocol import (
 from app.module.agent.protocol.chat_generator_protocol import ChatGeneratorProtocol
 from app.module.agent.protocol.companion_protocol import (
     CompanionContextContributorProtocol,
+    CompanionIdentity,
+    CompanionOwnMemoriesProtocol,
     CompanionPersonaLoaderProtocol,
     ContextContribution,
     ContextSignal,
+    OwnMemory,
+    RelationshipFacts,
 )
 from app.module.agent.protocol.system_prompt_cache_protocol import (
     SystemPromptCacheProtocol,
@@ -85,13 +89,19 @@ from app.module.auth.service.quota_service import AccountQuotaService
 from app.module.companion.dependencies import (
     build_companion_context_contributor,
     build_companion_story_service,
+    build_lore_recall,
     build_story_config_provider,
     record_companion_run,
 )
-from app.module.companion.domain.story_domain import normalize_locale, render_persona_section
+from app.module.companion.domain.story_domain import (
+    Relationship,
+    normalize_locale,
+    render_persona_section,
+)
 from app.module.companion.service.companion_context_contributor import (
     CompanionContextContributor,
 )
+from app.module.companion.service.lore_recall import CompanionLoreRecall
 from app.module.knowledge.dependencies import (
     build_file_service,
     build_memory_service,
@@ -352,6 +362,18 @@ class _ToolServiceScope:
         async with self.database.user_session(self.user_id, self.role) as session:
             state = self.request.app.state
             companion_context = await self._companion_context(session)
+            conversation_id = self._conversation_id()
+            companion_memories = (
+                await _conversation_own_memories(
+                    state,
+                    session,
+                    user_id=self.user_id,
+                    conversation_id=conversation_id,
+                    quota=AccountQuotaService(self.database, self.user_id),
+                )
+                if conversation_id is not None
+                else None
+            )
             services = AgentToolServices(
                 search_service=build_search_service(
                     state,
@@ -388,6 +410,7 @@ class _ToolServiceScope:
                     user_id=self.user_id,
                 ),
                 companion_context=companion_context,
+                companion_memories=companion_memories,
             )
             yield services
 
@@ -420,6 +443,53 @@ async def _conversation_contributor(
     )
 
 
+class _OwnMemoriesAdapter:
+    """Map the companion slice's lore recall onto the agent's own-memories port."""
+
+    def __init__(self, recall: CompanionLoreRecall, identity: CompanionIdentity) -> None:
+        self.recall = recall
+        self.identity = identity
+
+    async def search_own(self, query: str, *, limit: int) -> list[OwnMemory]:
+        return [
+            OwnMemory(id=item.id, weight=item.weight, text=item.text)
+            for item in await self.recall.search_own(query, limit=limit)
+        ]
+
+    async def relationship(self) -> RelationshipFacts | None:
+        return _relationship_facts(await self.recall.relationship())
+
+    async def guidance(self) -> str:
+        return await self.recall.guidance()
+
+
+async def _conversation_own_memories(
+    state: State,
+    session: AsyncSession,
+    *,
+    user_id: int,
+    conversation_id: int,
+    quota: AccountQuotaService | None = None,
+) -> CompanionOwnMemoriesProtocol | None:
+    """Return the frozen companion's own memories for ``recall_my_memories``."""
+    identity = await CompanionContextRepository(
+        session,
+        user_id,
+    ).conversation_identity(conversation_id)
+    if identity is None:
+        return None
+    ref, name, locale = identity
+    recall = build_lore_recall(
+        state,
+        session,
+        user_id=user_id,
+        companion_ref=ref,
+        locale=normalize_locale(locale),
+        quota=quota,
+    )
+    return _OwnMemoriesAdapter(recall, CompanionIdentity(ref=ref, name=name or ref))
+
+
 class _ContextContributorAdapter:
     """Map the agent's context signal onto the companion slice's contributor."""
 
@@ -433,16 +503,31 @@ class _ContextContributorAdapter:
             query=signal.query,
             offered=signal.offered_this_run,
         )
+        if not recalled:
+            return []
+        facts = _relationship_facts(await self.contributor.relationship())
         return [
             ContextContribution(
                 id=item.id,
-                tier=item.tier,
+                weight=item.weight,
                 text=item.text,
                 moment=item.moment,
                 guidance=item.guidance,
+                relationship=facts,
             )
             for item in recalled
         ]
+
+
+def _relationship_facts(value: Relationship | None) -> RelationshipFacts | None:
+    """Map the companion slice's relationship onto the agent's plain facts."""
+    if value is None:
+        return None
+    return RelationshipFacts(
+        first_met=value.first_met_at.date().isoformat() if value.first_met_at else None,
+        days_known=value.days_known,
+        conversations=value.conversations,
+    )
 
 
 class _MessageContextContributor:

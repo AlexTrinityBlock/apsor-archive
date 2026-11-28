@@ -182,7 +182,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `e7b2d5a9c4f1`. The migrations after `agent_config` on
+The latest migration is `d6a1f3c8e2b7`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -333,9 +333,15 @@ this branch are:
   and the append-only `companion_admin_access_log`.
 - `b3e8f5a1d6c7` adds `companion_generated_story` and `companion_story_job`
   for worker-written life stories.
-- `e7b2d5a9c4f1` (current head) adds `chunk.embedding_failures`, a partial
+- `e7b2d5a9c4f1` adds `chunk.embedding_failures`, a partial
   pending-embedding index, and converts JSON `null` embeddings to SQL NULL so
   the worker can backfill vectors after a provider or allowance outage.
+- `d6a1f3c8e2b7` (current head) replaces lore tiers with weights (`first` →
+  `everyday`, `familiar` → `past`, `rare` → `heart`) on every lore table, drops
+  the unlock counters and unlock timestamps, adds `companion_bond.first_met_at`,
+  lets `companion_lore_told.source` record `recall`, and stamps every past
+  assistant entry with `data.speaker = {ref, name}` from its conversation's
+  frozen companion.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

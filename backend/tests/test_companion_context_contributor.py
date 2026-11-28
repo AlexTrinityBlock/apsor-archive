@@ -82,7 +82,7 @@ def _offered_ids(turn: dict[str, Any]) -> list[str]:
 def _item(fragment_id: str, moment: str = "topical", guidance: str = "G") -> ContextContribution:
     return ContextContribution(
         id=fragment_id,
-        tier="first",
+        weight="everyday",
         text=f"Text <{fragment_id}>",
         moment=moment,  # type: ignore[arg-type]
         guidance=guidance,
@@ -135,7 +135,7 @@ class _FakeRecall:
 
 
 def _lore(fragment_id: str, moment: str = "self") -> RecalledLore:
-    return RecalledLore(id=fragment_id, text="t", tier="first", score=1.0, moment=moment)  # type: ignore[arg-type]
+    return RecalledLore(id=fragment_id, text="t", weight="everyday", score=1.0, moment=moment)  # type: ignore[arg-type]
 
 
 def test_user_message_prefers_self_query_then_story_moment() -> None:
@@ -191,8 +191,9 @@ def test_page_context_offers_topical_lore_with_the_message(
         },
     )
     data = _user(turn)["data"]
-    assert data["companion_context_ids"] == ["vellum-001"]
-    assert data["companion_context"].startswith('<librarian_memories moment="topical">')
+    # Nothing is locked: any seed memory of hers may surface, everyday first.
+    assert data["companion_context_ids"][0] == "vellum-001"
+    assert data["companion_context"].startswith('<librarian_memories moment="topical"')
     sent = generator.requests[0].messages
     user_messages = [m["content"] for m in sent if m.get("role") == "user"]
     assert any("<librarian_memories" in content for content in user_messages)
@@ -210,7 +211,7 @@ def test_attachment_names_offer_topical_lore(
         _conversation(client),
         {"content": "Look at this.", "attachment_ids": [attachment["id"]]},
     )
-    assert _user(turn)["data"]["companion_context_ids"] == ["vellum-001"]
+    assert _user(turn)["data"]["companion_context_ids"][0] == "vellum-001"
 
 
 def test_tool_results_offer_lore_once_per_run_with_the_trace_shape(
@@ -242,7 +243,7 @@ def test_tool_results_offer_lore_once_per_run_with_the_trace_shape(
     first_lore = results[0]["data"]["lore"]
     assert first_lore, "the first read surfaces the companion's own memory"
     for item in first_lore:
-        assert set(item) == {"id", "tier", "text", "moment"}
+        assert set(item) == {"id", "weight", "text", "moment"}
         assert item["moment"] == "topical"
     content = results[0]["model"][0]["content"]
     assert content.index("<librarian_memories") > content.index("clock")
@@ -260,9 +261,9 @@ def test_frozen_persona_carries_configured_rules_and_versions(client: TestClient
     section = system["data"]["sections"][-1]["content"]
     assert section.index(PERSONA_RULES) < section.index(EQUAL_ADDRESS_RULE)
     assert section.endswith(EQUAL_ADDRESS_RULE)
-    assert system["data"]["prompt_version"] == PROMPT_VERSION == "archive-agent-v20"
+    assert system["data"]["prompt_version"] == PROMPT_VERSION == "archive-agent-v21"
     catalog = client.get("/api/v1/agent/tools").json()
-    assert catalog["tools_version"] == TOOLS_VERSION == "archive-tools-v19"
+    assert catalog["tools_version"] == TOOLS_VERSION == "archive-tools-v20"
 
 
 @pytest.mark.parametrize("disabled", [True])

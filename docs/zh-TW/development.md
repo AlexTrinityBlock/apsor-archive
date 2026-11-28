@@ -167,7 +167,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `e7b2d5a9c4f1`。此分支上 `agent_config` 之後的移轉為：
+最新的移轉是 `d6a1f3c8e2b7`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -301,9 +301,14 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   新增的 `companion_admin_access_log`。
 - `b3e8f5a1d6c7` 新增 `companion_generated_story` 與 `companion_story_job`，
   供 worker 撰寫生活故事。
-- `e7b2d5a9c4f1`（目前 head）新增 `chunk.embedding_failures` 與待嵌入的部分
+- `e7b2d5a9c4f1` 新增 `chunk.embedding_failures` 與待嵌入的部分
   索引，並把 JSON `null` 嵌入轉為 SQL NULL，讓 worker 能在供應商或額度中斷後
   補上向量。
+- `d6a1f3c8e2b7`（目前 head）把所有傳說資料表的層級換成分量（`first` →
+  `everyday`、`familiar` → `past`、`rare` → `heart`），移除解鎖計數與解鎖時間，
+  新增 `companion_bond.first_met_at`，讓 `companion_lore_told.source` 可記錄
+  `recall`，並依對話凍結的夥伴，替每則過去的助理回覆蓋上
+  `data.speaker = {ref, name}`。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會

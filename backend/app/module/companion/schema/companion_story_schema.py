@@ -13,7 +13,8 @@ from app.module.companion.domain.story_domain import (
 )
 
 StoryLocaleField = Literal["en", "zh-TW", "zh-CN"]
-LoreTierField = Literal["first", "familiar", "rare"]
+# How much a memory means to the librarian (metadata, never a lock).
+LoreWeightField = Literal["everyday", "past", "heart"]
 
 
 class CompanionPersonaSchema(BaseModel):
@@ -48,7 +49,7 @@ class CompanionLoreFragmentSchema(BaseModel):
     """One lore fragment the account may see in its story editor.
 
     The account sees only its own fragments and the ones it has already heard;
-    tiers, locks, and progress stay hidden (root sees them in administration).
+    weights and progress stay hidden (root sees them in administration).
     """
 
     id: str
@@ -90,7 +91,7 @@ class CompanionLoreCreateSchema(_ThemesMixin):
 
     text: str = Field(min_length=1, max_length=FRAGMENT_MAX_CHARS)
     themes: list[str] = Field(default_factory=list)
-    tier: LoreTierField = "first"
+    weight: LoreWeightField = "everyday"
 
 
 class CompanionLoreUpdateSchema(_ThemesMixin):
@@ -100,7 +101,7 @@ class CompanionLoreUpdateSchema(_ThemesMixin):
 
     text: str | None = Field(default=None, min_length=1, max_length=FRAGMENT_MAX_CHARS)
     themes: list[str] | None = None
-    tier: LoreTierField | None = None
+    weight: LoreWeightField | None = None
     position: int | None = Field(default=None, ge=0, le=10_000)
 
 
@@ -111,6 +112,6 @@ __all__ = [
     "CompanionLoreUpdateSchema",
     "CompanionPersonaSchema",
     "CompanionPersonaUpdateSchema",
-    "LoreTierField",
+    "LoreWeightField",
     "StoryLocaleField",
 ]

@@ -2,6 +2,7 @@ export * from './accounts/accounts';
 export * from './agent/agent';
 export * from './ai/ai';
 export * from './auth/auth';
+export * from './companion-admin/companion-admin';
 export * from './companions/companions';
 export * from './files/files';
 export * from './folders/folders';

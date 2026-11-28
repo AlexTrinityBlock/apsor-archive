@@ -9,7 +9,7 @@
  * One lore fragment the account may see in its story editor.
  *
  * The account sees only its own fragments and the ones it has already heard;
- * tiers, locks, and progress stay hidden (root sees them in administration).
+ * weights and progress stay hidden (root sees them in administration).
  */
 export interface CompanionLoreFragmentSchema {
   edited: boolean;
