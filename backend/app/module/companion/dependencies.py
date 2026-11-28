@@ -32,6 +32,7 @@ from app.module.companion.domain.life_story_domain import (
     LifeStoryGenerationError,
     clip_text,
 )
+from app.module.companion.domain.seed_domain import SupersededText
 from app.module.companion.domain.story_domain import StoryLocale
 from app.module.companion.protocol.companion_admin_protocol import CompanionSeederProtocol
 from app.module.companion.protocol.companion_protocol import CompanionStorageProtocol
@@ -62,6 +63,10 @@ from app.module.companion.repository.companion_repository import CompanionReposi
 from app.module.companion.repository.companion_story_repository import (
     CompanionStoryRepository,
 )
+from app.module.companion.repository.lore_purge_repository import (
+    LorePurgeRepository,
+    LorePurgeResult,
+)
 from app.module.companion.service.companion_admin_service import (
     CompanionAdminService,
     CompanionCatalogService,
@@ -80,6 +85,7 @@ from app.module.companion.service.lore_vectors import (
     LoreVectorStore,
     LoreVectorWarmer,
 )
+from app.module.companion.service.lore_vectors import clear_memory as clear_lore_vector_memory
 from app.module.companion.service.story_config import (
     StaticCompanionContentProvider,
     StaticCompanionPolicyProvider,
@@ -215,6 +221,8 @@ async def seed_companion(state: State, *, force: bool = False) -> SeedResult:
     if database is None:
         return SeedResult()
     result = await CompanionSeeder().run(database, force=force)
+    if result.applied:
+        await purge_stale_lore(database, result.superseded)
     if getattr(state, "companion_seeder", None) is None:
         state.companion_seeder = _StateSeeder(state)
     install_companion_providers(state)
@@ -224,6 +232,34 @@ async def seed_companion(state: State, *, force: bool = False) -> SeedResult:
     config = getattr(state, "companion_story_config", None)
     if isinstance(config, DbCompanionConfigProvider):
         config.invalidate()
+    return result
+
+
+async def purge_stale_lore(
+    database: Database,
+    superseded: Sequence[SupersededText] = (),
+) -> LorePurgeResult:
+    """Remove what an earlier canon left behind, after a seed changed the lore.
+
+    Runs on the owner maintenance session because it spans accounts; it deletes
+    only retired seeded items, unedited copies of old seeded text, stale progress
+    and overrides (see :mod:`lore_purge_repository`). Logs counts only. The
+    in-process lore vector cache is cleared; Valkey vectors are keyed by text
+    digest, so vectors of replaced texts are never served and expire on their own.
+    """
+    async with database.maintenance_session() as session:
+        result = await LorePurgeRepository(session).purge(superseded)
+    clear_lore_vector_memory()
+    logger.info(
+        "companion lore purge retired_items=%s told=%s stale_copies=%s refreshed=%s "
+        "reset_stories=%s overrides=%s",
+        result.retired_items,
+        result.told_rows,
+        result.stale_copies,
+        result.refreshed_copies,
+        result.reset_stories,
+        result.overrides,
+    )
     return result
 
 
@@ -574,6 +610,7 @@ __all__ = [
     "get_companion_service",
     "get_companion_story_service",
     "install_companion_providers",
+    "purge_stale_lore",
     "record_companion_run",
     "seed_companion",
 ]

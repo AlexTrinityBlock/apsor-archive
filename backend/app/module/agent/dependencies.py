@@ -14,6 +14,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import cast
 
 from fastapi import Depends, Request
@@ -468,6 +469,9 @@ class _OwnMemoriesAdapter:
     async def guidance(self) -> str:
         return await self.recall.guidance()
 
+    async def said_since(self) -> datetime | None:
+        return await self.recall.said_since()
+
 
 async def _conversation_own_memories(
     state: State,
@@ -607,6 +611,12 @@ class _CompanionHandoff:
 
     async def active(self, locale: str | None) -> CompanionPersona | None:
         return await self.loader(locale)
+
+    async def guidance_version(self, conversation_id: int) -> str | None:
+        async with self.database.user_session(self.user_id, self.role) as session:
+            return await CompanionContextRepository(session, self.user_id).guidance_version(
+                conversation_id
+            )
 
 
 class _CompanionRunObserver:

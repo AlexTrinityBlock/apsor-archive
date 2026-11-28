@@ -10,7 +10,7 @@ edit, so the admin view works before the seeder has run.
 import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -198,6 +198,9 @@ KNOBS: tuple[_Knob, ...] = (
     _Knob("self_query_phrases", "list", "words", per_user=False),
     _Knob("self_canon_terms", "list", "words", per_user=False),
     _Knob("banned_address_terms", "list", "words", per_user=False),
+    # Replies older than this are not offered back as a librarian's "said"
+    # memories. A deployment fact, not a seeded default: reset keeps it.
+    _Knob("said_memory_since", "datetime", "recall", per_user=False),
 )
 _KNOB_BY_KEY = {knob.key: knob for knob in KNOBS}
 _WEIGHTS = ("everyday", "past", "heart")
@@ -205,11 +208,27 @@ _WEIGHTS = ("everyday", "past", "heart")
 
 def knob_default(key: str) -> Any:
     """Return the shipped default for one tunable."""
+    knob = _KNOB_BY_KEY.get(key)
+    if knob is not None and knob.kind == "datetime":
+        return ""
     if key.startswith("life_story_"):
         value = getattr(DEFAULT_RUNTIME_CONFIG.life_story, key.removeprefix("life_story_"))
     else:
         value = getattr(DEFAULT_RUNTIME_CONFIG, key)
     return list(value) if isinstance(value, tuple) else value
+
+
+def _coerce_datetime(key: str, value: Any) -> datetime | None:
+    """Parse an ISO date-time (naive means UTC); an empty value clears it."""
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise CompanionInvalidError(f"{key} must be an ISO date and time.")
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise CompanionInvalidError(f"{key} must be an ISO date and time.") from exc
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
 def coerce_knob(key: str, value: Any) -> Any:
@@ -225,6 +244,8 @@ def coerce_knob(key: str, value: Any) -> Any:
         if value not in _WEIGHTS:
             raise CompanionInvalidError(f"{key} must be everyday, past, or heart.")
         return value
+    if knob.kind == "datetime":
+        return _coerce_datetime(key, value)
     if knob.kind == "list":
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise CompanionInvalidError(f"{key} must be a list of words.")
@@ -399,6 +420,8 @@ class CompanionAdminService:
             value = getattr(row, knob.key, None) if row is not None else None
             if knob.kind == "list" and not value:
                 value = None
+            if isinstance(value, datetime):
+                value = value.isoformat()
             values[knob.key] = knob_default(knob.key) if value is None else value
         return values
 
@@ -1034,6 +1057,8 @@ class CompanionAdminService:
     async def reset_config(self) -> CompanionConfigAdminSchema:
         row = await self._config_row()
         for knob in KNOBS:
+            if knob.kind == "datetime":
+                continue
             setattr(row, knob.key, knob_default(knob.key))
         row.version = row.version + 1
         row.admin_modified = False

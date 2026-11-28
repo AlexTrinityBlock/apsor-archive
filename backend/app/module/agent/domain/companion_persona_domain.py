@@ -18,6 +18,10 @@ PERSONA_SECTION_NAME = "companion_persona"
 # user message only. The frozen system entry never changes.
 COMPANION_SWITCH_KEY = "companion_switch"
 COMPANION_HANDOFF_KEY = "companion_handoff"
+# The prompt version whose persona rules a user entry delivered (handoff or
+# refresh). A conversation frozen at an older version gets one refresh on its
+# next message, so rule fixes reach chats that started before them.
+GUIDANCE_VERSION_KEY = "guidance_version"
 ARCHIVE_ASSISTANT_NAME = "the archive assistant"
 # The heading the persona section renders under in the frozen system message.
 COMPANION_PERSONA_HEADING = "# Companion persona:"
@@ -164,11 +168,30 @@ def render_handoff(new: "CompanionPersona | None", previous_name: str | None) ->
     )
 
 
+def render_refresh(companion: "CompanionPersona") -> str:
+    """Render the one-time guidance refresh for a conversation frozen at an older version.
+
+    The persona and the rules that outrank it were updated after this
+    conversation began; the fresh section replaces the one in the system
+    message from here on. The speaker does not change.
+    """
+    body = (
+        f"Your guidance as {companion.name} was updated after this conversation began. "
+        "The persona and rules below replace the companion persona in the system "
+        "message from here on; follow them, including the current_time block for the "
+        "time of day."
+    )
+    return (
+        f"<companion_handoff>\n{body}\n\n{companion.content.rstrip()}\n</companion_handoff>"
+    )
+
+
 __all__ = [
     "ARCHIVE_ASSISTANT_NAME",
     "COMPANION_HANDOFF_KEY",
     "COMPANION_PERSONA_HEADING",
     "COMPANION_SWITCH_KEY",
+    "GUIDANCE_VERSION_KEY",
     "PERSONA_SECTION_NAME",
     "CompanionPersona",
     "current_companion",
@@ -177,5 +200,6 @@ __all__ = [
     "frozen_companion",
     "frozen_speaker",
     "render_handoff",
+    "render_refresh",
     "switch_record",
 ]

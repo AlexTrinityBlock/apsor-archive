@@ -231,6 +231,11 @@ class CompanionConfigModel(_SeedTrackedMixin, Base):
     )
     life_story_poll_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     life_story_max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    # Root-editable; the seed never writes it (see seed_domain.SAID_MEMORY_SINCE).
+    said_memory_since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
 

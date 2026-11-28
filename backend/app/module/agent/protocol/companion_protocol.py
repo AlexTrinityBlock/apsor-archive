@@ -10,6 +10,7 @@ context, its attachment names, and every tool result) builds one
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Literal, Protocol
 
 from app.module.agent.domain.companion_persona_domain import CompanionPersona
@@ -93,6 +94,10 @@ class CompanionOwnMemoriesProtocol(Protocol):
 
     async def guidance(self) -> str: ...
 
+    async def said_since(self) -> datetime | None:
+        """Return the cutoff before which past replies are not offered as "said"."""
+        ...
+
 
 class CompanionContextContributorProtocol(Protocol):
     """Decide which of the companion's own memories to offer for one signal."""
@@ -118,6 +123,14 @@ class CompanionHandoffProtocol(Protocol):
     async def current(self, conversation_id: int) -> dict[str, str] | None: ...
 
     async def active(self, locale: str | None) -> CompanionPersona | None: ...
+
+    async def guidance_version(self, conversation_id: int) -> str | None:
+        """Return the prompt version the conversation's guidance was last given at.
+
+        The latest ``guidance_version`` stamped on a user entry (a handoff or a
+        refresh), else the ``prompt_version`` frozen in the system entry.
+        """
+        ...
 
 
 class CompanionRunObserverProtocol(Protocol):

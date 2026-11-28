@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.module.agent.domain.agent_domain import KIND_SYSTEM, KIND_USER
 from app.module.agent.domain.companion_persona_domain import (
     COMPANION_SWITCH_KEY,
+    GUIDANCE_VERSION_KEY,
     current_companion,
 )
 from app.module.agent.model.agent_model import AgentEntryModel
@@ -40,6 +41,29 @@ class CompanionContextRepository:
             await self._system_data(conversation_id),
             await self._latest_switch_data(conversation_id),
         )
+
+    async def guidance_version(self, conversation_id: int) -> str | None:
+        """Return the prompt version the conversation's guidance was last given at."""
+        statement = (
+            select(AgentEntryModel.data[GUIDANCE_VERSION_KEY].astext)
+            .where(
+                AgentEntryModel.user_id == self.user_id,
+                AgentEntryModel.conversation_id == conversation_id,
+                AgentEntryModel.kind == KIND_USER,
+                AgentEntryModel.data.has_key(GUIDANCE_VERSION_KEY),
+            )
+            .order_by(AgentEntryModel.id.desc())
+            .limit(1)
+        )
+        stamped = (await self.session.execute(statement)).scalar_one_or_none()
+        if stamped:
+            return str(stamped)
+        system = await self._system_data(conversation_id)
+        if isinstance(system, dict):
+            version = system.get("prompt_version")
+            if isinstance(version, str):
+                return version
+        return None
 
     async def _latest_switch_data(self, conversation_id: int) -> Any:
         statement = (

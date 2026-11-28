@@ -271,9 +271,9 @@ def test_frozen_persona_carries_configured_rules_and_versions(client: TestClient
     section = system["data"]["sections"][-1]["content"]
     assert section.index(PERSONA_RULES) < section.index(EQUAL_ADDRESS_RULE)
     assert section.endswith(EQUAL_ADDRESS_RULE)
-    assert system["data"]["prompt_version"] == PROMPT_VERSION == "archive-agent-v22"
+    assert system["data"]["prompt_version"] == PROMPT_VERSION == "archive-agent-v23"
     catalog = client.get("/api/v1/agent/tools").json()
-    assert catalog["tools_version"] == TOOLS_VERSION == "archive-tools-v21"
+    assert catalog["tools_version"] == TOOLS_VERSION == "archive-tools-v22"
 
 
 @pytest.mark.parametrize("disabled", [True])

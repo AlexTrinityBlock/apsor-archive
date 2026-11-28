@@ -26,6 +26,7 @@ from the story config provider, never from module constants.
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 
 from app.module.companion.domain.recall_domain import (
@@ -243,6 +244,10 @@ class CompanionLoreRecall:
     async def guidance(self) -> str:
         """Return the configured guidance the model reads with her own memories."""
         return _lore_guidance(await self.config.load(self.stories.user_id))
+
+    async def said_since(self) -> datetime | None:
+        """Return root's cutoff for offering past replies back as "said" memories."""
+        return (await self.config.load(self.stories.user_id)).said_memory_since
 
     async def relationship(self) -> Relationship | None:
         """Return how long this account and the companion have known each other."""

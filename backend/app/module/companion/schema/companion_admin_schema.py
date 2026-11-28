@@ -192,7 +192,7 @@ class CompanionConfigKnobSchema(BaseModel):
     key: str
     value: float | int | bool | str | list[str]
     default: float | int | bool | str | list[str]
-    kind: Literal["int", "float", "bool", "weight", "list"]
+    kind: Literal["int", "float", "bool", "weight", "list", "datetime"]
     minimum: float | None = None
     maximum: float | None = None
     group: Literal["recall", "pacing", "life_story", "words"]

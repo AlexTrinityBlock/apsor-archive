@@ -62,8 +62,10 @@ from app.module.agent.domain.companion_persona_domain import (
     COMPANION_HANDOFF_KEY,
     COMPANION_PERSONA_HEADING,
     COMPANION_SWITCH_KEY,
+    GUIDANCE_VERSION_KEY,
     CompanionPersona,
     render_handoff,
+    render_refresh,
     switch_record,
 )
 from app.module.agent.domain.context_domain import (
@@ -435,13 +437,15 @@ class AgentService:
     async def _companion_handoff(
         self,
         conversation_id: int,
-    ) -> tuple[dict[str, str | None], str] | None:
-        """Return ``(switch_record, handoff_text)`` when the speaker must change.
+    ) -> tuple[dict[str, str | None] | None, str] | None:
+        """Return ``(switch_record | None, handoff_text)`` to attach to this message.
 
-        The account may have chosen another companion (or disabled it) since the
-        conversation started. The frozen system entry never changes; the new
-        persona rides on this user message only, and the record makes later turns
-        and the speaker stamp follow the new companion. Best-effort.
+        A switch: the account chose another companion (or disabled it) since the
+        conversation started; the record makes later turns and the speaker stamp
+        follow the new companion. A refresh (no record): the speaker is unchanged
+        but the conversation's guidance predates ``PROMPT_VERSION``, so the current
+        persona and rules ride on this message once. The frozen system entry never
+        changes. Best-effort.
         """
         if self.companion_handoff is None:
             return None
@@ -449,6 +453,14 @@ class AgentService:
             current = await self.companion_handoff.current(conversation_id)
             locale = current.get("locale") if current is not None else None
             active = await self.companion_handoff.active(locale)
+            current_ref = current.get("ref") if current is not None else None
+            active_ref = active.ref if active is not None else None
+            if current_ref != active_ref:
+                previous = current.get("name") if current is not None else None
+                return switch_record(active), render_handoff(active, previous)
+            if active is None:
+                return None
+            version = await self.companion_handoff.guidance_version(conversation_id)
         except Exception:
             logger.warning(
                 "companion handoff lookup failed conversation_id=%s",
@@ -456,12 +468,9 @@ class AgentService:
                 exc_info=True,
             )
             return None
-        current_ref = current.get("ref") if current is not None else None
-        active_ref = active.ref if active is not None else None
-        if current_ref == active_ref:
+        if version is None or version == PROMPT_VERSION:
             return None
-        previous = current.get("name") if current is not None else None
-        return switch_record(active), render_handoff(active, previous)
+        return None, render_refresh(active)
 
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
@@ -684,7 +693,11 @@ class AgentService:
             data["attachments"] = [attachment.to_entry_data() for attachment in attachments]
         handoff = await self._companion_handoff(conversation_id)
         if handoff is not None:
-            data[COMPANION_SWITCH_KEY], data[COMPANION_HANDOFF_KEY] = handoff
+            record, text = handoff
+            if record is not None:
+                data[COMPANION_SWITCH_KEY] = record
+            data[COMPANION_HANDOFF_KEY] = text
+            data[GUIDANCE_VERSION_KEY] = PROMPT_VERSION
         contributions = await self._message_contributions(
             conversation_id,
             content=content,
