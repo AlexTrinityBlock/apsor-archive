@@ -369,6 +369,8 @@ export const chat = {
     historyExcerpt: "對話記憶：{excerpt}",
     historyId: "對話記憶：#{id}",
     archiveCitation: "檔案館引用 {label}",
+    webOpen: "在新分頁開啟網路來源 {title}（{label}）",
+    webUnknown: "網路來源 {label}（不在這段對話中）",
   },
   resource: {
     file: "檔案",

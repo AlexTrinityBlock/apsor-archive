@@ -32,6 +32,7 @@ import {
   useGetAgentConversation,
   useListAgentApprovals,
   useListAgentConversations,
+  useListAgentWebSources,
   useUpdateAgentConversation,
 } from "../generated-apis-types/agent/agent";
 import type { AgentEntrySchema } from "../generated-apis-types/schemas";
@@ -113,11 +114,17 @@ import {
   type ResourceMeta,
 } from "./types";
 import { titleFromMessage } from "./format";
+import {
+  mergeWebSources,
+  webSourcesFromEntries,
+  WebSourcesContext,
+} from "./web-sources";
 import "./chat.css";
 import "../agent/agent.css";
 
 const PAGE_SIZE = 200;
 const NO_ENTRIES: readonly AgentEntrySchema[] = [];
+const NO_LIVE_TOOLS: readonly { readonly name: string; readonly data: unknown }[] = [];
 const NARROW_QUERY = "(max-width: 899px)";
 const ENTRY_HASH = /^#entry-(\d+)$/;
 const ENTRY_HIGHLIGHT_MS = 2_000;
@@ -792,6 +799,24 @@ export function ChatPage() {
   const entries = useMemo(
     () => mergeEntries(retainedEntries, baseEntries),
     [baseEntries, retainedEntries],
+  );
+
+  // `[web:wN]` chips resolve from the conversation's numbered web pages; the
+  // loaded and live tool results fill gaps (forks, or a run still streaming).
+  const webSourcesQuery = useListAgentWebSources(conversationId ?? 0, {
+    query: { enabled: conversationId !== null, staleTime: 30_000, retry: false },
+  });
+  const liveTools =
+    stream && stream.conversationId === conversationId
+      ? stream.toolCalls
+      : NO_LIVE_TOOLS;
+  const webSources = useMemo(
+    () =>
+      mergeWebSources(
+        webSourcesQuery.data ?? [],
+        webSourcesFromEntries(entries, liveTools),
+      ),
+    [entries, liveTools, webSourcesQuery.data],
   );
 
   // The detail endpoint now returns the newest page. Keep every page the reader
@@ -1532,6 +1557,7 @@ export function ChatPage() {
   );
 
   return (
+    <WebSourcesContext value={webSources}>
     <div className="chat-page">
       <ChatHeader
         conversation={conversation}
@@ -1652,5 +1678,6 @@ export function ChatPage() {
       />
       <ChatCompanion stream={stream} draft={draft} conversationKey={String(conversationId ?? "new")} />
     </div>
+    </WebSourcesContext>
   );
 }

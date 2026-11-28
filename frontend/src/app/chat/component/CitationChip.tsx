@@ -12,12 +12,14 @@ import {
   citationLabel,
   type CitationToken,
 } from "../types";
+import { useWebSources, webDomainLabel, type WebSource } from "../web-sources";
 
 const CITATION_ICONS: Record<CitationToken["kind"], IconName> = {
   file: "file",
   memory: "memory",
   summary: "layers",
   history: "history",
+  web: "external",
 };
 
 interface CitationPresentation {
@@ -104,8 +106,66 @@ interface CitationChipProps {
   readonly leading?: ReactNode;
 }
 
+/**
+ * A `[web:wN]` citation: the page's domain as a chip that opens the page in a
+ * new tab. The full title and URL are in the tooltip. An unresolved number
+ * (for example a label pasted from another conversation) stays a plain label.
+ */
+function WebCitationChip({
+  token,
+  source,
+}: {
+  readonly token: CitationToken;
+  readonly source: WebSource | undefined;
+}) {
+  const { t } = useI18n();
+  const label = citationLabel(token);
+  if (!source) {
+    return (
+      <span
+        className="citation-chip web"
+        title={t("chat.citation.webUnknown", { label })}
+      >
+        <Icon name={CITATION_ICONS.web} size={11} />
+        <span className="citation-chip__label">{label}</span>
+      </span>
+    );
+  }
+  const domain = webDomainLabel(source.url);
+  const tooltip = source.title ? `${source.title}\n${source.url}` : source.url;
+  return (
+    <a
+      className="citation-chip web"
+      href={source.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={tooltip}
+      aria-label={t("chat.citation.webOpen", {
+        title: source.title ?? domain,
+        label,
+      })}
+    >
+      <Icon name={CITATION_ICONS.web} size={11} />
+      <span className="citation-chip__label">{domain}</span>
+    </a>
+  );
+}
+
 /** A citation token rendered as a preview trigger or a resolved link. */
-export function CitationChip({
+export function CitationChip(props: CitationChipProps) {
+  const webSources = useWebSources();
+  if (props.token.kind === "web") {
+    return (
+      <WebCitationChip
+        token={props.token}
+        source={webSources.get(props.token.id)}
+      />
+    );
+  }
+  return <ArchiveCitationChip {...props} />;
+}
+
+function ArchiveCitationChip({
   token,
   label,
   fileTitle,

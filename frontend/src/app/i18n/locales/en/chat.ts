@@ -384,6 +384,8 @@ export const chat = {
     historyExcerpt: "Conversation: {excerpt}",
     historyId: "Conversation: #{id}",
     archiveCitation: "Archive citation {label}",
+    webOpen: "Open web source {title} ({label}) in a new tab",
+    webUnknown: "Web source {label} (not found in this conversation)",
   },
   resource: {
     file: "File",

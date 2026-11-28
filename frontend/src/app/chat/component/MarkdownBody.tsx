@@ -11,6 +11,7 @@ import type { CitationToken } from "../types";
 
 const SUMMARY_HREF = /^#citation-summary-(\d+)$/;
 const HISTORY_HREF = /^#citation-history-(\d+)$/;
+const WEB_HREF = /^#citation-web-(\d+)$/;
 // Old transcripts and model prose may still use the pre-merge /memory/{id}.
 const MEMORY_HREF = /^\/(?:library\/memories|memory)\/(\d+)\/?$/;
 const VIEWER_HREF = /^\/viewer\/(file|memory)\/(\d+)\/?$/;
@@ -25,6 +26,12 @@ function positiveId(value: string | null): number | null {
 }
 
 function citationFromHref(href: string): CitationToken | null {
+  const web = WEB_HREF.exec(href);
+  if (web) {
+    const id = positiveId(web[1]);
+    return id === null ? null : { kind: "web", id, chunk: null };
+  }
+
   const history = HISTORY_HREF.exec(href);
   if (history) {
     const id = positiveId(history[1]);

@@ -368,6 +368,8 @@ export const chat = {
     historyExcerpt: "对话记忆：{excerpt}",
     historyId: "对话记忆：#{id}",
     archiveCitation: "档案馆引用 {label}",
+    webOpen: "在新标签页打开网络来源 {title}（{label}）",
+    webUnknown: "网络来源 {label}（不在这段对话中）",
   },
   resource: {
     file: "文件",

@@ -1008,14 +1008,6 @@
   line-height: 1.5;
 }
 
-.chat-turn__citations {
-  margin-top: 2px;
-}
-
-.chat-turn__citations .citation-chip {
-  font-size: 10.5px;
-}
-
 .chat-turn__usage {
   display: flex;
   flex-wrap: wrap;
