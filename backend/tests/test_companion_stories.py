@@ -1,5 +1,6 @@
 """Companion personas, lore editing, lore recall in search, tiers, and isolation."""
 
+import dataclasses
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -23,14 +24,8 @@ from app.module.companion.domain.recall_domain import (
     story_moment_due,
 )
 from app.module.companion.domain.story_domain import (
-    DEFAULT_STORY_CONFIG,
-    FAMILIAR_UNLOCK_RUNS,
     FRAGMENT_MAX_CHARS,
-    PERSONA_RULES,
-    STORY_MOMENT_EVERY_RUNS,
-    TOPICAL_MIN_SIMILARITY,
     Bond,
-    CompanionStoryConfig,
     LoreFragment,
     ToldRecord,
     normalize_locale,
@@ -38,8 +33,22 @@ from app.module.companion.domain.story_domain import (
 )
 from app.module.companion.service import lore_vectors
 from app.module.companion.service.preset_lore_catalog import load_presets
+from app.module.companion.service.seed_catalog import seed_runtime_config
+from app.module.companion.service.story_config import StaticCompanionContentProvider
 from tests.conftest import UserClient, rls_connection
 from tests.helpers import create_memory
+
+# The live values come from the seed; tests read them instead of constants.
+SEED = seed_runtime_config()
+FAMILIAR_UNLOCK_RUNS = SEED.familiar_unlock_runs
+STORY_MOMENT_EVERY_RUNS = SEED.story_moment_every_runs
+TOPICAL_MIN_SIMILARITY = SEED.topical_min_similarity
+PERSONA_RULES = SEED.persona_rules
+
+
+def _config(**changes: Any) -> Any:
+    return dataclasses.replace(SEED, **changes)
+
 
 STORIES = "/api/v1/companions/stories"
 VELLUM = "preset:vellum"
@@ -159,9 +168,7 @@ def test_persona_override_is_per_locale_and_resettable(client: TestClient) -> No
 
     too_long = client.put(f"{STORIES}/{VELLUM}/persona", json={"persona": "x" * 4001})
     assert too_long.status_code == 400
-    assert client.get(f"{STORIES}/preset:nobody/persona").json()["error"] == (
-        "companion_not_found"
-    )
+    assert client.get(f"{STORIES}/preset:nobody/persona").json()["error"] == ("companion_not_found")
     assert client.get(f"{STORIES}/not-a-ref/persona").status_code == 404
 
 
@@ -172,13 +179,10 @@ def test_lore_is_copy_on_write_and_resettable(client: TestClient) -> None:
     """The first edit copies this locale's defaults; reset discards the copy."""
     initial = client.get(f"{STORIES}/{VELLUM}/lore").json()
     assert initial["customized"] is False
-    assert initial["bond"]["completed_runs"] == 0
+    # The account never sees progress, tiers, or locks; nothing is heard yet.
+    assert "bond" not in initial
+    assert initial["fragments"] == []
     defaults = load_presets()["vellum"].fragments
-    assert [item["id"] for item in initial["fragments"]] == [item.key for item in defaults]
-    by_tier = {item["tier"]: item["unlocked"] for item in initial["fragments"]}
-    assert by_tier == {"first": True, "familiar": False, "rare": False}
-    # The editor always shows full text, even for locked tiers.
-    assert all(item["text"] for item in initial["fragments"])
 
     target = defaults[0].key
     edited = client.patch(
@@ -192,8 +196,9 @@ def test_lore_is_copy_on_write_and_resettable(client: TestClient) -> None:
     assert first["text"] == "A rewritten memory."
     assert first["themes"] == ["books", "ink"]
     assert first["edited"] is True
-    untouched = next(item for item in body["fragments"] if item["id"] == defaults[1].key)
-    assert untouched["edited"] is False
+    assert "tier" not in first and "unlocked" not in first
+    # Unheard, unedited passages stay hidden from the account.
+    assert defaults[1].key not in {item["id"] for item in body["fragments"]}
 
     created = client.post(
         f"{STORIES}/{VELLUM}/lore",
@@ -202,7 +207,7 @@ def test_lore_is_copy_on_write_and_resettable(client: TestClient) -> None:
     assert created.status_code == 201, created.text
     added = created.json()["fragments"][-1]
     assert added["id"].startswith("u-")
-    assert added["tier"] == "rare"
+    assert added["own"] is True
 
     deleted = client.delete(f"{STORIES}/{VELLUM}/lore/{defaults[1].key}")
     assert deleted.status_code == 200, deleted.text
@@ -224,7 +229,7 @@ def test_lore_is_copy_on_write_and_resettable(client: TestClient) -> None:
     reset = client.post(f"{STORIES}/{VELLUM}/lore/reset")
     assert reset.status_code == 200, reset.text
     assert reset.json()["customized"] is False
-    assert [item["id"] for item in reset.json()["fragments"]] == [item.key for item in defaults]
+    assert reset.json()["fragments"] == []
 
 
 def test_custom_companion_story_and_cascade(
@@ -248,9 +253,10 @@ def test_custom_companion_story_and_cascade(
     # Another locale falls back to what the owner wrote.
     zh = client.get(f"{STORIES}/{ref}/lore", params={"locale": "zh-TW"}).json()
     assert [item["text"] for item in zh["fragments"]] == ["I collect lost buttons."]
-    assert client.get(f"{STORIES}/{ref}/persona", params={"locale": "zh-TW"}).json()[
-        "persona"
-    ] == "You are Moth."
+    assert (
+        client.get(f"{STORIES}/{ref}/persona", params={"locale": "zh-TW"}).json()["persona"]
+        == "You are Moth."
+    )
 
     assert client.delete(f"/api/v1/companions/{companion_id}").status_code == 204
     assert client.get(f"{STORIES}/{ref}/lore").status_code == 404
@@ -330,7 +336,7 @@ def test_self_query_offers_lore_in_a_separate_block(
     assert {item["tier"] for item in lore} == {"first"}
     content = about_self["model"][0]["content"]
     assert "<librarian_memories>" in content
-    assert DEFAULT_STORY_CONFIG.lore_guidance in content
+    assert SEED.lore_guidance in content
     assert content.index("<summary>") < content.index("<librarian_memories>")
     lore_ids = {item["id"] for item in lore}
     for item in about_self["data"]["memory_results"]:
@@ -342,6 +348,10 @@ def test_self_query_offers_lore_in_a_separate_block(
     # A second self query prefers fragments not told yet.
     again = _search_once(client, "Tell me a story about yourself")
     assert lore_ids.isdisjoint({item["id"] for item in again["data"]["lore"]})
+
+    # What the librarian has told now appears in the account's view, as heard.
+    heard = client.get(f"{STORIES}/{VELLUM}/lore").json()["fragments"]
+    assert lore_ids <= {item["id"] for item in heard if item["heard"]}
 
 
 def test_topical_recall_is_semantic_only(client: TestClient) -> None:
@@ -362,8 +372,11 @@ def test_topical_recall_respects_tiers_and_prefers_untold(
     assert "lore" not in locked["data"], "no first-tier fragment is about rain"
 
     _complete_runs(client, FAMILIAR_UNLOCK_RUNS)
-    unlocked = client.get(f"{STORIES}/{VELLUM}/lore").json()
-    assert unlocked["bond"]["familiar_unlocked_at"] is not None
+    with owner_engine.connect() as connection:
+        familiar_at = connection.execute(
+            text("SELECT familiar_unlocked_at FROM companion_bond")
+        ).scalar_one()
+    assert familiar_at is not None
 
     opened = _search_once(client, "rain at night")
     first = [item["id"] for item in opened["data"]["lore"]]
@@ -413,28 +426,32 @@ def test_a_narrow_life_still_hears_every_unlocked_fragment() -> None:
     heard: list[str] = []
     for run in range(200):
         bond = Bond(completed_runs=run, last_story_run=last_story_run)
-        if story_moment_due(bond):
-            upcoming = next_untold(fragments, bond.unlocked_tiers(), told)
+        if story_moment_due(bond, SEED):
+            upcoming = next_untold(fragments, bond.unlocked_tiers(SEED), told)
             if upcoming:
                 key = upcoming[0].key
                 heard.append(key)
                 told[key] = ToldRecord(told_count=told.get(key, ToldRecord()).told_count + 1)
                 last_story_run = run
         # A single narrow topic with no semantic match never offers lore at all.
-        assert rank_topical(fragments, bond.unlocked_tiers(), {}, told) == []
+        assert (
+            rank_topical(fragments, bond.unlocked_tiers(SEED), {}, told, limit=2, config=SEED) == []
+        )
     assert set(heard[: len(fragments)]) == {item.key for item in fragments}
     first_half = [item.key for item in fragments[: len(fragments) // 2]]
     assert heard[: len(first_half)] == first_half
 
 
 def test_pacing_and_ranking_rules() -> None:
-    assert not story_moment_due(Bond(completed_runs=0))
-    assert story_moment_due(Bond(completed_runs=1))
-    assert not story_moment_due(Bond(completed_runs=3, last_story_run=1))
-    assert story_moment_due(Bond(completed_runs=1 + STORY_MOMENT_EVERY_RUNS, last_story_run=1))
-    slower = CompanionStoryConfig(story_moment_every_runs=10)
+    assert not story_moment_due(Bond(completed_runs=0), SEED)
+    assert story_moment_due(Bond(completed_runs=1), SEED)
+    assert not story_moment_due(Bond(completed_runs=3, last_story_run=1), SEED)
+    assert story_moment_due(
+        Bond(completed_runs=1 + STORY_MOMENT_EVERY_RUNS, last_story_run=1), SEED
+    )
+    slower = _config(story_moment_every_runs=10)
     assert not story_moment_due(Bond(completed_runs=8, last_story_run=1), slower)
-    never = CompanionStoryConfig(story_moment_every_runs=0)
+    never = _config(story_moment_every_runs=0)
     assert not story_moment_due(Bond(completed_runs=8), never)
 
     fragments = _arc(4)
@@ -449,19 +466,19 @@ def test_pacing_and_ranking_rules() -> None:
     assert next_untold(fragments, unlocked, everything)[0].key == "f-000"
 
     similarity = {"f-000": 0.9, "f-001": 0.85, "f-002": TOPICAL_MIN_SIMILARITY - 0.01}
-    ranked = rank_topical(fragments, unlocked, similarity, told)
+    ranked = rank_topical(fragments, unlocked, similarity, told, limit=2, config=SEED)
     assert [item.fragment.key for item in ranked] == ["f-001", "f-000"]
-    assert rank_topical(fragments, unlocked, None, told) == []
-    strict = CompanionStoryConfig(topical_min_similarity=0.95)
-    assert rank_topical(fragments, unlocked, similarity, told, config=strict) == []
+    assert rank_topical(fragments, unlocked, None, told, limit=2, config=SEED) == []
+    strict = _config(topical_min_similarity=0.95)
+    assert rank_topical(fragments, unlocked, similarity, told, limit=2, config=strict) == []
 
-    chosen = rank_self_query(fragments, unlocked, told, {"f-002": 0.5}, limit=1)
+    chosen = rank_self_query(fragments, unlocked, told, {"f-002": 0.5}, limit=1, config=SEED)
     assert [item.fragment.key for item in chosen] == ["f-002"]
 
     assert is_semantic_embedder("text-embedding-3-small", 1536)
     assert not is_semantic_embedder("apsor-hash-384", 384)
     assert not is_semantic_embedder("none", 0)
-    assert unlocked_tiers(3, CompanionStoryConfig(familiar_unlock_runs=2)) == {"first", "familiar"}
+    assert unlocked_tiers(3, _config(familiar_unlock_runs=2)) == {"first", "familiar"}
 
 
 def test_no_lore_without_a_frozen_companion(client: TestClient) -> None:
@@ -490,7 +507,7 @@ def test_stories_and_bonds_are_private_per_account(
     assert other.get(f"{STORIES}/{VELLUM}/persona").json()["is_default"] is True
     other_lore = other.get(f"{STORIES}/{VELLUM}/lore").json()
     assert other_lore["customized"] is False
-    assert other_lore["bond"]["completed_runs"] == 0
+    assert "bond" not in other_lore
     assert "Owner-only memory." not in {item["text"] for item in other_lore["fragments"]}
     foreign = other.get(f"{STORIES}/custom:{companion['id']}/lore")
     assert foreign.status_code == 404
@@ -525,18 +542,18 @@ def test_locale_tiers_and_selection_rules() -> None:
     assert normalize_locale("zh-Hant-HK") == "zh-TW"
     assert normalize_locale("zh-Hans") == "zh-CN"
     assert normalize_locale("fr-FR") == "en"
-    assert unlocked_tiers(0) == {"first"}
-    assert unlocked_tiers(FAMILIAR_UNLOCK_RUNS) == {"first", "familiar"}
-    assert "rare" in unlocked_tiers(1000)
-    assert is_self_query("Tell me about Atlas", ["Vellum", "Atlas"])
-    assert is_self_query("說說你的過去", ["Vellum"])
-    assert is_self_query("What happened at your Vespers?", [])
-    assert not is_self_query("What did I eat on Tuesday?", ["Vellum"])
+    assert unlocked_tiers(0, SEED) == {"first"}
+    assert unlocked_tiers(FAMILIAR_UNLOCK_RUNS, SEED) == {"first", "familiar"}
+    assert "rare" in unlocked_tiers(1000, SEED)
+    assert is_self_query("Tell me about Atlas", ["Vellum", "Atlas"], SEED)
+    assert is_self_query("說說你的過去", ["Vellum"], SEED)
+    assert is_self_query("What happened at your Vespers?", [], SEED)
+    assert not is_self_query("What did I eat on Tuesday?", ["Vellum"], SEED)
     # Everyday phrasing about one's own archive is not a question about the librarian.
-    assert not is_self_query("What is in the archive about my trip?", ["Vellum"])
-    assert not is_self_query("我的檔案館裡有外婆的食譜嗎", ["Vellum"])
-    assert not is_self_query("Ask the curator of the museum", ["Vellum"])
-    custom = CompanionStoryConfig(self_query_phrases=("old friend",), self_canon_terms=())
+    assert not is_self_query("What is in the archive about my trip?", ["Vellum"], SEED)
+    assert not is_self_query("我的檔案館裡有外婆的食譜嗎", ["Vellum"], SEED)
+    assert not is_self_query("Ask the curator of the museum", ["Vellum"], SEED)
+    custom = _config(self_query_phrases=("old friend",), self_canon_terms=())
     assert is_self_query("hello old friend", [], custom)
     assert not is_self_query("tell me about your past", [], custom)
 
@@ -603,6 +620,7 @@ def test_shipped_lore_loads_in_every_locale() -> None:
         for preset_id, story in english.items()
     }
     from app.module.companion.service.preset_lore_catalog import LORE_DIRECTORY as seed_dir
+
     for preset_id, ids in english_ids.items():
         seed = json.loads((seed_dir / f"{preset_id}.json").read_text(encoding="utf-8"))
         assert ids == [fragment["id"] for fragment in seed["fragments"]]
@@ -649,12 +667,14 @@ def test_lore_vector_warmer_is_idempotent_and_semantic_only() -> None:
             self.values[key] = value
 
     cache = _Cache()
+    content = StaticCompanionContentProvider()
     warmer = lore_vectors.LoreVectorWarmer(
         embedder=lambda: _KeywordEmbedder(),
         vectors=lore_vectors.LoreVectorStore(cache),
+        content=lambda: content,
     )
     lore_vectors.clear_memory()
-    total = len(lore_vectors.preset_lore_texts())
+    total = len(asyncio.run(lore_vectors.preset_lore_texts(content)))
     assert asyncio.run(warmer.run_once()) == total
     assert len(cache.values) == total
     lore_vectors.clear_memory()  # another process: empty memory, warm shared cache
@@ -663,5 +683,6 @@ def test_lore_vector_warmer_is_idempotent_and_semantic_only() -> None:
     offline = lore_vectors.LoreVectorWarmer(
         embedder=lambda: HashingEmbedder(),
         vectors=lore_vectors.LoreVectorStore(_Cache()),
+        content=lambda: content,
     )
     assert asyncio.run(offline.run_once()) == 0

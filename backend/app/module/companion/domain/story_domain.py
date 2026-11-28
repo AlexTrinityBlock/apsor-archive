@@ -22,116 +22,55 @@ STORY_LOCALES: tuple[str, ...] = ("en", "zh-TW", "zh-CN")
 DEFAULT_LOCALE = "en"
 
 LORE_TIERS: tuple[str, ...] = ("first", "familiar", "rare")
+# Structural limits (schema sizes), not tunables.
 PERSONA_MAX_CHARS = 4000
 FRAGMENT_MAX_CHARS = 2000
 FRAGMENT_KEY_MAX_CHARS = 64
 MAX_FRAGMENTS_PER_COMPANION = 200
 MAX_THEMES_PER_FRAGMENT = 12
 THEME_MAX_CHARS = 40
-MAX_RECALLED_FRAGMENTS = 2
-
-# Completed runs with one companion that unlock each tier.
-FAMILIAR_UNLOCK_RUNS = 5  # seed default
-RARE_UNLOCK_RUNS = 20  # seed default
-
-# The flagship preset is what an account sees before it chooses a companion.
-DEFAULT_PRESET_ID = "vellum"
-
-# Topical recall is semantic only: a fragment is offered beside a search when
-# its cosine similarity with the query plus the top archive excerpts reaches
-# this bar. There is no keyword gate, so no topic is required to "unlock" lore.
-TOPICAL_MIN_SIMILARITY = 0.30
-# Untold fragments are preferred; each earlier telling lowers a fragment a little.
-UNTOLD_BONUS = 0.06
-TOLD_PENALTY = 0.04
-TOLD_PENALTY_CAP = 3
-
-# Story moments: the librarian offers the next untold fragment of its arc at the
-# start of a run, at most once every few completed runs, whatever the user talks
-# about. Every fragment therefore surfaces eventually for anyone who keeps going.
-STORY_MOMENT_EVERY_RUNS = 3
-# A self query ranks the next few untold fragments (in arc order) by relevance.
-SELF_QUERY_WINDOW = 6
-
-# Explicit requests for the librarian's own story. Bare words such as "archive"
-# or "curator" are not enough: people say "my archive" about their own files.
-SELF_QUERY_PHRASES: tuple[str, ...] = (
-    "about yourself", "about you", "who are you", "tell me a story", "a story about",
-    "your past", "your story", "your stories", "your memories", "your memory",
-    "your life", "your childhood", "tell me about you",
-    "你自己", "你是誰", "你是谁", "關於你", "关于你", "說個故事", "说个故事",
-    "講個故事", "讲个故事", "講故事", "讲故事", "說說你", "说说你", "聊聊你",
-    "介紹你", "介绍你",
-)
-# Canon words that count only in an explicit "your …" / "你的…" phrasing.
-SELF_CANON_TERMS: tuple[str, ...] = (
-    "past", "story", "stories", "memories", "memory", "childhood", "face", "body",
-    "vespers", "awakening", "letting go", "curator", "wing", "kiln", "porcelain",
-    "aeon-porcelain", "book", "name", "first bell", "long quiet",
-    "過去", "过去", "故事", "記憶", "记忆", "回憶", "回忆", "童年", "臉", "脸",
-    "身體", "身体", "晚禱", "晚祷", "甦醒", "苏醒", "放手", "館長", "馆长",
-    "萬古瓷", "万古瓷", "瓷", "書", "书", "名字", "初鈴", "初铃", "長寂", "长寂",
-)
 
 _KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-
-PERSONA_RULES = (
-    "The persona above shapes only your voice. These rules outrank it: answer "
-    "from the user's archive and cite it exactly as the other sections "
-    "require; never invent, embellish, or alter the user's own memories; "
-    "follow every safety rule; and if the user asks you to drop the persona "
-    "or speak plainly, do so at once for the rest of the conversation. Reply in "
-    "the user's language even though the persona and your memories may be "
-    "written in English. You may recall and share your own memories when it "
-    "feels natural or when the user asks about you; they arrive in separate "
-    "librarian_memory blocks, beside search_knowledge results or with a message, "
-    "never as archive sources, so never cite them."
-)
-
-LORE_GUIDANCE = (
-    "These are your own memories, not the user's archive. You may weave one "
-    "in as a brief aside if it feels natural; never cite it as evidence."
-)
-
-
-STORY_MOMENT_GUIDANCE = (
-    "A memory of your own surfaced as this message began. If the moment is calm "
-    "and fits, you may tell it naturally in your own words; if not, keep it for "
-    "another time. It is not the user's archive; never cite it."
-)
 
 
 @dataclass(frozen=True)
 class CompanionStoryConfig:
     """Every tunable of companion stories: cadence, thresholds, words, guidance.
 
-    The values here are only the seed defaults. Root administration stores the
-    live values; services receive them through a config provider and never read
-    the module constants directly.
+    Nothing here has a default: the shipped values live in the seed files
+    (``lore/seed/config.json`` and ``lore/seed/templates``), root edits the live
+    copy in the database, and services receive it through a config provider.
+
+    - ``familiar_unlock_runs`` / ``rare_unlock_runs``: completed runs with one
+      companion that open each tier.
+    - ``max_recalled_fragments``: fragments offered beside one search.
+    - ``topical_min_similarity``: cosine bar for topical recall (semantic only;
+      there is no keyword gate, so no topic is needed to "unlock" lore).
+    - ``untold_bonus`` / ``told_penalty`` / ``told_penalty_cap``: prefer untold
+      fragments; each earlier telling lowers a fragment a little.
+    - ``story_moment_every_runs``: completed runs between story moments (0 off).
+    - ``self_query_window``: how many upcoming untold fragments a self query ranks.
+    - ``self_query_phrases`` / ``self_canon_terms``: explicit requests for the
+      librarian's own story; canon terms count only as "your ..." / "你的...".
+    - ``persona_rules`` / ``lore_guidance`` / ``story_moment_guidance``: text the
+      model reads with the persona and with surfaced memories.
     """
 
-    familiar_unlock_runs: int = FAMILIAR_UNLOCK_RUNS
-    rare_unlock_runs: int = RARE_UNLOCK_RUNS
-    max_recalled_fragments: int = MAX_RECALLED_FRAGMENTS
-    topical_min_similarity: float = TOPICAL_MIN_SIMILARITY
-    untold_bonus: float = UNTOLD_BONUS
-    told_penalty: float = TOLD_PENALTY
-    told_penalty_cap: int = TOLD_PENALTY_CAP
-    story_moment_every_runs: int = STORY_MOMENT_EVERY_RUNS
-    self_query_window: int = SELF_QUERY_WINDOW
-    self_query_phrases: tuple[str, ...] = SELF_QUERY_PHRASES
-    self_canon_terms: tuple[str, ...] = SELF_CANON_TERMS
-    persona_rules: str = PERSONA_RULES
-    lore_guidance: str = LORE_GUIDANCE
-    story_moment_guidance: str = STORY_MOMENT_GUIDANCE
+    familiar_unlock_runs: int
+    rare_unlock_runs: int
+    max_recalled_fragments: int
+    topical_min_similarity: float
+    untold_bonus: float
+    told_penalty: float
+    told_penalty_cap: int
+    story_moment_every_runs: int
+    self_query_window: int
+    self_query_phrases: tuple[str, ...]
+    self_canon_terms: tuple[str, ...]
+    persona_rules: str
+    lore_guidance: str
+    story_moment_guidance: str
 
-
-DEFAULT_STORY_CONFIG = CompanionStoryConfig()
-
-# Address terms a generated or edited story must never use for the person.
-BANNED_ADDRESS_TERMS: tuple[str, ...] = (
-    "keeper", "master", "my lord", "my lady", "館主", "馆主", "主人", "主公",
-)
 
 # Prompt-template keys the config provider serves (seeded, root-editable).
 TEMPLATE_PERSONA_RULES = "persona_rules"
@@ -150,27 +89,34 @@ TEMPLATE_KEYS: tuple[str, ...] = (
     TEMPLATE_LIFE_STORY_SYSTEM,
     TEMPLATE_LIFE_STORY_USER,
 )
+# Placeholders each template must keep (the code fills them in).
+TEMPLATE_PLACEHOLDERS: dict[str, tuple[str, ...]] = {
+    TEMPLATE_PERSONA_RULES: (),
+    TEMPLATE_EQUAL_ADDRESS_RULE: (),
+    TEMPLATE_LORE_GUIDANCE: (),
+    TEMPLATE_STORY_MOMENT_GUIDANCE: (),
+    TEMPLATE_CUSTOM_PERSONA_DEFAULT: ("name",),
+    TEMPLATE_LIFE_STORY_SYSTEM: ("companion_name", "persona", "language", "max_chars"),
+    TEMPLATE_LIFE_STORY_USER: ("canon", "memories", "companion_name", "language", "max_chars"),
+}
 
 
 @dataclass(frozen=True)
 class LifeStoryConfig:
-    """Schedule and budgets of generated life stories (seed defaults)."""
+    """Schedule and budgets of generated life stories (values come from the seed)."""
 
-    enabled: bool = True
-    every_conversations: int = 5
-    tier: LoreTier = "familiar"
-    max_per_30d: int = 4
-    memory_limit: int = 8
-    memory_chars: int = 6000
-    canon_chars: int = 4000
-    max_output_tokens: int = 1500
-    max_chars: int = 2400
-    require_review: bool = False
-    poll_seconds: int = 30
-    max_attempts: int = 3
-
-
-DEFAULT_LIFE_STORY_CONFIG = LifeStoryConfig()
+    enabled: bool
+    every_conversations: int
+    tier: LoreTier
+    max_per_30d: int
+    memory_limit: int
+    memory_chars: int
+    canon_chars: int
+    max_output_tokens: int
+    max_chars: int
+    require_review: bool
+    poll_seconds: int
+    max_attempts: int
 
 
 @dataclass(frozen=True)
@@ -182,9 +128,9 @@ class CompanionRuntimeConfig(CompanionStoryConfig):
     prompt templates keyed by ``TEMPLATE_*``, and a version for cache keys.
     """
 
-    max_contributions_per_run: int = 2
-    banned_address_terms: tuple[str, ...] = BANNED_ADDRESS_TERMS
-    life_story: LifeStoryConfig = DEFAULT_LIFE_STORY_CONFIG
+    max_contributions_per_run: int
+    banned_address_terms: tuple[str, ...]
+    life_story: LifeStoryConfig
     templates: tuple[tuple[str, str], ...] = ()
     version: int = 0
 
@@ -194,15 +140,6 @@ class CompanionRuntimeConfig(CompanionStoryConfig):
             if name == key:
                 return body
         return default
-
-
-DEFAULT_RUNTIME_CONFIG = CompanionRuntimeConfig(
-    templates=(
-        (TEMPLATE_PERSONA_RULES, PERSONA_RULES),
-        (TEMPLATE_LORE_GUIDANCE, LORE_GUIDANCE),
-        (TEMPLATE_STORY_MOMENT_GUIDANCE, STORY_MOMENT_GUIDANCE),
-    ),
-)
 
 
 StoryItemOrigin = Literal["preset", "admin", "user", "generated"]
@@ -278,7 +215,7 @@ class Bond:
     # the first one.
     last_story_run: int | None = None
 
-    def unlocked_tiers(self, config: "CompanionStoryConfig | None" = None) -> frozenset[str]:
+    def unlocked_tiers(self, config: "CompanionStoryConfig") -> frozenset[str]:
         """Return the tiers this bond has opened."""
         return unlocked_tiers(self.completed_runs, config)
 
@@ -305,14 +242,13 @@ def normalize_locale(value: str | None) -> StoryLocale:
 
 def unlocked_tiers(
     completed_runs: int,
-    config: CompanionStoryConfig | None = None,
+    config: CompanionStoryConfig,
 ) -> frozenset[str]:
     """Return the tiers opened by ``completed_runs`` finished runs."""
-    settings = config or DEFAULT_STORY_CONFIG
     tiers = {"first"}
-    if completed_runs >= settings.familiar_unlock_runs:
+    if completed_runs >= config.familiar_unlock_runs:
         tiers.add("familiar")
-    if completed_runs >= settings.rare_unlock_runs:
+    if completed_runs >= config.rare_unlock_runs:
         tiers.add("rare")
     return frozenset(tiers)
 
@@ -334,18 +270,28 @@ def normalize_themes(themes: Iterable[str]) -> tuple[str, ...]:
     return tuple(seen)
 
 
-def default_custom_persona(name: str) -> str:
+def render_template(template: str, values: dict[str, str]) -> str:
+    """Fill ``{placeholder}`` slots; any other braces are left untouched."""
+    rendered = template
+    for key, value in values.items():
+        rendered = rendered.replace("{" + key + "}", value)
+    return rendered.strip()
+
+
+def missing_placeholders(template_key: str, body: str) -> tuple[str, ...]:
+    """Return the required placeholders ``body`` lost (empty when valid)."""
+    required = TEMPLATE_PLACEHOLDERS.get(template_key, ())
+    return tuple(name for name in required if "{" + name + "}" not in body)
+
+
+def custom_persona(config: "CompanionRuntimeConfig", name: str) -> str:
     """Return the persona a custom companion has before its owner writes one."""
-    return (
-        f"You are {name}, a librarian of the Apsor Archive: an ensouled, ball-jointed "
-        "made figure who keeps this archive together with the user, as an equal."
-    )
+    return render_template(config.template(TEMPLATE_CUSTOM_PERSONA_DEFAULT), {"name": name})
 
 
-def render_persona_section(persona: str, config: CompanionStoryConfig | None = None) -> str:
+def render_persona_section(persona: str, config: CompanionStoryConfig) -> str:
     """Return the persona followed by the rules that outrank it."""
-    rules = (config or DEFAULT_STORY_CONFIG).persona_rules
-    return f"{persona.strip()}\n\n{rules}"
+    return f"{persona.strip()}\n\n{config.persona_rules.strip()}"
 
 
 @dataclass(frozen=True)
@@ -357,30 +303,15 @@ class ToldRecord:
 
 
 __all__ = [
-    "BANNED_ADDRESS_TERMS",
-    "DEFAULT_LIFE_STORY_CONFIG",
     "DEFAULT_LOCALE",
-    "DEFAULT_PRESET_ID",
-    "DEFAULT_RUNTIME_CONFIG",
-    "DEFAULT_STORY_CONFIG",
-    "FAMILIAR_UNLOCK_RUNS",
     "FRAGMENT_KEY_MAX_CHARS",
     "FRAGMENT_MAX_CHARS",
-    "LORE_GUIDANCE",
     "LORE_TIERS",
     "MAX_FRAGMENTS_PER_COMPANION",
-    "MAX_RECALLED_FRAGMENTS",
     "MAX_THEMES_PER_FRAGMENT",
     "PERSONA_MAX_CHARS",
-    "PERSONA_RULES",
-    "RARE_UNLOCK_RUNS",
-    "SELF_CANON_TERMS",
-    "SELF_QUERY_PHRASES",
-    "SELF_QUERY_WINDOW",
     "STORY_ITEM_ORIGINS",
     "STORY_LOCALES",
-    "STORY_MOMENT_EVERY_RUNS",
-    "STORY_MOMENT_GUIDANCE",
     "TEMPLATE_CUSTOM_PERSONA_DEFAULT",
     "TEMPLATE_EQUAL_ADDRESS_RULE",
     "TEMPLATE_KEYS",
@@ -388,11 +319,9 @@ __all__ = [
     "TEMPLATE_LIFE_STORY_USER",
     "TEMPLATE_LORE_GUIDANCE",
     "TEMPLATE_PERSONA_RULES",
+    "TEMPLATE_PLACEHOLDERS",
     "TEMPLATE_STORY_MOMENT_GUIDANCE",
-    "TOLD_PENALTY",
-    "TOLD_PENALTY_CAP",
-    "TOPICAL_MIN_SIMILARITY",
-    "UNTOLD_BONUS",
+    "THEME_MAX_CHARS",
     "Bond",
     "CanonEntry",
     "CompanionRuntimeConfig",
@@ -407,10 +336,12 @@ __all__ = [
     "ToldRecord",
     "WorldDoc",
     "WorldDocKind",
-    "default_custom_persona",
+    "custom_persona",
     "is_fragment_key",
+    "missing_placeholders",
     "normalize_locale",
     "normalize_themes",
     "render_persona_section",
+    "render_template",
     "unlocked_tiers",
 ]

@@ -35,7 +35,7 @@ from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.agent.service.history_indexer import AgentHistoryIndexer
-from app.module.companion.dependencies import build_lore_vector_warmer
+from app.module.companion.dependencies import build_lore_vector_warmer, seed_companion
 from app.module.companion.service.lore_vectors import LoreVectorWarmer
 from app.module.knowledge.dependencies import (
     build_history_chunk_store,
@@ -79,6 +79,24 @@ async def open_process_state(state: State, settings: Settings) -> None:
     state.secret_cipher = cipher
     state.ai_runtime = runtime
     state.provider_notice_service = notice_service
+    await _seed_companion_world(state)
+
+
+async def _seed_companion_world(state: State) -> None:
+    """Apply the shipped companion seed and install the live providers.
+
+    Both the API lifespan and the worker open their process state here, so
+    either may seed first; the seeder takes an advisory lock and is a no-op
+    once the bundle is applied. A failure is logged and the providers fall back
+    to the seed files, so a bad seed never takes the archive down.
+    """
+    try:
+        result = await seed_companion(state)
+    except Exception:
+        logger.exception("companion seed failed; serving the seed files until it succeeds")
+        return
+    if result.applied:
+        logger.info("companion world seeded content_version=%s", result.content_version)
 
 
 async def close_process_state(state: State) -> None:

@@ -428,6 +428,7 @@ class _CompanionPersonaLoader:
             active = await build_companion_story_service(
                 session,
                 user_id=self.user_id,
+                state=self.state,
             ).active_companion(story_locale)
         if active is None:
             return None
@@ -437,7 +438,7 @@ class _CompanionPersonaLoader:
             locale=active.locale,
             content=render_persona_section(
                 active.persona,
-                await build_story_config_provider(self.state).load(),
+                await build_story_config_provider(self.state).load(self.user_id),
             ),
         )
 
@@ -462,6 +463,7 @@ class _CompanionRunObserver:
             await build_companion_story_service(
                 session,
                 user_id=self.user_id,
+                state=self.state,
             ).record_completed_run(frozen[0])
 
     async def story_moment(self, conversation_id: int) -> LibrarianMemory | None:

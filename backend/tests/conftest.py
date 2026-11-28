@@ -34,6 +34,19 @@ from app.infrastructure.security.password_hasher import Argon2PasswordHasher
 from app.main import create_app
 from app.module.agent.domain.system_entry_domain import default_sections
 from app.module.auth.domain.auth_domain import AuthDomain
+from app.module.companion.domain.seed_domain import SEED_BUNDLE
+from app.module.companion.model.companion_world_model import (
+    CompanionCanonEntityModel,
+    CompanionConfigModel,
+    CompanionLoreItemModel,
+    CompanionLoreItemTextModel,
+    CompanionPresetModel,
+    CompanionPresetTextModel,
+    CompanionPromptTemplateModel,
+    CompanionSeedStateModel,
+    CompanionWorldDocModel,
+)
+from app.module.companion.service.seed_catalog import load_seed_bundle
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -586,6 +599,71 @@ def _seed_system_prompt_defaults(connection: Connection) -> None:
         )
 
 
+_COMPANION_SEED_ROWS: list[tuple[Any, list[dict[str, Any]]]] | None = None
+
+
+def _companion_seed_rows() -> list[tuple[Any, list[dict[str, Any]]]]:
+    """Return the seed bundle as (table, rows) inserts, computed once per session.
+
+    Lore items get explicit ids (the truncation restarted their identity) so
+    the text rows can reference them without a round trip per row.
+    """
+    global _COMPANION_SEED_ROWS
+    if _COMPANION_SEED_ROWS is not None:
+        return _COMPANION_SEED_ROWS
+    bundle = load_seed_bundle()
+    rows = bundle.rows
+    item_ids: dict[tuple[str, str], int] = {}
+    items: list[dict[str, Any]] = []
+    for index, row in enumerate(rows["companion_lore_item"], start=1):
+        item_ids[(row["preset_id"], row["fragment_key"])] = index
+        items.append({**row, "id": index})
+    texts = [
+        {
+            "item_id": item_ids[(row["preset_id"], row["fragment_key"])],
+            "locale": row["locale"],
+            "text": row["text"],
+            "seed_hash": row["seed_hash"],
+        }
+        for row in rows["companion_lore_item_text"]
+    ]
+    _COMPANION_SEED_ROWS = [
+        (CompanionPresetModel.__table__, rows["companion_preset"]),
+        (CompanionPresetTextModel.__table__, rows["companion_preset_text"]),
+        (CompanionLoreItemModel.__table__, items),
+        (CompanionLoreItemTextModel.__table__, texts),
+        (CompanionCanonEntityModel.__table__, rows["companion_canon_entity"]),
+        (CompanionWorldDocModel.__table__, rows["companion_world_doc"]),
+        (CompanionPromptTemplateModel.__table__, rows["companion_prompt_template"]),
+        (CompanionConfigModel.__table__, rows["companion_config"]),
+        (
+            CompanionSeedStateModel.__table__,
+            [
+                {
+                    "bundle": SEED_BUNDLE,
+                    "content_hash": bundle.content_hash,
+                    "content_version": 1,
+                    "seed_version": 1,
+                }
+            ],
+        ),
+    ]
+    return _COMPANION_SEED_ROWS
+
+
+def _seed_companion_world(connection: Connection) -> None:
+    """Reinsert the companion seed exactly as the seeder would write it."""
+    for table, table_rows in _companion_seed_rows():
+        if table_rows:
+            connection.execute(table.insert(), table_rows)
+    connection.execute(
+        text(
+            "SELECT setval(pg_get_serial_sequence('companion_lore_item', 'id'), "
+            "(SELECT max(id) FROM companion_lore_item))"
+        )
+    )
+
+
 def _truncate_application_tables(connection: Connection) -> None:
     """Reset every application table, preserving the Alembic version row."""
     table_names = (
@@ -612,6 +690,7 @@ def _truncate_application_tables(connection: Connection) -> None:
     # RESTART IDENTITY only resets sequences owned by the truncated tables.
     connection.execute(text("ALTER SEQUENCE agent_commit_seq RESTART WITH 1"))
     _seed_system_prompt_defaults(connection)
+    _seed_companion_world(connection)
 
 
 @pytest.fixture(autouse=True)

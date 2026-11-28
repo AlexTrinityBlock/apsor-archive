@@ -22,8 +22,10 @@ from app.module.companion.domain.recall_domain import (
 from app.module.companion.domain.story_domain import (
     STORY_LOCALES,
 )
-from app.module.companion.protocol.companion_story_protocol import LoreEmbedderProtocol
-from app.module.companion.service.preset_lore_catalog import load_presets
+from app.module.companion.protocol.companion_story_protocol import (
+    CompanionContentProviderProtocol,
+    LoreEmbedderProtocol,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,28 +109,30 @@ class LoreVectorStore:
             _memory.popitem(last=False)
 
 
-def preset_lore_texts() -> list[str]:
-    """Return every shipped fragment text in every story locale, deduplicated."""
+async def preset_lore_texts(content: CompanionContentProviderProtocol) -> list[str]:
+    """Return every live preset fragment text in every story locale, deduplicated."""
     texts: dict[str, None] = {}
     for locale in STORY_LOCALES:
-        for preset in load_presets(locale).values():
+        for preset in await content.presets(locale):
             for fragment in preset.fragments:
                 texts[fragment.text] = None
     return list(texts)
 
 
 class LoreVectorWarmer:
-    """Embed every shipped preset fragment ahead of time (idempotent)."""
+    """Embed every live preset fragment ahead of time (idempotent)."""
 
     def __init__(
         self,
         *,
         embedder: Callable[[], LoreEmbedderProtocol | None],
         vectors: LoreVectorStore,
+        content: Callable[[], CompanionContentProviderProtocol],
         interval_seconds: float = _WARM_INTERVAL_SECONDS,
     ) -> None:
         self.embedder = embedder
         self.vectors = vectors
+        self.content = content
         self.interval_seconds = interval_seconds
 
     async def run_once(self) -> int:
@@ -138,7 +142,9 @@ class LoreVectorWarmer:
             return 0
         model = embedder.model_name
         missing = [
-            text for text in preset_lore_texts() if await self.vectors.get(model, text) is None
+            text
+            for text in await preset_lore_texts(self.content())
+            if await self.vectors.get(model, text) is None
         ]
         warmed = 0
         for start in range(0, len(missing), _WARM_BATCH):

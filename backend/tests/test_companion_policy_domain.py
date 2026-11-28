@@ -1,6 +1,7 @@
 """Pure tests for companion policy resolution and story layering."""
 
 import asyncio
+from dataclasses import fields
 
 from app.module.companion.domain.companion_policy_domain import (
     AccountCompanionPolicy,
@@ -14,12 +15,12 @@ from app.module.companion.domain.companion_policy_domain import (
     resolve_story_items,
 )
 from app.module.companion.domain.story_domain import (
-    DEFAULT_RUNTIME_CONFIG,
     CompanionRuntimeConfig,
     CompanionStoryConfig,
     LoreFragment,
     StoryItem,
 )
+from app.module.companion.service.seed_catalog import seed_runtime_config
 from app.module.companion.service.story_config import (
     StaticCompanionContentProvider,
     StaticCompanionPolicyProvider,
@@ -196,10 +197,15 @@ def test_lore_fragment_alias_and_origin_default() -> None:
 def test_static_providers_serve_seed() -> None:
     config = asyncio.run(StaticStoryConfigProvider().load(None))
     assert isinstance(config, CompanionRuntimeConfig)
-    assert config.template("persona_rules") == DEFAULT_RUNTIME_CONFIG.template("persona_rules")
-    lifted = asyncio.run(
-        StaticStoryConfigProvider(CompanionStoryConfig(story_moment_every_runs=9)).load(1)
+    assert config.template("persona_rules") == seed_runtime_config().template("persona_rules")
+    seed = seed_runtime_config()
+    plain = CompanionStoryConfig(
+        **{
+            **{field.name: getattr(seed, field.name) for field in fields(CompanionStoryConfig)},
+            "story_moment_every_runs": 9,
+        }
     )
+    lifted = asyncio.run(StaticStoryConfigProvider(plain).load(1))
     assert lifted.story_moment_every_runs == 9
     assert lifted.template("lore_guidance")
 

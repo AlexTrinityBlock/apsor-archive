@@ -48,8 +48,6 @@ from app.module.companion.service.companion_story_service import (
     StoryTarget,
 )
 from app.module.companion.service.lore_vectors import LoreVectorStore
-from app.module.companion.service.preset_lore_catalog import load_presets
-from app.module.companion.service.story_config import StaticStoryConfigProvider
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +91,7 @@ class CompanionLoreRecall:
         embedder: LoreEmbedderProtocol | None = None,
         quota: LoreEmbeddingQuotaProtocol | None = None,
         vectors: LoreVectorStore | None = None,
-        config: CompanionStoryConfigProviderProtocol | None = None,
+        config: CompanionStoryConfigProviderProtocol,
     ) -> None:
         self.stories = stories
         self.companion_ref = companion_ref
@@ -101,7 +99,7 @@ class CompanionLoreRecall:
         self.embedder = embedder
         self.quota = quota
         self.vectors = vectors or LoreVectorStore()
-        self.config = config or StaticStoryConfigProvider()
+        self.config = config
 
     async def recall(
         self,
@@ -111,7 +109,7 @@ class CompanionLoreRecall:
         limit: int | None = None,
     ) -> list[RecalledLore]:
         """Return the fragments worth offering beside one search."""
-        config = await self.config.load()
+        config = await self.config.load(self.stories.user_id)
         size = config.max_recalled_fragments if limit is None else limit
         if size <= 0:
             return []
@@ -128,7 +126,7 @@ class CompanionLoreRecall:
             return []
         told = await self.stories.told(target.ref)
         scoring_text = " ".join([query, *context])[: _CONTEXT_CHARS + len(query)]
-        if is_self_query(query, self._names(target), config):
+        if is_self_query(query, await self._names(target), config):
             semantic = await self._semantic(scoring_text, candidates)
             relevance = (
                 semantic
@@ -162,7 +160,7 @@ class CompanionLoreRecall:
             target = await self.stories.resolve(self.companion_ref)
         except CompanionRefNotFoundError:
             return None
-        config = await self.config.load()
+        config = await self.config.load(self.stories.user_id)
         bond = await self.stories.bond(target.ref)
         if not story_moment_due(bond, config):
             return None
@@ -182,11 +180,9 @@ class CompanionLoreRecall:
             guidance=config.story_moment_guidance,
         )
 
-    def _names(self, target: StoryTarget) -> list[str]:
+    async def _names(self, target: StoryTarget) -> list[str]:
         """Return the librarian's own name and every preset librarian's name."""
-        names = {target.name}
-        for locale in ("en", self.locale):
-            names.update(preset.name for preset in load_presets(locale).values())
+        names = {target.name, *await self.stories.preset_names(self.locale)}
         return sorted(name for name in names if name)
 
     async def _semantic(

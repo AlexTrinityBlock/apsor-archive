@@ -1,32 +1,44 @@
 """Companion stories: persona and lore editing, the active persona, and bonds.
 
-Presets ship a default story per locale (English canonical, translations
-falling back per item). An account edits one locale of a preset copy-on-write:
-the first lore edit copies that locale's defaults into owner rows, and reset
-deletes the copy. A custom companion has no shipped default; its rows are the
-story, falling back from the requested locale to English and then to any
-locale the owner wrote.
+Preset stories, the configuration, and root's per-account policy come from
+providers over the live, root-editable tables (the seed files are only seed
+data). Story layers resolve per item, lowest to highest precedence: the preset
+text (locale, then English) < root's per-account override < the account's own
+copy-on-write edit; published generated life stories are appended.
+
+An account edits one locale of a preset copy-on-write: the first lore edit
+copies that locale's effective lore (preset plus root's layer) into owner
+rows, and reset deletes the copy. A custom companion has no shipped default;
+its rows are the story, falling back from the requested locale to English and
+then to any locale the owner wrote.
+
+The account sees its own lore and the lore it has already heard; tiers, locks,
+and progress stay hidden (root sees them in administration).
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any, cast
 from uuid import uuid4
 
-from app.module.companion.domain.companion_domain import (
-    CompanionSelection,
-    parse_selection,
+from app.module.companion.domain.companion_domain import parse_selection
+from app.module.companion.domain.companion_policy_domain import (
+    AdminLoreOverride,
+    StoryLayers,
+    resolve_active_companion,
+    resolve_persona,
+    resolve_story_items,
 )
 from app.module.companion.domain.story_domain import (
-    DEFAULT_PRESET_ID,
-    DEFAULT_STORY_CONFIG,
     MAX_FRAGMENTS_PER_COMPANION,
     Bond,
-    CompanionStoryConfig,
+    CompanionRuntimeConfig,
     LoreFragment,
     LoreTier,
+    StoryItem,
     StoryLocale,
     ToldRecord,
-    default_custom_persona,
+    custom_persona,
     normalize_themes,
 )
 from app.module.companion.exception.domain_error import (
@@ -34,17 +46,21 @@ from app.module.companion.exception.domain_error import (
     CompanionLoreNotFoundError,
     CompanionRefNotFoundError,
 )
+from app.module.companion.model.companion_admin_model import CompanionAdminLoreOverrideModel
+from app.module.companion.model.companion_life_story_model import CompanionGeneratedStoryModel
 from app.module.companion.model.companion_story_model import (
     CompanionBondModel,
     CompanionLoreFragmentModel,
     CompanionStoryModel,
 )
 from app.module.companion.protocol.companion_story_protocol import (
+    CompanionContentProviderProtocol,
     CompanionLookupProtocol,
+    CompanionPolicyProviderProtocol,
+    CompanionStoryConfigProviderProtocol,
     CompanionStoryRepositoryProtocol,
 )
 from app.module.companion.schema.companion_story_schema import (
-    CompanionBondSchema,
     CompanionLoreCreateSchema,
     CompanionLoreFragmentSchema,
     CompanionLoreSchema,
@@ -52,13 +68,12 @@ from app.module.companion.schema.companion_story_schema import (
     CompanionPersonaSchema,
     CompanionPersonaUpdateSchema,
 )
-from app.module.companion.service.preset_lore_catalog import get_preset
 from app.shared.time import utcnow
 
 
 @dataclass(frozen=True)
 class StoryTarget:
-    """A resolved companion reference: a shipped preset or an owned custom one."""
+    """A resolved companion reference: a preset or an owned custom one."""
 
     ref: str
     name: str
@@ -76,14 +91,48 @@ class ActiveCompanion:
     locale: StoryLocale
 
 
+def _strings(value: Any) -> list[str]:
+    return [str(item) for item in value] if isinstance(value, list) else []
+
+
 def _fragment_from_row(row: CompanionLoreFragmentModel) -> LoreFragment:
-    themes = row.themes if isinstance(row.themes, list) else []
     return LoreFragment(
         key=row.fragment_key,
         text=row.text,
-        themes=normalize_themes(str(item) for item in themes),
-        tier=row.tier,  # type: ignore[arg-type]
+        themes=normalize_themes(_strings(row.themes)),
+        tier=cast(LoreTier, row.tier),
         edited=row.edited,
+        refs=tuple(_strings(getattr(row, "refs", None))),
+        origin="user",
+    )
+
+
+def _admin_override(row: CompanionAdminLoreOverrideModel) -> AdminLoreOverride:
+    item = None
+    if row.action != "hide" and row.text:
+        item = StoryItem(
+            key=row.fragment_key,
+            text=row.text,
+            themes=normalize_themes(_strings(row.themes)),
+            tier=cast(LoreTier, row.tier or "first"),
+            refs=tuple(_strings(row.refs)),
+            origin="admin",
+        )
+    return AdminLoreOverride(
+        key=row.fragment_key,
+        action=cast(Any, row.action),
+        item=item,
+        position=row.position,
+    )
+
+
+def _generated_item(row: CompanionGeneratedStoryModel) -> StoryItem:
+    return StoryItem(
+        key=row.fragment_key,
+        text=row.text,
+        themes=normalize_themes(_strings(row.themes)),
+        tier=cast(LoreTier, row.tier),
+        origin="generated",
     )
 
 
@@ -107,12 +156,20 @@ class CompanionStoryService:
         repository: CompanionStoryRepositoryProtocol,
         companions: CompanionLookupProtocol,
         user_id: int,
-        config: CompanionStoryConfig = DEFAULT_STORY_CONFIG,
+        content: CompanionContentProviderProtocol,
+        config: CompanionStoryConfigProviderProtocol,
+        policy: CompanionPolicyProviderProtocol,
     ) -> None:
         self.repository = repository
         self.companions = companions
         self.user_id = user_id
-        self.config = config
+        self.content = content
+        self.config_provider = config
+        self.policy = policy
+
+    async def config(self) -> CompanionRuntimeConfig:
+        """Return the live configuration for this account (root's overrides applied)."""
+        return await self.config_provider.load(self.user_id)
 
     # --- resolution -------------------------------------------------------
 
@@ -122,7 +179,7 @@ class CompanionStoryService:
         if selection is None:
             raise CompanionRefNotFoundError(companion_ref)
         if selection.kind == "preset" and selection.preset_id is not None:
-            preset = get_preset(selection.preset_id)
+            preset = await self.content.preset(selection.preset_id, "en")
             if preset is None:
                 raise CompanionRefNotFoundError(companion_ref)
             return StoryTarget(
@@ -139,6 +196,13 @@ class CompanionStoryService:
             name=companion.name,
             companion_id=companion.id,
         )
+
+    async def preset_names(self, locale: str) -> list[str]:
+        """Return every enabled preset's name in English and ``locale``."""
+        names: set[str] = set()
+        for each in {"en", locale}:
+            names.update(preset.name for preset in await self.content.presets(each))
+        return sorted(name for name in names if name)
 
     async def _story(self, target: StoryTarget, locale: str) -> CompanionStoryModel | None:
         return await self.repository.get_story(
@@ -159,34 +223,51 @@ class CompanionStoryService:
         others = [row for row in rows if row.locale != locale]
         return sorted(others, key=lambda row: (row.locale != "en", row.id))
 
-    def _display_name(self, target: StoryTarget, locale: str) -> str:
+    async def _display_name(self, target: StoryTarget, locale: str) -> str:
         if target.preset_id is not None:
-            preset = get_preset(target.preset_id, locale)
+            preset = await self.content.preset(target.preset_id, locale)
             if preset is not None:
                 return preset.name
         return target.name
 
     async def default_persona(self, target: StoryTarget, locale: str) -> str:
-        """Return the persona this locale falls back to without an override."""
+        """Return the persona this locale falls back to without the account's edit."""
+        admin = await self.repository.get_admin_persona(target.ref, locale)
         if target.preset_id is not None:
-            preset = get_preset(target.preset_id, locale)
-            assert preset is not None
-            return preset.persona
+            preset = await self.content.preset(target.preset_id, locale)
+            english = await self.content.preset(target.preset_id, "en")
+            return resolve_persona(
+                user_persona=None,
+                admin_persona=admin,
+                preset_persona=preset.persona if preset is not None else None,
+                english_preset_persona=english.persona if english is not None else None,
+                fallback=custom_persona(await self.config(), target.name),
+            )
+        if admin:
+            return admin
         for row in await self._custom_fallback_stories(target, locale):
             if row.persona:
                 return row.persona
-        return default_custom_persona(target.name)
+        return custom_persona(await self.config(), target.name)
 
     async def default_fragments(
         self,
         target: StoryTarget,
         locale: str,
     ) -> tuple[LoreFragment, ...]:
-        """Return the lore this locale falls back to without an account copy."""
+        """Return the lore this locale falls back to without an account copy.
+
+        For a preset this is the preset lore with root's per-account layer
+        applied; for a custom companion, the owner's other-locale rows.
+        """
         if target.preset_id is not None:
-            preset = get_preset(target.preset_id, locale)
-            assert preset is not None
-            return preset.fragments
+            preset = await self.content.preset(target.preset_id, locale)
+            items = preset.fragments if preset is not None else ()
+            overrides = tuple(
+                _admin_override(row)
+                for row in await self.repository.list_admin_lore_overrides(target.ref, locale)
+            )
+            return resolve_story_items(StoryLayers(preset_items=items, admin_overrides=overrides))
         for row in await self._custom_fallback_stories(target, locale):
             if row.lore_customized:
                 return tuple(
@@ -196,13 +277,21 @@ class CompanionStoryService:
         return ()
 
     async def fragments(self, target: StoryTarget, locale: str) -> tuple[LoreFragment, ...]:
-        """Return the lore in effect for this account and locale."""
+        """Return the lore in effect for this account and locale (all layers)."""
         story = await self._story(target, locale)
+        user_items: tuple[StoryItem, ...] | None = None
         if story is not None and story.lore_customized:
-            return tuple(
+            user_items = tuple(
                 _fragment_from_row(row) for row in await self.repository.list_fragments(story.id)
             )
-        return await self.default_fragments(target, locale)
+        base = user_items if user_items is not None else await self.default_fragments(
+            target, locale
+        )
+        generated = tuple(
+            _generated_item(row)
+            for row in await self.repository.list_published_generated(target.ref)
+        )
+        return resolve_story_items(StoryLayers(user_items=base, generated_items=generated))
 
     async def persona(self, target: StoryTarget, locale: str) -> tuple[str, bool]:
         """Return the persona in effect and whether it is the default."""
@@ -214,31 +303,37 @@ class CompanionStoryService:
     # --- agent reads -------------------------------------------------------
 
     async def active_companion(self, locale: StoryLocale) -> ActiveCompanion | None:
-        """Return the enabled, selected companion's persona, or ``None``.
+        """Return the enabled, active companion's persona, or ``None``.
 
-        An account that never chose a companion speaks with the flagship preset.
-        A stale custom selection (deleted companion) falls back the same way.
+        The active companion resolves as root's pin > the account's own choice
+        (when allowed) > root's default for the account > the global default
+        preset. A stale selection (deleted companion) falls through the same way.
         """
         preference = await self.companions.get_preference(self.user_id)
         if preference is not None and not preference.enabled:
             return None
-        selected = preference.selected if preference is not None else None
-        default_ref = CompanionSelection(kind="preset", preset_id=DEFAULT_PRESET_ID).serialize()
-        target: StoryTarget | None = None
-        for ref in (selected, default_ref):
-            if not ref:
-                continue
-            try:
-                target = await self.resolve(ref)
-            except CompanionRefNotFoundError:
-                continue
-            break
-        if target is None:
+        policy = await self.policy.load(self.user_id)
+        enabled = await self.content.enabled_preset_ids()
+        global_default = await self.content.global_default_preset_id()
+        customs = [
+            f"custom:{companion.id}"
+            for companion in await self.companions.list_companions(self.user_id)
+        ]
+        choice = resolve_active_companion(
+            user_selected=preference.selected if preference is not None else None,
+            policy=policy,
+            global_default=f"preset:{global_default}",
+            enabled_presets=enabled,
+            custom_refs=customs,
+        )
+        try:
+            target = await self.resolve(choice.ref)
+        except CompanionRefNotFoundError:
             return None
         persona, _default = await self.persona(target, locale)
         return ActiveCompanion(
             ref=target.ref,
-            name=self._display_name(target, locale),
+            name=await self._display_name(target, locale),
             persona=persona,
             locale=locale,
         )
@@ -273,7 +368,7 @@ class CompanionStoryService:
         now = utcnow()
         model = await self.repository.increment_bond(companion_ref, now)
         changed = False
-        config = self.config
+        config = await self.config()
         if (
             model.completed_runs >= config.familiar_unlock_runs
             and model.familiar_unlocked_at is None
@@ -297,7 +392,7 @@ class CompanionStoryService:
         return CompanionPersonaSchema(
             companion_ref=target.ref,
             locale=locale,
-            name=self._display_name(target, locale),
+            name=await self._display_name(target, locale),
             persona=override or default,
             is_default=not override,
             default_persona=default,
@@ -333,37 +428,40 @@ class CompanionStoryService:
     # --- lore editing -------------------------------------------------------
 
     async def list_lore(self, companion_ref: str, locale: StoryLocale) -> CompanionLoreSchema:
+        """Return what the account may see: its own lore and the lore it has heard.
+
+        Tiers, locks, and progress are never shown to the account.
+        """
         target = await self.resolve(companion_ref)
         story = await self._story(target, locale)
         customized = story is not None and story.lore_customized
         fragments = await self.fragments(target, locale)
-        bond = await self.bond(target.ref)
-        unlocked = bond.unlocked_tiers(self.config)
+        told = await self.told(target.ref)
+        visible: list[CompanionLoreFragmentSchema] = []
+        for index, fragment in enumerate(fragments):
+            own = fragment.key.startswith("u-") or (
+                target.companion_id is not None and fragment.origin == "user"
+            )
+            heard = told.get(fragment.key, ToldRecord()).told_count > 0
+            if not (own or heard or fragment.edited):
+                continue
+            visible.append(
+                CompanionLoreFragmentSchema(
+                    id=fragment.key,
+                    themes=list(fragment.themes),
+                    text=fragment.text,
+                    edited=fragment.edited,
+                    own=own,
+                    heard=heard,
+                    position=index,
+                )
+            )
         return CompanionLoreSchema(
             companion_ref=target.ref,
             locale=locale,
-            name=self._display_name(target, locale),
+            name=await self._display_name(target, locale),
             customized=customized,
-            bond=CompanionBondSchema(
-                completed_runs=bond.completed_runs,
-                familiar_unlock_runs=self.config.familiar_unlock_runs,
-                rare_unlock_runs=self.config.rare_unlock_runs,
-                familiar_unlocked_at=bond.familiar_unlocked_at,
-                rare_unlocked_at=bond.rare_unlocked_at,
-            ),
-            fragments=[
-                CompanionLoreFragmentSchema(
-                    id=fragment.key,
-                    tier=fragment.tier,
-                    themes=list(fragment.themes),
-                    text=fragment.text,
-                    unlocked=fragment.tier in unlocked,
-                    unlocked_at=bond.unlocked_at(fragment.tier),
-                    edited=fragment.edited,
-                    position=index,
-                )
-                for index, fragment in enumerate(fragments)
-            ],
+            fragments=visible,
         )
 
     async def create_lore(
@@ -456,7 +554,7 @@ class CompanionStoryService:
         target: StoryTarget,
         locale: str,
     ) -> tuple[CompanionStoryModel, list[CompanionLoreFragmentModel]]:
-        """Copy this locale's default lore into owner rows on the first edit."""
+        """Copy this locale's effective default lore into owner rows on the first edit."""
         story = await self._ensure_story(target, locale)
         if not story.lore_customized:
             defaults: Sequence[LoreFragment] = await self.default_fragments(target, locale)

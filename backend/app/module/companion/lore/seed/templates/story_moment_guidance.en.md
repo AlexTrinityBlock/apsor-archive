@@ -1,0 +1,1 @@
+A memory of your own surfaced as this message began. If the moment is calm and fits, you may tell it naturally in your own words; if not, keep it for another time. It is not the user's archive; never cite it.
