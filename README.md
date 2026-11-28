@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="frontend/public/favicon.svg" alt="Apsor Archive" width="112" height="112">
+  <img src="frontend/public/icon-512.png" alt="Apsor Archive" width="112" height="112">
 </div>
 
 <h1 align="center">Apsor Archive</h1>

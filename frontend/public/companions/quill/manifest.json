@@ -1,0 +1,150 @@
+{
+  "schema": 1,
+  "id": "quill",
+  "name": "Quill",
+  "gender": "male",
+  "palette": {
+    "accent": "#9e3b3b"
+  },
+  "anchor": {
+    "x": 0.483,
+    "y": 0.042
+  },
+  "size": {
+    "width": 384,
+    "height": 576
+  },
+  "portrait": "portrait.avif",
+  "actions": {
+    "idle": {
+      "frames": [
+        "idle.avif",
+        "idle-2.avif",
+        "idle-3.avif"
+      ],
+      "fps": 4,
+      "loop": true,
+      "pingpong": true
+    },
+    "greet": {
+      "frames": [
+        "greet.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    },
+    "listening": {
+      "frames": [
+        "listening.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    },
+    "thinking": {
+      "frames": [
+        "thinking.avif",
+        "thinking-2.avif",
+        "thinking-3.avif"
+      ],
+      "fps": 4,
+      "loop": true,
+      "pingpong": true
+    },
+    "searching": {
+      "frames": [
+        "searching.avif",
+        "searching-2.avif",
+        "searching-3.avif"
+      ],
+      "fps": 4,
+      "loop": true,
+      "pingpong": true
+    },
+    "reading": {
+      "frames": [
+        "reading.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    },
+    "writing": {
+      "frames": [
+        "writing.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    },
+    "calculating": {
+      "frames": [
+        "calculating.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    },
+    "browsing": {
+      "frames": [
+        "browsing.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    },
+    "presenting": {
+      "frames": [
+        "presenting.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    },
+    "speaking": {
+      "frames": [
+        "speaking.avif",
+        "speaking-2.avif",
+        "speaking-3.avif"
+      ],
+      "fps": 5,
+      "loop": true,
+      "pingpong": true
+    },
+    "waiting": {
+      "frames": [
+        "waiting.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    },
+    "success": {
+      "frames": [
+        "success.avif",
+        "success-2.avif",
+        "success-3.avif"
+      ],
+      "fps": 5,
+      "loop": true,
+      "pingpong": true
+    },
+    "confused": {
+      "frames": [
+        "confused.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    },
+    "sleeping": {
+      "frames": [
+        "sleeping.avif",
+        "sleeping-2.avif",
+        "sleeping-3.avif"
+      ],
+      "fps": 3,
+      "loop": true,
+      "pingpong": true
+    },
+    "held": {
+      "frames": [
+        "held.avif"
+      ],
+      "fps": 0,
+      "loop": true
+    }
+  }
+}

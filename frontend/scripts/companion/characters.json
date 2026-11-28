@@ -1,0 +1,100 @@
+{
+  "style": "Highly detailed anime illustration, full-body standing character art (tachie), crisp clean line art, soft cel shading with painterly fabric detail, same rendering style and line quality as the reference image. The character is a faceless marionette-style ball-jointed doll: the face is a completely blank smooth porcelain oval with NO eyes, NO mouth, NO nose, NO facial features at all. Visible doll joints at knees, elbows and wrists. Small polished brass marionette rings sit on top of the head and on both shoulders where puppet strings would attach (draw the rings only, no strings). Fully transparent background, no floor, no shadow on the ground, no text, no letters, no watermark, no frame. The whole body from the top of the head to the soles of the shoes is visible and centered, with empty margin around it.",
+  "icon": "Using the image as the exact character reference, draw a head-and-shoulders bust portrait of this same character for an app icon: short wavy silver hair, black beret with the gold medallion and ribbon, white jabot, black and gold collar. The face is a completely blank smooth porcelain oval with NO eyes, NO mouth, NO nose, NO features. Three-quarter view turned slightly to the left, the head large and centered, filling about 75% of the square, crisp bold silhouette, clean line art, rich but simplified detail that stays readable at very small sizes, soft cel shading. Fully transparent background, no text, no frame, no border.",
+  "characters": [
+    {
+      "id": "vellum",
+      "name": "Vellum",
+      "gender": "female",
+      "accent": "#c9a24a",
+      "props": "a leather-bound gilded book",
+      "design": "Exactly the character in the reference image: short wavy silver hair, black beret with a gold medallion and ribbon, white jabot, black and gold gothic librarian robes over a pleated black skirt, long flowing panels decorated with book-spine patterns, white porcelain doll legs, black buckled shoes. Keep the design, palette and costume identical to the reference."
+    },
+    {
+      "id": "atlas",
+      "name": "Atlas",
+      "gender": "male",
+      "accent": "#3f6fa8",
+      "props": "a small brass armillary globe and rolled maps",
+      "design": "A male cartographer-librarian redesigned from the reference: slim young man, dark navy hair tied in a short low ponytail, deep navy greatcoat with brass compass-rose buttons and map-pattern lining, cream cravat, fitted trousers, knee-high brown boots, a map case on a leather strap across the chest. Palette: navy, parchment cream, aged brass."
+    },
+    {
+      "id": "herbaria",
+      "name": "Herbaria",
+      "gender": "female",
+      "accent": "#6f8f4e",
+      "props": "a herbarium folio of pressed flowers and a small magnifying loupe",
+      "design": "A female botanist-librarian redesigned from the reference: long chestnut-brown hair in a loose side braid woven with dried flowers, moss-green layered dress with an ivory lace apron embroidered with leaf motifs, a sage capelet, a wide-brimmed straw-and-ribbon hat with pressed blossoms, brown lace-up boots. Palette: moss green, ivory, chestnut, soft rose accents."
+    },
+    {
+      "id": "horologe",
+      "name": "Horologe",
+      "gender": "male",
+      "accent": "#b8733a",
+      "props": "brass gears, a pocket watch and a ring of archive keys",
+      "design": "A male clockwork-librarian redesigned from the reference: short tousled ash-brown hair, a copper-and-burgundy waistcoat over a white shirt with rolled sleeves, a dark long tailcoat with gear-shaped brass buttons, a leather tool belt holding small brass tools, visible clockwork gears at the doll joints, dark trousers and polished brown shoes. Palette: copper, brass, burgundy, charcoal."
+    },
+    {
+      "id": "nocturne",
+      "name": "Nocturne",
+      "gender": "female",
+      "accent": "#7a5fb0",
+      "props": "a softly glowing brass lantern and a star chart",
+      "design": "A female night-librarian redesigned from the reference: very long straight black hair with a silver crescent hair ornament, a deep violet and midnight-blue gown with a high collar, a silver star-chart capelet with constellation embroidery, sheer layered sleeves, dark ribbon stockings over porcelain doll legs, silver-buckled heeled shoes. Palette: violet, midnight blue, silver, pale lantern gold."
+    },
+    {
+      "id": "quill",
+      "name": "Quill",
+      "gender": "male",
+      "accent": "#9e3b3b",
+      "props": "a long feather quill, an inkwell and a scroll",
+      "design": "A male scribe-librarian redesigned from the reference: short swept auburn-red hair, a burgundy scholar's robe with ivory trim over a high-collared ivory shirt, ink-stained cuffs, a scroll case and an inkwell hanging from the belt, dark trousers and black ankle boots. Palette: burgundy, ivory, ink black, gold leaf accents."
+    }
+  ],
+  "actions": {
+    "base": "Neutral relaxed standing pose facing slightly toward the viewer, arms loosely at the sides holding the signature prop: {props}.",
+    "idle": "Calm idle stance, weight on one leg, holding {props} loosely, head slightly lowered as if resting on its strings.",
+    "greet": "Friendly greeting: a polite bow with one hand raised in a small wave, the other hand holding {props} against the body.",
+    "listening": "Attentive listening pose: leaning slightly forward and sideways, head tilted, one hand cupped near the side of the head, as if listening closely to someone.",
+    "thinking": "Thinking pose: one gloved hand touching the chin, head tilted, the other arm holding {props} against the chest, a small floating golden question-mark-shaped ribbon beside the head.",
+    "searching": "Searching pose: holding a large brass magnifying glass up and peering through it, a few loose index cards floating around, slightly crouched and curious.",
+    "reading": "Reading pose: holding an open book in both hands at chest height, head bowed toward the pages, a page lifting in a gentle breeze.",
+    "writing": "Writing pose: holding an open ledger on one forearm and writing in it with a feather quill, focused, a faint golden trail from the quill tip.",
+    "calculating": "Calculating pose: holding a small brass abacus in one hand and sliding a bead with a finger, a few faint golden geometric diagrams floating nearby.",
+    "browsing": "Exploring pose: looking through a small brass spyglass held to the blank face with one hand, the other hand holding a small globe, one foot stepping forward.",
+    "presenting": "Presenting pose: holding up a single document page with both hands toward the viewer as if showing it, body facing the viewer, elegant and proud.",
+    "speaking": "Explaining pose: one hand open and gesturing outward at shoulder height as if explaining something, the other hand holding {props}, lively posture.",
+    "waiting": "Patient waiting pose: hands clasped together in front of the waist, standing very straight and still, head turned slightly toward the viewer.",
+    "success": "Joyful success pose: a graceful curtsy or bow with arms opened outward, a few golden sparkles and tiny stars around, cheerful body language.",
+    "confused": "Confused pose: a few loose puppet strings tangled around one arm, head tilted strongly to the side, one hand raised to the head, knees slightly knocked together, a small floating tangle of thread.",
+    "sleeping": "Asleep on its strings: standing but slumped, head drooping forward onto the chest, arms hanging limp, knees slightly bent, {props} held loosely, a few small floating golden 'z' shaped ribbon curls above the head.",
+    "held": "Lifted by its puppet strings: dangling in the air with feet off the ground, limbs loose and relaxed like a marionette being picked up, arms hanging slightly outward, coat and skirt fluttering upward, a little surprised posture."
+  },
+  "frames": {
+    "_comment": "Animation frames are pixel-locked warps of the approved pose (tilt: head degrees around the neck, nod: head drop px, lift: chest rise px, bob: detached props rise px; px at the 1024x1536 source). Frame 1 is the pose itself.",
+    "idle": { "fps": 4, "pingpong": true, "keys": [
+      { "tilt": 1.4, "lift": 3 },
+      { "tilt": 2.8, "lift": 6 }
+    ] },
+    "thinking": { "fps": 4, "pingpong": true, "keys": [
+      { "tilt": -1.6, "bob": 10 },
+      { "tilt": -3.0, "bob": 20 }
+    ] },
+    "speaking": { "fps": 5, "pingpong": true, "keys": [
+      { "tilt": 1.6, "nod": 6, "bob": 6 },
+      { "tilt": -1.2, "nod": 2, "bob": 12 }
+    ] },
+    "sleeping": { "fps": 3, "pingpong": true, "keys": [
+      { "nod": 4, "lift": 4, "bob": 14 },
+      { "nod": 8, "lift": 8, "bob": 28 }
+    ] },
+    "success": { "fps": 5, "pingpong": true, "keys": [
+      { "tilt": 1.2, "bob": 12 },
+      { "tilt": 2.0, "bob": 24 }
+    ] },
+    "searching": { "fps": 4, "pingpong": true, "keys": [
+      { "tilt": -1.0, "bob": 10 },
+      { "tilt": -2.0, "bob": 20 }
+    ] }
+  }
+}
