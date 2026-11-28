@@ -155,6 +155,14 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 
 ## 快速开始
 
+> **设置向导：** 不必手写环境变量，运行 `./start.sh setup`（或 `make setup`）
+> 即可。向导会询问公开主机名、存储后端（默认为随附的 **RustFS**，也可选
+> Cloudflare R2、任何 S3 兼容端点或本地磁盘）、会话时长、可选的 DeepSeek
+> 密钥与 Cloudflare Tunnel 令牌，并写出 `.env`、生成 RustFS 与 RabbitMQ 凭据，
+> 不回显任何机密。`./setup.sh --defaults` 以非交互方式运行。摄取由独立的
+> worker 进程负责；`./start.sh` 会同时启动 API 与 worker。完整说明请见英文版
+> [README](README.md)。
+
 ### Docker Compose（生产环境）
 
 生产栈是 **Cloudflare Tunnel → Caddy → API**，不发布任何主机端口。

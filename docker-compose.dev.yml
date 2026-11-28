@@ -3,7 +3,9 @@ name: apsor-archive-dev
 # Local development dependencies only. Run the API and Vite on the host:
 #   docker compose -f docker-compose.dev.yml up -d --wait
 #   cd backend && uv run apsor-archive --reload
+#   cd backend && uv run apsor-archive worker   # drains uploads; the API only enqueues
 #   cd frontend && bun run dev
+# (./start.sh runs the API and the worker together.)
 #
 # RabbitMQ is exposed on the host for a host-run API/worker. Match the Compose
 # defaults with:

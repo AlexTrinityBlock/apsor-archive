@@ -154,6 +154,14 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
 
 ## 快速開始
 
+> **設定精靈：** 不必手寫環境變數，執行 `./start.sh setup`（或 `make setup`）
+> 即可。精靈會詢問公開主機名稱、儲存後端（預設為隨附的 **RustFS**，也可選
+> Cloudflare R2、任何 S3 相容端點或本機磁碟）、工作階段時效、選用的 DeepSeek
+> 金鑰與 Cloudflare Tunnel 權杖，並寫出 `.env`、產生 RustFS 與 RabbitMQ 憑證，
+> 不回顯任何祕密。`./setup.sh --defaults` 以非互動方式執行。擷取由獨立的
+> worker 程序負責；`./start.sh` 會同時啟動 API 與 worker。完整說明請見英文版
+> [README](README.md)。
+
 ### Docker Compose（正式環境）
 
 正式堆疊是 **Cloudflare Tunnel → Caddy → API**，不發布任何主機連接埠。
