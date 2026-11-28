@@ -252,13 +252,14 @@ async def purge_stale_lore(
     clear_lore_vector_memory()
     logger.info(
         "companion lore purge retired_items=%s told=%s stale_copies=%s refreshed=%s "
-        "reset_stories=%s overrides=%s",
+        "reset_stories=%s overrides=%s retired_life_stories=%s",
         result.retired_items,
         result.told_rows,
         result.stale_copies,
         result.refreshed_copies,
         result.reset_stories,
         result.overrides,
+        result.retired_stories,
     )
     return result
 

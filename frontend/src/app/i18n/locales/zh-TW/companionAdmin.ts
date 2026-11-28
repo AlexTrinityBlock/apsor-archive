@@ -342,6 +342,7 @@ export const companionAdmin = {
       self_query_phrases: "詢問圖書館員本人的語句",
       self_canon_terms: "被問到時算數的設定詞",
       banned_address_terms: "圖書館員絕不使用的稱呼",
+      said_memory_since: "只把這個時間（UTC）之後的回應當作她說過的話（留空：全部）",
     },
   },
   templates: {

@@ -65,6 +65,16 @@ _PURGE_SQL: tuple[str, ...] = (
     "DELETE FROM companion_admin_lore_override o WHERE o.companion_ref LIKE 'preset:%' AND o.action IN ('replace', 'hide') AND NOT EXISTS (SELECT 1 FROM companion_lore_item i WHERE i.retired_at IS NULL AND i.preset_id = substr(o.companion_ref, 8) AND i.fragment_key = o.fragment_key)",
 )
 
+# Life stories that retell the old canon are retired (not deleted).
+_OLD_CANON_STORY_PATTERN = (
+    r"(press|gave|give|giving)[^.。]{0,60}face[^.。]{0,80}lintel"
+    r"|face-giving|remember everyone except|把臉|把脸|臉壓進|脸压进|獻出.{0,6}臉|献出.{0,6}脸"
+)
+_RETIRE_OLD_CANON_STORIES = sa.text(
+    "UPDATE companion_generated_story SET status = 'retired' "
+    "WHERE status <> 'retired' AND (text ~* :pattern OR title ~* :pattern)"
+)
+
 _TEMPLATE_UPDATE = sa.text(
     "UPDATE companion_prompt_template "
     "SET body = :to_body, version = version + 1 "
@@ -100,6 +110,7 @@ def upgrade() -> None:
     op.execute("UPDATE companion_seed_state SET content_hash = ''")
     for statement in _PURGE_SQL:
         op.execute(statement)
+    op.get_bind().execute(_RETIRE_OLD_CANON_STORIES, {"pattern": _OLD_CANON_STORY_PATTERN})
 
 
 def downgrade() -> None:

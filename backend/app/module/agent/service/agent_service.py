@@ -966,11 +966,10 @@ class AgentService:
     ) -> ProviderContext:
         """Drop withheld tools from the outbound request; the transcript is unchanged."""
         unavailable = await self._unavailable_tool_names(run_id)
-        has_companion = (
-            self._companion_active
-            if self._companion_active is not None
-            else _has_companion_persona(context)
-        )
+        # A run that never resolved its speaker (or a bare test service) falls
+        # back to the frozen persona in the context.
+        active = getattr(self, "_companion_active", None)
+        has_companion = active if active is not None else _has_companion_persona(context)
         if not has_companion:
             # Only a conversation with a companion has own memories to recall.
             unavailable = unavailable | {COMPANION_MEMORY_TOOL}

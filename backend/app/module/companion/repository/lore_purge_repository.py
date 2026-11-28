@@ -16,6 +16,8 @@ touches anything a person wrote or edited:
   the live text, in the story's locale or English);
 - copy-on-write stories that hold no edited and no own fragment any more (reset,
   so the live preset lore applies again);
+- published or draft life stories whose text retells the old canon (marked
+  ``retired``, never deleted);
 - root's per-account ``replace``/``hide`` overrides of fragments that no longer
   exist, and ``replace`` overrides whose text is exactly an old seeded text that
   was just superseded (passed in as ``superseded``).
@@ -60,9 +62,7 @@ DELETE_STALE_COPIES_SQL = (
     "DELETE FROM companion_lore_fragment f USING companion_story s "
     "WHERE s.id = f.story_id AND s.user_id = f.user_id AND s.preset_id IS NOT NULL "
     "AND NOT f.edited AND f.fragment_key NOT LIKE 'u-%' "
-    "AND NOT EXISTS ("
-    + _ACTIVE_ITEM.format(preset="s.preset_id", key="f.fragment_key")
-    + ")"
+    "AND NOT EXISTS (" + _ACTIVE_ITEM.format(preset="s.preset_id", key="f.fragment_key") + ")"
 )
 
 REFRESH_COPIES_SQL = (
@@ -108,6 +108,18 @@ DELETE_STALE_OVERRIDES_SQL = (
     + ")"
 )
 
+# Life stories written before the canon changed may retell the old script (the
+# librarians "giving" their faces). They are retired, never deleted: root can
+# still read or delete them, but they no longer surface.
+OLD_CANON_STORY_PATTERN = (
+    r"(press|gave|give|giving)[^.。]{0,60}face[^.。]{0,80}lintel"
+    r"|face-giving|remember everyone except|把臉|把脸|臉壓進|脸压进|獻出.{0,6}臉|献出.{0,6}脸"
+)
+RETIRE_OLD_CANON_STORIES_SQL = (
+    "UPDATE companion_generated_story SET status = 'retired' "
+    "WHERE status <> 'retired' AND (text ~* :pattern OR title ~* :pattern)"
+)
+
 DELETE_SUPERSEDED_OVERRIDES_SQL = (
     "DELETE FROM companion_admin_lore_override o "
     "WHERE o.companion_ref = :ref AND o.fragment_key = :key AND o.locale = :locale "
@@ -125,6 +137,7 @@ class LorePurgeResult:
     refreshed_copies: int = 0
     reset_stories: int = 0
     overrides: int = 0
+    retired_stories: int = 0
 
     @property
     def total(self) -> int:
@@ -135,6 +148,7 @@ class LorePurgeResult:
             + self.refreshed_copies
             + self.reset_stories
             + self.overrides
+            + self.retired_stories
         )
 
 
@@ -167,6 +181,10 @@ class LorePurgeRepository:
         result.refreshed_copies = await self._run(REFRESH_COPIES_SQL)
         result.reset_stories = await self._run(RESET_EMPTY_STORIES_SQL)
         result.overrides += await self._run(DELETE_STALE_OVERRIDES_SQL)
+        result.retired_stories = await self._run(
+            RETIRE_OLD_CANON_STORIES_SQL,
+            {"pattern": OLD_CANON_STORY_PATTERN},
+        )
         return result
 
 
@@ -176,8 +194,10 @@ __all__ = [
     "DELETE_STALE_OVERRIDES_SQL",
     "DELETE_STALE_TOLD_SQL",
     "DELETE_SUPERSEDED_OVERRIDES_SQL",
+    "OLD_CANON_STORY_PATTERN",
     "REFRESH_COPIES_SQL",
     "RESET_EMPTY_STORIES_SQL",
+    "RETIRE_OLD_CANON_STORIES_SQL",
     "LorePurgeRepository",
     "LorePurgeResult",
 ]
