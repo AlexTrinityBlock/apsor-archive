@@ -12,7 +12,9 @@ import type {
   ResourceMeta,
   ToolResultMeta,
 } from "../types";
+import { useLiveSpeaker } from "../hook/useLiveSpeaker";
 import { MarkdownBody } from "./MarkdownBody";
+import { ReplyAuthor } from "./ReplyAuthor";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolStepCard } from "./ToolStepCard";
 import { UserMarginalia } from "./UserMarginalia";
@@ -106,6 +108,7 @@ export const StreamingTurn = memo(function StreamingTurn({
   );
   const hasHistory = visibleSegments.length > 0;
   const running = stream.status === "running";
+  const speaker = useLiveSpeaker();
   const lastIndex = visibleSegments.at(-1)?.index ?? null;
 
   return (
@@ -120,10 +123,7 @@ export const StreamingTurn = memo(function StreamingTurn({
 
       <article className="chat-turn chat-turn--agent is-live">
         <header className="chat-turn__author">
-          <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
-            <span className="chat-pulse" />
-          </span>
-          <span>{t("chat.assistant.author")}</span>
+          <ReplyAuthor speaker={speaker} live={running} />
           <span className="chat-turn__meta">
             {stream.runId === null
               ? t("chat.streaming.openingRun")
