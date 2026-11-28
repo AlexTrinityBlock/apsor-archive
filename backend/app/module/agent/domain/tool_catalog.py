@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.module.agent.domain.tool_args import (
     CalculateArgs,
+    CompanionActionArgs,
     HistoryMessageArgs,
     PresentResourceArgs,
     ReadFileArgs,
@@ -32,8 +33,8 @@ from app.module.agent.domain.tool_args import (
 # v14 adds the ``<search_hint>`` sentence to the Context protocol section.
 # Composition changed, so the new-conversation prefix changes; existing
 # conversations keep their frozen ``pi.system`` and old version string, so their
-# KV cache lineage is untouched.
-PROMPT_VERSION = "archive-agent-v14"
+# KV cache lineage is untouched. v15 adds the companion_action guidance line.
+PROMPT_VERSION = "archive-agent-v15"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -47,8 +48,8 @@ PROMPT_VERSION = "archive-agent-v14"
 # budgets now come from the deployer-editable agent_config row; the tool still
 # enforces them. v14 adds per-result content_chars/excerpt_chars/excerpt_truncated
 # and the trailing <search_hint> to web_search. Existing conversations keep their
-# frozen pi.system snapshot.
-TOOLS_VERSION = "archive-tools-v14"
+# frozen pi.system snapshot. v15 adds the read-only companion_action gesture tool.
+TOOLS_VERSION = "archive-tools-v15"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -231,6 +232,18 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         ),
         args_model=WebFetchArgs,
         requires_confirmation=False,
+    ),
+    ToolSpec(
+        name="companion_action",
+        description=(
+            "Make the on-screen companion perform one visible gesture, such as "
+            "greet, thinking, success, or confused. It only changes the "
+            "animation beside the chat; it reads and writes no archive data. "
+            "The interface already animates searches and tool calls, so use "
+            "this sparingly: at most once per turn, when a gesture adds warmth "
+            "or clarity. Never use it instead of answering."
+        ),
+        args_model=CompanionActionArgs,
     ),
 )
 
