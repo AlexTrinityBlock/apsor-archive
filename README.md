@@ -59,6 +59,11 @@ you the page, and, now and then, remember something of their own.
   </tr>
 </table>
 
+<p align="center">
+  <img src="docs/assets/screenshots/en/phone-chat.webp" alt="The same archive on a phone" width="260"><br>
+  <sub>The same archive on your phone: the librarian peeks in from the edge.</sub>
+</p>
+
 ### The memory system, in one minute
 
 - **Your memories** are files, notes and past conversations. They are searched by

@@ -51,6 +51,11 @@ Apsor Archive 把它們收進一座放在你自己電腦上的私人圖書館，
   </tr>
 </table>
 
+<p align="center">
+  <img src="docs/assets/screenshots/zh-TW/phone-chat.webp" alt="同一座檔案館在手機上的樣子" width="260"><br>
+  <sub>在手機上也是同一座檔案館：圖書館員會從畫面邊緣探出頭來。</sub>
+</p>
+
 ### 一分鐘看懂記憶系統
 
 - **你的記憶**：檔案、筆記與過去的對話。系統同時依「意思」與「確切字詞」搜尋，每個回答都附上引用。
