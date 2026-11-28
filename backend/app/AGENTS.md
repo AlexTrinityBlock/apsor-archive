@@ -12,9 +12,9 @@ Keep application assembly, infrastructure, and business slices separate so a fea
 - `app.state` owns process-wide adapters: `db`, `cache`, `progress_bus`, `storage`, `secret_cipher`, `ai_runtime`, `ingest_worker`, and `settings`. Tests may replace `agent_chat_generator`, `web_research_service`, or `provider_tester`.
 - `dependency/` holds dependencies shared across slices. Today it exposes the authenticated account guard, the forced-password-change guard, and the root guard; it is not a home for feature services.
 - `infrastructure/` adapts external systems: config, async database/Alembic, cache, local/R2 storage, AI/embeddings, web clients, security, and logging. Adapters implement slice protocols but must not own archive policy.
-- `module/` contains vertical slices: `auth`, `knowledge`, `agent`, `prompt`, and `web_research`. A slice may contain `domain/` (pure rules), `model/` (SQLAlchemy), `schema/` (Pydantic HTTP contracts), `protocol/` (ports), `repository/` (SQL), `service/` (orchestration), `router/` (HTTP), `exception/`, and `dependencies.py`.
+- `module/` contains vertical slices: `auth`, `knowledge`, `agent`, `prompt`, `companion`, and `web_research`. A slice may contain `domain/` (pure rules), `model/` (SQLAlchemy), `schema/` (Pydantic HTTP contracts), `protocol/` (ports), `repository/` (SQL), `service/` (orchestration), `router/` (HTTP), `exception/`, and `dependencies.py`.
 - `module/*/dependencies.py` is the allowed cross-slice assembly point. Routers must receive services from dependencies rather than constructing repositories directly.
-- `shared/` contains only genuinely cross-cutting primitives: the exception registry, the generic list envelope, shared time, and text n-gram helpers. It must not absorb slice-specific logic.
+- `shared/` contains only genuinely cross-cutting primitives: the exception registry, the generic list envelope, shared time, text n-gram helpers, and the companion action vocabulary shared by the agent tool and the companion slice. It must not absorb slice-specific logic.
 - All ORM models share the declarative base in `infrastructure/database/base.py`. The model package exports are imported by Alembic and tests, so a new model must be reachable through the owning `model/__init__.py`.
 - The request database session is created by `get_db_session`, starts as `apsor_app` with no owner context, and commits once at request exit. `get_current_user` applies `app.user_id`/`app.user_role` after resolving the cookie. Streaming agent turns and long-running workers must use `database.user_session(...)`, `database.system_session()`, or the explicit `maintenance_session(...)` helpers; never open a raw `session_factory()` for private data. Ingestion checkpoints must use `commit_and_reapply(...)`.
 - Authentication is mounted as a router-level dependency in `main.py`. Do not add a second session-cookie parser or an alternative account/role check in a feature router. Root-only global settings use `require_root`; ordinary private data uses `require_authenticated`.
@@ -30,7 +30,7 @@ Keep application assembly, infrastructure, and business slices separate so a fea
 - `infrastructure/ai/runtime.py` — four-capability provider snapshot.
 - `infrastructure/config/settings.py` — settings and secret-file precedence.
 - `shared/exception/registry.py` — error and validation serialization.
-- `module/knowledge/dependencies.py`, `module/agent/dependencies.py`, `module/auth/dependencies.py`, `module/prompt/dependencies.py`, `module/web_research/dependencies.py` — assembly roots.
+- `module/knowledge/dependencies.py`, `module/agent/dependencies.py`, `module/auth/dependencies.py`, `module/prompt/dependencies.py`, `module/companion/dependencies.py`, `module/web_research/dependencies.py` — assembly roots.
 - `module/agent/AGENTS.md` and `module/knowledge/AGENTS.md` — deeper rules for the two largest slices.
 
 ## Conventions
