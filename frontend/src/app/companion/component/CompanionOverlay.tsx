@@ -15,6 +15,7 @@ import { ACTION_LABEL_KEYS, isAnnouncedAction } from "../actions";
 import type { CompanionStreamInput } from "../director";
 import type { DragRelease, ResizeSource } from "../gesture";
 import { useBusySignal } from "../hook/useBusySignal";
+import { BOOKMARK_HEIGHT, CompanionBookmark } from "./CompanionBookmark";
 import { useChatLayout } from "../hook/useChatLayout";
 import { useCompanionDirector } from "../hook/useCompanionDirector";
 import { useCompanionGestures } from "../hook/useCompanionGestures";
@@ -28,7 +29,7 @@ import {
   dockX,
   intersectionArea,
   isLeftSide,
-  isViewportSide,
+  bookmarkTop,
   landingPosition,
   peekGeometry,
   resolveBox,
@@ -186,8 +187,11 @@ export function CompanionOverlay({
   const busy = useBusySignal(opacityMode === "auto");
   const position = positions[breakpoint] ?? defaultPosition(breakpoint, context, size);
   const box = useMemo(() => resolveBox(position, context, size), [position, context, size]);
-  const presence = avoidance(box, context, dialogOpen, breakpoint);
-  const peeking = presence === "peek" && !expanded && !held && !resizing;
+  const presence = avoidance(box, context, dialogOpen, breakpoint, position.side);
+  const settled = !expanded && !held && !resizing;
+  const peeking = presence === "peek" && settled;
+  // Tucked away at the window edge as a bookmark until tapped or hovered.
+  const retracted = presence === "retract" && settled;
   const peek = peekGeometry(size, context);
   const left = isLeftSide(position.side);
   const rubber = motion === "full";
@@ -600,10 +604,7 @@ export function CompanionOverlay({
     }
   };
 
-  let peekStyle: "none" | "slide" | "shrink" = "none";
-  if (peeking) {
-    peekStyle = isViewportSide(position.side) ? "slide" : "shrink";
-  }
+  const peekStyle: "none" | "shrink" = peeking ? "shrink" : "none";
   const label = t(ACTION_LABEL_KEYS[action]);
   const actionAnnouncement = isAnnouncedAction(action)
     ? t("companion.overlay.announce", { name: character.name, action: label })
@@ -614,26 +615,18 @@ export function CompanionOverlay({
     range,
   );
 
-  if (minimized) {
+  if (minimized || retracted) {
     return (
       <div className="companion-layer" data-companion-root="">
-        <button
+        <CompanionBookmark
           ref={tabRef}
-          type="button"
-          className={`companion-tab${left ? " is-left" : ""}`}
-          style={{ top: box.top + FIGURE_HEADROOM }}
-          onClick={() => setMinimizedPersisted(false, true)}
-          aria-label={t("companion.overlay.restore", { name: character.name })}
-          title={t("companion.overlay.restore", { name: character.name })}
+          character={character}
+          left={left}
+          placement={bookmarkTop(box.top + FIGURE_HEADROOM, BOOKMARK_HEIGHT, context)}
+          label={t("companion.overlay.restore", { name: character.name })}
           hidden={presence === "hidden"}
-        >
-          {character.portrait !== null ? (
-            <img src={character.portrait} alt="" width={28} height={28} draggable={false} />
-          ) : (
-            <Icon name="user" size={16} />
-          )}
-          <span className="companion-tab__ribbon" aria-hidden="true" />
-        </button>
+          onActivate={() => (minimized ? setMinimizedPersisted(false, true) : setExpanded(true))}
+        />
       </div>
     );
   }

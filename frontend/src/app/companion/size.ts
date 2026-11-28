@@ -8,9 +8,10 @@
 import {
   FIGURE_HEADROOM,
   INTRINSIC_FIGURE,
-  TOP_MARGIN,
+  feetLine,
   figureSize,
   gutterWidth,
+  topLimit,
   type BoxSize,
   type Breakpoint,
   type LayoutContext,
@@ -58,9 +59,9 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** The line the companion's feet rest on: just above the composer. */
+/** The line the companion's feet rest on: above the composer and keyboard. */
 export function baselineY(context: LayoutContext): number {
-  return (context.composer?.top ?? context.viewport.height) - 6;
+  return feetLine(context);
 }
 
 function contentWidth(context: LayoutContext): number {
@@ -85,7 +86,10 @@ export function levelForHeight(height: number, range: SizeRange): number {
 
 export function sizeRange(breakpoint: Breakpoint, context: LayoutContext): SizeRange {
   const minHeight = figureSize(breakpoint).height;
-  const heightCap = baselineY(context) - TOP_MARGIN - FIGURE_HEADROOM;
+  // Derived every layout pass from the visible band, never persisted: an
+  // on-screen keyboard narrows it, and closing the keyboard restores it, while
+  // the user's chosen level stays the same.
+  const heightCap = baselineY(context) - topLimit(context) - FIGURE_HEADROOM;
   const widthCap = contentWidth(context) * (breakpoint === "phone" ? 0.5 : 0.4);
   const maxHeight = Math.floor(
     Math.max(minHeight, Math.min(ART.height, heightCap, widthCap * 1.5)),

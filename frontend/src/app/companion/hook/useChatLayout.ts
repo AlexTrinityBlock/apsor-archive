@@ -64,13 +64,22 @@ function isDialogOpen(): boolean {
 }
 
 function measure(): ChatLayoutSnapshot {
-  const viewport = window.visualViewport;
+  // Positions are stored against the stable layout viewport; the visual
+  // viewport (shrunk by an on-screen keyboard, offset by pinch-zoom) is the
+  // band the figure must stay inside.
+  const visual = window.visualViewport;
   return {
     context: {
-      viewport: {
-        width: viewport?.width ?? window.innerWidth,
-        height: viewport?.height ?? window.innerHeight,
-      },
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      visible:
+        visual === null || visual === undefined
+          ? null
+          : {
+              top: visual.offsetTop,
+              bottom: visual.offsetTop + visual.height,
+              left: visual.offsetLeft,
+              right: visual.offsetLeft + visual.width,
+            },
       panel: rectOf(CHAT_LAYOUT_SELECTORS.panel),
       composer: rectOf(CHAT_LAYOUT_SELECTORS.composer),
       column: visibleColumn(),
@@ -92,8 +101,21 @@ function sameRect(a: Rect | null, b: Rect | null): boolean {
   );
 }
 
+function sameBand(a: LayoutContext["visible"], b: LayoutContext["visible"]): boolean {
+  if (a === null || a === undefined || b === null || b === undefined) {
+    return (a ?? null) === (b ?? null);
+  }
+  return (
+    Math.abs(a.top - b.top) < 1 &&
+    Math.abs(a.bottom - b.bottom) < 1 &&
+    Math.abs((a.left ?? 0) - (b.left ?? 0)) < 1 &&
+    Math.abs((a.right ?? 0) - (b.right ?? 0)) < 1
+  );
+}
+
 function sameSnapshot(a: ChatLayoutSnapshot, b: ChatLayoutSnapshot): boolean {
   return (
+    sameBand(a.context.visible, b.context.visible) &&
     a.dialogOpen === b.dialogOpen &&
     a.context.viewport.width === b.context.viewport.width &&
     a.context.viewport.height === b.context.viewport.height &&
@@ -137,12 +159,14 @@ export function useChatLayout(enabled: boolean): ChatLayoutSnapshot {
     }, POLL_MS);
     window.addEventListener("resize", update);
     window.visualViewport?.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("scroll", update);
     document.addEventListener("visibilitychange", update);
     return () => {
       cancelAnimationFrame(frame);
       window.clearInterval(interval);
       window.removeEventListener("resize", update);
       window.visualViewport?.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("scroll", update);
       document.removeEventListener("visibilitychange", update);
     };
   }, [enabled]);
