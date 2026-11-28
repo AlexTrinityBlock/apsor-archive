@@ -40,8 +40,10 @@ from app.module.agent.domain.tool_args import (
 # v18 ships the rewritten preset personas from the world bible (ten-thousand-
 # year aeon-porcelain, minds that emerged from the library, equal keeping).
 # v19 renders persona rules and story-moment guidance from the companion story
-# config provider and adds story moments to the user entry.
-PROMPT_VERSION = "archive-agent-v19"
+# config provider and adds story moments to the user entry. v20 serves the
+# equal-address rule from the same config templates and tells the model that
+# its own memories may arrive beside any tool result or with a message.
+PROMPT_VERSION = "archive-agent-v20"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -60,7 +62,11 @@ PROMPT_VERSION = "archive-agent-v19"
 # <librarian_memory> block that is never an archive source. v17 makes that lore
 # semantic-only with untold preference and explicit self queries. v18 carries the
 # lore guidance from the companion story config instead of a hardcoded string.
-TOOLS_VERSION = "archive-tools-v18"
+# v19 routes the companion's memories through one context contributor: one
+# <librarian_memories> block (with moment and per-moment guidance) may follow
+# search_knowledge, read_file, read_memory, read_timeline, present_resource, and
+# web_fetch results, inside a reserved share of the result budget.
+TOOLS_VERSION = "archive-tools-v19"
 
 PLOT_TOOL_NAME = "render_plot"
 

@@ -290,8 +290,18 @@ def custom_persona(config: "CompanionRuntimeConfig", name: str) -> str:
 
 
 def render_persona_section(persona: str, config: CompanionStoryConfig) -> str:
-    """Return the persona followed by the rules that outrank it."""
-    return f"{persona.strip()}\n\n{config.persona_rules.strip()}"
+    """Return the persona followed by the rules that outrank it.
+
+    The persona rules and the equal-address rule both come from the config
+    (root-editable templates seeded from ``lore/seed/templates``).
+    """
+    rules = config.persona_rules
+    equal_rule = ""
+    if isinstance(config, CompanionRuntimeConfig):
+        rules = config.template(TEMPLATE_PERSONA_RULES, rules) or rules
+        equal_rule = config.template(TEMPLATE_EQUAL_ADDRESS_RULE, "")
+    parts = [persona.strip(), rules.strip(), equal_rule.strip()]
+    return "\n\n".join(part for part in parts if part)
 
 
 @dataclass(frozen=True)
