@@ -322,19 +322,25 @@
     opacity var(--speed-fast) var(--ease-soft);
 }
 
-.ca-star--told {
-  fill: var(--accent-moss);
-  filter: drop-shadow(0 0 2.5px var(--moss-bright));
+.ca-star--everyday {
+  fill: var(--mono-l2);
 }
 
-.ca-star--unlocked {
+.ca-star--past {
   fill: var(--accent-ochre);
-  opacity: 0.75;
 }
 
-.ca-star--locked {
-  fill: var(--mono-l4);
-  opacity: 0.45;
+.ca-star--heart {
+  fill: var(--vermilion);
+}
+
+.ca-star--untold {
+  opacity: 0.38;
+}
+
+.ca-star--told {
+  opacity: 1;
+  filter: drop-shadow(0 0 2.5px var(--moss-bright));
 }
 
 .ca-star--generated {
@@ -419,12 +425,20 @@
   background: var(--accent-moss);
 }
 
-.ca-dot--unlocked {
+.ca-dot--untold {
+  background: var(--mono-l5);
+}
+
+.ca-dot--everyday {
+  background: var(--mono-l2);
+}
+
+.ca-dot--past {
   background: var(--accent-ochre);
 }
 
-.ca-dot--locked {
-  background: var(--mono-l4);
+.ca-dot--heart {
+  background: var(--vermilion);
 }
 
 .ca-timeline {
@@ -464,9 +478,13 @@
   background: var(--accent-ochre);
 }
 
-.ca-timeline__mark--familiar,
-.ca-timeline__mark--rare {
+.ca-timeline__mark--start {
+  background: var(--accent-moss);
+}
+
+.ca-timeline__mark--lastMoment {
   border-radius: 2px;
+  background: var(--ochre-deep);
   transform: translate(-50%, -50%) rotate(45deg);
 }
 
@@ -483,10 +501,15 @@
   transform: translateX(-50%);
 }
 
-.ca-timeline__mark--familiar .ca-timeline__label,
-.ca-timeline__mark--rare .ca-timeline__label {
+.ca-timeline__mark--lastMoment .ca-timeline__label {
   transform: translateX(-50%) rotate(-45deg);
   transform-origin: top center;
+}
+
+.ca-timeline__mark--start .ca-timeline__label {
+  left: 0;
+  transform: none;
+  align-items: flex-start;
 }
 
 .ca-timeline__mark--now .ca-timeline__label,
@@ -543,16 +566,24 @@
   background: var(--mono-card-bg);
 }
 
-.ca-fragment--told {
-  border-top-color: var(--accent-moss);
+.ca-fragment--everyday {
+  border-top-color: var(--mono-l4);
 }
 
-.ca-fragment--unlocked {
+.ca-fragment--past {
   border-top-color: var(--accent-ochre);
 }
 
-.ca-fragment--locked {
+.ca-fragment--heart {
+  border-top-color: var(--vermilion);
+}
+
+.ca-fragment--untold {
   background: var(--mono-card-warm);
+}
+
+.ca-fragment--told {
+  box-shadow: inset 0 0 0 0.7px var(--moss-wash);
 }
 
 .ca-fragment.is-hidden {

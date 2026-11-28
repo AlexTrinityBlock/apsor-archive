@@ -64,7 +64,7 @@ export const companionAdmin = {
     sections: {
       sky: "Constellation",
       skyHint:
-        "Every star is one memory. Lit stars have been told, dim stars are unlocked and waiting, and locked stars stay dark.",
+        "Every star is one memory, and none is locked. Rings show its weight — everyday, the past, close to the heart — which the librarian judges for herself. Bright stars have been told; faint ones are still waiting.",
       fragments: "Memories",
       stories: "Life stories",
       overrides: "Overrides",
@@ -74,16 +74,15 @@ export const companionAdmin = {
     },
     timeline: {
       label: "Run timeline",
-      familiar: "Familiar unlocks",
-      rare: "Rare unlocks",
+      start: "First conversation",
+      lastMoment: "Last story moment",
       now: "Now",
       moment: "Next moment",
       runs: "run {count}",
     },
     legend: {
       told: "Told",
-      unlocked: "Unlocked",
-      locked: "Locked",
+      untold: "Not yet told",
       hidden: "Hidden by you",
     },
     adjustRuns: "Set runs",
@@ -96,19 +95,18 @@ export const companionAdmin = {
   fragments: {
     searchLabel: "Search memories",
     searchPlaceholder: "Words, theme, or key",
-    state: "State",
-    tier: "Tier",
+    state: "Told",
+    weight: "Weight",
     origin: "Source",
     any: "Any",
     states: {
       told: "Told",
-      unlocked: "Unlocked",
-      locked: "Locked",
+      untold: "Not yet told",
     },
-    tiers: {
-      first: "First meeting",
-      familiar: "Familiar",
-      rare: "Rare",
+    weights: {
+      everyday: "Everyday",
+      past: "The past",
+      heart: "Close to the heart",
     },
     origins: {
       preset: "Shipped",
@@ -214,7 +212,7 @@ export const companionAdmin = {
     personaReset: "Use the inherited persona",
     loreTitle: "Add a memory for this account",
     loreKey: "Key",
-    loreTier: "Tier",
+    loreTier: "Weight",
     loreText: "Memory",
     loreAdd: "Add memory",
     loreList: "Your changes for this account",

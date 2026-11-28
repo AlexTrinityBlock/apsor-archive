@@ -17,6 +17,7 @@ import type {
   ListCompanionLoreAdminParams,
 } from "../../generated-apis-types/schemas";
 import { useApiErrorMessage, useI18n } from "../../i18n";
+import { asWeight } from "../constellation";
 import { useAdminRefresh } from "../hook/useAdminRefresh";
 
 type Locale = "en" | "zh-TW" | "zh-CN";
@@ -79,7 +80,7 @@ export function LoreTable() {
           </select>
         </label>
         <label className="ca-field">
-          <span>{t("companionAdmin.fragments.tier")}</span>
+          <span>{t("companionAdmin.fragments.weight")}</span>
           <select
             className="input"
             value={tier}
@@ -88,7 +89,7 @@ export function LoreTable() {
             <option value="">{t("companionAdmin.fragments.any")}</option>
             {(["first", "familiar", "rare"] as const).map((item) => (
               <option key={item} value={item}>
-                {t(`companionAdmin.fragments.tiers.${item}`)}
+                {t(`companionAdmin.fragments.weights.${asWeight(item)}`)}
               </option>
             ))}
           </select>
@@ -196,7 +197,7 @@ function LoreRow({
         <code>{item.fragment_key}</code>
         <span className="ca-lore-item__preset">{item.preset_id}</span>
         <Badge tone="neutral">
-          {t(`companionAdmin.fragments.tiers.${item.tier}`)}
+          {t(`companionAdmin.fragments.weights.${asWeight(item.tier)}`)}
         </Badge>
         {item.id === 0 ? (
           <Badge tone="neutral">{t("companionAdmin.world.seededOnly")}</Badge>
@@ -307,7 +308,7 @@ function LoreEditForm({
       />
       <div className="ca-row">
         <label className="ca-field">
-          <span>{t("companionAdmin.fragments.tier")}</span>
+          <span>{t("companionAdmin.fragments.weight")}</span>
           <select
             className="input"
             value={tier}
@@ -315,7 +316,7 @@ function LoreEditForm({
           >
             {(["first", "familiar", "rare"] as const).map((value) => (
               <option key={value} value={value}>
-                {t(`companionAdmin.fragments.tiers.${value}`)}
+                {t(`companionAdmin.fragments.weights.${asWeight(value)}`)}
               </option>
             ))}
           </select>
@@ -422,7 +423,7 @@ function LoreCreateForm({
           />
         </label>
         <label className="ca-field">
-          <span>{t("companionAdmin.fragments.tier")}</span>
+          <span>{t("companionAdmin.fragments.weight")}</span>
           <select
             className="input"
             value={tier}
@@ -430,7 +431,7 @@ function LoreCreateForm({
           >
             {(["first", "familiar", "rare"] as const).map((value) => (
               <option key={value} value={value}>
-                {t(`companionAdmin.fragments.tiers.${value}`)}
+                {t(`companionAdmin.fragments.weights.${asWeight(value)}`)}
               </option>
             ))}
           </select>

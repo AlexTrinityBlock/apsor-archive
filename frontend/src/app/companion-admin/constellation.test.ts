@@ -3,16 +3,20 @@ import { describe, expect, test } from "bun:test";
 
 import {
   EMPTY_FILTER,
+  asWeight,
   constellationLines,
-  countStates,
+  countTold,
   filterFragments,
   hashUnit,
+  isTold,
   layoutStars,
   lineDiff,
   matchesDirectory,
   sparklinePoints,
   templatePlaceholders,
+  tierForWeight,
   timelineMarks,
+  weightOf,
   type FragmentLike,
 } from "./constellation";
 
@@ -27,10 +31,28 @@ const fragment = (overrides: Partial<FragmentLike>): FragmentLike => ({
   ...overrides,
 });
 
+describe("weights", () => {
+  test("accept either the legacy tier or the new weight", () => {
+    expect(weightOf({ tier: "first" })).toBe("everyday");
+    expect(weightOf({ tier: "familiar" })).toBe("past");
+    expect(weightOf({ tier: "rare" })).toBe("heart");
+    expect(weightOf({ weight: "heart", tier: "first" })).toBe("heart");
+    expect(weightOf({})).toBe("everyday");
+    expect(asWeight("rare")).toBe("heart");
+    expect(tierForWeight("past")).toBe("familiar");
+  });
+
+  test("told comes from the state or the count; nothing is locked", () => {
+    expect(isTold({ state: "told", told_count: 0 })).toBe(true);
+    expect(isTold({ state: "locked", told_count: 2 })).toBe(true);
+    expect(isTold({ state: "locked", told_count: 0 })).toBe(false);
+  });
+});
+
 describe("layoutStars", () => {
   const fragments = [
     fragment({ key: "a", tier: "first", state: "told", told_count: 2 }),
-    fragment({ key: "b", tier: "familiar" }),
+    fragment({ key: "b", weight: "past" }),
     fragment({ key: "c", tier: "rare", state: "locked" }),
   ];
 
@@ -45,8 +67,9 @@ describe("layoutStars", () => {
     }
   });
 
-  test("puts rarer tiers on wider rings and makes told stars larger", () => {
+  test("shows every memory, heavier weights on wider rings, told stars larger", () => {
     const stars = layoutStars(fragments, 200);
+    expect(stars).toHaveLength(3);
     const distance = (key: string) => {
       const star = stars.find((item) => item.key === key)!;
       return Math.hypot(star.x - 100, star.y - 100);
@@ -56,13 +79,14 @@ describe("layoutStars", () => {
     expect(stars.find((star) => star.key === "a")!.r).toBeGreaterThan(
       stars.find((star) => star.key === "b")!.r,
     );
+    expect(stars.find((star) => star.key === "c")!.weight).toBe("heart");
   });
 
   test("joins only told, visible stars", () => {
     const stars = layoutStars(
       [
         fragment({ key: "a", state: "told" }),
-        fragment({ key: "b", state: "told" }),
+        fragment({ key: "b", told_count: 1 }),
         fragment({ key: "c", state: "told", hidden_by_admin: true }),
         fragment({ key: "d" }),
       ],
@@ -78,27 +102,32 @@ describe("layoutStars", () => {
   });
 });
 
-describe("filterFragments and countStates", () => {
+describe("filterFragments and countTold", () => {
   const items = [
     fragment({ key: "a", state: "told", themes: ["rain"] }),
-    fragment({ key: "b", tier: "rare", state: "locked", origin: "admin" }),
+    fragment({ key: "b", tier: "rare", origin: "admin" }),
     fragment({
       key: "c",
       origin: "generated",
       text: "A door opened onto a bakery.",
     }),
-    fragment({ key: "d", hidden_by_admin: true, state: "locked" }),
+    fragment({ key: "d", hidden_by_admin: true }),
   ];
 
-  test("filters by state, tier, origin, and text", () => {
+  test("filters by told state, weight, origin, and text", () => {
     expect(filterFragments(items, EMPTY_FILTER)).toHaveLength(4);
     expect(
-      filterFragments(items, { ...EMPTY_FILTER, state: "told" }).map(
+      filterFragments(items, { ...EMPTY_FILTER, told: "told" }).map(
         (i) => i.key,
       ),
     ).toEqual(["a"]);
     expect(
-      filterFragments(items, { ...EMPTY_FILTER, tier: "rare" }).map(
+      filterFragments(items, { ...EMPTY_FILTER, told: "untold" }).map(
+        (i) => i.key,
+      ),
+    ).toEqual(["b", "c", "d"]);
+    expect(
+      filterFragments(items, { ...EMPTY_FILTER, weight: "heart" }).map(
         (i) => i.key,
       ),
     ).toEqual(["b"]);
@@ -119,25 +148,25 @@ describe("filterFragments and countStates", () => {
     ).toEqual(["a"]);
   });
 
-  test("counts states and skips hidden fragments", () => {
-    expect(countStates(items)).toEqual({
-      told: 1,
-      unlocked: 1,
-      locked: 1,
-      total: 3,
-    });
+  test("counts told and untold, skipping hidden memories", () => {
+    expect(countTold(items)).toEqual({ told: 1, untold: 2, total: 3 });
   });
 });
 
 describe("timelineMarks", () => {
-  test("always shows the next milestone and the current run", () => {
+  test("marks the first conversation, the last and next moments, and now", () => {
     const { span, marks } = timelineMarks({
       completedRuns: 7,
-      familiarRuns: 5,
-      rareRuns: 20,
+      lastStoryRun: 5,
       nextMomentIn: 2,
     });
-    expect(span).toBeGreaterThan(20);
+    expect(span).toBeGreaterThan(9);
+    expect(marks.map((mark) => mark.kind)).toEqual([
+      "start",
+      "lastMoment",
+      "now",
+      "moment",
+    ]);
     const now = marks.find((mark) => mark.kind === "now")!;
     const moment = marks.find((mark) => mark.kind === "moment")!;
     expect(moment.run).toBe(9);
@@ -148,14 +177,13 @@ describe("timelineMarks", () => {
     }
   });
 
-  test("omits the moment when pacing is off", () => {
+  test("omits moments that have not happened or are switched off", () => {
     const { marks } = timelineMarks({
       completedRuns: 0,
-      familiarRuns: 0,
-      rareRuns: 0,
+      lastStoryRun: null,
       nextMomentIn: null,
     });
-    expect(marks.some((mark) => mark.kind === "moment")).toBe(false);
+    expect(marks.map((mark) => mark.kind)).toEqual(["start", "now"]);
   });
 });
 

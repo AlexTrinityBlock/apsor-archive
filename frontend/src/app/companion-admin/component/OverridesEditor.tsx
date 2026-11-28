@@ -16,6 +16,7 @@ import {
 } from "../../generated-apis-types";
 import type { CompanionPersonaOverrideSchema } from "../../generated-apis-types/schemas";
 import { useApiErrorMessage, useI18n } from "../../i18n";
+import { asWeight } from "../constellation";
 import { useAdminRefresh } from "../hook/useAdminRefresh";
 import { ConfigKnobs } from "./ConfigKnobs";
 
@@ -166,7 +167,7 @@ export function OverridesEditor({
             >
               {(["first", "familiar", "rare"] as const).map((item) => (
                 <option key={item} value={item}>
-                  {t(`companionAdmin.fragments.tiers.${item}`)}
+                  {t(`companionAdmin.fragments.weights.${asWeight(item)}`)}
                 </option>
               ))}
             </select>

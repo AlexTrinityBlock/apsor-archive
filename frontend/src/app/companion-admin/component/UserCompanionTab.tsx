@@ -7,7 +7,6 @@ import { Loader } from "../../component/Loader";
 import { useToast } from "../../component/Toast";
 import {
   useDeleteCompanionUserLoreOverrideAdmin,
-  useGetCompanionConfigAdmin,
   useGetCompanionUserAdmin,
   useListCompanionPresetsAdmin,
   useListCompanionUserFragmentsAdmin,
@@ -57,9 +56,6 @@ export function UserCompanionTab({ userId }: UserCompanionTabProps) {
   const refresh = useAdminRefresh();
   const user = useGetCompanionUserAdmin(userId, { query: { retry: false } });
   const presets = useListCompanionPresetsAdmin({
-    query: { retry: false, staleTime: 60_000 },
-  });
-  const config = useGetCompanionConfigAdmin({
     query: { retry: false, staleTime: 60_000 },
   });
   const [chosenRef, setChosenRef] = useState<string | null>(null);
@@ -128,10 +124,6 @@ export function UserCompanionTab({ userId }: UserCompanionTabProps) {
   const data = user.data;
   const bond =
     data.bonds.find((item) => item.companion_ref === ref) ?? data.bonds[0];
-  const knob = (key: string, fallback: number) =>
-    Number(
-      config.data?.knobs.find((item) => item.key === key)?.value ?? fallback,
-    );
 
   return (
     <div className="ca-user">
@@ -260,8 +252,6 @@ export function UserCompanionTab({ userId }: UserCompanionTabProps) {
             <ConstellationTimeline
               bond={bond}
               fragments={fragments.data.fragments}
-              familiarRuns={knob("familiar_unlock_runs", 5)}
-              rareRuns={knob("rare_unlock_runs", 20)}
               portrait={portraitFor(ref)}
               onSelect={(key) => {
                 setFocusKey(key);

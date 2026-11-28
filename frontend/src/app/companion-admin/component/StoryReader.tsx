@@ -18,6 +18,7 @@ import {
 } from "../../generated-apis-types";
 import type { CompanionGeneratedStorySchema } from "../../generated-apis-types/schemas";
 import { useApiErrorMessage, useI18n } from "../../i18n";
+import { asWeight } from "../constellation";
 import { useAdminRefresh } from "../hook/useAdminRefresh";
 
 interface StoryReaderProps {
@@ -316,7 +317,7 @@ function StoryForm({
           </select>
         </label>
         <Badge tone="ochre">
-          {t(`companionAdmin.fragments.tiers.${story.tier}`)}
+          {t(`companionAdmin.fragments.weights.${asWeight(story.tier)}`)}
         </Badge>
       </div>
       <div className="ca-actions">

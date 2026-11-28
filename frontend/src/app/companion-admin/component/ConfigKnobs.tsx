@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button } from "../../component/Button";
 import type { CompanionConfigKnobSchema } from "../../generated-apis-types/schemas";
 import { useI18n, type TranslationKey } from "../../i18n";
+import { asWeight } from "../constellation";
 
 type KnobValue = number | boolean | string | string[];
 
@@ -17,7 +18,9 @@ interface ConfigKnobsProps {
   readonly resetLabel: string;
 }
 
-const GROUPS = ["unlock", "recall", "pacing", "life_story", "words"] as const;
+const GROUPS = ["recall", "pacing", "life_story", "words"] as const;
+/** Retired with the unlock system; hidden even if an older API still sends them. */
+const RETIRED_KNOBS = new Set(["familiar_unlock_runs", "rare_unlock_runs"]);
 
 function knobLabelKey(key: string): TranslationKey {
   return `companionAdmin.config.knobs.${key}` as TranslationKey;
@@ -92,7 +95,7 @@ function KnobInput({ id, knob, value, perAccount, onChange }: KnobInputProps) {
         {inherit}
         {(["first", "familiar", "rare"] as const).map((tier) => (
           <option key={tier} value={tier}>
-            {t(`companionAdmin.fragments.tiers.${tier}`)}
+            {t(`companionAdmin.fragments.weights.${asWeight(tier)}`)}
           </option>
         ))}
       </select>
@@ -152,6 +155,7 @@ export function ConfigKnobs({
   const submit = () => {
     const values: Record<string, KnobValue | null> = {};
     for (const knob of knobs) {
+      if (RETIRED_KNOBS.has(knob.key)) continue;
       const raw = draft[knob.key] ?? "";
       if (raw === initial(knob)) continue;
       if (raw !== "") values[knob.key] = parseKnob(knob.kind, raw);
@@ -172,7 +176,9 @@ export function ConfigKnobs({
   return (
     <div className="ca-knobs">
       {GROUPS.map((group) => {
-        const items = knobs.filter((knob) => knob.group === group);
+        const items = knobs.filter(
+          (knob) => knob.group === group && !RETIRED_KNOBS.has(knob.key),
+        );
         if (items.length === 0) return null;
         return (
           <fieldset key={group} className="ca-knob-group">

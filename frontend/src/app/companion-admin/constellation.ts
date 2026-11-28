@@ -4,14 +4,21 @@
  * Kept free of React so `bun test` can cover it.
  */
 
-export type FragmentState = "locked" | "unlocked" | "told";
-export type FragmentTier = "first" | "familiar" | "rare";
+export type FragmentWeight = "everyday" | "past" | "heart";
 export type FragmentOrigin = "preset" | "admin" | "user" | "generated";
+export type ToldFilter = "all" | "told" | "untold";
 
+/**
+ * A memory as the admin views see it. Nothing is locked: every memory is
+ * visible to the librarian, who judges its weight herself. The API may send
+ * the older `tier` (first, familiar, rare) or the newer `weight`; both map
+ * onto the same three weights.
+ */
 export interface FragmentLike {
   readonly key: string;
-  readonly tier: FragmentTier;
-  readonly state: FragmentState;
+  readonly tier?: string | null;
+  readonly weight?: string | null;
+  readonly state?: string | null;
   readonly origin: FragmentOrigin;
   readonly text: string;
   readonly themes: readonly string[];
@@ -24,22 +31,67 @@ export interface Star {
   readonly x: number;
   readonly y: number;
   readonly r: number;
-  readonly tier: FragmentTier;
-  readonly state: FragmentState;
+  readonly weight: FragmentWeight;
+  readonly told: boolean;
   readonly origin: FragmentOrigin;
   readonly hidden: boolean;
 }
 
-export const TIER_ORDER: readonly FragmentTier[] = [
-  "first",
-  "familiar",
-  "rare",
+export const WEIGHT_ORDER: readonly FragmentWeight[] = [
+  "everyday",
+  "past",
+  "heart",
 ];
-const TIER_RADIUS: Readonly<Record<FragmentTier, number>> = {
-  first: 0.36,
-  familiar: 0.62,
-  rare: 0.86,
+const WEIGHT_RADIUS: Readonly<Record<FragmentWeight, number>> = {
+  everyday: 0.36,
+  past: 0.62,
+  heart: 0.86,
 };
+const TIER_TO_WEIGHT: Readonly<Record<string, FragmentWeight>> = {
+  first: "everyday",
+  familiar: "past",
+  rare: "heart",
+  everyday: "everyday",
+  past: "past",
+  heart: "heart",
+};
+const WEIGHT_TO_TIER: Readonly<
+  Record<FragmentWeight, "first" | "familiar" | "rare">
+> = {
+  everyday: "first",
+  past: "familiar",
+  heart: "rare",
+};
+
+/** The weight of a memory from either the `weight` or the legacy `tier` field. */
+export function weightOf(
+  fragment: Pick<FragmentLike, "tier" | "weight">,
+): FragmentWeight {
+  return (
+    TIER_TO_WEIGHT[fragment.weight ?? ""] ??
+    TIER_TO_WEIGHT[fragment.tier ?? ""] ??
+    "everyday"
+  );
+}
+
+/** Map a weight or a legacy tier value to a weight (unknown values: everyday). */
+export function asWeight(value: string | null | undefined): FragmentWeight {
+  return TIER_TO_WEIGHT[value ?? ""] ?? "everyday";
+}
+
+/** The legacy tier value the current API still accepts for a weight. */
+export function tierForWeight(
+  weight: FragmentWeight,
+): "first" | "familiar" | "rare" {
+  return WEIGHT_TO_TIER[weight];
+}
+
+/** Whether the librarian has already told this memory to the account. */
+export function isTold(
+  fragment: Pick<FragmentLike, "state" | "told_count">,
+): boolean {
+  return fragment.state === "told" || fragment.told_count > 0;
+}
 
 /** A stable 0..1 pseudo-random number for a string (FNV-1a). */
 export function hashUnit(value: string): number {
@@ -52,9 +104,10 @@ export function hashUnit(value: string): number {
 }
 
 /**
- * Place fragments on three concentric rings (first, familiar, rare). Positions
- * depend only on the fragment keys, so a star never jumps between renders.
- * Coordinates are in a 0..size square centred on size/2.
+ * Place every memory on three concentric rings by weight (everyday inside,
+ * the past, then what lies close to the heart). Positions depend only on the
+ * keys, so a star never jumps between renders. Coordinates are in a 0..size
+ * square centred on size/2. Told memories shine; untold ones glimmer.
  */
 export function layoutStars(
   fragments: readonly FragmentLike[],
@@ -62,24 +115,22 @@ export function layoutStars(
 ): Star[] {
   const centre = size / 2;
   const stars: Star[] = [];
-  for (const tier of TIER_ORDER) {
-    const ring = fragments.filter((fragment) => fragment.tier === tier);
+  for (const weight of WEIGHT_ORDER) {
+    const ring = fragments.filter((fragment) => weightOf(fragment) === weight);
     ring.forEach((fragment, index) => {
       const jitter = hashUnit(fragment.key);
       const angle =
         ((index + jitter * 0.6) / Math.max(ring.length, 1)) * Math.PI * 2 +
-        TIER_ORDER.indexOf(tier) * 0.7;
-      const radius = (TIER_RADIUS[tier] + (jitter - 0.5) * 0.08) * centre;
+        WEIGHT_ORDER.indexOf(weight) * 0.7;
+      const radius = (WEIGHT_RADIUS[weight] + (jitter - 0.5) * 0.08) * centre;
+      const told = isTold(fragment);
       stars.push({
         key: fragment.key,
         x: Math.round((centre + Math.cos(angle) * radius) * 10) / 10,
         y: Math.round((centre + Math.sin(angle) * radius) * 10) / 10,
-        r:
-          fragment.state === "told"
-            ? 3.4 + Math.min(fragment.told_count, 4) * 0.5
-            : 2.4,
-        tier,
-        state: fragment.state,
+        r: told ? 3.4 + Math.min(fragment.told_count, 4) * 0.5 : 2.6,
+        weight,
+        told,
         origin: fragment.origin,
         hidden: fragment.hidden_by_admin === true,
       });
@@ -92,7 +143,7 @@ export function layoutStars(
 export function constellationLines(
   stars: readonly Star[],
 ): Array<readonly [Star, Star]> {
-  const lit = stars.filter((star) => star.state === "told" && !star.hidden);
+  const lit = stars.filter((star) => star.told && !star.hidden);
   const lines: Array<readonly [Star, Star]> = [];
   for (let index = 1; index < lit.length; index += 1) {
     lines.push([lit[index - 1], lit[index]] as const);
@@ -101,15 +152,15 @@ export function constellationLines(
 }
 
 export interface FragmentFilter {
-  readonly state: FragmentState | "all";
-  readonly tier: FragmentTier | "all";
+  readonly told: ToldFilter;
+  readonly weight: FragmentWeight | "all";
   readonly origin: FragmentOrigin | "all";
   readonly query: string;
 }
 
 export const EMPTY_FILTER: FragmentFilter = {
-  state: "all",
-  tier: "all",
+  told: "all",
+  weight: "all",
   origin: "all",
   query: "",
 };
@@ -119,72 +170,71 @@ export function filterFragments<T extends FragmentLike>(
   filter: FragmentFilter,
 ): T[] {
   const query = filter.query.trim().toLowerCase();
-  return fragments.filter(
-    (fragment) =>
-      (filter.state === "all" || fragment.state === filter.state) &&
-      (filter.tier === "all" || fragment.tier === filter.tier) &&
+  return fragments.filter((fragment) => {
+    const told = isTold(fragment);
+    return (
+      (filter.told === "all" || (filter.told === "told") === told) &&
+      (filter.weight === "all" || weightOf(fragment) === filter.weight) &&
       (filter.origin === "all" || fragment.origin === filter.origin) &&
       (!query ||
         fragment.key.toLowerCase().includes(query) ||
         fragment.text.toLowerCase().includes(query) ||
-        fragment.themes.some((theme) => theme.toLowerCase().includes(query))),
-  );
+        fragment.themes.some((theme) => theme.toLowerCase().includes(query)))
+    );
+  });
 }
 
-export interface StateCounts {
+export interface ToldCounts {
   readonly told: number;
-  readonly unlocked: number;
-  readonly locked: number;
+  readonly untold: number;
   readonly total: number;
 }
 
-export function countStates(fragments: readonly FragmentLike[]): StateCounts {
+export function countTold(fragments: readonly FragmentLike[]): ToldCounts {
   let told = 0;
-  let unlocked = 0;
-  let locked = 0;
+  let untold = 0;
   for (const fragment of fragments) {
-    if (fragment.hidden_by_admin) {
-      continue;
-    }
-    if (fragment.state === "told") told += 1;
-    else if (fragment.state === "unlocked") unlocked += 1;
-    else locked += 1;
+    if (fragment.hidden_by_admin) continue;
+    if (isTold(fragment)) told += 1;
+    else untold += 1;
   }
-  return { told, unlocked, locked, total: told + unlocked + locked };
+  return { told, untold, total: told + untold };
 }
 
 export interface TimelineMark {
-  readonly kind: "familiar" | "rare" | "now" | "moment";
+  readonly kind: "start" | "lastMoment" | "now" | "moment";
   readonly run: number;
   readonly at: number;
 }
 
 /**
- * Marks on a run axis from 0 to a span that always shows the next milestone:
- * tier unlocks, the current run count, and the next story moment.
+ * Marks on the run axis: the first conversation, the last story moment, now,
+ * and the next story moment. The span always leaves room for the next mark.
  */
 export function timelineMarks(input: {
   readonly completedRuns: number;
-  readonly familiarRuns: number;
-  readonly rareRuns: number;
+  readonly lastStoryRun: number | null;
   readonly nextMomentIn: number | null;
 }): { readonly span: number; readonly marks: TimelineMark[] } {
   const moment =
     input.nextMomentIn === null
       ? null
       : input.completedRuns + input.nextMomentIn;
-  const span =
-    Math.max(input.rareRuns, input.completedRuns, moment ?? 0, 1) * 1.08;
+  const span = Math.max(input.completedRuns, moment ?? 0, 1) * 1.08;
   const place = (run: number) => Math.min(1, Math.max(0, run / span));
-  const marks: TimelineMark[] = [
-    {
-      kind: "familiar",
-      run: input.familiarRuns,
-      at: place(input.familiarRuns),
-    },
-    { kind: "rare", run: input.rareRuns, at: place(input.rareRuns) },
-    { kind: "now", run: input.completedRuns, at: place(input.completedRuns) },
-  ];
+  const marks: TimelineMark[] = [{ kind: "start", run: 0, at: 0 }];
+  if (input.lastStoryRun !== null && input.lastStoryRun > 0) {
+    marks.push({
+      kind: "lastMoment",
+      run: input.lastStoryRun,
+      at: place(input.lastStoryRun),
+    });
+  }
+  marks.push({
+    kind: "now",
+    run: input.completedRuns,
+    at: place(input.completedRuns),
+  });
   if (moment !== null) {
     marks.push({ kind: "moment", run: moment, at: place(moment) });
   }

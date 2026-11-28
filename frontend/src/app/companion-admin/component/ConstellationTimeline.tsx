@@ -6,18 +6,19 @@ import type {
 } from "../../generated-apis-types/schemas";
 import { useI18n } from "../../i18n";
 import {
+  WEIGHT_ORDER,
   constellationLines,
-  countStates,
+  countTold,
+  isTold,
   layoutStars,
   timelineMarks,
+  weightOf,
   type FragmentLike,
 } from "../constellation";
 
 interface ConstellationTimelineProps {
   readonly bond: CompanionBondAdminSchema;
   readonly fragments: readonly CompanionUserFragmentSchema[];
-  readonly familiarRuns: number;
-  readonly rareRuns: number;
   readonly portrait: string | null;
   readonly onSelect: (key: string) => void;
 }
@@ -25,33 +26,30 @@ interface ConstellationTimelineProps {
 const SIZE = 320;
 
 /**
- * The account's memories as a sky: three rings (first, familiar, rare), lit
- * stars for told memories, dim stars for unlocked ones, and faint dots for
- * locked ones. Below it, a run axis shows tier unlocks and the next moment.
+ * Every memory as a star; nothing is locked. Rings and hue show its weight
+ * (everyday, the past, close to the heart), brightness shows whether the
+ * librarian has told it yet. Below, a run axis marks the first conversation,
+ * the last and next story moments, and now.
  */
 export function ConstellationTimeline({
   bond,
   fragments,
-  familiarRuns,
-  rareRuns,
   portrait,
   onSelect,
 }: ConstellationTimelineProps) {
   const { t, formatNumber } = useI18n();
   const titleId = useId();
   const [hovered, setHovered] = useState<string | null>(null);
-  const stars = useMemo(
-    () => layoutStars(fragments as readonly FragmentLike[], SIZE),
-    [fragments],
-  );
+  const items = fragments as readonly FragmentLike[];
+  const stars = useMemo(() => layoutStars(items, SIZE), [items]);
   const lines = useMemo(() => constellationLines(stars), [stars]);
-  const counts = countStates(fragments as readonly FragmentLike[]);
+  const counts = countTold(items);
   const timeline = timelineMarks({
     completedRuns: bond.completed_runs,
-    familiarRuns,
-    rareRuns,
+    lastStoryRun: bond.last_story_run ?? null,
     nextMomentIn: bond.next_story_moment_in_runs ?? null,
   });
+  const nowAt = timeline.marks.find((mark) => mark.kind === "now")?.at ?? 0;
   const hoveredFragment =
     fragments.find((fragment) => fragment.key === hovered) ?? null;
 
@@ -64,13 +62,13 @@ export function ConstellationTimeline({
           role="img"
           aria-label={t("companionAdmin.companion.sections.skyHint")}
         >
-          {[0.36, 0.62, 0.86].map((ring) => (
+          {[0.36, 0.62, 0.86].map((ring, index) => (
             <circle
               key={ring}
               cx={SIZE / 2}
               cy={SIZE / 2}
               r={(SIZE / 2) * ring}
-              className="ca-sky__ring"
+              className={`ca-sky__ring ca-sky__ring--${WEIGHT_ORDER[index]}`}
             />
           ))}
           {lines.map(([from, to]) => (
@@ -83,34 +81,44 @@ export function ConstellationTimeline({
               className="ca-sky__line"
             />
           ))}
-          {stars.map((star) => (
-            <circle
-              key={star.key}
-              cx={star.x}
-              cy={star.y}
-              r={star.r}
-              className={`ca-star ca-star--${star.state} ca-star--${star.origin}${
-                star.hidden ? " ca-star--hidden" : ""
-              }${hovered === star.key ? " is-hovered" : ""}`}
-              tabIndex={0}
-              role="button"
-              aria-label={[
-                star.key,
-                t(`companionAdmin.fragments.states.${star.state}`),
-              ].join(" · ")}
-              onMouseEnter={() => setHovered(star.key)}
-              onMouseLeave={() => setHovered(null)}
-              onFocus={() => setHovered(star.key)}
-              onBlur={() => setHovered(null)}
-              onClick={() => onSelect(star.key)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelect(star.key);
-                }
-              }}
-            />
-          ))}
+          {stars.map((star) => {
+            const state = star.told ? "told" : "untold";
+            const classes = [
+              "ca-star",
+              `ca-star--${state}`,
+              `ca-star--${star.weight}`,
+              `ca-star--${star.origin}`,
+              star.hidden ? "ca-star--hidden" : "",
+              hovered === star.key ? "is-hovered" : "",
+            ];
+            return (
+              <circle
+                key={star.key}
+                cx={star.x}
+                cy={star.y}
+                r={star.r}
+                className={classes.filter(Boolean).join(" ")}
+                tabIndex={0}
+                role="button"
+                aria-label={[
+                  star.key,
+                  t(`companionAdmin.fragments.weights.${star.weight}`),
+                  t(`companionAdmin.fragments.states.${state}`),
+                ].join(" · ")}
+                onMouseEnter={() => setHovered(star.key)}
+                onMouseLeave={() => setHovered(null)}
+                onFocus={() => setHovered(star.key)}
+                onBlur={() => setHovered(null)}
+                onClick={() => onSelect(star.key)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(star.key);
+                  }
+                }}
+              />
+            );
+          })}
         </svg>
         {portrait ? (
           <img
@@ -129,8 +137,16 @@ export function ConstellationTimeline({
         <figcaption id={titleId} className="ca-sky__caption">
           {hoveredFragment ? (
             <>
-              <strong>{hoveredFragment.key}</strong>
-              <span>{hoveredFragment.text.slice(0, 140)}…</span>
+              <strong>
+                {hoveredFragment.key} ·{" "}
+                {t(
+                  `companionAdmin.fragments.weights.${weightOf(hoveredFragment as FragmentLike)}`,
+                )}
+                {isTold(hoveredFragment as FragmentLike)
+                  ? ` · ${t("companionAdmin.fragments.states.told")}`
+                  : ""}
+              </strong>
+              <span>{hoveredFragment.text.slice(0, 160)}…</span>
             </>
           ) : (
             <span>{t("companionAdmin.companion.sections.skyHint")}</span>
@@ -145,15 +161,19 @@ export function ConstellationTimeline({
           {formatNumber(counts.told)}
         </li>
         <li>
-          <span className="ca-dot ca-dot--unlocked" aria-hidden="true" />
-          {t("companionAdmin.companion.legend.unlocked")} ·{" "}
-          {formatNumber(counts.unlocked)}
+          <span className="ca-dot ca-dot--untold" aria-hidden="true" />
+          {t("companionAdmin.companion.legend.untold")} ·{" "}
+          {formatNumber(counts.untold)}
         </li>
-        <li>
-          <span className="ca-dot ca-dot--locked" aria-hidden="true" />
-          {t("companionAdmin.companion.legend.locked")} ·{" "}
-          {formatNumber(counts.locked)}
-        </li>
+        {WEIGHT_ORDER.map((weight) => (
+          <li key={weight}>
+            <span className={`ca-dot ca-dot--${weight}`} aria-hidden="true" />
+            {t(`companionAdmin.fragments.weights.${weight}`)} ·{" "}
+            {formatNumber(
+              items.filter((item) => weightOf(item) === weight).length,
+            )}
+          </li>
+        ))}
       </ul>
 
       <div
@@ -163,9 +183,7 @@ export function ConstellationTimeline({
         <div className="ca-timeline__track">
           <div
             className="ca-timeline__fill"
-            style={{
-              width: `${(timeline.marks.find((mark) => mark.kind === "now")?.at ?? 0) * 100}%`,
-            }}
+            style={{ width: `${nowAt * 100}%` }}
           />
           {timeline.marks.map((mark) => (
             <span
