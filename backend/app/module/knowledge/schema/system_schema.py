@@ -36,3 +36,26 @@ class HealthSchema(BaseModel):
     web_search_configured: bool
     web_fetch_provider: str
     web_fetch_configured: bool
+
+
+class EmbeddingBackfillStatusSchema(BaseModel):
+    """Root-only view of chunks still waiting for an embedding.
+
+    ``pending_chunks`` counts rows whose text is indexed (keyword search works)
+    but whose vector is still missing; the worker fills them in automatically.
+    ``worker_state`` is what the dedicated worker last published: ``running``,
+    ``idle``, ``paused`` (provider failure; resumes at ``resume_at``),
+    ``disabled`` (no embedding provider), or ``unknown`` (no report yet).
+    Only counts and stable codes appear here, never chunk text.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    pending_chunks: int
+    pending_accounts: int
+    abandoned_chunks: int
+    worker_state: str
+    resume_at: datetime | None
+    last_error_code: str | None
+    allowance_blocked_accounts: int
+    updated_at: datetime | None

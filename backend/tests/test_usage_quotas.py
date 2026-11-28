@@ -1013,7 +1013,8 @@ def _drafts() -> list[ChunkDraft]:
     ]
 
 
-def test_indexer_strict_denial_raises_before_any_chunk_or_provider_call() -> None:
+def test_indexer_strict_denial_keeps_text_and_leaves_vectors_pending() -> None:
+    """A spent allowance never fails durable ingestion; vectors stay pending."""
     repository = _FakeChunkRepository()
     embedder = _FakeEmbedder()
     quota = _FakeQuota(allowed=False)
@@ -1025,15 +1026,16 @@ def test_indexer_strict_denial_raises_before_any_chunk_or_provider_call() -> Non
         quota=cast(Any, quota),
     )
 
-    with pytest.raises(EmbeddingUsageLimitExceededError):
-        asyncio.run(
-            indexer.index_chunks(
-                source_kind="file",
-                source_id=1,
-                drafts=_drafts(),
-            )
+    count = asyncio.run(
+        indexer.index_chunks(
+            source_kind="file",
+            source_id=1,
+            drafts=_drafts(),
         )
-    assert repository.chunks == []
+    )
+    assert count == 2
+    assert len(repository.chunks) == 2
+    assert all(chunk.embedding is None for chunk in repository.chunks)
     assert embedder.calls == []
     assert quota.recorded == []
 
@@ -1357,7 +1359,7 @@ def test_durable_ingest_job_error_code_for_denied_embedding() -> None:
     )
 
 
-def test_durable_ingest_job_fails_when_embedding_is_denied(
+def test_durable_ingest_job_succeeds_with_pending_vectors_when_embedding_is_denied(
     client: TestClient,
     root_account: UserClient,
     owner_engine: Engine,
@@ -1367,7 +1369,7 @@ def test_durable_ingest_job_fails_when_embedding_is_denied(
         "/api/v1/files/text/async",
         json={
             "path": "/quota/denied.md",
-            "content": "Embedding quota denial must fail the durable job.",
+            "content": "Embedding quota denial keeps the text searchable.",
         },
     )
     assert queued.status_code == 202, queued.text
@@ -1393,8 +1395,19 @@ def test_durable_ingest_job_fails_when_embedding_is_denied(
     job = client.get(f"/api/v1/files/ingest-jobs/{job_id}")
     assert job.status_code == 200, job.text
     body = job.json()
-    assert body["status"] == "failed"
-    assert body["error_code"] == "embedding_usage_limit_exceeded"
+    assert body["status"] == "ready", body
+    assert body["error_code"] is None
+    # The text is indexed for keyword search; vectors wait for the backfill.
+    with owner_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT embedding IS NULL AS pending FROM chunk "
+                "WHERE user_id = :user_id AND source_kind = 'file'"
+            ),
+            {"user_id": root_account.user_id},
+        ).all()
+    assert rows
+    assert all(row.pending for row in rows)
 
 
 # ---------------------------------------------------------------------------

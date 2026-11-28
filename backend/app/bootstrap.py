@@ -36,6 +36,7 @@ from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.agent.service.history_indexer import AgentHistoryIndexer
 from app.module.knowledge.dependencies import (
+    build_embedding_backfill,
     build_history_chunk_store,
     build_ingest_worker,
     build_job_consumer,
@@ -45,6 +46,7 @@ from app.module.knowledge.dependencies import (
     load_ingest_runtime_config,
     reload_ai_runtime,
 )
+from app.module.knowledge.service.embedding_backfill import EmbeddingBackfill
 from app.module.knowledge.service.ingest_job_service import IngestWorker
 from app.module.knowledge.service.provider_error_notice_service import (
     ProviderErrorNoticeService,
@@ -132,8 +134,9 @@ class BackgroundServices:
     cleanup: ChatAttachmentCleanup
     history_indexer: AgentHistoryIndexer
     consumer: RabbitMQJobConsumer | None = None
-    # Only the dedicated worker process starts the backfill (see worker.py).
+    # Only the dedicated worker process starts the backfills (see worker.py).
     thumbnail_backfill: FileThumbnailBackfill | None = None
+    embedding_backfill: EmbeddingBackfill | None = None
     _tasks: list[asyncio.Task[None]] = field(default_factory=list)
 
     def _spawn(self, coroutine: Coroutine[Any, Any, None], name: str) -> None:
@@ -156,6 +159,14 @@ class BackgroundServices:
             self._spawn(
                 self.thumbnail_backfill.run_forever(stop_event),
                 "file-thumbnail-backfill",
+            )
+
+    def start_embedding_backfill(self, stop_event: asyncio.Event | None) -> None:
+        """Start the pending-embedding backfill loop (dedicated worker only)."""
+        if self.embedding_backfill is not None:
+            self._spawn(
+                self.embedding_backfill.run_forever(stop_event),
+                "embedding-backfill",
             )
 
     def start_worker_loop(self) -> None:
@@ -201,6 +212,11 @@ async def build_background_services(state: State, settings: Settings) -> Backgro
         thumbnail_backfill=(
             build_thumbnail_backfill(state, database)
             if settings.thumbnail_backfill_enabled
+            else None
+        ),
+        embedding_backfill=(
+            build_embedding_backfill(state, database)
+            if settings.embedding_backfill_enabled
             else None
         ),
     )

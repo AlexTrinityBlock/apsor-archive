@@ -117,6 +117,18 @@ class ChunkRepositoryProtocol(Protocol):
         limit: int,
     ) -> list[ChunkModel]: ...
 
+    async def list_pending_embeddings(
+        self,
+        *,
+        after_id: int,
+        limit: int,
+        max_failures: int,
+    ) -> list[ChunkModel]: ...
+
+    async def count_pending_embeddings(self, *, max_failures: int) -> int: ...
+
+    async def record_embedding_failure(self, chunk_ids: Sequence[int]) -> None: ...
+
     async def update_embedding(
         self,
         chunk_id: int,
