@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type Ref,
 } from "react";
 
 import { Icon } from "../../component/Icon";
@@ -15,7 +16,6 @@ import { ACTION_LABEL_KEYS, isAnnouncedAction } from "../actions";
 import type { CompanionStreamInput } from "../director";
 import type { DragRelease, ResizeSource } from "../gesture";
 import { useBusySignal } from "../hook/useBusySignal";
-import { BOOKMARK_HEIGHT, CompanionBookmark } from "./CompanionBookmark";
 import { useChatLayout } from "../hook/useChatLayout";
 import { useCompanionDirector } from "../hook/useCompanionDirector";
 import { useCompanionGestures } from "../hook/useCompanionGestures";
@@ -29,12 +29,15 @@ import {
   dockX,
   intersectionArea,
   isLeftSide,
+  isViewportSide,
   bookmarkTop,
   landingPosition,
   peekGeometry,
   resolveBox,
   shiftPosition,
+  type BookmarkPlacement,
   type Breakpoint,
+  type DockSide,
   type SavedPosition,
 } from "../layout";
 import type { CompanionCharacter } from "../manifest";
@@ -58,7 +61,12 @@ import {
   type Detent,
   type Readout,
 } from "../size";
-import { DOCK_SPRING, isSettled, stepSpring, type SpringState } from "../spring";
+import {
+  DOCK_SPRING,
+  isSettled,
+  stepSpring,
+  type SpringState,
+} from "../spring";
 import {
   readLastNonFull,
   readMinimized,
@@ -114,7 +122,77 @@ const KEY_STEP = 0.04;
 const READOUT_LINGER_MS = 900;
 const ANNOUNCE_DELAY_MS = 500;
 const HINT_HOVER_MS = 700;
-const QUIET_ACTIONS: ReadonlySet<string> = new Set(["idle", "greet", "listening", "sleeping"]);
+/** Step-aside style: slide out at a window edge, shrink elsewhere. */
+function peekStyleFor(
+  peeking: boolean,
+  side: DockSide,
+): "none" | "slide" | "shrink" {
+  if (!peeking) {
+    return "none";
+  }
+  return isViewportSide(side) ? "slide" : "shrink";
+}
+
+interface MinimizedTabProps {
+  readonly ref?: Ref<HTMLButtonElement>;
+  readonly character: CompanionCharacter;
+  readonly left: boolean;
+  readonly placement: BookmarkPlacement;
+  readonly label: string;
+  readonly hidden: boolean;
+  readonly onRestore: () => void;
+}
+
+/** The minimized companion: a small portrait tab at the visible window edge. */
+function MinimizedTab({
+  ref,
+  character,
+  left,
+  placement,
+  label,
+  hidden,
+  onRestore,
+}: MinimizedTabProps) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      className={`companion-tab${left ? " is-left" : ""}`}
+      style={
+        left
+          ? { top: placement.top, left: placement.left }
+          : { top: placement.top, right: placement.right }
+      }
+      onClick={onRestore}
+      aria-label={label}
+      title={label}
+      hidden={hidden}
+    >
+      {character.portrait !== null ? (
+        <img
+          src={character.portrait}
+          alt=""
+          width={28}
+          height={28}
+          draggable={false}
+        />
+      ) : (
+        <Icon name="user" size={16} />
+      )}
+      <span className="companion-tab__ribbon" aria-hidden="true" />
+    </button>
+  );
+}
+
+/** Height of the minimized portrait tab, kept fully inside the visible band. */
+const TAB_HEIGHT = 52;
+
+const QUIET_ACTIONS: ReadonlySet<string> = new Set([
+  "idle",
+  "greet",
+  "listening",
+  "sleeping",
+]);
 
 function readPositions(): Positions {
   return {
@@ -124,7 +202,12 @@ function readPositions(): Positions {
   };
 }
 
-function setTransform(root: HTMLElement | null, dx: number, dy: number, k: number) {
+function setTransform(
+  root: HTMLElement | null,
+  dx: number,
+  dy: number,
+  k: number,
+) {
   root?.style.setProperty("--companion-dx", `${dx.toFixed(1)}px`);
   root?.style.setProperty("--companion-dy", `${dy.toFixed(1)}px`);
   root?.style.setProperty("--companion-k", k.toFixed(4));
@@ -167,12 +250,20 @@ export function CompanionOverlay({
   const [landing, setLanding] = useState<Landing | null>(null);
   const [readout, setReadout] = useState<ReadoutState | null>(null);
   const [readoutVisible, setReadoutVisible] = useState(false);
-  const [announcement, setAnnouncement] = useState<{ text: string; at: number } | null>(null);
+  const [announcement, setAnnouncement] = useState<{
+    text: string;
+    at: number;
+  } | null>(null);
   const [spoken, setSpoken] = useState("");
   const [hintSeen, setHintSeen] = useState(readResizeHintSeen);
   const [hintOpen, setHintOpen] = useState(false);
 
-  const director = useCompanionDirector({ stream, draft, conversationKey, held });
+  const director = useCompanionDirector({
+    stream,
+    draft,
+    conversationKey,
+    held,
+  });
   const { action } = director;
   // The coach hint only appears while the companion is not working; timers
   // read the latest pose through this ref.
@@ -181,33 +272,52 @@ export function CompanionOverlay({
     quietRef.current = QUIET_ACTIONS.has(action);
   }, [action]);
 
-  const range = useMemo(() => sizeRange(breakpoint, context), [breakpoint, context]);
+  const range = useMemo(
+    () => sizeRange(breakpoint, context),
+    [breakpoint, context],
+  );
   const detents = useMemo(() => detentsFor(range), [range]);
   // Chosen (persisted level) vs fitted (derived each layout pass).
-  const fitted = fittedFigure(figureForLevel(level, range), breakpoint, context);
+  const fitted = fittedFigure(
+    figureForLevel(level, range),
+    breakpoint,
+    context,
+  );
   const figure = fitted.figure;
   const size = boxForFigure(figure);
   const busy = useBusySignal(opacityMode === "auto");
-  const position = positions[breakpoint] ?? defaultPosition(breakpoint, context, size);
-  const box = useMemo(() => resolveBox(position, context, size), [position, context, size]);
+  const position =
+    positions[breakpoint] ?? defaultPosition(breakpoint, context, size);
+  const box = useMemo(
+    () => resolveBox(position, context, size),
+    [position, context, size],
+  );
   let presence = avoidance(box, context, dialogOpen, breakpoint, position.side);
   if (!fitted.room && presence !== "hidden") {
     presence = "retract";
   }
   const settled = !expanded && !held && !resizing;
-  const peeking = presence === "peek" && settled;
-  // Tucked away at the window edge as a bookmark until tapped or hovered.
-  const retracted = presence === "retract" && settled;
+  // No room or covering text: step aside as the familiar peek (slide out at a
+  // window edge, shrink elsewhere) until hovered, focused, or tapped.
+  const peeking = (presence === "peek" || presence === "retract") && settled;
   const peek = peekGeometry(size, context);
   const left = isLeftSide(position.side);
   const rubber = motion === "full";
 
-  const coversText = (rect: { left: number; top: number; width: number; height: number }) => {
+  const coversText = (rect: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  }) => {
     const column = context.column;
     if (column === null) {
       return false;
     }
-    return intersectionArea(rect, column) / Math.max(1, rect.width * rect.height) > 0.12;
+    return (
+      intersectionArea(rect, column) / Math.max(1, rect.width * rect.height) >
+      0.12
+    );
   };
 
   const sizeLabel = (value: Readout): string =>
@@ -215,7 +325,10 @@ export function CompanionOverlay({
       ? t("companion.size.percent", { percent: value.percent })
       : t(value.labelKey);
 
-  const commitPosition = (next: SavedPosition, from: { left: number; top: number }) => {
+  const commitPosition = (
+    next: SavedPosition,
+    from: { left: number; top: number },
+  ) => {
     const nextBox = resolveBox(next, context, size);
     writePosition(breakpoint, next);
     setPositions((current) => ({ ...current, [breakpoint]: next }));
@@ -240,7 +353,10 @@ export function CompanionOverlay({
    * Store a new size: keep the feet still, spring from the old box (or from
    * the live preview, which already matches) and announce it.
    */
-  const commitLevel = (next: number, options: { animate: boolean; deferred?: boolean }) => {
+  const commitLevel = (
+    next: number,
+    options: { animate: boolean; deferred?: boolean },
+  ) => {
     const settled = settleLevel(next);
     const nextFigure = figureForLevel(settled, range);
     const nextBox = boxForFigure(nextFigure);
@@ -263,7 +379,9 @@ export function CompanionOverlay({
       lastNonFull.current = settled;
       writeLastNonFull(settled);
     }
-    const snapped = detents.find((detent) => Math.abs(detent.level - settled) < 0.001) ?? null;
+    const snapped =
+      detents.find((detent) => Math.abs(detent.level - settled) < 0.001) ??
+      null;
     const value = readoutFor(settled, snapped, range);
     setReadout({ ...value, level: settled, coversText: coversText(nextRect) });
     setReadoutVisible(true);
@@ -288,10 +406,19 @@ export function CompanionOverlay({
     live.display = shown.level;
     live.snapped = shown.snapped;
     const liveBox = boxForFigure(figureForDisplayLevel(shown.level, range));
-    const target = resolveBox(anchorFeet(position, context, box, liveBox), context, liveBox);
+    const target = resolveBox(
+      anchorFeet(position, context, box, liveBox),
+      context,
+      liveBox,
+    );
     live.dx = target.left - box.left;
     live.dy = target.top - box.top;
-    setTransform(rootRef.current, live.dx, live.dy, liveBox.height / size.height);
+    setTransform(
+      rootRef.current,
+      live.dx,
+      live.dy,
+      liveBox.height / size.height,
+    );
     const value = readoutFor(settleLevel(shown.level), shown.snapped, range);
     const covers = coversText(target);
     setReadout((current) =>
@@ -310,7 +437,9 @@ export function CompanionOverlay({
     if (root === null) {
       return undefined;
     }
-    const still = landing === null || (landing.dx === 0 && landing.dy === 0 && landing.k === 1);
+    const still =
+      landing === null ||
+      (landing.dx === 0 && landing.dy === 0 && landing.k === 1);
     if (still || motion !== "full") {
       setTransform(root, 0, 0, 1);
       return undefined;
@@ -327,7 +456,11 @@ export function CompanionOverlay({
       y = stepSpring(y, 0, seconds, DOCK_SPRING);
       k = stepSpring(k, 1, seconds, DOCK_SPRING);
       setTransform(root, x.value, y.value, k.value);
-      if (isSettled(x, 0, 0.3) && isSettled(y, 0, 0.3) && isSettled(k, 1, 0.002)) {
+      if (
+        isSettled(x, 0, 0.3) &&
+        isSettled(y, 0, 0.3) &&
+        isSettled(k, 1, 0.002)
+      ) {
         setTransform(root, 0, 0, 1);
         return;
       }
@@ -348,7 +481,10 @@ export function CompanionOverlay({
     if (!readoutVisible || resizing) {
       return undefined;
     }
-    const timer = window.setTimeout(() => setReadoutVisible(false), READOUT_LINGER_MS);
+    const timer = window.setTimeout(
+      () => setReadoutVisible(false),
+      READOUT_LINGER_MS,
+    );
     return () => window.clearTimeout(timer);
   }, [readoutVisible, resizing, readout]);
 
@@ -356,7 +492,10 @@ export function CompanionOverlay({
     if (announcement === null) {
       return undefined;
     }
-    const timer = window.setTimeout(() => setSpoken(announcement.text), ANNOUNCE_DELAY_MS);
+    const timer = window.setTimeout(
+      () => setSpoken(announcement.text),
+      ANNOUNCE_DELAY_MS,
+    );
     return () => window.clearTimeout(timer);
   }, [announcement]);
 
@@ -394,7 +533,9 @@ export function CompanionOverlay({
     liveRef.current = {
       startHeight: heightForLevel(startLevel, range),
       display: startLevel,
-      snapped: detents.find((detent) => Math.abs(detent.level - startLevel) < 0.001) ?? null,
+      snapped:
+        detents.find((detent) => Math.abs(detent.level - startLevel) < 0.001) ??
+        null,
       dx: 0,
       dy: 0,
     };
@@ -441,7 +582,13 @@ export function CompanionOverlay({
       setHeld(false);
       const from = { left: box.left + release.dx, top: box.top + release.dy };
       commitPosition(
-        landingPosition(from.left, from.top, { x: release.vx, y: release.vy }, context, size),
+        landingPosition(
+          from.left,
+          from.top,
+          { x: release.vx, y: release.vy },
+          context,
+          size,
+        ),
         from,
       );
     },
@@ -467,7 +614,13 @@ export function CompanionOverlay({
       const live = liveRef.current;
       if (live !== null) {
         applyLive(
-          wheelLevel(settleLevel(live.display), range, deltaY, deltaMode, context.viewport.height),
+          wheelLevel(
+            settleLevel(live.display),
+            range,
+            deltaY,
+            deltaMode,
+            context.viewport.height,
+          ),
         );
       }
     },
@@ -540,18 +693,25 @@ export function CompanionOverlay({
     }
     if (event.key === "ArrowUp" || event.key === "ArrowDown") {
       event.preventDefault();
-      const step = (event.shiftKey ? 3 : 1) * KEY_STEP * (event.key === "ArrowUp" ? -1 : 1);
+      const step =
+        (event.shiftKey ? 3 : 1) *
+        KEY_STEP *
+        (event.key === "ArrowUp" ? -1 : 1);
       commitPosition(shiftPosition(position, step), from);
       return;
     }
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       event.preventDefault();
-      const ordered = DOCK_SIDES.filter((side) => context.panel !== null || !side.startsWith("panel"))
+      const ordered = DOCK_SIDES.filter(
+        (side) => context.panel !== null || !side.startsWith("panel"),
+      )
         .map((side) => ({ side, x: dockX(side, context, size.width) }))
         .sort((a, b) => a.x - b.x);
       const index = ordered.findIndex((item) => item.side === position.side);
       const nextIndex =
-        event.key === "ArrowLeft" ? Math.max(0, index - 1) : Math.min(ordered.length - 1, index + 1);
+        event.key === "ArrowLeft"
+          ? Math.max(0, index - 1)
+          : Math.min(ordered.length - 1, index + 1);
       const next = ordered[nextIndex];
       if (next !== undefined && next.side !== position.side) {
         commitPosition({ ...position, side: next.side }, from);
@@ -610,7 +770,7 @@ export function CompanionOverlay({
     }
   };
 
-  const peekStyle: "none" | "shrink" = peeking ? "shrink" : "none";
+  const peekStyle = peekStyleFor(peeking, position.side);
   const label = t(ACTION_LABEL_KEYS[action]);
   const actionAnnouncement = isAnnouncedAction(action)
     ? t("companion.overlay.announce", { name: character.name, action: label })
@@ -621,17 +781,21 @@ export function CompanionOverlay({
     range,
   );
 
-  if (minimized || retracted) {
+  if (minimized) {
     return (
       <div className="companion-layer" data-companion-root="">
-        <CompanionBookmark
+        <MinimizedTab
           ref={tabRef}
           character={character}
           left={left}
-          placement={bookmarkTop(box.top + FIGURE_HEADROOM, BOOKMARK_HEIGHT, context)}
+          placement={bookmarkTop(
+            box.top + FIGURE_HEADROOM,
+            TAB_HEIGHT,
+            context,
+          )}
           label={t("companion.overlay.restore", { name: character.name })}
           hidden={presence === "hidden"}
-          onActivate={() => (minimized ? setMinimizedPersisted(false, true) : setExpanded(true))}
+          onRestore={() => setMinimizedPersisted(false, true)}
         />
       </div>
     );
@@ -699,7 +863,9 @@ export function CompanionOverlay({
             data-companion-grip=""
             role="slider"
             tabIndex={0}
-            aria-label={t("companion.overlay.resize.handle", { name: character.name })}
+            aria-label={t("companion.overlay.resize.handle", {
+              name: character.name,
+            })}
             aria-orientation="vertical"
             aria-valuemin={0}
             aria-valuemax={100}
@@ -719,7 +885,7 @@ export function CompanionOverlay({
           aria-label={t("companion.overlay.minimize")}
           title={t("companion.overlay.minimize")}
         >
-          <Icon name="minimize" size={12} />
+          <Icon name="bookmark" size={16} />
         </button>
         {readout !== null ? (
           <CompanionSizeReadout
@@ -731,9 +897,7 @@ export function CompanionOverlay({
             showPercent={readout.labelKey !== null}
           />
         ) : null}
-        {hintOpen ? (
-          <CompanionResizeHint onDismiss={dismissHint} />
-        ) : null}
+        {hintOpen ? <CompanionResizeHint onDismiss={dismissHint} /> : null}
         <span className="visually-hidden" id={hintId}>
           {t("companion.overlay.hint")}
         </span>

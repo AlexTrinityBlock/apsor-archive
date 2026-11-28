@@ -121,8 +121,8 @@
   top: 2px;
   right: 0;
   display: inline-grid;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   place-items: center;
   border: 0.7px solid var(--line-strong);
   border-radius: 50%;
@@ -408,59 +408,59 @@
 
 /* Minimized tab ------------------------------------------------------------ */
 
-/* Bookmark tab: the companion tucked away at the visible window edge. */
-.companion-bookmark {
+.companion-tab {
   position: fixed;
+  right: 0;
   display: inline-flex;
-  width: 34px;
-  height: 56px;
-  align-items: flex-start;
+  width: 40px;
+  height: 52px;
+  align-items: center;
   justify-content: center;
-  padding: 7px 0 0;
-  border: 0;
-  background: transparent;
-  color: var(--mono-paper);
+  border: 0.7px solid var(--line-strong);
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: var(--surface);
+  box-shadow: 0 6px 18px rgba(28, 28, 26, 0.12);
   cursor: pointer;
   pointer-events: auto;
-  filter: drop-shadow(0 4px 8px rgba(28, 28, 26, 0.22));
-  /* Always fully on screen: it hugs the visible edge, never past it. */
-  transition: filter var(--speed-fast) var(--ease-out);
+  transition: width var(--speed-fast) var(--ease-out);
 }
 
-.companion-bookmark:hover,
-.companion-bookmark:focus-visible {
-  filter: drop-shadow(0 6px 12px rgba(28, 28, 26, 0.3));
+.companion-tab.is-left {
+  right: auto;
+  left: 0;
+  border-right: 0.7px solid var(--line-strong);
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
 }
 
-.companion-bookmark:focus-visible {
+.companion-tab:hover {
+  width: 46px;
+}
+
+.companion-tab:focus-visible {
   outline: 2px solid var(--mono-ink);
   outline-offset: 2px;
 }
 
-.companion-bookmark__ribbon {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  fill: var(--companion-accent, var(--accent-ochre));
-}
-
-.companion-bookmark__portrait,
-.companion-bookmark__glyph {
-  position: relative;
-  width: 22px;
-  height: 22px;
-  border: 1.5px solid var(--mono-paper);
+.companion-tab img {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   object-fit: cover;
   object-position: top;
   background: var(--mono-card-warm);
 }
 
-.companion-bookmark__glyph {
-  display: grid;
-  place-items: center;
-  color: var(--mono-ink);
+.companion-tab__ribbon {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  width: 6px;
+  height: 14px;
+  background: var(--companion-accent, var(--accent-ochre));
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
+  transform: translateX(-50%);
 }
 
 /* Fitting to a new layout (keyboard opens or closes) eases, never jumps. */
@@ -476,7 +476,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .companion,
-  .companion-bookmark {
+  .companion-tab {
     transition: none;
   }
 }
