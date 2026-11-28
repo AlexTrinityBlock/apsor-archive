@@ -216,7 +216,7 @@ export const chat = {
     errorFallback: "助理步驟失敗。",
     runFinished: "執行以 {reason} 結束。",
     limitStopped: "執行在工具或 token 上限停止。",
-    author: "Apsor Archive 代理",
+    author: "檔案館助理",
     saidBy: "由 {name} 說",
   },
   transcript: {
