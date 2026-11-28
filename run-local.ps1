@@ -6,6 +6,10 @@
 #
 #   .\run-local.ps1              # http://127.0.0.1:8000
 #   .\run-local.ps1 -Port 8080
+#
+# This serves the API only. Uploads stay queued until an ingestion worker runs:
+# start one in a second terminal with `cd backend; uv run apsor-archive worker`,
+# or set $env:APSOR_INGEST_WORKER_ENABLED = "true" for a single-process dev API.
 
 [CmdletBinding()]
 param(

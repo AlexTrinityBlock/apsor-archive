@@ -13,6 +13,9 @@ import type {
   SummarySearchResultSchema,
 } from "../../generated-apis-types/schemas";
 import { useI18n, type Translate } from "../../i18n";
+import {
+  libraryMemoryUrl,
+} from "../../../lib/library-url";
 
 const SNIPPET_LIMIT = 380;
 
@@ -154,7 +157,7 @@ export function FileResultCard({ result, query, rank }: CardProps<FileSearchResu
 /** A memory crystal with its status and a link to the memory reader. */
 export function MemoryResultCard({ result, query, rank }: CardProps<MemorySearchResultSchema>) {
   const { t, formatDateTime } = useI18n();
-  const href = `/memory/${result.memory_id}`;
+  const href = libraryMemoryUrl(result.memory_id);
 
   return (
     <CardFrame tone="memory" rank={rank}>

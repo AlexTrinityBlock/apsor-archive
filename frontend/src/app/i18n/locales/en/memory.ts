@@ -31,8 +31,8 @@ export const memory = {
     nounMatching: "matching",
   },
   vault: {
-    eyebrow: "Memory · vault",
-    title: "Memory Vault",
+    eyebrow: "Library · memories",
+    title: "Memories",
     description:
       "Every pressed memory, newest occurrence first. Active memories stay in search and the timeline; deprecated memories remain readable with their lineage.",
     activeLabel: "active",
@@ -130,7 +130,7 @@ export const memory = {
     metaNewRecord: "new record",
     metaSupersedesOne: "supersedes {count} record",
     metaSupersedesOther: "supersedes {count} records",
-    backToVault: "Back to vault",
+    backToVault: "Back to memories",
     formEyebrow: "New record",
     formTitle: "What should be remembered?",
     contentLabel: "Content",
@@ -192,7 +192,7 @@ export const memory = {
     readingRecord: "Reading record",
     editText: "Edit text",
     deprecate: "Deprecate",
-    backToVault: "Back to vault",
+    backToVault: "Back to memories",
     skeleton: "Reading the memory trace",
     errorTitle: "The memory trace did not answer.",
     errorDescription:
@@ -287,13 +287,32 @@ export const memory = {
       "Memory {id} is not in the archive. It may have been removed, or the id may never have existed.",
     missingDescriptionFallback:
       "The memory on this route is not in the archive. It may have been removed, or the id may never have existed.",
-    backToVault: "Back to vault",
+    backToVault: "Back to memories",
     emptyEyebrow: "No memory at this address",
     emptyTitle: "This memory is not in the archive.",
     emptyDescription:
       "Deprecated memories remain readable, so a missing record means it is genuinely absent rather than merely retired. Return to the vault to browse the surviving lineage.",
     browseVault: "Browse the vault",
     pressNew: "Press a new memory",
+  },
+  related: {
+    title: "Related memories",
+    description:
+      "Ranked by similar wording, shared keywords, and shared summaries. Lineage and the supersession chain are listed separately.",
+    loading: "Finding related memories",
+    empty: "No related memories yet.",
+    error: "Related memories could not be loaded.",
+    retry: "Retry",
+    similarityUnavailable:
+      "Similarity is unavailable for this record; showing keyword and summary links only.",
+    showDeprecated: "Include deprecated",
+    reason: {
+      similar: "Similar",
+      keyword: "Shared keywords",
+      summary: "Same summary",
+      nearby: "Nearby in time",
+    },
+    scoreTitle: "Relevance score {score}",
   },
   questions: {
     eyebrow: "Questions · saved shelf",

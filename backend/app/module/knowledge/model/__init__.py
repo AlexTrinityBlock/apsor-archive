@@ -1,6 +1,6 @@
 """ORM model exports used by Alembic and the repositories."""
 
-from app.module.knowledge.model.base import Base
+from app.infrastructure.database.base import Base
 from app.module.knowledge.model.chunk_model import (
     SOURCE_FILE,
     SOURCE_HISTORY,
@@ -10,6 +10,7 @@ from app.module.knowledge.model.chunk_model import (
     ChunkModel,
 )
 from app.module.knowledge.model.file_model import FileModel
+from app.module.knowledge.model.file_thumbnail_model import FileThumbnailModel
 from app.module.knowledge.model.folder_model import FolderModel
 from app.module.knowledge.model.ingest_config_model import IngestConfigModel
 from app.module.knowledge.model.ingest_job_model import (
@@ -84,6 +85,7 @@ __all__ = [
     "EmbeddingProviderConfigModel",
     "FileIngestJobModel",
     "FileModel",
+    "FileThumbnailModel",
     "FolderModel",
     "IngestConfigModel",
     "MemoryModel",

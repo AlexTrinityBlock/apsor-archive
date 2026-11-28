@@ -1195,31 +1195,6 @@
   margin-left: auto;
 }
 
-.settings-dialog__heading {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.settings-dialog__description {
-  margin: 0 0 10px;
-  color: var(--mono-ink);
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.55;
-}
-
-.settings-dialog__copy {
-  margin: 0 0 12px;
-  color: var(--mono-l2);
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.settings-dialog__copy:last-child {
-  margin-bottom: 0;
-}
 
 /* --------------------------------------------------------------------------
    Model assignment read-only panel

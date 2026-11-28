@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 import { useI18n } from "../../../i18n";
 import { truncate } from "../../../../lib/format";
-import { libraryFileUrl } from "../../../../lib/library-url";
+import { libraryFileUrl, libraryMemoryUrl } from "../../../../lib/library-url";
 import {
   excerptOf,
   numberField,
@@ -98,7 +98,7 @@ function EventCard({ event }: { readonly event: TimelineEvent }) {
         )}
         <div className="pi-ribbon__event-links">
           {event.memoryId !== null ? (
-            <Link to={`/memory/${event.memoryId}`}>memory:{event.memoryId}</Link>
+            <Link to={libraryMemoryUrl(event.memoryId)}>memory:{event.memoryId}</Link>
           ) : null}
           {event.fileId !== null ? (
             <Link to={libraryFileUrl(event.fileId)}>file:{event.fileId}</Link>

@@ -11,6 +11,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { PageHeader } from "../component/PageHeader";
 import { useI18n } from "../i18n";
+import { CompanionPanel } from "./component/CompanionPanel";
 import { DiagnosticsPanel } from "./component/DiagnosticsPanel";
 import { FrequentlyUsedPromptsPanel } from "./component/FrequentlyUsedPromptsPanel";
 import { LanguagePanel } from "./component/LanguagePanel";
@@ -41,6 +42,7 @@ const SECTION_PANELS: Record<SettingsSectionId, ComponentType> = {
   "settings-agent-runtime": AgentRuntimeSettingsPanel,
   "settings-ingest-runtime": IngestRuntimeSection,
   "settings-maintenance": MaintenancePanel,
+  "settings-companion": CompanionPanel,
   "settings-language": LanguagePanel,
 };
 

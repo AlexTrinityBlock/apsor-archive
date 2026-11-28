@@ -2,7 +2,12 @@ import { lazy, Suspense, useEffect } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 import { createBrowserRouter } from "react-router-dom";
 
-import { libraryFileUrl } from "../lib/library-url";
+import {
+  legacyMemoryRedirect,
+  libraryFileUrl,
+  libraryMemoriesUrl,
+  libraryMemoryUrl,
+} from "../lib/library-url";
 import { AuthGate } from "./auth/AuthGate";
 import { RequireRoot } from "./auth/RequireRoot";
 import {
@@ -15,7 +20,7 @@ import { RouteFallback } from "./component/RouteFallback";
 import { NotFoundPage } from "./not-found/page";
 
 const DashboardPage = lazy(() =>
-  import("./home/page").then((module) => ({ default: module.DashboardPage })),
+  import("./dashboard/page").then((module) => ({ default: module.DashboardPage })),
 );
 const SearchPage = lazy(() =>
   import("./search/page").then((module) => ({ default: module.SearchPage })),
@@ -25,9 +30,6 @@ const TimelinePage = lazy(() =>
 );
 const LibraryPage = lazy(() =>
   import("./library/page").then((module) => ({ default: module.LibraryPage })),
-);
-const MemoryPage = lazy(() =>
-  import("./memory/page").then((module) => ({ default: module.MemoryPage })),
 );
 const ChatPage = lazy(() =>
   import("./chat/page").then((module) => ({ default: module.ChatPage })),
@@ -136,7 +138,16 @@ function ViewerFileRedirect() {
 
 function ViewerMemoryRedirect() {
   const { memoryId } = useParams<{ memoryId: string }>();
-  return <Navigate to={`/memory/${memoryId ?? ""}`} replace />;
+  return <Navigate to={libraryMemoryUrl(memoryId ?? "")} replace />;
+}
+
+/** Memory moved into the Library; keep `/memory/...` deep links and state. */
+function LegacyMemoryRedirect() {
+  const location = useLocation();
+  const to =
+    legacyMemoryRedirect(location.pathname, location.search) ??
+    libraryMemoriesUrl();
+  return <Navigate to={to} state={location.state} replace />;
 }
 
 function ViewerMediaRedirect() {
@@ -178,9 +189,8 @@ export const router = createBrowserRouter([
           { path: "library/*", element: <LibraryPage /> },
           { path: "tree", element: <Navigate to="/library" replace /> },
           { path: "media", element: <RedirectWithQuery to="/library/media" /> },
-          { path: "memory", element: <MemoryPage /> },
-          { path: "memory/new", element: <MemoryPage /> },
-          { path: "memory/:memoryId", element: <MemoryPage /> },
+          { path: "memory", element: <LegacyMemoryRedirect /> },
+          { path: "memory/*", element: <LegacyMemoryRedirect /> },
           { path: "chat", element: <ChatEntry /> },
           { path: "chat/:conversationId", element: <ChatPage /> },
           { path: "questions", element: <QuestionsPage /> },

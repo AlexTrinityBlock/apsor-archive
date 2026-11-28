@@ -1,6 +1,9 @@
 import { ButtonLink } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
+import {
+  libraryNewMemoryUrl,
+} from "../../../lib/library-url";
 
 interface TimelineHeaderProps {
   readonly rangeLabel: string;
@@ -36,7 +39,7 @@ export function TimelineHeader({ rangeLabel, isFetching }: TimelineHeaderProps) 
           </span>
           <strong>{rangeLabel}</strong>
         </div>
-        <ButtonLink to="/memory/new" variant="ink" size="md">
+        <ButtonLink to={libraryNewMemoryUrl()} variant="ink" size="md">
           <Icon name="plus" size={13} />
           {t("insights.timeline.header.recordMemory")}
         </ButtonLink>

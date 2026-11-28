@@ -17,7 +17,10 @@ import {
   kindLabel,
   type ViewerKind,
 } from "../../viewer/component/viewer-utils";
+import { FileThumbnail } from "../../viewer/component/FileThumbnail";
+import type { ThumbnailInfo } from "../../viewer/component/thumbnail";
 import { resourceHref, type ResourceMeta } from "../types";
+import { framedThumbnailStyle } from "./resource-frame";
 
 const RESOURCE_ICONS: Record<ResourceMeta["resourceType"], IconName> = {
   file: "file",
@@ -113,6 +116,95 @@ function thumbnailBadge(kind: ViewerKind, title: string | null): string {
   }
 }
 
+function FramedThumbnail({
+  fileId,
+  thumbnail,
+  title,
+  onFailed,
+}: {
+  readonly fileId: number;
+  readonly thumbnail: ThumbnailInfo;
+  readonly title: string;
+  readonly onFailed?: () => void;
+}) {
+  return (
+    <span
+      className="chat-resource__thumb chat-resource__thumb--framed"
+      style={framedThumbnailStyle(thumbnail)}
+      aria-hidden="true"
+      title={title}
+    >
+      <FileThumbnail
+        fileId={fileId}
+        thumbnail={thumbnail}
+        sizing="fill"
+        onError={onFailed}
+      />
+    </span>
+  );
+}
+
+/**
+ * An image with a server thumbnail: the tiny WebP paints first inside a fixed
+ * box and the original fades in over it. A failed original keeps the
+ * thumbnail on screen instead of collapsing the card.
+ */
+function ThumbnailImage({
+  fileId,
+  thumbnail,
+  onFailed,
+}: {
+  readonly fileId: number;
+  readonly thumbnail: ThumbnailInfo;
+  readonly onFailed: () => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [originalFailed, setOriginalFailed] = useState(false);
+  return (
+    <span
+      className="chat-resource__thumb chat-resource__thumb--framed"
+      style={framedThumbnailStyle(thumbnail)}
+    >
+      <FileThumbnail
+        fileId={fileId}
+        thumbnail={thumbnail}
+        sizing="fill"
+        onError={onFailed}
+      >
+        {originalFailed ? null : (
+          <img
+            className={`file-thumbnail__overlay${loaded ? " is-loaded" : ""}`}
+            src={fileContentUrl(fileId)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setLoaded(true)}
+            onError={() => setOriginalFailed(true)}
+          />
+        )}
+      </FileThumbnail>
+    </span>
+  );
+}
+
+/** Box ratio for an image card without a thumbnail, before its original loads. */
+const IMAGE_FRAME_RATIO = "4 / 3";
+
+/** The reserved A4 sheet a PDF card shows until page 1 is drawn. */
+function PdfPendingSheet() {
+  return (
+    <span className="chat-resource__thumb chat-resource__thumb--pdf" aria-hidden="true">
+      <span className="chat-resource__pdf-pending" />
+    </span>
+  );
+}
+
+/**
+ * Chooses the preview for one presented resource, in a fixed order:
+ * server WebP thumbnail → image original → PDF page 1 → type tile. Every
+ * branch reserves its final box up front, so loading never shifts the
+ * transcript.
+ */
 function ResourceThumb({
   resource,
   kind,
@@ -123,20 +215,53 @@ function ResourceThumb({
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const handlePdfError = useCallback(() => setFailed(true), []);
+  const markFailed = useCallback(() => setFailed(true), []);
   const resourceId = resource.resourceId;
   const isImage = kind === "image" && resourceId !== null;
   const title = resource.title ?? t(RESOURCE_LABEL_KEYS[resource.resourceType]);
+  const thumbnail = resource.resourceType === "file" ? resource.thumbnail : null;
+
+  // Order: server thumbnail → original image → PDF page 1 → file tile. A
+  // thumbnail fixes the box size up front, so nothing below it can shift.
+  if (thumbnail !== null && resourceId !== null && kind !== "pdf" && !failed) {
+    if (kind === "image") {
+      return (
+        <ThumbnailImage
+          fileId={resourceId}
+          thumbnail={thumbnail}
+          onFailed={markFailed}
+        />
+      );
+    }
+    return (
+      <FramedThumbnail
+        fileId={resourceId}
+        thumbnail={thumbnail}
+        title={title}
+        onFailed={markFailed}
+      />
+    );
+  }
 
   if (isImage && !failed) {
     return (
-      <span className="chat-resource__thumb chat-resource__thumb--image">
+      // No thumbnail yet (older file or backfill pending): a fixed 4:3 frame
+      // reserves the final box, and the original fades in when decoded.
+      <span
+        className="chat-resource__thumb chat-resource__thumb--image"
+        style={{ aspectRatio: IMAGE_FRAME_RATIO }}
+      >
         {imageLoaded ? null : (
           <span className="chat-resource__thumb-loading" aria-hidden="true">
             <Loader size={18} className="chat-resource__thumb-loader" />
           </span>
         )}
         <img
+          className={
+            imageLoaded
+              ? "chat-resource__thumb-full is-loaded"
+              : "chat-resource__thumb-full"
+          }
           src={fileContentUrl(resourceId)}
           alt=""
           loading="lazy"
@@ -163,12 +288,33 @@ function ResourceThumb({
   // A PDF shows its first page instead of a generic file tile. The lazy chunk
   // keeps pdf.js out of the transcript until a PDF is actually presented.
   if (resource.resourceType === "file" && kind === "pdf" && resourceId !== null) {
+    if (thumbnail !== null) {
+      // The thumbnail is both the Suspense fallback and the layer under the
+      // pdf.js canvas, so the box keeps one size from first paint onwards.
+      const still = (
+        <FramedThumbnail fileId={resourceId} thumbnail={thumbnail} title={title} />
+      );
+      if (failed) {
+        return still;
+      }
+      return (
+        <Suspense fallback={still}>
+          <ResourcePdfThumb
+            fileId={resourceId}
+            thumbnail={thumbnail}
+            onError={markFailed}
+          />
+        </Suspense>
+      );
+    }
     if (failed) {
       return tile;
     }
+    // Without a thumbnail the fallback is the reserved A4 sheet, so the card
+    // already has its final height while pdf.js loads.
     return (
-      <Suspense fallback={tile}>
-        <ResourcePdfThumb fileId={resourceId} onError={handlePdfError} />
+      <Suspense fallback={<PdfPendingSheet />}>
+        <ResourcePdfThumb fileId={resourceId} thumbnail={null} onError={markFailed} />
       </Suspense>
     );
   }

@@ -246,3 +246,101 @@ export function legacyLibraryRedirect(
 
   return { to: libraryFolderUrl(folderPath, tab, preserved) };
 }
+
+/* --------------------------------------------------------------------------
+   Memories: the Library's third collection. Memories have no folders, so they
+   are addressed separately from `LibraryTab` and its folder/file builders.
+   -------------------------------------------------------------------------- */
+
+export const LIBRARY_MEMORIES_ROOT = "/library/memories";
+const LEGACY_MEMORY_ROOT = "/memory";
+
+export type LibraryMemoryRoute =
+  | { readonly kind: "index" }
+  | { readonly kind: "new" }
+  | { readonly kind: "read"; readonly rawId: string };
+
+/** Build the Memories collection URL, optionally with `q` / `status`. */
+export function libraryMemoriesUrl(
+  params?: Readonly<Record<string, QueryValue>>,
+): string {
+  return withQuery(LIBRARY_MEMORIES_ROOT, params);
+}
+
+/** Build the canonical reader URL for one memory. */
+export function libraryMemoryUrl(
+  memoryId: number | string,
+  params?: Readonly<Record<string, QueryValue>>,
+): string {
+  return withQuery(
+    `${LIBRARY_MEMORIES_ROOT}/${encodeURIComponent(String(memoryId))}`,
+    params,
+  );
+}
+
+/** Build the new-memory URL; every superseded id is kept as its own param. */
+export function libraryNewMemoryUrl(supersedes: readonly number[] = []): string {
+  const search = new URLSearchParams();
+  for (const id of supersedes) {
+    search.append("supersedes", String(id));
+  }
+  const query = search.toString();
+  return query
+    ? `${LIBRARY_MEMORIES_ROOT}/new?${query}`
+    : `${LIBRARY_MEMORIES_ROOT}/new`;
+}
+
+/**
+ * Parse `/library/memories`, `/library/memories/new`, and
+ * `/library/memories/:id`. The reader keeps the raw id so an invalid id still
+ * renders the "memory missing" state instead of silently redirecting.
+ */
+export function parseLibraryMemoryUrl(
+  pathname: string,
+): LibraryMemoryRoute | null {
+  if (
+    pathname !== LIBRARY_MEMORIES_ROOT &&
+    !pathname.startsWith(`${LIBRARY_MEMORIES_ROOT}/`)
+  ) {
+    return null;
+  }
+  const tail = stripTrailingSlashes(pathname.slice(LIBRARY_MEMORIES_ROOT.length));
+  if (tail === "") {
+    return { kind: "index" };
+  }
+  const segments = tail.slice(1).split("/");
+  if (segments.length !== 1 || segments[0] === "") {
+    return null;
+  }
+  if (segments[0] === "new") {
+    return { kind: "new" };
+  }
+  let rawId: string;
+  try {
+    rawId = decodeURIComponent(segments[0]);
+  } catch {
+    rawId = segments[0];
+  }
+  return { kind: "read", rawId };
+}
+
+/**
+ * Map a legacy `/memory`, `/memory/new`, or `/memory/:id` URL to its Library
+ * location, keeping the query string (including repeated `supersedes`).
+ * Returns null for any other pathname.
+ */
+export function legacyMemoryRedirect(
+  pathname: string,
+  search: string,
+): string | null {
+  if (
+    pathname !== LEGACY_MEMORY_ROOT &&
+    !pathname.startsWith(`${LEGACY_MEMORY_ROOT}/`)
+  ) {
+    return null;
+  }
+  const tail = stripTrailingSlashes(pathname.slice(LEGACY_MEMORY_ROOT.length));
+  const query = search.startsWith("?") ? search.slice(1) : search;
+  const suffix = query ? `?${query}` : "";
+  return `${LIBRARY_MEMORIES_ROOT}${tail}${suffix}`;
+}

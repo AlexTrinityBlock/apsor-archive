@@ -515,6 +515,23 @@
         "additionalProperties": false,
         "description": "Create a transcript scope with one frozen system entry.",
         "properties": {
+          "locale": {
+            "anyOf": [
+              {
+                "enum": [
+                  "en",
+                  "zh-TW",
+                  "zh-CN"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Interface language for the companion persona and lore, frozen with the conversation. Omitted means English.",
+            "title": "Locale"
+          },
           "model": {
             "anyOf": [
               {
@@ -2029,6 +2046,46 @@
         "title": "Body_uploadAgentChatAttachment",
         "type": "object"
       },
+      "Body_uploadCompanionFrames": {
+        "properties": {
+          "action": {
+            "enum": [
+              "idle",
+              "greet",
+              "listening",
+              "thinking",
+              "searching",
+              "reading",
+              "writing",
+              "calculating",
+              "browsing",
+              "presenting",
+              "speaking",
+              "waiting",
+              "success",
+              "confused",
+              "sleeping",
+              "held"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "contentMediaType": "application/octet-stream",
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "files"
+        ],
+        "title": "Body_uploadCompanionFrames",
+        "type": "object"
+      },
       "Body_uploadFile": {
         "properties": {
           "file": {
@@ -2350,6 +2407,723 @@
         "title": "ChunkSchema",
         "type": "object"
       },
+      "CompanionBondSchema": {
+        "description": "How far this account has come with the companion.",
+        "properties": {
+          "completed_runs": {
+            "title": "Completed Runs",
+            "type": "integer"
+          },
+          "familiar_unlock_runs": {
+            "title": "Familiar Unlock Runs",
+            "type": "integer"
+          },
+          "familiar_unlocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Familiar Unlocked At"
+          },
+          "rare_unlock_runs": {
+            "title": "Rare Unlock Runs",
+            "type": "integer"
+          },
+          "rare_unlocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rare Unlocked At"
+          }
+        },
+        "required": [
+          "completed_runs",
+          "familiar_unlock_runs",
+          "rare_unlock_runs"
+        ],
+        "title": "CompanionBondSchema",
+        "type": "object"
+      },
+      "CompanionCreateSchema": {
+        "additionalProperties": false,
+        "description": "Create an empty companion; frames are uploaded per action afterwards.",
+        "properties": {
+          "gender": {
+            "anyOf": [
+              {
+                "enum": [
+                  "female",
+                  "male",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gender"
+          },
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CompanionCreateSchema",
+        "type": "object"
+      },
+      "CompanionFrameOrderSchema": {
+        "additionalProperties": false,
+        "description": "The complete new order of one action's frames.",
+        "properties": {
+          "action": {
+            "enum": [
+              "idle",
+              "greet",
+              "listening",
+              "thinking",
+              "searching",
+              "reading",
+              "writing",
+              "calculating",
+              "browsing",
+              "presenting",
+              "speaking",
+              "waiting",
+              "success",
+              "confused",
+              "sleeping",
+              "held"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Frame Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "frame_ids"
+        ],
+        "title": "CompanionFrameOrderSchema",
+        "type": "object"
+      },
+      "CompanionFrameSchema": {
+        "description": "One stored frame; ``url`` already carries the cache-busting version.",
+        "properties": {
+          "action": {
+            "enum": [
+              "idle",
+              "greet",
+              "listening",
+              "thinking",
+              "searching",
+              "reading",
+              "writing",
+              "calculating",
+              "browsing",
+              "presenting",
+              "speaking",
+              "waiting",
+              "success",
+              "confused",
+              "sleeping",
+              "held"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "mime_type": {
+            "enum": [
+              "image/avif",
+              "image/webp"
+            ],
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "position",
+          "width",
+          "height",
+          "size_bytes",
+          "mime_type",
+          "version",
+          "url"
+        ],
+        "title": "CompanionFrameSchema",
+        "type": "object"
+      },
+      "CompanionLoreCreateSchema": {
+        "additionalProperties": false,
+        "description": "Add one fragment to this account's copy of the lore.",
+        "properties": {
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "tier": {
+            "default": "first",
+            "enum": [
+              "first",
+              "familiar",
+              "rare"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "CompanionLoreCreateSchema",
+        "type": "object"
+      },
+      "CompanionLoreFragmentSchema": {
+        "description": "One lore fragment as shown in the story editor.\n\n``unlocked`` only says whether retrieval may surface the fragment yet; the\neditor always shows the full text.",
+        "properties": {
+          "edited": {
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "tier": {
+            "enum": [
+              "first",
+              "familiar",
+              "rare"
+            ],
+            "title": "Tier",
+            "type": "string"
+          },
+          "unlocked": {
+            "title": "Unlocked",
+            "type": "boolean"
+          },
+          "unlocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unlocked At"
+          }
+        },
+        "required": [
+          "id",
+          "tier",
+          "themes",
+          "text",
+          "unlocked",
+          "edited",
+          "position"
+        ],
+        "title": "CompanionLoreFragmentSchema",
+        "type": "object"
+      },
+      "CompanionLoreSchema": {
+        "description": "A companion's lore in one locale, for the story editor.",
+        "properties": {
+          "bond": {
+            "$ref": "#/components/schemas/CompanionBondSchema"
+          },
+          "companion_ref": {
+            "title": "Companion Ref",
+            "type": "string"
+          },
+          "customized": {
+            "description": "True when this locale's lore is an account copy.",
+            "title": "Customized",
+            "type": "boolean"
+          },
+          "fragments": {
+            "items": {
+              "$ref": "#/components/schemas/CompanionLoreFragmentSchema"
+            },
+            "title": "Fragments",
+            "type": "array"
+          },
+          "locale": {
+            "enum": [
+              "en",
+              "zh-TW",
+              "zh-CN"
+            ],
+            "title": "Locale",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "companion_ref",
+          "locale",
+          "name",
+          "customized",
+          "bond",
+          "fragments"
+        ],
+        "title": "CompanionLoreSchema",
+        "type": "object"
+      },
+      "CompanionLoreUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Edit one fragment; omitted fields keep their values.",
+        "properties": {
+          "position": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "themes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Themes"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "enum": [
+                  "first",
+                  "familiar",
+                  "rare"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          }
+        },
+        "title": "CompanionLoreUpdateSchema",
+        "type": "object"
+      },
+      "CompanionPersonaSchema": {
+        "description": "The persona a companion speaks with in this account and locale.",
+        "properties": {
+          "companion_ref": {
+            "title": "Companion Ref",
+            "type": "string"
+          },
+          "default_persona": {
+            "title": "Default Persona",
+            "type": "string"
+          },
+          "is_default": {
+            "description": "True when no account override exists.",
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "locale": {
+            "enum": [
+              "en",
+              "zh-TW",
+              "zh-CN"
+            ],
+            "title": "Locale",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "persona": {
+            "title": "Persona",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "companion_ref",
+          "locale",
+          "name",
+          "persona",
+          "is_default",
+          "default_persona"
+        ],
+        "title": "CompanionPersonaSchema",
+        "type": "object"
+      },
+      "CompanionPersonaUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace this account's persona for one companion and locale.",
+        "properties": {
+          "persona": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Persona",
+            "type": "string"
+          }
+        },
+        "required": [
+          "persona"
+        ],
+        "title": "CompanionPersonaUpdateSchema",
+        "type": "object"
+      },
+      "CompanionPositionSchema": {
+        "additionalProperties": false,
+        "description": "A normalized viewport position, where 0..1 spans the visible area.",
+        "properties": {
+          "x": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "CompanionPositionSchema",
+        "type": "object"
+      },
+      "CompanionPreferenceSchema": {
+        "description": "The account's companion choice. ``selected=None`` means the default preset.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "motion": {
+            "enum": [
+              "full",
+              "reduced",
+              "off"
+            ],
+            "title": "Motion",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompanionPositionSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "selected",
+          "enabled",
+          "motion",
+          "position",
+          "updated_at"
+        ],
+        "title": "CompanionPreferenceSchema",
+        "type": "object"
+      },
+      "CompanionPreferenceUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Change part of the preference; omitted fields keep their stored value.",
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "motion": {
+            "anyOf": [
+              {
+                "enum": [
+                  "full",
+                  "reduced",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motion"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompanionPositionSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          }
+        },
+        "title": "CompanionPreferenceUpdateSchema",
+        "type": "object"
+      },
+      "CompanionSchema": {
+        "description": "One custom companion with every frame, ordered by action and position.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/CompanionFrameSchema"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "gender": {
+            "anyOf": [
+              {
+                "enum": [
+                  "female",
+                  "male",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gender"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "gender",
+          "frames",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CompanionSchema",
+        "type": "object"
+      },
+      "CompanionUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Rename a companion or change its gender; omitted fields are unchanged.",
+        "properties": {
+          "gender": {
+            "anyOf": [
+              {
+                "enum": [
+                  "female",
+                  "male",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gender"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "CompanionUpdateSchema",
+        "type": "object"
+      },
       "DirectorySchema": {
         "description": "One directory in a path listing.",
         "properties": {
@@ -2610,6 +3384,16 @@
             ],
             "title": "Supersedes File Id"
           },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileThumbnailSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total_chunks": {
             "title": "Total Chunks",
             "type": "integer"
@@ -2810,6 +3594,31 @@
           "expected_version"
         ],
         "title": "FileTextUpdateSchema",
+        "type": "object"
+      },
+      "FileThumbnailSchema": {
+        "description": "A ready WebP thumbnail: its cache-busting version and pixel size.",
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "version": {
+            "description": "First 16 hex characters of the thumbnail SHA-256.",
+            "title": "Version",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "width",
+          "height"
+        ],
+        "title": "FileThumbnailSchema",
         "type": "object"
       },
       "FolderCopySchema": {
@@ -3777,6 +4586,37 @@
           "resources"
         ],
         "title": "ListResponseSchema[AgentConversationSchema]",
+        "type": "object"
+      },
+      "ListResponseSchema_CompanionSchema_": {
+        "properties": {
+          "items_per_page": {
+            "title": "Items Per Page",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/CompanionSchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "start_index": {
+            "title": "Start Index",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "start_index",
+          "items_per_page",
+          "resources"
+        ],
+        "title": "ListResponseSchema[CompanionSchema]",
         "type": "object"
       },
       "ListResponseSchema_FrequentlyUsedPromptReadSchema_": {
@@ -4818,6 +5658,16 @@
             "title": "Size Bytes",
             "type": "integer"
           },
+          "thumbnail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileThumbnailSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total_chunks": {
             "title": "Total Chunks",
             "type": "integer"
@@ -5561,6 +6411,82 @@
           "provider"
         ],
         "title": "ProviderUpdateSchema",
+        "type": "object"
+      },
+      "RelatedMemoriesSchema": {
+        "description": "Memories ranked by similarity, shared keywords, and shared summaries.",
+        "properties": {
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedMemorySchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "similarity_available": {
+            "title": "Similarity Available",
+            "type": "boolean"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "integer"
+          },
+          "source_kind": {
+            "enum": [
+              "memory",
+              "file"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_kind",
+          "source_id",
+          "similarity_available",
+          "resources"
+        ],
+        "title": "RelatedMemoriesSchema",
+        "type": "object"
+      },
+      "RelatedMemorySchema": {
+        "description": "One memory related to a source memory or file.",
+        "properties": {
+          "memory": {
+            "$ref": "#/components/schemas/MemorySchema"
+          },
+          "reasons": {
+            "items": {
+              "enum": [
+                "similar",
+                "keyword",
+                "summary",
+                "nearby"
+              ],
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "shared_summary_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Shared Summary Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memory",
+          "score",
+          "reasons",
+          "shared_summary_ids"
+        ],
+        "title": "RelatedMemorySchema",
         "type": "object"
       },
       "SavedQuestionCreateSchema": {
@@ -7802,7 +8728,7 @@
         ]
       },
       "post": {
-        "description": "Create a transcript scope and its immutable system entry.",
+        "description": "Create a transcript scope and its immutable system entry.\n\nThe account's active companion persona (in ``locale``) is frozen with it.",
         "operationId": "createAgentConversation",
         "requestBody": {
           "content": {
@@ -9399,9 +10325,997 @@
         ]
       }
     },
+    "/api/v1/companions": {
+      "get": {
+        "description": "List the account's custom companions with their frames.",
+        "operationId": "listCompanions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_CompanionSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Companions",
+        "tags": [
+          "companions"
+        ]
+      },
+      "post": {
+        "description": "Create an empty custom companion.",
+        "operationId": "createCompanion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Companion",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/preference": {
+      "get": {
+        "description": "Return the account's companion choice, visibility, motion, and position.",
+        "operationId": "getCompanionPreference",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPreferenceSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Companion Preference",
+        "tags": [
+          "companions"
+        ]
+      },
+      "patch": {
+        "description": "Change part of the account's companion preference.",
+        "operationId": "updateCompanionPreference",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionPreferenceUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPreferenceSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Companion Preference",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/stories/{companion_ref}/lore": {
+      "get": {
+        "description": "Return every lore fragment with its tier and unlock state.",
+        "operationId": "listCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      },
+      "post": {
+        "description": "Add a fragment (copying this locale's defaults on the first edit).",
+        "operationId": "createCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionLoreCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/stories/{companion_ref}/lore/reset": {
+      "post": {
+        "description": "Discard this locale's lore copy and return the default fragments.",
+        "operationId": "resetCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/stories/{companion_ref}/lore/{fragment_id}": {
+      "delete": {
+        "description": "Remove one fragment from this account's copy.",
+        "operationId": "deleteCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fragment_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Fragment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      },
+      "patch": {
+        "description": "Edit one fragment's text, themes, tier, or position.",
+        "operationId": "updateCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fragment_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Fragment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionLoreUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/stories/{companion_ref}/persona": {
+      "delete": {
+        "description": "Drop this locale's persona override and return the default.",
+        "operationId": "resetCompanionPersona",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPersonaSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Companion Persona",
+        "tags": [
+          "companions"
+        ]
+      },
+      "get": {
+        "description": "Return the persona in effect for this account and locale.",
+        "operationId": "getCompanionPersona",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPersonaSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Companion Persona",
+        "tags": [
+          "companions"
+        ]
+      },
+      "put": {
+        "description": "Replace this account's persona; it applies to new conversations.",
+        "operationId": "updateCompanionPersona",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionPersonaUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPersonaSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Companion Persona",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}": {
+      "delete": {
+        "description": "Delete a custom companion and every frame it owns.",
+        "operationId": "deleteCompanion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Companion",
+        "tags": [
+          "companions"
+        ]
+      },
+      "patch": {
+        "description": "Rename a custom companion or change its gender.",
+        "operationId": "updateCompanion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Companion",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}/frames": {
+      "post": {
+        "description": "Append one or more images to an action, in upload order.",
+        "operationId": "uploadCompanionFrames",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_uploadCompanionFrames"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Companion Frames",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}/frames/order": {
+      "put": {
+        "description": "Replace the frame order of one action.",
+        "operationId": "reorderCompanionFrames",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionFrameOrderSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder Companion Frames",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}/frames/{frame_id}": {
+      "delete": {
+        "description": "Delete one frame and close the gap in its action's order.",
+        "operationId": "deleteCompanionFrame",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "frame_id",
+            "required": true,
+            "schema": {
+              "title": "Frame Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Companion Frame",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}/frames/{frame_id}/image": {
+      "get": {
+        "description": "Return one frame to its owner with a strong ETag.\n\nFrame bytes never change, so a request whose ``v`` matches the current\nversion may be cached for a year; any other request revalidates.",
+        "operationId": "getCompanionFrame",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "frame_id",
+            "required": true,
+            "schema": {
+              "title": "Frame Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/avif": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The encoded AVIF frame (WebP when AVIF was unavailable)."
+          },
+          "304": {
+            "description": "The cached frame is still current."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Companion Frame",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
     "/api/v1/files": {
       "post": {
-        "description": "Upload one file; the server extracts text and indexes it.",
+        "deprecated": true,
+        "description": "Upload one file and extract it inside the API request.\n\nDeprecated: extraction belongs to the dedicated ingestion worker. Clients\nshould use ``POST /files/async`` (``uploadFileAsync``) and follow the job.\nThe route stays for existing scripts and tests until it is removed.",
         "operationId": "uploadFile",
         "requestBody": {
           "content": {
@@ -10314,6 +12228,89 @@
         ]
       }
     },
+    "/api/v1/files/{file_id}/thumbnail": {
+      "get": {
+        "description": "Serve a file's WebP thumbnail.\n\nA file id never changes its bytes, so a request whose ``v`` matches the\ncurrent thumbnail version may be cached as immutable. Any other request\nrevalidates with the strong ETag. ``Vary: Cookie`` keeps shared browsers\nfrom reusing one account's cached image for another session.",
+        "operationId": "getFileThumbnail",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-None-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-None-Match"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The tiny WebP thumbnail of one file version."
+          },
+          "304": {
+            "description": "The cached thumbnail is still current."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get File Thumbnail",
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/api/v1/folders": {
       "post": {
         "description": "Create a folder and its missing ancestors; return 201 on every success.\n\nReturning the existing folder with the same 201 keeps the API idempotent\nfor clients without a second status branch.",
@@ -10600,6 +12597,61 @@
         ]
       }
     },
+    "/api/v1/memories/related/files/{file_id}": {
+      "get": {
+        "description": "Rank memories related to one file by stored similarity and shared keywords.",
+        "operationId": "listFileRelatedMemories",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 6,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedMemoriesSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List File Related Memories",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
     "/api/v1/memories/{memory_id}": {
       "get": {
         "description": "Read a memory, its neighbors, and its supersession chain.",
@@ -10771,6 +12823,71 @@
           }
         },
         "summary": "Deprecate Memory",
+        "tags": [
+          "memories"
+        ]
+      }
+    },
+    "/api/v1/memories/{memory_id}/related": {
+      "get": {
+        "description": "Rank memories related to one memory, excluding its supersession chain.",
+        "operationId": "listRelatedMemories",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "title": "Memory Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 6,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_deprecated",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Deprecated",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelatedMemoriesSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Related Memories",
         "tags": [
           "memories"
         ]

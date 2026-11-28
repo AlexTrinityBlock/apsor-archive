@@ -4,12 +4,15 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
+import type { AgentConversationCreateSchemaLocale } from './agentConversationCreateSchemaLocale';
 import type { AgentConversationCreateSchemaProvider } from './agentConversationCreateSchemaProvider';
 
 /**
  * Create a transcript scope with one frozen system entry.
  */
 export interface AgentConversationCreateSchema {
+  /** Interface language for the companion persona and lore, frozen with the conversation. Omitted means English. */
+  locale?: AgentConversationCreateSchemaLocale;
   model?: string | null;
   provider?: AgentConversationCreateSchemaProvider;
   title?: string | null;

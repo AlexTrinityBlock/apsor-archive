@@ -14,6 +14,7 @@ import {
   PanelLink,
   type PanelProps,
 } from "./common";
+import { libraryMemoryUrl } from "../../../../lib/library-url";
 
 function idsOf(value: unknown): number[] {
   if (!Array.isArray(value)) {
@@ -54,7 +55,7 @@ function LeafRef({
         <span className="pi-leaf-chain__role">{role}</span>
         <p>{truncate(memory.content, 260)}</p>
         <div className="pi-leaf-chain__meta">
-          <Link to={`/memory/${memory.memory_id}`}>
+          <Link to={libraryMemoryUrl(memory.memory_id)}>
             memory:{memory.memory_id}
           </Link>
           <span>{memory.status}</span>
@@ -80,7 +81,7 @@ function LineageSection({
       <ul>
         {memories.map((memory) => (
           <li key={memory.memory_id}>
-            <Link to={`/memory/${memory.memory_id}`}>memory:{memory.memory_id}</Link>
+            <Link to={libraryMemoryUrl(memory.memory_id)}>memory:{memory.memory_id}</Link>
             <span>{truncate(memory.content, 140)}</span>
           </li>
         ))}
@@ -156,7 +157,7 @@ export function ReadMemoryPanel({ item }: PanelProps) {
             iconOnly
             title={t("chat.panels.memory.copyMemoryTitle")}
           />
-          <PanelLink to={`/memory/${target.memory_id}`}>
+          <PanelLink to={libraryMemoryUrl(target.memory_id)}>
             {t("chat.panels.common.fullTrace")}
           </PanelLink>
         </div>
@@ -277,7 +278,7 @@ export function SaveMemoryPanel({ item }: PanelProps) {
               return (
                 <li key={id ?? title ?? "deprecated"}>
                   {id !== null ? (
-                    <Link to={`/memory/${id}`}>
+                    <Link to={libraryMemoryUrl(id)}>
                       {t("chat.panels.memory.crystalId", { id })}
                     </Link>
                   ) : (
@@ -358,7 +359,7 @@ export function SaveMemoryPanel({ item }: PanelProps) {
           </div>
         </dl>
         {memoryId !== null ? (
-          <PanelLink to={`/memory/${memoryId}`}>
+          <PanelLink to={libraryMemoryUrl(memoryId)}>
             {t("chat.panels.memory.openLeaf")}
           </PanelLink>
         ) : null}

@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { FileSchemaVisionPromptMode } from './fileSchemaVisionPromptMode';
+import type { FileThumbnailSchema } from './fileThumbnailSchema';
 
 /**
  * File metadata returned by the API.
@@ -25,6 +26,7 @@ export interface FileSchema {
   raw_file_path: string;
   size_bytes: number;
   supersedes_file_id: number | null;
+  thumbnail?: FileThumbnailSchema | null;
   total_chunks: number;
   updated_at: string;
   version: number;

@@ -20,6 +20,7 @@ Keep file lineage, search visibility, and memory history consistent across synch
 - Re-ingest is a durable `file_ingest_job` with `source_kind='reingest'` and `source_file_id`. It stores no payload (`storage_key`/`storage_backend` are NULL), reads the current source original through the owner-scoped file service, forces the vision pass, and stages a new version. `publish_pending(expected_current_file_id=...)` refuses to publish if a newer upload became current, and failure/recovery must never delete the shared source bytes.
 - Chunk boundaries are stored per file. The singleton `ingest_config` row supplies future chunk sizes; changing `chunk_target_chars` or `chunk_overlap_chars` affects only future ingests, and existing files keep their boundaries until re-ingested.
 - Durable ingestion uses `file_ingest_job` with `queued → parsing → chunking → embedding → summarizing → ready`, or `failed`. The worker claims with `SELECT ... FOR UPDATE SKIP LOCKED`, owns staged rows, publishes only on success, discards them on failure, and requeues stale leases after a crash. While parsing or chunking, nullable `stage_done`/`stage_total`/`stage_unit` describe the current page, chunk, DOCX paragraph/row, PPTX slide, or rendered PDF page; the worker's one-second reporter writes them, keeps `updated_at` fresh, and clears them at the embedding/publish/terminal boundary. Spreadsheet sheet progress remains coarse.
+- Only the dedicated worker process (or the API in the opt-in `APSOR_INGEST_WORKER_ENABLED=true` dev mode) drains durable jobs. The deprecated synchronous `POST /files` (`uploadFile`) still extracts inside the API request, and `POST /files/text`, Markdown updates, copies, memories, and summaries index in the request; new file-upload clients must use `uploadFileAsync`.
 - Live progress uses Valkey Pub/Sub as an ephemeral hint, never a second ledger. `GET /files/ingest-jobs/{id}/events` streams a compact snapshot over SSE and falls back to one-second owner-scoped polling if the broker is unavailable; the JSON job endpoint and the browser's polling helper remain the durable fallback.
 - RabbitMQ (`apsor.ingest`) is an optional low-latency dispatch path, never a second ledger. The API publishes persistent `{job_id, retry_count}` messages, the consumer uses manual ack with prefetch 1 so a crash redelivers the unacked delivery, and retry outcomes use a TTL retry queue capped by a dispatch-retry limit. Every message is re-read from `file_ingest_job` and claimed there; duplicate or missing messages only fall back to the one-second database polling worker.
 - `search_service.py` runs BM25 over CJK bigrams and Latin terms, optional vector recall by cosine similarity, and reciprocal-rank fusion. Results are selected per source kind, de-duplicated by chunk, hydrated, and cached under the archive cache version. Vector rows with a different dimension are skipped rather than mixed. Conversation history has its own lane: cosine recall of 128 history windows, BM25 scoring of every recalled window, RRF rerank, and the top 15 raw windows. It is always current-only and is returned alongside the archive results as `history_results`.
@@ -28,6 +29,7 @@ Keep file lineage, search visibility, and memory history consistent across synch
 - Summaries are derived views over memories and are indexed as `summary` chunks. Agent-facing summary output must remain visibly compressed, with coverage and source-memory counts.
 - `TimelineService` merges memories, summaries, and current-file updates. Sparse reads (the agent tool and the default API) sample up to five anchors per kind and report skipped counts; complete reads (`complete=true`, the human Timeline page) return the whole window with `anchor=None`, `sampled == total`, `skipped=0`, `skips=[]`, and density from `timeline_density`. The cache key includes the mode, and both modes keep the per-kind safety cap and `truncated` flag.
 - Provider configuration uses four capability tables (`chat`, `embedding`, `web_search`, `web_fetch`) with one active row each enforced by partial unique indexes. A chat row is an endpoint with an optional `max_output_tokens`, and `anthropic` is admitted beside `deepseek`, `openai-compatible`, and `none`. Keys are Fernet-encrypted and endpoint-owned; a provider-scoped environment key enriches only that provider's row. `AiRuntime` reloads after writes. `ModelAssignmentService` owns the per-account assignment: `app_user` row ids are resolved exactly, with no fallback, and the auxiliary slot inherits the primary only when both auxiliary fields are NULL. A changed slot must pass a 16-token probe; a failure is `422 model_probe_failed` and writes nothing.
+- Every file version with a visual gets one tiny WebP thumbnail (long edge 320 px, usually under 12 KiB) in the private `file_thumbnail` table, written in the same transaction as the file row. Images render through Pillow, PDF page 1 through PDFium under the shared `pdfium_lock`, and PPTX/DOCX/XLSX/ODS through the preview the writer embedded; text formats get no row and Office files without a preview get `status='none'`. A render failure is recorded as `failed` and never fails ingestion. Byte-identical content (copy, re-upload, folder copy) reuses an existing thumbnail instead of rendering again. `GET /files/{id}/thumbnail?v=<version>` is `immutable` when `v` matches and revalidates with a strong ETag otherwise. Only the dedicated worker runs `FileThumbnailBackfill` (`APSOR_THUMBNAIL_BACKFILL_ENABLED`); `script/backfill_thumbnails.py` is the one-off equivalent. Bump `GENERATOR_VERSION` in `domain/thumbnail_domain.py` whenever renderer output changes.
 - Markdown edits require `expected_version`. A stale value is `409 file_version_conflict`; a changed extension is `422 invalid_path`; non-Markdown content is rejected as `unsupported_file_type`.
 
 ## Key files
@@ -41,6 +43,9 @@ Keep file lineage, search visibility, and memory history consistent across synch
 - `service/spreadsheet_extractor.py` — calamine extraction, formula fallback, merged cells.
 - `service/spreadsheet_guard.py` — pre-parse zip and declared-grid guards for ODS/XLSX.
 - `service/file_service.py` — extraction, versioning, Markdown update, move/copy/delete, path reads, re-ingest source.
+- `model/file_thumbnail_model.py`, `repository/file_thumbnail_repository.py` — per-version WebP thumbnail rows, reuse by content hash, and clone.
+- `domain/thumbnail_domain.py`, `service/thumbnail_renderer.py`, `service/pdfium_lock.py` — thumbnail size/quality rules, the CPU-bound renderer, and the process-wide PDFium lock.
+- `service/thumbnail_backfill.py` — worker-only cross-account backfill (ids via maintenance session, work in each owner's `user_session`).
 - `service/ingest_job_service.py` — job enqueue (upload/text/reingest), leases, staging, publication, failure recovery.
 - `domain/ingest_progress_domain.py` — thread-safe parse/chunk tracker shared with extraction threads.
 - `service/ingest_progress_service.py` — SSE snapshot, Pub/Sub relay, keepalives, and polling fallback.
@@ -49,11 +54,17 @@ Keep file lineage, search visibility, and memory history consistent across synch
 - `service/history_chunk_store.py` — knowledge-side write adapter for conversation-history windows; still routes through `IndexerService`.
 - `service/search_service.py` — BM25 + vector recall + RRF + caching, including the separate history lane.
 - `service/memory_service.py`, `service/timeline_service.py` — memory lineage and sparse/complete time reads.
+- `service/related_memory_service.py` — owner-scoped related memories for a memory or a file: RRF over stored-embedding cosine and top n-gram BM25, plus shared-summary and time-proximity signals. It never calls a provider or spends embedding quota, excludes the supersession chain, and scans non-current memory chunks only when deprecated memories are requested.
 - `service/provider_config_service.py` — capability registry, encryption, activation, reindexing.
 - `dependencies.py` — composition of all knowledge services, worker factories, provider runtime.
-- `router/` — files, folders, paths, memories, summaries, search, timeline, settings, tool facade.
-- `domain/` — path validation, chunking, hashing embedder, timeline sampling, provider specs.
-- `exception/domain_error.py` — stable knowledge errors and their handler mappings.
+- `service/summary_service.py`, `service/stats_service.py`, `service/ai_service.py` — summaries, dashboard stats, and the AI status/ask facade.
+- `service/model_assignment_service.py` — per-account chat endpoint/model assignments and probes.
+- `service/provider_error_notice_service.py` / `service/metered_text_generator.py` — provider failure notices and quota-metered text generation.
+- `service/cache_keys.py` — owner-scoped cache keys and version scopes.
+- `service/health_service.py` — database readiness probe behind `GET /health`.
+- `router/` — `file`, `folder`, `tree`, `memory`, `search`, `timeline`, `settings`, `ingest_settings`, `ingest_progress` (SSE, mounted separately), `model_assignment`, `provider_notice`, `ai`, `system`, `health`, and the `tool` facade.
+- `domain/` — path validation, chunking, timeline sampling, provider table specs (`provider_config_domain.py`), and resolved provider value objects (`provider_runtime_domain.py`). The signed-hashing embedder is an adapter in `app/infrastructure/embedding/hashing_embedder.py`.
+- `exception/domain_error.py` — stable knowledge errors; `exception/handler.py` maps them to HTTP status and codes.
 
 ## Conventions
 
@@ -76,6 +87,7 @@ Keep file lineage, search visibility, and memory history consistent across synch
 cd backend
 uv run ruff check app/module/knowledge tests/test_file_library.py tests/test_markdown_update.py tests/test_search.py tests/test_memories.py tests/test_summaries.py tests/test_timeline.py tests/test_versions.py
 uv run mypy app
+uv run lint-imports
 uv run pytest -q tests/test_file_library.py tests/test_markdown_update.py tests/test_search.py
 uv run pytest -q tests/test_memories.py tests/test_summaries.py tests/test_timeline.py tests/test_versions.py
 ```

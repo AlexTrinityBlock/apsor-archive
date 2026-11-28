@@ -2,6 +2,8 @@ import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
 import { useI18n } from "../../i18n";
+import { FileThumbnail } from "./FileThumbnail";
+import type { ThumbnailInfo } from "./thumbnail";
 import { viewerErrorMessage } from "./viewer-utils";
 
 interface LoadingProps {
@@ -22,6 +24,27 @@ export function ViewerLoading({ label }: LoadingProps) {
       <p className="viewer-state__label" aria-hidden="true">
         {message}
       </p>
+    </div>
+  );
+}
+
+interface ThumbnailLoadingProps {
+  readonly fileId: number;
+  readonly thumbnail: ThumbnailInfo;
+  readonly label?: string;
+}
+
+/**
+ * The loading state for a file with a server thumbnail: the reader sees the
+ * page or picture immediately while the full renderer loads behind it.
+ */
+export function ViewerThumbnailLoading({ fileId, thumbnail, label }: ThumbnailLoadingProps) {
+  const { t } = useI18n();
+  const message = label ?? t("library.viewer.loadingDefault");
+  return (
+    <div className="viewer-state viewer-state--thumbnail" role="status">
+      <FileThumbnail fileId={fileId} thumbnail={thumbnail} />
+      <span className="visually-hidden">{message}</span>
     </div>
   );
 }

@@ -1,11 +1,13 @@
 import {
-  useEffect,
   useId,
+  useImperativeHandle,
+  useLayoutEffect,
   useRef,
   type ChangeEvent,
   type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent,
+  type Ref,
 } from "react";
 
 import { Button } from "../../component/Button";
@@ -20,7 +22,25 @@ import {
 import { useMobileComposer } from "../hook/useMobileComposer";
 import { ChatImage } from "./ChatImage";
 
+/** Imperative focus control the page uses after send, new chat, or a suggestion. */
+export interface ChatComposerHandle {
+  /**
+   * Move focus into the message box with the caret at the end. A programmatic
+   * focus is skipped on coarse pointers so a phone keyboard does not pop up
+   * after an action the reader did not aim at the composer.
+   */
+  readonly focus: (options?: { readonly programmatic?: boolean }) => void;
+}
+
+/** Why the composer is blocked, when it is blocked for a specific reason. */
+export type ComposerBlockReason = "approval" | null;
+
+export const COMPOSER_MAX_LENGTH = 32_000;
+/** Show the character counter once the draft passes this share of the limit. */
+const COUNTER_THRESHOLD = 0.85;
+
 interface ChatComposerProps {
+  readonly composerRef?: Ref<ChatComposerHandle>;
   readonly value: string;
   readonly onChange: (value: string) => void;
   readonly onSubmit: (value: string) => void;
@@ -31,17 +51,28 @@ interface ChatComposerProps {
   readonly pending: boolean;
   readonly streaming: boolean;
   readonly disabled?: boolean;
+  readonly blockReason?: ComposerBlockReason;
   readonly onStop: () => void;
 }
 
 const MAX_HEIGHT = 220;
 
+function isCoarsePointer(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches
+  );
+}
+
 /**
  * A sticky composer. A hardware keyboard keeps Enter-to-send and Shift+Enter
  * for a newline; touch-first phones and narrow windows use Enter as a newline
- * and submit only through the Send button.
+ * and submit only through the Send button. Ctrl/Cmd+Enter always sends, and
+ * Escape stops a streaming answer.
  */
 export function ChatComposer({
+  composerRef,
   value,
   onChange,
   onSubmit,
@@ -52,13 +83,14 @@ export function ChatComposer({
   pending,
   streaming,
   disabled = false,
+  blockReason = null,
   onStop,
 }: ChatComposerProps) {
   const inputId = useId();
   const hintId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { t } = useI18n();
+  const { t, formatNumber } = useI18n();
   const mobileComposer = useMobileComposer();
   const uploading = attachments.some((item) => item.status === "uploading");
   const uploadFailed = attachments.some((item) => item.status === "error");
@@ -70,7 +102,9 @@ export function ChatComposer({
     !pending &&
     !disabled;
 
-  useEffect(() => {
+  // Layout effect: the measured height lands before paint, so a new line
+  // never flashes at the old height for one frame.
+  useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) {
       return;
@@ -79,9 +113,27 @@ export function ChatComposer({
     textarea.style.height = `${Math.min(textarea.scrollHeight, MAX_HEIGHT)}px`;
   }, [value]);
 
+  useImperativeHandle(
+    composerRef,
+    () => ({
+      focus: (options) => {
+        const textarea = textareaRef.current;
+        if (!textarea || (options?.programmatic && isCoarsePointer())) {
+          return;
+        }
+        textarea.focus({ preventScroll: true });
+        const end = textarea.value.length;
+        textarea.setSelectionRange(end, end);
+      },
+    }),
+    [],
+  );
+
   const submit = () => {
     if (canSubmit) {
       onSubmit(value.trim());
+      // Send disables itself; keep focus in the message box instead of <body>.
+      textareaRef.current?.focus({ preventScroll: true });
     }
   };
 
@@ -93,6 +145,21 @@ export function ChatComposer({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Escape" && streaming) {
+      event.preventDefault();
+      event.stopPropagation();
+      onStop();
+      return;
+    }
+    if (
+      event.key === "Enter" &&
+      (event.ctrlKey || event.metaKey) &&
+      !event.nativeEvent.isComposing
+    ) {
+      event.preventDefault();
+      submit();
+      return;
+    }
     if (
       event.key !== "Enter" ||
       event.shiftKey ||
@@ -129,6 +196,8 @@ export function ChatComposer({
   let note = t("chat.composer.note");
   if (streaming) {
     note = t("chat.composer.noteStreaming");
+  } else if (disabled && blockReason === "approval") {
+    note = t("chat.composer.noteAwaitingApproval");
   } else if (disabled) {
     note = t("chat.composer.noteDisabled");
   } else if (uploadFailed) {
@@ -136,6 +205,8 @@ export function ChatComposer({
   } else if (uploading) {
     note = t("chat.composer.noteUploading");
   }
+
+  const showCounter = value.length >= COMPOSER_MAX_LENGTH * COUNTER_THRESHOLD;
 
   return (
     <form
@@ -236,12 +307,11 @@ export function ChatComposer({
           onPaste={handlePaste}
           placeholder={t("chat.composer.placeholder")}
           rows={2}
-          maxLength={32000}
+          maxLength={COMPOSER_MAX_LENGTH}
           autoComplete="off"
           enterKeyHint={mobileComposer ? "enter" : "send"}
           disabled={disabled}
           aria-describedby={hintId}
-          aria-busy={pending}
         />
 
         <div className="chat-composer__foot">
@@ -252,8 +322,25 @@ export function ChatComposer({
                   ? "chat.composer.enterHintMobile"
                   : "chat.composer.enterHint",
               )}
+              {streaming ? ` · ${t("chat.composer.stopHint")}` : null}
             </span>
-            <span className="chat-composer__state">{note}</span>
+            <span className="chat-composer__state" aria-live="polite">
+              {note}
+            </span>
+            {showCounter ? (
+              <span
+                className={
+                  value.length >= COMPOSER_MAX_LENGTH
+                    ? "chat-composer__count is-full"
+                    : "chat-composer__count"
+                }
+              >
+                {t("chat.composer.charCount", {
+                  count: formatNumber(value.length),
+                  max: formatNumber(COMPOSER_MAX_LENGTH),
+                })}
+              </span>
+            ) : null}
           </span>
 
           <div className="chat-composer__actions">
@@ -279,38 +366,41 @@ export function ChatComposer({
             >
               <Icon name="folder" size={14} />
             </button>
+            {/* Stop swaps into the Send slot so the action row never shifts. */}
             {streaming ? (
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="chat-composer__stop"
+                className="chat-composer__primary chat-composer__stop"
                 onClick={onStop}
               >
                 <Icon name="stop" size={13} />
                 {t("chat.composer.stop")}
               </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="ink"
-              size="sm"
-              disabled={!canSubmit}
-              aria-busy={pending}
-              onClick={submit}
-            >
-              {pending && !streaming ? (
-                <>
-                  <Loader size={14} label={t("chat.composer.openingLabel")} />
-                  {t("chat.composer.opening")}
-                </>
-              ) : (
-                <>
-                  <span>{t("chat.composer.send")}</span>
-                  <Icon name="send" size={14} />
-                </>
-              )}
-            </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="ink"
+                size="sm"
+                className="chat-composer__primary"
+                disabled={!canSubmit}
+                aria-busy={pending}
+                onClick={submit}
+              >
+                {pending ? (
+                  <>
+                    <Loader size={14} label={t("chat.composer.openingLabel")} />
+                    {t("chat.composer.opening")}
+                  </>
+                ) : (
+                  <>
+                    <span>{t("chat.composer.send")}</span>
+                    <Icon name="send" size={14} />
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>

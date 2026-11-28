@@ -5,9 +5,13 @@ Original uploads are stored behind the three-method `FileStorageProtocol`
 `storage_protocol.py`, so adapters and the router never import a module package.
 
 - `local_storage.py` keeps bytes under `APSOR_DATA_DIR`.
-- `r2_storage.py` stores bytes in a private Cloudflare R2 bucket. boto3 runs in
-  a worker thread, the client is created lazily once per process, and the
-  constructor performs no network I/O.
+- `s3_storage.py` stores bytes in any private S3-compatible bucket (the bundled
+  RustFS service, AWS S3, MinIO, ...). boto3 runs in a worker thread, the
+  client is created lazily once per process, and the constructor performs no
+  network I/O. `create_bucket_if_missing` lets the first write create the
+  bucket on a fresh RustFS volume.
+- `r2_storage.py` keeps the Cloudflare R2 adapter: the same implementation with
+  R2 defaults (`auto` region, path-style addressing, no bucket creation).
 - `storage_router.py` chooses an adapter. New writes use
   `Settings.storage_backend`; reads use the row's `storage_backend`, falling
   back to the configured backend when the row value is null.
@@ -25,10 +29,17 @@ data = await storage.read(file.storage_key)
 
 ## Configuration
 
-`APSOR_STORAGE_BACKEND` selects the backend for new writes (`local` or `r2`).
-Non-secret R2 settings use `APSOR_R2_*`. Credentials are `SecretStr` values and
-are never logged. The app reads `.secrets/r2.env` and `../.secrets/r2.env`
-through the normal Settings env-file list. The local secret file may keep its
+`APSOR_STORAGE_BACKEND` selects the backend for new writes: `local`, `r2`,
+`s3` (`rustfs` is an alias), or `auto`. `auto` resolves to `r2` when R2 is fully
+configured, else `s3` when S3 is, else `local`; the production Compose file
+uses it so an existing R2 deployment keeps R2 without an `.env` change. Rows
+persist the canonical name (`local`, `r2`, or `s3`), and every adapter whose
+settings are complete is built, so rows on a previous backend keep reading.
+
+Non-secret settings use `APSOR_R2_*` and `APSOR_S3_*`. Credentials are
+`SecretStr` values and are never logged. The app reads `.secrets/r2.env` and
+`.secrets/s3.env` (and their `../` variants) through the normal Settings
+env-file list. The local secret file may keep its
 legacy `R2_ACCOUNT_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, and
 `R2_SECRET_ACCESS_KEY` names. Container deployments mount `.secrets` read-only;
 `r2.env` must be readable by uid 10001 (mode 644 or matching ownership).
@@ -52,7 +63,7 @@ diagnostics, endpoint details, or credentials.
 
 ## Migration
 
-See `backend/script/migrate_storage_to_r2.py`. Run it from `backend/` with
+See `backend/script/migrate_storage_to_r2.py` (local disk to R2 only). Run it from `backend/` with
 `--dry-run`, then `--copy`, `--verify`, and finally `--delete-local`. When the
 host shell has no `APSOR_R2_BUCKET`, pass the non-secret value explicitly:
 

@@ -3,6 +3,7 @@ import {
   use,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -56,6 +57,11 @@ export function I18nProvider({ children }: { readonly children: ReactNode }) {
     setActiveLocale(locale);
     applyDocumentLanguage(locale);
     storeLocale(locale);
+  }, [locale]);
+
+  // The generic title is a layout effect so it lands before the shell's
+  // per-page title effect, which then refines it inside the app.
+  useLayoutEffect(() => {
     document.title = `${translate(locale, "core.app.name")} — ${translate(
       locale,
       "core.app.studio",

@@ -46,7 +46,7 @@ import {
   invalidateProviderQueries,
   invalidateReindexQueries,
 } from "./settings-invalidation";
-import { SettingsDialog } from "./SettingsDialog";
+import { ConfirmDialog } from "../../component/ConfirmDialog";
 
 type Capability = ProviderReadSchema["capability"];
 
@@ -637,7 +637,7 @@ function ProviderEditorDialog({
   };
 
   return (
-    <SettingsDialog
+    <ConfirmDialog
       eyebrow={t("settings.providers.editorEyebrow", {
         capability: capabilityLabel(group.capability, t),
       })}
@@ -905,7 +905,7 @@ function ProviderEditorDialog({
           </p>
         ) : null}
       </form>
-    </SettingsDialog>
+    </ConfirmDialog>
   );
 }
 
@@ -1545,7 +1545,7 @@ function ProviderDialogs({
       ) : null}
 
       {deleteTarget ? (
-        <SettingsDialog
+        <ConfirmDialog
           eyebrow={t("settings.providers.deleteDialogEyebrow")}
           title={t("settings.providers.deleteDialogTitle")}
           description={t("settings.providers.deleteDialogDescription", {
@@ -1593,11 +1593,11 @@ function ProviderDialogs({
               ? t("settings.providers.deleteActiveNote")
               : t("settings.providers.deleteInactiveNote")}
           </p>
-        </SettingsDialog>
+        </ConfirmDialog>
       ) : null}
 
       {reindexOpen ? (
-        <SettingsDialog
+        <ConfirmDialog
           eyebrow={t("settings.reindex.dialogEyebrow")}
           title={t("settings.reindex.dialogTitle")}
           description={t("settings.reindex.dialogDescription")}
@@ -1629,7 +1629,7 @@ function ProviderDialogs({
           }
         >
           <p className="settings-lede">{t("settings.reindex.dialogCopy")}</p>
-        </SettingsDialog>
+        </ConfirmDialog>
       ) : null}
     </>
   );

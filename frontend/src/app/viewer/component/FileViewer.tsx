@@ -6,7 +6,12 @@ import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
 import { CitedChunk } from "./CitedChunk";
 import { TextSheet } from "./TextSheet";
-import { ViewerLoading } from "./ViewerStates";
+import { ViewerLoading, ViewerThumbnailLoading } from "./ViewerStates";
+import {
+  fileThumbnailUrl,
+  readThumbnail,
+  thumbnailPageRatio,
+} from "./thumbnail";
 import {
   classifyFile,
   fileContentUrl,
@@ -84,6 +89,7 @@ function UnsupportedViewer({ file }: { readonly file: FileSchema }) {
 function rendererFor(file: FileSchema): ReactNode {
   const kind: ViewerKind = classifyFile(file);
   const contentUrl = fileContentUrl(file.id);
+  const thumbnail = readThumbnail(file.thumbnail);
   switch (kind) {
     case "pdf":
       return (
@@ -92,6 +98,7 @@ function rendererFor(file: FileSchema): ReactNode {
           fileUrl={contentUrl}
           fileName={file.file_name}
           downloadUrl={fileDownloadUrl(file.id)}
+          initialPageAspect={thumbnail ? thumbnailPageRatio(thumbnail) : null}
         />
       );
     case "docx":
@@ -121,6 +128,9 @@ function rendererFor(file: FileSchema): ReactNode {
           alt={file.file_name}
           downloadUrl={fileDownloadUrl(file.id)}
           downloadName={file.file_name}
+          placeholderSrc={
+            thumbnail ? fileThumbnailUrl(file.id, thumbnail.version) : null
+          }
         />
       );
     case "spreadsheet":
@@ -155,11 +165,19 @@ interface FileRendererProps {
  */
 export function FileRenderer({ file, chunk = null }: FileRendererProps) {
   const { t } = useI18n();
+  const thumbnail = readThumbnail(file.thumbnail);
+  const label = t("library.viewer.loading.rendering");
   return (
     <>
       {chunk !== null ? <CitedChunk fileId={file.id} chunk={chunk} /> : null}
       <Suspense
-        fallback={<ViewerLoading label={t("library.viewer.loading.rendering")} />}
+        fallback={
+          thumbnail ? (
+            <ViewerThumbnailLoading fileId={file.id} thumbnail={thumbnail} label={label} />
+          ) : (
+            <ViewerLoading label={label} />
+          )
+        }
       >
         {rendererFor(file)}
       </Suspense>

@@ -14,6 +14,7 @@ seed rows.
 
 import hashlib
 
+from app.module.agent.domain.system_entry_domain import default_sections
 from app.module.agent.domain.system_prompt_domain import SystemPromptSection
 from app.module.agent.exception.domain_error import (
     AgentInvalidSystemPromptError,
@@ -30,7 +31,6 @@ from app.module.agent.schema.system_prompt_schema import (
     SystemPromptSectionReadSchema,
     SystemPromptSectionUpdateSchema,
 )
-from app.module.agent.service.system_prompt import default_sections
 from app.shared.time import utcnow
 from app.shared.types.list_response import ListResponseSchema
 

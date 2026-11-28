@@ -6,11 +6,11 @@ from typing import cast
 from app.infrastructure.ai.anthropic_client import AnthropicClient
 from app.infrastructure.ai.deepseek_client import DeepSeekClient, NullTextGenerator
 from app.infrastructure.config.settings import Settings
+from app.infrastructure.embedding.hashing_embedder import HashingEmbedder
 from app.infrastructure.embedding.http_embedder import (
     DisabledEmbedder,
     OpenAICompatibleEmbedder,
 )
-from app.module.knowledge.domain.hashing_embedder import HashingEmbedder
 from app.module.knowledge.domain.provider_config_domain import (
     CAPABILITY_CHAT,
     CAPABILITY_EMBEDDING,
@@ -20,12 +20,12 @@ from app.module.knowledge.domain.provider_config_domain import (
     EMBEDDING_TABLE_SPEC,
     ProviderCapability,
 )
-from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
-from app.module.knowledge.protocol.provider_builder_protocol import WebClientProtocol
-from app.module.knowledge.protocol.provider_config import (
+from app.module.knowledge.domain.provider_runtime_domain import (
     ProviderConfig,
     ProviderDefaults,
 )
+from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
+from app.module.knowledge.protocol.provider_builder_protocol import WebClientProtocol
 from app.module.knowledge.protocol.provider_tester_protocol import (
     ProviderTesterProtocol,
     ProviderTestOutcome,
@@ -237,7 +237,7 @@ class ProviderFactory:
             )
         if config.provider == "deepseek":
             try:
-                from app.infrastructure.web.deepseek_client import DeepSeekWebClient
+                from app.infrastructure.web.deepseek_web_client import DeepSeekWebClient
             except ImportError:  # The web slice is optional at boot time.
                 logger.warning("DeepSeek client is unavailable; web capabilities stay disabled.")
                 return NullWebClient()

@@ -6,7 +6,7 @@ import { Loader } from "../../../component/Loader";
 import { useGetFile } from "../../../generated-apis-types/files/files";
 import { useReadMemory } from "../../../generated-apis-types/memories/memories";
 import { useI18n } from "../../../i18n";
-import { libraryFileUrl } from "../../../../lib/library-url";
+import { libraryFileUrl, libraryMemoryUrl } from "../../../../lib/library-url";
 import { FileRenderer } from "../../../viewer/component/FileViewer";
 import { viewerErrorMessage } from "../../../viewer/component/viewer-utils";
 import type { TraceItem } from "../../trace";
@@ -188,7 +188,7 @@ export function InspectorMemoryStage({ memoryId }: { readonly memoryId: number }
             time: formatDateTime(memory.update_time),
           })}
         </span>
-        <PanelLink to={`/memory/${memory.memory_id}`}>
+        <PanelLink to={libraryMemoryUrl(memory.memory_id)}>
           {t("chat.panels.common.fullTrace")}
         </PanelLink>
       </div>

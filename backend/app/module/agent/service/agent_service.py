@@ -53,8 +53,15 @@ from app.module.agent.domain.compaction_domain import (
     estimate_provider_context_tokens,
     render_compaction_prompt,
 )
-from app.module.agent.domain.context_domain import build_context, render_tool_result
+from app.module.agent.domain.companion_persona_domain import CompanionPersona
+from app.module.agent.domain.context_domain import (
+    build_context,
+    prefix_hash,
+    render_tool_result,
+)
 from app.module.agent.domain.plot_spec_domain import PlotLimits
+from app.module.agent.domain.system_entry_domain import build_system_data, build_system_model
+from app.module.agent.domain.time_context_domain import current_time_block
 from app.module.agent.domain.tool_args import MAX_EXPRESSION_CHARS
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
@@ -92,6 +99,7 @@ from app.module.agent.protocol.chat_generator_protocol import (
     ChatResult,
     ChatToolCall,
 )
+from app.module.agent.protocol.companion_protocol import CompanionRunObserverProtocol
 from app.module.agent.protocol.usage_quota_protocol import AgentQuotaProtocol
 from app.module.agent.schema.agent_schema import (
     AgentApprovalSchema,
@@ -110,9 +118,7 @@ from app.module.agent.schema.agent_schema import (
     AgentToolSchema,
     AgentTurnResultSchema,
 )
-from app.module.agent.service.system_prompt import build_system_data, build_system_model
 from app.module.agent.service.system_prompt_service import SystemPromptService
-from app.module.agent.service.time_context import current_time_block
 from app.module.agent.service.tool_registry import AgentToolRegistry
 from app.module.knowledge.exception.domain_error import (
     AiContextWindowError,
@@ -265,6 +271,7 @@ class AgentService:
         quota: AgentQuotaProtocol | None = None,
         model_plan: AgentModelPlanProtocol | None = None,
         model_status: str = "assigned",
+        companion_runs: CompanionRunObserverProtocol | None = None,
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -275,6 +282,7 @@ class AgentService:
         self.system_prompt_service = system_prompt_service
         self.chat_attachments = chat_attachments
         self.server_timezone = server_timezone
+        self.companion_runs = companion_runs
         # Provider availability is resolved by the composition root from the
         # account assignment. They are safe names only; keys and base URLs never
         # reach the agent service.
@@ -285,6 +293,11 @@ class AgentService:
         # optional so isolated tests that exercise conversation mechanics keep
         # working with no quota policy.
         self.quota = quota
+        # Web tools this account cannot use, resolved once at run start (see
+        # ``_unavailable_tools``). The web-research service still enforces the
+        # account toggles on every call, so a mid-run change is caught there.
+        self._unavailable_tools: dict[int, frozenset[str]] = {}
+        self._withheld_tools: tuple[str, ...] = ()
         # Provider calls use the current model, not the conversation's
         # creation-time metadata. Escalation is capped at one swap per run and
         # every generator in the plan comes from the same primary endpoint row.
@@ -299,6 +312,36 @@ class AgentService:
         # ignored once a real response reports it.
         self._prompt_token_floor = 0
 
+    async def _complete_run(
+        self,
+        *,
+        conversation_id: int,
+        run_id: int,
+        last_entry_id: int | None,
+    ) -> None:
+        """Settle a completed run, then count it toward the companion bond.
+
+        The bond is best-effort: a failure there is logged and never turns a
+        finished answer into a failed run.
+        """
+        await self.repository.complete_run(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            last_entry_id=last_entry_id,
+            now=utcnow(),
+        )
+        if self.companion_runs is None:
+            return
+        try:
+            await self.companion_runs.run_completed(conversation_id)
+        except Exception:
+            logger.warning(
+                "companion bond update failed conversation_id=%s run_id=%s",
+                conversation_id,
+                run_id,
+                exc_info=True,
+            )
+
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
             raise AgentUsageLimitExceededError()
@@ -308,6 +351,7 @@ class AgentService:
         payload: AgentConversationCreateSchema,
         *,
         user_profile: UserProfile | None = None,
+        companion: CompanionPersona | None = None,
     ) -> AgentConversationSchema:
         provider = payload.provider or self.default_provider
         if provider not in {"deepseek", "openai-compatible", "anthropic"}:
@@ -320,6 +364,7 @@ class AgentService:
             model=model,
             sections=sections,
             user_profile=user_profile,
+            companion=companion,
         )
         system_model = build_system_model(system_data)
         conversation, _entry = await self.repository.create_conversation(
@@ -723,12 +768,59 @@ class AgentService:
                 last_entry_id,
                 keep_plot_run_id=run_id,
             )
+        context = await self._offered_tools_only(context, run_id)
         return await self._enforce_context_budget(
             context,
             conversation_id=conversation_id,
             run_id=run_id,
             last_entry_id=last_entry_id,
             last_compaction_entry_id=last_compaction_entry_id,
+        )
+
+    async def _unavailable_tool_names(self, run_id: int) -> frozenset[str]:
+        """Return the web tools this account cannot use, once per run.
+
+        A web tool is withheld when no provider is configured for it or the
+        account's web toggle (or allowance) forbids it, so the model is never
+        offered a tool that can only fail.
+        """
+        cached = self._unavailable_tools.get(run_id)
+        if cached is not None:
+            return cached
+        unavailable: set[str] = set()
+        checks = (
+            ("web_search", self.web_search_provider, "web_search_allowed"),
+            ("web_fetch", self.web_fetch_provider, "web_fetch_allowed"),
+        )
+        for tool_name, provider, allowed_name in checks:
+            if provider == "none":
+                unavailable.add(tool_name)
+                continue
+            allowed = getattr(self.quota, allowed_name, None) if self.quota else None
+            if allowed is not None and not await allowed():
+                unavailable.add(tool_name)
+        result = frozenset(unavailable)
+        self._unavailable_tools[run_id] = result
+        return result
+
+    async def _offered_tools_only(
+        self,
+        context: ProviderContext,
+        run_id: int,
+    ) -> ProviderContext:
+        """Drop withheld tools from the outbound request; the transcript is unchanged."""
+        unavailable = await self._unavailable_tool_names(run_id)
+        self._withheld_tools = tuple(sorted(unavailable))
+        if not unavailable:
+            return context
+        offered = [
+            tool for tool in context.tools if _tool_definition_name(tool) not in unavailable
+        ]
+        # The prefix hash describes what the provider actually receives.
+        return replace(
+            context,
+            tools=offered,
+            cache_prefix_hash=prefix_hash(context.system_message, offered),
         )
 
     async def _enforce_context_budget(
@@ -1422,11 +1514,10 @@ class AgentService:
                 )
 
                 if not result.tool_calls:
-                    await self.repository.complete_run(
+                    await self._complete_run(
                         conversation_id=conversation_id,
                         run_id=run_id,
                         last_entry_id=last_entry_id,
-                        now=utcnow(),
                     )
                     logger.info(
                         "agent run completed run_id=%s conversation_id=%s "
@@ -2229,6 +2320,7 @@ class AgentService:
                     context_remaining=max(0, limit - used),
                     compaction_at=compaction_at,
                     compaction_in=max(0, compaction_at - used),
+                    unavailable_tools=self._withheld_tools,
                 )
             )
 
@@ -2319,11 +2411,10 @@ class AgentService:
                 "finish_reason": "stop",
             },
         )
-        await self.repository.complete_run(
+        await self._complete_run(
             conversation_id=conversation_id,
             run_id=run_id,
             last_entry_id=entry.id,
-            now=utcnow(),
         )
         logger.info(
             "agent run completed run_id=%s conversation_id=%s step=%d "
@@ -2458,11 +2549,10 @@ class AgentService:
                 "finish_reason": finish_reason,
             },
         )
-        await self.repository.complete_run(
+        await self._complete_run(
             conversation_id=conversation_id,
             run_id=run_id,
             last_entry_id=entry.id,
-            now=utcnow(),
         )
         logger.info(
             "agent run completed run_id=%s conversation_id=%s step=%s "
@@ -3289,6 +3379,16 @@ def _output_limit_text(max_output_tokens: int) -> str:
         "complete that request. Please ask again for a smaller or simpler result, "
         "for example a chart with fewer points."
     )
+
+
+def _tool_definition_name(tool: Mapping[str, Any]) -> str | None:
+    """Return the function name of one OpenAI-style tool definition."""
+    function = tool.get("function")
+    if isinstance(function, Mapping):
+        name = function.get("name")
+        return name if isinstance(name, str) else None
+    name = tool.get("name")
+    return name if isinstance(name, str) else None
 
 
 def _web_provider_name(value: str) -> str:

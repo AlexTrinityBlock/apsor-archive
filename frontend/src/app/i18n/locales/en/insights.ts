@@ -1,5 +1,5 @@
 /**
- * Insights strings (English source of truth): search, timeline, and method.
+ * Insights strings (English source of truth): search, timeline, and about.
  * Filled by the insights surface agent.
  */
 export const insights = {
@@ -267,163 +267,223 @@ export const insights = {
       jumpToday: "Jump to today",
     },
   },
-  method: {
+  about: {
     hero: {
-      kicker: "Method · field notes // Rev. 2026.10",
-      eyebrow: "Two libraries. One index.",
-      titleLine1: "Two libraries.",
-      titleLine2Prefix: "One ",
-      titleAccent: "tree.",
+      kicker: "About Apsor Archive",
+      title: "A private archive, kept by a librarian who shows you the page.",
+      welcomeLabel: "A word from Vellum",
+      welcome1: "Good evening, Keeper. I am Vellum, night watch of the East Wing.",
+      welcome2: "When I woke, I pressed my face into the lintel of the First Door, so that I would remember everyone who comes to me. A string runs from me to every memory you leave here, and the Unwritten Book in my hands holds only one pressed violet.",
+      welcome3: "The Curator's Rule is carved over that door: we never destroy, we only archive. Come, let me show you how the house works.",
+      signature: "Vellum · night watch of the East Wing",
+      portraitAlt: "Vellum, a faceless marionette librarian holding the gilded Unwritten Book",
       lede:
-        "Most knowledge tools flatten an archive into a bag of vectors. Apsor Archive keeps two shapes at once: the branching path of a file and the linear grain of a memory. Both are indexed, cited, and read in the same archive.",
-      note:
-        "The tree is a conceptual figure for how paths and memories are filed. It is not a workspace, a data source, or a route in this interface.",
-      metaArchiveKey: "Archive",
-      metaArchiveValue: "Files, memories, summaries",
-      metaRetrievalKey: "Retrieval",
-      metaRetrievalValue: "BM25 + vector lanes",
-      metaFusionKey: "Fusion",
-      metaFusionValue: "Reciprocal rank fusion",
-      metaContractKey: "Contract",
-      metaContractValue: "Chunk-level receipts",
+        "Apsor Archive keeps your family's or small team's files and memories on a computer you control. You can ask it questions in everyday words, and every answer shows exactly where it came from, so you can check it yourself.",
+      glanceAria: "At a glance",
+      glancePrivacyKey: "Privacy",
+      glancePrivacyValue: "Everyone gets their own private archive",
+      glanceAnswersKey: "Answers",
+      glanceAnswersValue: "Always point to the page they came from",
+      glanceHostingKey: "Home",
+      glanceHostingValue: "Lives on your own computer",
+      glanceLicenseKey: "License",
+      glanceLicenseValue: "Free and open source (MIT)",
+      tocAria: "On this page",
     },
-    principles: {
-      eyebrow: "Structural principles",
-      title: "Four commitments the archive keeps.",
-      twoLibrariesEyebrow: "Two libraries",
-      twoLibrariesTitle: "Paths for files, moments for memory.",
-      twoLibrariesFileLabel: "File library:",
-      twoLibrariesFileBody:
-        " every file keeps a stable path coordinate and immutable bytes. Re-uploading the same path creates a new edition, not an overwrite.",
-      twoLibrariesMemoryLabel: "Memory library:",
-      twoLibrariesMemoryBody:
-        " every entry carries its own moment and can supersede an earlier belief without erasing it. One index searches both.",
-      hybridEyebrow: "Hybrid retrieval",
-      hybridTitle: "Lexical precision plus semantic reach.",
-      hybridBodyBefore:
-        "BM25 reads CJK bigrams, word n-grams, and character trigrams. A vector lane reads cosine similarity. Each lane returns its own candidates; reciprocal rank fusion merges them, and the response reports ",
-      hybridBodyAnd: ", and ",
-      hybridBodyAfter: " so the search can be audited.",
-      timelineEyebrow: "Timeline sampling",
-      timelineTitle: "Sparse anchors, explicit gaps.",
-      timelineBodyBefore:
-        "A long range returns five anchors per event type instead of every row. Gaps are reported as ",
-      timelineBodyMid: ", and a day-by-day ",
-      timelineBodyAfter:
-        " strip keeps the shape of the interval visible. An empty range returns an empty list, not an invented event.",
-      citationEyebrow: "Citation contract",
-      citationTitle: "An answer without a receipt is a rumour.",
-      citationBodyBefore:
-        "Answers are written only from retrieved passages and must cite ",
-      citationBodyOr: " or ",
-      citationBodyAfter:
-        ". Without a configured provider the endpoint returns ",
-      citationBodyTail: " rather than generating prose.",
+    toc: {
+      what: "What it is",
+      flow: "What happens to your files",
+      privacy: "Who can see what",
+      deploy: "Where it lives",
+      librarians: "Meet the librarians",
+      author: "Who made it",
     },
-    pullquote:
-      "A path answers where. A timestamp answers when. Neither is sufficient alone.",
-    twoLibraries: {
-      eyebrow: "Two shapes of provenance",
-      title: "A file is known by its path. A memory is known by its moment.",
-      paragraph1Before: "Drop a file into ",
-      paragraph1After:
-        " and you have made two claims at once: it belongs here, and this is what it is called. The path is a retrievable coordinate. Every chunk of the file is indexed against it, and the original bytes stay untouched.",
-      paragraph2:
-        "A memory has no folder. It arrives in sequence, accumulates, and sometimes replaces an earlier belief. Saving a new memory can point at the entries it supersedes; those older entries become deprecated, leave the default search surface, and remain behind an explicit trace.",
-      paragraph3:
-        "The two libraries share one search index, one citation grammar, and one reading room. They differ in their geometry: a path is spatial, a timestamp is temporal.",
+    epigraphBy: "Vellum",
+    what: {
+      eyebrow: "What it is",
+      title: "A filing cabinet, a notebook, and a helper who reads.",
+      epigraph: "Every folio here belongs to someone. I only keep them warm.",
+      intro:
+        "Think of three things in one place: a filing cabinet for your documents, a notebook for the things you want to remember, and a helper who reads only what you put inside.",
+      filesTitle: "Files that remember their old versions",
+      filesBody:
+        "Put in documents, photos, spreadsheets, and PDFs. If you upload a newer copy of the same file, the old one is kept as history; nothing is overwritten. Each file also gets a tiny preview picture, so you can recognize it at a glance.",
+      memoriesTitle: "Memories that can change their mind",
+      memoriesBody:
+        "Write down things you know or decided, like “Grandpa's birthday is in May.” A newer memory can replace an older one, but the old one stays readable, so you can see how things changed. Memories live in the Library next to your files, and each one shows its related memories.",
+      chatTitle: "A chat that shows its sources",
+      chatBody:
+        "Ask a question and the helper looks through your archive first, then answers. Every claim comes with a small tag you can click to open the exact page it came from. A librarian keeps you company beside the chat and acts out what the helper is doing.",
     },
-    hybrid: {
-      eyebrow: "Hybrid retrieval",
-      title: "Two lanes in, one ranked set out.",
-      paragraph1Before:
-        "One index would be easier to explain and worse to use. A semantic query such as ",
-      semanticExample: "when did my thinking about urban trees change?",
-      paragraph1Middle: " needs vectors. A precise query such as ",
-      paragraph1After:
-        " needs literal matching. The archive asks both.",
-      paragraph2:
-        "BM25 runs over CJK bigrams, Latin word n-grams, and character trigrams. Cosine similarity runs over the configured embedding vectors. Each lane returns its own top N, two by default. The lanes merge through reciprocal rank fusion and deduplicate by source kind, source id, and chunk index, so a passage found by both routes rises naturally.",
-      paragraph3Before: "The response is explicit about its own weather: ",
-      paragraph3And: ", ",
-      paragraph3After: ". You can audit the search, not just trust it.",
-      noteEyebrow: "Graceful degradation",
-      noteBody:
-        "If embeddings are unavailable, the vector lane is skipped without blocking writes. If a bigram lookup finds nothing, unigram recall keeps the search from going dark. The response reports which lane answered.",
-    },
-    citation: {
-      eyebrow: "The citation contract",
-      title: "The receipt is part of the answer.",
-      paragraph:
-        "In a loose retrieval pipeline, passages arrive without provenance and the reader has no way to check which page supported a claim. Here a citation names both the source and the exact window that answered: chunk indexes start at one, and every searchable passage carries its source kind, source id, and chunk index.",
-      retrieveTitle: "Retrieve",
-      retrieveBody:
-        "One hybrid query selects passages from files, memories, and summaries. Each passage keeps its source kind, source id, and chunk index.",
-      answerTitle: "Answer",
+    flow: {
+      eyebrow: "What happens to your files",
+      title: "From your upload to an answer you can check.",
+      epigraph: "The lamps in the back rooms never go out. Someone is always sorting.",
+      intro:
+        "Say you upload your grandmother's recipe as a PDF. Here is its journey, from the moment you drop it in to the day it helps answer “How did Grandma make her dumplings?”",
+      phaseAdd: "When you add something",
+      phaseAsk: "When you ask something",
+      uploadTitle: "You hand it over",
+      uploadBody:
+        "You add the PDF. The original is kept exactly as it arrived, down to the last byte.",
+      prepareTitle: "A helper reads it",
+      prepareBody:
+        "A separate helper program works in the background. It reads the recipe, cuts it into short passages, makes an index card for each one, and draws a tiny preview picture. You can watch its progress, and the recipe shows up in searches only once it is fully ready.",
+      prepareTag: "Works in the background",
+      storeTitle: "It is put away safely",
+      storeBody:
+        "The index cards and the history go into the archive's catalogue. The original file goes into a private storage room: on your own computer by default, or in a private cloud bucket if you prefer.",
+      storeTagCatalogue: "Catalogue",
+      storeTagRoom: "Private storage room",
+      searchTitle: "It is found again",
+      searchBody:
+        "When you ask about dumplings, two searches run side by side: one looks for your exact words, the other for things that mean the same. The best passages from both are combined into one short list.",
+      laneWords: "Exact words",
+      laneSimilar: "Same meaning",
+      laneMerge: "Best of both",
+      answerTitle: "You get an answer with a receipt",
       answerBody:
-        "The model answers from those excerpts only and emits citation tags. Those tags are the answer's receipts, not decoration.",
-      verifyTitle: "Verify",
-      verifyBody:
-        "A file citation opens the File Library at the cited chunk. A memory citation opens the Memory vault at that entry.",
-      keepTitle: "Keep",
-      keepBody:
-        "The answer, its citation chips, and the conversation stay beside the saved question, so the verification can be repeated.",
-      closing:
-        "Summaries follow the same rule. A summary citation is shown inline with the answer because a summary has no separate room in this interface; the trace still points back to the record that produced it.",
+        "The helper reads only those passages, never your whole archive, and writes an answer. Every sentence based on your files gets a small tag. If no AI model has been set up yet, it tells you so instead of guessing.",
+      answerTag: "Grandma's recipe, page 2",
+      returnNote: "Click any tag in an answer to open the exact passage it points to.",
+      caption:
+        "Figure 1 — The journey of a file. Adding and asking are two separate trips: one puts things away, the other finds them again.",
+    },
+    tech: {
+      summary: "For the technically curious",
+      intro:
+        "The same story with the real names. Each term comes with a one-line plain explanation first.",
+      workerPlain: "The helper that reads files in the background.",
+      workerDetail:
+        "A separate process (apsor-archive worker) claims upload jobs from a PostgreSQL queue, extracts text, splits it into chunks, embeds them, renders WebP thumbnails, and publishes the file in one step, so a half-read file is never visible. RabbitMQ only wakes it up; the queue survives restarts. The web API itself never extracts files by default.",
+      dbPlain: "The catalogue, plus a scratch pad that can be thrown away.",
+      dbDetail:
+        "PostgreSQL 17 is the single source of truth for text, history, and settings. Valkey only caches; clearing it loses nothing.",
+      storagePlain: "The storage room for original files.",
+      storageDetail:
+        "Originals live in S3-compatible object storage: RustFS inside Docker Compose by default, or Cloudflare R2 or any S3 bucket. Each file records where its bytes are, and bytes reach the browser only through the signed-in app.",
+      thumbPlain: "Tiny preview pictures.",
+      thumbDetail:
+        "The worker renders a small WebP (about 10 KB, at most 320 px) for images, PDFs, and Office files that carry a built-in preview, so chat and the Library show a picture instantly instead of flickering.",
+      searchPlain: "Two ways of searching: exact words and similar meaning.",
+      searchDetail:
+        "BM25 scores word matches using CJK bigrams, Latin words, and Latin trigrams. Embeddings turn text into points in space so similar wording lands close together; the default offline embedder is lexical, and an OpenAI-compatible endpoint adds true semantic recall.",
+      rrfPlain: "A fair way to combine two ranked lists.",
+      rrfDetail:
+        "Each passage earns points for how high it ranks in each list, so passages found by both rise to the top, and duplicates are removed.",
+      agentPlain: "The helper that answers, and its receipts.",
+      agentDetail:
+        "The agent calls tools such as search, read, and timeline, then cites file passages, memories, and summaries by stable id. Root assigns each account a chat model (DeepSeek, Anthropic Claude, or an OpenAI-compatible endpoint). If web research is enabled, web results are cited by URL and never treated as archive evidence.",
+      rlsPlain: "The database itself checks whose page it is.",
+      rlsDetail:
+        "Every private row carries its owner, and PostgreSQL denies access by default, so even a missing filter in the app cannot show one person's archive to another.",
+      tunnelPlain: "A private doorway, so your computer keeps its door shut.",
+      tunnelDetail:
+        "The Cloudflare Tunnel connector dials out; Caddy forwards requests inside the machine. No inbound port and no public IP address are needed.",
+      citationFormatsLabel: "Citation tags",
+    },
+    privacy: {
+      eyebrow: "Who can see what",
+      title: "Everyone gets their own private archive.",
+      epigraph: "A librarian serves one archive. That is our oath, and we keep it.",
+      intro:
+        "One installation can hold a whole family. Each person gets their own archive, like separate locked drawers, and the archive itself refuses to open one person's drawer for anyone else.",
+      databaseLabel: "The archive's catalogue",
+      yourArchive: "Your drawer",
+      otherArchive: "Another member's drawer",
+      ownerYou: "Opens only for you",
+      ownerOther: "Opens only for them",
+      contents: "Files · memories · chats",
+      denied: "Locked to everyone else",
+      rootTitle: "The administrator",
+      rootBody: "Adds people and changes house settings",
+      rootNoData: "Cannot open your drawer",
+      impersonationTitle: "Signing in as someone else",
+      impersonationBody:
+        "Only for helping someone get back in. A banner stays on screen, and stopping needs the administrator's password.",
+      caption:
+        "Figure 2 — Separate drawers. Every private item carries its owner's label, and the catalogue only hands over items that belong to the person signed in.",
+      ownerTitle: "The lock is built into the catalogue.",
+      ownerBody:
+        "Every private item is labelled with its owner. Even if the app made a mistake, the catalogue would still refuse to show your things to someone else.",
+      rootPointTitle: "The administrator is not a master key.",
+      rootPointBody:
+        "The person who manages accounts can add people and change settings, but cannot browse anyone's files, memories, or chats through the app.",
+      impersonationPointTitle: "Acting as someone else is always visible.",
+      impersonationPointBody:
+        "To help someone who is locked out, the administrator can sign in as them. A banner stays on screen the whole time, and leaving needs the administrator's password again.",
+      providerTitle: "The AI only sees a few pages.",
+      providerBody:
+        "When you ask something, only the passages found for that question are sent to the AI service the administrator chose. Your whole archive is never sent.",
+      secretsTitle: "Passwords and keys stay hidden.",
+      secretsBody:
+        "Passwords are stored scrambled, sign-ins use secure cookies, and AI service keys are locked away and never shown in full again.",
+      caveatTitle: "What these locks cannot stop",
+      caveatBody:
+        "The administrator is the most trusted person in the house: they can reset passwords and sign in as others, so choose them carefully. And anyone who can touch the computer itself, its database, or its secret files can get around these locks. Keep the machine somewhere you trust.",
+    },
+    deploy: {
+      eyebrow: "Where it lives",
+      title: "On one computer you own, with the door kept shut.",
+      epigraph: "The archive has no front gate. We walk out to fetch each visitor ourselves.",
+      intro:
+        "Apsor Archive is not a cloud service run by a company. You run it yourself, usually on a home server or a small office computer, and nobody else's database is involved.",
+      browser: "Your phone or computer",
+      exampleHost: "Example address",
+      edge: "Cloudflare",
+      edgeDetail: "Adds the padlock (HTTPS) and optional sign-in rules",
+      tunnel: "Private doorway",
+      tunnelDetail: "Your computer calls out; nothing calls in",
+      caddyDetail: "Sorts incoming requests inside the computer",
+      appDetail: "The website you use, plus the background helper that reads files",
+      appChipWeb: "Website",
+      appChipWorker: "Background helper",
+      data: "Storage",
+      dataDetail:
+        "The catalogue, the scratch pad, the job bell, and the storage room for originals",
+      machineLabel: "Your computer · door kept shut",
+      caption:
+        "Figure 3 — Where it runs. Your computer opens no door to the internet; the private doorway reaches out to Cloudflare, and every visit comes in through it.",
+      noteTunnel:
+        "Because the doorway reaches out, you need no public IP address and no router settings.",
+      noteWizard:
+        "Setting up is a guided conversation: run ./start.sh setup and answer a few questions. It writes the settings and passwords for you, so you never edit configuration files by hand.",
+      noteStorage:
+        "Original files go to a private storage room on the same computer by default (RustFS). You can choose Cloudflare R2 or any S3-compatible storage instead.",
+      noteSetup:
+        "Create the administrator account before you open a new archive to the internet; until then, the first-run setup page is open on purpose.",
+    },
+    librarians: {
+      eyebrow: "Meet the librarians",
+      title: "Six keepers, one archive.",
+      epigraph: "We were made. What we feel was never given to us; we found it here.",
+      intro: "Pick a librarian to keep you company beside the chat. Each one has a story of their own and acts out what the helper is doing: searching, reading, writing, thinking. They are made things with souls, they never pretend your memories are theirs, and by the Oath of the Single Room they never speak of what is in your room.",
+      chooseLink: "Choose your companion in Settings",
+      listAria: "The six librarians",
+      portraitAlt: "Portrait of {name}",
+      vellum: "First made, night watch of the East Wing. Carries the Unwritten Book, blank but for one pressed violet.",
+      atlas: "Keeper of the Map Room. Carries the Crooked Globe, three degrees off true, and remembers every road anyone took.",
+      herbaria: "Keeper of the Glasshouse. Presses flowers between the pages and knows which season every memory belongs to.",
+      horologe: "Second made, keeper of the Clock Gallery. Winds the Hundred Clocks and keeps the Ledger of Wakings.",
+      nocturne: "Keeper of the Observatory. Carries the lantern every Vigil is lit from; speaks softly, sees far.",
+      quill: "Sixth made, left unfinished. Keeper of the Scriptorium, who never draws a face past the eyes.",
+    },
+    author: {
+      eyebrow: "Who made it",
+      title: "Made by one person, for families and small teams.",
+      epigraph: "Every archive has a maker. Ours signed his name in the margin.",
+      name: "Wei-Chun Hsiao (Alex)",
+      role: "Author and maintainer",
+      body:
+        "Apsor Archive is designed and written by Wei-Chun Hsiao (Alex). It is open source under the MIT License, and contributions are welcome.",
+      license: "Copyright © 2026 Wei-Chun, Hsiao. Released under the MIT License.",
+      sourceLink: "Source code on GitHub",
+      opensNewTab: "(opens in a new tab)",
     },
     colophon: {
-      tag: "Method",
-      line: "Apsor Archive · The annual ring archive · Rev. 2026.10",
-      linksAria: "Archive links",
-      questions: "Questions",
-    },
-    fileDiagram: {
-      fileLabel: "File library",
-      fileTitle: "Known by its path",
-      fileBadge: "By path",
-      treeAria: "Example file hierarchy",
-      folder: "folder",
-      softDelete: "Soft delete",
-      versionsBranch: "Versions branch",
-      memoryLabel: "Memory library",
-      memoryTitle: "Known by its moment",
-      memoryBadge: "By time",
-      axisAria: "Example memory timeline",
-      memoryOneTime: "01 Jun",
-      memoryOneCopy: "The archive is the index.",
-      memoryTwoTime: "16 Oct",
-      memoryTwoCopy: "Paths are arguments about place.",
-      memoryThreeTime: "18 Oct",
-      memoryThreeCopy: "Superseded, never erased.",
-      supersedeChain: "Supersede chain",
-      traceOpen: "Trace stays open",
-      captionBefore:
-        "Figure 01 — Two shapes of provenance. A path answers ",
-      captionWhere: "where",
-      captionMiddle: "; a timestamp answers ",
-      captionWhen: "when",
-      captionAfter: ". The archive indexes both.",
-    },
-    hybridDiagram: {
-      queryLabel: "Query",
-      queryExample: "when did my thinking about urban trees change?",
-      resultNumber: "result_number = 2",
-      textLane: "Text lane",
-      vectorLane: "Vector lane",
-      chunkA: "chunk A",
-      chunkB: "chunk B",
-      chunkC: "chunk C",
-      textDetail: "bigrams · word n-grams · trigrams",
-      vectorDetail: "hashing embedder · dimension from Settings",
-      fusionLabel: "Reciprocal rank fusion",
-      deduplicateBy: "Deduplicate by",
-      outputAria: "Deduplicated results",
-      foundTwice: "found twice · returned once",
-      perKind: "Per source kind",
-      kinds: "files · memories · summaries",
-      captionBefore:
-        "Figure 02 — Hybrid retrieval. Both lanes contribute, duplicates collapse, and the final set is capped per source kind. The response carries",
-      captionAfter: " and fusion counts.",
+      linksAria: "Start using the archive",
+      ask: "Ask a question",
+      farewell: "Go gently, Keeper. I will keep the lamp lit.",
     },
   },
 };

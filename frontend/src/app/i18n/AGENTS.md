@@ -17,7 +17,7 @@ User-authored content, file and memory names, citations, model/provider names, t
 - **Provider:** `I18nProvider.tsx` is the outermost app provider. It initializes from stored preference, then browser languages, then English. On change it updates the non-React active locale, document language, page title, and `localStorage` key `apsor-archive.locale`.
 - **Lookup:** `translate.ts` walks dot paths such as `core.nav.library`. It falls back to English and then the key, and substitutes `{name}` placeholders from the optional variables object.
 - **Locales:** `locale.ts` defines `LOCALES`, native option labels, detection (`zh-TW`/`zh-Hant`, `zh-CN`/`zh-Hans`, `en`), storage, and document-language application. A bare `zh` resolves to Traditional Chinese.
-- **Dictionaries:** `locales/index.ts` combines seven namespaces (`core`, `chat`, `library`, `memory`, `insights`, `settings`, `systemPrompt`) for each locale. `TranslationKey` is derived from the English dictionary, so English is the type-level source of truth.
+- **Dictionaries:** `locales/index.ts` combines eight namespaces (`core`, `chat`, `library`, `memory`, `insights`, `settings`, `systemPrompt`, `companion`) for each locale. `insights` is non-obvious: it holds the Search, Timeline, and About (`about`) groups; `memory` also holds the saved-questions and profile groups. `TranslationKey` is derived from the English dictionary, so English is the type-level source of truth.
 - **Parity:** `scripts/check-i18n.ts` flattens each namespace and reports missing or extra keys against English. Empty placeholder namespaces pass; a namespace with keys must match across all locales.
 - **Errors:** `errors.ts` maps stable backend codes to `core.errors.*`, then shows the server detail verbatim for unknown codes, then a localized generic message. Provider/server text is never translated.
 - **Statuses:** `status.ts` localizes the known service-state vocabulary and leaves unknown values verbatim.
@@ -25,6 +25,7 @@ User-authored content, file and memory names, citations, model/provider names, t
 
 ## Key files
 
+- `index.ts` — the public barrel (`useI18n`, `I18nProvider`, types); import from it rather than from internal files.
 - `I18nProvider.tsx` — locale state, translator, formatters, document metadata, and `useI18n`.
 - `locale.ts` — supported locales, native labels, detection, storage, and `lang`.
 - `translate.ts` — dot-path lookup, interpolation, fallback, and active-locale bridge for non-React modules.
@@ -40,7 +41,7 @@ User-authored content, file and memory names, citations, model/provider names, t
 ## Conventions
 
 - Route every user-visible string through `t`: labels, descriptions, empty states, hints, validation, toasts, `title`, `aria-label`, and `aria-description`.
-- Add the English key first, then add the identical key path to both Chinese dictionaries. Keep the object shape and semantic grouping aligned.
+- English is the canonical locale and both Chinese locales stay complete: add the English key first, then add the identical key path to both Chinese dictionaries in the same change; never leave English text in a Chinese dictionary. Keep the object shape and semantic grouping aligned.
 - Use semantic keys, not English sentences. Use `{name}` interpolation and paired `One`/`Other` keys for counts.
 - Run `bun run i18n:check` after any dictionary change. It checks key parity, not wording or placeholder quality.
 - Use `useI18n()` inside components and `translateApiError` for mapped failures. Use `getActiveLocale`/`translateApiErrorWithActiveLocale` only in plain modules that cannot call hooks.

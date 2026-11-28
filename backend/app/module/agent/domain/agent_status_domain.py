@@ -13,7 +13,9 @@ order, so identical inputs produce byte-identical output.
 The five optional context-budget values are the only mutable telemetry allowed:
 they tell the model how much of the effective input budget this exact request
 uses, how much remains, and how far away auto-compaction is. Identifiers,
-content, paths, usage counters, and tool names stay out.
+content, paths, and usage counters stay out. The one tool-name exception is
+``unavailable_tools``: the frozen prompt may describe web tools this account
+cannot use right now, and the attribute tells the model they were withheld.
 """
 
 from dataclasses import dataclass
@@ -38,11 +40,14 @@ class AgentStatus:
     context_remaining: int | None = None
     compaction_at: int | None = None
     compaction_in: int | None = None
+    # Catalog tools withheld from this request (sorted), e.g. web tools the
+    # account has disabled or that have no configured provider.
+    unavailable_tools: tuple[str, ...] = ()
 
 
 def render_agent_status(status: AgentStatus) -> str:
     """Render the one trailing system message with the current runtime limits."""
-    values: dict[str, int] = {
+    values: dict[str, int | str] = {
         "max_tool_result_chars": status.max_tool_result_chars,
         "max_page_context_chars": status.max_page_context_chars,
         "max_expression_chars": status.max_expression_chars,
@@ -58,6 +63,8 @@ def render_agent_status(status: AgentStatus) -> str:
     ):
         if value is not None:
             values[key] = value
+    if status.unavailable_tools:
+        values["unavailable_tools"] = ",".join(sorted(status.unavailable_tools))
     opening = "<agent_status" + attributes(values, sort_keys=True)
     if not status.retry_notice:
         return f"{opening} />"

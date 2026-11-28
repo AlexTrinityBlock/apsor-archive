@@ -26,6 +26,7 @@ from app.module.knowledge.domain.provider_config_domain import (
     ProviderTableSpec,
     default_base_url_for,
 )
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig, ProviderDefaults
 from app.module.knowledge.exception.domain_error import (
     EmbeddingProviderError,
     InvalidProviderConfigError,
@@ -37,7 +38,6 @@ from app.module.knowledge.model.provider_config_model import ProviderConfigMixin
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.chunk_repository_protocol import ChunkRepositoryProtocol
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
-from app.module.knowledge.protocol.provider_config import ProviderConfig, ProviderDefaults
 from app.module.knowledge.protocol.provider_config_repository_protocol import (
     ProviderConfigRepositoryProtocol,
 )

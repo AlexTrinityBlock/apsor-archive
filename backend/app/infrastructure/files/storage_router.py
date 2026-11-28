@@ -1,8 +1,9 @@
 """Backend selection for original file bytes.
 
 Both the API and the ingestion worker build one router from Settings. New writes
-use the configured backend; reads can select the backend persisted on the row so
-a staged local-to-R2 migration can serve a mixed archive.
+use the configured backend; reads select the backend persisted on the row, so a
+staged migration (for example local to R2, or R2 to RustFS) can serve a mixed
+archive.
 """
 
 from __future__ import annotations
@@ -12,20 +13,31 @@ from typing import Literal
 from app.infrastructure.files.storage_errors import StorageConfigurationError
 from app.infrastructure.files.storage_protocol import StorageAdapterProtocol
 
-StorageBackendName = Literal["local", "r2"]
-SUPPORTED_STORAGE_BACKENDS: tuple[StorageBackendName, ...] = ("local", "r2")
+StorageBackendName = Literal["local", "r2", "s3"]
+SUPPORTED_STORAGE_BACKENDS: tuple[StorageBackendName, ...] = ("local", "r2", "s3")
+_BACKEND_LABELS: dict[StorageBackendName, str] = {"local": "local", "r2": "R2", "s3": "S3"}
 
 
 def normalize_backend(value: str | None) -> StorageBackendName:
-    """Normalize and validate a backend name from a row or Settings."""
+    """Normalize and validate a backend name from a row or Settings.
+
+    ``rustfs`` is accepted as a configuration alias for ``s3``; rows always
+    persist the canonical ``s3`` name.
+    """
     candidate = (value or "").strip().lower()
-    if candidate not in SUPPORTED_STORAGE_BACKENDS:
-        raise StorageConfigurationError(f"Unsupported storage backend: {candidate or '(empty)'}.")
-    return candidate
+    if candidate == "rustfs":
+        candidate = "s3"
+    if candidate == "local":
+        return "local"
+    if candidate == "r2":
+        return "r2"
+    if candidate == "s3":
+        return "s3"
+    raise StorageConfigurationError(f"Unsupported storage backend: {candidate or '(empty)'}.")
 
 
 class StorageRouter:
-    """Select the local or R2 adapter for each operation.
+    """Select the local, R2, or generic S3 adapter for each operation.
 
     ``take(backend)`` and the optional ``backend`` keyword accept a row's
     ``storage_backend``. ``None`` means "use the configured default", which is
@@ -38,14 +50,19 @@ class StorageRouter:
         local: StorageAdapterProtocol,
         r2: StorageAdapterProtocol | None,
         default_backend: str,
+        s3: StorageAdapterProtocol | None = None,
     ) -> None:
+        self._adapters: dict[StorageBackendName, StorageAdapterProtocol | None] = {
+            "local": local,
+            "r2": r2,
+            "s3": s3,
+        }
         selected = normalize_backend(default_backend)
-        if selected == "r2" and r2 is None:
+        if self._adapters[selected] is None:
+            label = _BACKEND_LABELS[selected]
             raise StorageConfigurationError(
-                "The configured storage backend is r2, but R2 is not configured."
+                f"The configured storage backend is {selected}, but {label} is not configured."
             )
-        self._local = local
-        self._r2 = r2
         self._default_backend = selected
 
     @property
@@ -58,18 +75,18 @@ class StorageRouter:
         selected = (
             self._default_backend if storage_backend is None else normalize_backend(storage_backend)
         )
-        if selected == "r2" and self._r2 is None:
-            raise StorageConfigurationError("The R2 storage backend is not configured.")
+        if self._adapters[selected] is None:
+            label = _BACKEND_LABELS[selected]
+            raise StorageConfigurationError(f"The {label} storage backend is not configured.")
         return selected
 
     def take(self, storage_backend: str | None = None) -> StorageAdapterProtocol:
         """Return the adapter for a row value, falling back to the default."""
         selected = self.backend_name(storage_backend)
-        if selected == "local":
-            return self._local
-        if self._r2 is None:  # pragma: no cover - guarded by backend_name
-            raise StorageConfigurationError("The R2 storage backend is not configured.")
-        return self._r2
+        adapter = self._adapters[selected]
+        if adapter is None:  # pragma: no cover - guarded by backend_name
+            raise StorageConfigurationError("The storage backend is not configured.")
+        return adapter
 
     def adapter_for(self, storage_backend: str | None = None) -> StorageAdapterProtocol:
         """Alias for ``take`` with a more explicit name."""

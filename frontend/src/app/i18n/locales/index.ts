@@ -5,6 +5,7 @@ import { memory as enMemory } from "./en/memory";
 import { insights as enInsights } from "./en/insights";
 import { settings as enSettings } from "./en/settings";
 import { systemPrompt as enSystemPrompt } from "./en/systemPrompt";
+import { companion as enCompanion } from "./en/companion";
 
 import { core as zhTwCore } from "./zh-TW/core";
 import { chat as zhTwChat } from "./zh-TW/chat";
@@ -13,6 +14,7 @@ import { memory as zhTwMemory } from "./zh-TW/memory";
 import { insights as zhTwInsights } from "./zh-TW/insights";
 import { settings as zhTwSettings } from "./zh-TW/settings";
 import { systemPrompt as zhTwSystemPrompt } from "./zh-TW/systemPrompt";
+import { companion as zhTwCompanion } from "./zh-TW/companion";
 
 import { core as zhCnCore } from "./zh-CN/core";
 import { chat as zhCnChat } from "./zh-CN/chat";
@@ -21,6 +23,7 @@ import { memory as zhCnMemory } from "./zh-CN/memory";
 import { insights as zhCnInsights } from "./zh-CN/insights";
 import { settings as zhCnSettings } from "./zh-CN/settings";
 import { systemPrompt as zhCnSystemPrompt } from "./zh-CN/systemPrompt";
+import { companion as zhCnCompanion } from "./zh-CN/companion";
 
 /** The locales the archive interface can render. */
 export const LOCALES = ["en", "zh-TW", "zh-CN"] as const;
@@ -40,6 +43,7 @@ export interface TranslationDictionary {
   readonly insights: typeof enInsights;
   readonly settings: typeof enSettings;
   readonly systemPrompt: typeof enSystemPrompt;
+  readonly companion: typeof enCompanion;
 }
 
 /** Namespaces are separate files so surface agents can fill them independently. */
@@ -54,6 +58,7 @@ export const NAMESPACES = [
   "insights",
   "settings",
   "systemPrompt",
+  "companion",
 ] as const satisfies readonly Namespace[];
 
 /**
@@ -70,6 +75,7 @@ export const dictionaries = {
     insights: enInsights,
     settings: enSettings,
     systemPrompt: enSystemPrompt,
+    companion: enCompanion,
   },
   "zh-TW": {
     core: zhTwCore,
@@ -79,6 +85,7 @@ export const dictionaries = {
     insights: zhTwInsights,
     settings: zhTwSettings,
     systemPrompt: zhTwSystemPrompt,
+    companion: zhTwCompanion,
   },
   "zh-CN": {
     core: zhCnCore,
@@ -88,6 +95,7 @@ export const dictionaries = {
     insights: zhCnInsights,
     settings: zhCnSettings,
     systemPrompt: zhCnSystemPrompt,
+    companion: zhCnCompanion,
   },
 } satisfies Record<Locale, Record<Namespace, unknown>>;
 

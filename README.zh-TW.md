@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="frontend/public/favicon.svg" alt="Apsor Archive" width="112" height="112">
+  <img src="frontend/public/icon-512.png" alt="Apsor Archive" width="112" height="112">
 </div>
 
 <h1 align="center">Apsor Archive</h1>
@@ -32,11 +32,12 @@
 - [技術堆疊](#技術堆疊)
 - [快速開始](#快速開始)
   - [Docker Compose（一般）](#docker-compose一般)
-  - [物件儲存（本機或 R2）](#物件儲存本機或-r2)
+  - [物件儲存（RustFS、R2、S3 或本機）](#物件儲存rustfsr2s3-或本機)
   - [在應用程式內設定供應商](#在應用程式內設定供應商)
   - [每位帳號的模型指派](#每位帳號的模型指派)
   - [網路研究工具](#網路研究工具)
   - [常用提示詞](#常用提示詞)
+  - [對話夥伴](#對話夥伴)
   - [代理執行階段設定](#代理執行階段設定)
   - [資料匯入執行階段](#資料匯入執行階段)
   - [本機開發](#本機開發)
@@ -71,8 +72,8 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
 
 > 狀態：v0.1.0 —— 檔案與記憶典藏、root 加上每位使用者各自的帳號、具備
 > 資料庫後端執行階段限制的常駐 Pi 型代理、壓縮、平行工具、SSE 對話、
-> 儲存問題的問答庫、可持久化的非同步資料匯入、專用的 PDF/DOCX/試算表/圖片/文字
-> 預覽引擎、資料夾工作區，以及三面板對話工作區。
+> 儲存問題的問答庫、可持久化的非同步資料匯入、專用的 PDF/DOCX/PPTX/試算表/圖片/
+> 文字預覽引擎、資料夾工作區，以及三面板對話工作區。
 
 ## 重點特色
 
@@ -101,7 +102,9 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
 - **記憶是線性且可追溯的。** 新的信念可以取代舊的。舊記憶會離開搜尋介面，
   但仍可沿其鏈結閱讀。
 - **搜尋是混合式的。** 以 CJK 雙字組與拉丁詞元進行的 BM25，與向量召回
-  並行。結果會去重並融合，同時記錄原因。
+  並行。結果會去重並融合，同時記錄原因。過去的對話訊息也會以原始的
+  256 字元視窗建立索引；另一條 cosine → BM25 → RRF 通道會傳回最佳的 15 個
+  視窗，代理可以用穩定的訊息 ID 展開任何命中結果。
 - **時間取樣忠實呈現。** 代理的時間軸工具每種事件種類最多傳回五個錨點，
   並精確回報略過多少事件。人類時間軸頁面則以 `complete=true` 取得所選視窗
   的完整事件，並在向下捲動時自動載入更早的視窗。
@@ -111,6 +114,15 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
 - **問題的生命超越對話。** 可以在還沒有答案時先儲存問題，之後再提問，並把
   答案、引用、執行狀態與對話連結留在同一資料列上。編輯問題會清除過期
   答案，而不是在畫面上留下彼此不符的配對。
+- **對話圖片是暫時的。** 貼到對話輸入區的螢幕截圖會立即上傳（逐張顯示
+  位元組進度）到目前登入帳號的 `users/{user_id}/chat-temp/` 物件儲存區，
+  經縮小與重新編碼後，列在可移除的暫存圖片管理器中。在所有選取的圖片都
+  儲存完成前，無法送出。移除尚未送出的圖片或離開對話，會中止其上傳並立即
+  丟棄暫存資料列；分頁關閉後遺留的暫存圖片，會在資料庫設定的存活時間（預設
+  一小時）後過期。送出訊息時，會先把物件提升到 `users/{user_id}/chat-images/`
+  再認領資料列，因此已送出的圖片會一直保留，直到擁有者刪除。供應商收到的是
+  OpenAI 相容的 `image_url` 部分。刪除對話圖片會移除物件，並在對話記錄中
+  留下如實的佔位說明。對話圖片不是典藏檔案，也無法被搜尋。
 - **圖片存在於檔案庫中。** 圖片是普通的檔案紀錄，帶有原始位元組、路徑與
   分塊。支援視覺的對話供應商會加上 OCR、GitHub-Flavored Markdown 表格與
   完整的視覺描述；OCR 文字保留原文語言，描述語言與影像／文件提示詞範本
@@ -121,9 +133,9 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
   掃描頁系統提示詞。儲存時只驗證九個輸出 JSON 鍵仍然存在；目前範本存放
   在 `ingest_config`。既有檔案會保留目前的擷取結果，直到明確重新匯入
   並建立新檔案版本。
-- **文件會選擇自己的擷取器。** PDF 先嘗試文字，掃描頁面則以文件頁模式擷取
-  OCR、表格與簡短版面說明。DOCX、TXT、JSON、CSV 與日誌使用文字，並搭配
-  AI 結構化中介資料；圖片使用完整影像模式或檔名備援。XLSX、XLS、XLSM 與
+- **文件會選擇自己的擷取器。** PDF 先嘗試文字，掃描頁面則退回視覺擷取。
+  DOCX、PPTX、TXT、JSON、CSV 與日誌使用文字，並搭配 AI 結構化中介資料；
+  圖片使用視覺或檔名備援。XLSX、XLS、XLSM 與
   ODS 活頁簿會逐工作表讀成 Markdown 表格，包含日期、數值、合併標題、隱藏
   工作表與公式備援；它們永遠不會進入視覺流程。
 - **介面說三種語言。** 英文、繁體中文與簡體中文可在設定頁切換。選擇會依
@@ -135,17 +147,17 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
   查詢少了篩選條件，也無法揭露他人的典藏。密碼使用 Argon2，工作階段使用
   HttpOnly cookie。請在自己的機器上執行；只有在你自己具備存取控制時，才
   將它放在 Cloudflare Tunnel 之後。
-- **原始位元組可以存放在 Cloudflare R2。** `APSOR_STORAGE_BACKEND=local|r2`
-  決定新原始檔的寫入位置。讀取時遵循每筆資料列記錄的後端，因此分階段
-  移轉期間可以服務混合的典藏。R2 儲存桶是私人的，應用程式絕不發出預先
-  簽署或公開 URL。
+- **原始位元組存放在 S3 相容儲存中。** 預設是隨附的 RustFS 服務；也可以在
+  設定精靈中改選 Cloudflare R2、任何 S3 端點或本機磁碟。讀取時遵循每筆資料列
+  記錄的後端，因此分階段移轉期間可以服務混合的典藏。儲存桶一律保持私人，
+  應用程式絕不發出預先簽署或公開 URL。
 
 ## 技術堆疊
 
 | 層次 | 選擇 |
 |---|---|
 | API | Python 3.13、FastAPI、SQLAlchemy 2 async、Alembic、psycopg 3 |
-| 儲存 | PostgreSQL 17（`pg_trgm` 用於路徑模糊搜尋）；原始位元組位於本機磁碟或私人的 Cloudflare R2 |
+| 儲存 | PostgreSQL 17（`pg_trgm` 用於路徑模糊搜尋）；原始位元組位於 RustFS（預設）、Cloudflare R2、任何 S3 相容儲存桶或本機磁碟 |
 | 快取 | Valkey／相容於 Redis，附記憶體內備援 |
 | 檢索 | CJK 雙字組 + 拉丁詞元 n-gram、BM25、帶符號雜湊向量、RRF |
 | AI | DeepSeek `deepseek-flash`、Anthropic Claude，或任何 OpenAI 相容的對話端點 |
@@ -156,21 +168,25 @@ Apsor Archive 不是筆記清單。它是一個檢索介面，專為少量而刻
 
 ### Docker Compose（正式環境）
 
-正式堆疊是 **Cloudflare Tunnel → Caddy → API**，不發布任何主機連接埠。
-請準備 tunnel 權杖、公開主機名稱與資料目錄：
+正式堆疊是 **Cloudflare Tunnel → Caddy → API + 資料匯入 worker**，並在私人的
+Compose 網路上執行 PostgreSQL、Valkey、RabbitMQ，以及（預設）隨附的 RustFS
+物件儲存。它不發布任何主機連接埠。
+
+請執行設定精靈，而不是手動撰寫環境變數：
 
 ```bash
-mkdir -p data secrets
-sudo chown -R 10001:10001 data
-# Write the tunnel token; no trailing newline.
-printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
-chmod 755 secrets
-sudo chown 65532 secrets/cf_token.txt && chmod 640 secrets/cf_token.txt
-# The production default is R2; local disk is the simplest first run.
-export APSOR_STORAGE_BACKEND=local
-export APSOR_PUBLIC_HOST=archive.example.com
+./start.sh setup        # or: make setup
+mkdir -p data && sudo chown -R 10001:10001 data
 docker compose up -d --build
 ```
+
+精靈會詢問公開主機名稱、儲存後端（預設為隨附的 **RustFS**，也可選
+Cloudflare R2、任何 S3 相容端點或本機磁碟）、工作階段時效、選用的 DeepSeek
+金鑰，以及 Cloudflare Tunnel 權杖。它會寫出非祕密的 `.env`，產生 RustFS 與
+RabbitMQ 憑證，把貼上的金鑰存進 `.secrets/*.env` 與 `secrets/*.txt` 且不回顯，
+除非你確認覆寫，否則保留任何既有檔案，並印出容器讀取祕密檔案所需的
+`sudo chgrp` 指令。`./setup.sh --defaults` 以非互動方式執行同一流程（正式環境
+搭配 RustFS）；加上 `--dev` 則寫出開發用的 `.env`。
 
 將 Cloudflare Tunnel 的公開主機指向 **HTTP `caddy:80`**，再開啟
 `https://$APSOR_PUBLIC_HOST`。請把 `APSOR_PUBLIC_HOST` 放進 `.env`，重啟後
@@ -179,9 +195,8 @@ docker compose up -d --build
 登入時變更。新帳號也會繼承部署的主要對話端點與模型，因此對話與背景 AI 可
 立即使用；若部署沒有任何使用中的對話端點，帳號會保持未指派，root 必須先
 指派。PostgreSQL 使用具名磁碟區；本機的原始位元組與產生的祕密金鑰位於主機的
-`./data` 目錄下。正式環境的 Compose 檔案預設為
-`APSOR_STORAGE_BACKEND=r2`；其所需憑證請見
-[物件儲存](#物件儲存本機或-r2)，或者為自成一體的主機保留本機儲存。
+`./data` 目錄下。原始檔案位元組會寫入精靈所選的後端；請見
+[物件儲存](#物件儲存rustfsr2s3-或本機)。
 
 > 注意：`./data` 會綁定掛載到容器中，且容器程序以 uid `10001` 執行。請在
 > 第一次開機前建立目錄並修正其擁有者，否則上傳與原始位元組寫入都會失敗。
@@ -211,42 +226,48 @@ docker compose up -d --build
 
 Compose 檔案會以唯讀方式掛載 `.secrets/`。應用程式自行讀取該環境檔，因此
 金鑰永遠不會成為容器環境變數，也永遠不會出現在 `docker compose config`
-中。`644` 權限是必要的，因為 API 容器以非 root 使用者執行。金鑰已列入
+中。API 容器以 uid `10001` 執行，因此該檔案必須能被這個 uid 讀取：群組
+`10001` 搭配權限 `640`，或在單一使用者的主機上使用 `644`。金鑰已列入
 gitignore，且 API 永遠不會傳回它。
 沒有金鑰時，摘要會退回確定性的抽取式形式，圖片上傳會使用檔名圖說，代理
 訊息則傳回 `503 agent_not_configured`。
 
-### 物件儲存（本機或 R2）
+### 物件儲存（RustFS、R2、S3 或本機）
 
-`APSOR_STORAGE_BACKEND` 決定新原始位元組的預設寫入位置：
+`APSOR_STORAGE_BACKEND` 決定新原始位元組的預設寫入位置。設定精靈會設定它；
+除了 `local` 之外，所有選項都使用同一個 S3 相容轉接器。
 
-- `local` 寫入 `APSOR_DATA_DIR` 之下，是開發與測試的預設值。
-- `r2` 寫入私人的 Cloudflare R2 儲存桶。兩個正式環境的 Compose 檔案都預設
-  為 `r2`；第一次開機或回復時請設定 `APSOR_STORAGE_BACKEND=local`。
+| 值 | 位元組寫入位置 | 憑證 |
+|---|---|---|
+| `rustfs` | 隨附的 RustFS 服務（以 `COMPOSE_PROFILES=rustfs` 啟動）。新安裝的預設值。 | 由精靈產生到 `.secrets/s3.env` 與 `secrets/rustfs_*_key.txt` |
+| `r2` | 私人的 Cloudflare R2 儲存桶 | `.secrets/r2.env` |
+| `s3` | 任何 S3 相容端點（AWS S3、MinIO、另一個 RustFS） | `.secrets/s3.env` |
+| `local` | `APSOR_DATA_DIR`；開發與測試的預設值 | 無 |
+| `auto` | `.secrets/r2.env` 完整時用 R2，否則用 S3，再否則用本機 | — |
 
-非祕密的 R2 值為 `APSOR_R2_ENDPOINT_URL`、`APSOR_R2_BUCKET`（部署中為
-`apsor-archive`）、`APSOR_R2_REGION`（`auto`）與 `APSOR_R2_PREFIX`。帳號
-端點沒有預設值：在以 `r2` 後端執行之前，請將
-`APSOR_R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com` 放入
-Compose 檔案旁、已列入 gitignore 的 `.env` 檔案，或先匯出該變數。憑證位於
-已列入 gitignore 的 `.secrets/r2.env`，Compose 會以唯讀方式掛載，並由應用
-程式自行讀取，因此它們永遠不會成為容器環境變數：
+`rustfs` 是 `s3` 的別名。未設定 `APSOR_STORAGE_BACKEND` 時，正式環境的 Compose
+檔案會使用 `auto`，因此既有的 R2 部署不必修改 `.env` 就會繼續寫入 R2。每筆
+資料列會記錄保存其位元組的後端（`local`、`r2` 或 `s3`），而設定完整的每個後端
+都保持可讀，因此分階段移轉期間可以服務混合的典藏。
 
-```bash
-mkdir -p .secrets
-# Fill these in locally; never commit the file.
-printf 'APSOR_R2_ACCESS_KEY_ID=...\nAPSOR_R2_SECRET_ACCESS_KEY=...\n' \
-  > .secrets/r2.env
-chmod 755 .secrets
-# Container uid 10001 needs read access; other host users do not.
-sudo chgrp 10001 .secrets/r2.env
-chmod 640 .secrets/r2.env
-```
+非祕密設定放在 `.env`：
 
-該檔案必須能被容器 uid `10001` 讀取（權限 `640` 且群組為 `10001`，或在
-單一使用者的主機上使用 `644`）。儲存桶維持私人：沒有預先簽署 URL、沒有
-公開的儲存桶存取，且 `files/` 沒有生命週期到期設定。`data/.secret_key` 是
-Fernet 主金鑰，只留在本機；請與 PostgreSQL 分開備份。
+- R2：`APSOR_R2_ENDPOINT_URL`（`https://<account-id>.r2.cloudflarestorage.com`，
+  沒有預設值）、`APSOR_R2_BUCKET`（`apsor-archive`）、`APSOR_R2_REGION`
+  （`auto`）、`APSOR_R2_PREFIX`。
+- S3／RustFS：`APSOR_S3_ENDPOINT_URL`（Compose 預設 `http://rustfs:9000`）、
+  `APSOR_S3_BUCKET`（`apsor-archive`）、`APSOR_S3_REGION`（`us-east-1`）、
+  `APSOR_S3_PREFIX`、`APSOR_S3_ADDRESSING_STYLE`（`path` 或 `virtual`），以及
+  `APSOR_S3_CREATE_BUCKET`（第一次寫入時建立缺少的儲存桶；隨附的 RustFS 需要它）。
+
+存取金鑰絕不放進 `.env` 或容器環境變數。Compose 會以唯讀方式掛載
+`.secrets/`，由應用程式自行讀取 `r2.env`／`s3.env`；RustFS 容器則以 Docker
+secrets 讀取自己的金鑰組。它們都以 uid `10001` 執行，因此這些檔案需要群組
+`10001` 與權限 `640`（精靈會印出 `sudo chgrp` 指令）。儲存桶保持私人：沒有
+預先簽署 URL、沒有公開存取，且 `files/` 沒有生命週期到期設定。
+`data/.secret_key` 是 Fernet 主金鑰，只留在本機；請與 PostgreSQL 分開備份。
+請把 `apsor-archive_rustfs-data` 磁碟區（或外部儲存桶）與資料庫一起備份為
+同一組備份。
 
 若要將現有典藏從本機磁碟移至 R2，請停止 API 與 worker，並從 `backend/`
 執行儲存 CLI：
@@ -273,13 +294,13 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
   OpenAI 相容的對話端點。對話資料列是帳號所指派的 **端點**；它有選用的
   `max_output_tokens` 上限（256–131,072）。
 - **嵌入** —— `embedding_provider_config`：離線的 `hashing`、`openai` 或
-  `openai-compatible`。允許保存多個資料列；恰有一個處於使用中。
-- **網路搜尋** —— `web_search_provider_config`：目前為 Tavily，並保留
-  供應商轉接器的擴充接縫，以供未來的搜尋 API 使用。允許保存多個資料列；
-  恰有一個處於使用中。
-- **網路取得** —— `web_fetch_provider_config`：目前為 Tavily `extract`。
-  網路搜尋與網路取得刻意分成不同資料列，因此它們可以使用不同的供應商或
-  不同的憑證。
+  `openai-compatible`。多個資料列可以組成一條鏈結，但每個使用中的資料列都
+  必須使用相同的模型與維度。
+- **網路搜尋** —— `web_search_provider_config`：Tavily、Exa 或 DeepSeek。
+  多個資料列可以同時使用中，組成一條有順序的鏈結。
+- **網路取得** —— `web_fetch_provider_config`：Tavily `extract`、Exa
+  `contents` 或 DeepSeek `fetch`。網路搜尋與網路取得刻意分成不同資料列，
+  因此它們可以使用不同的供應商或不同的憑證。
 
 每張資料表都儲存從零開始的 `priority`，並對 `priority WHERE is_active` 設有
 部分唯一索引。對嵌入、網路搜尋與網路取得而言，鏈結中的第一列是主要，其餘
@@ -293,9 +314,13 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 傳回明文金鑰：瀏覽器只會收到例如 `...14f8` 的提示。`APSOR_SECRET_KEY`
 提供 Fernet 主金鑰。若未設定，會在 `data/.secret_key`（Docker 中為
 `/data/.secret_key`）建立 `0600` 權限的金鑰檔案，因此加密值能承受重新
-啟動。`APSOR_TAVILY_API_KEY` 是兩種網路能力可選的環境備援。Anthropic
-金鑰可以放在 `.secrets/anthropic.env` 中，名為 `ANTHROPIC_API_KEY`（或
-`APSOR_ANTHROPIC_API_KEY`）；端點資料列上的資料庫金鑰仍然優先。
+啟動。`APSOR_TAVILY_API_KEY` 是兩種網路能力可選的環境備援。Exa 金鑰可以
+放在已列入 gitignore 的 `.secrets/exa.env` 中，名為 `EXA_API_KEY`（或
+`APSOR_EXA_API_KEY`）；加密的供應商資料列仍然優先。對話所用的同一個
+`APSOR_DEEPSEEK_API_KEY` 也是 DeepSeek 網路搜尋與網路取得供應商的環境備援，
+因此不需要另外的網路憑證。Anthropic 金鑰可以放在 `.secrets/anthropic.env`
+中，名為 `ANTHROPIC_API_KEY`（或 `APSOR_ANTHROPIC_API_KEY`）；端點資料列上的
+資料庫金鑰仍然優先。
 
 對話端點擁有其金鑰，而不是帳號。多個帳號可以共用一個端點，輪替或清除該
 端點的金鑰會影響每個指派到它的帳號。沒有加密金鑰的資料列可以使用供應商
@@ -314,11 +339,12 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 
 | 方法 | 路徑 | 用途 |
 |---|---|---|
-| `GET` | `/api/v1/settings/providers` | 四個能力群組、遮蔽提示、使用中的資料列、重新索引建議 |
-| `POST` | `/api/v1/settings/providers/{capability}` | 建立一個儲存的供應商；可選擇將其啟用 |
-| `PUT` | `/api/v1/settings/providers/{capability}/{provider_id}` | 取代一個儲存的供應商 |
-| `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | 刪除一個儲存的供應商 |
-| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | 使其成為該能力唯一使用中的資料列 |
+| `GET` | `/api/v1/settings/providers` | 四個能力群組、遮蔽提示、有順序的鏈結、重新索引建議 |
+| `POST` | `/api/v1/settings/providers/{capability}` | 建立一個儲存的供應商；可選擇將其附加到鏈結 |
+| `PUT` | `/api/v1/settings/providers/{capability}/{provider_id}` | 取代一個儲存的供應商，不重新排序鏈結 |
+| `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | 刪除一個儲存的供應商並補上鏈結空缺 |
+| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | 附加該資料列，或傳入 `priority=0` 使其成為主要 |
+| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/deactivate` | 從鏈結移除一個資料列並補上空缺 |
 | `POST` | `/api/v1/settings/providers/{capability}/deactivate` | 清除整個鏈結；嵌入／網路退回環境／預設值，對話指派則變為未啟用 |
 | `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/test` | 送出一個小型供應商請求並測量延遲 |
 | `POST` | `/api/v1/settings/providers/embedding/reindex` | 以使用中的供應商重新嵌入每個目前的分塊 |
@@ -326,6 +352,18 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 `{capability}` 是 `chat`、`embedding`、`web_search` 或 `web_fetch` 之一。
 登錄回應會在 `providers` 快取範圍下快取 30 秒；每次供應商寫入都會更新該
 範圍。
+
+當整條鏈結都失敗時，API 與 worker 會記錄一筆經過清理的
+`provider_error_notice` 資料列，root 會在帳號頁看到它。通知會在 15 分鐘的
+視窗內依能力、操作與錯誤代碼去重；重複發生時 `count` 與 `last_seen_at` 會
+前進。這張資料表只保存供應商中繼資料，絕不保存提示詞或典藏內容。root 可以
+列出通知、解決單一通知，或全部解決：
+
+| 方法 | 路徑 | 用途 |
+|---|---|---|
+| `GET` | `/api/v1/system/provider-notices?status=open\|all&limit=50` | 未解決的通知與未解決數量 |
+| `POST` | `/api/v1/system/provider-notices/{notice_id}/resolve` | 解決一則通知 |
+| `POST` | `/api/v1/system/provider-notices/resolve-all` | 解決所有未解決的通知 |
 
 ### 每位帳號的模型指派
 
@@ -409,17 +447,21 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 
 | 工具 | 功能 |
 |---|---|
-| `web_search` | 以使用中的 `web_search` 供應商搜尋公開網路；傳回標題、URL、分數與有上限的摘錄。 |
+| `web_search` | 以使用中的 `web_search` 供應商搜尋公開網路；傳回標題、URL、選用的分數與有上限的摘錄。 |
 | `web_fetch` | 以使用中的 `web_fetch` 供應商取得一個公開的 `http(s)` URL，並傳回一個由伺服器定義的 Markdown 頁面。 |
 
-Tavily 是第一個轉接器（`/search` 與 `/extract`）。供應商接縫是一個協定，
-因此可以新增另一個搜尋或取得 API，而不需變更工具層。搜尋結果會在
+已實作的轉接器有 Tavily（`/search` 與 `/extract`）、Exa（`/search` 與
+`/contents`）以及 DeepSeek（`/v1/tools/search` 與 `/v1/tools/fetch`）。供應商
+接縫是一個協定，因此可以新增另一個搜尋或取得 API，而不需變更工具層。搜尋結果會在
 `providers` 快取範圍下快取 15 分鐘；供應商寫入會使其失效。`web_fetch`
 會拒絕非 HTTP(S)、URL 中含憑證、`localhost`/`.local`/`.internal`，以及
 私有或特殊用途的 IP 字面值。
 
 `web_fetch` 會為每個 URL 快取完整的擷取文件一次，為期一小時，因此翻頁
-永遠不會再次呼叫供應商。其面對模型的引數只有 `url` 與 `page`（從 1 開始，
+永遠不會再次呼叫供應商。結構可疑的擷取結果（標題後面緊接著同級或更高級的
+標題，或文件以標題結尾）不會被快取，因此之後的頁面請求會重新查詢供應商，
+而不是固定住不完整的文件。最後一頁的頁尾會寫著 `End of extracted content.`，
+並在某個標題到下一個標題之間沒有內文時加上警告。其面對模型的引數只有 `url` 與 `page`（從 1 開始，
 預設為 1）。伺服器會將每個來源行硬性折行於 800 字元，並將整行打包成最多
 12,000 字元的頁面（或在較小時使用設定的 `web_fetch_max_chars`，且絕不低於
 801），因此頁面永遠不會超出其預算，且一定至少包含一行。沒有行號需要計算，
@@ -467,19 +509,40 @@ Tavily 是第一個轉接器（`/search` 與 `/extract`）。供應商接縫是�
 它不會送出訊息。API 為
 `GET/POST/PUT/DELETE /api/v1/settings/frequent-prompts`。
 
+### 對話夥伴
+
+一位小巧的傀儡圖書館員可以站在對話旁並回應代理：模型推理時它會思考，執行
+`search_knowledge` 時會搜尋，在對應的工具期間會閱讀、書寫、計算、瀏覽與展示；
+代理也可以呼叫唯讀的 `companion_action` 工具做出明確的手勢。內建角色隨前端
+一起發佈。每個帳號還可以建立最多 20 個私人自訂夥伴，每個動作最多上傳 12 張
+圖片（PNG、JPEG、WebP 或 AVIF，每張最多 8 MB）；伺服器會把每張圖片重新編碼為
+符合 384x576 與 40 KB 的 AVIF（只有在無法使用 AVIF 編碼器時才用 WebP），並移除
+其中繼資料。每個帳號的偏好會儲存所選的夥伴（`preset:<id>` 或 `custom:<id>`）、
+是否顯示、動態程度（`full`、`reduced`、`off`）以及正規化的位置。API 位於
+`/api/v1/companions` 之下（列出、建立、更新、刪除、上傳影格、影格排序、刪除
+影格、影格圖片，以及 `GET/PATCH /api/v1/companions/preference`）。
+
+每個夥伴也有自己的故事：一段人設，會成為它在新對話中的聲音（每個對話凍結，
+使用該對話的語言），以及傳說，也就是它自己的記憶。代理搜尋館主的檔案館時，
+最多兩段相關的圖書館員自身記憶可能會以獨立區塊附在結果旁；它們永遠不是典藏
+證據，也不會被引用。詢問圖書館員關於它自己或檔案館的事，它就會講述自己的故事。
+帳號與該夥伴完成越多對話，越深層的記憶就會解鎖。每個帳號都可以依語言編輯任何
+夥伴的人設與傳說，並重設為預設值（`/api/v1/companions/stories/...`）。
+
 ### 代理執行階段設定
 
 `/settings` 上的 **代理執行階段** 面板（僅限 root）會編輯單例的
 `agent_config` 資料列（`id=1`）。對話端點與模型選擇是每位帳號的指派
-（見 **每位帳號的模型指派**）；此資料列帶有步驟與工具預算、部署預設的
-脈絡預算，以及壓縮與升級控制。這些執行階段值都存放在 PostgreSQL 中，
-套用至新的執行且無需重新啟動，並由每個帳號共用。帳號自己的脈絡視窗與
-壓縮門檻會在設定時覆寫這些部署預設值。
+（見 **每位帳號的模型指派**）；此資料列帶有平行工具與單筆工具結果預算、
+部署預設的脈絡預算，以及壓縮與升級控制。全部十九個執行階段值都存放在
+PostgreSQL 中，套用至新的執行且無需重新啟動，並由每個帳號共用。帳號自己的
+脈絡視窗與壓縮門檻會在設定時覆寫這些部署預設值。兩個對話圖片存活時間值
+也由背景清理迴圈從這個資料列讀取；它們不是環境變數。
 
 | 方法 | 路徑 | 用途 |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | 生效設定、預設值、來源、`updated_at` |
-| `PUT` | `/api/v1/agent/settings` | 完整取代；所有欄位皆為必填 |
+| `PUT` | `/api/v1/agent/settings` | 完整取代；全部十九個欄位皆為必填 |
 | `POST` | `/api/v1/agent/settings/reset` | 保存並傳回內建預設值 |
 
 產生的操作為 `getAgentSettings`、`updateAgentSettings` 與
@@ -493,8 +556,6 @@ Tavily 是第一個轉接器（`/search` 與 `/extract`）。供應商接縫是�
 |---|---|---|
 | `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000；低於脈絡視窗 |
 | `context_window_tokens` | 1,000,000 | 8,000–2,000,000；部署預設預算 |
-| `max_steps` | 24 | 1–32 |
-| `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
 | `max_tool_result_chars` | 100,000 | 1,000–200,000 |
 | `max_page_context_chars` | 6,000 | 500–50,000 |
@@ -507,20 +568,23 @@ Tavily 是第一個轉接器（`/search` 與 `/extract`）。供應商接縫是�
 | `auto_compaction_enabled` | `true` | 布林值 |
 | `parallel_tools_enabled` | `true` | 布林值 |
 | `save_memory_requires_approval` | `true` | 布林值；`save_memory` 需要人工核准 |
+| `chat_attachment_staged_ttl_hours` | 1 | 1–168；未送出上傳的保留期限 |
+| `chat_attachment_cleanup_interval_seconds` | 900 | 60–86,400；清理掃描間隔 |
+| `max_plot_points` | 10,000 | 100–50,000；每張繪製圖表的資料點數 |
+| `max_plot_bytes` | 600,000 | 10,000–2,000,000；序列化後的圖表大小 |
+| `max_plot_nodes` | 100,000 | 1,000–500,000；每張圖表的 JSON 節點數 |
 
-Pydantic 與對應的 PostgreSQL 檢查條件約束會強制執行範圍與兩項跨欄位規則：
-壓縮門檻必須低於模型脈絡視窗，且平行寬度不得超過每回合的工具呼叫數。
-壓縮範本也必須含有 `{max_output_tokens}`；未知的預留位置、轉換、格式規格
-或缺少輸出上限會傳回 `422 compaction_prompt_invalid`，而不是
-`400 invalid_request`。應用程式的全域驗證封套會將其他請求驗證失敗對應為
-`400 invalid_request`，而非 422。
+Pydantic 與對應的 PostgreSQL 檢查條件約束會強制執行範圍與三項跨欄位規則：
+壓縮門檻必須低於模型脈絡視窗、平行寬度不得超過每回合的工具呼叫數，且
+`max_plot_nodes` 至少要等於 `max_plot_points`。壓縮範本也必須能以已知的
+預留位置繪製；字面大括號需成對重複，缺少 `{max_output_tokens}` 或含有未知
+預留位置時，會以 `422 compaction_prompt_invalid` 拒絕，而不是
+`400 invalid_request`。繪圖預算會套用到每個帳號的 `render_plot`。應用程式的
+全域驗證封套會將其他請求驗證失敗對應為 `400 invalid_request`，而非 422。
 
 請求會在一次短暫的資料庫工作階段中載入一個不可變的執行階段快照。進行中
-的 SSE 執行會保留它啟動時的快照；之後的執行則使用已變更的設定。已儲存的
-帳號預算對會套用到快照上；若繼承的配對不再符合門檻規則，會回報為
-`invalid_threshold` 並保留部署值。主要供應商與模型仍來自帳號指派，而不是
-`/api/v1/ai/status` 或 `runtime.chat_config`。後端契約描述於
-`backend/README.md`。
+的 SSE 執行會保留它啟動時的快照；之後的執行則使用已變更的設定。後端契約
+描述於 `backend/README.md`。
 
 ### 資料匯入執行階段
 
@@ -546,8 +610,10 @@ UI 可以改為將工作排入佇列。非同步路由會儲存酬載並傳回 `
 一個 worker 程序在閒置時每秒輪詢資料庫，並以
 `SELECT ... FOR UPDATE SKIP LOCKED` 認領排入佇列的資料列。它會執行兩個
 擷取執行緒與最多兩個進行中的工作，全域非同步嵌入並行度為六，並批次更新
-進度。過期的工作會在崩潰後重新排入佇列，嵌入重試則有次數上限。API 生命
-週期會為本機使用啟動一個 worker；正式環境請執行專用程序：
+進度。過期的工作會在崩潰後重新排入佇列，嵌入重試則有次數上限。API 只會
+把工作排入佇列，因此請在它旁邊執行 worker（本機用 `make worker`，正式環境
+用專用服務）。若改為設定 `APSOR_INGEST_WORKER_ENABLED=true`，同樣的迴圈會在
+API 程序內執行，作為單一程序的開發捷徑；其預設值為 `false`。
 
 ```bash
 cd backend
@@ -561,6 +627,32 @@ uv run python -m app.worker --once
 標準與 Cloudflare Compose 堆疊會將它作為專用的 `worker` 服務執行，並在
 API 上設定 `APSOR_INGEST_WORKER_ENABLED=false`，因此恰好只有一個程序擁有
 佇列。
+
+#### RabbitMQ 派送
+
+Compose 堆疊也會執行 `rabbitmq:4-management-alpine`，作為可持久化資料匯入
+的選用低延遲派送路徑。PostgreSQL 的 `file_ingest_job` 仍是權威的工作帳本：
+訊息只攜帶 `{job_id, retry_count}`，消費者會重新讀取該資料列，以
+`SELECT ... FOR UPDATE SKIP LOCKED` 認領它，並依資料庫狀態做決定。重複、
+延遲或遺失的訊息最多只會增加延遲，永遠不會成為第二個事實來源。
+
+- API 會以發布者確認（publisher confirms）把持久化 JSON 訊息發布到可持久的
+  `apsor.ingest` direct exchange。發布路徑的時限為一秒
+  （`APSOR_RABBITMQ_PUBLISH_TIMEOUT_SECONDS`）；代理程式（broker）失敗時只依
+  例外類型記錄並吞下錯誤，因此上傳仍會傳回 `202`，工作維持 `queued`。
+- worker 以 `prefetch_count=1` 與手動確認消費 `apsor.ingest.jobs`。它只會在
+  `process_notified_job` 傳回後才確認：worker 崩潰時投遞會維持未確認，
+  RabbitMQ 會重新投遞，工作則從其資料列繼續或重試。
+- `retry` 結果與非預期的處理失敗會發布到 `apsor.ingest.jobs.retry`，這是一個
+  30 秒 TTL 的佇列，會以死信（dead-letter）轉回主佇列。派送重試上限為 20 次，
+  因此損壞的工作不會無限循環。
+- 容器上限為 384 MB，VM 水位線為 200 MB（`docker/rabbitmq/rabbitmq.conf`）。
+  管理 UI 只留在 Compose 網路內，不會發布到主機；本機示範憑證是
+  `apsor` / `apsor`，在任何共用部署之前都必須透過
+  `RABBITMQ_DEFAULT_USER`/`RABBITMQ_DEFAULT_PASS` 變更。
+- 以 `APSOR_RABBITMQ_ENABLED=false` 停用派送。此時 API 使用不做任何事的通知器，
+  worker 仍每秒輪詢 PostgreSQL，因此不會遺失任何工作。代理程式停機或通知器
+  連線失敗時，也適用同樣的輪詢備援。
 
 `/settings` 上的 **資料匯入執行階段** 面板（僅限 root）會編輯單例的
 `ingest_config` 資料列。它是完整取代，不是修補，且讀取本文會帶有
@@ -588,8 +680,8 @@ worker 會在每次迴圈與每個工作讀取最新的資料庫快照，因此�
 變更無需重新啟動即可套用；已在執行中的工作則保留其快照。環境值會為全新
 安裝提供初始值，並持續作為備援。變更分塊大小只會影響未來的匯入。
 `vision_description_language` 只控制視覺描述、圖說、標題、摘要與標籤；
-OCR 文字與表格儲存格文字會維持原文語言。變更此設定只會影響未來的匯入，
-既有檔案會保留目前的擷取結果。後端契約描述於 `backend/README.md`。
+OCR 文字與表格儲存格文字會逐字維持原文語言。變更此設定只會影響未來的
+匯入，既有檔案會保留目前的擷取結果。後端契約描述於 `backend/README.md`。
 
 #### 視覺提示詞
 
@@ -610,10 +702,10 @@ invalid_vision_prompt`）。若提示詞缺少 `verbatim`、`do not translate` �
 GitHub-Flavored Markdown 措辭，回應也會帶回警告。
 
 `POST /api/v1/files/{file_id}/reingest` 接受 `{expected_version}`，為目前
-且具有已儲存原始檔的圖片、PDF 或 DOCX 排入強制視覺流程。工作只會在擷取
-與索引成功後建立新檔案版本；在此之前，舊版本仍是最新且可讀取。原始位元組
-會共用，不會被工作複製或刪除。若路徑已變更，或已有較新的上傳成為最新，
-工作會以 `409 ingest_source_stale` 失敗，較新的檔案維持最新。
+且具有已儲存原始檔的圖片、PDF、DOCX 或 PPTX 排入強制視覺流程。工作只會在
+擷取與索引成功後建立新檔案版本；在此之前，舊版本仍是最新且可讀取。原始
+位元組會共用，不會被工作複製或刪除。若路徑已變更，或已有較新的上傳成為
+最新，工作會以 `409 ingest_source_stale` 失敗，較新的檔案維持最新。
 
 ### 本機開發
 
@@ -643,9 +735,14 @@ bun run dev
 cd frontend && bun run build
 ```
 
-`./start.sh` 是最短的裸機路徑：若 Docker 可用，它會啟動開發資料庫／快取、
-載入 `.secrets/deepseek.env`、同步後端，並在 <http://127.0.0.1:8000> 提供
-API 與已提交的用戶端。
+`./start.sh` 是最短的裸機路徑。先執行一次 `./start.sh setup --dev` 寫出開發用
+的 `.env`（預設為本機儲存），之後 `./start.sh` 會在 Docker 可用時啟動開發
+資料庫／快取、同步後端，並在 <http://127.0.0.1:8000> 執行 API，同時啟動專用的
+資料匯入 worker；按 Ctrl+C 會同時停止兩者。設定 `APSOR_START_WORKER=false`
+則只執行 API。第一次裸機啟動前，請先執行一次 `cd frontend && bun run build`。
+若要在本機試用 S3 路徑，請在精靈中選擇 `rustfs`，並以
+`docker compose -f docker-compose.dev.yml --profile rustfs up -d` 啟動開發用的
+儲存服務。
 
 在 Windows 上，`./start.sh` 需要 bash shell。`./run-local.ps1` 是 PowerShell
 的對等版本：若 Docker 可用，它會啟動開發資料庫／快取、同步後端，並提供
@@ -679,7 +776,7 @@ ingress 加入第二個公開主機名。權杖權限請見 `secrets/README.md`�
 
 | 工具 | 端點 | 傳回內容 |
 |---|---|---|
-| `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | 依來源種類分別取 BM25 + 向量的前幾名結果，以 RRF 融合並去重 |
+| `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | 依典藏來源種類分別取 BM25 + 向量的前幾名結果，以 RRF 融合；另加最佳的 15 個過去對話視窗 |
 | `read_file` | `GET /api/v1/files/{file_id}/chunks/{chunk}?chunk_range=1` | 從 1 開始算起的分塊視窗 |
 | `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | 預設稀疏：每種事件種類最多五個取樣事件、密度與略過數量；`complete=true` 傳回整個視窗 |
 | `read_path` | `GET /api/v1/paths?path=/history&path_depth=1&fuzzy_search=` | 目錄與檔案，或模糊路徑比對 |
@@ -692,12 +789,15 @@ ingress 加入第二個公開主機名。權杖權限請見 `secrets/README.md`�
 `skips`，且每個事件的 `anchor=null`。頁面會將事件主軸排除在頁面脈絡之外，
 因此完整清單不會成為代理的脈絡。
 
-常駐典藏代理對模型提供九個工具：上述六個加上 `present_resource`、
-`web_search` 與 `web_fetch`。HTTP 範例使用明確參數；HTTP 伺服器預設值為
+常駐典藏代理對模型提供十個工具：上述六個加上 `present_resource`、
+`web_search`、`web_fetch` 與 `history_message`。HTTP 範例使用明確參數；HTTP 伺服器預設值為
 `result_number=2`、`chunk_range=1`、`day_range=1`、`path_depth=1` 與
 `memory_range=0`。文字會以約 4,000 字元、500 字元重疊的方式分塊；現有
-檔案會保留其原始分塊邊界，直到重新匯入為止。代理的工具結構描述會選擇
-自己的預設值，例如 `result_number=8` 與 `day_range=7`。對於外部的 LLM
+檔案會保留其原始分塊邊界，直到重新匯入為止。過去的對話訊息使用另一種
+固定視窗：256 字元、32 字元重疊（步幅 224）。代理的工具結構描述會選擇
+自己的預設值，例如 `result_number=8` 與 `day_range=7`。`history_message`
+接受 `<history_message>` 搜尋命中結果上顯示的 `id`，並傳回完整訊息加上
+有上限的相鄰訊息。對於外部的 LLM
 呼叫者，另有一個 `/api/v1/tools/*`  façade 會將相同的服務呈現為精簡的
 XML；常駐代理則透過自己的登錄直接呼叫這些服務。
 
@@ -751,14 +851,17 @@ XML；常駐代理則透過自己的登錄直接呼叫這些服務。
 `GET /api/v1/memories`、`POST /api/v1/memories`、
 `PATCH /api/v1/memories/{memory_id}`（編輯文字；標題會重新產生）、
 `POST /api/v1/memories/{memory_id}/deprecate`（以可選的 `reason` 直接
-汰除）、`POST /api/v1/summaries`、`GET /api/v1/stats`、
-`GET /api/v1/health` 與 `GET /api/v1/ai/status`。
+汰除）、`GET /api/v1/memories/{memory_id}/related` 與
+`GET /api/v1/memories/related/files/{file_id}`（依已儲存的嵌入與關鍵字找出
+關聯記憶；不呼叫供應商）、`POST /api/v1/summaries`、`GET /api/v1/stats`、
+`GET /api/v1/health` 與 `GET /api/v1/ai/status`。`ai/status` 回報部署全域的
+執行階段，供 root 診斷使用；它不是某個帳號的模型指派。
 
 ### 資料夾工作區
 
 `/library` 是資料夾優先的工作區。麵包屑與資料夾側欄描述你所在的位置；主
 區域會顯示目前路徑的資料夾卡片與檔案卡片。先前的表格仍以精簡清單檢視
-提供，供密集瀏覽使用，也是窄螢幕上的備援版面。
+提供，供密集瀏覽使用，需以 `view=list` 明確選取。
 
 - **新增資料夾** 會建立要求的資料夾與任何缺少的祖先資料夾。此操作是
   冪等的：重複執行會傳回相同的資料夾與 `201`。
@@ -768,6 +871,10 @@ XML；常駐代理則透過自己的登錄直接呼叫這些服務。
   `.toml`、`.ini`、`.env`、`.log`、`.pdf`、`.docx`、`.pptx`、`.xlsx`、
   `.xls`、`.xlsm`、`.ods`、`.jpg`、`.jpeg`、`.png` 或 `.webp`。對話框也
   支援 2 MB 的純文字建立。拖放的檔案永遠不會被開啟或執行。
+- **剪貼簿貼上** 透過同一條匯入路徑上傳檔案。當剪貼簿中的名稱已存在於
+  目標資料夾時，貼上的檔案會取得第一個可用的 ` (n)` 後綴（`image (1).png`），
+  而不是默默成為新版本；一次貼上多個同名檔案時會依序編號。拖放或使用上傳
+  對話框則維持明確的同名版本行為。
 - **移動與複製** 是明確區分的。正常拖放到資料夾會移動檔案；拖放時按住
   Alt/Option 則會複製。觸控與鍵盤使用者會取得獨立的 **移動** 與
   **複製** 動作，而不是拖放。
@@ -802,14 +909,25 @@ coding-agent harness 的持久化逐字稿模型：對話是一份由不可變�
 - `agent_conversation` —— 對話記錄範圍、供應商／模型身分與中介資料。
 - `agent_entry` —— 不可變的 `pi.user`、`pi.assistant`、`pi.tool-result`、
   `pi.page-context`、`pi.system`、`pi.reset`、`pi.compaction` 與
-  `ui.notice` 項目。`model` 正是供應商酬載；`data` 僅供 UI／診斷使用。
+  `ui.notice` 項目。`model` 是標準的供應商訊息文字；連結的暫存圖片會在呼叫
+  供應商時具體化為 `image_url` 部分，`data` 則僅供 UI／診斷使用。
 - `agent_run` —— 單次提交的可持久化狀態（`request_id`、狀態、中止、最後
   項目、安全錯誤）。`agent_commit_seq` 會將同一交易中寫入的項目分組。
 - `agent_approval` —— 針對需要確認的工具呼叫，保存一筆可持久化的
   待處理／已核准／已拒絕／已過期的人工決定，包含經驗證的引數、安全預覽，
   以及用來恢復等待中執行的迴圈快照。
+- `agent_chat_attachment` —— 屬於單一帳號的對話圖片，包含物件儲存金鑰、
+  經清理的中介資料，以及指向送出它們的使用者項目的選用連結。尚未送出的圖片
+  位於 `users/{user_id}/chat-temp/`；送出時會提升到
+  `users/{user_id}/chat-images/`。資料列採用軟刪除。
 - `agent_config` —— 單例執行階段設定（`id=1`），保存經驗證的權杖、步驟、
-  工具、頁面脈絡與壓縮限制，以及壓縮範本、其輸出上限與升級開關。
+  工具、頁面脈絡、壓縮與對話圖片存活時間限制。
+
+使用者與助理項目也會以 `source_kind='history'` 複製到共用的扁平分塊索引中，
+每個 256 字元視窗一列。背景的歷史索引器會回填既有對話、略過只有工具呼叫而
+沒有內容的助理項目，並把軟刪除對話的視窗標記為非目前。代理會把每個命中結果
+看成 `<history_message id="...">`，並呼叫 `history_message` 讀取完整的不可變
+項目及其相鄰項目。
 
 第一個項目是凍結的 `pi.system` 提示詞與工具快照。脈絡建構器會以確定性
 方式重播項目：它會遵循 `head_entry_id` 與 `edits`、保留系統項目、將工具
@@ -828,6 +946,11 @@ HTTP 500。
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/compact` | 附加手動壓縮邊界 |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | 附加重設邊界；對話記錄會保留 |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/fork` | 將包含截止點在內的項目複製到新討論串 |
+| `POST` | `/api/v1/agent/attachments` | 上傳一張暫存對話圖片（`multipart/form-data`，可選 `client_token`） |
+| `POST` | `/api/v1/agent/attachments/cancel` | 依 `client_token` 冪等地丟棄暫存上傳（`204`） |
+| `GET` | `/api/v1/agent/attachments?status=&limit=&offset=` | 列出帳號的暫存對話圖片 |
+| `GET` | `/api/v1/agent/attachments/{attachment_id}/content` | 串流一張仍有效的暫存圖片 |
+| `DELETE` | `/api/v1/agent/attachments/{attachment_id}` | 刪除物件並軟刪除其資料列（`204`） |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | 附加使用者項目並執行迴圈 |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | 重試最近一次失敗／取消的執行 |
 | `GET` | `/api/v1/agent/conversations/{conversation_id}/approvals?status=` | 可持久化的核准，最舊優先（預設 `pending`） |
@@ -842,46 +965,53 @@ HTTP 500。
 | `POST` | `/api/v1/agent/settings/system-prompt/reset` | 以四個初始預設區段取代每個區段 |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` 接受
-`{content, request_id?, page_context?, client_timezone?,
-client_utc_offset_minutes?}`，而 `.../retry` 接受 `{request_id?}`。兩者
-預設都會串流 `text/event-stream`。用戶端時區會與伺服器呈現的
-`<current_time>` 區塊一起儲存在每個使用者項目上；該區塊會恰好附加在訊息
-文字之後一次。排序後的系統提示詞區段會在建立對話時寫入，並凍結到該
-討論串中。四個預設值會以一般資料列初始植入；設定頁讓 root 帳號能為整個
-部署編輯、刪除或重新排序每一個資料列。事件名稱為 `run_start`、
-`message_start`、`message_delta`、`message_end`、`tool_start`、
-`tool_end`、`approval_required`、`run_end` 與 `error`。`run_start` 會
-回報 `page_context_entry_id`（或 `null`）、`page_context_attached` 與
-`resumed`，讓用戶端能標示是否寫入了新快照，以及串流是否接續一筆可持久化
-的等待中執行。`tool_start` 與 `tool_end` 也會帶有助理呼叫批次的
-`parallel`、`batch_size` 與 `parallel_index`。`tool_end` 帶有已保存的
-工具結果 `data` 酬載，加上 `duration_ms` 與 `error_code`，因此檢視器
-可以在對話記錄重新取得完成前先呈現預覽。`message_start` 的
-`entry_id=null`，因為助理項目只會在 `message_end` 時保存；增量僅供傳輸。
-若想要取得完成的回合，請改送 `Accept: application/json`。SSE 回應會設定
-`Cache-Control: no-cache, no-transform` 與 `X-Accel-Buffering: no`，
-且 Starlette 的 GZip 中介軟體會排除 `text/event-stream`。
+`{content, attachment_ids?, request_id?, page_context?, client_timezone?,
+client_utc_offset_minutes?}`，而 `.../retry` 接受 `{request_id?}`。最多可以
+附上四張已暫存的對話圖片；有圖片時文字可以留空。兩者預設都會串流
+`text/event-stream`。用戶端時區會與伺服器呈現的 `<current_time>` 區塊一起
+儲存在每個使用者項目上；該區塊會恰好附加在訊息文字之後一次。排序後的系統
+提示詞區段會在建立對話時寫入，並凍結到該討論串中。四個預設值會以一般資料列
+初始植入；設定頁讓 root 帳號能為整個部署編輯、刪除或重新排序每一個資料列。
+事件名稱為 `run_start`、`message_start`、`message_delta`、`reasoning_delta`、
+`message_end`、`tool_start`、`tool_end`、`approval_required`、`run_end` 與
+`error`。`reasoning_delta` 攜帶在對應回答或工具呼叫之前抵達的供應商推理文字，
+且永遠不會併入 `message_delta`。`run_start` 會回報 `page_context_entry_id`
+（或 `null`）、`page_context_attached` 與 `resumed`，讓用戶端能標示是否寫入了
+新快照，以及串流是否接續一筆可持久化的等待中執行。`tool_start` 與 `tool_end`
+也會帶有助理呼叫批次的 `parallel`、`batch_size` 與 `parallel_index`。
+`tool_end` 帶有已保存的工具結果 `data` 酬載，加上 `duration_ms` 與
+`error_code`，因此檢視器可以在對話記錄重新取得完成前先呈現預覽。
+`message_start` 的 `entry_id=null`，因為助理項目只會在 `message_end` 時保存；
+增量僅供傳輸。供應商推理會作為有上限的顯示用遙測保存在助理項目中，並以純文字
+`Thinking` 區塊呈現；它永遠不會進入供應商訊息、凍結的系統前綴或快取前綴雜湊。
+確定性的壓縮摘要可能帶有一行有上限的 `Thinking:`。若想要取得完成的回合，請
+改送 `Accept: application/json`。SSE 回應會設定
+`Cache-Control: no-cache, no-transform` 與 `X-Accel-Buffering: no`，且
+Starlette 的 GZip 中介軟體會排除 `text/event-stream`。
 
-每個對話一次只允許一筆使用中的執行。預設值允許 24 個模型步驟、每個
-使用者回合 20 次工具呼叫、6 個平行工具、自動壓縮前 75,000 個權杖的
-活動脈絡，以及每個工具 100,000 個結果字元。沒有累計的每回合權杖上限；
-回合只會在最終答案、步驟或工具呼叫上限、使用者取消，或供應商失敗時結束。
-1,000,000 權杖的模型脈絡視窗記錄供應商容量，也是壓縮門檻的比較基準。
-每個結果都會依該單一結果上限獨立裁切，並附上可見的
-`[truncated]` 標記；沒有整回合的結果預算，也沒有第二次摘要呼叫。
-100,000 字元的上限大約涵蓋二十五個 4,000 字元的分塊。這些是執行階段
-設定，不是程式碼常數；請見上方的 **代理執行階段設定**。符合條件的工具
-呼叫會一起開始，並在啟用平行工具時透過 `asyncio.gather` 執行。結果保存
-與 `tool_end` 的順序遵循助理呼叫順序，而不是完成順序。停用平行工具時，
-執行會依序進行，且事件會回報 `parallel=false`。
+每個對話一次只允許一筆使用中的執行。預設值允許 6 個平行工具、自動壓縮前
+75,000 個權杖的活動脈絡，以及每個工具 100,000 個結果字元。沒有步驟上限、
+工具呼叫上限，也沒有累計的每回合權杖上限；回合只會在最終答案、使用者取消
+或供應商失敗時結束。生效的脈絡視窗是部署預設值（1,000,000），除非帳號
+指派了自己的預算；它是由本機溢位階梯強制執行的真實對外輸入預算，壓縮門檻
+必須低於它。預算估算中，CJK 字元大約以每權杖 1.6 個字元計算，ASCII 文字則
+維持模型目錄的比例，且目前脈絡區段中供應商回報的最大成功 `prompt_tokens`
+會作為下限。因此僅供應商可見的狀態區塊中的 `context_used` 是保守估計，而非
+與供應商完全一致的權杖數。每個結果都會依該單一結果上限獨立裁切，並附上可見
+的 `[truncated]` 標記；沒有整回合的結果預算，也沒有第二次摘要呼叫。
+100,000 字元的上限大約涵蓋二十五個 4,000 字元的分塊。這些是執行階段設定，
+不是程式碼常數；請見上方的 **代理執行階段設定**。符合條件的工具呼叫會一起
+開始，並在啟用平行工具時透過 `asyncio.gather` 執行。結果保存與 `tool_end` 的
+順序遵循助理呼叫順序，而不是完成順序。停用平行工具時，執行會依序進行，且
+事件會回報 `parallel=false`。
 
 失敗或取消的執行可以重試，而不會重複使用者項目。當最新項目是失敗／取消
 的助理回答、結尾的硬性上限工具結果（`step_limit`、`token_limit`、
 `tool_call_limit` 或 `tool_result_budget_exhausted`），或最後一次串流在
 記錄助理項目之前就失敗時，對話工作台與停駐的代理都會顯示「重試」動作。
 重試會為同一個使用者項目啟動新的執行；UI 不會附加第二則訊息，並在串流
-進行中停用該動作。若對話記錄仍然太長，重試可能會再次觸及相同的
-脈絡上限。當最近一次執行已完成或並非失敗／取消時，端點會傳回
+進行中停用該動作。若連溢位階梯都無法讓請求放得下，重試仍可能被供應商拒絕。
+當最近一次執行已完成或並非失敗／取消時，端點會傳回
 `409 agent_run_not_retryable`；UI 會在該錯誤後重新取得對話記錄，讓過期的
 「重試」動作消失。
 
@@ -1105,7 +1235,7 @@ UI 會使用產生的 Orval hook 來處理對話中介資料與生命週期，�
 預覽或記憶閱讀器。儲存的問題仍可在 `/questions` 供之後的代理回合使用。
 
 側欄是分組的，而不是平鋪的。典藏工作區會先出現（對話、檔案庫、時間軸、
-記憶、搜尋、儀表板），接著是包含 **使用者個人檔案** 的個人區塊，然後是
+搜尋、儀表板；記憶是檔案庫的「記憶」分頁），接著是包含 **使用者個人檔案** 的個人區塊，然後是
 系統區塊（設定、**變更密碼**、僅 root 帳號可見的 **帳號**、關於），以及
 一個獨立的 **工作階段** 區塊，內含 **登出**。頁尾的身分識別也是 root
 使用者切換器：root 點擊它會開啟可搜尋的帳號對話框，而一般帳號只會看到
@@ -1154,14 +1284,16 @@ End；比例與收合狀態會保存在本機。寬度低於 900 px 時，檢視
 
 ### 資源預覽
 
-檔案會在檔案庫內的現地預覽彈出視窗中開啟；記憶閱讀器是 `/memory/:id`
-上的一般路由。舊版的 `/viewer/*` URL 會重新導向至那些介面，因此舊引用與
-書籤仍可運作。
+檔案會在檔案庫內的現地預覽彈出視窗中開啟；記憶位於檔案庫的「記憶」分頁，
+閱讀器在 `/library/memories/:id`，並有一個依已儲存的嵌入、共同關鍵字與共同
+摘要排序的「關聯記憶」區段。舊版的 `/memory/*` 與 `/viewer/*` URL 會重新導向
+至那些介面，因此舊引用與書籤仍可運作。
 
 | 資源 | 渲染器 |
 |---|---|
 | PDF | `react-pdf` 11 + 內附的 `pdfjs-dist` 6、頁面導覽、縮放、符合寬度、文字層 |
 | DOCX | `docx-preview`，位於停用指令碼的沙箱中 |
+| PPTX | `pptxviewjs` Canvas 渲染器，支援投影片導覽與鍵盤方向鍵 |
 | 試算表（XLSX/XLS/XLSM/ODS） | 延遲載入的 SheetJS 網格、工作表分頁、隱藏標記、凍結表頭，以及 500 × 50 的受限預覽 |
 | 圖片 | 使用標準檔案內容端點的原生圖片 |
 | 文字／JSON／Markdown／CSV | 典藏頁面，支援換行／複製／下載、美化 JSON、GFM Markdown |
@@ -1172,6 +1304,12 @@ ETag/Last-Modified 與單一範圍 HTTP Range 支援（`206`/`416`；
 `If-None-Match` 傳回 `304`）行內提供原始檔。`/download` 仍為附件。
 舊的純文字紀錄的 `has_original=false`；這類頁面會完全略過 `/content` 探查，
 並讀取已索引的分塊。
+
+每個上傳的圖片、PDF，以及內嵌預覽圖的 Office 檔案，也會在匯入時產生一張
+極小的 WebP 縮圖（`GET /api/v1/files/{file_id}/thumbnail`）。檔案庫卡片、
+媒體格線、對話資源卡片與預覽載入狀態，都會先在依已知尺寸預留的方框內畫出
+縮圖，因此完整預覽載入時不會跳動或閃爍。資料匯入 worker 會為較早上傳的檔案
+回填縮圖（`APSOR_THUMBNAIL_BACKFILL_ENABLED`，預設開啟）。
 
 PDF.js 的 CMaps 與標準字型會由 `bun run pdf-assets` 從固定版本的
 `pdfjs-dist` 套件複製到 `frontend/public/pdfjs/`，`dev` 與 `build` 會
@@ -1265,6 +1403,9 @@ compose 會設定它）。每個帳號都可以在 `/profile` 編輯其顯示名
   OCR、表格與簡短版面說明。
 - **DOCX** —— python-docx 段落與表格；內嵌圖片可提供視覺備援，並使用完整
   影像模式的描述與表格。
+- **PPTX** —— python-pptx 投影片文字框、表格、群組圖形與講者備忘稿；內嵌的
+  `ppt/media` 圖片可提供視覺備援，並使用完整影像模式的描述與表格。不支援舊版
+  二進位 `.ppt`。
 - **XLSX / XLS / XLSM / ODS** —— python-calamine 依序讀取工作表，包含隱藏
   工作表與合併儲存格，並把每個工作表渲染成 GitHub-Flavored Markdown 表格。
   優先使用公式快取值；對於 OOXML 活頁簿，openpyxl 會在產生的檔案沒有快取
@@ -1276,7 +1417,7 @@ compose 會設定它）。每個帳號都可以在 `/profile` 編輯其顯示名
 （`image` 或 `document`）與 `vision_description_language`；舊資料列維持
 `null`，代表未記錄提示詞。自訂提示詞只會套用至未來的匯入。若要從已儲存的
 原始檔建立新版本，請使用上方的重新匯入路由；文字檔不符合資格，而沒有內嵌
-圖片的 DOCX 會維持純文字結果，不記錄提示詞指紋。
+圖片的 DOCX 或 PPTX 會維持純文字結果，不記錄提示詞指紋。
 
 相同的匯入也可以透過 `POST /api/v1/files/async` 與
 `POST /api/v1/files/text/async` 非同步使用；請輪詢
@@ -1355,9 +1496,15 @@ uv run python -m script.ingest_wikipedia \
 4. **向量召回** 預設使用 384 維的帶符號特徵雜湊嵌入器，因此可離線運作。
    設定 `APSOR_EMBEDDING_PROVIDER=openai` 與相符的基礎 URL／模型，即可
    改用託管的嵌入模型。
-5. **融合** 使用倒數排名融合。每種來源種類會保留自己的前
+5. **融合** 使用倒數排名融合。每種典藏來源種類會保留自己的前
    `result_number` 名，因此摘要不會被檔案分塊擠掉。
 6. **去重** 依分塊 ID，然後補齊檔案、記憶或摘要資料列。
+7. **對話歷史** 走另一條扁平索引通道。每則超過 256 字元的使用者或助理訊息
+   會切成 256 字元、32 字元重疊（步幅 224）的視窗。查詢嵌入會依餘弦相似度
+   取前 128 個視窗；BM25 為每個召回的視窗評分；倒數排名融合會重新排序聯集，
+   並保留前 15 名。無論典藏歷史開關為何，歷史視窗一律納入。每個命中結果都
+   帶有穩定的 `agent_entry` ID，代理會以 `history_message` 展開它。已刪除的
+   對話會被標記為非目前，並從這條通道消失。
 
 若向量召回無法使用，搜尋仍會傳回 BM25 結果。同步匯入在嵌入呼叫於重試
 預算內失敗時，會讓分塊維持純文字；可持久化的 worker 會將耗盡重試的嵌入
@@ -1420,7 +1567,8 @@ token -> BLAKE2b -> bucket 0..383 + sign(+1/-1) -> accumulate -> normalize
 file ─────────────┐
 folder ───────────┤
 memory ───────────┼──> chunk ──> chunk_ngram
-memory_summary ───┘
+memory_summary ───┤
+agent_entry ──────┘  (source_kind = history)
 ```
 
 下列私人典藏資料表帶有 `user_id bigint NOT NULL`。例外是全域設定資料表
@@ -1435,13 +1583,14 @@ memory_summary ───┘
 
 - `file`：每個版本一列。`is_current` 與 `deleted_at` 是軟狀態；ID 永遠
   不會重複使用。檔案葉不會在資料夾資料表中重複：它們的位置是
-  `raw_file_path`。`storage_backend` 會為原始位元組記錄 `local` 或 `r2`，
+  `raw_file_path`。`storage_backend` 會為原始位元組記錄 `local`、`r2` 或 `s3`，
   且只有在 `storage_key` 為 null 時才為 null。
 - `folder`：明確的資料夾紀錄（`parent_id`、`path`、`name`、`depth`）。
   空資料夾與資料夾身分會獨立於檔案存活。唯一性是依帳號區分：
   `(user_id, path)`。
 - `chunk`：`(source_kind, source_id, chunk_index)`，附帶可選的 JSONB
-  向量。
+  向量。`source_kind` 是 `file`、`memory`、`summary` 或 `history`；歷史分塊的
+  `source_id` 是不可變的 `agent_entry` ID，內容是一個原始的 256 字元視窗。
 - `chunk_ngram`：BM25 使用的倒排索引。
 - `memory`：線性時間軸，附自動產生的 `title`、`supersedes_ids`、
   `superseded_by_id`、`status=active|deprecated`，以及直接汰除的來源資訊
@@ -1474,7 +1623,7 @@ memory_summary ───┘
   已拒絕／已過期人工決定，附經驗證的引數、安全預覽，以及用來恢復等待中
   執行的迴圈快照。
 - `agent_config`：一列（`id=1`），帶有代理迴圈與設定 API 使用的經驗證
-  執行階段限制。
+  執行階段限制，包含壓縮範本與輸出上限，以及升級開關。
 - `saved_question`：帳號的問答庫。`question` 由使用者撰寫；`answer`、
   `citations`、`conversation_id` 與執行狀態／錯誤欄位只會由提問寫入。
   `conversation_id` 使用 `ON DELETE SET NULL`，而 `last_asked_at` 會記錄
@@ -1484,24 +1633,40 @@ memory_summary ───┘
   次數／時間戳記。每個帳號的每個路徑只能有一個使用中的工作。工作會指向
   其暫存檔案、在失敗時清除該連結，且檔案與分塊只會在工作發佈它們時才
   成為目前版本。
+- `file_thumbnail`：每個檔案版本一張極小的 WebP，以 `file_id` 為鍵，帶有
+  `status`（`ready`、`none` 或 `failed`）、像素尺寸、SHA-256、產生器版本與
+  嘗試次數。它會隨其檔案一併串聯刪除。
+- `companion` / `companion_frame` / `companion_preference`：帳號的自訂對話
+  夥伴、每個動作經編碼的 AVIF（或 WebP）影格及其位置、大小與 SHA-256，以及
+  帳號的夥伴選擇、是否顯示、動態程度與位置。
+- `companion_story` / `companion_lore_fragment` / `companion_bond`：帳號依語言
+  覆寫的夥伴人設與傳說、其片段，以及解鎖更深層傳說的完成對話數。
 - `ingest_config`：一列（`id=1`），帶有經驗證的 worker 輪詢、擷取、
   進行中工作、嵌入與分塊大小設定。它不是分塊來源；佇列會參照最終發佈
   的檔案。
 
-原始位元組不會存放在 PostgreSQL 中。它們位於本機磁碟或私人 R2 儲存桶，
-由 `storage_backend` 依檔案選擇；擷取出的分塊及其 n-gram 則留在
+原始位元組不會存放在 PostgreSQL 中。它們位於本機磁碟、私人 R2 儲存桶，或
+S3 相容儲存桶（預設為 RustFS），由 `storage_backend` 依檔案選擇；擷取出的分塊及其 n-gram 則留在
 PostgreSQL。
 
-已提交的程式碼、註解、UI 文案與文件皆為英文。
+程式碼、註解與文件以英文撰寫，英文為標準版本。介面與本 README 也提供完整的
+繁體中文與簡體中文翻譯，並與英文來源一起更新。
 
 ## 開發檢查
 
 ```bash
+# Everything at once (offline lint, then tests, then the contract gate)
+make lint
+make test
+make api-check
+make audit        # needs network
+
 # Backend
 cd backend
 uv run ruff check .
-uv run mypy app
-PYTHONUTF8=1 uv run bandit -r app -c pyproject.toml
+uv run mypy app script
+uv run lint-imports          # layer and slice-boundary contracts
+PYTHONUTF8=1 uv run bandit -r app script -c pyproject.toml
 uv run pip-audit
 PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 
@@ -1509,15 +1674,23 @@ PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 cd frontend
 bun run lint
 bun run typecheck
+bun run i18n:check
+bun run check:boundaries     # workspace import boundaries
+bun run test
 bun run build
 bun audit
 ```
 
+`make lint` 是架構與安全性閘門：ruff、mypy、讓路由器、服務、領域程式碼與
+各切片守在自身層級內的 import-linter 契約、bandit、ESLint、TypeScript、i18n
+鍵值一致性，以及前端工作區邊界檢查。分支遵循 Gitflow：`feat/*` 與 `fix/*` 從
+`develop` 建立並透過 pull request 合併回去，`develop` 再合併到 `main` 進行發佈。
+
 整合測試套件在相同執行個體上使用一個真實的 PostgreSQL 測試資料庫
 （`apsor_archive_test`）、依序執行，並在每次測試之間重設每張受追蹤的
 資料表。資料庫是由 `alembic upgrade head` 建置，而不是 `create_all`，
-因此 `apsor_app` 角色、授權與 RLS 原則會出現在每個請求中。共收集 46 項
-測試；每項都會演練真實的 HTTP 介面與資料庫。多使用者測試涵蓋 root／
+因此 `apsor_app` 角色、授權與 RLS 原則會出現在每個請求中。每項測試都會
+演練真實的 HTTP 介面與資料庫。多使用者測試涵蓋 root／
 使用者生命週期、強制變更密碼、一次性臨時密碼、停用／重設造成的工作階段
 撤銷、僅限 root 的帳號與全域設定、跨檔案／資料夾／記憶／摘要／對話／
 問題／提示詞的私人典藏隔離、每帳號提示詞上限、直接 SQL 的 RLS 拒絕、
@@ -1537,7 +1710,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `a4c9e2f7b1d6`。此分支上 `agent_config` 之後的移轉為：
+最新的移轉是 `b8e4d2f6a1c3`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -1616,7 +1789,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   擁有者安全的複合外鍵、重新匯入檢查、使用中來源唯一索引與查詢索引。
   它不會植入或回填提示詞／指紋值。降級會先移除重新匯入工作，再還原舊的
   來源種類檢查；
-- `a4c9e2f7b1d6`（目前 head）新增八個 `app_user` 指派欄位與兩個指向
+- `a4c9e2f7b1d6` 新增八個 `app_user` 指派欄位與兩個指向
   `chat_provider_config` 的 `ON DELETE SET NULL` 外鍵、七項檢查條件、
   `chat_provider_config.max_output_tokens`（256–131,072）、允許 `anthropic`
   的較寬對話供應商檢查，以及四個新的 `agent_config` 欄位
@@ -1627,7 +1800,29 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   端點與模型；只有在沒有使用中的對話資料列時才會保持未指派。`app_user`
   仍在 RLS 之外，因此不需要
   變更原則或授權。降級會移除指派欄位，並在仍有 `anthropic` 資料列時
-  拒絕還原較窄的供應商檢查。
+  拒絕還原較窄的供應商檢查；
+- `d8f2a6c4e1b9` 移除 `agent_config.max_steps` 與
+  `agent_config.max_tool_calls_per_turn` 及其檢查條件，以及
+  `parallel_within_tool_calls` 關係，因此工具密集的回合會持續執行到模型回答
+  為止。並行上限 `max_parallel_tools` 保留。降級會還原兩個欄位，並把還原的
+  呼叫上限提高到至少 `max_parallel_tools`；
+- `c3e7a1f5b9d2` 放寬 `file`、`file_ingest_job` 與 `agent_chat_attachment`
+  上的 `storage_backend` 檢查，允許 `s3`（RustFS、AWS S3、MinIO）；`rustfs`
+  只是設定別名，`r2` 仍是獨立的值。降級會還原只有兩個值的檢查，且在仍有
+  資料列記錄 `s3` 時失敗；
+- `c7a3e9f1d5b2` 建立私人的 `file_thumbnail` 資料表：每個檔案
+  版本一張極小的 WebP（最多 32 KiB、512 px）、指向 `file` 且帶
+  `ON DELETE CASCADE` 的擁有者安全複合外鍵、附擁有者原則的強制 RLS，以及
+  `apsor_app` 授權。既有檔案由 worker 回填補上。降級會移除該資料表；
+- `a7d3c9e1f5b2` 建立私人的 `companion`、`companion_frame` 與
+  `companion_preference` 資料表，每張都帶 `user_id`、僅限擁有者的強制 RLS 與
+  `apsor_app` 授權。影格透過擁有者安全的複合外鍵參照其夥伴並一併串聯刪除；
+  偏好資料列以 `user_id` 為鍵。降級會移除這三張資料表；
+- `b8e4d2f6a1c3`（目前 head）建立私人的 `companion_story`、
+  `companion_lore_fragment` 與 `companion_bond` 資料表，帶僅限擁有者的強制 RLS
+  與 `apsor_app` 授權：帳號依語言保存的夥伴人設與傳說副本、其片段，以及解鎖
+  傳說層級的完成對話數。自訂夥伴的故事會隨夥伴一併串聯刪除。降級會移除這三張
+  資料表。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會
@@ -1643,6 +1838,7 @@ backend/
   app/
     main.py                     API assembly, lifespan, gzip, SPA mount
     worker.py                   dedicated durable-ingestion process
+    bootstrap.py                shared process setup and background loops
     shared/                     error registry and list envelope
     infrastructure/             config, database, cache, embeddings, AI, web, files
     module/knowledge/
@@ -1657,9 +1853,9 @@ backend/
     module/agent/               transcript, runtime settings, compaction, tools,
                                 saved questions, SSE
     module/prompt/              editable frequently used chat prompts
-    module/web_research/        Tavily search/fetch service, URL safety, cache
+    module/web_research/        web search/fetch service, URL safety, cache
   alembic/                      migrations
-  tests/                        46 integration tests
+  tests/                        integration tests (PostgreSQL, offline fakes)
 frontend/
   src/app/
     component/                  shared archive UI
@@ -1670,13 +1866,13 @@ frontend/
     chat/                       reading room, retry, context actions
     questions/                  saved-question Q&A library
     settings/                   role-filtered provider and runtime panels
-    library/                    files, media gallery, preview modal, intake
-    home/ search/ timeline/ memory/ about/ ...
+    library/                    files, media gallery, memories, preview modal, intake
+    dashboard/ search/ timeline/ about/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting
   src/styles/                   paper / night archive tokens
-  scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
+  scripts/                      PDF.js asset copy, i18n parity, workspace boundaries
   dist/                         generated build output, gitignored
 docker-compose.yml              production stack: Caddy + Cloudflare Tunnel
 docker-compose.dev.yml          local dependencies
@@ -1714,12 +1910,14 @@ docker/caddy/                   non-root reverse proxy
 - 路徑會拒絕穿越區段、反斜線、控制字元與過長的值。上傳上限為 10 MB，
   且僅限於副檔名允許清單。
 - 來自檔案與記憶的 HTML 會透過 React 以文字呈現。代理 Markdown 使用
-  `skipHtml`；DOCX 預覽會在停用指令碼的沙箱中執行。UI 永遠不會使用
+  `skipHtml`；DOCX 預覽會在停用指令碼的沙箱中執行，PPTX 投影片則繪製到本機
+canvas。UI 永遠不會使用
   `dangerouslySetInnerHTML`。
 - DeepSeek 金鑰位於 `.secrets/deepseek.env` 或環境中。它永遠不會被
   記錄、傳回或提交。從設定頁儲存的金鑰會在 PostgreSQL 中加密，且只會
   以四字元提示傳回。
-- R2 憑證位於已列入 gitignore 的 `.secrets/r2.env`，以唯讀方式掛載，
+- 物件儲存憑證位於已列入 gitignore 的 `.secrets/r2.env` 或 `.secrets/s3.env`
+  （隨附的 RustFS 另有 `secrets/` 下的 Docker secret 檔案），以唯讀方式掛載，
   且永遠不會成為容器環境變數。儲存桶是私人的，沒有預先簽署或公開 URL。
 - AI 呼叫會發生在摘要與代理回合。若供應商失敗，API 會傳回穩定的錯誤，
   而不是編造答案。

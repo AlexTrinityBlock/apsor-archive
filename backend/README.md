@@ -314,9 +314,10 @@ rows are removed; a job over its attempt limit becomes a terminal
 `ingest_worker_lost` failure. Embedding retries are bounded by the configured
 attempt count and backoff.
 
-The FastAPI lifespan starts one in-process worker by default. For production,
-run a dedicated process so parsing and embedding cannot starve request
-handlers:
+The API only enqueues jobs; a dedicated worker process drains them so parsing
+and embedding cannot starve request handlers. `APSOR_INGEST_WORKER_ENABLED=true`
+(default `false`) opts the API lifespan into running the same loops for
+single-process development:
 
 ```bash
 uv run apsor-archive worker
@@ -326,9 +327,9 @@ uv run python -m app.worker
 uv run python -m app.worker --once
 ```
 
-Both shapes use the same queue and leases. Multiple API replicas should disable
-the lifespan worker (`APSOR_INGEST_WORKER_ENABLED=false`) and run one or more
-dedicated workers.
+Both shapes use the same queue and leases. API replicas keep the default
+(`APSOR_INGEST_WORKER_ENABLED=false`) and one or more dedicated workers own the
+queue.
 
 ### Runtime settings
 
@@ -877,6 +878,97 @@ returns `409 provider_inactive`; `503 agent_not_configured` remains for a missin
 service dependency, not for a normal account. Asking again creates another
 conversation and replaces the stored answer on the same row.
 
+### Chat companions
+
+The `companion` slice owns three private, owner-only RLS tables:
+
+- `companion` (`id`, `user_id`, `name`, nullable `gender`): at most 20 per account.
+- `companion_frame`: one AVIF (fallback WebP) frame of one action, with its `mime_type`, referenced through the
+  owner-safe `(companion_id, user_id)` pair and deleted with its companion. The
+  action list is the shared vocabulary in `app/shared/companion_action.py`.
+- `companion_preference`: one row per account with `selected`
+  (`preset:<id>` or `custom:<id>`), `enabled`, `motion`, and a normalized
+  `position_x`/`position_y` pair.
+
+| Method | Path | Operation id |
+|---|---|---|
+| GET | `/api/v1/companions` | `listCompanions` |
+| POST | `/api/v1/companions` | `createCompanion` |
+| PATCH | `/api/v1/companions/{companion_id}` | `updateCompanion` |
+| DELETE | `/api/v1/companions/{companion_id}` | `deleteCompanion` |
+| POST | `/api/v1/companions/{companion_id}/frames` (multipart `action`, `files`) | `uploadCompanionFrames` |
+| PUT | `/api/v1/companions/{companion_id}/frames/order` | `reorderCompanionFrames` |
+| DELETE | `/api/v1/companions/{companion_id}/frames/{frame_id}` | `deleteCompanionFrame` |
+| GET | `/api/v1/companions/{companion_id}/frames/{frame_id}/image?v=` | `getCompanionFrame` |
+| GET/PATCH | `/api/v1/companions/preference` | `getCompanionPreference` / `updateCompanionPreference` |
+
+Uploads accept still PNG, JPEG, WebP, or AVIF files of at most 8 MB and 40
+million pixels, at most 12 frames per action. The server applies EXIF
+orientation, drops all metadata, keeps transparency, fits the image into
+384x576, and re-encodes AVIF (quality 60 stepping down, speed 4) within 40 KB.
+If the running Pillow build has no AVIF codec it falls back to WebP; the frame
+records its `mime_type` and is served with that content type. A frame never changes after upload, so its
+SHA-256 is the strong `ETag` and its first 16 hex digits are the `v` version;
+a matching `v` is served `private, max-age=31536000, immutable`, any other
+request revalidates. Errors use the stable codes `companion_not_found`,
+`companion_frame_not_found`, `companion_limit`, `companion_frame_limit`,
+`companion_frame_too_large`, `companion_frame_unsupported`, `companion_invalid`,
+and `companion_storage_unavailable`. Deleting a selected custom companion
+returns the preference to the default preset.
+
+The agent tool `companion_action` (`{action, note?}`) is read-only and needs no
+approval. It returns `{ok, action, note}` in the tool-result data so the browser
+can play the gesture; it touches no archive data.
+
+### Companion stories: persona and lore
+
+Each companion has a story in two layers. The **persona** is its voice; the
+**lore** is its own memories. Presets ship them as files under
+`app/module/companion/lore/`: `<id>.json` is the canonical English story (it
+owns fragment ids, tiers, and themes), `zh-TW/<id>.json` and `zh-CN/<id>.json`
+may override `name`, `persona`, and each fragment's `text` with the same ids,
+falling back to English per item. `vocabulary.json` maps themes to multilingual
+keywords so a Chinese query can find English-themed lore.
+
+- **Persona.** When a conversation is created, the account's enabled companion
+  (the selection, or the flagship `preset:vellum`) is frozen into `pi.system` as
+  a final `companion_persona` section: the persona, then the rules that outrank
+  it (grounding and citations, never inventing the Keeper's memories, safety,
+  dropping the voice on request). `data.companion` records `{ref, name, locale}`.
+  `POST /api/v1/agent/conversations` takes an optional `locale`
+  (`en`, `zh-TW`, `zh-CN`). A disabled companion adds nothing. Saved-question
+  answers never carry a persona.
+- **Lore recall.** `search_knowledge` in a conversation with a frozen companion
+  offers at most two unlocked fragments in a separate
+  `<librarian_memories>` block after every archive source, with the guidance
+  that they are the librarian's own memories and never evidence. Tool data
+  carries them as `lore: [{id, tier, text}]`; they are never in the source
+  lists or the citation vocabulary. Scoring combines theme/word overlap with the
+  account's embedder (fragment vectors cached in process; the query counts
+  against the embedding allowance). A question about the librarian, the other
+  librarians, or the Archive lowers the threshold so it can tell its own story.
+  How often a memory is woven in is left to the model.
+- **Tiers.** `first` is always eligible; `familiar` opens after 5 completed runs
+  with that companion and `rare` after 20. `companion_bond` counts completed
+  runs per companion reference (best-effort, after the run is settled) and
+  stamps when each tier opened.
+- **Editing.** Accounts edit per locale, copy-on-write: the first lore edit
+  copies that locale's defaults into `companion_lore_fragment` rows; reset
+  deletes the copy. A custom companion's story is its rows, falling back from
+  the requested locale to English and then to any locale the owner wrote; it is
+  deleted with the companion. Persona ≤ 4000 characters, fragment ≤ 2000,
+  ≤ 200 fragments per companion.
+
+| Method | Path (`?locale=en\|zh-TW\|zh-CN`) | Operation id |
+|---|---|---|
+| GET/PUT/DELETE | `/api/v1/companions/stories/{companion_ref}/persona` | `getCompanionPersona` / `updateCompanionPersona` / `resetCompanionPersona` |
+| GET/POST | `/api/v1/companions/stories/{companion_ref}/lore` | `listCompanionLore` / `createCompanionLore` |
+| PATCH/DELETE | `/api/v1/companions/stories/{companion_ref}/lore/{fragment_id}` | `updateCompanionLore` / `deleteCompanionLore` |
+| POST | `/api/v1/companions/stories/{companion_ref}/lore/reset` | `resetCompanionLore` |
+
+Errors: `companion_not_found` (unknown or foreign reference),
+`companion_lore_not_found`, `companion_lore_limit`, and `400 invalid_request`.
+
 ### Tool result preview data
 
 `pi.tool-result.data` is UI-only and is never sent to the provider. It contains
@@ -1160,6 +1252,25 @@ distinct from `/download`:
 - `Cache-Control: private, max-age=0, must-revalidate`;
 - 404 `file_content_unavailable` when a legacy text-only record has no original.
 
+`GET /api/v1/files/{file_id}/thumbnail` (`getFileThumbnail`) returns the
+file's tiny WebP thumbnail. `FileSchema.thumbnail` and `PathFileSchema.thumbnail`
+carry `{version, width, height}` when one is ready, so a card can reserve its
+box before loading:
+
+- `image/webp`, `nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`,
+  `Vary: Cookie`, and a strong `ETag` with `304`;
+- `Cache-Control: private, max-age=31536000, immutable` when `?v=` matches the
+  current version, otherwise `private, max-age=0, must-revalidate`;
+- 404 `thumbnail_not_found` for a file without a visual thumbnail, and
+  `file_not_found` for a missing or another account's file.
+
+Thumbnails are rendered during ingestion (images, PDF page 1, embedded
+Office/OpenDocument previews), stored in the private `file_thumbnail` table, and
+reused for byte-identical copies. The dedicated worker backfills older files in
+the background; `uv run python -m script.backfill_thumbnails --dry-run|--apply`
+finishes the job immediately. On R2 the backfill reads each candidate original
+once.
+
 The `FileSchema.has_original` flag tells the UI whether to show **Open original**
 and **Download**. Text-only records skip the `/content` probe entirely and read
 indexed chunks; if they have no chunks either, the viewer shows a readable error.
@@ -1247,13 +1358,15 @@ fields, account/session auth (`app_user`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The current head is
-`a4c9e2f7b1d6`; every private table now has `user_id` and forced RLS, the
+`b8e4d2f6a1c3`; every private table now has `user_id` and forced RLS, the
 runtime role is `apsor_app`, and `file` / `file_ingest_job` record
 `storage_backend`. Earlier migrations add per-run and per-account agent usage
 counters and the impersonation session marker. `f7a3c2d9e1b4` adds the editable
 vision prompt templates, per-file prompt fingerprints, and re-ingest source
-linkage. The current head adds the per-account chat endpoint assignment and the
-compaction/escalation settings. The migration chain is executed by the test
+linkage. `a4c9e2f7b1d6` adds the per-account chat endpoint assignment and the
+compaction/escalation settings; the later revisions drop the step and tool-call
+caps, admit the `s3` storage backend, add `file_thumbnail`, and add the chat
+companion tables. The migration chain is executed by the test
 fixture and verifies the role, grants, and policies; downgrades are still a
 separate check. The agent
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
@@ -1359,7 +1472,7 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   active-source unique index, and `(user_id, source_file_id)` lookup index. It
   seeds no prompt rows and backfills no fingerprints. The downgrade deletes
   re-ingest jobs before restoring the two-kind source check;
-- `a4c9e2f7b1d6` (current head) adds the eight `app_user` assignment columns and
+- `a4c9e2f7b1d6` adds the eight `app_user` assignment columns and
   their two `ON DELETE SET NULL` foreign keys into `chat_provider_config`, seven
   CHECK constraints, `chat_provider_config.max_output_tokens` (256–131,072), the
   widened chat provider check that admits `anthropic`, and the four new
@@ -1371,7 +1484,25 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   row exists. `app_user` stays outside RLS, so no
   policy or grant changes are needed. The downgrade drops the assignment columns
   and refuses to restore the narrower provider check while an `anthropic` row
-  exists.
+  exists;
+- `d8f2a6c4e1b9` drops `agent_config.max_steps` and
+  `agent_config.max_tool_calls_per_turn` with their checks; `max_parallel_tools`
+  stays. The downgrade restores both columns;
+- `c3e7a1f5b9d2` widens the `storage_backend` checks on `file`,
+  `file_ingest_job`, and `agent_chat_attachment` to admit `s3`. The downgrade
+  fails while any row still records `s3`;
+- `c7a3e9f1d5b2` creates the private `file_thumbnail` table (one tiny WebP per
+  file version, cascading with its file, forced owner RLS, `apsor_app` grants);
+- `a7d3c9e1f5b2` creates the private `companion`,
+  `companion_frame`, and `companion_preference` tables with forced owner-only
+  RLS and `apsor_app` grants; frames cascade with their companion. The downgrade
+  drops the three tables;
+- `b8e4d2f6a1c3` (current head) creates the private `companion_story`,
+  `companion_lore_fragment`, and `companion_bond` tables with forced owner-only
+  RLS and `apsor_app` grants: one account's per-locale copy of a companion's
+  persona and lore, its fragments, and the completed-run count that unlocks lore
+  tiers. A custom companion's story cascades with the companion. The downgrade
+  drops the three tables.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

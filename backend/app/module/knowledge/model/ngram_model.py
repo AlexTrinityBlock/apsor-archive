@@ -3,7 +3,7 @@
 from sqlalchemy import BigInteger, ForeignKey, ForeignKeyConstraint, Index, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.module.knowledge.model.base import Base
+from app.infrastructure.database.base import Base
 
 
 class ChunkNgramModel(Base):

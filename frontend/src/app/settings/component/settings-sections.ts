@@ -56,6 +56,11 @@ export const SETTINGS_SECTIONS = [
     roles: "root",
   },
   {
+    id: "settings-companion",
+    labelKey: "core.settingsNav.companion",
+    roles: "all",
+  },
+  {
     id: "settings-language",
     labelKey: "core.settingsNav.language",
     roles: "all",

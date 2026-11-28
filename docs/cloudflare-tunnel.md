@@ -5,7 +5,8 @@ it through a Cloudflare Tunnel. The origin publishes **no inbound port**:
 `cloudflared` makes outbound connections to Cloudflare, and Cloudflare reaches
 the local Caddy reverse proxy over that tunnel. The deployed archive serves one
 root account plus normal accounts, each with a private archive; originals are
-stored on local disk or in a private Cloudflare R2 bucket.
+stored in the bundled RustFS service, a private Cloudflare R2 bucket, another
+S3-compatible bucket, or on local disk.
 
 This is the single production deployment. A pure Cloudflare Serverless
 deployment would be a separate architecture; it is not part of this stack.
@@ -25,8 +26,8 @@ cloudflared ──► Caddy :80 ──► API :8000
                                ├── Valkey
                                ├── RabbitMQ (ingestion wake-ups)
                                ├── host ./data (bound to /data)
-                               ├── ./.secrets/r2.env (read-only R2 credentials)
-                               └── Cloudflare R2 (private original bytes)
+                               ├── ./.secrets/*.env (read-only object-store credentials)
+                               └── RustFS (default), R2, or S3 (private original bytes)
                                       ▲
                                worker process
 ```
@@ -39,7 +40,8 @@ Compose services:
 | `cache` | Valkey, used for the optional cache |
 | `rabbitmq` | Ingestion dispatch wake-ups; PostgreSQL remains the job ledger |
 | `api` | FastAPI, serves the API and committed SPA build; local originals live in `./data` |
-| `worker` | Dedicated durable-ingestion worker sharing the same host directory and R2 credentials |
+| `worker` | Dedicated durable-ingestion worker sharing the same host directory and object-store credentials |
+| `rustfs` | Bundled S3-compatible object store (profile `rustfs`, the wizard default); no host port |
 | `caddy` | Non-root reverse proxy, port 80 inside the Compose network only |
 | `cloudflare-tunnel` | `cloudflared` connector with the tunnel token |
 
@@ -55,9 +57,9 @@ only ingress.
 - Outbound HTTPS/QUIC access from the host. No router port forwarding or
   public IP is required.
 - A Cloudflare tunnel token.
-- A Cloudflare R2 bucket for original bytes and an S3-compatible access key
-  pair. The production Compose file defaults to the private `apsor-archive` bucket. If you
-  keep everything on local disk, set `APSOR_STORAGE_BACKEND=local`.
+- Nothing extra for object storage: the setup wizard (`./start.sh setup`)
+  defaults to the bundled RustFS service. A Cloudflare R2 bucket (or another
+  S3-compatible bucket) with an access key pair is optional.
 - A host data directory owned by the container uid:
   `mkdir -p data && sudo chown -R 10001:10001 data`.
 - At least 2 GB of RAM for the database, cache, broker, API, worker, Caddy, and connector.
@@ -125,11 +127,17 @@ the chown where it works. Never put the token in `environment:`, a committed
 
 See `secrets/README.md` for the same permission guidance.
 
-### Object storage (R2)
+### Object storage (RustFS, R2, or S3)
 
-The production Compose file defaults to `APSOR_STORAGE_BACKEND=r2`. The API and
-worker read R2 credentials from `.secrets/r2.env`, mounted read-only; the file
-must be readable by uid `10001`:
+Run `./start.sh setup` and pick the storage backend. The default `rustfs`
+starts the bundled RustFS service on the Compose network (no host port) via
+`COMPOSE_PROFILES=rustfs`, generates its access key pair, and lets the app
+create the bucket on the first upload. Choose `r2` for Cloudflare R2 or `s3`
+for any other S3-compatible endpoint. When `APSOR_STORAGE_BACKEND` is unset,
+Compose uses `auto`, which keeps an existing R2 deployment on R2.
+
+For R2 by hand, the API and worker read credentials from `.secrets/r2.env`,
+mounted read-only; the file must be readable by uid `10001`:
 
 ```bash
 mkdir -p .secrets
@@ -151,7 +159,7 @@ for `files/`. Keep the Fernet key (`/data/.secret_key` in the container,
 `data/.secret_key` on the host) on local storage and back it up; it
 is the master key for provider credentials.
 
-For a trial with no R2 bucket, start with `APSOR_STORAGE_BACKEND=local`. To move
+For a trial with no object store at all, choose `local`. To move
 existing local bytes to R2, follow the maintenance procedure in
 [Upgrade an existing archive](#12-upgrade-an-existing-archive) before switching
 both services.

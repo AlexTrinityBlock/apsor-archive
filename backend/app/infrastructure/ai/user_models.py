@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.ai.deepseek_client import NullTextGenerator
 from app.infrastructure.ai.runtime import AiRuntime
 from app.module.auth.model.auth_model import AppUserModel
-from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 
 AssignmentSlot = Literal["primary", "auxiliary"]
