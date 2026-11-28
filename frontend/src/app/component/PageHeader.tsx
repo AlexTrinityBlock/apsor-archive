@@ -8,10 +8,20 @@ interface PageHeaderProps {
   readonly description?: ReactNode;
   readonly actions?: ReactNode;
   readonly meta?: ReactNode;
+  /** Use 2 when the page already renders its own visually hidden h1. */
+  readonly headingLevel?: 1 | 2;
 }
 
 /** Standard page masthead: mono eyebrow, sans title, quiet meta and actions. */
-export function PageHeader({ eyebrow, title, description, actions, meta }: PageHeaderProps) {
+export function PageHeader({
+  eyebrow,
+  title,
+  description,
+  actions,
+  meta,
+  headingLevel = 1,
+}: PageHeaderProps) {
+  const Heading = headingLevel === 2 ? "h2" : "h1";
   return (
     <header className="page-header">
       <div className="header-top page-header__kicker">
@@ -20,7 +30,7 @@ export function PageHeader({ eyebrow, title, description, actions, meta }: PageH
       </div>
       <div className="page-header__row">
         <div className="page-header__copy">
-          <h1 className="page-title">{title}</h1>
+          <Heading className="page-title">{title}</Heading>
           {description ? (
             <p className="page-desc page-header__description">{description}</p>
           ) : null}

@@ -24,11 +24,11 @@ from app.module.knowledge.dependencies import (
     ingest_runtime_defaults,
     load_ingest_runtime_config,
 )
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.domain.vision_prompt_domain import (
     DEFAULT_VISION_IMAGE_PROMPT,
     render_vision_prompt,
 )
-from app.module.knowledge.protocol.provider_config import ProviderConfig
 from app.module.knowledge.protocol.vision_extractor_protocol import VisionDocument
 
 # A 1x1 blue PNG; enough to exercise the image extension and vision path.

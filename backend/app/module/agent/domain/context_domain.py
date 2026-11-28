@@ -513,6 +513,11 @@ def _render_sections(sections: Mapping[str, tuple[str, str]]) -> str:
     return "\n\n".join(parts)
 
 
+def prefix_hash(system_message: Mapping[str, Any], tools: Sequence[Mapping[str, Any]]) -> str:
+    """Hash the provider-visible prefix: the system message and offered tools."""
+    return _prefix_hash(system_message, tools)
+
+
 def _prefix_hash(system_message: Mapping[str, Any], tools: Sequence[Mapping[str, Any]]) -> str:
     payload = {"system": system_message, "tools": list(tools)}
     serialized = json.dumps(
@@ -525,4 +530,4 @@ def _prefix_hash(system_message: Mapping[str, Any], tools: Sequence[Mapping[str,
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-__all__ = ["active_start_entry_id", "build_context", "render_tool_result"]
+__all__ = ["active_start_entry_id", "build_context", "prefix_hash", "render_tool_result"]

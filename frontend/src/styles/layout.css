@@ -93,6 +93,27 @@
   border-radius: 4px;
 }
 
+/* The librarian portrait replaces the inked seal; keep the same box. */
+.brand-seal--image {
+  overflow: hidden;
+  color: var(--mono-ink);
+  background: var(--mono-card-warm);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 50%;
+}
+
+.brand-seal--small {
+  width: 28px;
+  height: 28px;
+}
+
+.brand-mark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .brand-meta {
   display: flex;
   flex-direction: column;
@@ -272,9 +293,18 @@
   text-overflow: ellipsis;
 }
 
-.app-shell.rail-collapsed .rail-item-text,
 .app-shell.rail-collapsed .rail-item-badge {
   display: none !important;
+}
+
+/* Collapsed labels are clipped, not removed, so links keep their name. */
+.app-shell.rail-collapsed .rail-item-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .rail-item-badge {
@@ -310,7 +340,8 @@
   left: 0;
 }
 
-.app-shell.rail-collapsed .rail-item:hover::after {
+.app-shell.rail-collapsed .rail-item:hover::after,
+.app-shell.rail-collapsed .rail-item:focus-visible::after {
   opacity: 1;
 }
 
@@ -689,6 +720,13 @@
   .app-shell.rail-collapsed .rail-item-badge,
   .app-shell.rail-collapsed .rail-status__copy {
     display: initial !important;
+  }
+
+  .app-shell.rail-collapsed .rail-item-text {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
   }
 
   .app-shell.rail-collapsed .rail-menu {

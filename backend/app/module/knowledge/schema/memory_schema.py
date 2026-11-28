@@ -105,3 +105,28 @@ class SummaryCreateSchema(BaseModel):
     period_end: datetime | None = None
     memory_ids: list[int] = Field(default_factory=list, max_length=500)
     force: bool = False
+
+
+RelatedReason = Literal["similar", "keyword", "summary", "nearby"]
+
+
+class RelatedMemorySchema(BaseModel):
+    """One memory related to a source memory or file."""
+
+    model_config = ConfigDict(frozen=True)
+
+    memory: MemorySchema
+    score: float
+    reasons: list[RelatedReason]
+    shared_summary_ids: list[int]
+
+
+class RelatedMemoriesSchema(BaseModel):
+    """Memories ranked by similarity, shared keywords, and shared summaries."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source_kind: Literal["memory", "file"]
+    source_id: int
+    similarity_available: bool
+    resources: list[RelatedMemorySchema]

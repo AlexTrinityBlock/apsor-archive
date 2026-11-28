@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.module.agent.domain.tool_args import (
     CalculateArgs,
+    CompanionActionArgs,
     HistoryMessageArgs,
     PresentResourceArgs,
     ReadFileArgs,
@@ -32,8 +33,10 @@ from app.module.agent.domain.tool_args import (
 # v14 adds the ``<search_hint>`` sentence to the Context protocol section.
 # Composition changed, so the new-conversation prefix changes; existing
 # conversations keep their frozen ``pi.system`` and old version string, so their
-# KV cache lineage is untouched.
-PROMPT_VERSION = "archive-agent-v14"
+# KV cache lineage is untouched. v15 adds the companion_action guidance line.
+# v16 adds the optional companion persona section (persona, then the rules that
+# outrank it) frozen per conversation.
+PROMPT_VERSION = "archive-agent-v16"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -47,8 +50,10 @@ PROMPT_VERSION = "archive-agent-v14"
 # budgets now come from the deployer-editable agent_config row; the tool still
 # enforces them. v14 adds per-result content_chars/excerpt_chars/excerpt_truncated
 # and the trailing <search_hint> to web_search. Existing conversations keep their
-# frozen pi.system snapshot.
-TOOLS_VERSION = "archive-tools-v14"
+# frozen pi.system snapshot. v15 adds the read-only companion_action gesture tool.
+# v16 lets search_knowledge return the companion's own lore in a separate
+# <librarian_memory> block that is never an archive source.
+TOOLS_VERSION = "archive-tools-v16"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -97,7 +102,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "past conversation windows. Use this before making factual claims. "
             "Results carry source labels such as [file:10#2], [memory:7], and "
             "[history:123]. A history hit is a raw 256-character window; use "
-            "history_message with its id when the excerpt is not enough."
+            "history_message with its id when the excerpt is not enough. When "
+            "you speak as a librarian companion, the result may also carry up "
+            "to two of your own memories in <librarian_memory> blocks; they "
+            "are not archive sources and are never cited. Search with a "
+            "question about yourself or the Archive to recall your own story."
         ),
         args_model=SearchKnowledgeArgs,
     ),
@@ -231,6 +240,18 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         ),
         args_model=WebFetchArgs,
         requires_confirmation=False,
+    ),
+    ToolSpec(
+        name="companion_action",
+        description=(
+            "Make the on-screen companion perform one visible gesture, such as "
+            "greet, thinking, success, or confused. It only changes the "
+            "animation beside the chat; it reads and writes no archive data. "
+            "The interface already animates searches and tool calls, so use "
+            "this sparingly: at most once per turn, when a gesture adds warmth "
+            "or clarity. Never use it instead of answering."
+        ),
+        args_model=CompanionActionArgs,
     ),
 )
 

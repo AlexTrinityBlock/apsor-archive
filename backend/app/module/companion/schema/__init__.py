@@ -1,0 +1,1 @@
+"""Companion schema package."""

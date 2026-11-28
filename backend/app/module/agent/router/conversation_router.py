@@ -8,9 +8,14 @@ from fastapi import APIRouter, Depends, Header, Query, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.dependency.auth import require_authenticated
-from app.module.agent.dependencies import get_agent_service, get_current_user_profile
+from app.module.agent.dependencies import (
+    get_agent_service,
+    get_companion_persona_loader,
+    get_current_user_profile,
+)
 from app.module.agent.domain.agent_domain import AgentStreamEvent
 from app.module.agent.domain.user_profile_domain import UserProfile
+from app.module.agent.protocol.companion_protocol import CompanionPersonaLoaderProtocol
 from app.module.agent.schema.agent_schema import (
     AgentApprovalSchema,
     AgentApprovalStatus,
@@ -60,11 +65,16 @@ async def create_conversation(
     payload: AgentConversationCreateSchema,
     agent_service: AgentService = Depends(get_agent_service),
     user_profile: UserProfile = Depends(get_current_user_profile),
+    companion_loader: CompanionPersonaLoaderProtocol = Depends(get_companion_persona_loader),
 ) -> AgentConversationSchema:
-    """Create a transcript scope and its immutable system entry."""
+    """Create a transcript scope and its immutable system entry.
+
+    The account's active companion persona (in ``locale``) is frozen with it.
+    """
     return await agent_service.create_conversation(
         payload,
         user_profile=user_profile,
+        companion=await companion_loader(payload.locale),
     )
 
 

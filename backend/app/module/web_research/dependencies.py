@@ -17,8 +17,8 @@ from fastapi import Request
 
 from app.infrastructure.config.settings import Settings
 from app.infrastructure.database.session import Database
-from app.infrastructure.web.deepseek_client import DEFAULT_BASE_URL as DEEPSEEK_DEFAULT_BASE_URL
-from app.infrastructure.web.deepseek_client import DeepSeekWebClient
+from app.infrastructure.web.deepseek_web_client import DEFAULT_BASE_URL as DEEPSEEK_DEFAULT_BASE_URL
+from app.infrastructure.web.deepseek_web_client import DeepSeekWebClient
 from app.infrastructure.web.exa_client import DEFAULT_BASE_URL as EXA_DEFAULT_BASE_URL
 from app.infrastructure.web.exa_client import ExaWebClient
 from app.infrastructure.web.tavily_client import DEFAULT_BASE_URL as TAVILY_DEFAULT_BASE_URL

@@ -20,16 +20,16 @@ from app.module.knowledge.domain.provider_config_domain import (
     ProviderCapability,
     ProviderTableSpec,
 )
+from app.module.knowledge.domain.provider_runtime_domain import (
+    ProviderConfig,
+    ProviderDefaults,
+    ProviderSnapshot,
+)
 from app.module.knowledge.model.provider_config_model import ProviderConfigMixin
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
 from app.module.knowledge.protocol.provider_builder_protocol import (
     ProviderBuilderProtocol,
     WebClientProtocol,
-)
-from app.module.knowledge.protocol.provider_config import (
-    ProviderConfig,
-    ProviderDefaults,
-    ProviderSnapshot,
 )
 from app.module.knowledge.protocol.provider_config_repository_protocol import (
     ProviderConfigRepositoryProtocol,

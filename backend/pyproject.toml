@@ -53,6 +53,7 @@ dev = [
     # Starlette's TestClient prefers httpx2 and warns on plain httpx, which the
     # test configuration turns into an error.
     "httpx2>=2.13.1",
+    "import-linter>=2.17",
     "mypy>=1.18.0",
     "pip-audit>=2.9.0",
     "pytest>=8.4.0",
@@ -69,7 +70,6 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["B011"]
-"app/module/knowledge/test/**" = ["B011"]
 "app/module/knowledge/dependencies.py" = ["B008"]
 "app/module/knowledge/router/**" = ["B008"]
 "app/module/agent/dependencies.py" = ["B008"]
@@ -97,7 +97,322 @@ warn_required_dynamic_aliases = true
 exclude_dirs = ["tests", ".venv"]
 skips = ["B101"]
 
+# Architecture contracts (``uv run lint-imports``). Routers own HTTP; services,
+# domain, and protocols stay framework-free; domain stays pure; slices meet only
+# through schemas/exceptions or a ``dependencies.py`` composition root.
+# ``ignore_imports`` lists known debts; remove an entry when it is fixed and
+# never add one without a note in backend/app/AGENTS.md.
+[tool.importlinter]
+root_package = "app"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Services, domain, protocols, and repositories do not import the web framework"
+type = "forbidden"
+source_modules = [
+    "app.module.*.service",
+    "app.module.*.domain",
+    "app.module.*.protocol",
+    "app.module.*.repository",
+]
+forbidden_modules = ["fastapi", "starlette"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Domain logic is pure"
+type = "forbidden"
+source_modules = ["app.module.*.domain"]
+forbidden_modules = [
+    "app.infrastructure",
+    "app.module.*.repository",
+    "app.module.*.model",
+    "app.module.*.service",
+    "app.module.*.router",
+    "sqlalchemy",
+]
+allow_indirect_imports = true
+ignore_imports = [
+    # Debt: the provider table spec binds ORM classes; move it to repository/.
+    "app.module.knowledge.domain.provider_config_domain -> app.module.knowledge.model.provider_config_model",
+]
+
+[[tool.importlinter.contracts]]
+name = "Services reach persistence and adapters through protocols"
+type = "forbidden"
+source_modules = ["app.module.*.service"]
+forbidden_modules = ["app.module.*.repository", "app.infrastructure", "app.module.*.router"]
+allow_indirect_imports = true
+ignore_imports = [
+    # Debt: services that own short-lived sessions (workers, sweeps, notices).
+    # Fix with an injected session-scope / repository-factory protocol.
+    "app.module.*.service.* -> app.infrastructure.database.session",
+    "app.module.agent.service.* -> app.module.agent.repository.history_repository",
+    "app.module.knowledge.service.* -> app.module.knowledge.repository.ingest_job_repository",
+    "app.module.knowledge.service.provider_error_notice_service -> app.module.knowledge.repository.provider_error_notice_repository",
+    # Debt: storage error types live with the adapters; move them to app.shared.
+    "app.module.*.service.* -> app.infrastructure.files.storage_errors",
+    # Debt: model-catalog and runtime lookups; put them behind protocols.
+    "app.module.*.service.* -> app.infrastructure.ai.model_catalog",
+    "app.module.knowledge.service.model_assignment_service -> app.infrastructure.ai.*",
+    "app.module.knowledge.service.model_assignment_service -> app.module.knowledge.repository.model_assignment_repository",
+    "app.module.knowledge.service.provider_config_service -> app.infrastructure.security.secret_cipher",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 filterwarnings = ["error"]
+
+[[tool.importlinter.contracts]]
+name = "The agent slice does not reach into another slice's internals"
+type = "forbidden"
+source_modules = [
+    "app.module.agent.service",
+    "app.module.agent.repository",
+    "app.module.agent.domain",
+    "app.module.agent.protocol",
+    "app.module.agent.model",
+]
+forbidden_modules = [
+    "app.module.companion.service",
+    "app.module.companion.repository",
+    "app.module.companion.model",
+    "app.module.companion.domain",
+    "app.module.companion.protocol",
+    "app.module.companion.router",
+    "app.module.auth.service",
+    "app.module.auth.repository",
+    "app.module.auth.model",
+    "app.module.auth.domain",
+    "app.module.auth.protocol",
+    "app.module.auth.router",
+    "app.module.knowledge.service",
+    "app.module.knowledge.repository",
+    "app.module.knowledge.model",
+    "app.module.knowledge.domain",
+    "app.module.knowledge.protocol",
+    "app.module.knowledge.router",
+    "app.module.prompt.service",
+    "app.module.prompt.repository",
+    "app.module.prompt.model",
+    "app.module.prompt.protocol",
+    "app.module.prompt.router",
+    "app.module.web_research.service",
+    "app.module.web_research.domain",
+    "app.module.web_research.protocol",
+]
+allow_indirect_imports = true
+ignore_imports = [
+    # Debt: the history indexer reuses knowledge chunking, cache, and store
+    # contracts; give agent its own protocols or move pure parts to app.shared.
+    "app.module.agent.service.history_indexer -> app.module.knowledge.**",
+    # Debt: shared pure web-fetch heuristic; move to app.shared.
+    "app.module.agent.service.tool_registry -> app.module.web_research.domain.fetch_quality_domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "The auth slice does not reach into another slice's internals"
+type = "forbidden"
+source_modules = [
+    "app.module.auth.service",
+    "app.module.auth.repository",
+    "app.module.auth.domain",
+    "app.module.auth.protocol",
+    "app.module.auth.model",
+]
+forbidden_modules = [
+    "app.module.companion.service",
+    "app.module.companion.repository",
+    "app.module.companion.model",
+    "app.module.companion.domain",
+    "app.module.companion.protocol",
+    "app.module.companion.router",
+    "app.module.agent.service",
+    "app.module.agent.repository",
+    "app.module.agent.model",
+    "app.module.agent.domain",
+    "app.module.agent.protocol",
+    "app.module.agent.router",
+    "app.module.knowledge.service",
+    "app.module.knowledge.repository",
+    "app.module.knowledge.model",
+    "app.module.knowledge.domain",
+    "app.module.knowledge.protocol",
+    "app.module.knowledge.router",
+    "app.module.prompt.service",
+    "app.module.prompt.repository",
+    "app.module.prompt.model",
+    "app.module.prompt.protocol",
+    "app.module.prompt.router",
+    "app.module.web_research.service",
+    "app.module.web_research.domain",
+    "app.module.web_research.protocol",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "The knowledge slice does not reach into another slice's internals"
+type = "forbidden"
+source_modules = [
+    "app.module.knowledge.service",
+    "app.module.knowledge.repository",
+    "app.module.knowledge.domain",
+    "app.module.knowledge.protocol",
+    "app.module.knowledge.model",
+]
+forbidden_modules = [
+    "app.module.companion.service",
+    "app.module.companion.repository",
+    "app.module.companion.model",
+    "app.module.companion.domain",
+    "app.module.companion.protocol",
+    "app.module.companion.router",
+    "app.module.agent.service",
+    "app.module.agent.repository",
+    "app.module.agent.model",
+    "app.module.agent.domain",
+    "app.module.agent.protocol",
+    "app.module.agent.router",
+    "app.module.auth.service",
+    "app.module.auth.repository",
+    "app.module.auth.model",
+    "app.module.auth.domain",
+    "app.module.auth.protocol",
+    "app.module.auth.router",
+    "app.module.prompt.service",
+    "app.module.prompt.repository",
+    "app.module.prompt.model",
+    "app.module.prompt.protocol",
+    "app.module.prompt.router",
+    "app.module.web_research.service",
+    "app.module.web_research.domain",
+    "app.module.web_research.protocol",
+]
+allow_indirect_imports = true
+ignore_imports = [
+    # Debt: model assignments read and write auth-owned app_user columns;
+    # move persistence behind an auth-side service and a knowledge protocol.
+    "app.module.knowledge.repository.model_assignment_repository -> app.module.auth.model.auth_model",
+    "app.module.knowledge.service.model_assignment_service -> app.module.auth.model.auth_model",
+]
+
+[[tool.importlinter.contracts]]
+name = "The prompt slice does not reach into another slice's internals"
+type = "forbidden"
+source_modules = [
+    "app.module.prompt.service",
+    "app.module.prompt.repository",
+    "app.module.prompt.protocol",
+    "app.module.prompt.model",
+]
+forbidden_modules = [
+    "app.module.companion.service",
+    "app.module.companion.repository",
+    "app.module.companion.model",
+    "app.module.companion.domain",
+    "app.module.companion.protocol",
+    "app.module.companion.router",
+    "app.module.agent.service",
+    "app.module.agent.repository",
+    "app.module.agent.model",
+    "app.module.agent.domain",
+    "app.module.agent.protocol",
+    "app.module.agent.router",
+    "app.module.auth.service",
+    "app.module.auth.repository",
+    "app.module.auth.model",
+    "app.module.auth.domain",
+    "app.module.auth.protocol",
+    "app.module.auth.router",
+    "app.module.knowledge.service",
+    "app.module.knowledge.repository",
+    "app.module.knowledge.model",
+    "app.module.knowledge.domain",
+    "app.module.knowledge.protocol",
+    "app.module.knowledge.router",
+    "app.module.web_research.service",
+    "app.module.web_research.domain",
+    "app.module.web_research.protocol",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "The web_research slice does not reach into another slice's internals"
+type = "forbidden"
+source_modules = [
+    "app.module.web_research.service",
+    "app.module.web_research.domain",
+    "app.module.web_research.protocol",
+]
+forbidden_modules = [
+    "app.module.companion.service",
+    "app.module.companion.repository",
+    "app.module.companion.model",
+    "app.module.companion.domain",
+    "app.module.companion.protocol",
+    "app.module.companion.router",
+    "app.module.agent.service",
+    "app.module.agent.repository",
+    "app.module.agent.model",
+    "app.module.agent.domain",
+    "app.module.agent.protocol",
+    "app.module.agent.router",
+    "app.module.auth.service",
+    "app.module.auth.repository",
+    "app.module.auth.model",
+    "app.module.auth.domain",
+    "app.module.auth.protocol",
+    "app.module.auth.router",
+    "app.module.knowledge.service",
+    "app.module.knowledge.repository",
+    "app.module.knowledge.model",
+    "app.module.knowledge.domain",
+    "app.module.knowledge.protocol",
+    "app.module.knowledge.router",
+    "app.module.prompt.service",
+    "app.module.prompt.repository",
+    "app.module.prompt.model",
+    "app.module.prompt.protocol",
+    "app.module.prompt.router",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "The companion slice does not reach into another slice's internals"
+type = "forbidden"
+source_modules = [
+    "app.module.companion.service",
+    "app.module.companion.repository",
+    "app.module.companion.domain",
+    "app.module.companion.protocol",
+    "app.module.companion.model",
+]
+forbidden_modules = [
+    "app.module.auth.service",
+    "app.module.auth.repository",
+    "app.module.auth.model",
+    "app.module.auth.domain",
+    "app.module.auth.protocol",
+    "app.module.auth.router",
+    "app.module.knowledge.service",
+    "app.module.knowledge.repository",
+    "app.module.knowledge.model",
+    "app.module.knowledge.domain",
+    "app.module.knowledge.protocol",
+    "app.module.knowledge.router",
+    "app.module.agent.service",
+    "app.module.agent.repository",
+    "app.module.agent.model",
+    "app.module.agent.domain",
+    "app.module.agent.protocol",
+    "app.module.agent.router",
+    "app.module.prompt.service",
+    "app.module.prompt.repository",
+    "app.module.prompt.model",
+    "app.module.prompt.protocol",
+    "app.module.prompt.router",
+    "app.module.web_research.service",
+    "app.module.web_research.domain",
+    "app.module.web_research.protocol",
+]
+allow_indirect_imports = true

@@ -6,7 +6,7 @@
 export const core = {
   app: {
     name: "Apsor Archive",
-    studio: "Archive Studio",
+    studio: "檔案館工作室",
   },
   boot: {
     missingRoot: "index.html 中缺少檔案館的根元素。",
@@ -63,6 +63,7 @@ export const core = {
     defaultLabel: "正在載入檔案館",
   },
   route: {
+    title: "{page} — {app}",
     fallbackLabel: "正在開啟檔案館",
     fallbackEyebrow: "正在開啟檔案館",
     errorEyebrow: "檔案館 · 路由錯誤",
@@ -255,8 +256,13 @@ export const core = {
     quotaLifetime: "累計",
     quotaBeforeResetLabel: "重設前累計",
     quotaRemaining: "剩餘",
-    quotaEnabledLabel: "啟用此類別",
     quotaEnabledHint: "封鎖後，即使仍有額度也無法使用此類別。",
+    quotaToggleChat: "對話",
+    quotaToggleEmbedding: "嵌入",
+    quotaToggleWebSearch: "網路搜尋",
+    quotaToggleWebFetch: "網頁擷取",
+    quotaToggleState: "{category}：{state}",
+    quotaToggleWebHint: "封鎖後，助手不會向此帳號提供這個網路工具，任何直接呼叫也會被拒絕。",
     quotaGrantLabel: "額度",
     quotaGrantHint: "留空表示無上限。0 是有效額度，會封鎖所有用量。",
     quotaGrantInvalid: "請輸入 0 或以上的整數；留空表示無上限。",
@@ -564,6 +570,7 @@ export const core = {
     ingestRuntime: "擷取執行環境",
     maintenance: "維護",
     language: "語言",
+    companion: "夥伴",
   },
   settings: {
     model: {

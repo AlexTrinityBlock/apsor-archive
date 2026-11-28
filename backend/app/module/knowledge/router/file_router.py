@@ -25,6 +25,7 @@ from app.module.knowledge.dependencies import (
     get_ingest_job_service,
     get_upload_file_service,
 )
+from app.module.knowledge.domain.thumbnail_domain import thumbnail_version
 from app.module.knowledge.schema.file_schema import (
     FileChunksSchema,
     FileCopySchema,
@@ -123,6 +124,7 @@ def _byte_range(range_header: str, size: int) -> tuple[int, int] | None:
     response_model=FileSchema,
     status_code=status.HTTP_201_CREATED,
     operation_id="uploadFile",
+    deprecated=True,
 )
 async def upload_file(
     path: Annotated[str, Form(min_length=1, max_length=1024)],
@@ -131,7 +133,12 @@ async def upload_file(
     file_service: FileService = Depends(get_upload_file_service),
     settings: Settings = Depends(get_app_settings),
 ) -> FileSchema:
-    """Upload one file; the server extracts text and indexes it."""
+    """Upload one file and extract it inside the API request.
+
+    Deprecated: extraction belongs to the dedicated ingestion worker. Clients
+    should use ``POST /files/async`` (``uploadFileAsync``) and follow the job.
+    The route stays for existing scripts and tests until it is removed.
+    """
     data = await file.read(settings.max_upload_bytes + 1)
     return await file_service.ingest_upload(
         path=path,
@@ -394,6 +401,48 @@ async def get_file_content(
         media_type=original.mime_type,
         headers=headers,
     )
+
+
+@router.get(
+    "/{file_id}/thumbnail",
+    operation_id="getFileThumbnail",
+    responses={
+        200: {
+            "description": "The tiny WebP thumbnail of one file version.",
+            "content": {"image/webp": {"schema": {"type": "string", "format": "binary"}}},
+        },
+        304: {"description": "The cached thumbnail is still current."},
+    },
+)
+async def get_file_thumbnail(
+    file_id: int,
+    v: Annotated[str | None, Query(max_length=64)] = None,
+    if_none_match: Annotated[str | None, Header(alias="If-None-Match")] = None,
+    file_service: FileService = Depends(get_file_service),
+) -> Response:
+    """Serve a file's WebP thumbnail.
+
+    A file id never changes its bytes, so a request whose ``v`` matches the
+    current thumbnail version may be cached as immutable. Any other request
+    revalidates with the strong ETag. ``Vary: Cookie`` keeps shared browsers
+    from reusing one account's cached image for another session.
+    """
+    thumbnail = await file_service.read_thumbnail(file_id)
+    current = v is not None and v == thumbnail_version(thumbnail.sha256)
+    headers = {
+        "ETag": f'"{thumbnail.sha256}"',
+        "Cache-Control": (
+            "private, max-age=31536000, immutable"
+            if current
+            else "private, max-age=0, must-revalidate"
+        ),
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
+        "Vary": "Cookie",
+    }
+    if if_none_match and _etag_matches(if_none_match, thumbnail.sha256):
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+    return Response(content=thumbnail.data, media_type="image/webp", headers=headers)
 
 
 @router.put(

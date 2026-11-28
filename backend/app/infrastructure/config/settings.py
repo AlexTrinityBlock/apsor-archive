@@ -5,7 +5,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[3]
@@ -29,6 +29,8 @@ class Settings(BaseSettings):
             "../.secrets/openai.env",
             ".secrets/r2.env",
             "../.secrets/r2.env",
+            ".secrets/s3.env",
+            "../.secrets/s3.env",
             ".secrets/exa.env",
             "../.secrets/exa.env",
         ),
@@ -53,9 +55,14 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 120
 
     # Storage. ``local`` keeps original bytes under ``data_dir``; ``r2`` writes
-    # new originals to the private Cloudflare R2 bucket. Reads always choose the
-    # backend persisted on the row, so a staged migration can mix both.
-    storage_backend: Literal["local", "r2"] = "local"
+    # new originals to a private Cloudflare R2 bucket; ``s3`` writes to any
+    # S3-compatible bucket (the bundled RustFS service, AWS S3, MinIO, ...).
+    # ``rustfs`` is an alias for ``s3``. ``auto`` picks ``r2`` when R2 is fully
+    # configured, else ``s3`` when S3 is, else ``local``; the production Compose
+    # file uses it so an existing R2 deployment keeps working unchanged. Reads
+    # always choose the backend persisted on the row, so a staged migration can
+    # mix backends.
+    storage_backend: Literal["auto", "local", "r2", "s3"] = "local"
     # ``R2_ACCOUNT_ENDPOINT``, ``R2_ACCESS_KEY_ID``, ``R2_SECRET_ACCESS_KEY``,
     # and ``R2_BUCKET`` are the names used by the local, gitignored
     # ``.secrets/r2.env``. Keep the unprefixed aliases so existing deployments
@@ -95,6 +102,21 @@ class Settings(BaseSettings):
     # unchanged after a migration, otherwise existing objects become unreachable.
     r2_prefix: str = ""
 
+    # Generic S3-compatible store. Credentials come from ``.secrets/s3.env``
+    # (written by ``./start.sh setup``) and never from container environment
+    # variables. ``s3_addressing_style`` is ``path`` for RustFS/MinIO and most
+    # self-hosted servers; AWS S3 also accepts ``virtual``.
+    # ``s3_create_bucket`` lets the first write create a missing bucket, which
+    # the bundled RustFS service needs on a fresh volume.
+    s3_endpoint_url: str | None = None
+    s3_bucket: str | None = None
+    s3_region: str = "us-east-1"
+    s3_access_key_id: SecretStr | None = None
+    s3_secret_access_key: SecretStr | None = None
+    s3_prefix: str = ""
+    s3_addressing_style: Literal["path", "virtual"] = "path"
+    s3_create_bucket: bool = False
+
     max_upload_bytes: int = 10 * 1024 * 1024
     max_text_bytes: int = 2 * 1024 * 1024
     # Pasted chat screenshots are downscaled and re-encoded before storage.
@@ -110,13 +132,19 @@ class Settings(BaseSettings):
     # vision ingests.
     vision_description_language: str = "English"
 
-    # Durable ingestion worker. The lifespan task is a convenience for local
-    # single-process development; production can run ``python -m app.worker``
-    # (or ``apsor-archive worker``) as a dedicated service.
+    # Durable ingestion worker. The dedicated ``apsor-archive worker`` process
+    # (``python -m app.worker`` / ``make worker``) owns ingestion. Setting
+    # ``ingest_worker_enabled`` makes the API lifespan also run the worker loops
+    # as an opt-in single-process development mode; it is off by default so
+    # the API never extracts files unless asked to.
     #
-    # These values seed the database-backed singleton on a fresh installation;
-    # the worker reads the database row and uses these only as a fallback.
-    ingest_worker_enabled: bool = True
+    # The remaining values seed the database-backed singleton on a fresh
+    # installation; the worker reads the database row and uses these only as a
+    # fallback.
+    ingest_worker_enabled: bool = False
+    # The dedicated worker backfills WebP thumbnails for files that predate
+    # them. Disable only to keep a constrained host from reading every original.
+    thumbnail_backfill_enabled: bool = True
     ingest_poll_seconds: float = 1.0
     ingest_extract_workers: int = 2
     ingest_max_inflight_jobs: int = 2
@@ -227,6 +255,45 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     login_attempt_limit: int = 10
     login_window_minutes: int = 5
+
+    @field_validator("storage_backend", mode="before")
+    @classmethod
+    def _normalize_storage_backend(cls, value: object) -> object:
+        """Accept ``rustfs`` (and any letter case) as a name for ``s3``."""
+        if isinstance(value, str):
+            candidate = value.strip().lower()
+            return "s3" if candidate == "rustfs" else candidate
+        return value
+
+    @property
+    def resolved_storage_backend(self) -> Literal["local", "r2", "s3"]:
+        """Concrete backend for new writes after resolving ``auto``."""
+        if self.storage_backend != "auto":
+            return self.storage_backend
+        if self.r2_configured:
+            return "r2"
+        if self.s3_configured:
+            return "s3"
+        return "local"
+
+    @property
+    def s3_configured(self) -> bool:
+        """Whether every non-secret and secret S3 setting is present."""
+        return not self.s3_missing_settings
+
+    @property
+    def s3_missing_settings(self) -> list[str]:
+        """Return missing setting names only; never include values."""
+        missing: list[str] = []
+        if not (self.s3_endpoint_url or "").strip():
+            missing.append("s3_endpoint_url")
+        if not (self.s3_bucket or "").strip():
+            missing.append("s3_bucket")
+        if not self._has_secret(self.s3_access_key_id):
+            missing.append("s3_access_key_id")
+        if not self._has_secret(self.s3_secret_access_key):
+            missing.append("s3_secret_access_key")
+        return missing
 
     @property
     def r2_configured(self) -> bool:

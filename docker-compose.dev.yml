@@ -3,7 +3,9 @@ name: apsor-archive-dev
 # Local development dependencies only. Run the API and Vite on the host:
 #   docker compose -f docker-compose.dev.yml up -d --wait
 #   cd backend && uv run apsor-archive --reload
+#   cd backend && uv run apsor-archive worker   # drains uploads; the API only enqueues
 #   cd frontend && bun run dev
+# (./start.sh runs the API and the worker together.)
 #
 # RabbitMQ is exposed on the host for a host-run API/worker. Match the Compose
 # defaults with:
@@ -12,6 +14,15 @@ name: apsor-archive-dev
 # The management UI is http://127.0.0.1:15672 (apsor / apsor).
 # PostgreSQL is still the authoritative ingest-job ledger; the broker only
 # dispatches wake-ups and redelivers unacked messages after a worker crash.
+#
+# Local disk is the default storage for development. To exercise the
+# S3-compatible path against RustFS, start it with the `rustfs` profile:
+#   docker compose -f docker-compose.dev.yml --profile rustfs up -d --wait
+# and point the host-run API/worker at it (demo credentials, dev only):
+#   APSOR_STORAGE_BACKEND=s3  APSOR_S3_ENDPOINT_URL=http://127.0.0.1:59000
+#   APSOR_S3_BUCKET=apsor-archive-dev  APSOR_S3_CREATE_BUCKET=true
+#   .secrets/s3.env: APSOR_S3_ACCESS_KEY_ID=apsor-dev
+#                    APSOR_S3_SECRET_ACCESS_KEY=apsor-dev-secret
 services:
   db:
     image: postgres:17-alpine
@@ -76,6 +87,30 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # Optional S3-compatible store for development (profile `rustfs`).
+  rustfs:
+    image: rustfs/rustfs:1.0.6
+    profiles: ["rustfs"]
+    mem_limit: 512m
+    environment:
+      RUSTFS_ACCESS_KEY: ${RUSTFS_DEV_ACCESS_KEY:-apsor-dev}
+      RUSTFS_SECRET_KEY: ${RUSTFS_DEV_SECRET_KEY:-apsor-dev-secret}
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "false"
+      RUSTFS_OBS_LOGGER_LEVEL: warn
+    ports:
+      - "127.0.0.1:59000:9000"
+    volumes:
+      - rustfs-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
 volumes:
   postgres-data:
     # The physical name is explicit so a Compose project rename cannot silently
@@ -83,3 +118,5 @@ volumes:
     name: apsor-archive-dev_postgres-data
   rabbitmq-data:
     name: apsor-archive-dev_rabbitmq-data
+  rustfs-data:
+    name: apsor-archive-dev_rustfs-data

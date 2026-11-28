@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="frontend/public/favicon.svg" alt="Apsor Archive" width="112" height="112">
+  <img src="frontend/public/icon-512.png" alt="Apsor Archive" width="112" height="112">
 </div>
 
 <h1 align="center">Apsor Archive</h1>
@@ -32,11 +32,12 @@
 - [Stack](#stack)
 - [Quick start](#quick-start)
   - [Docker Compose (normal)](#docker-compose-normal)
-  - [Object storage (local or R2)](#object-storage-local-or-r2)
+  - [Object storage (RustFS, R2, S3, or local)](#object-storage-rustfs-r2-s3-or-local)
   - [Configure providers in the app](#configure-providers-in-the-app)
   - [Per-account model assignment](#per-account-model-assignment)
   - [Web research tools](#web-research-tools)
   - [Frequently used prompts](#frequently-used-prompts)
+  - [Chat companion](#chat-companion)
   - [Agent runtime settings](#agent-runtime-settings)
   - [Ingestion runtime](#ingestion-runtime)
   - [Local development](#local-development)
@@ -169,17 +170,18 @@ result carries its source, chunk number, and time.
   missing query filter cannot expose another person's archive. Passwords use
   Argon2 and sessions use HttpOnly cookies. Run it on your own machine; put it
   behind Cloudflare Tunnel only with your own access controls.
-- **Original bytes can live in Cloudflare R2.** `APSOR_STORAGE_BACKEND=local|r2`
-  selects where new originals are written. Reads follow the backend recorded on
-  each row, so a staged migration can serve a mixed archive. The R2 bucket is
-  private and the app never issues presigned or public URLs.
+- **Original bytes live in S3-compatible storage.** The bundled RustFS service
+  is the default; Cloudflare R2, any S3 endpoint, or local disk can be chosen
+  in the setup wizard. Reads follow the backend recorded on each row, so a
+  staged migration can serve a mixed archive. Buckets stay private and the app
+  never issues presigned or public URLs.
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
 | API | Python 3.13, FastAPI, SQLAlchemy 2 async, Alembic, psycopg 3 |
-| Storage | PostgreSQL 17 (`pg_trgm` for path fuzzy search); original bytes on local disk or in private Cloudflare R2 |
+| Storage | PostgreSQL 17 (`pg_trgm` for path fuzzy search); original bytes in RustFS (default), Cloudflare R2, any S3-compatible bucket, or local disk |
 | Cache | Valkey / Redis-compatible, with a memory fallback |
 | Retrieval | CJK bigram + Latin token n-grams, BM25, signed hashing vectors, RRF |
 | AI | DeepSeek `deepseek-flash`, Anthropic Claude, or any OpenAI-compatible chat endpoint |
@@ -190,21 +192,27 @@ result carries its source, chunk number, and time.
 
 ### Docker Compose (production)
 
-The production stack is **Cloudflare Tunnel → Caddy → API**. It publishes no
-host port. Prepare the tunnel token, the public host, and the data directory:
+The production stack is **Cloudflare Tunnel → Caddy → API + ingestion worker**,
+with PostgreSQL, Valkey, RabbitMQ, and (by default) a bundled RustFS object
+store on the private Compose network. It publishes no host port.
+
+Run the setup wizard instead of writing environment variables by hand:
 
 ```bash
-mkdir -p data secrets
-sudo chown -R 10001:10001 data
-# Write the tunnel token; no trailing newline.
-printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
-chmod 755 secrets
-sudo chown 65532 secrets/cf_token.txt && chmod 640 secrets/cf_token.txt
-# The production default is R2; local disk is the simplest first run.
-export APSOR_STORAGE_BACKEND=local
-export APSOR_PUBLIC_HOST=archive.example.com
+./start.sh setup        # or: make setup
+mkdir -p data && sudo chown -R 10001:10001 data
 docker compose up -d --build
 ```
+
+The wizard asks for the public hostname, the storage backend (bundled
+**RustFS** by default, or Cloudflare R2, or any S3-compatible endpoint, or local
+disk), the session lifetime, an optional DeepSeek key, and the Cloudflare
+Tunnel token. It writes the non-secret `.env`, generates the RustFS and
+RabbitMQ credentials, stores pasted keys in `.secrets/*.env` and `secrets/*.txt`
+without echoing them, keeps any existing file unless you confirm an overwrite,
+and prints the `sudo chgrp` commands the containers need to read the secret
+files. `./setup.sh --defaults` runs the same flow non-interactively (production
+with RustFS); add `--dev` for a development `.env`.
 
 Point the Cloudflare Tunnel public hostname at **HTTP `caddy:80`**, then open
 `https://$APSOR_PUBLIC_HOST`. Put `APSOR_PUBLIC_HOST` in `.env` so restarts keep
@@ -212,10 +220,8 @@ the host matcher. The first visit asks you to create the root account. The root
 can then create normal accounts from **Accounts**; each new account receives a
 one-time temporary password and must change it at first sign-in. PostgreSQL
 uses a named volume; local original bytes and the generated secret key live
-under the host's `./data` directory. The production Compose file defaults to
-`APSOR_STORAGE_BACKEND=r2`; see
-[Object storage](#object-storage-local-or-r2) for the credentials it needs, or
-keep local storage for a self-contained host.
+under the host's `./data` directory. Original file bytes go to the backend the
+wizard selected; see [Object storage](#object-storage-rustfs-r2-s3-or-local).
 
 > Note: `./data` is bind-mounted into the container and the container process
 > runs as uid `10001`. Create the directory and fix its owner before the first
@@ -254,41 +260,45 @@ Without it, summaries fall back to a deterministic extractive form, image
 uploads use the filename caption, and agent messages return
 `503 agent_not_configured`.
 
-### Object storage (local or R2)
+### Object storage (RustFS, R2, S3, or local)
 
-`APSOR_STORAGE_BACKEND` chooses the default for new original bytes:
+`APSOR_STORAGE_BACKEND` chooses the default for new original bytes. The setup
+wizard sets it; every option uses the same S3-compatible adapter except `local`.
 
-- `local` writes under `APSOR_DATA_DIR` and is the default for development and
-  tests.
-- `r2` writes to a private Cloudflare R2 bucket. The production Compose file
-  defaults to `r2`; set `APSOR_STORAGE_BACKEND=local` for a first boot or a
-  rollback.
+| Value | Where bytes go | Credentials |
+|---|---|---|
+| `rustfs` | The bundled RustFS service (`COMPOSE_PROFILES=rustfs` starts it). Default for new installs. | Generated by the wizard into `.secrets/s3.env` and `secrets/rustfs_*_key.txt` |
+| `r2` | A private Cloudflare R2 bucket | `.secrets/r2.env` |
+| `s3` | Any S3-compatible endpoint (AWS S3, MinIO, another RustFS) | `.secrets/s3.env` |
+| `local` | `APSOR_DATA_DIR`; the default for development and tests | none |
+| `auto` | R2 when `.secrets/r2.env` is complete, else S3, else local | — |
 
-The non-secret R2 values are `APSOR_R2_ENDPOINT_URL`, `APSOR_R2_BUCKET`
-(`apsor-archive` in the deployment), `APSOR_R2_REGION` (`auto`), and
-`APSOR_R2_PREFIX`. The account endpoint has no default: put
-`APSOR_R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com` in a
-gitignored `.env` file next to the Compose file, or export it, before running
-with the `r2` backend. Credentials live in the gitignored `.secrets/r2.env`,
-which Compose mounts read-only and the app reads itself, so they never become
-container environment variables:
+`rustfs` is an alias of `s3`. When `APSOR_STORAGE_BACKEND` is unset, the
+production Compose file uses `auto`, so an existing R2 deployment keeps writing
+to R2 without an `.env` change. Each row records the backend that holds its
+bytes (`local`, `r2`, or `s3`), and every backend whose settings are complete
+stays readable, so a staged migration can serve a mixed archive.
 
-```bash
-mkdir -p .secrets
-# Fill these in locally; never commit the file.
-printf 'APSOR_R2_ACCESS_KEY_ID=...\nAPSOR_R2_SECRET_ACCESS_KEY=...\n' \
-  > .secrets/r2.env
-chmod 755 .secrets
-# Container uid 10001 needs read access; other host users do not.
-sudo chgrp 10001 .secrets/r2.env
-chmod 640 .secrets/r2.env
-```
+Non-secret settings live in `.env`:
 
-The file must be readable by container uid `10001` (mode `640` with group
-`10001`, or `644` on a single-user host). The bucket stays private:
-no presigned URLs, no public bucket access, and no lifecycle expiry on `files/`.
-`data/.secret_key` is the Fernet master key and remains local; back it up
-separately from PostgreSQL.
+- R2: `APSOR_R2_ENDPOINT_URL` (`https://<account-id>.r2.cloudflarestorage.com`,
+  no default), `APSOR_R2_BUCKET` (`apsor-archive`), `APSOR_R2_REGION` (`auto`),
+  `APSOR_R2_PREFIX`.
+- S3 / RustFS: `APSOR_S3_ENDPOINT_URL` (Compose default `http://rustfs:9000`),
+  `APSOR_S3_BUCKET` (`apsor-archive`), `APSOR_S3_REGION` (`us-east-1`),
+  `APSOR_S3_PREFIX`, `APSOR_S3_ADDRESSING_STYLE` (`path` or `virtual`), and
+  `APSOR_S3_CREATE_BUCKET` (create a missing bucket on the first write; the
+  bundled RustFS needs it).
+
+Access keys never go in `.env` or container environment variables. Compose
+mounts `.secrets/` read-only and the app reads `r2.env` / `s3.env` itself; the
+RustFS container reads its pair as Docker secrets. All of them run as uid
+`10001`, so the files need group `10001` with mode `640` (the wizard prints the
+`sudo chgrp` command). Buckets stay private: no presigned URLs, no public
+access, and no lifecycle expiry on `files/`. `data/.secret_key` is the Fernet
+master key and remains local; back it up separately from PostgreSQL. Back up
+the `apsor-archive_rustfs-data` volume (or the external bucket) with the
+database as one backup set.
 
 To move an existing archive from local disk to R2, stop the API and worker and
 run the storage CLI from `backend/`:
@@ -562,6 +572,32 @@ ordered by `sort_order` then `id`, and cached for 60 seconds under that account'
 prompt text; it does not send the message. The API is
 `GET/POST/PUT/DELETE /api/v1/settings/frequent-prompts`.
 
+### Chat companion
+
+A small marionette librarian can stand beside the chat and react to the agent:
+it thinks while the model reasons, searches during `search_knowledge`, reads,
+writes, calculates, browses, and presents during the matching tools, and the
+agent can also call the read-only `companion_action` tool for an explicit
+gesture. Built-in presets ship with the frontend. Each account may also create up
+to 20 private custom companions and upload up to 12 images per action (PNG,
+JPEG, WebP, or AVIF, at most 8 MB each); the server re-encodes every image as
+AVIF (WebP only when the AVIF codec is unavailable) that fits 384x576 and 40 KB
+and strips its metadata. The per-account preference stores
+the selected companion (`preset:<id>` or `custom:<id>`), whether it is shown, the
+motion level (`full`, `reduced`, `off`), and its normalized position. The API is
+under `/api/v1/companions` (list, create, update, delete, frame upload, frame
+order, frame delete, frame image, and `GET/PATCH /api/v1/companions/preference`).
+
+Each companion also has a story: a persona that becomes its voice in new
+conversations (frozen per conversation, in the conversation's language), and
+lore, its own memories. When the agent searches the Keeper's archive, up to two
+relevant memories of the librarian's own may ride beside the results in a
+separate block; they are never archive evidence or citations. Asking the
+librarian about itself or the Archive lets it tell its own story. Deeper
+memories unlock as the account completes more conversations with that
+companion. Every account can edit the persona and lore of any companion per
+language and reset to the default (`/api/v1/companions/stories/...`).
+
 ### Agent runtime settings
 
 The **Agent runtime** panel on `/settings` (root only) edits the singleton
@@ -651,8 +687,10 @@ One worker process polls the database every second while idle and claims queued
 rows with `SELECT ... FOR UPDATE SKIP LOCKED`. It runs two extraction threads
 and at most two in-flight jobs, with global async embedding concurrency of six
 and batched progress updates. Stale jobs are requeued after a crash, and
-embedding retries are bounded. The API lifespan starts one worker for local use;
-run a dedicated process in production:
+embedding retries are bounded. The API only enqueues jobs, so run the worker
+beside it (`make worker` locally, a dedicated service in production). Setting
+`APSOR_INGEST_WORKER_ENABLED=true` instead runs the same loops inside the API
+process as a single-process development shortcut; it defaults to `false`.
 
 ```bash
 cd backend
@@ -787,10 +825,14 @@ the container serves:
 cd frontend && bun run build
 ```
 
-`./start.sh` is the shortest bare-metal path: it starts the dev database/cache
-if Docker is available, sources `.secrets/deepseek.env`, syncs the backend, and
-serves the API and the built client at <http://127.0.0.1:8000>. Run
-`cd frontend && bun run build` once before the first bare-metal start.
+`./start.sh` is the shortest bare-metal path. Run `./start.sh setup --dev`
+once to write a development `.env` (local storage by default), then
+`./start.sh` starts the dev database/cache if Docker is available, syncs the
+backend, and runs the API at <http://127.0.0.1:8000> together with the dedicated
+ingestion worker; Ctrl+C stops both. Set `APSOR_START_WORKER=false` to run the
+API alone. Run `cd frontend && bun run build` once before the first bare-metal
+start. To try the S3 path locally, choose `rustfs` in the wizard and start the
+dev store with `docker compose -f docker-compose.dev.yml --profile rustfs up -d`.
 
 On Windows, `./start.sh` needs a bash shell. `./run-local.ps1` is the PowerShell
 equivalent: it starts the dev database/cache if Docker is available, syncs the
@@ -912,7 +954,9 @@ Additional surfaces: `POST /api/v1/files` (multimodal intake), `POST
 `GET /api/v1/memories`, `POST /api/v1/memories`,
 `PATCH /api/v1/memories/{memory_id}` (edit text; the title is regenerated),
 `POST /api/v1/memories/{memory_id}/deprecate` (retire directly with an optional
-`reason`), `POST /api/v1/summaries`, `GET /api/v1/stats`,
+`reason`), `GET /api/v1/memories/{memory_id}/related` and
+`GET /api/v1/memories/related/files/{file_id}` (related memories from stored
+embeddings and keywords; no provider call), `POST /api/v1/summaries`, `GET /api/v1/stats`,
 `GET /api/v1/health`, and `GET /api/v1/ai/status`. `ai/status` reports the
 deployment-global runtime for root diagnostics; it is not an account's model
 assignment.
@@ -1346,7 +1390,8 @@ citations resolve to File Library previews or memory readers. Saved questions
 remain available at `/questions` for later agent turns.
 
 The rail is grouped rather than flat. The archive workspaces come first (Chat,
-File library, Timeline, Memory, Search, Dashboard), then a personal block with
+File library, Timeline, Search, Dashboard; memories are the File library's
+Memories tab), then a personal block with
 **User profile**, then the system block (Settings, **Change password**,
 **Accounts** for the root account only, About), and a separate **Session**
 block with **Sign out**. The footer identity is also the root user switcher:
@@ -1402,9 +1447,11 @@ from `frontend/`, so a frontend change only needs an image rebuild.
 
 ### Resource preview
 
-Files open in an in-situ preview modal inside the File Library; the Memory
-reader is a normal route at `/memory/:id`. Legacy `/viewer/*` URLs redirect into
-those surfaces, so old citations and bookmarks keep working.
+Files open in an in-situ preview modal inside the File Library; memories live
+in its Memories tab, with the reader at `/library/memories/:id` and a Related
+memories section ranked from stored embeddings, shared keywords, and shared
+summaries. Legacy `/memory/*` and `/viewer/*` URLs redirect into those surfaces,
+so old citations and bookmarks keep working.
 
 | Resource | Renderer |
 |---|---|
@@ -1421,6 +1468,14 @@ sandboxing CSP, ETag/Last-Modified, and single-range HTTP Range support
 (`206`/`416`; `If-None-Match` returns `304`). `/download` stays an attachment.
 Legacy text-only records have `has_original=false`; the sheet skips the
 `/content` probe entirely and reads indexed chunks.
+
+Every uploaded image, PDF, and Office file with an embedded preview also gets a
+tiny WebP thumbnail during ingestion (`GET /api/v1/files/{file_id}/thumbnail`).
+Library cards, the Media grid, chat resource cards, and preview loading states
+paint it first inside a box sized from its known dimensions, so nothing jumps
+or flickers while the full preview loads. The ingestion worker backfills
+thumbnails for files uploaded earlier (`APSOR_THUMBNAIL_BACKFILL_ENABLED`, on
+by default).
 
 PDF.js CMaps and standard fonts are copied from the pinned `pdfjs-dist` package
 into `frontend/public/pdfjs/` by `bun run pdf-assets`, which `dev` and `build`
@@ -1740,8 +1795,8 @@ user context exists; global config tables are read-all/root-write.
 
 - `file`: one row per version. `is_current` and `deleted_at` are soft state;
   ids are never reused. File leaves are not duplicated in the folder table:
-  their placement is `raw_file_path`. `storage_backend` records `local` or `r2`
-  for the original bytes and is null exactly when `storage_key` is null.
+  their placement is `raw_file_path`. `storage_backend` records `local`, `r2`, or
+  `s3` for the original bytes and is null exactly when `storage_key` is null.
 - `folder`: explicit folder records (`parent_id`, `path`, `name`, `depth`).
   Empty folders and folder identity survive independently of files. Uniqueness
   is per account: `(user_id, path)`.
@@ -1794,24 +1849,44 @@ user context exists; global config tables are read-all/root-write.
   error fields, and attempt/timestamps. A path can have only one active job per
   account. The job points at its staged file, clears that link on failure, and
   the file and chunks become current only when the job publishes them.
+- `file_thumbnail`: one tiny WebP per file version, keyed by `file_id`, with
+  `status` (`ready`, `none`, or `failed`), pixel size, SHA-256, generator
+  version, and attempt count. It cascades with its file.
+- `companion` / `companion_frame` / `companion_preference`: an account's custom
+  chat companions, their encoded AVIF (or WebP) frames per action with position,
+  size, and SHA-256, and the account's companion choice, visibility, motion
+  level, and position.
+- `companion_story` / `companion_lore_fragment` / `companion_bond`: an
+  account's per-locale persona and lore overrides for a companion, their
+  fragments, and the completed runs that unlock deeper lore tiers.
 - `ingest_config`: one row (`id=1`) with the validated worker poll, extraction,
   in-flight, embedding, and chunk-size settings. It is not a chunk source; the
   queue references the file that is eventually published.
 
-Original bytes are not stored in PostgreSQL. They live on local disk or in the
-private R2 bucket, selected per file by `storage_backend`; the extracted chunks
+Original bytes are not stored in PostgreSQL. They live on local disk, in the private R2
+bucket, or in an S3-compatible bucket (RustFS by default), selected per file by
+`storage_backend`; the extracted chunks
 and their n-grams remain in PostgreSQL.
 
-The committed code, comments, UI copy, and documentation are English.
+Code, comments, and documentation are written in English, which is canonical.
+The interface and this README also ship complete Traditional and Simplified
+Chinese translations that are updated together with the English source.
 
 ## Development checks
 
 ```bash
+# Everything at once (offline lint, then tests, then the contract gate)
+make lint
+make test
+make api-check
+make audit        # needs network
+
 # Backend
 cd backend
 uv run ruff check .
-uv run mypy app
-PYTHONUTF8=1 uv run bandit -r app -c pyproject.toml
+uv run mypy app script
+uv run lint-imports          # layer and slice-boundary contracts
+PYTHONUTF8=1 uv run bandit -r app script -c pyproject.toml
 uv run pip-audit
 PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 
@@ -1819,16 +1894,24 @@ PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 cd frontend
 bun run lint
 bun run typecheck
+bun run i18n:check
+bun run check:boundaries     # workspace import boundaries
+bun run test
 bun run build
 bun audit
 ```
+
+`make lint` is the architecture and security gate: ruff, mypy, import-linter
+contracts that keep routers, services, domain code, and slices in their layers,
+bandit, ESLint, TypeScript, i18n key parity, and the frontend workspace-boundary
+check. Branches follow Gitflow: `feat/*` and `fix/*` start from `develop` and
+merge back through a pull request, and `develop` merges into `main` for release.
 
 The integration suite uses one real PostgreSQL test database
 (`apsor_archive_test`) on the same instance, runs sequentially, and resets every
 tracked table between tests. The database is built by `alembic upgrade head`,
 not `create_all`, so the `apsor_app` role, grants, and RLS policies are present
-in every request. There are 46 collected tests; each one exercises the real HTTP
-surface and database. The multi-user tests cover the root/user lifecycle,
+in every request. Each test exercises the real HTTP surface and database. The multi-user tests cover the root/user lifecycle,
 forced password change, one-time temporary passwords, disable/reset session
 revocation, root-only accounts and global settings, private archive isolation
 across files, folders, memories, summaries, conversations, questions, and
@@ -1855,7 +1938,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `d8f2a6c4e1b9`. The migrations after `agent_config` on
+The latest migration is `b8e4d2f6a1c3`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -1953,12 +2036,33 @@ this branch are:
   endpoint and model when one exists; without one they start unassigned. The
   downgrade drops the assignment columns and refuses to restore
   the narrower provider check while an `anthropic` row exists;
-- `d8f2a6c4e1b9` (current head) drops `agent_config.max_steps` and
+- `d8f2a6c4e1b9` drops `agent_config.max_steps` and
   `agent_config.max_tool_calls_per_turn` with their checks and the
   `parallel_within_tool_calls` relation, so a tool-heavy turn keeps running
   until the model answers. The concurrency bound `max_parallel_tools` stays.
   The downgrade restores both columns and raises the restored call cap to at
-  least `max_parallel_tools`.
+  least `max_parallel_tools`;
+- `c3e7a1f5b9d2` widens the `storage_backend` checks on `file`,
+  `file_ingest_job`, and `agent_chat_attachment` to admit `s3` (RustFS, AWS S3,
+  MinIO); `rustfs` is only a configuration alias and `r2` stays distinct. The
+  downgrade restores the two-value checks and fails while any row still records
+  `s3`;
+- `c7a3e9f1d5b2` creates the private `file_thumbnail` table:
+  one tiny WebP per file version (at most 32 KiB, 512 px), owner-safe composite
+  foreign key to `file` with `ON DELETE CASCADE`, forced RLS with an owner
+  policy, and `apsor_app` grants. Existing files are filled in by the worker
+  backfill. The downgrade drops the table;
+- `a7d3c9e1f5b2` creates the private `companion`,
+  `companion_frame`, and `companion_preference` tables, each with `user_id`,
+  forced owner-only RLS, and `apsor_app` grants. Frames reference their
+  companion through an owner-safe composite foreign key and cascade with it; the
+  preference row is keyed by `user_id`. The downgrade drops the three tables;
+- `b8e4d2f6a1c3` (current head) creates the private `companion_story`,
+  `companion_lore_fragment`, and `companion_bond` tables with forced owner-only
+  RLS and `apsor_app` grants: one account's per-locale copy of a companion's
+  persona and lore, its fragments, and the completed-run count that unlocks lore
+  tiers. A custom companion's story cascades with the companion. The downgrade
+  drops the three tables.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable
@@ -1975,6 +2079,7 @@ backend/
   app/
     main.py                     API assembly, lifespan, gzip, SPA mount
     worker.py                   dedicated durable-ingestion process
+    bootstrap.py                shared process setup and background loops
     shared/                     error registry and list envelope
     infrastructure/             config, database, cache, embeddings, AI, web, files
     module/knowledge/
@@ -1991,7 +2096,7 @@ backend/
     module/prompt/              editable frequently used chat prompts
     module/web_research/        web search/fetch service, URL safety, cache
   alembic/                      migrations
-  tests/                        46 integration tests
+  tests/                        integration tests (PostgreSQL, offline fakes)
 frontend/
   src/app/
     component/                  shared archive UI
@@ -2002,13 +2107,13 @@ frontend/
     chat/                       reading room, retry, context actions
     questions/                  saved-question Q&A library
     settings/                   role-filtered provider and runtime panels
-    library/                    files, media gallery, preview modal, intake
-    home/ search/ timeline/ memory/ about/ ...
+    library/                    files, media gallery, memories, preview modal, intake
+    dashboard/ search/ timeline/ about/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting
   src/styles/                   paper / night archive tokens
-  scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
+  scripts/                      PDF.js asset copy, i18n parity, workspace boundaries
   dist/                         generated build output, gitignored
 docker-compose.yml              production stack: Caddy + Cloudflare Tunnel
 docker-compose.dev.yml          local dependencies
@@ -2058,9 +2163,10 @@ docker/caddy/                   non-root reverse proxy
 - The DeepSeek key lives in `.secrets/deepseek.env` or the environment. It is
   never logged, returned, or committed. Keys saved from the Settings page are
   encrypted in PostgreSQL and returned only as a four-character hint.
-- R2 credentials live in the gitignored `.secrets/r2.env`, are mounted
-  read-only, and never become container environment variables. The bucket is
-  private, with no presigned or public URLs.
+- Object-store credentials live in the gitignored `.secrets/r2.env` or
+  `.secrets/s3.env` (and, for the bundled RustFS, Docker secret files under
+  `secrets/`), are mounted read-only, and never become container environment
+  variables. Buckets are private, with no presigned or public URLs.
 - AI calls happen for summaries and agent turns. If the provider fails, the API
   returns a stable error instead of inventing an answer.
 

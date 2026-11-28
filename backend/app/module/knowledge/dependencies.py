@@ -76,6 +76,9 @@ from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorP
 from app.module.knowledge.protocol.vision_extractor_protocol import VisionExtractorProtocol
 from app.module.knowledge.repository.chunk_repository import ChunkRepository
 from app.module.knowledge.repository.file_repository import FileRepository
+from app.module.knowledge.repository.file_thumbnail_repository import (
+    FileThumbnailRepository,
+)
 from app.module.knowledge.repository.folder_repository import FolderRepository
 from app.module.knowledge.repository.ingest_config_repository import (
     IngestConfigRepository,
@@ -106,9 +109,11 @@ from app.module.knowledge.service.provider_config_service import ProviderConfigS
 from app.module.knowledge.service.provider_error_notice_service import (
     ProviderErrorNoticeService,
 )
+from app.module.knowledge.service.related_memory_service import RelatedMemoryService
 from app.module.knowledge.service.search_service import SearchService
 from app.module.knowledge.service.stats_service import StatsService
 from app.module.knowledge.service.summary_service import SummaryService
+from app.module.knowledge.service.thumbnail_backfill import FileThumbnailBackfill
 from app.module.knowledge.service.timeline_service import TimelineService
 
 
@@ -355,6 +360,9 @@ async def build_file_service(
         chat_quota=quota,
         cpu_runner=cpu_runner,
         progress_tracker=progress_tracker,
+        thumbnail_repository=FileThumbnailRepository(session, user_id),
+        # Tests may inject ``app.state.thumbnail_renderer`` as an offline seam.
+        thumbnail_renderer=getattr(state, "thumbnail_renderer", None),
     )
 
 
@@ -443,6 +451,26 @@ def build_search_service(state: State, session: AsyncSession, *, user_id: int) -
         candidate_limit=settings.search_candidate_limit,
         vector_scan_limit=settings.search_vector_scan_limit,
         quota=AccountQuotaService(cast(Database, state.db), user_id),
+    )
+
+
+def build_related_memory_service(
+    state: State,
+    session: AsyncSession,
+    *,
+    user_id: int,
+) -> RelatedMemoryService:
+    """Compose an owner-scoped related-memory ranker over stored chunks."""
+    settings = cast(Settings, state.settings)
+    return RelatedMemoryService(
+        user_id=user_id,
+        memory_repository=MemoryRepository(session, user_id),
+        file_repository=FileRepository(session, user_id),
+        chunk_repository=ChunkRepository(session, user_id),
+        summary_repository=SummaryRepository(session, user_id),
+        cache=cast(CacheProtocol, state.cache),
+        cache_ttl_seconds=settings.cache_ttl_seconds,
+        vector_scan_limit=settings.search_vector_scan_limit,
     )
 
 
@@ -565,6 +593,19 @@ async def build_ingest_job_service(
     )
 
 
+async def reload_ai_runtime(
+    runtime: AiRuntime,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Load the startup provider snapshot through a short system session.
+
+    Entrypoints call this instead of reaching into the provider repository, so
+    the process shell never imports a knowledge repository directly.
+    """
+    async with system_session(session_factory) as session:
+        await runtime.reload(ProviderConfigRepository(session))
+
+
 def build_provider_refresh(
     runtime: AiRuntime,
     session_factory: async_sessionmaker[AsyncSession],
@@ -587,6 +628,26 @@ def build_provider_refresh(
         return runtime.embedder
 
     return refresh
+
+
+def build_thumbnail_backfill(
+    state: State,
+    database: Database,
+    *,
+    user_id: int | None = None,
+    regenerate: bool = False,
+) -> FileThumbnailBackfill:
+    """Compose the cross-account thumbnail backfill used by the worker and CLI."""
+
+    async def service_factory(session: AsyncSession, owner_id: int) -> FileService:
+        return await build_file_service(state, session, user_id=owner_id)
+
+    return FileThumbnailBackfill(
+        database=database,
+        service_factory=service_factory,
+        user_id=user_id,
+        regenerate=regenerate,
+    )
 
 
 def build_ingest_worker(
@@ -744,6 +805,14 @@ def get_search_service(
     user: UserSchema = Depends(require_authenticated),
 ) -> SearchService:
     return build_search_service(request.app.state, session, user_id=user.user_id)
+
+
+def get_related_memory_service(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),
+    user: UserSchema = Depends(require_authenticated),
+) -> RelatedMemoryService:
+    return build_related_memory_service(request.app.state, session, user_id=user.user_id)
 
 
 def get_ai_service(

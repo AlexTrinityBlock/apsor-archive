@@ -12,9 +12,11 @@ Requests keep using ``apsor_app`` with transaction-local settings; nothing here
 disables or bypasses row-level security.
 """
 
+import os
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+from functools import partial
 from itertools import count
 from pathlib import Path
 from typing import Any
@@ -26,10 +28,11 @@ from sqlalchemy import Connection, Engine, create_engine, text
 from sqlalchemy.exc import ProgrammingError
 
 from alembic import command
+from app.bootstrap import build_state_ingest_worker
 from app.infrastructure.config.settings import Settings
 from app.infrastructure.security.password_hasher import Argon2PasswordHasher
 from app.main import create_app
-from app.module.agent.service.system_prompt import default_sections
+from app.module.agent.domain.system_entry_domain import default_sections
 from app.module.auth.domain.auth_domain import AuthDomain
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -37,8 +40,10 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 # Cluster maintenance and migrations connect to the maintenance database, not
 # to the live archive. The disposable database name must stay test-only.
 ADMIN_DATABASE_URL = "postgresql+psycopg://apsor:apsor@127.0.0.1:55432/postgres"
-TEST_DATABASE_URL = "postgresql+psycopg://apsor:apsor@127.0.0.1:55432/apsor_archive_test"
-TEST_DATABASE_NAME = "apsor_archive_test"
+# APSOR_TEST_DATABASE_NAME lets parallel worktrees use separate disposable
+# databases on the same development cluster; it must still end with "_test".
+TEST_DATABASE_NAME = os.environ.get("APSOR_TEST_DATABASE_NAME", "apsor_archive_test")
+TEST_DATABASE_URL = f"postgresql+psycopg://apsor:apsor@127.0.0.1:55432/{TEST_DATABASE_NAME}"
 APP_ROLE = "apsor_app"
 
 # Expected schema classification. A new application table must be added here
@@ -51,8 +56,15 @@ PRIVATE_TABLES: tuple[str, ...] = (
     "agent_run",
     "chunk",
     "chunk_ngram",
+    "companion",
+    "companion_bond",
+    "companion_frame",
+    "companion_lore_fragment",
+    "companion_preference",
+    "companion_story",
     "file",
     "file_ingest_job",
+    "file_thumbnail",
     "folder",
     "frequently_used_prompt",
     "memory",
@@ -521,6 +533,8 @@ def settings(tmp_path: Path) -> Settings:
         _env_file=None,
         database_url=TEST_DATABASE_URL,
         data_dir=tmp_path,
+        # Never let a developer .env or secret file point tests at object storage.
+        storage_backend="local",
         static_dir=tmp_path / "no-spa",
         cors_origins=[],
         cache_url="memory://",
@@ -539,10 +553,31 @@ def settings(tmp_path: Path) -> Settings:
     )
 
 
+@contextmanager
+def app_client(settings: Settings) -> Iterator[TestClient]:
+    """Start the app and attach an ingestion worker as a test seam.
+
+    The API no longer builds an ingestion worker unless the opt-in dev mode is
+    enabled. Tests that drive ingestion call ``client.app.state.ingest_worker``
+    directly (``run_once`` / ``process_job``), so this attaches one built over
+    the same process state, with environment defaults and no polling loop.
+    """
+    with TestClient(create_app(settings)) as test_client:
+        state = test_client.app.state
+        worker = test_client.portal.call(
+            partial(build_state_ingest_worker, state, settings, load_config=False)
+        )
+        state.ingest_worker = worker
+        try:
+            yield test_client
+        finally:
+            worker.close()
+
+
 @pytest.fixture
 def anonymous_client(settings: Settings) -> Iterator[TestClient]:
     """A TestClient with no owner account and no session."""
-    with TestClient(create_app(settings)) as test_client:
+    with app_client(settings) as test_client:
         yield test_client
 
 
@@ -584,7 +619,7 @@ def client_factory(settings: Settings) -> Iterator[Callable[[], TestClient]]:
     with ExitStack() as stack:
 
         def create() -> TestClient:
-            return stack.enter_context(TestClient(create_app(settings)))
+            return stack.enter_context(app_client(settings))
 
         yield create
 
@@ -666,7 +701,7 @@ def user_client_factory(
             must_change_password=must_change_password,
         )
 
-        test_client = stack.enter_context(TestClient(create_app(settings)))
+        test_client = stack.enter_context(app_client(settings))
         login = test_client.post(
             "/api/v1/auth/login",
             json={"username": normalized_username, "password": password},

@@ -10,7 +10,7 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict
 
 from app.module.knowledge.domain.provider_config_domain import ProviderCapability
-from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 
 
 class ProviderTestOutcome(BaseModel):

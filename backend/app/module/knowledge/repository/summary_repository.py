@@ -69,6 +69,14 @@ class SummaryRepository:
         )
         return list((await self.session.execute(statement)).scalars().all())
 
+    async def list_containing_memory(self, memory_id: int) -> list[MemorySummaryModel]:
+        """Return this owner's summaries whose sources include ``memory_id``."""
+        statement = select(MemorySummaryModel).where(
+            MemorySummaryModel.user_id == self.user_id,
+            MemorySummaryModel.source_memory_ids.contains([memory_id]),
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
     async def count(self) -> int:
         statement = select(func.count(MemorySummaryModel.id)).where(
             MemorySummaryModel.user_id == self.user_id

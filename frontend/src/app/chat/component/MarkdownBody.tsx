@@ -11,7 +11,8 @@ import type { CitationToken } from "../types";
 
 const SUMMARY_HREF = /^#citation-summary-(\d+)$/;
 const HISTORY_HREF = /^#citation-history-(\d+)$/;
-const MEMORY_HREF = /^\/memory\/(\d+)\/?$/;
+// Old transcripts and model prose may still use the pre-merge /memory/{id}.
+const MEMORY_HREF = /^\/(?:library\/memories|memory)\/(\d+)\/?$/;
 const VIEWER_HREF = /^\/viewer\/(file|memory)\/(\d+)\/?$/;
 const LIBRARY_FILE_HREF = /^\/library\/(?:media\/)?files\/(\d+)\/?$/;
 
@@ -179,6 +180,8 @@ interface MarkdownBodyProps {
 }
 
 const NO_MEMORY_TITLES: ReadonlyMap<number, string> = new Map();
+// A stable plugin list keeps ReactMarkdown from rebuilding its processor per token.
+const REMARK_PLUGINS = [remarkGfm, remarkCitations];
 
 /**
  * Renders model prose with GFM and safe citation links. Raw HTML is skipped,
@@ -198,7 +201,7 @@ export const MarkdownBody = memo(function MarkdownBody({
   return (
     <div className="chat-markdown">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkCitations]}
+        remarkPlugins={REMARK_PLUGINS}
         components={components}
         skipHtml
       >

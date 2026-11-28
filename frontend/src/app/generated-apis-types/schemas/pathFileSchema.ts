@@ -4,6 +4,7 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
+import type { FileThumbnailSchema } from './fileThumbnailSchema';
 
 /**
  * One file in a path listing.
@@ -14,6 +15,7 @@ export interface PathFileSchema {
   has_original: boolean;
   raw_file_path: string;
   size_bytes: number;
+  thumbnail?: FileThumbnailSchema | null;
   total_chunks: number;
   update_time: string;
 }

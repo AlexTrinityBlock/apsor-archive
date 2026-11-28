@@ -2,8 +2,8 @@
 
 from typing import Any, Literal, Protocol
 
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.protocol.embedder_protocol import EmbedderProtocol
-from app.module.knowledge.protocol.provider_config import ProviderConfig
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 
 

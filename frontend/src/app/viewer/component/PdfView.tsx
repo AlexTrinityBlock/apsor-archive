@@ -27,6 +27,12 @@ interface PdfViewProps {
   readonly fileUrl: string;
   readonly fileName: string;
   readonly downloadUrl: string;
+  /**
+   * Height/width of page 1 from the server thumbnail. Seeds the page
+   * placeholders so they have the right size before the first page is
+   * measured; falls back to A4.
+   */
+  readonly initialPageAspect?: number | null;
 }
 
 // PDF.js 6 no longer exposes the eval flag in its public type and has dropped
@@ -168,12 +174,23 @@ function PdfLoading({ label }: { readonly label: string }) {
  * disabled; the worker is bundled through Vite's URL import so the viewer never
  * fetches a remote script.
  */
-export function PdfView({ fileUrl, fileName, downloadUrl }: PdfViewProps) {
+export function PdfView({
+  fileUrl,
+  fileName,
+  downloadUrl,
+  initialPageAspect = null,
+}: PdfViewProps) {
   const { t, formatNumber } = useI18n();
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageWidth, setPageWidth] = useState<number | null>(null);
-  const [pageAspect, setPageAspect] = useState(DEFAULT_PAGE_ASPECT);
+  const [pageAspect, setPageAspect] = useState(() =>
+    initialPageAspect !== null &&
+    Number.isFinite(initialPageAspect) &&
+    initialPageAspect > 0
+      ? initialPageAspect
+      : DEFAULT_PAGE_ASPECT,
+  );
   const [pageAspects, setPageAspects] = useState<ReadonlyMap<number, number>>(
     () => new Map<number, number>(),
   );

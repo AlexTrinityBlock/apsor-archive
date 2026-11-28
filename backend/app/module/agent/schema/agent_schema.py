@@ -31,6 +31,13 @@ class AgentConversationCreateSchema(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     provider: AgentProvider | None = None
     model: str | None = Field(default=None, min_length=1, max_length=128)
+    locale: Literal["en", "zh-TW", "zh-CN"] | None = Field(
+        default=None,
+        description=(
+            "Interface language for the companion persona and lore, frozen with "
+            "the conversation. Omitted means English."
+        ),
+    )
 
 
 class AgentConversationPatchSchema(BaseModel):

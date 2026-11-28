@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { memo, type RefObject } from "react";
 import { Link } from "react-router-dom";
 
 import { Icon } from "../../component/Icon";
@@ -8,6 +8,7 @@ import {
   InspectorMemoryStage,
 } from "../../agent/component/inspector/common";
 import { useI18n } from "../../i18n";
+import { handleTabListKeyDown } from "../tab-keys";
 import {
   viewerHref,
   type ResourceTarget,
@@ -15,6 +16,10 @@ import {
 } from "../../agent/trace";
 
 export type InspectorTab = "telemetry" | "preview";
+
+const INSPECTOR_TABS: readonly InspectorTab[] = ["telemetry", "preview"];
+const inspectorTabId = (tab: InspectorTab) => `chat-inspector-tab-${tab}`;
+const INSPECTOR_PANEL_ID = "chat-inspector-panel";
 
 interface ChatInspectorProps {
   readonly inspectorRef: RefObject<HTMLElement | null>;
@@ -97,8 +102,11 @@ function ChatPreview({ target }: { readonly target: ResourceTarget | null }) {
   );
 }
 
-/** The inspector column: tool telemetry and in-situ document preview. */
-export function ChatInspector({
+/**
+ * The inspector column: tool telemetry and in-situ document preview. Memoized
+ * so assistant prose tokens re-render it only when its own inputs change.
+ */
+export const ChatInspector = memo(function ChatInspector({
   inspectorRef,
   tab,
   onTab,
@@ -121,11 +129,17 @@ export function ChatInspector({
           className="tabs tabs--light chat-inspector__tabs"
           role="tablist"
           aria-label={t("chat.inspector.viewsAria")}
+          onKeyDown={(event) =>
+            handleTabListKeyDown(event, INSPECTOR_TABS, tab, onTab, inspectorTabId)
+          }
         >
           <button
             type="button"
             role="tab"
+            id={inspectorTabId("telemetry")}
+            aria-controls={INSPECTOR_PANEL_ID}
             aria-selected={tab === "telemetry"}
+            tabIndex={tab === "telemetry" ? 0 : -1}
             className={tab === "telemetry" ? "tab is-active" : "tab"}
             onClick={() => onTab("telemetry")}
           >
@@ -135,7 +149,10 @@ export function ChatInspector({
           <button
             type="button"
             role="tab"
+            id={inspectorTabId("preview")}
+            aria-controls={INSPECTOR_PANEL_ID}
             aria-selected={tab === "preview"}
+            tabIndex={tab === "preview" ? 0 : -1}
             className={tab === "preview" ? "tab is-active" : "tab"}
             onClick={() => onTab("preview")}
           >
@@ -158,12 +175,9 @@ export function ChatInspector({
 
       <div
         className="chat-inspector__body"
+        id={INSPECTOR_PANEL_ID}
         role="tabpanel"
-        aria-label={
-          tab === "telemetry"
-            ? t("chat.inspector.telemetryPanel")
-            : t("chat.inspector.previewPanel")
-        }
+        aria-labelledby={inspectorTabId(tab)}
       >
         {tab === "telemetry" ? (
           <AgentInspector
@@ -177,4 +191,4 @@ export function ChatInspector({
       </div>
     </aside>
   );
-}
+});

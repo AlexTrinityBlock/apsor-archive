@@ -83,8 +83,8 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v14"
-TOOLS_VERSION = "archive-tools-v14"
+PROMPT_VERSION = "archive-agent-v16"
+TOOLS_VERSION = "archive-tools-v16"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -104,6 +104,7 @@ TOOL_NAMES = [
     "render_plot",
     "web_search",
     "web_fetch",
+    "companion_action",
 ]
 
 
@@ -526,12 +527,15 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
     system_data = system_entry["data"]
     assert system_data["prompt_version"] == PROMPT_VERSION
     assert system_data["tools_version"] == TOOLS_VERSION
+    # The account's default companion persona follows the four seeded rows.
     assert [section["name"] for section in system_data["sections"]] == [
         "system_prompt:1",
         "system_prompt:2",
         "system_prompt:3",
         "system_prompt:4",
+        "companion_persona",
     ]
+    assert system_data["companion"]["ref"] == "preset:vellum"
     assert [tool["function"]["name"] for tool in system_data["tools"]] == TOOL_NAMES
 
     first_turn = client.post(
@@ -2328,8 +2332,9 @@ def test_agent_entry_log_tool_loop_and_cache_usage(
         "system_prompt:3",
         "system_prompt:4",
         "user_profile",
+        "companion_persona",
     ]
-    profile_section = profile_sections[-1]
+    profile_section = profile_sections[-2]
     assert profile_section["name"] == "user_profile"
     assert "Name: Alex" in profile_section["content"]
     assert "Work: I build local-first archives" in profile_section["content"]
@@ -3122,8 +3127,12 @@ def test_agent_status_system_message_exposes_runtime_limits(
         "compaction_at",
         "compaction_in",
     }
-    assert set(first) == expected_keys
-    assert re.findall(r' ([a-z_]+)="', first_content) == sorted(expected_keys)
+    # The default test deployment has no web provider, so the block also names
+    # the withheld web tools.
+    assert set(first) - {"unavailable_tools"} == expected_keys
+    assert re.findall(r' ([a-z_]+)="', first_content) == sorted(
+        expected_keys | {"unavailable_tools"}
+    )
 
     runtime = client.get("/api/v1/agent/settings").json()["config"]
     context_limit = runtime["context_window_tokens"]
@@ -3140,7 +3149,9 @@ def test_agent_status_system_message_exposes_runtime_limits(
     assert "conversation_id" not in first_content
     assert "run_id" not in first_content
     assert "tool_count" not in first_content
-    assert "web_search" not in first_content
+    # Provider identity never appears; only the withheld tool names may.
+    assert "web_search_provider" not in first_content
+    assert first["unavailable_tools"] == "web_fetch,web_search"
     assert "prompt_version" not in first_content
     assert "tools_version" not in first_content
     assert "context_window_tokens" not in first_content
@@ -3154,7 +3165,7 @@ def test_agent_status_system_message_exposes_runtime_limits(
     second_block = fake.requests[1].messages[-1]
     assert second_block["role"] == "system"
     second = _agent_status_attributes(fake.requests[1])
-    assert set(second) == expected_keys
+    assert set(second) - {"unavailable_tools"} == expected_keys
     second_used = int(second["context_used"])
     assert second_used > context_used
     assert int(second["context_limit"]) == context_limit

@@ -19,6 +19,7 @@ import { PlotBlock } from "./PlotBlock";
 import { PlotSummary } from "./PlotSummary";
 import { ResourceCard } from "./ResourceCard";
 import { isToolFailure, toolStatusLabel, toolStatusTone } from "./status";
+import { CompanionLoreTrace } from "../../companion/component/CompanionLoreTrace";
 
 const VISIBLE_TEXT_LIMIT = 320;
 const VISIBLE_ITEMS = 2;
@@ -595,6 +596,7 @@ export function ToolStepCard({
           ) : null}
         </summary>
         <div className="chat-tool-step__details-body">
+          <CompanionLoreTrace data={meta.data} />
           {argumentPairs.length > 0 ? (
             <p className="chat-tool-step__args-line">
               <span className="chat-tool-step__args-label">

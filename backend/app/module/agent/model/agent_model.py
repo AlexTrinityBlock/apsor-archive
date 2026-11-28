@@ -232,7 +232,7 @@ class AgentChatAttachmentModel(Base):
             name="mime_type_valid",
         ),
         CheckConstraint(
-            "storage_backend IN ('local', 'r2')",
+            "storage_backend IN ('local', 'r2', 's3')",
             name="storage_backend_valid",
         ),
         CheckConstraint("size_bytes > 0", name="size_positive"),

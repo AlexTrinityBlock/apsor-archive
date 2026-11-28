@@ -32,8 +32,8 @@ from app.module.knowledge.dependencies import (
     build_memory_service,
     build_summary_service,
 )
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.exception.domain_error import AiNotConfiguredError
-from app.module.knowledge.protocol.provider_config import ProviderConfig
 from app.module.knowledge.protocol.text_generator_protocol import AiCompletion
 from app.module.knowledge.service.file_service import FileService
 from app.module.knowledge.service.memory_service import MemoryService

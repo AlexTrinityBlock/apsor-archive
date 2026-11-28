@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { Badge } from "../../component/Badge";
@@ -8,6 +8,7 @@ import { Icon } from "../../component/Icon";
 import type { AgentConversationDetailSchema } from "../../generated-apis-types/schemas";
 import { useI18n } from "../../i18n";
 import { clearLastChatConversation } from "../session-storage";
+import { handleTabListKeyDown } from "../tab-keys";
 
 export type ChatPane = "thread" | "inspector";
 
@@ -27,6 +28,14 @@ interface ChatHeaderProps {
   readonly contextActions: ReactNode;
 }
 
+const PANES: readonly ChatPane[] = ["thread", "inspector"];
+const paneTabId = (pane: ChatPane) => `chat-pane-tab-${pane}`;
+/** Element ids of the two panes the narrow-screen tabs switch between. */
+export const CHAT_PANE_IDS: Readonly<Record<ChatPane, string>> = {
+  thread: "chat-thread-pane",
+  inspector: "chat-inspector",
+};
+
 /** The slim chat header: drawer, title, compact meta, and overflow actions. */
 export function ChatHeader({
   conversation,
@@ -45,6 +54,9 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelId = useId();
   const { t, formatNumber, formatRelative } = useI18n();
 
   useEffect(() => {
@@ -64,12 +76,23 @@ export function ChatHeader({
     };
     const handleKey = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
+        // Close only this layer; the page's drawer Escape must not also fire.
+        event.stopPropagation();
         setMenuOpen(false);
+        triggerRef.current?.focus();
       }
     };
+    const frame = window.requestAnimationFrame(() => {
+      panelRef.current
+        ?.querySelector<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )
+        ?.focus();
+    });
     document.addEventListener("pointerdown", handlePointer);
     document.addEventListener("keydown", handleKey);
     return () => {
+      window.cancelAnimationFrame(frame);
       document.removeEventListener("pointerdown", handlePointer);
       document.removeEventListener("keydown", handleKey);
     };
@@ -165,10 +188,16 @@ export function ChatHeader({
             className="chat-pane-tabs"
             role="tablist"
             aria-label={t("chat.header.panesAria")}
+            onKeyDown={(event) =>
+              handleTabListKeyDown(event, PANES, pane, onPane, paneTabId)
+            }
           >
             <button
               type="button"
               role="tab"
+              id={paneTabId("thread")}
+              aria-controls={CHAT_PANE_IDS.thread}
+              tabIndex={pane === "thread" ? 0 : -1}
               aria-selected={pane === "thread"}
               className={pane === "thread" ? "is-active" : undefined}
               onClick={() => onPane("thread")}
@@ -178,6 +207,9 @@ export function ChatHeader({
             <button
               type="button"
               role="tab"
+              id={paneTabId("inspector")}
+              aria-controls={CHAT_PANE_IDS.inspector}
+              tabIndex={pane === "inspector" ? 0 : -1}
               aria-selected={pane === "inspector"}
               className={pane === "inspector" ? "is-active" : undefined}
               onClick={() => onPane("inspector")}
@@ -226,11 +258,12 @@ export function ChatHeader({
 
         <div className="chat-header__menu" ref={menuRef}>
           <button
+            ref={triggerRef}
             type="button"
             className="chat-icon-btn"
             onClick={() => setMenuOpen((value) => !value)}
             aria-label={t("chat.header.threadActions")}
-            aria-haspopup="menu"
+            aria-controls={menuOpen ? panelId : undefined}
             aria-expanded={menuOpen}
             title={t("chat.header.threadActions")}
           >
@@ -238,6 +271,8 @@ export function ChatHeader({
           </button>
           {menuOpen ? (
             <div
+              ref={panelRef}
+              id={panelId}
               className="chat-header__menu-panel"
               role="group"
               aria-label={t("chat.header.threadActions")}

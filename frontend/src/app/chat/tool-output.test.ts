@@ -12,6 +12,7 @@ const RESOURCE: ResourceMeta = {
   mimeType: "application/pdf",
   rawFilePath: "uploads/report.pdf",
   chunk: null,
+  thumbnail: null,
 };
 
 function plotData(): Record<string, unknown> {

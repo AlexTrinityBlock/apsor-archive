@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "default": "vellum",
+  "presets": [
+    {
+      "id": "vellum",
+      "name": "Vellum",
+      "gender": "female"
+    },
+    {
+      "id": "atlas",
+      "name": "Atlas",
+      "gender": "male"
+    },
+    {
+      "id": "herbaria",
+      "name": "Herbaria",
+      "gender": "female"
+    },
+    {
+      "id": "horologe",
+      "name": "Horologe",
+      "gender": "male"
+    },
+    {
+      "id": "nocturne",
+      "name": "Nocturne",
+      "gender": "female"
+    },
+    {
+      "id": "quill",
+      "name": "Quill",
+      "gender": "male"
+    }
+  ]
+}

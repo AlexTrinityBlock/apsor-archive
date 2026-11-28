@@ -1,13 +1,20 @@
 # Local secrets
 
+The setup wizard creates every file below for you: run `./start.sh setup` (or
+`make setup`). It generates random credentials where it can, reads pasted keys
+without echoing them, never prints a secret, keeps existing files unless you
+confirm an overwrite, and prints the `sudo chgrp` commands the containers need.
+The manual steps that follow are for hosts where you prefer to do it by hand.
+
 There are two secret locations:
 
-- `secrets/` holds the Cloudflare Tunnel token file named by
-  `docker-compose.yml`.
+- `secrets/` holds the files `docker-compose.yml` mounts as Docker secrets: the
+  Cloudflare Tunnel token and, with the bundled RustFS store, the RustFS access
+  key pair.
 - `.secrets/` holds application env files that the API and worker read
-  themselves: `deepseek.env`, `anthropic.env`, `openai.env`, `r2.env`, and the
-  optional `exa.env`. Compose mounts `.secrets/` read-only, so these values
-  never become container environment variables.
+  themselves: `deepseek.env`, `anthropic.env`, `openai.env`, `r2.env`, `s3.env`,
+  and the optional `exa.env`. Compose mounts `.secrets/` read-only, so these
+  values never become container environment variables.
 
 The contents of both directories are gitignored (this README is the tracked
 exception). Never put a secret in `environment:`, a committed `.env` file, a
@@ -66,6 +73,37 @@ not add a lifecycle expiry rule for `files/`. Back up `.secrets/r2.env`
 separately from the bucket: it is required for restores and for the storage
 migration CLI. `data/.secret_key` remains the Fernet master key for provider
 credentials and is not an R2 secret.
+
+## RustFS and other S3-compatible stores
+
+Create `.secrets/s3.env` with the access key pair:
+
+```text
+APSOR_S3_ACCESS_KEY_ID=...
+APSOR_S3_SECRET_ACCESS_KEY=...
+```
+
+With the bundled RustFS service, the same pair must also exist as two
+single-line files (no trailing newline is needed) that RustFS reads as Docker
+secrets:
+
+```text
+secrets/rustfs_access_key.txt
+secrets/rustfs_secret_key.txt
+```
+
+The wizard writes all three from one generated pair. RustFS, the API, and the
+worker all run as uid `10001`:
+
+```bash
+sudo chgrp 10001 .secrets/s3.env secrets/rustfs_access_key.txt secrets/rustfs_secret_key.txt
+chmod 640 .secrets/s3.env secrets/rustfs_access_key.txt secrets/rustfs_secret_key.txt
+```
+
+To rotate the pair, change all three files together and restart `rustfs`,
+`api`, and `worker`. The
+endpoint, bucket, region, prefix, and addressing style are non-secret and live
+in `.env` (`APSOR_S3_*`). Back up the RustFS volume alongside PostgreSQL.
 
 ## Anthropic Claude (optional)
 

@@ -16,7 +16,7 @@ from app.module.knowledge.domain.provider_config_domain import (
     CAPABILITY_WEB_SEARCH,
     ProviderCapability,
 )
-from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.protocol.provider_tester_protocol import ProviderTestOutcome
 from tests.conftest import TEST_DATABASE_URL
 from tests.helpers import create_text

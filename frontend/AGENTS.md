@@ -17,9 +17,11 @@ It does not own backend behavior, database migrations, API schemas, or deploymen
 - **Toolchain:** Bun 1.3.6, React 19, Vite 8, TypeScript 5.9 in strict mode, React Router 7, TanStack Query 5, and Orval 8. There is no Tailwind, CSS-in-JS, or component library.
 - **Boot:** `src/main.tsx` imports `styles/index.css`, mounts `AppProviders`, then renders `RouterProvider`. `AppProviders` nests i18n outermost, then React Query, toasts, and auth.
 - **Auth:** `AuthProvider` resolves `/auth/status` into `user`, `role`, `isRoot`, `mustChangePassword`, and the optional `impersonation` actor. `isRoot` follows the current session, so it is false while root is impersonating a normal user. `AuthGate` orders loading → load error → setup → login → blocking change-password screen → authenticated outlet. `RequireRoot` guards `/accounts` and redirects a normal user to `/profile`, or an impersonation target to `/chat`. Login, impersonation start, impersonation stop, logout, and unauthorized handling clear private query data and the last-chat pointer before installing the new auth-status snapshot. Stopping impersonation re-authenticates with the root password; other tabs receive a BroadcastChannel/localStorage transition and reload so stale account DOM and query rows cannot survive. A status refetch that observes a different user id clears rows and confirms once.
-- **Routing:** `src/app/router.tsx` uses `createBrowserRouter` with a root `AuthGate`, the `AppShell` layout, and lazy page imports. `/` redirects to `/chat`; legacy viewer routes redirect into the Library or Memory reader.
+- **Routing:** `src/app/router.tsx` uses `createBrowserRouter` with a root `AuthGate`, the `AppShell` layout, and lazy page imports. `/` redirects to `/chat`; legacy viewer routes and `/memory/*` redirect into the Library (files, media, or the Memories tab).
 - **Navigation:** `AppShell` renders four groups: archive workspaces, a personal block with User profile, a system block with Settings, Change password, Accounts (root only), and About, then a Session block with Sign out. The Change password item opens the dialog. The footer identity is a root-only button into `ImpersonateUserDialog` when not already impersonating; normal accounts and impersonation targets see a plain identity block. While impersonating, a banner above the page canvas names the target and exposes Return to root, which opens `StopImpersonationDialog` for root re-authentication. Visible indices are computed after role filtering.
 - **API access:** generated Orval hooks call `src/apis/fetch-client.ts`, which uses same-origin relative URLs and throws `ApiError`. Vite proxies `/api` and `/health` to the backend in development.
+- **Framework-free helpers:** `src/lib/` holds pure, React-free utilities shared by several workspaces: formatting (`format.ts`), search highlighting (`highlight.tsx`), and Library URL builders/parsers (`library-url.ts`).
+- **Workspace boundaries:** a workspace under `src/app/` imports only its own files, the shared areas (`component/`, `hook/`, `type/`, `i18n/`, `generated-apis-types/`, and the supporting `viewer/` and `auth/` domains), `src/lib/`, and `src/apis/`. `scripts/check-boundaries.ts` enforces this and lists the documented exceptions.
 - **Timeline:** `/timeline` requests `complete=true` for the current window and every earlier window, so the human spine shows every event. Earlier windows load through the `useTimelineAutoLoad` sentinel observer instead of a click control: an `IntersectionObserver` plus `window` and `.app-page` scroll listeners stop after three automatic loads until another scroll gesture, and an earlier-window error waits for the retry button. The spine carries `data-page-context="exclude"`, so the agent page context keeps the range, controls, density telemetry, and counts but not event cards or summary text. `read_timeline` and the agent keep their sparse sample; summaries stay collapsed until the reader expands them.
 - **Build output:** `dist/` is generated and gitignored, built by the Docker image and by `bun run build` for a local preview. `public/pdfjs/` is generated and gitignored too.
 - **PDF.js assets:** `scripts/copy-pdfjs-assets.mjs` copies CMaps and standard fonts from the pinned `pdfjs-dist` package. `dev` and `build` run it automatically.
@@ -44,13 +46,15 @@ It does not own backend behavior, database migrations, API schemas, or deploymen
 - `src/app/settings/component/settings-sections.ts` — role-filtered Settings tab registry.
 - `src/app/viewer/component/viewer-utils.ts` — deliberate text/binary viewer fetch exception; URLs still come from generated helpers.
 - `scripts/check-i18n.ts` — locale key-parity check against English.
+- `scripts/check-boundaries.ts` — cross-workspace import check for `src/app/`.
+- `scripts/copy-pdfjs-assets.mjs` — copies the PDF.js CMaps and standard fonts into `public/pdfjs/`.
 - `dist/` — generated production bundle, including `dist/pdfjs/`; never edit by hand.
 
 ## Conventions
 
 - Use Bun and the existing scripts. Do not introduce npm, pnpm, or a second lockfile.
 - Do not edit `src/app/generated-apis-types/`; regenerate with `bun run api:generate`. Generated code is ignored by ESLint for a reason.
-- Do not add hand-written API clients. The only exceptions are the existing agent and ingestion-progress SSE streams, viewer text/binary loaders, and the chat-image XHR upload (`src/app/chat/attachments.ts`), which needs `xhr.upload.onprogress` and `xhr.abort()`. All of them preserve `ApiError` behavior and dispatch `apsor-archive:unauthorized` on `401`.
+- Do not add hand-written API clients. The only exceptions are the existing agent and ingestion-progress SSE streams, viewer text/binary loaders, the chat-image XHR upload (`src/app/chat/attachments.ts`), which needs `xhr.upload.onprogress` and `xhr.abort()`, and the static companion preset manifests under `public/companions/` (`src/app/companion/api.ts`), which are same-origin assets rather than API calls. All of them preserve `ApiError` behavior and dispatch `apsor-archive:unauthorized` on `401`.
 - After mutations, invalidate the narrow React Query keys that changed. Avoid blanket invalidation except for deliberate seeding. Account create/disable/enable/reset invalidates the account list; patch or invalidate auth status only when the current account changes. Impersonation start and stop must use `useAuth().impersonate` / `stopImpersonation`: `AuthProvider` replaces the auth-status snapshot, clears every private query, and broadcasts the transition so root and target rows never survive in this tab or another tab. Stopping requires the root password and must not navigate from inside the provider.
 - Keep a one-time temporary password in local dialog state only. Never place it in the React Query cache, localStorage, a URL, a log, or a toast; clear it when the dialog closes.
 - Derive role visibility from `useAuth` (`isRoot`) and the Settings section `roles` field. Hidden deep links fall back to the first visible Settings tab, and a direct `/accounts` visit redirects a normal user to `/profile`.
@@ -59,6 +63,7 @@ It does not own backend behavior, database migrations, API schemas, or deploymen
 - Prefer the design tokens and shared primitives in `src/styles/` and `src/app/component/`. Do not add a second styling system.
 - Keep TypeScript strict: no `any`, use type-only imports, and preserve the security and sanitization lint rules.
 - Never hand-edit `dist/`; the Docker build rebuilds it from source. Run `bun run build` only when you need a local preview.
+- Unit tests are colocated `*.test.ts` files that import `bun:test` behind the standard `// @ts-expect-error` header; run them with `bun run test`. Do not add a separate `tests/` tree.
 
 ## Verification
 
@@ -67,8 +72,13 @@ cd frontend
 bun run lint
 bun run typecheck
 bun run i18n:check
+bun run check:boundaries
+bun run test
 bun run build
+bun audit          # needs network; part of `make audit`
 ```
+
+On a memory-constrained host, prefix the ESLint and build steps with `NODE_OPTIONS=--max-old-space-size=2048`.
 
 A successful build writes `dist/` and the generated PDF.js assets to the working tree; both are gitignored, so commit only the source changes.
 

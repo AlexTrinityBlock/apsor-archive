@@ -59,6 +59,9 @@ function clampWidth(width: number, containerWidth: number): number {
  * capture; a pointer-up without movement collapses the inspector; the
  * separator supports arrow keys, Home/End, and Enter/Space.
  */
+/** The live inspector width while dragging; unset when the drag ends. */
+export const SPLIT_BASIS_VAR = "--chat-inspector-basis";
+
 export function useChatSplit() {
   const [stored] = useState(readStoredSplit);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,6 +71,8 @@ export function useChatSplit() {
     readonly startWidth: number;
     readonly wasCollapsed: boolean;
     moved: boolean;
+    /** Ratio shown during the drag; committed to state on release. */
+    pendingRatio: number | null;
   } | null>(null);
 
   const [ratio, setRatio] = useState(stored.ratio);
@@ -145,6 +150,7 @@ export function useChatSplit() {
         inspectorRef.current?.getBoundingClientRect().width ?? currentWidth,
       wasCollapsed: collapsed,
       moved: false,
+      pendingRatio: null,
     };
     document.body.style.userSelect = "none";
     setDragging(true);
@@ -161,7 +167,18 @@ export function useChatSplit() {
     if (drag.wasCollapsed) {
       return;
     }
-    applyWidth(drag.startWidth + (drag.startX - event.clientX));
+    // Dragging writes a CSS variable instead of React state, so the page
+    // (and a streaming transcript) does not re-render on every pointer move.
+    const container = containerRef.current;
+    const widthOfContainer = container?.clientWidth ?? 0;
+    if (!container || widthOfContainer <= 0) {
+      return;
+    }
+    const next =
+      clampWidth(drag.startWidth + (drag.startX - event.clientX), widthOfContainer) /
+      widthOfContainer;
+    drag.pendingRatio = next;
+    container.style.setProperty(SPLIT_BASIS_VAR, `${next * 100}%`);
   };
 
   const finishPointer = (
@@ -178,6 +195,10 @@ export function useChatSplit() {
     if (!drag) {
       return;
     }
+    if (drag.pendingRatio !== null) {
+      setRatio(drag.pendingRatio);
+    }
+    containerRef.current?.style.removeProperty(SPLIT_BASIS_VAR);
     if (drag.wasCollapsed) {
       setCollapsed(false);
       return;

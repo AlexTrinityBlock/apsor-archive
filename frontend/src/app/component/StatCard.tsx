@@ -1,10 +1,10 @@
-import type { StatAccent } from "../type/demo";
+import type { AccentTone } from "../type/ui";
 
 interface StatCardProps {
   readonly label: string;
   readonly value: string;
   readonly note: string;
-  readonly accent?: StatAccent;
+  readonly accent?: AccentTone;
   readonly index?: string;
   readonly className?: string;
 }

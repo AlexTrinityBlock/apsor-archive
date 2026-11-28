@@ -62,6 +62,7 @@ export const core = {
     defaultLabel: "Loading the archive",
   },
   route: {
+    title: "{page} — {app}",
     fallbackLabel: "Opening the archive",
     fallbackEyebrow: "Opening the archive",
     errorEyebrow: "Archive · route error",
@@ -257,9 +258,14 @@ export const core = {
     quotaLifetime: "Lifetime",
     quotaBeforeResetLabel: "Before reset",
     quotaRemaining: "Remaining",
-    quotaEnabledLabel: "Category enabled",
     quotaEnabledHint:
       "When blocked, the category cannot be used even if a grant remains.",
+    quotaToggleChat: "Chat",
+    quotaToggleEmbedding: "Embedding",
+    quotaToggleWebSearch: "Web search",
+    quotaToggleWebFetch: "Web fetch",
+    quotaToggleState: "{category}: {state}",
+    quotaToggleWebHint: "When blocked, the assistant is not offered this web tool for this account, and any direct call is refused.",
     quotaGrantLabel: "Grant",
     quotaGrantHint:
       "Leave blank for unlimited. 0 is a valid grant that blocks all usage.",
@@ -590,6 +596,7 @@ export const core = {
     ingestRuntime: "Ingestion runtime",
     maintenance: "Maintenance",
     language: "Language",
+    companion: "Companion",
   },
   settings: {
     model: {

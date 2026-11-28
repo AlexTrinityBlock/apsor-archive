@@ -1,13 +1,20 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import {
+  useBlocker,
+  useLocation,
+  useNavigate,
+  useParams,
+  type BlockerFunction,
+} from "react-router-dom";
 
 import { ApiError } from "../../apis/fetch-client";
 import { Button, ButtonLink } from "../component/Button";
@@ -28,7 +35,13 @@ import {
   useUpdateAgentConversation,
 } from "../generated-apis-types/agent/agent";
 import type { AgentEntrySchema } from "../generated-apis-types/schemas";
-import { getActiveLocale, translate, translateApiErrorWithActiveLocale, useI18n } from "../i18n";
+import {
+  getActiveLocale,
+  translate,
+  translateApiErrorWithActiveLocale,
+  useI18n,
+  type TranslationKey,
+} from "../i18n";
 import {
   buildPersistedWorkTrace,
   mergeWorkTrace,
@@ -46,18 +59,41 @@ import {
 } from "./attachments";
 import { ApprovalStack } from "./component/ApprovalCard";
 import { ChatAttachmentManager } from "./component/ChatAttachmentManager";
-import { ChatComposer } from "./component/ChatComposer";
-import { ChatHeader, type ChatPane } from "./component/ChatHeader";
+import {
+  ChatComposer,
+  type ChatComposerHandle,
+} from "./component/ChatComposer";
+import {
+  CHAT_PANE_IDS,
+  ChatHeader,
+  type ChatPane,
+} from "./component/ChatHeader";
 import { ChatInspector, type InspectorTab } from "./component/ChatInspector";
 import { ChatIntro } from "./component/ChatIntro";
 import { ChatThread } from "./component/ChatThread";
 import { ContextActions } from "./component/ContextActions";
 import { ConversationRail } from "./component/ConversationRail";
+import { JumpToLatest } from "./component/JumpToLatest";
+import { LeaveRunDialog } from "./component/LeaveRunDialog";
 import { ResourcePreviewDialog } from "./component/ResourcePreviewDialog";
+import { ChatCompanion } from "../companion/component/ChatCompanion";
 import { RetryBar } from "./component/RetryBar";
 import { StreamingTurn } from "./component/StreamingTurn";
-import { useChatSplit } from "./hook/useChatSplit";
-import { useChatStream } from "./hook/useChatStream";
+import { StreamErrorBanner, StreamLiveRegion } from "./component/StreamStatus";
+import { SPLIT_BASIS_VAR, useChatSplit } from "./hook/useChatSplit";
+import {
+  useChatStream,
+  type ChatStreamView,
+  type StreamOutcome,
+} from "./hook/useChatStream";
+import { useStickToBottom } from "./hook/useStickToBottom";
+import {
+  readDraft,
+  writeDraft,
+  type DraftKey,
+  type DraftMap,
+} from "./draft-map";
+import { anchoredScrollTop } from "./scroll-follow";
 import { buildMemoryTitles } from "./memory-titles";
 import { invalidateConversation, invalidateConversationList } from "./query";
 import {
@@ -70,6 +106,7 @@ import {
   numberValue,
   readRetryState,
   stringValue,
+  type RetryState,
   transcriptText,
   type ChatAttachmentView,
   type CitationToken,
@@ -160,6 +197,64 @@ function readRouteDraft(state: unknown): RouteDraft | null {
     : null;
 }
 
+/**
+ * A brand-new conversation's first turn is already streaming (or about to
+ * start from route state) while the detail request is still in flight.
+ */
+function isLiveForThread(
+  stream: ChatStreamView | null,
+  conversationId: number,
+  routeState: unknown,
+): boolean {
+  if (stream !== null && stream.conversationId === conversationId) {
+    return true;
+  }
+  return readRouteDraft(routeState) !== null;
+}
+
+/**
+ * On narrow screens the inspector is a hidden pane most of the time; mount it
+ * only when shown so streaming tokens do not re-render it off screen.
+ */
+function shouldMountInspector(
+  narrow: boolean,
+  collapsed: boolean,
+  pane: ChatPane,
+  hasPreview: boolean,
+): boolean {
+  if (narrow) {
+    return pane === "inspector" || hasPreview;
+  }
+  return !collapsed;
+}
+
+/**
+ * The retry bar already shows a stream failure's detail and action, so the
+ * banner only remains for failures that cannot be retried.
+ */
+function visibleBannerError(
+  lastError: string | null,
+  retryState: RetryState,
+): string | null {
+  if (retryState.retryable && retryState.reason === "stream_failure") {
+    return null;
+  }
+  return lastError;
+}
+
+/** The polite live-region message for the current stream state, if any. */
+function liveAnnouncementKey(
+  stream: ChatStreamView | null,
+  outcome: StreamOutcome | null,
+): TranslationKey | null {
+  if (stream) {
+    return stream.status === "waiting"
+      ? "chat.live.waitingApproval"
+      : "chat.live.responding";
+  }
+  return outcome ? `chat.live.${outcome}` : null;
+}
+
 function ThreadState({
   eyebrow,
   title,
@@ -232,17 +327,24 @@ export function ChatPage() {
   const [highlightedEntryId, setHighlightedEntryId] = useState<number | null>(
     null,
   );
-  const [draftState, setDraftState] = useState<{
-    readonly id: number | null;
-    readonly value: string;
-  }>({ id: conversationId, value: "" });
-  const draft = draftState.id === conversationId ? draftState.value : "";
+  // One in-memory draft per conversation, so switching threads and coming
+  // back keeps what the reader was writing.
+  const [drafts, setDrafts] = useState<DraftMap>({});
+  const currentDraftKey: DraftKey =
+    conversationId === null ? "new" : `${conversationId}`;
+  const draft = readDraft(drafts, currentDraftKey);
   const setDraft = useCallback(
     (value: string) => {
-      setDraftState({ id: conversationId, value });
+      setDrafts((current) => writeDraft(current, currentDraftKey, value));
     },
-    [conversationId],
+    [currentDraftKey],
   );
+  const composerRef = useRef<ChatComposerHandle>(null);
+  const focusComposer = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      composerRef.current?.focus({ programmatic: true });
+    });
+  }, []);
   const [composerAttachments, setComposerAttachments] = useState<
     ComposerAttachment[]
   >([]);
@@ -264,9 +366,14 @@ export function ChatPage() {
   const handledEntryHash = useRef<string | null>(null);
   const entryHighlightTimer = useRef<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollContentRef = useRef<HTMLDivElement>(null);
   const historyInFlightRef = useRef(false);
   const historyRequestIdRef = useRef(0);
-  const stickToBottomRef = useRef(true);
+  // Scroll metrics captured just before older rows are prepended.
+  const olderAnchorRef = useRef<{
+    readonly scrollHeight: number;
+    readonly scrollTop: number;
+  } | null>(null);
 
   useEffect(() => {
     composerAttachmentsRef.current = composerAttachments;
@@ -573,16 +680,49 @@ export function ChatPage() {
     }
   }, [conversationQuery.error]);
 
+  const stickRef = useRef<() => void>(() => undefined);
   const handleStreamError = useCallback((message: string) => {
-    stickToBottomRef.current = true;
+    stickRef.current();
     setLastError(message);
   }, []);
-  const { stream, isStreaming, start, retry, resolveApproval, stop } =
+  const { stream, isStreaming, start, retry, resolveApproval, stop, outcome } =
     useChatStream(handleStreamError);
+
+  // Leaving the page or switching threads disconnects the stream, which the
+  // backend records as a stopped run, so a pathname change asks first.
+  // Hash-only changes (`#entry-N`) and same-path state rewrites pass.
+  const shouldBlock = useCallback<BlockerFunction>(
+    ({ currentLocation, nextLocation }) =>
+      isStreaming && currentLocation.pathname !== nextLocation.pathname,
+    [isStreaming],
+  );
+  const blocker = useBlocker(shouldBlock);
+  const stayOnRun = useCallback(() => {
+    if (blocker.state === "blocked") {
+      blocker.reset();
+    }
+  }, [blocker]);
+  const leaveRun = useCallback(() => {
+    if (blocker.state === "blocked") {
+      stop();
+      blocker.proceed();
+    }
+  }, [blocker, stop]);
+
+  useEffect(() => {
+    if (!isStreaming) {
+      return;
+    }
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isStreaming]);
 
   // Abort any open run when the selected thread changes or the page unmounts.
   useEffect(() => {
-    stickToBottomRef.current = true;
+    stickRef.current();
     return () => stop();
   }, [conversationId, stop]);
 
@@ -592,7 +732,7 @@ export function ChatPage() {
       if ((trimmed.length === 0 && readyAttachments.length === 0) || isStreaming) {
         return;
       }
-      stickToBottomRef.current = true;
+      stickRef.current();
       setLastError(null);
       setPinnedId(null);
       setDraft("");
@@ -724,7 +864,7 @@ export function ChatPage() {
       if (conversationId === null) {
         return Promise.resolve(false);
       }
-      stickToBottomRef.current = true;
+      stickRef.current();
       setLastError(null);
       setPinnedId(null);
       return resolveApproval(conversationId, approvalId, decision);
@@ -793,15 +933,7 @@ export function ChatPage() {
   const streamTextLength = stream?.assistantText.length ?? 0;
   const streamingActive = stream !== null;
 
-  useEffect(() => {
-    if (conversationId === null || !stickToBottomRef.current) {
-      return;
-    }
-    const scroll = scrollRef.current;
-    if (scroll) {
-      scroll.scrollTop = scroll.scrollHeight;
-    }
-  }, [
+  const followVersion = [
     conversationId,
     entries.length,
     lastError,
@@ -809,7 +941,23 @@ export function ChatPage() {
     streamingActive,
     streamTextLength,
     streamToolCount,
-  ]);
+  ].join("|");
+  const follow = useStickToBottom(scrollRef, scrollContentRef, followVersion);
+  useEffect(() => {
+    stickRef.current = follow.stick;
+  }, [follow.stick]);
+
+  // Older pages are prepended; restore the reader's distance from the bottom
+  // before paint so the visible message stays put in every browser.
+  useLayoutEffect(() => {
+    const anchor = olderAnchorRef.current;
+    const scroll = scrollRef.current;
+    if (!anchor || !scroll) {
+      return;
+    }
+    olderAnchorRef.current = null;
+    scroll.scrollTop = anchoredScrollTop(anchor, scroll.scrollHeight);
+  }, [entries.length]);
 
   // A history citation deep-links to one message. The target may arrive with
   // the first conversation page, so `entries` is a dependency; the handled key
@@ -840,7 +988,7 @@ export function ChatPage() {
       return;
     }
     handledEntryHash.current = key;
-    stickToBottomRef.current = false;
+    follow.unstick();
     target.scrollIntoView({ block: "center" });
     setHighlightedEntryId(targetId);
     if (entryHighlightTimer.current !== null) {
@@ -850,7 +998,7 @@ export function ChatPage() {
       setHighlightedEntryId(null);
       entryHighlightTimer.current = null;
     }, ENTRY_HIGHLIGHT_MS);
-  }, [conversationId, entries, location.hash]);
+  }, [conversationId, entries, follow, location.hash]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(
@@ -885,6 +1033,8 @@ export function ChatPage() {
             title:
               titleFromMessage(trimmed) ||
               t("chat.attachments.imageConversationTitle"),
+            // The companion persona and lore are frozen in this language.
+            locale,
           },
         });
         await invalidateConversationList(queryClient);
@@ -909,11 +1059,17 @@ export function ChatPage() {
     if (conversationId === null || !retryState.retryable) {
       return;
     }
-    stickToBottomRef.current = true;
+    follow.stick();
     setLastError(null);
     setPinnedId(null);
     void retry(conversationId, retryState.lastUserText);
-  }, [conversationId, retry, retryState.lastUserText, retryState.retryable]);
+  }, [
+    conversationId,
+    follow,
+    retry,
+    retryState.lastUserText,
+    retryState.retryable,
+  ]);
 
   const loadOlder = async () => {
     if (
@@ -926,7 +1082,7 @@ export function ChatPage() {
     const requestId = historyRequestIdRef.current + 1;
     historyRequestIdRef.current = requestId;
     historyInFlightRef.current = true;
-    stickToBottomRef.current = false;
+    follow.unstick();
     setHistoryStateId(conversationId);
     setHistoryLoading(true);
     setHistoryError(null);
@@ -938,6 +1094,10 @@ export function ChatPage() {
       if (historyRequestIdRef.current !== requestId) {
         return;
       }
+      const scroll = scrollRef.current;
+      olderAnchorRef.current = scroll
+        ? { scrollHeight: scroll.scrollHeight, scrollTop: scroll.scrollTop }
+        : null;
       setHistoryEntries((current) =>
         mergeEntries(historyForCurrent ? current : baseEntries, page.entries),
       );
@@ -970,8 +1130,10 @@ export function ChatPage() {
       setDrawerOpen(false);
     }
     navigate("/chat");
+    focusComposer();
   }, [
     discardComposerAttachments,
+    focusComposer,
     navigate,
     narrow,
     setDraft,
@@ -1056,6 +1218,10 @@ export function ChatPage() {
     setPinnedId(null);
   }, []);
 
+  const collapseInspector = useCallback(() => {
+    setCollapsed(true);
+  }, [setCollapsed]);
+
   const restoreThread = async () => {
     if (conversationId === null || restoring) {
       return;
@@ -1074,6 +1240,28 @@ export function ChatPage() {
       setRestoring(false);
     }
   };
+
+  // Pending approvals and the live turn trail the persisted transcript.
+  const liveTail = (
+    <>
+      <ApprovalStack
+        approvals={pendingApprovals}
+        disabled={isStreaming}
+        archived={archived}
+        onResolve={handleResolveApproval}
+      />
+      {stream ? (
+        <StreamingTurn
+          stream={stream}
+          memoryTitles={memoryTitles}
+          selectedTraceId={pinnedId}
+          onSelectTrace={handleSelectTrace}
+          onOpenCitation={handleOpenCitation}
+          onOpenResource={handleOpenResource}
+        />
+      ) : null}
+    </>
+  );
 
   const threadContent = () => {
     if (invalidId) {
@@ -1098,12 +1286,19 @@ export function ChatPage() {
     if (conversationId === null) {
       return (
         <ChatIntro
-          onSuggestion={(text) => setDraft(text)}
+          onSuggestion={(text) => {
+            setDraft(text);
+            focusComposer();
+          }}
           disabled={creating}
         />
       );
     }
     if (conversationQuery.isLoading) {
+      // Render the live first turn instead of flashing the loading card.
+      if (isLiveForThread(stream, conversationId, location.state)) {
+        return liveTail;
+      }
       return (
         <ThreadState
           eyebrow={t("chat.page.loadingEyebrow")}
@@ -1188,22 +1383,7 @@ export function ChatPage() {
           onOpenResource={handleOpenResource}
           highlightedEntryId={highlightedEntryId}
         />
-        <ApprovalStack
-          approvals={pendingApprovals}
-          disabled={isStreaming}
-          archived={archived}
-          onResolve={handleResolveApproval}
-        />
-        {stream ? (
-          <StreamingTurn
-            stream={stream}
-            memoryTitles={memoryTitles}
-            selectedTraceId={pinnedId}
-            onSelectTrace={handleSelectTrace}
-            onOpenCitation={handleOpenCitation}
-            onOpenResource={handleOpenResource}
-          />
-        ) : null}
+        {liveTail}
       </>
     );
   };
@@ -1248,6 +1428,7 @@ export function ChatPage() {
           />
         ) : null}
         <ChatComposer
+          composerRef={composerRef}
           value={draft}
           onChange={setDraft}
           onSubmit={(value) => void submit(value)}
@@ -1262,11 +1443,15 @@ export function ChatPage() {
             waitingForApproval ||
             (conversationId !== null && conversationQuery.isError)
           }
+          blockReason={waitingForApproval ? "approval" : null}
           onStop={stop}
         />
       </>
     );
   };
+
+  const bannerError = visibleBannerError(lastError, retryState);
+  const liveMessage = liveAnnouncementKey(stream, outcome);
 
   const totalEntries = conversation?.entries_total ?? entries.length;
   const contextMeta = [
@@ -1288,6 +1473,7 @@ export function ChatPage() {
 
   const streamPanel = (
     <section
+      id={CHAT_PANE_IDS.thread}
       className="panel chat-stream-panel"
       aria-label={t("chat.page.streamAria")}
     >
@@ -1308,36 +1494,26 @@ export function ChatPage() {
       <div
         className="chat-stream__scroll"
         ref={scrollRef}
-        onScroll={(event) => {
-          const element = event.currentTarget;
-          stickToBottomRef.current =
-            element.scrollHeight - element.scrollTop - element.clientHeight <
-            140;
-        }}
+        tabIndex={-1}
       >
-        <div className="chat-stream__inner">
+        <div className="chat-stream__inner" ref={scrollContentRef}>
           {threadContent()}
-          {lastError ? (
-            <div className="chat-stream-error" role="alert">
-              <Icon name="info" size={16} />
-              <div>
-                <strong>{t("chat.page.failureTitle")}</strong>
-                <p>{lastError}</p>
-              </div>
-              <button
-                type="button"
-                className="chat-stream-error__close"
-                onClick={() => setLastError(null)}
-                aria-label={t("chat.page.dismissError")}
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-          ) : null}
+          <StreamErrorBanner
+            detail={bannerError}
+            onDismiss={() => setLastError(null)}
+          />
         </div>
       </div>
 
-      <div className="chat-composer-dock">{composer()}</div>
+      <div className="chat-composer-dock">
+        <JumpToLatest
+          visible={!follow.stuck && conversationId !== null}
+          hasNewActivity={follow.hasNewActivity}
+          onJump={follow.scrollToLatest}
+        />
+        {composer()}
+      </div>
+      <StreamLiveRegion message={liveMessage} />
     </section>
   );
 
@@ -1350,7 +1526,7 @@ export function ChatPage() {
       pinnedId={pinnedId}
       onFollow={handleFollow}
       previewTarget={previewTarget}
-      onCollapse={() => setCollapsed(true)}
+      onCollapse={collapseInspector}
       narrow={narrow}
     />
   );
@@ -1442,11 +1618,18 @@ export function ChatPage() {
             </div>
           ) : null}
 
-          {narrow || !collapsed ? (
+          {shouldMountInspector(
+            narrow,
+            collapsed,
+            pane,
+            previewTarget !== null,
+          ) ? (
             <div
               id="chat-inspector"
               className="chat-inspector-slot"
-              style={{ flexBasis: `${ratio * 100}%` }}
+              style={{
+                flexBasis: `var(${SPLIT_BASIS_VAR}, ${ratio * 100}%)`,
+              }}
             >
               {inspector}
             </div>
@@ -1462,6 +1645,12 @@ export function ChatPage() {
         resource={previewResource}
         onClose={() => setPreviewResource(null)}
       />
+      <LeaveRunDialog
+        open={blocker.state === "blocked"}
+        onStay={stayOnRun}
+        onLeave={leaveRun}
+      />
+      <ChatCompanion stream={stream} draft={draft} conversationKey={String(conversationId ?? "new")} />
     </div>
   );
 }

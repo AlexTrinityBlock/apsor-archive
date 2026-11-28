@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from pydantic import SecretStr
 
-from app.infrastructure.files import r2_storage
+from app.infrastructure.files import s3_storage
 from app.infrastructure.files.r2_storage import R2FileStorage
 from app.infrastructure.files.storage_errors import (
     StorageObjectMissingError,
@@ -862,11 +862,11 @@ def test_r2_storage_adapter_roundtrip_and_error_safety(
     """R2 put/get/delete works offline and never leaks provider details."""
     fake = _FakeR2Client()
     monkeypatch.setattr(
-        r2_storage,
+        s3_storage,
         "boto3",
         SimpleNamespace(client=lambda *args, **kwargs: fake),
     )
-    monkeypatch.setattr(r2_storage, "_CLIENT_CACHE", {})
+    monkeypatch.setattr(s3_storage, "_CLIENT_CACHE", {})
 
     storage = R2FileStorage(
         endpoint_url="https://r2.invalid",

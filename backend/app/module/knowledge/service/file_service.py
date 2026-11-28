@@ -5,7 +5,6 @@ import hashlib
 import json
 import logging
 import mimetypes
-import threading
 import zipfile
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
@@ -47,6 +46,14 @@ from app.module.knowledge.domain.spreadsheet_domain import (
     SPREADSHEET_EXTENSIONS,
     SPREADSHEET_MAX_TEXT_CHARS,
 )
+from app.module.knowledge.domain.thumbnail_domain import (
+    GENERATOR_VERSION as THUMBNAIL_GENERATOR_VERSION,
+)
+from app.module.knowledge.domain.thumbnail_domain import (
+    ThumbnailRenderError,
+    is_thumbnail_candidate,
+    thumbnail_version,
+)
 from app.module.knowledge.domain.vision_prompt_domain import (
     RenderedVisionPrompt,
     VisionPromptMode,
@@ -61,6 +68,7 @@ from app.module.knowledge.exception.domain_error import (
     FileContentUnavailableError,
     FileRecordNotFoundError,
     FileStorageUnavailableError,
+    FileThumbnailNotFoundError,
     FileTooLargeError,
     FileVersionConflictError,
     FolderCopyTooLargeError,
@@ -75,6 +83,11 @@ from app.module.knowledge.exception.domain_error import (
 )
 from app.module.knowledge.model.chunk_model import SOURCE_FILE, ChunkModel
 from app.module.knowledge.model.file_model import FileModel
+from app.module.knowledge.model.file_thumbnail_model import (
+    THUMBNAIL_STATUS_FAILED,
+    THUMBNAIL_STATUS_NONE,
+    THUMBNAIL_STATUS_READY,
+)
 from app.module.knowledge.model.folder_model import FolderModel
 from app.module.knowledge.protocol.cache_protocol import CacheProtocol
 from app.module.knowledge.protocol.chat_usage_quota_protocol import (
@@ -83,6 +96,11 @@ from app.module.knowledge.protocol.chat_usage_quota_protocol import (
 from app.module.knowledge.protocol.chunk_repository_protocol import ChunkRepositoryProtocol
 from app.module.knowledge.protocol.file_repository_protocol import FileRepositoryProtocol
 from app.module.knowledge.protocol.file_storage_protocol import FileStorageProtocol
+from app.module.knowledge.protocol.file_thumbnail_repository_protocol import (
+    FileThumbnailRepositoryProtocol,
+    ThumbnailBytes,
+    ThumbnailMeta,
+)
 from app.module.knowledge.protocol.folder_repository_protocol import FolderRepositoryProtocol
 from app.module.knowledge.protocol.ingest_progress_protocol import IngestProgressProtocol
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
@@ -95,6 +113,7 @@ from app.module.knowledge.schema.file_schema import (
     DirectorySchema,
     FileChunksSchema,
     FileSchema,
+    FileThumbnailSchema,
     FolderMutationSchema,
     LibraryDeleteResultSchema,
     PathFileSchema,
@@ -102,7 +121,12 @@ from app.module.knowledge.schema.file_schema import (
 )
 from app.module.knowledge.service.cache_keys import user_version_scope
 from app.module.knowledge.service.indexer_service import IndexerService
+from app.module.knowledge.service.pdfium_lock import PDFIUM_RENDER_LOCK
 from app.module.knowledge.service.spreadsheet_extractor import extract_spreadsheet_text
+from app.module.knowledge.service.thumbnail_renderer import (
+    ThumbnailRenderer,
+    render_thumbnail,
+)
 from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
@@ -130,8 +154,9 @@ ALLOWED_EXTENSIONS = TEXT_EXTENSIONS | DOCUMENT_EXTENSIONS | IMAGE_EXTENSIONS
 
 # PDFium documents are not thread-safe, even across separate documents. The
 # extraction pool may render two scanned PDFs on different threads, so the whole
-# document lifetime is serialized by one process-wide lock.
-_PDFIUM_RENDER_LOCK = threading.Lock()
+# document lifetime is serialized by one process-wide lock shared with the
+# thumbnail renderer.
+_PDFIUM_RENDER_LOCK = PDFIUM_RENDER_LOCK
 
 FOLDER_COPY_MAX_FILES = 300
 FOLDER_COPY_MAX_BYTES = 256 * 1024 * 1024
@@ -219,6 +244,8 @@ class FileService:
         chat_quota: ChatUsageQuotaProtocol | None = None,
         cpu_runner: CpuRunner | None = None,
         progress_tracker: ProgressTracker | None = None,
+        thumbnail_repository: FileThumbnailRepositoryProtocol | None = None,
+        thumbnail_renderer: ThumbnailRenderer | None = None,
     ) -> None:
         self.user_id = user_id
         self.file_repository = file_repository
@@ -252,6 +279,8 @@ class FileService:
         self.chat_quota = chat_quota
         self.cpu_runner: CpuRunner = cpu_runner or asyncio.to_thread
         self.progress_tracker = progress_tracker
+        self.thumbnail_repository = thumbnail_repository
+        self.thumbnail_renderer: ThumbnailRenderer = thumbnail_renderer or render_thumbnail
 
     async def _run_cpu(
         self,
@@ -309,7 +338,31 @@ class FileService:
             logger.warning("Could not delete stored object %s from %s", key, backend)
 
     @staticmethod
-    def _to_schema(file: FileModel) -> FileSchema:
+    def _thumbnail_schema(meta: ThumbnailMeta | None) -> FileThumbnailSchema | None:
+        if meta is None:
+            return None
+        return FileThumbnailSchema(
+            version=thumbnail_version(meta.sha256),
+            width=meta.width,
+            height=meta.height,
+        )
+
+    async def _thumbnail_meta(self, file_ids: Sequence[int]) -> dict[int, ThumbnailMeta]:
+        if self.thumbnail_repository is None or not file_ids:
+            return {}
+        return await self.thumbnail_repository.meta_for(file_ids)
+
+    async def _file_schema(self, file: FileModel) -> FileSchema:
+        """Map one file row with its ready thumbnail metadata, if any."""
+        metas = await self._thumbnail_meta([file.id])
+        return self._to_schema(file, metas.get(file.id))
+
+    async def _path_file_schemas(self, files: Sequence[FileModel]) -> list[PathFileSchema]:
+        metas = await self._thumbnail_meta([file.id for file in files])
+        return [self._path_file_schema(file, metas.get(file.id)) for file in files]
+
+    @classmethod
+    def _to_schema(cls, file: FileModel, thumbnail: ThumbnailMeta | None = None) -> FileSchema:
         return FileSchema(
             id=file.id,
             raw_file_path=file.raw_file_path,
@@ -335,10 +388,15 @@ class FileService:
             created_at=file.created_at,
             updated_at=file.updated_at,
             deleted_at=file.deleted_at,
+            thumbnail=cls._thumbnail_schema(thumbnail),
         )
 
-    @staticmethod
-    def _path_file_schema(file: FileModel) -> PathFileSchema:
+    @classmethod
+    def _path_file_schema(
+        cls,
+        file: FileModel,
+        thumbnail: ThumbnailMeta | None = None,
+    ) -> PathFileSchema:
         return PathFileSchema(
             file_id=file.id,
             raw_file_path=file.raw_file_path,
@@ -347,6 +405,7 @@ class FileService:
             size_bytes=file.size_bytes,
             has_original=file.storage_key is not None,
             update_time=file.updated_at,
+            thumbnail=cls._thumbnail_schema(thumbnail),
         )
 
     @staticmethod
@@ -1172,6 +1231,7 @@ class FileService:
         )
 
         await self._ensure_parent_folder(path)
+        thumbnail = await self._create_thumbnail(file, data)
 
         if checkpoint is not None:
             await checkpoint()
@@ -1187,7 +1247,146 @@ class FileService:
         )
         if publish:
             await self._bump_index_version()
-        return self._to_schema(file)
+        return self._to_schema(file, thumbnail)
+
+    async def _create_thumbnail(
+        self,
+        file: FileModel,
+        data: bytes,
+    ) -> ThumbnailMeta | None:
+        """Render or reuse the thumbnail for a freshly inserted file version.
+
+        A thumbnail is decorative: any render failure is recorded as a
+        ``failed`` row and never fails the ingestion. The row is written in the
+        same transaction as the file, so a discarded staged file drops it too.
+        """
+        repository = self.thumbnail_repository
+        if repository is None or not is_thumbnail_candidate(file.extension):
+            return None
+        reusable = await repository.find_reusable(
+            content_hash=file.content_hash,
+            extension=file.extension,
+            generator_version=THUMBNAIL_GENERATOR_VERSION,
+            exclude_file_id=file.id,
+        )
+        if reusable is not None and await repository.clone(
+            source_file_id=reusable,
+            target_file_id=file.id,
+        ):
+            return (await repository.meta_for([file.id])).get(file.id)
+        return await self._render_and_store_thumbnail(file, data)
+
+    async def _render_and_store_thumbnail(
+        self,
+        file: FileModel,
+        data: bytes,
+    ) -> ThumbnailMeta | None:
+        repository = self.thumbnail_repository
+        if repository is None:
+            return None
+        try:
+            rendered = await self._run_cpu(self.thumbnail_renderer, data, file.extension)
+        except asyncio.CancelledError:
+            raise
+        except ThumbnailRenderError as exc:
+            await self._store_thumbnail_failure(file.id, exc.code)
+            return None
+        except Exception:
+            logger.warning("Thumbnail render failed for file_id=%s", file.id, exc_info=True)
+            await self._store_thumbnail_failure(file.id, "render_failed")
+            return None
+        if rendered is None:
+            await repository.upsert(
+                file_id=file.id,
+                status=THUMBNAIL_STATUS_NONE,
+                data=None,
+                width=None,
+                height=None,
+                sha256=None,
+                generator_version=THUMBNAIL_GENERATOR_VERSION,
+                error_code=None,
+            )
+            return None
+        digest = hashlib.sha256(rendered.data).hexdigest()
+        await repository.upsert(
+            file_id=file.id,
+            status=THUMBNAIL_STATUS_READY,
+            data=rendered.data,
+            width=rendered.width,
+            height=rendered.height,
+            sha256=digest,
+            generator_version=THUMBNAIL_GENERATOR_VERSION,
+            error_code=None,
+        )
+        return ThumbnailMeta(
+            file_id=file.id,
+            width=rendered.width,
+            height=rendered.height,
+            sha256=digest,
+        )
+
+    async def _store_thumbnail_failure(self, file_id: int, code: str) -> None:
+        if self.thumbnail_repository is None:
+            return
+        await self.thumbnail_repository.upsert(
+            file_id=file_id,
+            status=THUMBNAIL_STATUS_FAILED,
+            data=None,
+            width=None,
+            height=None,
+            sha256=None,
+            generator_version=THUMBNAIL_GENERATOR_VERSION,
+            error_code=code[:64],
+        )
+
+    async def backfill_thumbnail(self, file_id: int) -> bool:
+        """Create or refresh one file's thumbnail; returns whether work ran.
+
+        Used by the worker backfill for files ingested before thumbnails
+        existed. A missing original is recorded as a failure so the backfill
+        stops retrying it after the attempt limit.
+        """
+        if self.thumbnail_repository is None:
+            return False
+        file = await self.file_repository.get_by_id(file_id)
+        if file is None or file.deleted_at is not None or not file.storage_key:
+            return False
+        if not is_thumbnail_candidate(file.extension):
+            return False
+        reusable = await self.thumbnail_repository.find_reusable(
+            content_hash=file.content_hash,
+            extension=file.extension,
+            generator_version=THUMBNAIL_GENERATOR_VERSION,
+            exclude_file_id=file.id,
+        )
+        if reusable is not None and await self.thumbnail_repository.clone(
+            source_file_id=reusable,
+            target_file_id=file.id,
+        ):
+            return True
+        try:
+            data = await self._storage_read(
+                file.storage_key,
+                backend=file.storage_backend,
+                file_id=file.id,
+            )
+        except FileContentUnavailableError:
+            await self._store_thumbnail_failure(file.id, "original_missing")
+            return True
+        await self._render_and_store_thumbnail(file, data)
+        return True
+
+    async def read_thumbnail(self, file_id: int) -> ThumbnailBytes:
+        """Return one file's ready WebP thumbnail bytes and hash."""
+        file = await self.file_repository.get_by_id(file_id)
+        if file is None:
+            raise FileRecordNotFoundError(file_id)
+        if self.thumbnail_repository is None:
+            raise FileThumbnailNotFoundError(file_id)
+        thumbnail = await self.thumbnail_repository.get_ready(file_id)
+        if thumbnail is None:
+            raise FileThumbnailNotFoundError(file_id)
+        return thumbnail
 
     async def ingest_extracted(
         self,
@@ -1240,7 +1439,7 @@ class FileService:
         if file is None:
             raise FileRecordNotFoundError(file_id)
         if file.is_current:
-            return self._to_schema(file)
+            return await self._file_schema(file)
 
         existing = await self.file_repository.get_current_by_path_for_update(
             file.raw_file_path
@@ -1260,7 +1459,7 @@ class FileService:
         await self.chunk_repository.mark_source_current(SOURCE_FILE, file.id)
         await self.file_repository.flush()
         await self._bump_index_version()
-        return self._to_schema(file)
+        return await self._file_schema(file)
 
     async def discard_pending(self, file_id: int) -> bool:
         """Delete an unpublished file and its chunks after a failed job.
@@ -1727,6 +1926,11 @@ class FileService:
                     target_id=new_file.id,
                 )
                 new_file.total_chunks = cloned
+                if self.thumbnail_repository is not None:
+                    await self.thumbnail_repository.clone(
+                        source_file_id=old_file.id,
+                        target_file_id=new_file.id,
+                    )
 
             await self.file_repository.flush()
             await self._bump_index_version()
@@ -1802,7 +2006,7 @@ class FileService:
         file = await self._require_current_file_for_update(file_id)
         target = self._target_file_path(file, path)
         if target == file.raw_file_path:
-            return self._to_schema(file)
+            return await self._file_schema(file)
         if await self._target_is_occupied(target):
             raise TreePathConflictError(target)
 
@@ -1813,7 +2017,7 @@ class FileService:
             file_name=file_name(target),
         )
         await self._bump_index_version()
-        return self._to_schema(file)
+        return await self._file_schema(file)
 
     async def rename_file(self, file_id: int, *, file_name_value: str) -> FileSchema:
         """Rename one current file without changing its parent folder or extension."""
@@ -1829,7 +2033,7 @@ class FileService:
         target = f"/{name}" if parent == "/" else f"{parent}/{name}"
         target = self._target_file_path(file, target)
         if target == file.raw_file_path:
-            return self._to_schema(file)
+            return await self._file_schema(file)
         if await self._target_is_occupied(target):
             raise TreePathConflictError(target)
 
@@ -1839,7 +2043,7 @@ class FileService:
             file_name=name,
         )
         await self._bump_index_version()
-        return self._to_schema(file)
+        return await self._file_schema(file)
 
     async def copy_file(self, file_id: int, *, path: str) -> FileSchema:
         """Copy one current file into a new file record with fresh chunks."""
@@ -1894,7 +2098,7 @@ class FileService:
         file = await self.file_repository.get_by_id(file_id)
         if file is None:
             raise FileRecordNotFoundError(file_id)
-        return self._to_schema(file)
+        return await self._file_schema(file)
 
     async def read_chunks(
         self,
@@ -1965,7 +2169,7 @@ class FileService:
                 path=normalized,
                 fuzzy_search=fuzzy,
                 directories=[],
-                files=[self._path_file_schema(file) for file in files],
+                files=await self._path_file_schemas(files),
             )
 
         folder = None if normalized == "/" else await self.folder_repository.get_by_path(normalized)
@@ -1992,7 +2196,7 @@ class FileService:
             path=normalized,
             fuzzy_search=None,
             directories=directories,
-            files=[self._path_file_schema(file) for file in files],
+            files=await self._path_file_schemas(files),
         )
 
     async def delete_file(self, file_id: int) -> None:

@@ -986,6 +986,24 @@
   opacity: 1;
 }
 
+.toast__action {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  color: inherit;
+  border: 0.7px solid currentColor;
+  border-radius: 3px;
+  font-family: var(--mono-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.toast__action:hover,
+.toast__action:focus-visible {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
 /* --------------------------------------------------------------------------
    Citations, code, metadata
    -------------------------------------------------------------------------- */
@@ -1313,4 +1331,53 @@
   height: 26px;
   padding: 0;
   text-transform: none;
+}
+
+/* Server-rendered WebP thumbnail. The box size comes from the inline
+   aspect-ratio before the image loads, so nothing shifts when it arrives. */
+.file-thumbnail {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  background: var(--mono-card-warm);
+}
+
+.file-thumbnail[data-sizing="fill"] {
+  height: 100%;
+}
+
+.file-thumbnail__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+.file-thumbnail--cover .file-thumbnail__image {
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* A full-resolution layer placed over the thumbnail fades in on load. */
+.file-thumbnail__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 160ms ease-out;
+}
+
+.file-thumbnail__overlay.is-loaded {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-thumbnail__overlay {
+    transition: none;
+  }
 }

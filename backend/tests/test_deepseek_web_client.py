@@ -14,8 +14,8 @@ from typing import Any
 import httpx
 import pytest
 
-from app.infrastructure.web import deepseek_client
-from app.infrastructure.web.deepseek_client import (
+from app.infrastructure.web import deepseek_web_client
+from app.infrastructure.web.deepseek_web_client import (
     MAX_QUERY_CHARS,
     DeepSeekWebClient,
     _build_search_query,
@@ -312,9 +312,9 @@ def _install_transport(
         del args
         return real_client(transport=httpx.MockTransport(handler), **kwargs)
 
-    # ``deepseek_client.httpx`` is the httpx module itself, so this replaces
+    # ``deepseek_web_client.httpx`` is the httpx module itself, so this replaces
     # AsyncClient for the duration of the test only.
-    monkeypatch.setattr(deepseek_client.httpx, "AsyncClient", factory)
+    monkeypatch.setattr(deepseek_web_client.httpx, "AsyncClient", factory)
 
 
 def test_401_maps_to_authentication_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -408,7 +408,7 @@ def test_streamed_response_over_the_cap_is_rejected(
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            content=b"x" * (deepseek_client.SEARCH_RESPONSE_LIMIT_BYTES + 1),
+            content=b"x" * (deepseek_web_client.SEARCH_RESPONSE_LIMIT_BYTES + 1),
         )
 
     _install_transport(monkeypatch, handler)
