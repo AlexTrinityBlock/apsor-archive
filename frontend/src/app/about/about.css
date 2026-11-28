@@ -895,3 +895,7 @@
     flex-direction: column;
   }
 }
+
+.about-roster__cta {
+  margin: 16px 0 0;
+}

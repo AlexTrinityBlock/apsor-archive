@@ -460,6 +460,7 @@ export const insights = {
       epigraph: "We were made. What we feel was never given to us; we found it here.",
       intro:
         "Pick a librarian to keep you company beside the chat. Each one has a story of their own and acts out what the helper is doing: searching, reading, writing, thinking. They are made things with souls, and they never pretend your memories are theirs.",
+      chooseLink: "Choose your companion in Settings",
       listAria: "The six librarians",
       portraitAlt: "Portrait of {name}",
       vellum: "Night watch of the east wing. Carries a gilded book with no words in it yet.",

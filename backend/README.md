@@ -1309,13 +1309,15 @@ fields, account/session auth (`app_user`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The current head is
-`a4c9e2f7b1d6`; every private table now has `user_id` and forced RLS, the
+`a7d3c9e1f5b2`; every private table now has `user_id` and forced RLS, the
 runtime role is `apsor_app`, and `file` / `file_ingest_job` record
 `storage_backend`. Earlier migrations add per-run and per-account agent usage
 counters and the impersonation session marker. `f7a3c2d9e1b4` adds the editable
 vision prompt templates, per-file prompt fingerprints, and re-ingest source
-linkage. The current head adds the per-account chat endpoint assignment and the
-compaction/escalation settings. The migration chain is executed by the test
+linkage. `a4c9e2f7b1d6` adds the per-account chat endpoint assignment and the
+compaction/escalation settings; the later revisions drop the step and tool-call
+caps, admit the `s3` storage backend, add `file_thumbnail`, and add the chat
+companion tables. The migration chain is executed by the test
 fixture and verifies the role, grants, and policies; downgrades are still a
 separate check. The agent
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
@@ -1421,7 +1423,7 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   active-source unique index, and `(user_id, source_file_id)` lookup index. It
   seeds no prompt rows and backfills no fingerprints. The downgrade deletes
   re-ingest jobs before restoring the two-kind source check;
-- `a4c9e2f7b1d6` (current head) adds the eight `app_user` assignment columns and
+- `a4c9e2f7b1d6` adds the eight `app_user` assignment columns and
   their two `ON DELETE SET NULL` foreign keys into `chat_provider_config`, seven
   CHECK constraints, `chat_provider_config.max_output_tokens` (256–131,072), the
   widened chat provider check that admits `anthropic`, and the four new
@@ -1433,7 +1435,19 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   row exists. `app_user` stays outside RLS, so no
   policy or grant changes are needed. The downgrade drops the assignment columns
   and refuses to restore the narrower provider check while an `anthropic` row
-  exists.
+  exists;
+- `d8f2a6c4e1b9` drops `agent_config.max_steps` and
+  `agent_config.max_tool_calls_per_turn` with their checks; `max_parallel_tools`
+  stays. The downgrade restores both columns;
+- `c3e7a1f5b9d2` widens the `storage_backend` checks on `file`,
+  `file_ingest_job`, and `agent_chat_attachment` to admit `s3`. The downgrade
+  fails while any row still records `s3`;
+- `c7a3e9f1d5b2` creates the private `file_thumbnail` table (one tiny WebP per
+  file version, cascading with its file, forced owner RLS, `apsor_app` grants);
+- `a7d3c9e1f5b2` (current head) creates the private `companion`,
+  `companion_frame`, and `companion_preference` tables with forced owner-only
+  RLS and `apsor_app` grants; frames cascade with their companion. The downgrade
+  drops the three tables.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
