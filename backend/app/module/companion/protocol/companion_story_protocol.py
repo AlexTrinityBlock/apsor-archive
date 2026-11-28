@@ -11,6 +11,12 @@ from app.module.companion.domain.story_domain import (
     PresetStory,
     WorldDoc,
 )
+from app.module.companion.model.companion_admin_model import (
+    CompanionAdminLoreOverrideModel,
+)
+from app.module.companion.model.companion_life_story_model import (
+    CompanionGeneratedStoryModel,
+)
 from app.module.companion.model.companion_model import (
     CompanionModel,
     CompanionPreferenceModel,
@@ -88,6 +94,19 @@ class CompanionStoryRepositoryProtocol(Protocol):
 
     async def clear_companion_ref(self, companion_ref: str) -> None: ...
 
+    async def get_admin_persona(self, companion_ref: str, locale: str) -> str | None: ...
+
+    async def list_admin_lore_overrides(
+        self,
+        companion_ref: str,
+        locale: str,
+    ) -> list[CompanionAdminLoreOverrideModel]: ...
+
+    async def list_published_generated(
+        self,
+        companion_ref: str,
+    ) -> list[CompanionGeneratedStoryModel]: ...
+
 
 class CompanionLookupProtocol(Protocol):
     """The slice's companion and preference reads the story service needs."""
@@ -99,6 +118,8 @@ class CompanionLookupProtocol(Protocol):
     ) -> CompanionModel | None: ...
 
     async def get_preference(self, user_id: int) -> CompanionPreferenceModel | None: ...
+
+    async def list_companions(self, user_id: int) -> list[CompanionModel]: ...
 
 
 class CompanionStoryConfigProviderProtocol(Protocol):

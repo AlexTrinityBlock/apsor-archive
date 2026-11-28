@@ -11,6 +11,13 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.module.companion.model.companion_admin_model import (
+    CompanionAdminLoreOverrideModel,
+    CompanionAdminStoryOverrideModel,
+)
+from app.module.companion.model.companion_life_story_model import (
+    CompanionGeneratedStoryModel,
+)
 from app.module.companion.model.companion_story_model import (
     CompanionBondModel,
     CompanionLoreFragmentModel,
@@ -248,6 +255,50 @@ class CompanionStoryRepository:
                 CompanionLoreToldModel.companion_ref == companion_ref,
             )
         )
+
+    # --- root's layer and generated stories (owner-readable) ---------------
+
+    async def get_admin_persona(self, companion_ref: str, locale: str) -> str | None:
+        """Return root's persona override for this account, companion, and locale."""
+        statement = select(CompanionAdminStoryOverrideModel.persona).where(
+            CompanionAdminStoryOverrideModel.user_id == self.user_id,
+            CompanionAdminStoryOverrideModel.companion_ref == companion_ref,
+            CompanionAdminStoryOverrideModel.locale == locale,
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def list_admin_lore_overrides(
+        self,
+        companion_ref: str,
+        locale: str,
+    ) -> list[CompanionAdminLoreOverrideModel]:
+        """Return root's lore overrides for this account, companion, and locale."""
+        statement = (
+            select(CompanionAdminLoreOverrideModel)
+            .where(
+                CompanionAdminLoreOverrideModel.user_id == self.user_id,
+                CompanionAdminLoreOverrideModel.companion_ref == companion_ref,
+                CompanionAdminLoreOverrideModel.locale == locale,
+            )
+            .order_by(CompanionAdminLoreOverrideModel.fragment_key)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def list_published_generated(
+        self,
+        companion_ref: str,
+    ) -> list[CompanionGeneratedStoryModel]:
+        """Return this account's published life stories for one companion."""
+        statement = (
+            select(CompanionGeneratedStoryModel)
+            .where(
+                CompanionGeneratedStoryModel.user_id == self.user_id,
+                CompanionGeneratedStoryModel.companion_ref == companion_ref,
+                CompanionGeneratedStoryModel.status == "published",
+            )
+            .order_by(CompanionGeneratedStoryModel.created_at, CompanionGeneratedStoryModel.id)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
 
 
 __all__ = ["CompanionStoryRepository"]

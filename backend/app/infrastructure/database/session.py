@@ -212,9 +212,20 @@ async def commit_and_reapply(session: AsyncSession, user_id: int, role: str) -> 
     can silently read or mutate every archive. Use this helper for checkpoints
     in ingestion or agent workflows instead of calling ``commit()`` directly.
     The request boundary still commits once on exit via ``get_db_session``.
+    An administration scope (``app.admin_scope``) set on the transaction is
+    restored too, so a root companion workflow keeps its scope across
+    checkpoints.
     """
+    scope = (
+        await session.execute(
+            text("SELECT current_setting(:name, true)"),
+            {"name": ADMIN_SCOPE_SETTING},
+        )
+    ).scalar_one_or_none()
     await session.commit()
     await apply_user_context(session, user_id, role)
+    if scope:
+        await apply_admin_scope(session, scope)
 
 
 @asynccontextmanager

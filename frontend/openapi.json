@@ -2407,54 +2407,6 @@
         "title": "ChunkSchema",
         "type": "object"
       },
-      "CompanionBondSchema": {
-        "description": "How far this account has come with the companion.",
-        "properties": {
-          "completed_runs": {
-            "title": "Completed Runs",
-            "type": "integer"
-          },
-          "familiar_unlock_runs": {
-            "title": "Familiar Unlock Runs",
-            "type": "integer"
-          },
-          "familiar_unlocked_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Familiar Unlocked At"
-          },
-          "rare_unlock_runs": {
-            "title": "Rare Unlock Runs",
-            "type": "integer"
-          },
-          "rare_unlocked_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rare Unlocked At"
-          }
-        },
-        "required": [
-          "completed_runs",
-          "familiar_unlock_runs",
-          "rare_unlock_runs"
-        ],
-        "title": "CompanionBondSchema",
-        "type": "object"
-      },
       "CompanionCreateSchema": {
         "additionalProperties": false,
         "description": "Create an empty companion; frames are uploaded per action afterwards.",
@@ -2642,15 +2594,25 @@
         "type": "object"
       },
       "CompanionLoreFragmentSchema": {
-        "description": "One lore fragment as shown in the story editor.\n\n``unlocked`` only says whether retrieval may surface the fragment yet; the\neditor always shows the full text.",
+        "description": "One lore fragment the account may see in its story editor.\n\nThe account sees only its own fragments and the ones it has already heard;\ntiers, locks, and progress stay hidden (root sees them in administration).",
         "properties": {
           "edited": {
             "title": "Edited",
             "type": "boolean"
           },
+          "heard": {
+            "description": "Already surfaced to the account at least once.",
+            "title": "Heard",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "own": {
+            "description": "Written by the account (its own memory of the companion).",
+            "title": "Own",
+            "type": "boolean"
           },
           "position": {
             "title": "Position",
@@ -2666,51 +2628,23 @@
             },
             "title": "Themes",
             "type": "array"
-          },
-          "tier": {
-            "enum": [
-              "first",
-              "familiar",
-              "rare"
-            ],
-            "title": "Tier",
-            "type": "string"
-          },
-          "unlocked": {
-            "title": "Unlocked",
-            "type": "boolean"
-          },
-          "unlocked_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Unlocked At"
           }
         },
         "required": [
           "id",
-          "tier",
           "themes",
           "text",
-          "unlocked",
           "edited",
+          "own",
+          "heard",
           "position"
         ],
         "title": "CompanionLoreFragmentSchema",
         "type": "object"
       },
       "CompanionLoreSchema": {
-        "description": "A companion's lore in one locale, for the story editor.",
+        "description": "A companion's visible lore in one locale, for the story editor.",
         "properties": {
-          "bond": {
-            "$ref": "#/components/schemas/CompanionBondSchema"
-          },
           "companion_ref": {
             "title": "Companion Ref",
             "type": "string"
@@ -2746,7 +2680,6 @@
           "locale",
           "name",
           "customized",
-          "bond",
           "fragments"
         ],
         "title": "CompanionLoreSchema",

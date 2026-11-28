@@ -45,40 +45,28 @@ class CompanionPersonaUpdateSchema(BaseModel):
 
 
 class CompanionLoreFragmentSchema(BaseModel):
-    """One lore fragment as shown in the story editor.
+    """One lore fragment the account may see in its story editor.
 
-    ``unlocked`` only says whether retrieval may surface the fragment yet; the
-    editor always shows the full text.
+    The account sees only its own fragments and the ones it has already heard;
+    tiers, locks, and progress stay hidden (root sees them in administration).
     """
 
     id: str
-    tier: LoreTierField
     themes: list[str]
     text: str
-    unlocked: bool
-    unlocked_at: datetime | None = None
     edited: bool
+    own: bool = Field(description="Written by the account (its own memory of the companion).")
+    heard: bool = Field(description="Already surfaced to the account at least once.")
     position: int
 
 
-class CompanionBondSchema(BaseModel):
-    """How far this account has come with the companion."""
-
-    completed_runs: int
-    familiar_unlock_runs: int
-    rare_unlock_runs: int
-    familiar_unlocked_at: datetime | None = None
-    rare_unlocked_at: datetime | None = None
-
-
 class CompanionLoreSchema(BaseModel):
-    """A companion's lore in one locale, for the story editor."""
+    """A companion's visible lore in one locale, for the story editor."""
 
     companion_ref: str
     locale: StoryLocaleField
     name: str
     customized: bool = Field(description="True when this locale's lore is an account copy.")
-    bond: CompanionBondSchema
     fragments: list[CompanionLoreFragmentSchema]
 
 
@@ -117,7 +105,6 @@ class CompanionLoreUpdateSchema(_ThemesMixin):
 
 
 __all__ = [
-    "CompanionBondSchema",
     "CompanionLoreCreateSchema",
     "CompanionLoreFragmentSchema",
     "CompanionLoreSchema",
