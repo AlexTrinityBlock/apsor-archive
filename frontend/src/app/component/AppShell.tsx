@@ -27,7 +27,7 @@ import { Icon, type IconName } from "./Icon";
 import { RouteFallback } from "./RouteFallback";
 import { routeLabelKey, workspaceSegment } from "./route-title";
 import { useToast } from "./Toast";
-import { TreeMark } from "./TreeMark";
+import { BrandMark } from "./BrandMark";
 
 
 interface NavItem {
@@ -510,7 +510,9 @@ export function AppShell() {
           <Icon name="panel-left-open" size={20} />
         </button>
         <NavLink to="/" className="mobile-bar__brand" end>
-          <TreeMark size={26} />
+          <span className="brand-seal brand-seal--image brand-seal--small" aria-hidden="true">
+            <BrandMark size={28} />
+          </span>
           <span>{t("core.app.name")}</span>
         </NavLink>
       </header>
@@ -543,8 +545,8 @@ export function AppShell() {
             }}
             title={t("core.app.name")}
           >
-            <span className="brand-seal" aria-hidden="true">
-              <TreeMark size={24} />
+            <span className="brand-seal brand-seal--image" aria-hidden="true">
+              <BrandMark size={36} />
             </span>
             <span className="brand-meta">
               <span className="brand-title">{t("core.app.name")}</span>
