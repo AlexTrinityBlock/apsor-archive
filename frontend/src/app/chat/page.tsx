@@ -54,6 +54,7 @@ import { ChatThread } from "./component/ChatThread";
 import { ContextActions } from "./component/ContextActions";
 import { ConversationRail } from "./component/ConversationRail";
 import { ResourcePreviewDialog } from "./component/ResourcePreviewDialog";
+import { ChatCompanion } from "../companion/component/ChatCompanion";
 import { RetryBar } from "./component/RetryBar";
 import { StreamingTurn } from "./component/StreamingTurn";
 import { useChatSplit } from "./hook/useChatSplit";
@@ -1462,6 +1463,7 @@ export function ChatPage() {
         resource={previewResource}
         onClose={() => setPreviewResource(null)}
       />
+      <ChatCompanion stream={stream} draft={draft} conversationKey={String(conversationId ?? "new")} />
     </div>
   );
 }

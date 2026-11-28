@@ -590,6 +590,7 @@ export const core = {
     ingestRuntime: "Ingestion runtime",
     maintenance: "Maintenance",
     language: "Language",
+    companion: "Companion",
   },
   settings: {
     model: {

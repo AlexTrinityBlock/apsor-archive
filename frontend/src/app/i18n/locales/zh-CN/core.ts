@@ -561,6 +561,7 @@ export const core = {
     ingestRuntime: "摄取运行环境",
     maintenance: "维护",
     language: "语言",
+    companion: "伙伴",
   },
   settings: {
     model: {

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "presets": [
+    {
+      "id": "placeholder-archivist-f",
+      "name": "Placeholder F",
+      "gender": "female"
+    },
+    {
+      "id": "placeholder-archivist-m",
+      "name": "Placeholder M",
+      "gender": "male"
+    }
+  ]
+}
