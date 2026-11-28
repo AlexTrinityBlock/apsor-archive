@@ -53,7 +53,7 @@ Apsor Archive 把它们收进一座放在你自己电脑上的私人图书馆，
 
 <p align="center">
   <img src="docs/assets/screenshots/zh-CN/phone-chat.webp" alt="同一座档案馆在手机上的样子" width="260"><br>
-  <sub>在手机上也是同一座档案馆：图书馆员会从屏幕边缘探出头来。</sub>
+  <sub>在手机上也是同一座档案馆，你的图书馆员就在身旁。</sub>
 </p>
 
 ### 一分钟看懂记忆系统
