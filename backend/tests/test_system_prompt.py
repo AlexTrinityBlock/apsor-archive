@@ -70,6 +70,12 @@ def _system_entry(client: TestClient, conversation_id: int) -> dict[str, Any]:
     return entries[0]
 
 
+def _disable_companion(client: TestClient) -> None:
+    """Hide the companion so new conversations carry no persona section."""
+    response = client.patch("/api/v1/companions/preference", json={"enabled": False})
+    assert response.status_code == 200, response.text
+
+
 def _section_names(system_entry: dict[str, Any]) -> list[str]:
     """Return the provider-visible section names in order."""
     return [section["name"] for section in system_entry["data"]["sections"]]
@@ -86,6 +92,9 @@ def test_system_prompt_module_and_section_order(
 ) -> None:
     """Defaults are ordinary rows: editable, deletable, reorderable, and frozen."""
     client.app.state.agent_chat_generator = FakeChatGenerator([])
+    # Section mechanics only: keep the companion persona out of the prefix
+    # (test_companion_stories.py covers the persona section).
+    _disable_companion(client)
 
     # ------------------------------------------------------------------
     # 1. A fresh database contains the four seeded defaults. They are the same
@@ -178,10 +187,8 @@ def test_system_prompt_module_and_section_order(
     # ------------------------------------------------------------------
     conversation_id = _create_conversation(client, "Ordered sections")
     system_entry = _system_entry(client, conversation_id)
-    # The account's default companion persona is appended after every row.
     assert _section_names(system_entry) == [
-        *(f"system_prompt:{section_id}" for section_id in reordered_ids),
-        "companion_persona",
+        f"system_prompt:{section_id}" for section_id in reordered_ids
     ]
     assert system_entry["data"]["prompt_version"] == "archive-agent-v16"
     sections = system_entry["data"]["sections"]
