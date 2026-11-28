@@ -1033,6 +1033,8 @@ export function ChatPage() {
             title:
               titleFromMessage(trimmed) ||
               t("chat.attachments.imageConversationTitle"),
+            // The companion persona and lore are frozen in this language.
+            locale,
           },
         });
         await invalidateConversationList(queryClient);

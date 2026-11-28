@@ -13,27 +13,39 @@
  * - Custom companions come from listCompanions and are edited through the
  *   create/update/delete/upload/reorder endpoints; their ids are `custom-<id>`
  *   and their frames use the server's versioned `url`.
- * - The story (persona and lore) still reports `supported: false` until the
- *   persona/lore endpoints land; the Story editor keeps edits as a local draft.
+ * - The story (persona and lore) uses the persona and lore endpoints in the
+ *   current interface locale.
  */
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "../auth/AuthProvider";
+import { useI18n } from "../i18n";
 import {
   createCompanion,
+  createCompanionLore,
   deleteCompanion,
+  deleteCompanionLore,
   deleteCompanionFrame,
+  getGetCompanionPersonaQueryKey,
   getGetCompanionPreferenceQueryKey,
+  getListCompanionLoreQueryKey,
   getListCompanionsQueryKey,
   reorderCompanionFrames,
+  resetCompanionLore,
+  resetCompanionPersona,
   updateCompanion,
+  updateCompanionLore,
+  updateCompanionPersona,
   updateCompanionPreference,
   uploadCompanionFrames,
+  useGetCompanionPersona,
   useGetCompanionPreference,
+  useListCompanionLore,
   useListCompanions,
 } from "../generated-apis-types/companions/companions";
 import type {
+  CompanionLoreSchema,
   CompanionPreferenceSchema,
   CompanionSchema,
 } from "../generated-apis-types/schemas";
@@ -49,7 +61,12 @@ import {
   preferenceStore,
   type CompanionPreference,
 } from "./preference";
-import type { CompanionPersona, LoreFragment, LoreInput } from "./story";
+import {
+  parseLoreFragment,
+  type CompanionPersona,
+  type LoreFragment,
+  type LoreInput,
+} from "./story";
 
 const PRESET_ROOT = "/companions";
 
@@ -296,13 +313,13 @@ export interface CustomCompanionDraft {
 /* Story: persona and lore ------------------------------------------------- */
 
 /**
- * Flip when getCompanionPersona / updateCompanionPersona /
+ * Persona and lore come from getCompanionPersona / updateCompanionPersona /
  * resetCompanionPersona and listCompanionLore / createCompanionLore /
- * updateCompanionLore / deleteCompanionLore / resetCompanionLore are
- * generated. Rows map through `parseLoreFragment` (server `is_default`,
- * `unlocked`, `unlocked_at`; sealed rows omit `text`).
+ * updateCompanionLore / deleteCompanionLore / resetCompanionLore, always in
+ * the current interface locale. Account-written fragments have `u-` ids;
+ * every other fragment of a preset is authored lore.
  */
-export const COMPANION_STORY_SUPPORTED = false;
+export const COMPANION_STORY_SUPPORTED = true;
 
 /** Server reference for a companion: `preset:<id>` or `custom:<id>`. */
 export type CompanionRef = `preset:${string}` | `custom:${string}`;
@@ -329,25 +346,100 @@ export interface CompanionStory {
   readonly resetLore: () => Promise<void>;
 }
 
-const unavailable = () => Promise.reject(new CompanionApiUnavailableError());
+type StoryLocale = "en" | "zh-TW" | "zh-CN";
+
+const ACCOUNT_LORE_PREFIX = "u-";
+
+function storyLocale(locale: string): StoryLocale {
+  return locale === "zh-TW" || locale === "zh-CN" ? locale : "en";
+}
+
+/** Map one lore response to fragments; account rows start with `u-`. */
+export function loreFragments(
+  response: Pick<CompanionLoreSchema, "fragments">,
+  ref: CompanionRef,
+): readonly LoreFragment[] {
+  const preset = ref.startsWith("preset:");
+  return response.fragments
+    .map((row) =>
+      parseLoreFragment({
+        ...row,
+        is_default: preset && !row.id.startsWith(ACCOUNT_LORE_PREFIX),
+      }),
+    )
+    .filter((item): item is LoreFragment => item !== null);
+}
 
 export function useCompanionStory(ref: CompanionRef): CompanionStory {
-  return useMemo(
-    () => ({
-      supported: COMPANION_STORY_SUPPORTED && ref.length > 0,
-      isLoading: false,
-      isError: false,
-      persona: null,
-      lore: [],
-      savePersona: unavailable,
-      resetPersona: unavailable,
-      createLore: unavailable,
-      updateLore: unavailable,
-      deleteLore: unavailable,
-      resetLore: unavailable,
-    }),
-    [ref],
-  );
+  const { locale: uiLocale } = useI18n();
+  const locale = storyLocale(uiLocale);
+  const queryClient = useQueryClient();
+  const enabled = COMPANION_STORY_SUPPORTED && ref.length > 0;
+  const params = useMemo(() => ({ locale }), [locale]);
+  const personaQuery = useGetCompanionPersona(ref, params, { query: { enabled } });
+  const loreQuery = useListCompanionLore(ref, params, { query: { enabled } });
+  const persona = personaQuery.data;
+  const lore = loreQuery.data;
+  return useMemo(() => {
+    const personaKey = getGetCompanionPersonaQueryKey(ref, params);
+    const loreKey = getListCompanionLoreQueryKey(ref, params);
+    const setLore = (next: CompanionLoreSchema) => {
+      queryClient.setQueryData(loreKey, next);
+    };
+    return {
+      supported: enabled,
+      isLoading: personaQuery.isLoading || loreQuery.isLoading,
+      isError: personaQuery.isError || loreQuery.isError,
+      persona:
+        persona === undefined ? null : { text: persona.persona, isDefault: persona.is_default },
+      lore: lore === undefined ? [] : loreFragments(lore, ref),
+      savePersona: async (text) => {
+        queryClient.setQueryData(
+          personaKey,
+          await updateCompanionPersona(ref, { persona: text }, params),
+        );
+      },
+      resetPersona: async () => {
+        queryClient.setQueryData(personaKey, await resetCompanionPersona(ref, params));
+      },
+      createLore: async (input) => {
+        setLore(
+          await createCompanionLore(
+            ref,
+            { text: input.text, themes: [...input.themes], tier: input.tier },
+            params,
+          ),
+        );
+      },
+      updateLore: async (id, input) => {
+        setLore(
+          await updateCompanionLore(
+            ref,
+            id,
+            { text: input.text, themes: [...input.themes], tier: input.tier },
+            params,
+          ),
+        );
+      },
+      deleteLore: async (id) => {
+        setLore(await deleteCompanionLore(ref, id, params));
+      },
+      resetLore: async () => {
+        setLore(await resetCompanionLore(ref, params));
+      },
+    };
+  }, [
+    enabled,
+    lore,
+    loreQuery.isError,
+    loreQuery.isLoading,
+    params,
+    persona,
+    personaQuery.isError,
+    personaQuery.isLoading,
+    queryClient,
+    ref,
+  ]);
 }
 
 export class CompanionApiUnavailableError extends Error {
