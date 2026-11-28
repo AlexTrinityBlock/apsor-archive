@@ -33,10 +33,9 @@ from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorP
 
 AssignmentSlot = Literal["primary", "auxiliary"]
 
-# The auxiliary effort column is NOT NULL, but a legacy row may still contain
-# an empty string; resolution normalises it rather than sending an empty
-# parameter to a provider.
-DEFAULT_AUXILIARY_EFFORT = "low"
+# No effort is ever forced: NULL or an empty string means "omit the field and
+# let the provider default apply", so models without reasoning support work.
+DEFAULT_AUXILIARY_EFFORT: str | None = None
 
 
 @dataclass(frozen=True)
@@ -49,7 +48,7 @@ class ChatAssignment:
     reasoning_effort: str | None
     aux_provider_config_id: int | None
     aux_model: str | None
-    aux_reasoning_effort: str
+    aux_reasoning_effort: str | None
     context_window_tokens: int | None
     compaction_threshold_tokens: int | None
 
@@ -138,7 +137,7 @@ async def load_assignment(session: AsyncSession, user_id: int) -> ChatAssignment
         reasoning_effort=reasoning_effort,
         aux_provider_config_id=aux_provider_config_id,
         aux_model=aux_model,
-        aux_reasoning_effort=aux_reasoning_effort or DEFAULT_AUXILIARY_EFFORT,
+        aux_reasoning_effort=aux_reasoning_effort or None,
         context_window_tokens=context_window_tokens,
         compaction_threshold_tokens=compaction_threshold_tokens,
     )
@@ -172,7 +171,7 @@ def slot_values(assignment: ChatAssignment, slot: AssignmentSlot) -> SlotValues:
             model=assignment.model,
             effort=assignment.reasoning_effort,
         )
-    effort = assignment.aux_reasoning_effort or DEFAULT_AUXILIARY_EFFORT
+    effort = assignment.aux_reasoning_effort or None
     if assignment.aux_provider_config_id is None and assignment.aux_model is None:
         return SlotValues(
             row_id=assignment.provider_config_id,

@@ -8034,8 +8034,15 @@
             "title": "Aux Provider Label"
           },
           "aux_reasoning_effort": {
-            "title": "Aux Reasoning Effort",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aux Reasoning Effort"
           },
           "aux_tier": {
             "anyOf": [
@@ -8298,11 +8305,16 @@
             "type": "integer"
           },
           "aux_reasoning_effort": {
-            "default": "low",
-            "maxLength": 32,
-            "minLength": 1,
-            "title": "Aux Reasoning Effort",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aux Reasoning Effort"
           },
           "chat_model": {
             "maxLength": 128,
