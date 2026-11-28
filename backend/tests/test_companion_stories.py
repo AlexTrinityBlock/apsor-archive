@@ -273,11 +273,11 @@ def test_search_offers_unlocked_lore_in_a_separate_block(client: TestClient) -> 
     for item in about_self["data"]["memory_results"]:
         assert str(item["memory_id"]) not in lore_ids
 
-    # The recipe memory is familiar-tier: locked before enough completed runs.
-    locked = _search_once(client, "grandmother recipe soy sauce family food")
-    assert "vellum-familiar-recipe" not in {
-        item["id"] for item in locked["data"].get("lore", [])
-    }
+    # Family/letters/love lore includes familiar-tier passages (for example
+    # vellum-014): none may surface before enough completed runs.
+    family_query = "family letters love grandmother recipe soy sauce"
+    locked = _search_once(client, family_query)
+    assert "familiar" not in {item["tier"] for item in locked["data"].get("lore", [])}
     assert locked["data"]["memory_results"], "the archive memory is still found"
 
     bond = client.get(f"{STORIES}/{VELLUM}/lore").json()["bond"]
@@ -293,8 +293,8 @@ def test_search_offers_unlocked_lore_in_a_separate_block(client: TestClient) -> 
     assert unlocked["bond"]["familiar_unlocked_at"] is not None
     assert {item["tier"]: item["unlocked"] for item in unlocked["fragments"]}["familiar"]
 
-    opened = _search_once(client, "grandmother recipe soy sauce family food")
-    assert "vellum-familiar-recipe" in {item["id"] for item in opened["data"]["lore"]}
+    opened = _search_once(client, family_query)
+    assert "familiar" in {item["tier"] for item in opened["data"]["lore"]}
 
 
 def test_no_lore_without_a_frozen_companion(client: TestClient) -> None:
@@ -428,3 +428,53 @@ def test_shipped_lore_files_are_valid() -> None:
 @pytest.mark.parametrize("locale", ["en", "zh-TW", "zh-CN"])
 def test_every_locale_loads(locale: str) -> None:
     assert load_presets(locale).keys() == load_presets("en").keys()
+
+
+# --- shipped lore content ----------------------------------------------------------
+
+
+def test_shipped_lore_loads_in_every_locale() -> None:
+    """All six presets load in en, zh-TW, and zh-CN with identical fragment ids."""
+    from app.module.companion.service.preset_lore_catalog import load_presets
+
+    english = load_presets("en")
+    assert sorted(english) == ["atlas", "herbaria", "horologe", "nocturne", "quill", "vellum"]
+    english_ids = {
+        preset_id: [fragment.key for fragment in story.fragments]
+        for preset_id, story in english.items()
+    }
+    assert sum(len(ids) for ids in english_ids.values()) == 183
+    for locale in ("zh-TW", "zh-CN"):
+        translated = load_presets(locale)
+        for preset_id, story in translated.items():
+            assert [fragment.key for fragment in story.fragments] == english_ids[preset_id]
+            assert story.persona != english[preset_id].persona
+            translated_texts = {fragment.text for fragment in story.fragments}
+            assert translated_texts.isdisjoint(
+                {fragment.text for fragment in english[preset_id].fragments}
+            )
+
+
+def test_shipped_lore_refs_point_at_canon() -> None:
+    """Every fragment's refs name a canon entity; Vellum's first passage has refs."""
+    import json
+
+    from app.module.companion.service.preset_lore_catalog import LORE_DIRECTORY, load_presets
+
+    canon = json.loads((LORE_DIRECTORY / "canon.json").read_text(encoding="utf-8"))
+    entities = set(canon["entities"])
+    presets = load_presets("en")
+    for story in presets.values():
+        for fragment in story.fragments:
+            assert set(fragment.refs) <= entities
+    assert presets["vellum"].fragments[0].refs
+
+
+def test_vocabulary_overlays_match_chinese_queries() -> None:
+    """English themes stay canonical; zh overlays add keywords for both scripts."""
+    from app.module.companion.service.preset_lore_catalog import load_vocabulary
+
+    vocabulary = load_vocabulary()
+    assert {"rain", "family", "cooking"} <= vocabulary.themes_in("昨天下雨，想起外婆的食譜")
+    assert {"rain", "family", "cooking"} <= vocabulary.themes_in("昨天下雨，想起外婆的菜谱")
+    assert "rain" in vocabulary.themes_in("a rainy evening")

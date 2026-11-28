@@ -97,6 +97,9 @@ class LoreFragment:
     themes: tuple[str, ...]
     tier: LoreTier
     edited: bool = False
+    # Canon entity ids (``lore/canon.json``) this passage mentions; empty for
+    # account-written lore.
+    refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
