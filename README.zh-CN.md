@@ -1761,7 +1761,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `d2b6f4a8c1e9`。此分支上
+最新的迁移是 `e7b2d5a9c4f1`。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1878,10 +1878,26 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   `medium`、`full`，默认 `full`）与 `opacity_mode`（`opaque`、`translucent`、
   `auto`，默认 `opaque`），附检查约束与服务器默认值。RLS 与授权不变；降级会删除
   这两个字段。
-- `d2b6f4a8c1e9`（当前 head）为 `companion_preference` 新增可为 NULL 的
+- `d2b6f4a8c1e9`为 `companion_preference` 新增可为 NULL 的
   `scale` 浮点数（0 为精简、1 为完整），用于直接在屏幕上缩放，附范围检查。
   NULL 表示“使用 `size`”；只发送 `scale` 时会推导出 `size`，只发送 `size` 时会清除
   `scale`。RLS 与授权不变；降级会删除这个字段。
+- `e4c8a2f6b0d3` 新增 `companion_lore_told`（每个账号、伙伴与片段的
+  `told_count`、`offered_at`、`last_told_at`、`source`）与
+  `companion_bond.last_story_run`，用于故事时刻的节奏。仅限所有者的 RLS。
+- `f1a6c3e8b2d4` 新增全局、可由 root 编辑的伙伴世界表（预设角色、片段、
+  设定词条、世界观文档与修订、配置、提示词模板、种子状态），从 `lore/`
+  预置，并通过 `seed_hash`／`admin_modified`／`upstream_seed_hash`
+  保留 root 的修改。所有人可读、仅 root 可写。
+- `a2d7e4f9c3b5` 新增 `app.admin_scope = 'companion'` 策略（root 只能读写
+  伙伴故事相关的数据行，永远接触不到档案馆内容）、由管理员管理的账号表
+  （账号可读不可写）、新的羁绊字段、`companion_lore_fragment.refs`，以及只能
+  追加的 `companion_admin_access_log`。
+- `b3e8f5a1d6c7` 新增 `companion_generated_story` 与 `companion_story_job`，
+  供 worker 撰写生活故事。
+- `e7b2d5a9c4f1`（当前 head）新增 `chunk.embedding_failures` 与待嵌入的部分
+  索引，并把 JSON `null` 嵌入转为 SQL NULL，让 worker 能在供应商或额度中断后
+  补上向量。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，

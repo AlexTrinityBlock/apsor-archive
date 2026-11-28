@@ -1982,7 +1982,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `d2b6f4a8c1e9`. The migrations after `agent_config` on
+The latest migration is `e7b2d5a9c4f1`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -2111,11 +2111,31 @@ this branch are:
   default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
   `opaque`) to `companion_preference`, with check constraints and server
   defaults. RLS and grants are unchanged; the downgrade drops both columns.
-- `d2b6f4a8c1e9` (current head) adds the nullable `scale` float (0 compact to
+- `d2b6f4a8c1e9` adds the nullable `scale` float (0 compact to
   1 full) to `companion_preference` for direct on-screen resizing, with a
   range check. NULL means "use `size`"; sending only `scale` derives `size`,
   and sending only `size` clears `scale`. RLS and grants are unchanged; the
   downgrade drops the column.
+- `e4c8a2f6b0d3` adds `companion_lore_told` (per account, companion and
+  fragment: `told_count`, `offered_at`, `last_told_at`, `source`) and
+  `companion_bond.last_story_run` for story-moment pacing. Owner-only RLS.
+- `f1a6c3e8b2d4` adds the global, root-editable companion world tables
+  (`companion_preset`, `_preset_text`, `_lore_item`, `_lore_item_text`,
+  `_canon_entity`, `_world_doc`, `_world_doc_revision`, `_config`,
+  `_prompt_template`, `_seed_state`), seeded from `lore/` with
+  `seed_hash`/`admin_modified`/`upstream_seed_hash` so root edits survive
+  upgrades. Read-all, root-write.
+- `a2d7e4f9c3b5` adds the `app.admin_scope = 'companion'` policies (root may
+  read and write companion story rows only, never the archive), the
+  admin-managed per-account tables (`companion_account_policy`,
+  `_user_config`, `_admin_story_override`, `_admin_lore_override`; the account
+  can read but not write them), new bond columns, `companion_lore_fragment.refs`,
+  and the append-only `companion_admin_access_log`.
+- `b3e8f5a1d6c7` adds `companion_generated_story` and `companion_story_job`
+  for worker-written life stories.
+- `e7b2d5a9c4f1` (current head) adds `chunk.embedding_failures`, a partial
+  pending-embedding index, and converts JSON `null` embeddings to SQL NULL so
+  the worker can backfill vectors after a provider or allowance outage.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

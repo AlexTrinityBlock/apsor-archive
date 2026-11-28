@@ -1742,7 +1742,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `d2b6f4a8c1e9`。此分支上 `agent_config` 之後的移轉為：
+最新的移轉是 `e7b2d5a9c4f1`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -1859,10 +1859,26 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   `medium`、`full`，預設 `full`）與 `opacity_mode`（`opaque`、`translucent`、
   `auto`，預設 `opaque`），附檢查約束與伺服器預設值。RLS 與授權不變；降級會刪除
   這兩個欄位。
-- `d2b6f4a8c1e9`（目前 head）為 `companion_preference` 新增可為 NULL 的
+- `d2b6f4a8c1e9`為 `companion_preference` 新增可為 NULL 的
   `scale` 浮點數（0 為精簡、1 為完整），供直接在畫面上縮放使用，附範圍檢查。
   NULL 表示「使用 `size`」；只送 `scale` 時會推導出 `size`，只送 `size` 時會清除
   `scale`。RLS 與授權不變；降級會刪除這個欄位。
+- `e4c8a2f6b0d3` 新增 `companion_lore_told`（每個帳號、夥伴與片段的
+  `told_count`、`offered_at`、`last_told_at`、`source`）與
+  `companion_bond.last_story_run`，用於故事時刻的節奏。僅限擁有者的 RLS。
+- `f1a6c3e8b2d4` 新增全域、可由 root 編輯的夥伴世界資料表（預設角色、
+  片段、設定詞條、世界觀文件與修訂、設定、提示詞模板、種子狀態），從
+  `lore/` 植入，並以 `seed_hash`／`admin_modified`／`upstream_seed_hash`
+  保留 root 的修改。所有人可讀、僅 root 可寫。
+- `a2d7e4f9c3b5` 新增 `app.admin_scope = 'companion'` 政策（root 只能讀寫
+  夥伴故事相關資料列，永遠碰不到檔案館內容）、由管理員管理的帳號資料表
+  （帳號可讀不可寫）、新的羈絆欄位、`companion_lore_fragment.refs`，以及只能
+  新增的 `companion_admin_access_log`。
+- `b3e8f5a1d6c7` 新增 `companion_generated_story` 與 `companion_story_job`，
+  供 worker 撰寫生活故事。
+- `e7b2d5a9c4f1`（目前 head）新增 `chunk.embedding_failures` 與待嵌入的部分
+  索引，並把 JSON `null` 嵌入轉為 SQL NULL，讓 worker 能在供應商或額度中斷後
+  補上向量。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會
