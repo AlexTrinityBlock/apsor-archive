@@ -66,5 +66,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.0",
     "vite": "^8.3.5"
+  },
+  "patchedDependencies": {
+    "pptxviewjs@1.1.9": "patches/pptxviewjs@1.1.9.patch"
   }
 }

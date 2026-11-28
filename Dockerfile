@@ -12,6 +12,7 @@ FROM oven/bun:1.3.6-alpine AS web
 WORKDIR /app/frontend
 
 COPY frontend/package.json frontend/bun.lock ./
+COPY frontend/patches ./patches
 RUN bun install --frozen-lockfile
 
 COPY frontend/ ./
