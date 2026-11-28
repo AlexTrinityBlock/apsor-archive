@@ -415,6 +415,23 @@ export const core = {
     resolveSuccess: "已解决供应商通知。",
     resolveAllSuccess: "已解决所有供应商通知。",
     resolveError: "无法解决供应商通知。",
+    embeddings: {
+      pending:
+        "{accounts} 个档案馆中有 {count} 个段落正在等待嵌入向量。关键词搜索已经能找到它们；向量会自动补上。",
+      retry: "立即重试",
+      retryRequested: "worker 会在下一个周期重试嵌入。",
+      retryError: "无法请 worker 重试。",
+      resumeAt: "将于 {time} 自动恢复",
+      allowanceBlocked: "有 {count} 个账号的嵌入额度已用完；提高额度后即可继续。",
+      abandoned: "有 {count} 个段落多次嵌入失败；它们仍可用关键词搜索。",
+      state: {
+        running: "补齐中",
+        idle: "等待中",
+        paused: "提供方出错，已暂停",
+        disabled: "嵌入已关闭",
+        unknown: "worker 尚未回报",
+      },
+    },
   },
   impersonation: {
     eyebrow: "根账号会话",

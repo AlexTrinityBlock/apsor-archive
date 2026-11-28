@@ -3148,6 +3148,78 @@
         "title": "DirectorySchema",
         "type": "object"
       },
+      "EmbeddingBackfillStatusSchema": {
+        "description": "Root-only view of chunks still waiting for an embedding.\n\n``pending_chunks`` counts rows whose text is indexed (keyword search works)\nbut whose vector is still missing; the worker fills them in automatically.\n``worker_state`` is what the dedicated worker last published: ``running``,\n``idle``, ``paused`` (provider failure; resumes at ``resume_at``),\n``disabled`` (no embedding provider), or ``unknown`` (no report yet).\nOnly counts and stable codes appear here, never chunk text.",
+        "properties": {
+          "abandoned_chunks": {
+            "title": "Abandoned Chunks",
+            "type": "integer"
+          },
+          "allowance_blocked_accounts": {
+            "title": "Allowance Blocked Accounts",
+            "type": "integer"
+          },
+          "last_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error Code"
+          },
+          "pending_accounts": {
+            "title": "Pending Accounts",
+            "type": "integer"
+          },
+          "pending_chunks": {
+            "title": "Pending Chunks",
+            "type": "integer"
+          },
+          "resume_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "worker_state": {
+            "title": "Worker State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pending_chunks",
+          "pending_accounts",
+          "abandoned_chunks",
+          "worker_state",
+          "resume_at",
+          "last_error_code",
+          "allowance_blocked_accounts",
+          "updated_at"
+        ],
+        "title": "EmbeddingBackfillStatusSchema",
+        "type": "object"
+      },
       "EmbeddingReindexSchema": {
         "description": "The result of re-embedding the current and historical chunk corpus.",
         "properties": {
@@ -14115,6 +14187,50 @@
         "summary": "Get Summary",
         "tags": [
           "memories"
+        ]
+      }
+    },
+    "/api/v1/system/embedding-backfill": {
+      "get": {
+        "description": "Return how many passages still wait for an embedding, as counts only.",
+        "operationId": "getEmbeddingBackfillStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingBackfillStatusSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Embedding Backfill Status",
+        "tags": [
+          "system"
+        ]
+      }
+    },
+    "/api/v1/system/embedding-backfill/retry": {
+      "post": {
+        "description": "Ask the worker to resume the backfill now (after a recharge, say).",
+        "operationId": "retryEmbeddingBackfill",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingBackfillStatusSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Retry Embedding Backfill",
+        "tags": [
+          "system"
         ]
       }
     },

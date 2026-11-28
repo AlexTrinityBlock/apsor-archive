@@ -418,6 +418,23 @@ export const core = {
     resolveSuccess: "已解決供應商通知。",
     resolveAllSuccess: "已解決所有供應商通知。",
     resolveError: "無法解決供應商通知。",
+    embeddings: {
+      pending:
+        "{accounts} 個檔案館中有 {count} 個段落正在等待嵌入向量。關鍵字搜尋已經找得到它們；向量會自動補上。",
+      retry: "立即重試",
+      retryRequested: "worker 會在下一個週期重試嵌入。",
+      retryError: "無法請 worker 重試。",
+      resumeAt: "將於 {time} 自動恢復",
+      allowanceBlocked: "有 {count} 個帳號的嵌入額度已用完；提高額度後即可繼續。",
+      abandoned: "有 {count} 個段落多次嵌入失敗；它們仍可用關鍵字搜尋。",
+      state: {
+        running: "補齊中",
+        idle: "等待中",
+        paused: "供應商出錯，已暫停",
+        disabled: "嵌入已關閉",
+        unknown: "worker 尚未回報",
+      },
+    },
   },
   impersonation: {
     eyebrow: "根帳號工作階段",

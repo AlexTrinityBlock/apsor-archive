@@ -439,6 +439,25 @@ export const core = {
     resolveSuccess: "Provider notice resolved.",
     resolveAllSuccess: "All provider notices resolved.",
     resolveError: "Could not resolve the provider notice.",
+    embeddings: {
+      pending:
+        "{count} passages in {accounts} archive(s) are waiting for embeddings. Keyword search already finds them; vectors resume automatically.",
+      retry: "Retry now",
+      retryRequested: "The worker will retry the embeddings on its next cycle.",
+      retryError: "Could not ask the worker to retry.",
+      resumeAt: "Resumes automatically at {time}",
+      allowanceBlocked:
+        "{count} account(s) have spent their embedding allowance; raise it to continue.",
+      abandoned:
+        "{count} passages could not be embedded after repeated attempts; they stay keyword-searchable.",
+      state: {
+        running: "Filling in",
+        idle: "Waiting",
+        paused: "Paused after a provider failure",
+        disabled: "Embeddings are off",
+        unknown: "Worker not reporting",
+      },
+    },
   },
   impersonation: {
     eyebrow: "Root session",
