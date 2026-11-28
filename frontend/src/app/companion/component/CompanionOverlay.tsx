@@ -112,6 +112,7 @@ const KEY_STEP = 0.04;
 const READOUT_LINGER_MS = 900;
 const ANNOUNCE_DELAY_MS = 500;
 const HINT_HOVER_MS = 700;
+const QUIET_ACTIONS: ReadonlySet<string> = new Set(["idle", "greet", "listening", "sleeping"]);
 
 function readPositions(): Positions {
   return {
@@ -171,6 +172,12 @@ export function CompanionOverlay({
 
   const director = useCompanionDirector({ stream, draft, conversationKey, held });
   const { action } = director;
+  // The coach hint only appears while the companion is not working; timers
+  // read the latest pose through this ref.
+  const quietRef = useRef(true);
+  useLayoutEffect(() => {
+    quietRef.current = QUIET_ACTIONS.has(action);
+  }, [action]);
 
   const range = useMemo(() => sizeRange(breakpoint, context), [breakpoint, context]);
   const detents = useMemo(() => detentsFor(range), [range]);
@@ -384,6 +391,7 @@ export function CompanionOverlay({
     setResizing(true);
     setExpanded(false);
     setReadoutVisible(true);
+    disarmHint();
     setHintOpen(false);
     if (source === "wheel") {
       setReadout({
@@ -412,6 +420,7 @@ export function CompanionOverlay({
     onMoveStart: () => {
       setHeld(true);
       setExpanded(false);
+      disarmHint();
       setHintOpen(false);
     },
     onMove: (dx, dy) => {
@@ -457,7 +466,7 @@ export function CompanionOverlay({
     onTap: () => {
       director.poke();
       setExpanded((value) => !value || breakpoint !== "phone");
-      if (!hintSeen && range.resizable && action === "idle") {
+      if (!hintSeen && range.resizable && quietRef.current) {
         setHintOpen(true);
       }
     },
@@ -577,7 +586,8 @@ export function CompanionOverlay({
     }
     hintTimer.current = window.setTimeout(() => {
       hintTimer.current = null;
-      if (action === "idle") {
+      // Re-read the flag: a resize during the wait may have just set it.
+      if (quietRef.current && !readResizeHintSeen()) {
         setHintOpen(true);
       }
     }, HINT_HOVER_MS);
