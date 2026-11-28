@@ -63,6 +63,11 @@ The application layer does not define backend behavior. API shapes come from `ge
 - A live tool step is isolated from assistant prose tokens. Streaming a token must not re-render or remount a presented PDF, chart, or resource card; keep the live step memoized and its callbacks stable so the preview stays on screen.
 - Fenced code blocks in the transcript offer one-click copy of the raw code text; inline backtick code has no copy control.
 - Inline charts enable Plotly `automargin` on every cartesian axis. A chart whose long category labels cannot fit the reading column gets a minimum width and scrolls horizontally inside its card instead of compressing labels into each other; the scroll hint appears only while the canvas overflows.
+- Scroll follow lives in `chat/hook/useStickToBottom.ts` (pure rules in `chat/scroll-follow.ts`): pin in a layout effect, re-pin on `ResizeObserver` growth, detach on any upward intent, re-attach only near the end, and show **Jump to latest** when detached. Do not reintroduce a post-paint `scrollTop` effect.
+- The live-turn reducer is pure (`chat/hook/stream-reducer.ts`); token deltas are batched per animation frame and any structural event flushes first. Keep new event handling in the reducer with a `bun:test` case.
+- Leaving the page or switching threads while a run streams asks first (`useBlocker` + `LeaveRunDialog`), because a disconnect stops the run server-side. Hash-only and same-path navigations pass.
+- Presented resources reserve their final box before loading. `ResourceThumb` picks server thumbnail → image original → PDF page 1 → type tile; its `thumbnail` prop is the seam for server-rendered thumbnails.
+- Composer drafts are kept per conversation in memory only (`chat/draft-map.ts`); never persist them.
 - On mobile the fixed chat shell follows the visual viewport while the on-screen keyboard is open, so the transcript top and the composer stay reachable. The inner transcript remains the scroll owner; do not replace this with scroll padding or by letting the page body scroll.
 
 ## Verification

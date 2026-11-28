@@ -79,7 +79,7 @@ import { ResourcePreviewDialog } from "./component/ResourcePreviewDialog";
 import { RetryBar } from "./component/RetryBar";
 import { StreamingTurn } from "./component/StreamingTurn";
 import { StreamErrorBanner, StreamLiveRegion } from "./component/StreamStatus";
-import { useChatSplit } from "./hook/useChatSplit";
+import { SPLIT_BASIS_VAR, useChatSplit } from "./hook/useChatSplit";
 import {
   useChatStream,
   type ChatStreamView,
@@ -1624,7 +1624,9 @@ export function ChatPage() {
             <div
               id="chat-inspector"
               className="chat-inspector-slot"
-              style={{ flexBasis: `${ratio * 100}%` }}
+              style={{
+                flexBasis: `var(${SPLIT_BASIS_VAR}, ${ratio * 100}%)`,
+              }}
             >
               {inspector}
             </div>
