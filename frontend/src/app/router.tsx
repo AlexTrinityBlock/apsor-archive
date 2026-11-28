@@ -43,6 +43,9 @@ const AboutPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("./settings/page").then((module) => ({ default: module.SettingsPage })),
 );
+const CompanionPage = lazy(() =>
+  import("./companions/page").then((module) => ({ default: module.CompanionPage })),
+);
 const ProfilePage = lazy(() =>
   import("./profile/page").then((module) => ({ default: module.ProfilePage })),
 );
@@ -200,6 +203,7 @@ export const router = createBrowserRouter([
           { path: "docs", element: <Navigate to="/about" replace /> },
           { path: "settings", element: <SettingsPage /> },
           { path: "profile", element: <ProfilePage /> },
+          { path: "companion", element: <CompanionPage /> },
           { path: "change-password", element: <ChangePasswordPage /> },
           {
             path: "accounts",

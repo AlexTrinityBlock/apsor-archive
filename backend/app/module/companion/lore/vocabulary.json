@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "English keywords only; matching against Keeper memories is semantic (embeddings), so other languages match by meaning.",
+  "note": "English keywords only; matching against people's memories is semantic (embeddings), so other languages match by meaning.",
   "themes": {
     "family": [
       "family",

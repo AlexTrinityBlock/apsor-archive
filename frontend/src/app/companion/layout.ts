@@ -1,8 +1,8 @@
 /**
  * Pure placement geometry for the floating companion: dock lines, release
- * projection, vertical clamping, and the "don't block the reader" rules.
+ * projection, vertical clamping, size fitting, and the "don't block the
+ * reader" rules.
  */
-
 export interface Rect {
   readonly left: number;
   readonly top: number;
@@ -33,6 +33,12 @@ export interface SavedPosition {
   readonly side: DockSide;
   /** Top of the box as a fraction of the viewport height. */
   readonly y: number;
+  /**
+   * Bottom of the box (the figure's feet) as a fraction of the viewport
+   * height. When present it wins over `y`, so resizing keeps the feet still.
+   * Older saved positions have only `y`.
+   */
+  readonly feet?: number;
 }
 
 export interface LayoutContext {
@@ -56,9 +62,9 @@ export interface BoxSize {
 }
 
 export const EDGE_MARGIN = 10;
-const TOP_MARGIN = 64;
-/** Height of the control bar plus visible strings above the figure. */
-export const STRING_SPAN = 46;
+export const TOP_MARGIN = 64;
+/** Free space above the figure for floating effects (?, zZ, sparkles). */
+export const FIGURE_HEADROOM = 20;
 
 export function breakpointFor(width: number): Breakpoint {
   if (width < 620) {
@@ -67,7 +73,10 @@ export function breakpointFor(width: number): Breakpoint {
   return width < 980 ? "tablet" : "desktop";
 }
 
-/** Figure size (without strings) per breakpoint, 2:3 like the art. */
+/** The art's intrinsic frame size; the figure never renders larger than this. */
+export const INTRINSIC_FIGURE: BoxSize = { width: 384, height: 576 };
+
+/** Compact figure size (without headroom) per breakpoint, 2:3 like the art. */
 export function figureSize(breakpoint: Breakpoint): BoxSize {
   switch (breakpoint) {
     case "phone":
@@ -79,9 +88,28 @@ export function figureSize(breakpoint: Breakpoint): BoxSize {
   }
 }
 
+/**
+ * The widest free gutter beside the reading column inside the main content,
+ * or the whole content width when there is no column.
+ */
+export function gutterWidth(context: LayoutContext): number {
+  const content = context.content ?? null;
+  const contentLeft = content?.left ?? 0;
+  const contentRight =
+    content === null ? context.viewport.width : content.left + content.width;
+  const column = context.column;
+  if (column === null) {
+    return Math.max(0, contentRight - contentLeft - 2 * EDGE_MARGIN);
+  }
+  const leftGutter = column.left - contentLeft;
+  const rightGutter = contentRight - (column.left + column.width);
+  return Math.max(0, Math.max(leftGutter, rightGutter) - 2 * EDGE_MARGIN);
+}
+
+/** Compact box (figure plus headroom); sized boxes come from `size.ts`. */
 export function boxSize(breakpoint: Breakpoint): BoxSize {
   const figure = figureSize(breakpoint);
-  return { width: figure.width, height: figure.height + STRING_SPAN };
+  return { width: figure.width, height: figure.height + FIGURE_HEADROOM };
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -132,12 +160,22 @@ export function clampTop(top: number, context: LayoutContext, box: BoxSize, left
 export function defaultPosition(
   breakpoint: Breakpoint,
   context: LayoutContext,
+  box: BoxSize = boxSize(breakpoint),
 ): SavedPosition {
-  const box = boxSize(breakpoint);
   const side: DockSide = breakpoint === "phone" ? "viewport-right" : "panel-right";
-  const bottom = context.composer?.top ?? context.viewport.height;
-  const top = bottom - box.height - 8;
-  return { side, y: clamp(top / Math.max(1, context.viewport.height), 0, 1) };
+  const bottom = (context.composer?.top ?? context.viewport.height) - 8;
+  return positionAt(side, bottom - box.height, box, context);
+}
+
+/** Saved position for a box whose top edge is at `top` on a dock side. */
+export function positionAt(
+  side: DockSide,
+  top: number,
+  box: BoxSize,
+  context: LayoutContext,
+): SavedPosition {
+  const height = Math.max(1, context.viewport.height);
+  return { side, y: clamp(top / height, 0, 1), feet: clamp((top + box.height) / height, 0, 1) };
 }
 
 /** Concrete box rectangle for a saved position in the current layout. */
@@ -147,7 +185,11 @@ export function resolveBox(
   box: BoxSize,
 ): Rect {
   const left = dockX(position.side, context, box.width);
-  const top = clampTop(position.y * context.viewport.height, context, box, left);
+  const wanted =
+    position.feet === undefined
+      ? position.y * context.viewport.height
+      : position.feet * context.viewport.height - box.height;
+  const top = clampTop(wanted, context, box, left);
   return { left, top, width: box.width, height: box.height };
 }
 
@@ -179,7 +221,7 @@ export function landingPosition(
   }
   const snappedLeft = dockX(best, context, box.width);
   const snappedTop = clampTop(projectedY, context, box, snappedLeft);
-  return { side: best, y: snappedTop / Math.max(1, context.viewport.height) };
+  return positionAt(best, snappedTop, box, context);
 }
 
 export function intersectionArea(a: Rect, b: Rect): number {
@@ -237,7 +279,49 @@ export function readSavedPosition(value: unknown): SavedPosition | null {
     typeof y === "number" &&
     Number.isFinite(y)
   ) {
-    return { side: side as DockSide, y: clamp(y, 0, 1) };
+    const feet = record.feet;
+    return typeof feet === "number" && Number.isFinite(feet)
+      ? { side: side as DockSide, y: clamp(y, 0, 1), feet: clamp(feet, 0, 1) }
+      : { side: side as DockSide, y: clamp(y, 0, 1) };
   }
   return null;
+}
+
+/** Move a saved position vertically by a fraction of the viewport height. */
+export function shiftPosition(position: SavedPosition, delta: number): SavedPosition {
+  const y = clamp(position.y + delta, 0, 1);
+  return position.feet === undefined
+    ? { side: position.side, y }
+    : { side: position.side, y, feet: clamp(position.feet + delta, 0, 1) };
+}
+
+/**
+ * Keep the feet still when the box changes size. If the head would rise past
+ * the top margin, the feet move down instead, but never into the composer.
+ */
+export function anchorFeet(
+  position: SavedPosition,
+  context: LayoutContext,
+  from: Rect,
+  next: BoxSize,
+): SavedPosition {
+  const baseline = (context.composer?.top ?? context.viewport.height) - 6;
+  let feet = from.top + from.height;
+  if (feet - next.height < TOP_MARGIN) {
+    feet = Math.min(TOP_MARGIN + next.height, baseline);
+  }
+  return positionAt(position.side, feet - next.height, next, context);
+}
+
+export interface PeekGeometry {
+  /** Scale for the shrink peek (panel docks). */
+  readonly scale: number;
+  /** Fraction of the stage slid off-screen for the slide peek (window edges). */
+  readonly slide: number;
+}
+
+/** Peek amounts that leave a large figure no wider than the free gutter. */
+export function peekGeometry(box: BoxSize, context: LayoutContext): PeekGeometry {
+  const ratio = gutterWidth(context) / Math.max(1, box.width);
+  return { scale: clamp(ratio, 0.22, 0.6), slide: clamp(1 - ratio, 0.58, 0.82) };
 }

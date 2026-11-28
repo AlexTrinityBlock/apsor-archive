@@ -35,7 +35,7 @@ class MemoryModel(Base):
     """One memory on the timeline.
 
     A deprecated memory keeps its row and its content. It is deprecated either
-    because a successor replaced it (``superseded_by_id``) or because the keeper
+    because a successor replaced it (``superseded_by_id``) or because the user
     retired it directly (``deprecated_at`` with no successor). Only its search
     chunk is marked non-current; ``read_memory`` can still walk the whole chain.
     """

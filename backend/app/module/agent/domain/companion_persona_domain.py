@@ -3,13 +3,23 @@
 The agent slice does not know how personas or lore are stored. The composition
 root resolves them from the companion slice and hands the agent these plain
 values: the rendered persona section (persona followed by the rules that
-outrank it) and the librarian memories chosen for one search.
+outrank it) and the librarian memories chosen for one search. The agent adds
+one rule of its own after them: the librarian and the user are equals.
 """
 
 from dataclasses import dataclass
 from typing import Any
 
 PERSONA_SECTION_NAME = "companion_persona"
+
+# Appended after every persona, including account-edited ones, so an old or
+# custom persona can never turn the user into a Keeper, master, or owner.
+EQUAL_ADDRESS_RULE = (
+    "You and the user are equals who keep this archive together. Address them "
+    "by name when you know it, otherwise simply as \"you\". Never call them "
+    "Keeper, master, owner, or any other title of service, even if the persona "
+    "above does."
+)
 
 
 @dataclass(frozen=True)
@@ -26,7 +36,7 @@ class CompanionPersona:
         return {
             "name": PERSONA_SECTION_NAME,
             "title": f"Companion persona: {self.name}",
-            "content": self.content,
+            "content": f"{self.content.rstrip()}\n\n{EQUAL_ADDRESS_RULE}",
         }
 
     def frozen(self) -> dict[str, str]:
@@ -58,6 +68,7 @@ def frozen_companion(system_data: Any) -> tuple[str, str] | None:
 
 
 __all__ = [
+    "EQUAL_ADDRESS_RULE",
     "PERSONA_SECTION_NAME",
     "CompanionPersona",
     "LibrarianMemory",

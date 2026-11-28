@@ -1,7 +1,8 @@
 # Chat companion presets
 
-Built-in sprite sets for the chat companion: faceless, ball-jointed marionette
-librarians that stand beside the chat and change pose with the agent's work.
+Built-in sprite sets for the chat companion: faceless, ball-jointed figures:
+librarians who stand freely beside the chat and change pose with the agent's
+work. No strings hold them; they move on their own.
 
 ## Roster
 
@@ -16,15 +17,15 @@ librarians that stand beside the chat and change pose with the agent's work.
 | `nocturne` | Nocturne | female | `#7a5fb0` | lantern, star chart |
 | `quill` | Quill | male | `#9e3b3b` | feather quill, inkwell, scroll |
 
-Every character has a blank porcelain face (no eyes, mouth, or nose) and small
-brass rings on the head and shoulders where the companion's procedural
-marionette strings attach (`manifest.json` → `anchor`, the top of the head in
-normalized frame coordinates).
+Every character has a blank porcelain face (no eyes, mouth, or nose). The small
+brass rings on the head and shoulders are ornaments from the generated art; the
+overlay draws no strings or control bar. Older manifests may still carry an
+`anchor` field, which the parser ignores.
 
 ## Layout
 
 ```
-<id>/manifest.json      schema 1: name, gender, accent, anchor, frame size, actions
+<id>/manifest.json      schema 1: name, gender, accent, frame size, actions
 <id>/<action>.avif      384×576 transparent AVIF, feet on a shared baseline
 <id>/<action>-N.avif    further animation frames (N = 2, 3)
 <id>/portrait.avif      192×192 head-and-shoulders crop for the picker

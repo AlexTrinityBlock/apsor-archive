@@ -301,7 +301,7 @@ export const settings = {
       "This archive uses private per-account archives with root-managed global settings. Root manages accounts and runtime configuration; every account can read only its own files, memories, and conversations. You are signed in as ",
     accessCopyAfter:
       ". Manage accounts from the Accounts page in the main navigation. There is no cloud account or email recovery; sign out from the rail when you leave a shared machine.",
-    keeperFallback: "the root account",
+    rootFallback: "the root account",
     readMethod: "Read the method",
   },
   diagnostics: {

@@ -36,6 +36,7 @@ export const core = {
     openProfile: "開啟使用者檔案",
     userProfile: "使用者檔案",
     profile: "使用者檔案",
+    companion: "夥伴",
     personalSection: "個人",
     accounts: "帳號管理",
     changePassword: "變更密碼",
@@ -47,7 +48,7 @@ export const core = {
     apiOffline: "API 離線",
     localFirst: "本機優先",
     version: "v{version}",
-    owner: "館長",
+    owner: "你",
   },
   status: {
     ok: "正常",
@@ -570,7 +571,6 @@ export const core = {
     ingestRuntime: "擷取執行環境",
     maintenance: "維護",
     language: "語言",
-    companion: "夥伴",
   },
   settings: {
     model: {

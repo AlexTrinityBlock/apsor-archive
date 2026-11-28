@@ -11,6 +11,8 @@ from app.module.companion.domain.companion_domain import (
     SELECTION_MAX_CHARS,
     CompanionGender,
     CompanionMotion,
+    CompanionOpacityMode,
+    CompanionSize,
     parse_selection,
 )
 from app.shared.companion_action import CompanionAction
@@ -113,6 +115,10 @@ class CompanionPreferenceSchema(BaseModel):
     selected: str | None
     enabled: bool
     motion: CompanionMotion
+    size: CompanionSize
+    # Continuous display scale from 0 (compact) to 1 (full); null means "use size".
+    scale: float | None
+    opacity_mode: CompanionOpacityMode
     position: CompanionPositionSchema | None
     updated_at: datetime | None
 
@@ -125,6 +131,11 @@ class CompanionPreferenceUpdateSchema(BaseModel):
     selected: str | None = Field(default=None, max_length=SELECTION_MAX_CHARS)
     enabled: bool | None = None
     motion: CompanionMotion | None = None
+    size: CompanionSize | None = None
+    # Sending only ``scale`` derives ``size``; sending only ``size`` clears
+    # ``scale``; null clears it back to the preset.
+    scale: float | None = Field(default=None, ge=0, le=1)
+    opacity_mode: CompanionOpacityMode | None = None
     position: CompanionPositionSchema | None = None
 
     @field_validator("selected")
@@ -134,7 +145,7 @@ class CompanionPreferenceUpdateSchema(BaseModel):
             raise ValueError("selected must be 'preset:<id>' or 'custom:<id>'.")
         return value
 
-    @field_validator("enabled", "motion")
+    @field_validator("enabled", "motion", "size", "opacity_mode")
     @classmethod
     def _reject_null(cls, value: object) -> object:
         if value is None:

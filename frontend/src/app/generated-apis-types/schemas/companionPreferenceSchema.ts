@@ -6,6 +6,8 @@
  */
 import type { CompanionPositionSchema } from './companionPositionSchema';
 import type { CompanionPreferenceSchemaMotion } from './companionPreferenceSchemaMotion';
+import type { CompanionPreferenceSchemaOpacityMode } from './companionPreferenceSchemaOpacityMode';
+import type { CompanionPreferenceSchemaSize } from './companionPreferenceSchemaSize';
 
 /**
  * The account's companion choice. ``selected=None`` means the default preset.
@@ -13,7 +15,10 @@ import type { CompanionPreferenceSchemaMotion } from './companionPreferenceSchem
 export interface CompanionPreferenceSchema {
   enabled: boolean;
   motion: CompanionPreferenceSchemaMotion;
+  opacity_mode: CompanionPreferenceSchemaOpacityMode;
   position: CompanionPositionSchema | null;
+  scale: number | null;
   selected: string | null;
+  size: CompanionPreferenceSchemaSize;
   updated_at: string | null;
 }
