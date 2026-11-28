@@ -83,8 +83,8 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v21"
-TOOLS_VERSION = "archive-tools-v20"
+PROMPT_VERSION = "archive-agent-v22"
+TOOLS_VERSION = "archive-tools-v21"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"

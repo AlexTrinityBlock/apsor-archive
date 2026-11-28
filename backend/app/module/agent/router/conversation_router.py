@@ -30,6 +30,7 @@ from app.module.agent.schema.agent_schema import (
     AgentMessageCreateSchema,
     AgentRetrySchema,
     AgentTurnResultSchema,
+    AgentWebSourceSchema,
 )
 from app.module.agent.service.agent_service import AgentService
 from app.shared.types.list_response import ListResponseSchema
@@ -139,6 +140,19 @@ async def list_entries(
         before_id=before_id,
         limit=limit,
     )
+
+
+@router.get(
+    "/{conversation_id}/web-sources",
+    response_model=list[AgentWebSourceSchema],
+    operation_id="listAgentWebSources",
+)
+async def list_web_sources(
+    conversation_id: int,
+    agent_service: AgentService = Depends(get_agent_service),
+) -> list[AgentWebSourceSchema]:
+    """List the web pages this conversation cited or saw, by their short ids."""
+    return await agent_service.list_web_sources(conversation_id)
 
 
 @router.patch(

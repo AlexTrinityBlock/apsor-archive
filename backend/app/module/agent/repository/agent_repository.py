@@ -40,6 +40,7 @@ from app.module.agent.domain.agent_domain import (
     EntryDraft,
 )
 from app.module.agent.domain.companion_persona_domain import frozen_speaker
+from app.module.agent.domain.web_source_domain import WebSource
 from app.module.agent.exception.domain_error import (
     AgentApprovalNotFoundError,
     AgentApprovalNotPendingError,
@@ -61,6 +62,7 @@ from app.module.agent.model.agent_model import (
     AgentEntryModel,
     AgentRunModel,
 )
+from app.module.agent.repository.web_source_repository import WebSourceRepository
 
 
 class AgentRepository:
@@ -356,6 +358,15 @@ class AgentRepository:
             if not include_deleted and conversation.deleted_at is not None:
                 return None
             return conversation
+
+    async def list_web_sources(self, conversation_id: int) -> list[WebSource]:
+        """Return the conversation's numbered web pages, in number order."""
+        async with self._read() as session:
+            return await WebSourceRepository(
+                session,
+                self.user_id,
+                conversation_id,
+            ).list_sources()
 
     async def list_conversations(
         self,
