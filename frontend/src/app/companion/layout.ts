@@ -43,6 +43,11 @@ export interface LayoutContext {
   readonly composer: Rect | null;
   /** Visible part of the reading column. */
   readonly column: Rect | null;
+  /**
+   * The app's main content region (right of the navigation rail). Viewport
+   * dock lines hug its edges so a drop never lands behind the rail.
+   */
+  readonly content?: Rect | null;
 }
 
 export interface BoxSize {
@@ -88,21 +93,25 @@ function clamp(value: number, min: number, max: number): number {
 
 /** Left coordinate of a dock line for a box of the given width. */
 export function dockX(side: DockSide, context: LayoutContext, width: number): number {
-  const maxX = context.viewport.width - width - EDGE_MARGIN;
+  const content = context.content ?? null;
+  const minX = content === null ? EDGE_MARGIN : Math.max(EDGE_MARGIN, content.left + EDGE_MARGIN);
+  const rightEdge =
+    content === null
+      ? context.viewport.width
+      : Math.min(context.viewport.width, content.left + content.width);
+  const maxX = Math.max(minX, rightEdge - width - EDGE_MARGIN);
   const panel = context.panel;
   switch (side) {
     case "viewport-left":
-      return EDGE_MARGIN;
+      return minX;
     case "viewport-right":
       return maxX;
     case "panel-left":
-      return panel === null
-        ? EDGE_MARGIN
-        : clamp(panel.left + EDGE_MARGIN, EDGE_MARGIN, maxX);
+      return panel === null ? minX : clamp(panel.left + EDGE_MARGIN, minX, maxX);
     case "panel-right":
       return panel === null
         ? maxX
-        : clamp(panel.left + panel.width - width - EDGE_MARGIN, EDGE_MARGIN, maxX);
+        : clamp(panel.left + panel.width - width - EDGE_MARGIN, minX, maxX);
   }
 }
 

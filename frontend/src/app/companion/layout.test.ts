@@ -75,6 +75,18 @@ describe("positions", () => {
     expect(left.side).toBe("viewport-left");
   });
 
+  test("viewport dock lines stay inside the main content, clear of the nav rail", () => {
+    const width = boxSize("desktop").width;
+    const withRail: LayoutContext = {
+      ...desktop,
+      content: { left: 230, top: 0, width: 1210, height: 900 },
+    };
+    expect(dockX("viewport-left", withRail, width)).toBe(230 + EDGE_MARGIN);
+    expect(dockX("viewport-right", withRail, width)).toBe(1440 - width - EDGE_MARGIN);
+    const thrownLeft = landingPosition(300, 300, { x: -4, y: 0 }, withRail, boxSize("desktop"));
+    expect(dockX(thrownLeft.side, withRail, width)).toBeGreaterThanOrEqual(230 + EDGE_MARGIN);
+  });
+
   test("readSavedPosition validates stored JSON", () => {
     expect(readSavedPosition({ side: "viewport-left", y: 2 })).toEqual({
       side: "viewport-left",
