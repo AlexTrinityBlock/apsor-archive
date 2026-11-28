@@ -63,6 +63,8 @@ PRIVATE_TABLES: tuple[str, ...] = (
     "companion_lore_told",
     "companion_preference",
     "companion_story",
+    "companion_story_job",
+    "companion_generated_story",
     "file",
     "file_ingest_job",
     "file_thumbnail",
@@ -73,9 +75,41 @@ PRIVATE_TABLES: tuple[str, ...] = (
     "saved_question",
     "user_profile_card",
 )
+# Private companion tables root may also read and write under the companion
+# admin scope (``{table}_owner`` + ``{table}_companion_admin``).
+COMPANION_ADMIN_TABLES: tuple[str, ...] = (
+    "companion_bond",
+    "companion_generated_story",
+    "companion_lore_fragment",
+    "companion_lore_told",
+    "companion_story",
+    "companion_story_job",
+)
+# Private tables root writes for an account; the account may only read its row
+# (``{table}_owner_read`` + ``{table}_companion_admin``).
+ADMIN_MANAGED_PRIVATE_TABLES: tuple[str, ...] = (
+    "companion_account_policy",
+    "companion_admin_lore_override",
+    "companion_admin_story_override",
+    "companion_user_config",
+)
+# Append-only audit: root reads and inserts under the companion admin scope.
+AUDIT_TABLES: tuple[str, ...] = ("companion_admin_access_log",)
+# ``companion`` is owner-only plus a root read policy for custom companion names.
+COMPANION_ADMIN_READ_TABLES: tuple[str, ...] = ("companion",)
 GLOBAL_TABLES: tuple[str, ...] = (
     "agent_config",
     "chat_provider_config",
+    "companion_canon_entity",
+    "companion_config",
+    "companion_lore_item",
+    "companion_lore_item_text",
+    "companion_preset",
+    "companion_preset_text",
+    "companion_prompt_template",
+    "companion_seed_state",
+    "companion_world_doc",
+    "companion_world_doc_revision",
     "embedding_provider_config",
     "ingest_config",
     "provider_error_notice",
@@ -85,7 +119,9 @@ GLOBAL_TABLES: tuple[str, ...] = (
 )
 AUTH_TABLES: tuple[str, ...] = ("app_user", "user_session")
 ALEMBIC_TABLE = "alembic_version"
-APPLICATION_TABLES = frozenset((*PRIVATE_TABLES, *GLOBAL_TABLES, *AUTH_TABLES))
+APPLICATION_TABLES = frozenset(
+    (*PRIVATE_TABLES, *ADMIN_MANAGED_PRIVATE_TABLES, *AUDIT_TABLES, *GLOBAL_TABLES, *AUTH_TABLES)
+)
 EXPECTED_TABLES = APPLICATION_TABLES | {ALEMBIC_TABLE}
 
 OWNER_USERNAME = "owner"
@@ -271,8 +307,9 @@ def _verify_grants(connection: Connection) -> None:
 
     for table in sorted(APPLICATION_TABLES):
         _require(table in table_privileges, f"{APP_ROLE} has no grants on {table}")
+        expected = {"SELECT", "INSERT"} if table in AUDIT_TABLES else set(_TABLE_PRIVILEGES)
         _require(
-            table_privileges[table] == set(_TABLE_PRIVILEGES),
+            table_privileges[table] == expected,
             f"{APP_ROLE} has unexpected grants on {table}: {sorted(table_privileges[table])}",
         )
     _require(
@@ -315,7 +352,7 @@ def _verify_rls_flags(connection: Connection) -> None:
     ).all()
     flags = {name: (enabled, forced) for name, enabled, forced in rows}
 
-    for table in (*PRIVATE_TABLES, *GLOBAL_TABLES):
+    for table in (*PRIVATE_TABLES, *ADMIN_MANAGED_PRIVATE_TABLES, *AUDIT_TABLES, *GLOBAL_TABLES):
         _require(
             flags.get(table) == (True, True),
             f"{table} must have RLS enabled and forced",
@@ -324,6 +361,25 @@ def _verify_rls_flags(connection: Connection) -> None:
         _require(
             flags.get(table) == (False, False),
             f"{table} must not have RLS enabled",
+        )
+
+
+def _verify_admin_policy(entry: Any, table: str, cmd: str) -> None:
+    """A companion admin policy must require root plus the companion scope."""
+    _require(entry is not None, f"{table} is missing its companion admin {cmd} policy")
+    assert entry is not None
+    _require(entry["cmd"] == cmd, f"{entry['policyname']} must be {cmd}")
+    _require(set(entry["roles"]) == {APP_ROLE}, f"{entry['policyname']} has the wrong role")
+    clauses = [entry["qual"] or ""]
+    if cmd == "ALL":
+        clauses.append(entry["with_check"] or "")
+    for clause in clauses:
+        _require(
+            "app.user_role" in clause
+            and "'root'" in clause
+            and "app.admin_scope" in clause
+            and "'companion'" in clause,
+            f"{entry['policyname']} must require root and the companion admin scope",
         )
 
 
@@ -345,11 +401,20 @@ def _verify_policies(connection: Connection) -> None:
 
     for table in PRIVATE_TABLES:
         entries = by_table.get(table, [])
+        policies = {entry["policyname"]: entry for entry in entries}
+        extra: set[str] = set()
+        if table in COMPANION_ADMIN_TABLES:
+            extra = {f"{table}_companion_admin"}
+            _verify_admin_policy(policies.get(f"{table}_companion_admin"), table, "ALL")
+        elif table in COMPANION_ADMIN_READ_TABLES:
+            extra = {f"{table}_companion_admin_read"}
+            _verify_admin_policy(policies.get(f"{table}_companion_admin_read"), table, "SELECT")
         _require(
-            len(entries) == 1 and entries[0]["policyname"] == f"{table}_owner",
-            f"{table} must have exactly one {table}_owner policy",
+            set(policies) == {f"{table}_owner", *extra},
+            f"{table} must have exactly the {table}_owner policy"
+            + (f" and {sorted(extra)}" if extra else ""),
         )
-        entry = entries[0]
+        entry = policies[f"{table}_owner"]
         _require(entry["cmd"] == "ALL", f"{table}_owner must be FOR ALL")
         _require(set(entry["roles"]) == {APP_ROLE}, f"{table}_owner has the wrong role")
         qual = entry["qual"] or ""
@@ -361,6 +426,36 @@ def _verify_policies(connection: Connection) -> None:
         _require(
             "user_id" in check and "app.user_id" in check,
             f"{table}_owner WITH CHECK clause is not owner-scoped",
+        )
+
+    for table in ADMIN_MANAGED_PRIVATE_TABLES:
+        policies = {entry["policyname"]: entry for entry in by_table.get(table, [])}
+        _require(
+            set(policies) == {f"{table}_owner_read", f"{table}_companion_admin"},
+            f"{table} must have only {table}_owner_read and {table}_companion_admin",
+        )
+        read = policies[f"{table}_owner_read"]
+        _require(read["cmd"] == "SELECT", f"{table}_owner_read must be SELECT")
+        _require(set(read["roles"]) == {APP_ROLE}, f"{table}_owner_read has the wrong role")
+        _require(
+            "app.user_id" in (read["qual"] or ""),
+            f"{table}_owner_read USING clause is not owner-scoped",
+        )
+        _verify_admin_policy(policies.get(f"{table}_companion_admin"), table, "ALL")
+
+    for table in AUDIT_TABLES:
+        policies = {entry["policyname"]: entry for entry in by_table.get(table, [])}
+        _require(
+            set(policies) == {f"{table}_root_read", f"{table}_root_insert"},
+            f"{table} must have only {table}_root_read and {table}_root_insert",
+        )
+        _verify_admin_policy(policies.get(f"{table}_root_read"), table, "SELECT")
+        insert = policies[f"{table}_root_insert"]
+        _require(insert["cmd"] == "INSERT", f"{table}_root_insert must be INSERT")
+        check = insert["with_check"] or ""
+        _require(
+            "app.admin_scope" in check and "'root'" in check,
+            f"{table}_root_insert must require root and the companion admin scope",
         )
 
     for table in GLOBAL_TABLES:

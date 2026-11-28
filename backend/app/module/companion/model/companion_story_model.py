@@ -166,6 +166,12 @@ class CompanionLoreFragmentModel(Base):
         server_default=sql_text("'[]'::jsonb"),
     )
     tier: Mapped[str] = mapped_column(String(16), nullable=False)
+    refs: Mapped[list[Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=sql_text("'[]'::jsonb"),
+    )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     edited: Mapped[bool] = mapped_column(
         Boolean,
@@ -225,6 +231,25 @@ class CompanionBondModel(Base):
         nullable=True,
     )
     last_story_run: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Distinct conversations with this companion (counted once per conversation
+    # id, which only increases) and the count at the last life story.
+    conversations: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=sql_text("0"),
+    )
+    last_conversation_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    last_life_story_conversations: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=sql_text("0"),
+    )
+    admin_adjusted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -249,7 +274,7 @@ class CompanionLoreToldModel(Base):
             name="fragment_key_format",
         ),
         CheckConstraint(
-            "source IN ('topical', 'story_moment', 'self_query')",
+            "source IN ('topical', 'story_moment', 'self_query', 'admin')",
             name="source_valid",
         ),
     )
@@ -266,7 +291,7 @@ class CompanionLoreToldModel(Base):
     companion_ref: Mapped[str] = mapped_column(String(64), primary_key=True)
     fragment_key: Mapped[str] = mapped_column(String(64), primary_key=True)
     told_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    # The path of the latest offer: topical | story_moment | self_query.
+    # The path of the latest offer: topical | story_moment | self_query | admin.
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     # When the fragment was first offered to this account.
     offered_at: Mapped[datetime] = mapped_column(

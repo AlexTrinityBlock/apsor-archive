@@ -600,7 +600,10 @@ def test_shipped_lore_loads_in_every_locale() -> None:
         preset_id: [fragment.key for fragment in story.fragments]
         for preset_id, story in english.items()
     }
-    assert sum(len(ids) for ids in english_ids.values()) == 219
+    seed_dir = Path(load_presets.__code__.co_filename).resolve().parents[1] / "lore"
+    for preset_id, ids in english_ids.items():
+        seed = json.loads((seed_dir / f"{preset_id}.json").read_text(encoding="utf-8"))
+        assert ids == [fragment["id"] for fragment in seed["fragments"]]
     for locale in ("zh-TW", "zh-CN"):
         translated = load_presets(locale)
         for preset_id, story in translated.items():
