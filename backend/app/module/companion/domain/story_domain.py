@@ -96,7 +96,7 @@ TEMPLATE_PLACEHOLDERS: dict[str, tuple[str, ...]] = {
     TEMPLATE_LORE_GUIDANCE: (),
     TEMPLATE_STORY_MOMENT_GUIDANCE: (),
     TEMPLATE_CUSTOM_PERSONA_DEFAULT: ("name",),
-    TEMPLATE_LIFE_STORY_SYSTEM: ("companion_name", "persona", "language", "max_chars"),
+    TEMPLATE_LIFE_STORY_SYSTEM: ("companion_name", "persona", "language"),
     TEMPLATE_LIFE_STORY_USER: ("canon", "memories", "companion_name", "language", "max_chars"),
 }
 

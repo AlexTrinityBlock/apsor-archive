@@ -276,8 +276,19 @@ class CompanionStoryService:
                 )
         return ()
 
-    async def fragments(self, target: StoryTarget, locale: str) -> tuple[LoreFragment, ...]:
-        """Return the lore in effect for this account and locale (all layers)."""
+    async def fragments(
+        self,
+        target: StoryTarget,
+        locale: str,
+        *,
+        include_generated: bool = False,
+    ) -> tuple[LoreFragment, ...]:
+        """Return the lore in effect for this account and locale.
+
+        ``include_generated`` appends the account's published life stories for
+        this companion and locale, so recall and pacing treat them like any
+        other lore item. Editing surfaces leave it off.
+        """
         story = await self._story(target, locale)
         user_items: tuple[StoryItem, ...] | None = None
         if story is not None and story.lore_customized:
@@ -287,10 +298,13 @@ class CompanionStoryService:
         base = user_items if user_items is not None else await self.default_fragments(
             target, locale
         )
-        generated = tuple(
-            _generated_item(row)
-            for row in await self.repository.list_published_generated(target.ref)
-        )
+        generated: tuple[StoryItem, ...] = ()
+        if include_generated:
+            generated = tuple(
+                _generated_item(row)
+                for row in await self.repository.list_published_generated(target.ref)
+                if row.locale == locale and not row.fragment_key.startswith("g-pending-")
+            )
         return resolve_story_items(StoryLayers(user_items=base, generated_items=generated))
 
     async def persona(self, target: StoryTarget, locale: str) -> tuple[str, bool]:

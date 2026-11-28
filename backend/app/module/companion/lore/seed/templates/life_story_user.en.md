@@ -1,9 +1,14 @@
-The world of the Archive, for reference (do not retell it; let it stay in the background):
+The world you come from (background only):
 
 {canon}
 
-Memories the person has kept in their archive (the only facts you may use about their life):
+Memories from the archive you keep together (the only true facts you may use about this person):
 
 {memories}
 
-Write one story, as {companion_name}, of the night a door in the Archive opened onto this person's world. Let one small moment from these memories become the heart of it. Write in {language}, under {max_chars} characters, with a title line first.
+Write the story now, in {language}, in no more than {max_chars} characters.
+
+Format:
+- First line: a short title, without quotation marks or a heading symbol.
+- Then a blank line.
+- Then the story, in the first person, in your own voice as {companion_name}.

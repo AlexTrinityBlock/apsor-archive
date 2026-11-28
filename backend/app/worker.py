@@ -76,6 +76,11 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                     if services.thumbnail_backfill is not None
                     else 0
                 )
+                life_stories = (
+                    await services.life_stories.drain()
+                    if services.life_stories is not None
+                    else 0
+                )
                 lore_vectors = (
                     await services.lore_warmer.run_once()
                     if services.lore_warmer is not None
@@ -83,17 +88,20 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                 )
                 logger.info(
                     "Worker --once finished; processed=%s attachments_removed=%s "
-                    "history_examined=%s history_indexed=%s thumbnails=%s lore_vectors=%s",
+                    "history_examined=%s history_indexed=%s thumbnails=%s lore_vectors=%s "
+                    "life_stories=%s",
                     processed,
                     removed,
                     history_batch.examined,
                     history_batch.indexed,
                     thumbnails,
                     lore_vectors,
+                    life_stories,
                 )
             else:
                 services.start_side_loops(settings, stop_event)
                 services.start_thumbnail_backfill(stop_event)
+                services.start_life_stories(stop_event)
                 await services.worker.run_forever(stop_event)
         finally:
             await services.stop()
