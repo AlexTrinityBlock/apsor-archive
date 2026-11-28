@@ -19,11 +19,13 @@ import { useDrawerAccessibility } from "./useDrawerAccessibility";
 import {
   localizeStatus,
   useI18n,
+  type Translate,
   type TranslationKey,
 } from "../i18n";
 import { Button } from "./Button";
 import { Icon, type IconName } from "./Icon";
 import { RouteFallback } from "./RouteFallback";
+import { routeLabelKey, workspaceSegment } from "./route-title";
 import { useToast } from "./Toast";
 import { TreeMark } from "./TreeMark";
 
@@ -155,6 +157,30 @@ function readRailPreference(): boolean {
   } catch {
     return false;
   }
+}
+
+/** Name the browser tab after the active workspace. */
+function applyDocumentTitle(
+  t: Translate,
+  pageLabelKey: TranslationKey | null,
+): void {
+  const app = t("core.app.name");
+  document.title =
+    pageLabelKey === null
+      ? `${app} — ${t("core.app.studio")}`
+      : t("core.route.title", { page: t(pageLabelKey), app });
+}
+
+/**
+ * Collapsed-rail tooltips are fixed-position pseudo elements; anchor each to
+ * its item's vertical centre when it is hovered or focused.
+ */
+function placeRailTooltip(element: HTMLElement): void {
+  const rect = element.getBoundingClientRect();
+  element.style.setProperty(
+    "--rail-tooltip-top",
+    `${Math.round(rect.top + rect.height / 2)}px`,
+  );
 }
 
 function pageClassName(pathname: string): string {
@@ -344,9 +370,36 @@ export function AppShell() {
   // every full-screen editor that consumes the root variables.
   useVisualViewport();
 
+  // `html`/`body` never scroll; the page canvas does. Reset it, move focus to
+  // the main landmark, and announce the new page only when the workspace
+  // changes, so in-workspace URL updates (folders, previews) keep their place.
+  // Chat owns focus itself (the composer), so it is skipped.
+  const pageRef = useRef<HTMLDivElement>(null);
+  const currentWorkspace = workspaceSegment(location.pathname);
+  const previousWorkspace = useRef<string | null>(null);
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
+    const previous = previousWorkspace.current;
+    previousWorkspace.current = currentWorkspace;
+    if (previous === null || previous === currentWorkspace) {
+      return;
+    }
+    if (pageRef.current) {
+      pageRef.current.scrollTop = 0;
+    }
+    if (currentWorkspace !== "chat") {
+      document
+        .getElementById("main-content")
+        ?.focus({ preventScroll: true });
+    }
+  }, [currentWorkspace]);
+
+  const titleRoutes = navSections.flatMap((section) =>
+    section.items.filter((item) => item.action === undefined),
+  );
+  const pageLabelKey = routeLabelKey(location.pathname, titleRoutes);
+  useEffect(() => {
+    applyDocumentTitle(t, pageLabelKey);
+  }, [pageLabelKey, t]);
 
   useEffect(() => {
     try {
@@ -572,6 +625,10 @@ export function AppShell() {
                         }
                       }}
                       data-tooltip={`${label} (${item.index})`}
+                      onPointerEnter={(event) =>
+                        placeRailTooltip(event.currentTarget)
+                      }
+                      onFocus={(event) => placeRailTooltip(event.currentTarget)}
                       aria-haspopup={isLogout ? undefined : "dialog"}
                       disabled={isLogout && isSubmitting}
                     >
@@ -589,6 +646,10 @@ export function AppShell() {
                       closeDrawer();
                     }}
                     data-tooltip={`${label} (${item.index})`}
+                    onPointerEnter={(event) =>
+                      placeRailTooltip(event.currentTarget)
+                    }
+                    onFocus={(event) => placeRailTooltip(event.currentTarget)}
                     className={({ isActive }) =>
                       isActive ? "rail-item active" : "rail-item"
                     }
@@ -646,7 +707,11 @@ export function AppShell() {
             onStop={openStopDialog}
           />
         ) : null}
-        <div key={workspaceKey} className={pageClassName(location.pathname)}>
+        <div
+          key={workspaceKey}
+          ref={pageRef}
+          className={pageClassName(location.pathname)}
+        >
           <Suspense fallback={<RouteFallback />}>
             <Outlet />
           </Suspense>

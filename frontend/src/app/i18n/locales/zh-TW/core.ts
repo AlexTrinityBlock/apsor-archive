@@ -63,6 +63,7 @@ export const core = {
     defaultLabel: "正在載入檔案館",
   },
   route: {
+    title: "{page} — {app}",
     fallbackLabel: "正在開啟檔案館",
     fallbackEyebrow: "正在開啟檔案館",
     errorEyebrow: "檔案館 · 路由錯誤",

@@ -63,6 +63,7 @@ export const core = {
     defaultLabel: "正在加载档案馆",
   },
   route: {
+    title: "{page} — {app}",
     fallbackLabel: "正在打开档案馆",
     fallbackEyebrow: "正在打开档案馆",
     errorEyebrow: "档案馆 · 路由错误",
