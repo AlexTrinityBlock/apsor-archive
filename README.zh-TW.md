@@ -522,6 +522,13 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 `/api/v1/companions` 之下（列出、建立、更新、刪除、上傳影格、影格排序、刪除
 影格、影格圖片，以及 `GET/PATCH /api/v1/companions/preference`）。
 
+每個夥伴也有自己的故事：一段人設，會成為它在新對話中的聲音（每個對話凍結，
+使用該對話的語言），以及傳說，也就是它自己的記憶。代理搜尋館主的檔案館時，
+最多兩段相關的圖書館員自身記憶可能會以獨立區塊附在結果旁；它們永遠不是典藏
+證據，也不會被引用。詢問圖書館員關於它自己或檔案館的事，它就會講述自己的故事。
+帳號與該夥伴完成越多對話，越深層的記憶就會解鎖。每個帳號都可以依語言編輯任何
+夥伴的人設與傳說，並重設為預設值（`/api/v1/companions/stories/...`）。
+
 ### 代理執行階段設定
 
 `/settings` 上的 **代理執行階段** 面板（僅限 root）會編輯單例的
@@ -1632,6 +1639,8 @@ agent_entry ──────┘  (source_kind = history)
 - `companion` / `companion_frame` / `companion_preference`：帳號的自訂對話
   夥伴、每個動作經編碼的 AVIF（或 WebP）影格及其位置、大小與 SHA-256，以及
   帳號的夥伴選擇、是否顯示、動態程度與位置。
+- `companion_story` / `companion_lore_fragment` / `companion_bond`：帳號依語言
+  覆寫的夥伴人設與傳說、其片段，以及解鎖更深層傳說的完成對話數。
 - `ingest_config`：一列（`id=1`），帶有經驗證的 worker 輪詢、擷取、
   進行中工作、嵌入與分塊大小設定。它不是分塊來源；佇列會參照最終發佈
   的檔案。
@@ -1701,7 +1710,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `a7d3c9e1f5b2`。此分支上 `agent_config` 之後的移轉為：
+最新的移轉是 `b8e4d2f6a1c3`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -1805,10 +1814,15 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   版本一張極小的 WebP（最多 32 KiB、512 px）、指向 `file` 且帶
   `ON DELETE CASCADE` 的擁有者安全複合外鍵、附擁有者原則的強制 RLS，以及
   `apsor_app` 授權。既有檔案由 worker 回填補上。降級會移除該資料表；
-- `a7d3c9e1f5b2`（目前 head）建立私人的 `companion`、`companion_frame` 與
+- `a7d3c9e1f5b2` 建立私人的 `companion`、`companion_frame` 與
   `companion_preference` 資料表，每張都帶 `user_id`、僅限擁有者的強制 RLS 與
   `apsor_app` 授權。影格透過擁有者安全的複合外鍵參照其夥伴並一併串聯刪除；
-  偏好資料列以 `user_id` 為鍵。降級會移除這三張資料表。
+  偏好資料列以 `user_id` 為鍵。降級會移除這三張資料表；
+- `b8e4d2f6a1c3`（目前 head）建立私人的 `companion_story`、
+  `companion_lore_fragment` 與 `companion_bond` 資料表，帶僅限擁有者的強制 RLS
+  與 `apsor_app` 授權：帳號依語言保存的夥伴人設與傳說副本、其片段，以及解鎖
+  傳說層級的完成對話數。自訂夥伴的故事會隨夥伴一併串聯刪除。降級會移除這三張
+  資料表。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會

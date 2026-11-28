@@ -1856,6 +1856,9 @@ user context exists; global config tables are read-all/root-write.
   chat companions, their encoded AVIF (or WebP) frames per action with position,
   size, and SHA-256, and the account's companion choice, visibility, motion
   level, and position.
+- `companion_story` / `companion_lore_fragment` / `companion_bond`: an
+  account's per-locale persona and lore overrides for a companion, their
+  fragments, and the completed runs that unlock deeper lore tiers.
 - `ingest_config`: one row (`id=1`) with the validated worker poll, extraction,
   in-flight, embedding, and chunk-size settings. It is not a chunk source; the
   queue references the file that is eventually published.
@@ -1935,7 +1938,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `a7d3c9e1f5b2`. The migrations after `agent_config` on
+The latest migration is `b8e4d2f6a1c3`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -2049,11 +2052,17 @@ this branch are:
   foreign key to `file` with `ON DELETE CASCADE`, forced RLS with an owner
   policy, and `apsor_app` grants. Existing files are filled in by the worker
   backfill. The downgrade drops the table;
-- `a7d3c9e1f5b2` (current head) creates the private `companion`,
+- `a7d3c9e1f5b2` creates the private `companion`,
   `companion_frame`, and `companion_preference` tables, each with `user_id`,
   forced owner-only RLS, and `apsor_app` grants. Frames reference their
   companion through an owner-safe composite foreign key and cascade with it; the
-  preference row is keyed by `user_id`. The downgrade drops the three tables.
+  preference row is keyed by `user_id`. The downgrade drops the three tables;
+- `b8e4d2f6a1c3` (current head) creates the private `companion_story`,
+  `companion_lore_fragment`, and `companion_bond` tables with forced owner-only
+  RLS and `apsor_app` grants: one account's per-locale copy of a companion's
+  persona and lore, its fragments, and the completed-run count that unlocks lore
+  tiers. A custom companion's story cascades with the companion. The downgrade
+  drops the three tables.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

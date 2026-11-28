@@ -1358,7 +1358,7 @@ fields, account/session auth (`app_user`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The current head is
-`a7d3c9e1f5b2`; every private table now has `user_id` and forced RLS, the
+`b8e4d2f6a1c3`; every private table now has `user_id` and forced RLS, the
 runtime role is `apsor_app`, and `file` / `file_ingest_job` record
 `storage_backend`. Earlier migrations add per-run and per-account agent usage
 counters and the impersonation session marker. `f7a3c2d9e1b4` adds the editable
@@ -1493,9 +1493,15 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   fails while any row still records `s3`;
 - `c7a3e9f1d5b2` creates the private `file_thumbnail` table (one tiny WebP per
   file version, cascading with its file, forced owner RLS, `apsor_app` grants);
-- `a7d3c9e1f5b2` (current head) creates the private `companion`,
+- `a7d3c9e1f5b2` creates the private `companion`,
   `companion_frame`, and `companion_preference` tables with forced owner-only
   RLS and `apsor_app` grants; frames cascade with their companion. The downgrade
+  drops the three tables;
+- `b8e4d2f6a1c3` (current head) creates the private `companion_story`,
+  `companion_lore_fragment`, and `companion_bond` tables with forced owner-only
+  RLS and `apsor_app` grants: one account's per-locale copy of a companion's
+  persona and lore, its fragments, and the completed-run count that unlocks lore
+  tiers. A custom companion's story cascades with the companion. The downgrade
   drops the three tables.
 
 The page-context migration names both existing constraints through `op.f(...)`.
