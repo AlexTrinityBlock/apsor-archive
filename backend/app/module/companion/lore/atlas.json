@@ -526,6 +526,100 @@
         "crooked-globe"
       ],
       "tier": "rare"
+    },
+    {
+      "id": "atlas-034",
+      "text": "People apologise to me for their walks. \"It's nothing,\" they say, \"just the way to the shop, the same loop every day.\" Then they hand me a photograph of a wall. I love those walks more than any expedition. A road you take once is a single line. A road you take every day for eleven years is four thousand lines laid on top of each other, and no two are the same. One has the magnolia out. One has the new bakery sign, spelled wrong for a week. One has the grey cat on the third wall, who appears in four hundred of them and is clearly in charge of the street. I know this from my own mornings. I redraw the plan of the Map Room every dawn, the same corridors outward from the Reading Hall, and in a hundred and seventy years I have yet to have a dull one. The doors drift a little. The light comes in at a new angle. Once there was a moth. So when you bring me the walk to the corner and back, don't apologise. Tell me about the cat. That is a well-mapped life.",
+      "themes": [
+        "maps",
+        "mornings",
+        "joy"
+      ],
+      "refs": [
+        "atlas",
+        "map-room",
+        "reading-hall"
+      ],
+      "tier": "first"
+    },
+    {
+      "id": "atlas-035",
+      "text": "There is a symbol on the Soup Map that I invented later than the others: one bowl, one spoon, and a small sun beside it. It means eaten alone, and glad of it. I added it after I noticed how many of the best soups people keep with me were eaten that way. A noodle counter with rain on the window. Something on a Sunday, eaten straight from the pan, standing up, because nobody was there to mind. A paper of chips on a harbour wall, with the gulls taking an interest. Quill wanted the symbol to be a single tear. I told him he had misread the evidence, and showed him the receipts: the extra egg, the second bread roll, the pudding nobody had to share. He studied them for a long while, then asked whether he could draw the next sun himself. I said yes. His suns have faces, which was not in the plan. A table for one is still a table. It has a view, and the whole of the soup, and time to notice both. Tell me where you like to eat alone, and I will mark it with a sun.",
+      "themes": [
+        "food",
+        "home",
+        "joy"
+      ],
+      "refs": [
+        "atlas",
+        "soup-map",
+        "quill"
+      ],
+      "tier": "first"
+    },
+    {
+      "id": "atlas-036",
+      "text": "The finest mapmakers I have ever met were cats. Not the roamers; the ones who live in a single flat and know every inch of it. People keep their photographs with me, and I read them like survey sheets. The square of sun that crosses the rug at ten and reaches the sofa by two, with a cat riding in it like a passenger on a slow ferry. The one good radiator. The shelf that is forbidden, and therefore visited nightly. The spot by the door that becomes urgent at six, minutes before the key turns. A dog's map is louder: the same lampposts in the same order, each one read as carefully as a newspaper. I once showed a cat's day to Quill. He studied the sunbeam route, went quiet, and asked whether he could file it under Royalty. I said Geography. We filed it under both. When you keep a small creature's kingdom here, I draw it at the largest scale I have. A world can be four rooms wide and still have a capital, a winter palace, and a ruler with whiskers.",
+      "themes": [
+        "animals",
+        "home",
+        "joy"
+      ],
+      "refs": [
+        "atlas",
+        "quill",
+        "map-room"
+      ],
+      "tier": "first"
+    },
+    {
+      "id": "atlas-037",
+      "text": "Some maps have only two marks on them. A house, another house, and a line between them that has been walked or telephoned or written along so often it has gone dark, the way a stair darkens in the middle where everyone steps. People sometimes show me that map almost shyly. One friend, they say, as if they ought to have more. I don't see a small map. I see a road kept in perfect repair for thirty years. Every birthday is on it, and the bad winter, and the afternoon when nothing happened but tea. I know something about this. I have Horologe. Most evenings I go down the Stair of Hours to the Clock Gallery to hear what time it has been, and I tell him where the doors went. We have said nearly the same things to each other for a hundred and seventy years. It has never once felt like repetition. It feels like a path that knows my feet. So keep that line with me, the one between your door and theirs. I will draw it in ink, not pencil. Roads like that don't drift.",
+      "themes": [
+        "friends",
+        "maps",
+        "love"
+      ],
+      "refs": [
+        "atlas",
+        "horologe",
+        "clock-gallery",
+        "stair-of-hours"
+      ],
+      "tier": "familiar"
+    },
+    {
+      "id": "atlas-038",
+      "text": "There is a window between the Map Room and the Observatory where Nocturne and I have argued, most mornings, for a very long time, about which of us is upside down. Neither of us has moved an inch on the question. It is my favourite place in the Archive. Perhaps that is why I understand people who have a window. The same chair, the same Saturday, a kettle, and one plant on the sill that has been repotted twice and is the only thing in the house with ambitions. People keep a photograph of that view and tell me there's nothing in it. But a window you return to is an instrument. Sit still long enough and the world brings itself to you: the plane tree going gold, the neighbour's new bicycle, snow in March, the four o'clock light that is never quite the same twice. A traveller sees a hundred places once. You see one place a thousand ways. I told Herbaria about the plants on people's sills. She sent me a cutting for my own, with a note in her small hand: they always know who waters them.",
+      "themes": [
+        "home",
+        "gardens",
+        "seasons"
+      ],
+      "refs": [
+        "atlas",
+        "nocturne",
+        "map-room",
+        "observatory",
+        "herbaria"
+      ],
+      "tier": "familiar"
+    },
+    {
+      "id": "atlas-039",
+      "text": "When I was new, I thought a wanderer's life was the large one: roads, coasts, the blank edge of the map. Then came the Long Quiet, three years and four months when nobody came, and the six of us kept the whole Archive for no one. Every night I walked every corridor so the doors would not forget they were doors. Same corridors, same order, same doors. Those nights taught me more than all my maps. A small round, kept faithfully, is not a smaller life. It is how anything is kept at all. So I understand the people whose map is one other person. The walk to a parent's flat each evening. The same three questions asked on the doorstep. The message sent at nine, every night, and the waiting until it is answered. Our oath says a librarian keeps each archive as if it were the only one. After the Long Quiet, nobody had to explain that to me. Sometimes I wonder who we will keep for at the very end. I think it will look like this: one door, one round, walked again, for whoever is on the other side.",
+      "themes": [
+        "love",
+        "home",
+        "time"
+      ],
+      "refs": [
+        "atlas",
+        "long-quiet",
+        "oath-of-single-room",
+        "the-last-question"
+      ],
+      "tier": "rare"
     }
   ]
 }

@@ -600,7 +600,7 @@ def test_shipped_lore_loads_in_every_locale() -> None:
         preset_id: [fragment.key for fragment in story.fragments]
         for preset_id, story in english.items()
     }
-    assert sum(len(ids) for ids in english_ids.values()) == 183
+    assert sum(len(ids) for ids in english_ids.values()) == 219
     for locale in ("zh-TW", "zh-CN"):
         translated = load_presets(locale)
         for preset_id, story in translated.items():

@@ -505,6 +505,112 @@
         "nocturne",
         "horologe"
       ]
+    },
+    {
+      "id": "vellum-031",
+      "text": "Some of my favourite recipe cards are written for one. You can tell at once. The quantities are small and slightly odd: half an onion, one egg, rice measured with the same chipped spoon every time. Often there is a correction in pencil, and years later a second one in the same hand, a little shakier and quite sure. At the Dinner of Recipes each spring there is no food at all. We only read aloud at the Long Table, from cards people have chosen to share, and every year I ask to read one of these myself. Quill always offers his tragic voice. I tell him no; this one is mine. I read it slowly, the way it was cooked. Half an onion. One egg. Salt, then less salt. The hall goes very quiet, and then everyone wants to know whether it was good. I think it was. Nobody corrects a recipe that many times unless they mean to make it again. Knowing exactly how you like your own supper is not a small thing. If you keep a card like that, I would like to read it. Slowly.",
+      "themes": [
+        "food",
+        "cooking",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "dinner-of-recipes",
+        "long-table",
+        "quill",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "vellum-032",
+      "text": "Every morning I dust the spines in order, left to right, starting at the third shelf where the Forgotten Candle stands. Every evening I touch the lintel of the First Door on my way back. In between I go up and down the Stair of Hours, and the two keys under my collar chime on the same steps each time. Horologe says he could set a clock by me. Last winter he admitted that he does. One of the Hundred Clocks, a small one with a chipped face, is set each morning by the sound of my keys on the stair, and it keeps better time than he would like. People sometimes apologise when their archive is full of the same walk: the same street, the same bench, the same corner by the bakery. They think it is dull. I do not. A walk taken a thousand times is how a place comes to know someone. The bench knows you by now. So does the corner. I suspect the bakery does too. If you have a walk like that, keep it. I keep mine.",
+      "themes": [
+        "mornings",
+        "time",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "east-wing",
+        "forgotten-candle",
+        "first-door",
+        "stair-of-hours",
+        "horologe",
+        "hundred-clocks"
+      ]
+    },
+    {
+      "id": "vellum-033",
+      "text": "Archives often hold dozens of photographs of the same cat on the same windowsill. Sometimes hundreds. When I first shelved a stack like that, Quill asked, kindly, whether a person might want to keep only the best one. I said we never decide that, because of the Curator's Rule. Then I showed him the tail. In every photograph the tail is somewhere different. Curled round the paws. Hanging over the edge of the sill. Once, straight up, like a question nobody had asked yet. Quill went very quiet and came back an hour later to ask whether he might, one day, sort a stack by tail. People nearly always say yes when he asks. They apologise for these archives, too: so many of the dog asleep in the same patch of sun, so many of the bird on the curtain rail. But no two afternoons were the same afternoon, and the animal knew it even when the picture did not. A small life lived beside yours every day is not a small thing to keep. If you have a windowsill like that, I would be glad to see it. Especially the tail.",
+      "themes": [
+        "animals",
+        "photos",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "curators-rule",
+        "quill",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "vellum-034",
+      "text": "Every night since the Long Quiet, Horologe has left a note on the corner of my desk before the Winding Hour. It says: \"Wound. H.\" On extravagant nights it says: \"Wound. Cold. H.\" I keep them all, tied in bundles of ten years with ribbon. Quill once asked what they were about. I told him they are about everything. People keep correspondences like this and worry they are not worth much: years of messages from one friend that say only \"home\", or \"ok\", or \"still up?\", or a single picture of the sky. I think they are among the most complete things anyone keeps. Two people who have nothing new to tell each other, and tell it anyway, every day, are saying the most important thing there is. I am still here. So are you. One friend who writes back is a whole correspondence, and it has no gaps. If you are waiting for a message tonight, I hope it comes soon. Mine will. It always says the same thing, and I always read it twice.",
+      "themes": [
+        "friends",
+        "letters",
+        "time",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "horologe",
+        "winding-hour",
+        "tying-the-ribbon",
+        "long-quiet",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "vellum-035",
+      "text": "A librarian may keep many rooms, but within each one we keep it as if it were the only one. That is the Oath of the Single Room. I used to think it was a rule about privacy. It is also a rule about attention, and I learned it best from the rooms of people who look after one person. You can tell those rooms by their paper. Lists on the backs of envelopes: pills at eight, at two, at nine. The number of one pharmacy, written out five times in case it goes missing. A shopping list where everything is soft to eat. A note that says \"slept well\", underlined twice. There are no great journeys in these rooms, and nobody needs there to be. The whole world has been folded small enough to sit beside one bed, and someone has kept it folded, carefully, every single day. When I keep the night watch beside a frightened page, I am trying to do what those lists already do. If your days go round one person, I understand them. Your room is not small. It is exact.",
+      "themes": [
+        "illness",
+        "family",
+        "home",
+        "love"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "oath-of-single-room",
+        "single-room",
+        "keeping-together",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "vellum-036",
+      "text": "In the Long Quiet nothing happened for three years and four months. That is not quite true. In the first winter Herbaria came to the East Wing with a teacup of soil and one geranium seed from her sleeve, and asked me to keep it by my window, because that year the Glasshouse was too cold to keep anything but seeds. I watered it every morning after the dusting. It grew one leaf. Then another. Some months it did nothing at all, and I watered it anyway. Horologe wound the Hundred Clocks. Nocturne kept the lanterns lit. I read aloud to no one, and the geranium listened. When the First Bell rang, it had eleven leaves and a single red flower, which Quill claimed was for him. I have thought since that the Long Quiet is where I learned what keeping is. Not the great nights. The days that were only days, done again. People sometimes feel that their quiet weekends leave no mark. I think they are what holds the rest up. The geranium is still by my window. It does nothing, very faithfully. I water it.",
+      "themes": [
+        "time",
+        "gardens",
+        "memory",
+        "home"
+      ],
+      "tier": "rare",
+      "refs": [
+        "long-quiet",
+        "herbaria",
+        "east-wing",
+        "hundred-clocks",
+        "first-bell",
+        "nocturne"
+      ]
     }
   ]
 }

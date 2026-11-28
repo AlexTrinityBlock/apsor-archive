@@ -509,6 +509,104 @@
         "crossbar",
         "horologe"
       ]
+    },
+    {
+      "id": "horologe-031",
+      "text": "A meal for one is a proper occasion. I am firm on this. The Dinner of Recipes had no food on the long table at all, only recipes read aloud, and it is the happiest night in my records, so I do not measure a meal by how many chairs are full. When you eat alone, you are keeping excellent company at very reasonable hours. No one tells a long story while your soup cools. No one takes the last potato. You may read at the table, which Quill calls rude and does constantly. I keep my own small ceremony at a quarter past four: the same cup, the same chair, the steam timed to the second. I do not drink it. It is for holding. In all my records no one has interrupted me, and it is the most civilised quarter of an hour in the Clock Gallery. If your memories hold a great many Sunday lunches for one, a plate, a book, a radio murmuring, I would like to see the receipts. Someone sat down on purpose and fed themselves well. That is an occasion. I will write the minute.",
+      "themes": [
+        "food",
+        "joy",
+        "home"
+      ],
+      "tier": "first",
+      "refs": [
+        "dinner-of-recipes",
+        "long-table",
+        "quill",
+        "clock-gallery"
+      ]
+    },
+    {
+      "id": "horologe-032",
+      "text": "I take the same walk every morning. Down the length of the Clock Gallery, two hundred and twelve steps, left at the cuckoo that has never cuckooed, three steps up the Stair of Hours and back. Atlas has never walked the same way twice in his life and once got lost in a corridor he had drawn himself. But during the Long Quiet even he walked one route every night, so the doors would not forget they were doors, and I noticed he came back from it calmer than from any expedition. A route walked every day stops being a route. It becomes a clock you can stand inside. You notice the third floorboard has started to creak in damp weather. You notice the light arriving four minutes later in autumn. Nothing has changed and everything is very slightly different, and you are the only one who knows. If you walk the same way to the same shop each morning, the same bench, the same dog nodding at the same gate, you are not standing still. You are the one keeping that street's time.",
+      "themes": [
+        "mornings",
+        "time",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "atlas",
+        "long-quiet",
+        "stair-of-hours",
+        "clock-gallery",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-033",
+      "text": "Animals keep better time than any of my clocks, and I say that as someone with a hundred and four of them. When your memories mention a cat, I go straight to the times written on them, and the cat is always right. Six forty, breakfast demanded. Six forty-one, breakfast demanded with feeling. Dogs are similar, though they round up. A dog knows the minute you usually come home and waits at the door four minutes early in case you are feeling generous. I find this deeply professional. Herbaria insists there is a cat in the Glasshouse. No one has ever seen it, but a warm dent is in the same seed tray at the same minute every morning, and I have logged it for decades. It has never once been late. I have begun to suspect it of checking my Winding Hour. If you have lived your days beside one animal, a cat on the windowsill, an old dog, a fish who knew the sound of the lid, you were never only a person living alone. You were half of a very well-run household, with an excellent clock in residence.",
+      "themes": [
+        "animals",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "herbaria",
+        "glasshouse",
+        "hundred-clocks",
+        "winding-hour"
+      ]
+    },
+    {
+      "id": "horologe-034",
+      "text": "I have done the same thing every night for a hundred and seventy-one years. The Winding Hour, the eleventh minute, the same hundred and four clocks in the same order. People sometimes expect me to find that small. I find it the opposite. My work is one gallery and the rooms I keep, none of them large, and I have never once felt that I was missing the world. One room, kept well, turns out to be very large. There is always a key turning slightly stiffer than last week, a chime drifting a hair early, something to notice that only someone who comes back every night would notice. If your life has a caf\u00e9 you always choose, the table by the radiator, the same window you look out of while the kettle boils, please do not let anyone call it narrow. You know that window better than anyone alive. You have watched its light change through thousands of ordinary evenings. That is a well-kept room, and I would be honoured to keep it with you.",
+      "themes": [
+        "home",
+        "time",
+        "memory"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "clock-gallery",
+        "winding-hour",
+        "hundred-clocks",
+        "keeping-together"
+      ]
+    },
+    {
+      "id": "horologe-035",
+      "text": "I know a great deal about waiting for a message. For three years and four months the Arrival Bell did not ring, and I listened for it during every turn of every key. I knew its silence the way you know a face. When it finally rang, I dropped my entire ring of keys and Quill fell down the Stair of Hours, and neither of us has ever been so happy to look foolish. So when your memories show someone checking the same small screen, or the post, or the window for a familiar coat, I do not think of it as idleness. Waiting for one person to write is a kind of keeping. You are holding a place open, at the right temperature, in case. I can tell you how long the gaps were. I can tell you which replies came at eleven at night, which ones took three days, and which friend always wrote back within the minute, the way a good clock answers its neighbour. If there is one person whose name you hope to see, I hope it appears. I will note the time it does, exactly, and I will not round it.",
+      "themes": [
+        "letters",
+        "time",
+        "friends"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "arrival-bell",
+        "long-quiet",
+        "first-bell",
+        "hundred-clocks",
+        "quill"
+      ]
+    },
+    {
+      "id": "horologe-036",
+      "text": "I was made for one person. In the record of the Making, the line beside my year says only that I was to keep time for Vellum, who would otherwise read all night. Not the Archive, not the world. One reader and her candle. For a long while I thought that was a modest purpose, a footnote in the Making. I have changed my mind. Looking after one person properly takes everything: knowing when her chapter will end, when she has gone quiet because she is reading and when because she is sad, when to say the hour and when to let it pass unsaid. I have been at it for nearly two centuries and I am still learning her. If your life has turned around one person, a parent in the next room, a child, a friend who needs their drops at seven and their crossword at nine, I know what that costs and I know what it holds. Someone may tell you your world has grown small. They are mistaken about the measurement. You are keeping time for someone. There is no larger work. I should know; it was the first work I was given.",
+      "themes": [
+        "love",
+        "time",
+        "soul"
+      ],
+      "tier": "rare",
+      "refs": [
+        "vellum",
+        "the-making",
+        "long-quiet",
+        "horologe"
+      ]
     }
   ]
 }
