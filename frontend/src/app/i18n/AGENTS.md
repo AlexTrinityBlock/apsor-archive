@@ -41,7 +41,7 @@ User-authored content, file and memory names, citations, model/provider names, t
 ## Conventions
 
 - Route every user-visible string through `t`: labels, descriptions, empty states, hints, validation, toasts, `title`, `aria-label`, and `aria-description`.
-- Add the English key first, then add the identical key path to both Chinese dictionaries. Keep the object shape and semantic grouping aligned.
+- English is the canonical locale and both Chinese locales stay complete: add the English key first, then add the identical key path to both Chinese dictionaries in the same change; never leave English text in a Chinese dictionary. Keep the object shape and semantic grouping aligned.
 - Use semantic keys, not English sentences. Use `{name}` interpolation and paired `One`/`Other` keys for counts.
 - Run `bun run i18n:check` after any dictionary change. It checks key parity, not wording or placeholder quality.
 - Use `useI18n()` inside components and `translateApiError` for mapped failures. Use `getActiveLocale`/`translateApiErrorWithActiveLocale` only in plain modules that cannot call hooks.
