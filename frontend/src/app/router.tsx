@@ -20,7 +20,7 @@ import { RouteFallback } from "./component/RouteFallback";
 import { NotFoundPage } from "./not-found/page";
 
 const DashboardPage = lazy(() =>
-  import("./home/page").then((module) => ({ default: module.DashboardPage })),
+  import("./dashboard/page").then((module) => ({ default: module.DashboardPage })),
 );
 const SearchPage = lazy(() =>
   import("./search/page").then((module) => ({ default: module.SearchPage })),

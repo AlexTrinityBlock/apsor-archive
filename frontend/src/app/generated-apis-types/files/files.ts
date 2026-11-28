@@ -75,7 +75,12 @@ export const getUploadFileUrl = () => {
 }
 
 /**
- * Upload one file; the server extracts text and indexes it.
+ * Upload one file and extract it inside the API request.
+ *
+ * Deprecated: extraction belongs to the dedicated ingestion worker. Clients
+ * should use ``POST /files/async`` (``uploadFileAsync``) and follow the job.
+ * The route stays for existing scripts and tests until it is removed.
+ * @deprecated
  * @summary Upload File
  */
 export const uploadFile = async (bodyUploadFile: BodyUploadFile, options?: Parameters<typeof apiFetch>[1]): Promise<FileSchema> => {
@@ -134,6 +139,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UploadFileMutationVariables = {data: BodyUploadFile}
 
     /**
+ * @deprecated
  * @summary Upload File
  */
 export const useUploadFile = <TError = HTTPValidationError,

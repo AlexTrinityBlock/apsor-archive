@@ -17,7 +17,7 @@ from app.module.agent.test.fake_chat_generator import (
     FakeChatGenerator,
     text_result,
 )
-from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from tests.conftest import UserClient
 
 DEFAULT_COMPACTION_PROMPT_BOUND = "{max_output_tokens}"

@@ -660,8 +660,10 @@ One worker process polls the database every second while idle and claims queued
 rows with `SELECT ... FOR UPDATE SKIP LOCKED`. It runs two extraction threads
 and at most two in-flight jobs, with global async embedding concurrency of six
 and batched progress updates. Stale jobs are requeued after a crash, and
-embedding retries are bounded. The API lifespan starts one worker for local use;
-run a dedicated process in production:
+embedding retries are bounded. The API only enqueues jobs, so run the worker
+beside it (`make worker` locally, a dedicated service in production). Setting
+`APSOR_INGEST_WORKER_ENABLED=true` instead runs the same loops inside the API
+process as a single-process development shortcut; it defaults to `false`.
 
 ```bash
 cd backend
@@ -2026,7 +2028,7 @@ backend/
     module/prompt/              editable frequently used chat prompts
     module/web_research/        web search/fetch service, URL safety, cache
   alembic/                      migrations
-  tests/                        46 integration tests
+  tests/                        integration tests (PostgreSQL, offline fakes)
 frontend/
   src/app/
     component/                  shared archive UI
@@ -2038,12 +2040,12 @@ frontend/
     questions/                  saved-question Q&A library
     settings/                   role-filtered provider and runtime panels
     library/                    files, media gallery, memories, preview modal, intake
-    home/ search/ timeline/ about/ ...
+    dashboard/ search/ timeline/ about/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting
   src/styles/                   paper / night archive tokens
-  scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
+  scripts/                      PDF.js asset copy, i18n parity, workspace boundaries
   dist/                         generated build output, gitignored
 docker-compose.yml              production stack: Caddy + Cloudflare Tunnel
 docker-compose.dev.yml          local dependencies

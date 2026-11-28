@@ -132,13 +132,16 @@ class Settings(BaseSettings):
     # vision ingests.
     vision_description_language: str = "English"
 
-    # Durable ingestion worker. The lifespan task is a convenience for local
-    # single-process development; production can run ``python -m app.worker``
-    # (or ``apsor-archive worker``) as a dedicated service.
+    # Durable ingestion worker. The dedicated ``apsor-archive worker`` process
+    # (``python -m app.worker`` / ``make worker``) owns ingestion. Setting
+    # ``ingest_worker_enabled`` makes the API lifespan also run the worker loops
+    # as an opt-in single-process development mode; it is off by default so
+    # the API never extracts files unless asked to.
     #
-    # These values seed the database-backed singleton on a fresh installation;
-    # the worker reads the database row and uses these only as a fallback.
-    ingest_worker_enabled: bool = True
+    # The remaining values seed the database-backed singleton on a fresh
+    # installation; the worker reads the database row and uses these only as a
+    # fallback.
+    ingest_worker_enabled: bool = False
     # The dedicated worker backfills WebP thumbnails for files that predate
     # them. Disable only to keep a constrained host from reading every original.
     thumbnail_backfill_enabled: bool = True

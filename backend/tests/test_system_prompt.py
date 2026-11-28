@@ -7,7 +7,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, text
 
-from app.module.agent.service.system_prompt import default_sections
+from app.module.agent.domain.system_entry_domain import default_sections
 from app.module.agent.test.fake_chat_generator import FakeChatGenerator
 from tests.conftest import TEST_DATABASE_URL, UserClient
 

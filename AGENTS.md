@@ -12,14 +12,15 @@ Use this guide to choose the right subsystem, respect cross-cutting invariants, 
 
 ## Architecture
 
-- `backend/` is a Python 3.13 FastAPI service. It owns authentication, account management, per-account file and memory ingestion, hybrid retrieval, provider settings, durable ingestion jobs, and the persistent agent. PostgreSQL 17 is the source of truth; Valkey is a disposable cache; original bytes live under the configured data directory or in the private Cloudflare R2 bucket selected by `APSOR_STORAGE_BACKEND`.
+- `backend/` is a Python 3.13 FastAPI service. It owns authentication, account management, per-account file and memory ingestion, hybrid retrieval, provider settings, durable ingestion jobs, and the persistent agent. PostgreSQL 17 is the source of truth; Valkey is a disposable cache and progress bus; RabbitMQ (`apsor.ingest`) is an optional low-latency dispatch hint, never a second job ledger; original bytes live under the configured data directory or in the private Cloudflare R2 bucket selected by `APSOR_STORAGE_BACKEND`.
 - Every private row carries `user_id`. Request transactions and scoped worker work run as the non-login `apsor_app` role with transaction-local `app.user_id` / `app.user_role` settings, and PostgreSQL row-level security is default-deny. A worker may use a privileged maintenance session only to claim or recover jobs across accounts, then switches to the job owner's context. Root manages accounts and global config but is not a data superuser and must not read another account's archive through normal API queries. Explicit impersonation is the deliberate trusted exception: root starts a marked target session, the target's role drives authorization, and returning to root requires the root password.
 - Authentication tables (`app_user`, `user_session`) are deliberately outside RLS because login and session lookup happen before a user context exists. Global config tables are read-all/root-write; private tables use owner-only policies.
 - `frontend/` is a React 19 + TypeScript + Vite SPA. It uses React Query for server state and a committed Orval client generated from `frontend/openapi.json`. The production bundle is compiled inside the Docker image and is not tracked.
 - FastAPI serves the SPA and `/api/v1` from the same origin. API routes win before the SPA fallback. The container image compiles the client in a Bun stage and copies the result; the runtime image runs no frontend build.
-- Root deployment files are `Dockerfile`, `docker-compose.yml`, `docker-compose.dev.yml`, and `docker/caddy/`. The production Compose file runs Caddy and the Cloudflare Tunnel connector ahead of separate API and ingestion-worker services; only the worker drains ingestion jobs.
-- `docs/cloudflare-tunnel.md` is the deployment/security guide; `secrets/README.md` documents local secret-file handling. `Makefile` and `start.sh` are the supported local command paths.
-- A normal request path is router → service → repository. Cross-cutting resources are created in the app lifespan and exposed through `app.state`; each vertical slice assembles its own dependencies.
+- Root deployment files are `Dockerfile`, `docker-compose.yml`, `docker-compose.dev.yml`, `docker/caddy/`, and `docker/rabbitmq/`. The production Compose file runs Caddy and the Cloudflare Tunnel connector ahead of `api`, `worker`, `db`, `cache`, and `rabbitmq` services.
+- The dedicated ingestion worker (`apsor-archive worker`, `backend/app/worker.py`, `make worker`) is the only default drain for durable ingestion jobs; it also runs the chat-image cleanup sweep and the conversation-history indexer. The API enqueues jobs and publishes wake-ups. `APSOR_INGEST_WORKER_ENABLED=true` (default `false`) is an opt-in single-process development mode that runs the same loops inside the API.
+- `docs/cloudflare-tunnel.md` is the deployment/security guide; `secrets/README.md` documents local secret-file handling. `Makefile` and `start.sh` are the supported local command paths; `run-local.ps1` is the Windows API-only launcher.
+- A normal request path is router → service → repository. Cross-cutting resources are created by `backend/app/bootstrap.py` for both the API lifespan and the worker and exposed through `app.state`; each vertical slice assembles its own dependencies, and cross-slice wiring happens only in a `dependencies.py`. `uv run lint-imports` and `bun run check:boundaries` enforce the backend layer contracts and the frontend workspace boundaries.
 - A durable ingestion job and an agent run are separate asynchronous workflows. Neither workflow may hold a request-scoped database session for its full lifetime.
 
 ## Key files
@@ -44,22 +45,24 @@ Use this guide to choose the right subsystem, respect cross-cutting invariants, 
 - **Respect the account boundary.** The supported product is one local deployment with exactly one root and any number of normal accounts, each with one private archive. Do not add tenants, workspaces, memberships, shared archives, or per-user provider keys without an explicit product change. Root account management is not a data-access grant, but password reset and explicit impersonation are trusted-recovery capabilities that can transfer sign-in access; impersonation is visible, uses a marked target session, and requires the root password to end. Treat root as the highest-trust credential and never describe RLS as protection against a malicious root.
 - **Tracked text is English.** Commit messages, PR titles and bodies, code comments, docstrings, and documentation are English. Chinese appears only in `frontend/src/app/i18n/locales/`. User archive content is never translated.
 - **Archive content is not UI copy.** Frontend UI strings exist in English, Traditional Chinese, and Simplified Chinese; user content, file names, citations, raw URLs, and model output are never translated. Run `bun run i18n:check` after locale changes.
-- **Keep tests offline and isolated.** Provider tests use injected fakes. Never call DeepSeek, OpenAI, Tavily, or a live archive database from tests.
+- **Keep tests offline and isolated.** Provider tests use injected fakes. Never call DeepSeek, OpenAI, Anthropic, Tavily, Exa, or a live archive database from tests.
+- **Gitflow:** branch `feat/*` or `fix/*` from `develop` and merge back through a PR; `develop` merges into `main` for release; `hotfix/*` branches from `main` and merges into both.
 - **For documentation-only work, do not start services or run builds merely to validate prose.** Use static checks such as `git diff --check` for docs changes.
 
 ## Verification
 
 ```bash
 # Repository gates (require the documented local dependencies)
-make lint
-make test
+make lint        # ruff, mypy, import-linter, bandit; eslint, tsc, i18n, workspace boundaries
+make test        # backend pytest + frontend bun test
 make api-check
+make audit       # pip-audit + bun audit; needs network
 
 # Build the client that Docker will serve
 make build
 ```
 
-`make test` uses the development PostgreSQL and a disposable test database; it must never point at a live archive. For docs-only changes, verify with `git diff --check` and confirm the intended file set with `git status --short`.
+`make test` uses the development PostgreSQL and a disposable test database (`APSOR_TEST_DATABASE_NAME`, default `apsor_archive_test`); it must never point at a live archive. For docs-only changes, verify with `git diff --check` and confirm the intended file set with `git status --short`.
 
 ## Related guides
 

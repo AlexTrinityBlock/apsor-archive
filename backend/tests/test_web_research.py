@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from app.infrastructure.web.tavily_client import TavilyWebClient
 from app.module.agent.domain.tool_args import WebFetchArgs
-from app.module.web_research.domain.fetch_quality import looks_structurally_incomplete
+from app.module.web_research.domain.fetch_quality_domain import looks_structurally_incomplete
 from app.module.web_research.exception.domain_error import WebProviderError
 from app.module.web_research.protocol.web_cache_protocol import JsonValue
 from app.module.web_research.schema.web_research_schema import (

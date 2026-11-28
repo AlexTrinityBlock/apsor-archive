@@ -39,7 +39,7 @@ import type {
 } from "../../generated-apis-types/schemas";
 import { useI18n } from "../../i18n";
 import { apiErrorMessage } from "./settings-utils";
-import { SettingsDialog } from "./SettingsDialog";
+import { ConfirmDialog } from "../../component/ConfirmDialog";
 
 type PromptList = ListResponseSchemaFrequentlyUsedPromptReadSchema;
 
@@ -150,7 +150,7 @@ function PromptEditorDialog({
   };
 
   return (
-    <SettingsDialog
+    <ConfirmDialog
       eyebrow={t("settings.prompts.dialogEyebrow")}
       title={
         prompt
@@ -239,7 +239,7 @@ function PromptEditorDialog({
           </p>
         ) : null}
       </form>
-    </SettingsDialog>
+    </ConfirmDialog>
   );
 }
 
@@ -692,7 +692,7 @@ export function FrequentlyUsedPromptsPanel() {
       ) : null}
 
       {deleteTarget ? (
-        <SettingsDialog
+        <ConfirmDialog
           eyebrow={t("settings.prompts.dialogEyebrow")}
           title={t("settings.prompts.deleteDialogTitle")}
           description={t("settings.prompts.deleteDialogDescription", {
@@ -734,7 +734,7 @@ export function FrequentlyUsedPromptsPanel() {
           <p className="settings-lede">
             {t("settings.prompts.deleteDialogCopy")}
           </p>
-        </SettingsDialog>
+        </ConfirmDialog>
       ) : null}
     </>
   );

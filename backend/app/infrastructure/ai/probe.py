@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 
 from app.infrastructure.ai.provider_factory import ProviderFactory
-from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 
 logger = logging.getLogger(__name__)
 

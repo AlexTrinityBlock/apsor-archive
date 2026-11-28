@@ -124,6 +124,7 @@ def _byte_range(range_header: str, size: int) -> tuple[int, int] | None:
     response_model=FileSchema,
     status_code=status.HTTP_201_CREATED,
     operation_id="uploadFile",
+    deprecated=True,
 )
 async def upload_file(
     path: Annotated[str, Form(min_length=1, max_length=1024)],
@@ -132,7 +133,12 @@ async def upload_file(
     file_service: FileService = Depends(get_upload_file_service),
     settings: Settings = Depends(get_app_settings),
 ) -> FileSchema:
-    """Upload one file; the server extracts text and indexes it."""
+    """Upload one file and extract it inside the API request.
+
+    Deprecated: extraction belongs to the dedicated ingestion worker. Clients
+    should use ``POST /files/async`` (``uploadFileAsync``) and follow the job.
+    The route stays for existing scripts and tests until it is removed.
+    """
     data = await file.read(settings.max_upload_bytes + 1)
     return await file_service.ingest_upload(
         path=path,

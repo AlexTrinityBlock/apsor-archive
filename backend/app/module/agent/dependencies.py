@@ -77,7 +77,7 @@ from app.module.knowledge.dependencies import (
     build_search_service,
     build_timeline_service,
 )
-from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.protocol.text_generator_protocol import TextGeneratorProtocol
 from app.module.web_research.dependencies import get_web_research_service
 

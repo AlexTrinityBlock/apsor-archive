@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, text
 
 from app.infrastructure.ai.probe import ProviderProbe
-from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.protocol.text_generator_protocol import AiCompletion
 from tests.conftest import UserClient
 

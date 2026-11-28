@@ -5,8 +5,8 @@ import json
 import logging
 from typing import Literal
 
-from app.module.web_research.domain.fetch_quality import looks_structurally_incomplete
-from app.module.web_research.domain.web_url_safety import WebUrlSafety
+from app.module.web_research.domain.fetch_quality_domain import looks_structurally_incomplete
+from app.module.web_research.domain.url_safety_domain import WebUrlSafety
 from app.module.web_research.exception.domain_error import (
     WebFetchNotConfiguredError,
     WebProviderError,

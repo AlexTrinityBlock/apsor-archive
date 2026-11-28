@@ -1,9 +1,10 @@
+// @ts-expect-error -- `bun:test` is provided by the Bun runtime; the frontend tsconfig does not load @types/bun.
 import { describe, expect, test } from "bun:test";
 
 import {
   readCalculationResult,
   readPlotSpec,
-} from "../src/app/chat/plot";
+} from "./plot";
 
 const plot = {
   version: 1,

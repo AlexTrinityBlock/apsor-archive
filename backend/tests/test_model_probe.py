@@ -17,7 +17,7 @@ from app.infrastructure.ai import anthropic_client, deepseek_client
 from app.infrastructure.ai.probe import ProbeOutcome, ProviderProbe
 from app.infrastructure.ai.provider_factory import ProviderFactory
 from app.infrastructure.config.settings import Settings
-from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from app.module.knowledge.protocol.text_generator_protocol import AiCompletion
 
 

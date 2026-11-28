@@ -1,10 +1,10 @@
 """Dedicated durable-ingestion worker process.
 
-Run ``python -m app.worker`` (or ``apsor-archive worker``) as its own service
-when the API should stay responsive under long uploads. The worker uses the
-same PostgreSQL job queue and lease as the lifespan fallback, so either mode
-can drain a queue left by the other. Only this process backfills WebP
-thumbnails for files that predate them (``APSOR_THUMBNAIL_BACKFILL_ENABLED``).
+Run ``python -m app.worker`` (or ``apsor-archive worker`` / ``make worker``) as
+its own service; this is the supported way to drain ingestion. The API only
+enqueues jobs and publishes wake-ups unless ``APSOR_INGEST_WORKER_ENABLED=true``
+opts it into a single-process development mode. Both modes share the same
+PostgreSQL job queue and lease, so either can drain a queue left by the other.
 
 The loop polls immediately, processes every claimable job without sleeping,
 and waits ``APSOR_INGEST_POLL_SECONDS`` (one second by default) only when the
@@ -18,6 +18,9 @@ parsing/chunking work is capped by a shared ``ThreadPoolExecutor`` sized by
 shared async semaphore ``APSOR_INGEST_EMBEDDING_CONCURRENCY`` (six by
 default). Pure-Python CPU-bound work can later move to a process pool; the job,
 lease, and progress contracts do not depend on the executor type.
+
+Only this process backfills WebP thumbnails for files that predate them
+(``APSOR_THUMBNAIL_BACKFILL_ENABLED``); the API never starts that loop.
 """
 
 import argparse
@@ -25,42 +28,13 @@ import asyncio
 import logging
 import signal
 from collections.abc import Sequence
-from contextlib import suppress
 
 from starlette.datastructures import State
 
-from app.infrastructure.ai.provider_factory import (
-    ProviderFactory,
-    provider_defaults_from_settings,
-)
-from app.infrastructure.ai.runtime import AiRuntime
-from app.infrastructure.cache.progress_bus import build_progress_bus
-from app.infrastructure.cache.resilient_cache import build_cache
+from app.bootstrap import build_background_services, close_process_state, open_process_state
 from app.infrastructure.config.settings import Settings, get_settings
 from app.infrastructure.database.migrations import upgrade_to_head
-from app.infrastructure.database.session import Database, system_session
-from app.infrastructure.files.storage_factory import build_file_storage
 from app.infrastructure.logger.logging import configure_logging
-from app.infrastructure.queue.rabbitmq import RabbitMQJobConsumer
-from app.infrastructure.security.secret_cipher import SecretCipher
-from app.module.agent.dependencies import load_agent_runtime_config
-from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
-from app.module.agent.service.history_indexer import AgentHistoryIndexer
-from app.module.knowledge.dependencies import (
-    build_history_chunk_store,
-    build_ingest_worker,
-    build_job_consumer,
-    build_provider_refresh,
-    build_thumbnail_backfill,
-    ingest_runtime_defaults,
-    load_ingest_runtime_config,
-)
-from app.module.knowledge.repository.provider_config_repository import (
-    ProviderConfigRepository,
-)
-from app.module.knowledge.service.provider_error_notice_service import (
-    ProviderErrorNoticeService,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -86,85 +60,20 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
     # remain visible.
     configure_logging(debug=settings.debug)
 
-    database = Database(settings.database_url, echo=settings.debug)
-    cache = build_cache(settings.cache_url)
-    progress_bus = build_progress_bus(settings.cache_url)
-    storage = build_file_storage(settings)
-    cipher = SecretCipher.from_settings(settings)
-    notice_service = ProviderErrorNoticeService(database.session_factory)
-    runtime = AiRuntime(
-        builder=ProviderFactory(settings),
-        cipher=cipher,
-        defaults=provider_defaults_from_settings(settings),
-        reporter=notice_service.report,
-    )
+    state = State()
     try:
-        async with system_session(database.session_factory) as session:
-            await runtime.reload(ProviderConfigRepository(session))
-
-        state = State()
-        state.settings = settings
-        state.db = database
-        state.cache = cache
-        state.progress_bus = progress_bus
-        state.storage = storage
-        state.secret_cipher = cipher
-        state.ai_runtime = runtime
-        state.provider_notice_service = notice_service
-
-        ingest_defaults = ingest_runtime_defaults(settings)
-        ingest_config = await load_ingest_runtime_config(
-            database.session_factory,
-            ingest_defaults,
-        )
-        worker = build_ingest_worker(
-            state,
-            database.session_factory,
-            settings,
-            runtime_config=ingest_config,
-            config_provider=lambda: load_ingest_runtime_config(
-                database.session_factory,
-                ingest_defaults,
-            ),
-            provider_refresh=build_provider_refresh(runtime, database.session_factory),
-            progress_bus=progress_bus,
-        )
-        cleanup = ChatAttachmentCleanup(
-            database=database,
-            storage=storage,
-            config_provider=lambda: load_agent_runtime_config(database),
-        )
-        history_indexer = AgentHistoryIndexer(
-            database=database,
-            store_factory=lambda session, user_id: build_history_chunk_store(
-                state,
-                session,
-                user_id=user_id,
-            ),
-            cache=cache,
-        )
-        thumbnail_backfill = (
-            build_thumbnail_backfill(state, database)
-            if settings.thumbnail_backfill_enabled
-            else None
-        )
-        cleanup_task: asyncio.Task[None] | None = None
-        thumbnail_task: asyncio.Task[None] | None = None
-        history_task: asyncio.Task[None] | None = None
-        consumer_task: asyncio.Task[None] | None = None
-        consumer: RabbitMQJobConsumer | None = None
+        await open_process_state(state, settings)
+        services = await build_background_services(state, settings)
         try:
-            await worker.startup()
-
             stop_event = asyncio.Event()
             _install_signal_handlers(stop_event)
             if once:
-                removed = await cleanup.run_once()
-                history_batch = await history_indexer.run_once()
-                processed = await worker.run_once()
+                removed = await services.cleanup.run_once()
+                history_batch = await services.history_indexer.run_once()
+                processed = await services.worker.run_once()
                 thumbnails = (
-                    (await thumbnail_backfill.run_once()).processed
-                    if thumbnail_backfill is not None
+                    (await services.thumbnail_backfill.run_once()).processed
+                    if services.thumbnail_backfill is not None
                     else 0
                 )
                 logger.info(
@@ -177,50 +86,13 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                     thumbnails,
                 )
             else:
-                consumer = build_job_consumer(settings, worker)
-                if consumer is not None:
-                    consumer_task = asyncio.create_task(
-                        consumer.run(),
-                        name="ingest-rabbitmq-consumer",
-                    )
-                cleanup_task = asyncio.create_task(
-                    cleanup.run_forever(stop_event),
-                    name="chat-attachment-cleanup",
-                )
-                history_task = asyncio.create_task(
-                    history_indexer.run_forever(stop_event),
-                    name="conversation-history-indexer",
-                )
-                if thumbnail_backfill is not None:
-                    thumbnail_task = asyncio.create_task(
-                        thumbnail_backfill.run_forever(stop_event),
-                        name="file-thumbnail-backfill",
-                    )
-                await worker.run_forever(stop_event)
+                services.start_side_loops(settings, stop_event)
+                services.start_thumbnail_backfill(stop_event)
+                await services.worker.run_forever(stop_event)
         finally:
-            if consumer_task is not None:
-                consumer_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await consumer_task
-            if consumer is not None:
-                await consumer.close()
-            if cleanup_task is not None:
-                cleanup_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await cleanup_task
-            if thumbnail_task is not None:
-                thumbnail_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await thumbnail_task
-            if history_task is not None:
-                history_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await history_task
-            worker.close()
+            await services.stop()
     finally:
-        await progress_bus.close()
-        await cache.close()
-        await database.dispose()
+        await close_process_state(state)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

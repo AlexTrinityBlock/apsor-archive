@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
@@ -14,52 +14,32 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
-from app.dependency.auth import require_authenticated, require_stateless_authenticated
-from app.infrastructure.ai.provider_factory import (
-    ProviderFactory,
-    provider_defaults_from_settings,
+from app.bootstrap import (
+    BackgroundServices,
+    build_background_services,
+    close_process_state,
+    open_process_state,
 )
-from app.infrastructure.ai.runtime import AiRuntime
-from app.infrastructure.cache.progress_bus import build_progress_bus
-from app.infrastructure.cache.resilient_cache import build_cache
+from app.dependency.auth import require_authenticated, require_stateless_authenticated
 from app.infrastructure.config.settings import Settings, get_settings
 from app.infrastructure.database.migrations import upgrade_to_head
-from app.infrastructure.database.session import Database, system_session
-from app.infrastructure.files.storage_factory import build_file_storage
 from app.infrastructure.logger.logging import configure_logging
-from app.infrastructure.queue.rabbitmq import RabbitMQJobConsumer
-from app.infrastructure.security.secret_cipher import SecretCipher
-from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.exception.handler import register_exceptions as register_agent_exceptions
 from app.module.agent.repository.agent_repository import AgentRepository
 from app.module.agent.router import router as agent_router
-from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
-from app.module.agent.service.history_indexer import AgentHistoryIndexer
 from app.module.auth.exception.handler import register_exceptions as register_auth_exceptions
 from app.module.auth.router.account_router import router as account_router
 from app.module.auth.router.auth_router import router as auth_router
-from app.module.knowledge.dependencies import (
-    build_history_chunk_store,
-    build_ingest_worker,
-    build_job_consumer,
-    build_job_notifier,
-    build_provider_refresh,
-    ingest_runtime_defaults,
-    load_ingest_runtime_config,
-)
-from app.module.knowledge.exception.handler import register_exceptions
-from app.module.knowledge.repository.provider_config_repository import (
-    ProviderConfigRepository,
+from app.module.knowledge.dependencies import build_job_notifier
+from app.module.knowledge.exception.handler import (
+    register_exceptions as register_knowledge_exceptions,
 )
 from app.module.knowledge.router import router as knowledge_router
 from app.module.knowledge.router.health_router import router as health_router
 from app.module.knowledge.router.ingest_progress_router import (
     router as ingest_progress_router,
 )
-from app.module.knowledge.service.provider_error_notice_service import (
-    ProviderErrorNoticeService,
-)
-from app.module.prompt.exception.handler import register_prompt_exceptions
+from app.module.prompt.exception.handler import register_exceptions as register_prompt_exceptions
 from app.module.prompt.router import router as prompt_router
 from app.module.web_research.exception.handler import (
     register_exceptions as register_web_research_exceptions,
@@ -102,124 +82,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # the no-op notifier; an enabled deployment without a URL fails here
         # instead of silently advertising a queue it cannot use.
         app.state.job_notifier = build_job_notifier(resolved_settings)
-        app.state.db = Database(
-            resolved_settings.database_url,
-            echo=resolved_settings.debug,
-        )
-        await AgentRepository.recover_stale_runs(app.state.db, now=utcnow())
-        app.state.cache = build_cache(resolved_settings.cache_url)
-        app.state.progress_bus = build_progress_bus(resolved_settings.cache_url)
-        app.state.storage = build_file_storage(resolved_settings)
-        cipher = SecretCipher.from_settings(resolved_settings)
-        notice_service = ProviderErrorNoticeService(app.state.db.session_factory)
-        runtime = AiRuntime(
-            builder=ProviderFactory(resolved_settings),
-            cipher=cipher,
-            defaults=provider_defaults_from_settings(resolved_settings),
-            reporter=notice_service.report,
-        )
-        async with system_session(app.state.db.session_factory) as session:
-            await runtime.reload(ProviderConfigRepository(session))
-        app.state.secret_cipher = cipher
-        app.state.ai_runtime = runtime
-        app.state.provider_notice_service = notice_service
-        ingest_defaults = ingest_runtime_defaults(resolved_settings)
-        ingest_config = ingest_defaults
-        if resolved_settings.ingest_worker_enabled:
-            ingest_config = await load_ingest_runtime_config(
-                app.state.db.session_factory,
-                ingest_defaults,
-            )
-        app.state.ingest_worker = build_ingest_worker(
-            app.state,
-            app.state.db.session_factory,
-            resolved_settings,
-            runtime_config=ingest_config,
-            config_provider=(
-                (
-                    lambda: load_ingest_runtime_config(
-                        app.state.db.session_factory,
-                        ingest_defaults,
-                    )
-                )
-                if resolved_settings.ingest_worker_enabled
-                else None
-            ),
-            provider_refresh=build_provider_refresh(
-                runtime,
-                app.state.db.session_factory,
-            ),
-            progress_bus=app.state.progress_bus,
-        )
-        worker_task: asyncio.Task[None] | None = None
-        consumer_task: asyncio.Task[None] | None = None
-        cleanup_task: asyncio.Task[None] | None = None
-        history_task: asyncio.Task[None] | None = None
-        job_consumer: RabbitMQJobConsumer | None = None
-        if resolved_settings.ingest_worker_enabled:
-            await app.state.ingest_worker.startup()
-            worker_task = asyncio.create_task(
-                app.state.ingest_worker.run_forever(),
-                name="ingest-worker",
-            )
-            job_consumer = build_job_consumer(
-                resolved_settings,
-                app.state.ingest_worker,
-            )
-            app.state.job_consumer = job_consumer
-            if job_consumer is not None:
-                consumer_task = asyncio.create_task(
-                    job_consumer.run(),
-                    name="ingest-rabbitmq-consumer",
-                )
-            cleanup = ChatAttachmentCleanup(
-                database=app.state.db,
-                storage=app.state.storage,
-                config_provider=lambda: load_agent_runtime_config(app.state.db),
-            )
-            cleanup_task = asyncio.create_task(
-                cleanup.run_forever(),
-                name="chat-attachment-cleanup",
-            )
-            history_indexer = AgentHistoryIndexer(
-                database=app.state.db,
-                store_factory=lambda session, user_id: build_history_chunk_store(
-                    app.state,
-                    session,
-                    user_id=user_id,
-                ),
-                cache=app.state.cache,
-            )
-            history_task = asyncio.create_task(
-                history_indexer.run_forever(),
-                name="conversation-history-indexer",
-            )
+        background: BackgroundServices | None = None
         try:
+            await open_process_state(app.state, resolved_settings)
+            await AgentRepository.recover_stale_runs(app.state.db, now=utcnow())
+            # Production runs ingestion in the dedicated ``apsor-archive worker``
+            # process. APSOR_INGEST_WORKER_ENABLED=true is an opt-in
+            # single-process development mode that runs the same loops here.
+            if resolved_settings.ingest_worker_enabled:
+                background = await build_background_services(app.state, resolved_settings)
+                app.state.ingest_worker = background.worker
+                background.start_worker_loop()
+                background.start_side_loops(resolved_settings, None)
+                app.state.job_consumer = background.consumer
             yield
         finally:
-            if cleanup_task is not None:
-                cleanup_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await cleanup_task
-            if history_task is not None:
-                history_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await history_task
-            if consumer_task is not None:
-                consumer_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await consumer_task
-            if job_consumer is not None:
-                await job_consumer.close()
-            if worker_task is not None:
-                worker_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await worker_task
-            app.state.ingest_worker.close()
+            if background is not None:
+                await background.stop()
             await app.state.job_notifier.close()
-            await app.state.progress_bus.close()
-            await app.state.cache.close()
-            await app.state.db.dispose()
+            await close_process_state(app.state)
 
     app = FastAPI(
         title=resolved_settings.app_name,
@@ -231,7 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = resolved_settings
 
-    register_exceptions()
+    register_knowledge_exceptions()
     register_auth_exceptions()
     register_agent_exceptions()
     register_web_research_exceptions()

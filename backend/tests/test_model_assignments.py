@@ -21,7 +21,7 @@ from app.infrastructure.ai.user_models import (
     resolve_endpoint,
     slot_values,
 )
-from app.module.knowledge.protocol.provider_config import ProviderConfig
+from app.module.knowledge.domain.provider_runtime_domain import ProviderConfig
 from tests.conftest import UserClient
 
 

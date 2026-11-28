@@ -33,7 +33,7 @@ import {
   truncate,
 } from "../../lib/format";
 import { libraryFileUrl } from "../../lib/library-url";
-import "./home.css";
+import "./dashboard.css";
 
 
 const TIMELINE_WINDOW_DAYS = 30;

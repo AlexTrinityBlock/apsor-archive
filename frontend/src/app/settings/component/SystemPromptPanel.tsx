@@ -44,7 +44,7 @@ import type {
 } from "../../generated-apis-types/schemas";
 import { useI18n } from "../../i18n";
 import { apiErrorMessage } from "./settings-utils";
-import { SettingsDialog } from "./SettingsDialog";
+import { ConfirmDialog } from "../../component/ConfirmDialog";
 
 type SectionList = ListResponseSchemaSystemPromptSectionReadSchema;
 
@@ -604,7 +604,7 @@ function AddSectionDialog({
   };
 
   return (
-    <SettingsDialog
+    <ConfirmDialog
       eyebrow={t("systemPrompt.add.eyebrow")}
       title={t("systemPrompt.add.title")}
       description={t("systemPrompt.add.description")}
@@ -689,7 +689,7 @@ function AddSectionDialog({
           </p>
         ) : null}
       </form>
-    </SettingsDialog>
+    </ConfirmDialog>
   );
 }
 
@@ -711,7 +711,7 @@ function DeleteSectionDialog({
 }: DeleteDialogProps) {
   const { t } = useI18n();
   return (
-    <SettingsDialog
+    <ConfirmDialog
       eyebrow={t("systemPrompt.delete.eyebrow")}
       title={t("systemPrompt.delete.title")}
       description={t("systemPrompt.delete.description", {
@@ -751,7 +751,7 @@ function DeleteSectionDialog({
           {error}
         </p>
       ) : null}
-    </SettingsDialog>
+    </ConfirmDialog>
   );
 }
 
@@ -781,7 +781,7 @@ function ResetSectionsDialog({
   }
 
   return (
-    <SettingsDialog
+    <ConfirmDialog
       eyebrow={t("systemPrompt.reset.eyebrow")}
       title={t("systemPrompt.reset.title")}
       description={t("systemPrompt.reset.description")}
@@ -817,7 +817,7 @@ function ResetSectionsDialog({
           {error}
         </p>
       ) : null}
-    </SettingsDialog>
+    </ConfirmDialog>
   );
 }
 

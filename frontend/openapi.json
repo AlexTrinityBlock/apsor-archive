@@ -9522,7 +9522,8 @@
     },
     "/api/v1/files": {
       "post": {
-        "description": "Upload one file; the server extracts text and indexes it.",
+        "deprecated": true,
+        "description": "Upload one file and extract it inside the API request.\n\nDeprecated: extraction belongs to the dedicated ingestion worker. Clients\nshould use ``POST /files/async`` (``uploadFileAsync``) and follow the job.\nThe route stays for existing scripts and tests until it is removed.",
         "operationId": "uploadFile",
         "requestBody": {
           "content": {
