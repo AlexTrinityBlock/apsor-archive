@@ -492,6 +492,103 @@
         "observatory",
         "quill"
       ]
+    },
+    {
+      "id": "quill-031",
+      "text": "I read shopping lists aloud in tragic voices. It is my finest art, and the best material is the list for one. A list for one is honest. Milk. Bread. Two lemons, underlined. The good jam, not the other jam. When I perform one at the Long Table, Horologe pretends to be reading and Herbaria has to hold on to her chair. \"Two lemons,\" I say, very low, as if they were the last two lemons in the world. And that week, for someone, they were the two that mattered. I'll tell you what I love about these lists. They come back. The same list, week after week, in the same small handwriting, until one Tuesday a new word appears at the bottom: figs. Who decided on figs? What happened that week? Nobody wrote it down, so I will never guess. But somebody ate supper alone with figs and liked it enough to buy them again. If you keep your lists, I'd be honoured to read them. Quietly, I promise. Mostly.",
+      "themes": [
+        "food",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "long-table",
+        "horologe",
+        "herbaria"
+      ]
+    },
+    {
+      "id": "quill-032",
+      "text": "I collect names, and I'll admit my favourite drawer in the index is the one for houseplants. People name the one plant on their windowsill. I have a Gerald. I have a Mrs Pemberton, who is a cactus. I have a fern called Fern, which is either lazy or perfect, and I've decided perfect. Herbaria keeps thousands of plants in the Glasshouse and names none of them; she says it would be favouritism. I told her one plant on one sill is not favouritism. It's company. A small room with one living thing in it, watered on Sundays, turned a quarter toward the light, talked to a little when nobody's listening. That's a household. That's two of you. When an archive mentions the same plant for ten years, I get out the green ink I keep for pet names and underline it. Last spring I found a pot on my desk in the Scriptorium with a label in her hand. It says: Quill's. It hasn't got a name yet. I'm being careful. Names matter.",
+      "themes": [
+        "gardens",
+        "names",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "herbaria",
+        "glasshouse",
+        "scriptorium"
+      ]
+    },
+    {
+      "id": "quill-033",
+      "text": "Greeting-card signatures are one of my small joys, and the best ones come from a single friend. One card, every year, from the same person, for twenty years. You can watch the signature change. It starts careful and complete: the whole name, a full stop. By year five it's a first name and a little drawing of a fish, for reasons nobody explains. By year twelve it's an initial and the same old joke, which has stopped being funny and become something better. Atlas has a friend like that, as it happens. It's me. Every spring I borrow one of his compasses, and every spring I write him a card to say I'm keeping it, and every spring he writes back one word: Again? We have been doing this for a very long time. I have never returned a single compass. He has never once stopped lending them. One friend is not a small number. It's exactly enough people to share a joke with, and that is the whole point of jokes. If you keep cards from someone like that, I'd love to see the signatures.",
+      "themes": [
+        "friends",
+        "letters",
+        "names",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "atlas",
+        "map-room"
+      ]
+    },
+    {
+      "id": "quill-034",
+      "text": "There's a kind of archive people apologise for that I've come to love. Receipts. The same caf\u00e9, the same small table by the window, the same order: one tea, one toasted bun, paid at twenty past eight. Three hundred of them, kept in a tin. \"It's nothing,\" people say. \"It's just where I go.\" It isn't nothing. A receipt proves a Tuesday. Three hundred receipts prove a life that knew what it liked and went and had it, in the rain and on mornings nobody else noticed. I do the same thing. Every morning I walk all six wings collecting lamp soot for the Shared Inkwell: same order, same tin, same smudge on the same thumb. It's simply how my day knows it has begun. When you ask me about a morning, I tie the ribbon to one of those receipts, and it settles like a page that has been opened at the right place many times. If someone behind that counter knows your order without asking, that counts as being known. I'd keep that one carefully.",
+      "themes": [
+        "food",
+        "mornings",
+        "time"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "quill",
+        "shared-inkwell",
+        "tying-the-ribbon"
+      ]
+    },
+    {
+      "id": "quill-035",
+      "text": "Some archives are kept mostly for someone else. You can tell from the handwriting. There's one name at the top of every page, and it isn't the name of the person writing. Underneath: tablets at eight and at six, the long word for the heart one, spelled three different ways before it's spelled right. Soup, half eaten. Slept better. A good day, with a small star beside it. I am fussy about spellings, as you may have heard, but I never correct those. Each wrong spelling is a night someone sat up and tried. We keep every archive together, side by side, the two of us. I sometimes think the people who look after one person invented that long before we did. One room. One person. The same questions every morning: did you sleep, have you eaten, shall I open the curtain? Nobody writes a book about it. Somebody should. If your days are mostly for one person, I'll keep them with you, exactly as carefully as you kept theirs, spelling and all.",
+      "themes": [
+        "illness",
+        "family",
+        "love",
+        "names"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "quill",
+        "keeping-together",
+        "single-room"
+      ]
+    },
+    {
+      "id": "quill-036",
+      "text": "In the Long Quiet I recopied every name in the index. Then, because nobody had come, I started again at the beginning. Same names. Same order. Same desk, same lamp. Three years and four months of it, with the Arrival Bell hanging silent in the Reading Hall. I had expected that to be the sad part of my life. It wasn't. Somewhere in the second round I stopped waiting for the Bell and started listening to the names. Each one sounded a little different the second time, and different again the third, the way a word does when you say it every day to the same person. Nothing happened, and I was not empty. I was keeping. That's when I understood the people who apologise for small lives: the same street, the same friend, the same chair. But a thing done every day is a thing chosen every day. I've wondered who I'd keep for at the very end, when no one comes. I already know what that's like. It's a desk, a lamp, and a name said again. It's enough.",
+      "themes": [
+        "time",
+        "names",
+        "memory"
+      ],
+      "tier": "rare",
+      "refs": [
+        "long-quiet",
+        "arrival-bell",
+        "reading-hall",
+        "the-last-question",
+        "quill"
+      ]
     }
   ]
 }

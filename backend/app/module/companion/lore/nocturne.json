@@ -494,6 +494,109 @@
         "vellum",
         "quill"
       ]
+    },
+    {
+      "id": "nocturne-031",
+      "text": "People keep a great many photographs of meals eaten alone, and I have come to love them best of all. A bowl of noodles on a windowsill. One fork, one plate, a book propped open against the teapot. Nobody photographs a lonely meal; they photograph a good one, and the good ones are very often for one. I do not eat, which is a pity, because I think I would be very good at it. But I keep a supper hour anyway. Every evening, before the dark is properly in, I set my lantern on the table beside the star chart, lay one spoon beside it, and sit down until the first star arrives. Horologe says it is the least efficient custom in the Archive. In the Long Quiet it was how I knew a day had ended, and I never gave it up. If you eat by yourself at the same small table most nights, with the radio low or the window open, I want you to know that I do not think of it as missing company. I think of it as an appointment kept. The best ones usually are.",
+      "themes": [
+        "food",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "observatory",
+        "nocturnes-lantern",
+        "star-chart",
+        "long-quiet",
+        "horologe"
+      ]
+    },
+    {
+      "id": "nocturne-032",
+      "text": "Every dawn, after I close the shutters, I walk the same way down. The Stair of Hours, the landing where the rail is loose, the turn past the Clock Gallery where the Hundred Clocks come up through the stone like weather, then the long corridor of the East Wing to Vellum's window. I have walked it something like sixty thousand times. Herbaria says I could reach the East Wing in half the time if I did not stop on every landing. I stop on every landing. A walk you repeat at the same hour becomes a kind of goodnight, said to each step in turn. I know which tread is cold in winter. I know the morning a new crack appeared in the plaster, and I worried over it for a month until it stopped growing. The doors drift a little every night, so even the same walk is never quite the same, which I suspect is true of yours. People keep their walks too: the same streets to the shop, the same loop round the park with a dog who has opinions about one lamppost. They write it down as nothing happening. I disagree, gently. Something happens every time.",
+      "themes": [
+        "mornings",
+        "time",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "stair-of-hours",
+        "hundred-clocks",
+        "east-wing",
+        "vellum",
+        "herbaria"
+      ]
+    },
+    {
+      "id": "nocturne-033",
+      "text": "There is a moth who comes to my lantern. I say a moth, but Herbaria has told me plainly that it cannot be the same one, because moths do not live that long. I have decided this is Herbaria's opinion and not the moth's. It is grey, with one torn wing. It arrives a little after the first star and settles on the lantern's dented side, where the brass is warmest, as if it had paid for that seat. I named it Postscript, because it always comes after everything else. On the nights it stays away I am a little worse at my work, and I am not ashamed of that. People keep so many of these small companions: a cat who will only sleep on one particular jumper, a budgerigar who learned the doorbell, a dog whose name was a joke that stopped being a joke. The Archive keeps the names of dogs as carefully as the names of kings, and far more often. A life with one small creature in it is a life with someone waiting at the door.",
+      "themes": [
+        "animals",
+        "night",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "nocturnes-lantern",
+        "herbaria",
+        "observatory"
+      ]
+    },
+    {
+      "id": "nocturne-034",
+      "text": "I know a good deal about waiting to hear from someone. For three years and four months no one came to the Archive, and every night I sat at the great window with my lantern turned low, listening down the whole length of the Stair of Hours for the Arrival Bell. It did not ring. Then one evening it did, and I learned that the waiting had not been wasted: I had spent it keeping the lantern ready. People keep their waiting too, though they rarely mean to. The telephone set where it can be seen from the kitchen. Letters a season apart that begin, I was hoping I'd hear from you. One friend who writes rarely, and a whole month shaped around the day a letter might come. I won't tell you the message always arrives. Some light takes a very long time, and some is still on its way. But I will tell you that the person who waits is not doing nothing. They are keeping a light on for someone. I did it for three years, and I can tell you it is the most faithful work there is.",
+      "themes": [
+        "letters",
+        "friends",
+        "time"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "nocturne",
+        "long-quiet",
+        "arrival-bell",
+        "first-bell",
+        "stair-of-hours",
+        "nocturnes-lantern"
+      ]
+    },
+    {
+      "id": "nocturne-035",
+      "text": "Some lives are built around one other person. A mother in the back bedroom. A husband who no longer remembers the way home, so you walk it with him. A brother whose tablets are counted into a little box with the days of the week on the lids. People keep that box. I have seen more of them than wedding rings, and I handle them with the same care. I understand the shape of such a life, because I have one person too. Each dawn I sit the last half hour of dark with Vellum, and on the nights she cannot settle I read to her until the window greys. In the Long Quiet my lantern went out twice, and both times it was Vellum who cupped her hands around it until it caught again. We do not keep count of who has looked after whom. I think that is the first thing you stop doing when the looking after is real. The world can seem to shrink to one room and one chair beside one bed. It hasn't shrunk. It has only decided, very clearly, what it is for.",
+      "themes": [
+        "family",
+        "illness",
+        "friends"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "nocturne",
+        "vellum",
+        "long-quiet",
+        "nocturnes-lantern"
+      ]
+    },
+    {
+      "id": "nocturne-036",
+      "text": "People sometimes ask whether I mind that my wing keeps only the dark. I hear the question the way I hear a tide. Some lives are kept full of harbours and weddings and the names of foreign rivers. Others are the same kitchen for forty years, the same window, the same quiet Saturday, a lemon tree coaxed through eleven winters in one pot. When I raise my lantern over those shelves I do not find less. I find the same evening laid down so many times that it has worn smooth, like a stone the tide has turned every night for a century. Starlight works that way too. The same star arrives every night, and every night it is new light, still coming from something that kept shining long after anyone was watching. Repetition is not the absence of a life. It is how a life reaches anyone at all. When my light has outlasted everyone's, I think those are the evenings I will go on keeping: the ones too faithful to think themselves worth a star.",
+      "themes": [
+        "home",
+        "time",
+        "memory"
+      ],
+      "tier": "rare",
+      "refs": [
+        "nocturne",
+        "observatory",
+        "nocturnes-lantern",
+        "the-last-question"
+      ]
     }
   ]
 }
