@@ -2029,6 +2029,46 @@
         "title": "Body_uploadAgentChatAttachment",
         "type": "object"
       },
+      "Body_uploadCompanionFrames": {
+        "properties": {
+          "action": {
+            "enum": [
+              "idle",
+              "greet",
+              "listening",
+              "thinking",
+              "searching",
+              "reading",
+              "writing",
+              "calculating",
+              "browsing",
+              "presenting",
+              "speaking",
+              "waiting",
+              "success",
+              "confused",
+              "sleeping",
+              "held"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "contentMediaType": "application/octet-stream",
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "files"
+        ],
+        "title": "Body_uploadCompanionFrames",
+        "type": "object"
+      },
       "Body_uploadFile": {
         "properties": {
           "file": {
@@ -2348,6 +2388,392 @@
           "is_current"
         ],
         "title": "ChunkSchema",
+        "type": "object"
+      },
+      "CompanionCreateSchema": {
+        "additionalProperties": false,
+        "description": "Create an empty companion; frames are uploaded per action afterwards.",
+        "properties": {
+          "gender": {
+            "anyOf": [
+              {
+                "enum": [
+                  "female",
+                  "male",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gender"
+          },
+          "name": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CompanionCreateSchema",
+        "type": "object"
+      },
+      "CompanionFrameOrderSchema": {
+        "additionalProperties": false,
+        "description": "The complete new order of one action's frames.",
+        "properties": {
+          "action": {
+            "enum": [
+              "idle",
+              "greet",
+              "listening",
+              "thinking",
+              "searching",
+              "reading",
+              "writing",
+              "calculating",
+              "browsing",
+              "presenting",
+              "speaking",
+              "waiting",
+              "success",
+              "confused",
+              "sleeping",
+              "held"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "frame_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Frame Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "frame_ids"
+        ],
+        "title": "CompanionFrameOrderSchema",
+        "type": "object"
+      },
+      "CompanionFrameSchema": {
+        "description": "One stored frame; ``url`` already carries the cache-busting version.",
+        "properties": {
+          "action": {
+            "enum": [
+              "idle",
+              "greet",
+              "listening",
+              "thinking",
+              "searching",
+              "reading",
+              "writing",
+              "calculating",
+              "browsing",
+              "presenting",
+              "speaking",
+              "waiting",
+              "success",
+              "confused",
+              "sleeping",
+              "held"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "mime_type": {
+            "enum": [
+              "image/avif",
+              "image/webp"
+            ],
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "position",
+          "width",
+          "height",
+          "size_bytes",
+          "mime_type",
+          "version",
+          "url"
+        ],
+        "title": "CompanionFrameSchema",
+        "type": "object"
+      },
+      "CompanionPositionSchema": {
+        "additionalProperties": false,
+        "description": "A normalized viewport position, where 0..1 spans the visible area.",
+        "properties": {
+          "x": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "CompanionPositionSchema",
+        "type": "object"
+      },
+      "CompanionPreferenceSchema": {
+        "description": "The account's companion choice. ``selected=None`` means the default preset.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "motion": {
+            "enum": [
+              "full",
+              "reduced",
+              "off"
+            ],
+            "title": "Motion",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompanionPositionSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "selected",
+          "enabled",
+          "motion",
+          "position",
+          "updated_at"
+        ],
+        "title": "CompanionPreferenceSchema",
+        "type": "object"
+      },
+      "CompanionPreferenceUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Change part of the preference; omitted fields keep their stored value.",
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "motion": {
+            "anyOf": [
+              {
+                "enum": [
+                  "full",
+                  "reduced",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motion"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompanionPositionSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selected": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selected"
+          }
+        },
+        "title": "CompanionPreferenceUpdateSchema",
+        "type": "object"
+      },
+      "CompanionSchema": {
+        "description": "One custom companion with every frame, ordered by action and position.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "frames": {
+            "items": {
+              "$ref": "#/components/schemas/CompanionFrameSchema"
+            },
+            "title": "Frames",
+            "type": "array"
+          },
+          "gender": {
+            "anyOf": [
+              {
+                "enum": [
+                  "female",
+                  "male",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gender"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "gender",
+          "frames",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CompanionSchema",
+        "type": "object"
+      },
+      "CompanionUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Rename a companion or change its gender; omitted fields are unchanged.",
+        "properties": {
+          "gender": {
+            "anyOf": [
+              {
+                "enum": [
+                  "female",
+                  "male",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gender"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "CompanionUpdateSchema",
         "type": "object"
       },
       "DirectorySchema": {
@@ -3812,6 +4238,37 @@
           "resources"
         ],
         "title": "ListResponseSchema[AgentConversationSchema]",
+        "type": "object"
+      },
+      "ListResponseSchema_CompanionSchema_": {
+        "properties": {
+          "items_per_page": {
+            "title": "Items Per Page",
+            "type": "integer"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/CompanionSchema"
+            },
+            "title": "Resources",
+            "type": "array"
+          },
+          "start_index": {
+            "title": "Start Index",
+            "type": "integer"
+          },
+          "total_results": {
+            "title": "Total Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_results",
+          "start_index",
+          "items_per_page",
+          "resources"
+        ],
+        "title": "ListResponseSchema[CompanionSchema]",
         "type": "object"
       },
       "ListResponseSchema_FrequentlyUsedPromptReadSchema_": {
@@ -9517,6 +9974,447 @@
         "summary": "Probe Chat Endpoint",
         "tags": [
           "model-assignments"
+        ]
+      }
+    },
+    "/api/v1/companions": {
+      "get": {
+        "description": "List the account's custom companions with their frames.",
+        "operationId": "listCompanions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListResponseSchema_CompanionSchema_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Companions",
+        "tags": [
+          "companions"
+        ]
+      },
+      "post": {
+        "description": "Create an empty custom companion.",
+        "operationId": "createCompanion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Companion",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/preference": {
+      "get": {
+        "description": "Return the account's companion choice, visibility, motion, and position.",
+        "operationId": "getCompanionPreference",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPreferenceSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Companion Preference",
+        "tags": [
+          "companions"
+        ]
+      },
+      "patch": {
+        "description": "Change part of the account's companion preference.",
+        "operationId": "updateCompanionPreference",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionPreferenceUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPreferenceSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Companion Preference",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}": {
+      "delete": {
+        "description": "Delete a custom companion and every frame it owns.",
+        "operationId": "deleteCompanion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Companion",
+        "tags": [
+          "companions"
+        ]
+      },
+      "patch": {
+        "description": "Rename a custom companion or change its gender.",
+        "operationId": "updateCompanion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Companion",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}/frames": {
+      "post": {
+        "description": "Append one or more images to an action, in upload order.",
+        "operationId": "uploadCompanionFrames",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_uploadCompanionFrames"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Companion Frames",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}/frames/order": {
+      "put": {
+        "description": "Replace the frame order of one action.",
+        "operationId": "reorderCompanionFrames",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionFrameOrderSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reorder Companion Frames",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}/frames/{frame_id}": {
+      "delete": {
+        "description": "Delete one frame and close the gap in its action's order.",
+        "operationId": "deleteCompanionFrame",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "frame_id",
+            "required": true,
+            "schema": {
+              "title": "Frame Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Companion Frame",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/{companion_id}/frames/{frame_id}/image": {
+      "get": {
+        "description": "Return one frame to its owner with a strong ETag.\n\nFrame bytes never change, so a request whose ``v`` matches the current\nversion may be cached for a year; any other request revalidates.",
+        "operationId": "getCompanionFrame",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "companion_id",
+            "required": true,
+            "schema": {
+              "title": "Companion Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "frame_id",
+            "required": true,
+            "schema": {
+              "title": "Frame Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/avif": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The encoded AVIF frame (WebP when AVIF was unavailable)."
+          },
+          "304": {
+            "description": "The cached frame is still current."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Companion Frame",
+        "tags": [
+          "companions"
         ]
       }
     },

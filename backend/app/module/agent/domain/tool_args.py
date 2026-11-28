@@ -6,6 +6,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
+from app.shared.companion_action import CompanionAction
+
 
 class _ToolArgs(BaseModel):
     """Base class: reject unknown model arguments instead of ignoring them."""
@@ -130,6 +132,17 @@ class CalculateArgs(_ToolArgs):
     """Arguments for one arithmetic expression."""
 
     expression: str = Field(min_length=1, max_length=MAX_EXPRESSION_CHARS)
+
+
+class CompanionActionArgs(_ToolArgs):
+    """Arguments for one visible companion gesture."""
+
+    action: CompanionAction
+    note: str | None = Field(
+        default=None,
+        max_length=80,
+        description="Optional short caption shown beside the gesture.",
+    )
 
 
 class PlotFigureArgs(BaseModel):

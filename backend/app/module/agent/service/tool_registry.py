@@ -27,6 +27,7 @@ from app.module.agent.domain.plot_spec_domain import (
 )
 from app.module.agent.domain.tool_args import (
     CalculateArgs,
+    CompanionActionArgs,
     HistoryMessageArgs,
     PresentResourceArgs,
     ReadFileArgs,
@@ -290,6 +291,8 @@ async def _dispatch(
         return await _web_search(args, services)
     if name == "web_fetch" and isinstance(args, WebFetchArgs):
         return await _web_fetch(args, services)
+    if name == "companion_action" and isinstance(args, CompanionActionArgs):
+        return await _companion_action(args)
     raise ValueError(f"No handler is registered for tool {name!r}.")
 
 
@@ -895,6 +898,23 @@ async def _calculate(args: CalculateArgs) -> tuple[str, dict[str, Any], None]:
         "result": result.result,
         "formatted": result.formatted,
     }
+    return content, data, None
+
+
+async def _companion_action(
+    args: CompanionActionArgs,
+) -> tuple[str, dict[str, Any], None]:
+    """Acknowledge one companion gesture; it touches no service or database.
+
+    The browser reacts to the ``tool_start``/``tool_end`` events and reads the
+    action from the result data, so the tool only echoes the validated choice.
+    """
+    note = args.note.strip() if args.note else None
+    content = _empty(
+        "companion_action",
+        {"action": args.action, "status": "performed"},
+    )
+    data: dict[str, Any] = {"ok": True, "action": args.action, "note": note or None}
     return content, data, None
 
 

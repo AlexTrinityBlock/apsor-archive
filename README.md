@@ -571,6 +571,22 @@ ordered by `sort_order` then `id`, and cached for 60 seconds under that account'
 prompt text; it does not send the message. The API is
 `GET/POST/PUT/DELETE /api/v1/settings/frequent-prompts`.
 
+### Chat companion
+
+A small marionette librarian can stand beside the chat and react to the agent:
+it thinks while the model reasons, searches during `search_knowledge`, reads,
+writes, calculates, browses, and presents during the matching tools, and the
+agent can also call the read-only `companion_action` tool for an explicit
+gesture. Built-in presets ship with the frontend. Each account may also create up
+to 20 private custom companions and upload up to 12 images per action (PNG,
+JPEG, WebP, or AVIF, at most 8 MB each); the server re-encodes every image as
+AVIF (WebP only when the AVIF codec is unavailable) that fits 384x576 and 40 KB
+and strips its metadata. The per-account preference stores
+the selected companion (`preset:<id>` or `custom:<id>`), whether it is shown, the
+motion level (`full`, `reduced`, `off`), and its normalized position. The API is
+under `/api/v1/companions` (list, create, update, delete, frame upload, frame
+order, frame delete, frame image, and `GET/PATCH /api/v1/companions/preference`).
+
 ### Agent runtime settings
 
 The **Agent runtime** panel on `/settings` (root only) edits the singleton

@@ -30,6 +30,10 @@ from app.module.agent.router import router as agent_router
 from app.module.auth.exception.handler import register_exceptions as register_auth_exceptions
 from app.module.auth.router.account_router import router as account_router
 from app.module.auth.router.auth_router import router as auth_router
+from app.module.companion.exception.handler import (
+    register_exceptions as register_companion_exceptions,
+)
+from app.module.companion.router import router as companion_router
 from app.module.knowledge.dependencies import build_job_notifier
 from app.module.knowledge.exception.handler import (
     register_exceptions as register_knowledge_exceptions,
@@ -117,6 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_agent_exceptions()
     register_web_research_exceptions()
     register_prompt_exceptions()
+    register_companion_exceptions()
     ExceptionRegistry.setup_app(app)
 
     if resolved_settings.cors_origins:
@@ -218,6 +223,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.include_router(
         prompt_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_authenticated)],
+    )
+    app.include_router(
+        companion_router,
         prefix="/api/v1",
         dependencies=[Depends(require_authenticated)],
     )
