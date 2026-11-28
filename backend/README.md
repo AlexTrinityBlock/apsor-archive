@@ -967,18 +967,37 @@ metadata only and never gate recall.
   `source` (`topical`, `story_moment`, `self_query`); `companion_bond` keeps
   `last_story_run`. Users never see this progress; it is the source of truth
   for root's view. How a memory is woven in is left to the model.
-- **Configuration.** Unlock runs, cadence, thresholds, bonuses, self-query
-  phrases, the persona rules, and both guidance texts are one
-  `CompanionStoryConfig`, served by a provider (`build_story_config_provider`;
-  seed defaults until root administration installs a stored one). Services
-  never read the module constants directly.
-- **Tiers.** `first` is always eligible; `familiar` opens after 5 completed runs
-  with that companion and `rare` after 20. `companion_bond` counts completed
-  runs per companion reference (best-effort, after the run is settled) and
-  stamps when each tier opened.
+- **Configuration and content live in the database.** Nothing about stories is
+  hardcoded: unlock runs, cadence, thresholds, bonuses, word lists (self-query
+  phrases, canon terms, banned address terms), life-story knobs, guidance and
+  prompt templates (`companion_config`, `companion_prompt_template`), presets
+  and personas (`companion_preset`, `companion_preset_text`), lore
+  (`companion_lore_item`, `companion_lore_item_text`), canon, and world documents
+  (`companion_canon_entity`, `companion_world_doc`) are global, root-editable
+  rows. The files under `companion/lore/` (with `lore/seed/config.json` and
+  `lore/seed/templates/<key>.<locale>.md`) are **seed data only**: at process
+  start (API and worker, `app/bootstrap.py`) the seeder compares the bundle's
+  content hash with `companion_seed_state` and, under an advisory lock,
+  inserts missing rows, updates rows root has not edited, keeps root's edits
+  while recording `upstream_seed_hash` for review, and retires removed lore
+  items (never deletes them). Database-backed providers
+  (`repository/companion_providers.py`) serve the live values with short
+  in-process caches keyed by `content_version` / TTL; root administration bumps
+  the version after an edit. Root's per-account overrides
+  (`companion_user_config`) and policy (`companion_account_policy`: default,
+  allowed set, optional pin) are owner-readable, root-written rows.
+- **Tiers.** `first` is always eligible; `familiar` and `rare` open after the
+  configured numbers of completed runs with that companion (seed: 5 and 20).
+  `companion_bond` counts completed runs per companion reference
+  (best-effort, after the run is settled) and stamps when each tier opened.
+- **Layers and the account's view.** A story resolves per item: preset text
+  (locale, then English) < root's per-account override < the account's own
+  copy-on-write edit; published generated life stories are appended. The
+  account's lore view (`listCompanionLore`) shows only its own fragments and
+  the ones it has already heard; tiers, locks, and progress stay hidden.
 - **Editing.** Accounts edit per locale, copy-on-write: the first lore edit
-  copies that locale's defaults into `companion_lore_fragment` rows; reset
-  deletes the copy. A custom companion's story is its rows, falling back from
+  copies that locale's effective defaults into `companion_lore_fragment` rows;
+  reset deletes the copy. A custom companion's story is its rows, falling back from
   the requested locale to English and then to any locale the owner wrote; it is
   deleted with the companion. Persona ≤ 4000 characters, fragment ≤ 2000,
   ≤ 200 fragments per companion.
