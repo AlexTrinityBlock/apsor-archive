@@ -70,7 +70,7 @@ def test_new_account_inherits_the_primary_endpoint(
     # the cheap default effort; the assignment API makes it explicit later.
     assert aux_endpoint is None
     assert aux_model is None
-    assert aux_effort == "low"
+    assert aux_effort is None
 
 
 def test_new_account_stays_unassigned_without_an_endpoint(
@@ -94,4 +94,4 @@ def test_new_account_stays_unassigned_without_an_endpoint(
     assert model is None
     assert aux_endpoint is None
     assert aux_model is None
-    assert aux_effort == "low"
+    assert aux_effort is None

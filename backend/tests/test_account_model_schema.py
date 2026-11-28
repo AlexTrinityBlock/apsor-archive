@@ -87,7 +87,8 @@ def _insert_chat_provider(
         )
 
 
-def test_aux_reasoning_effort_defaults_to_low(owner_engine: Engine) -> None:
+def test_aux_reasoning_effort_defaults_to_null(owner_engine: Engine) -> None:
+    """No effort is forced: NULL means the provider default applies."""
     user_id = _insert_account(owner_engine)
 
     with owner_engine.connect() as connection:
@@ -96,7 +97,7 @@ def test_aux_reasoning_effort_defaults_to_low(owner_engine: Engine) -> None:
             {"user_id": user_id},
         ).scalar_one()
 
-    assert value == "low"
+    assert value is None
 
 
 def test_chat_model_longer_than_128_characters_is_rejected(owner_engine: Engine) -> None:

@@ -37,7 +37,7 @@ class AccountAssignment:
     chat_reasoning_effort: str | None
     aux_provider_config_id: int | None
     aux_model: str | None
-    aux_reasoning_effort: str
+    aux_reasoning_effort: str | None
     chat_context_window_tokens: int | None
     chat_compaction_threshold_tokens: int | None
 
@@ -112,7 +112,7 @@ class ModelAssignmentRepository:
         chat_reasoning_effort: str | None,
         aux_provider_config_id: int | None,
         aux_model: str | None,
-        aux_reasoning_effort: str,
+        aux_reasoning_effort: str | None,
         chat_context_window_tokens: int | None,
         chat_compaction_threshold_tokens: int | None,
     ) -> None:

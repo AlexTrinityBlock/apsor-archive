@@ -45,7 +45,7 @@ class ModelAssignmentUpdateSchema(BaseModel):
     chat_reasoning_effort: str | None = Field(default=None, max_length=32)
     aux_provider_config_id: int = Field(gt=0)
     aux_model: str = Field(min_length=1, max_length=128)
-    aux_reasoning_effort: str = Field(default="low", min_length=1, max_length=32)
+    aux_reasoning_effort: str | None = Field(default=None, max_length=32)
     context_window_tokens: int | None = Field(default=None, ge=8_000, le=2_000_000)
     compaction_threshold_tokens: int | None = Field(
         default=None,
@@ -76,11 +76,13 @@ class ModelAssignmentUpdateSchema(BaseModel):
 
     @field_validator("aux_reasoning_effort")
     @classmethod
-    def _normalize_auxiliary_effort(cls, value: str) -> str:
-        """Require a non-empty auxiliary effort; it is never sent as an omission."""
+    def _normalize_auxiliary_effort(cls, value: str | None) -> str | None:
+        """Trim the auxiliary effort; empty means "omit the field" like the primary."""
+        if value is None:
+            return None
         trimmed = value.strip()
         if not trimmed:
-            raise ValueError("aux_reasoning_effort must not be empty.")
+            return None
         if len(trimmed) > 32:
             raise ValueError("aux_reasoning_effort must be at most 32 characters.")
         return trimmed
@@ -98,7 +100,7 @@ class ModelAssignmentSchema(BaseModel):
     chat_reasoning_effort: str | None
     aux_provider_config_id: int | None
     aux_model: str | None
-    aux_reasoning_effort: str
+    aux_reasoning_effort: str | None
     chat_context_window_tokens: int | None
     chat_compaction_threshold_tokens: int | None
     chat_provider_label: str | None

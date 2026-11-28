@@ -73,7 +73,7 @@ class AppUserModel(Base):
             name="chat_effort_length",
         ),
         CheckConstraint(
-            "char_length(aux_reasoning_effort) BETWEEN 1 AND 32",
+            "aux_reasoning_effort IS NULL OR char_length(aux_reasoning_effort) BETWEEN 1 AND 32",
             name="aux_effort_length",
         ),
         CheckConstraint(
@@ -284,11 +284,9 @@ class AppUserModel(Base):
         nullable=True,
     )
     aux_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    aux_reasoning_effort: Mapped[str] = mapped_column(
+    aux_reasoning_effort: Mapped[str | None] = mapped_column(
         String(32),
-        nullable=False,
-        default="low",
-        server_default=text("'low'"),
+        nullable=True,
     )
     chat_context_window_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chat_compaction_threshold_tokens: Mapped[int | None] = mapped_column(

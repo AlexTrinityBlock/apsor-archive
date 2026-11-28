@@ -15,7 +15,7 @@ export interface ModelAssignmentSchema {
   aux_pricing: ModelPricingSchema | null;
   aux_provider_config_id: number | null;
   aux_provider_label: string | null;
-  aux_reasoning_effort: string;
+  aux_reasoning_effort: string | null;
   aux_tier: string | null;
   chat_compaction_threshold_tokens: number | null;
   chat_context_window_tokens: number | null;

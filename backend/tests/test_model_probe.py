@@ -400,3 +400,89 @@ def test_probe_clips_an_oversized_failure_detail() -> None:
     assert outcome.ok is False
     assert outcome.detail is not None
     assert len(outcome.detail) == 300
+
+
+def test_probe_retries_without_a_rejected_reasoning_effort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A model that rejects reasoning_effort still passes the probe without it."""
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if "reasoning_effort" in _request_json(request):
+            return httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": "Unsupported parameter: 'reasoning_effort' is not "
+                        "supported with this model.",
+                        "type": "invalid_request_error",
+                    }
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "model": "gpt-4.1-mini",
+                "choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+            },
+        )
+
+    _install_transport(monkeypatch, deepseek_client, handler)
+    deepseek_client._EFFORT_UNSUPPORTED.clear()
+    factory = ProviderFactory(
+        Settings(deepseek_api_key="oa-probe-key-1234", deepseek_timeout_seconds=5.0)
+    )
+    config = _config(
+        "openai-compatible",
+        model="gpt-4.1-mini",
+        base_url="https://api.example.com/v1",
+        key="oa-probe-key-1234",
+    )
+
+    outcome = asyncio.run(
+        ProviderProbe(factory).probe(config, model="gpt-4.1-mini", reasoning_effort="low")
+    )
+
+    assert outcome.ok is True
+    assert len(calls) == 2
+    assert _request_json(calls[0])["reasoning_effort"] == "low"
+    assert "reasoning_effort" not in _request_json(calls[1])
+    assert deepseek_client.effort_unsupported("https://api.example.com/v1", "gpt-4.1-mini")
+
+    # A later call to the same endpoint and model omits the field up front.
+    calls.clear()
+    second = asyncio.run(
+        ProviderProbe(factory).probe(config, model="gpt-4.1-mini", reasoning_effort="low")
+    )
+    assert second.ok is True
+    assert len(calls) == 1
+    assert "reasoning_effort" not in _request_json(calls[0])
+    deepseek_client._EFFORT_UNSUPPORTED.clear()
+
+
+def test_an_unrelated_400_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(400, json={"error": {"message": "model not found"}})
+
+    _install_transport(monkeypatch, deepseek_client, handler)
+    deepseek_client._EFFORT_UNSUPPORTED.clear()
+    factory = ProviderFactory(
+        Settings(deepseek_api_key="oa-probe-key-1234", deepseek_timeout_seconds=5.0)
+    )
+    config = _config(
+        "openai-compatible",
+        model="missing",
+        base_url="https://api.example.com/v1",
+        key="oa-probe-key-1234",
+    )
+    outcome = asyncio.run(
+        ProviderProbe(factory).probe(config, model="missing", reasoning_effort="low")
+    )
+    assert outcome.ok is False
+    assert len(calls) == 1
