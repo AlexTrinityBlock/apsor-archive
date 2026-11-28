@@ -9,6 +9,7 @@ export type ThumbKind =
   | "pptx"
   | "xlsx"
   | "markdown"
+  | "text"
   | "file";
 
 const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
@@ -18,6 +19,18 @@ const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".av
 const SPREADSHEET_EXTENSIONS = new Set([".xlsx", ".xls", ".xlsm", ".ods"]);
 
 const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
+
+// Plain-text originals the backend accepts; their card shows the first lines.
+const TEXT_EXTENSIONS = new Set([
+  ".txt",
+  ".log",
+  ".csv",
+  ".json",
+  ".jsonl",
+  ".toml",
+  ".ini",
+  ".env",
+]);
 
 /**
  * Classify a stored path by the lowercase extension of its real basename.
@@ -46,6 +59,9 @@ export function thumbKindFor(rawPath: string): ThumbKind {
   }
   if (MARKDOWN_EXTENSIONS.has(extension)) {
     return "markdown";
+  }
+  if (TEXT_EXTENSIONS.has(extension)) {
+    return "text";
   }
   return "file";
 }

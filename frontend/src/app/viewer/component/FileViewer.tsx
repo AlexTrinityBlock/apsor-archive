@@ -1,4 +1,5 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { lazyRetry } from "../../component/chunk-error";
 
 import type { FileSchema } from "../../generated-apis-types/schemas";
 import { formatBytes } from "../../../lib/format";
@@ -6,6 +7,7 @@ import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
 import { CitedChunk } from "./CitedChunk";
 import { TextSheet } from "./TextSheet";
+import { ViewerBoundary } from "./ViewerBoundary";
 import { ViewerLoading, ViewerThumbnailLoading } from "./ViewerStates";
 import {
   fileThumbnailUrl,
@@ -19,19 +21,19 @@ import {
   type ViewerKind,
 } from "./viewer-utils";
 
-const PdfView = lazy(() =>
+const PdfView = lazyRetry(() =>
   import("./PdfView").then((module) => ({ default: module.PdfView })),
 );
-const DocxView = lazy(() =>
+const DocxView = lazyRetry(() =>
   import("./DocxView").then((module) => ({ default: module.DocxView })),
 );
-const PptxView = lazy(() =>
+const PptxView = lazyRetry(() =>
   import("./PptxView").then((module) => ({ default: module.PptxView })),
 );
-const ImageView = lazy(() =>
+const ImageView = lazyRetry(() =>
   import("./ImageView").then((module) => ({ default: module.ImageView })),
 );
-const XlsxView = lazy(() =>
+const XlsxView = lazyRetry(() =>
   import("./XlsxView").then((module) => ({ default: module.XlsxView })),
 );
 
@@ -170,17 +172,23 @@ export function FileRenderer({ file, chunk = null }: FileRendererProps) {
   return (
     <>
       {chunk !== null ? <CitedChunk fileId={file.id} chunk={chunk} /> : null}
-      <Suspense
-        fallback={
-          thumbnail ? (
-            <ViewerThumbnailLoading fileId={file.id} thumbnail={thumbnail} label={label} />
-          ) : (
-            <ViewerLoading label={label} />
-          )
-        }
+      <ViewerBoundary
+        resetKey={file.id}
+        downloadUrl={fileDownloadUrl(file.id)}
+        downloadName={file.file_name}
       >
-        {rendererFor(file)}
-      </Suspense>
+        <Suspense
+          fallback={
+            thumbnail ? (
+              <ViewerThumbnailLoading fileId={file.id} thumbnail={thumbnail} label={label} />
+            ) : (
+              <ViewerLoading label={label} />
+            )
+          }
+        >
+          {rendererFor(file)}
+        </Suspense>
+      </ViewerBoundary>
     </>
   );
 }

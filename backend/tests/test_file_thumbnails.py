@@ -10,7 +10,7 @@ from typing import Any, Literal
 
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
+from PIL import Image, ImageDraw
 from pypdf import PdfWriter
 from sqlalchemy import Engine, text
 
@@ -84,7 +84,7 @@ def _blank_pdf(width: float = 612, height: float = 792) -> bytes:
     return buffer.getvalue()
 
 
-def _office_package(deck: bytes, *, preview: bool) -> bytes:
+def _office_package(deck: bytes, *, preview: bool, blank: bool = False) -> bytes:
     """Rewrite a package without its preview parts, optionally adding one."""
     source = zipfile.ZipFile(io.BytesIO(deck))
     target_buffer = io.BytesIO()
@@ -95,7 +95,10 @@ def _office_package(deck: bytes, *, preview: bool) -> bytes:
             target.writestr(item, source.read(item.filename))
         if preview:
             image = io.BytesIO()
-            Image.new("RGB", (256, 192), (40, 90, 160)).save(image, format="JPEG")
+            picture = Image.new("RGB", (256, 192), (255, 255, 255) if blank else (40, 90, 160))
+            if not blank:
+                ImageDraw.Draw(picture).rectangle((24, 24, 160, 120), fill=(240, 200, 60))
+            picture.save(image, format="JPEG")
             target.writestr("docProps/thumbnail.jpeg", image.getvalue())
     return target_buffer.getvalue()
 
@@ -218,6 +221,22 @@ def test_office_files_use_their_embedded_preview(
     assert without_preview["thumbnail"] is None
     rows = _thumbnail_rows(owner_engine)
     assert rows[int(without_preview["id"])]["status"] == "none"
+
+
+def test_blank_embedded_office_preview_falls_back_to_the_client(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    # python-docx/python-pptx templates and some exporters embed a plain white
+    # placeholder; a blank card is worse than letting the browser render page 1.
+    blank = _upload(
+        client,
+        "/slides/blank-preview.pptx",
+        _office_package(build_pptx_deck(), preview=True, blank=True),
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+    assert blank["thumbnail"] is None
+    assert _thumbnail_rows(owner_engine)[int(blank["id"])]["status"] == "none"
 
 
 def test_text_files_have_no_thumbnail(client: TestClient, owner_engine: Engine) -> None:

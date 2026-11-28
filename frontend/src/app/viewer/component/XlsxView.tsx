@@ -1,11 +1,11 @@
 import {
-  lazy,
   Suspense,
   useEffect,
   useRef,
   useState,
   type KeyboardEvent,
 } from "react";
+import { lazyRetry } from "../../component/chunk-error";
 import { useQuery } from "@tanstack/react-query";
 import { read as readWorkbook, type WorkBook } from "xlsx";
 
@@ -20,7 +20,7 @@ import {
   ViewerResourceError,
 } from "./viewer-utils";
 
-const XlsxGrid = lazy(() =>
+const XlsxGrid = lazyRetry(() =>
   import("./XlsxGrid").then((module) => ({ default: module.XlsxGrid })),
 );
 

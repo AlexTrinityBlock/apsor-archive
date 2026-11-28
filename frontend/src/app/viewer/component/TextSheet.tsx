@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { lazyRetry } from "../../component/chunk-error";
 import { useQuery } from "@tanstack/react-query";
 
 import type { FileSchema } from "../../generated-apis-types/schemas";
@@ -6,6 +7,7 @@ import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
 import { CsvSheet } from "./CsvSheet";
+import { ViewerBoundary } from "./ViewerBoundary";
 import { ViewerErrorState, ViewerLoading } from "./ViewerStates";
 import { useChunkedText } from "./useChunkedText";
 import {
@@ -19,7 +21,7 @@ import {
   textMode,
   ViewerResourceError,
 } from "./viewer-utils";
-const MarkdownSheet = lazy(() =>
+const MarkdownSheet = lazyRetry(() =>
   import("./MarkdownSheet").then((module) => ({ default: module.MarkdownSheet })),
 );
 
@@ -119,9 +121,22 @@ function TextBody({ mode, content, wrap }: TextBodyProps) {
   if (mode === "markdown") {
     return (
       <div className="viewer-sheet">
-        <Suspense fallback={<ViewerLoading label={t("library.viewer.loading.markdown")} />}>
-          <MarkdownSheet content={content} />
-        </Suspense>
+        <ViewerBoundary
+          resetKey={content.length}
+          fallback={() => (
+            <>
+              <div className="viewer-notice" role="note">
+                <Icon name="info" size={16} />
+                <p>{t("library.viewer.markdown.renderFallback")}</p>
+              </div>
+              <pre className={wrap ? "viewer-pre is-wrapped" : "viewer-pre"}>{content}</pre>
+            </>
+          )}
+        >
+          <Suspense fallback={<ViewerLoading label={t("library.viewer.loading.markdown")} />}>
+            <MarkdownSheet content={content} />
+          </Suspense>
+        </ViewerBoundary>
       </div>
     );
   }

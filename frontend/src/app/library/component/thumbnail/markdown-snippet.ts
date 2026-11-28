@@ -46,3 +46,28 @@ export function extractMarkdownSnippet(
   const end = boundary > 0 ? boundary : maxChars;
   return body.slice(0, end).trimEnd();
 }
+
+/** Characters kept from a plain-text original (CSV, JSON, logs) for its card. */
+export const TEXT_SNIPPET_CHARS = 600;
+
+/**
+ * The first lines of a plain-text original, normalized like Markdown but with
+ * nothing stripped: CSV headers, JSON braces and config keys are the content.
+ * Single-line JSON is pretty-printed so the card shows structure, not one row.
+ */
+export function extractTextSnippet(source: string, maxChars: number = TEXT_SNIPPET_CHARS): string {
+  let text = source.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const trimmed = text.trim();
+  if ((trimmed.startsWith("{") || trimmed.startsWith("[")) && !trimmed.slice(0, 2000).includes("\n")) {
+    try {
+      text = JSON.stringify(JSON.parse(trimmed), null, 2);
+    } catch {
+      // Not one JSON value (e.g. JSON Lines); keep the source as written.
+    }
+  }
+  if (text.length <= maxChars) {
+    return text;
+  }
+  const cut = text.lastIndexOf("\n", maxChars);
+  return text.slice(0, cut > 0 ? cut : maxChars);
+}

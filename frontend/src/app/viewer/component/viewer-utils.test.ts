@@ -92,3 +92,36 @@ describe("prettyJson", () => {
     );
   });
 });
+
+describe("every accepted upload type has a renderer", () => {
+  // Mirrors backend ALLOWED_EXTENSIONS; browsers sometimes send a generic MIME,
+  // so the extension alone must still pick the right renderer.
+  const cases: ReadonlyArray<readonly [string, string, string]> = [
+    [".md", "text/markdown", "markdown"],
+    [".markdown", "application/octet-stream", "markdown"],
+    [".txt", "text/plain", "text"],
+    [".log", "application/octet-stream", "text"],
+    [".csv", "text/csv", "csv"],
+    [".json", "application/json", "json"],
+    [".jsonl", "application/jsonl", "text"],
+    [".toml", "application/toml", "text"],
+    [".ini", "text/plain", "text"],
+    [".env", "application/octet-stream", "text"],
+    [".pdf", "application/pdf", "pdf"],
+    [".docx", "application/octet-stream", "docx"],
+    [".pptx", "application/octet-stream", "pptx"],
+    [".xlsx", "application/octet-stream", "spreadsheet"],
+    [".xlsm", "application/vnd.ms-excel.sheet.macroEnabled.12", "spreadsheet"],
+    [".xls", "application/vnd.ms-excel", "spreadsheet"],
+    [".ods", "application/vnd.oasis.opendocument.spreadsheet", "spreadsheet"],
+    [".jpg", "image/jpeg", "image"],
+    [".jpeg", "application/octet-stream", "image"],
+    [".png", "image/png", "image"],
+    [".webp", "image/webp", "image"],
+  ];
+  for (const [extension, mime, kind] of cases) {
+    test(`${extension} (${mime}) -> ${kind}`, () => {
+      expect(classifyFile({ extension, mime_type: mime })).toBe(kind);
+    });
+  }
+});
