@@ -349,6 +349,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
+_REVALIDATED_ICONS = frozenset(
+    {"favicon.ico", "icon-192.png", "icon-512.png", "apple-touch-icon.png", "site.webmanifest"}
+)
+
+
 def _mount_spa(app: FastAPI, directory: Path) -> None:
     """Serve the committed Vite build, with API routes winning first."""
     resolved = directory.resolve()
@@ -360,7 +365,7 @@ def _mount_spa(app: FastAPI, directory: Path) -> None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
         candidate = (resolved / path).resolve()
         if path and candidate.is_file() and candidate.is_relative_to(resolved):
-            if path == "favicon.svg":
+            if path in _REVALIDATED_ICONS:
                 # Revalidate so an icon change reaches returning readers without
                 # waiting for the long-lived edge cache used by other files.
                 cache = "no-cache, must-revalidate"
