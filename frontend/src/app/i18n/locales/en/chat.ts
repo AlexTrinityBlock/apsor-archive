@@ -223,7 +223,7 @@ export const chat = {
     errorFallback: "The assistant step failed.",
     runFinished: "The run finished with {reason}.",
     limitStopped: "The run stopped at a tool or token limit.",
-    author: "Apsor Archive Agent",
+    author: "Archive assistant",
     saidBy: "Said by {name}",
   },
   transcript: {

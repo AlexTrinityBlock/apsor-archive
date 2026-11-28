@@ -887,6 +887,17 @@
   border-color: var(--accent-moss);
 }
 
+.chat-turn__who {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.chat-turn__live-dot {
+  margin-inline: 2px;
+}
+
 .chat-turn__speaker {
   display: inline-flex;
   min-width: 0;
