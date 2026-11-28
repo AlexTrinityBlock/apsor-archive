@@ -87,6 +87,7 @@ export const companion = {
     quill: "抄写室 · 果断、风趣、未曾完成",
   },
   page: {
+    adminNotice: "管理员可以阅读你的图书馆员为你写下的故事，每次阅读都会被记录。",
     eyebrow: "个人",
     title: "伙伴",
     description:
@@ -168,6 +169,9 @@ export const companion = {
     description:
       "{name} 自己过去的片段。当搜索触及这些主题时，助理可能会让 {name} 用自己的话说出其中一两句。",
     empty: "{name} 还没有任何记忆。",
+    heardTitle: "你听过的记忆",
+    heardEmpty: "{name} 还没有对你讲过任何记忆。它们会在合适的时候到来。",
+    ownTitle: "你自己写的",
     tierFirst: "初识",
     tierFamiliar: "熟悉",
     tierRare: "珍稀",

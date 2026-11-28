@@ -175,13 +175,31 @@ async def get_companion_admin_service(
     tables across accounts for this transaction only; archive tables stay owner-only.
     """
     await apply_admin_scope(session, ADMIN_SCOPE_COMPANION)
-    seeder = getattr(request.app.state, "companion_seeder", None)
+    state = request.app.state
+    seeder = getattr(state, "companion_seeder", None)
     return CompanionAdminService(
         CompanionAdminRepository(session),
         actor_user_id=user.user_id,
         seeder=cast(CompanionSeederProtocol | None, seeder),
         clock=utcnow,
+        invalidate=lambda user_id: _invalidate_providers(state, user_id),
     )
+
+
+_CACHED_PROVIDERS = ("companion_story_config", "companion_content", "companion_policy")
+
+
+def _invalidate_providers(state: State, user_id: int | None) -> None:
+    """Drop cached config, content, and policy after a root write.
+
+    Database-backed providers installed on ``app.state`` expose ``invalidate``;
+    the static seed providers do not, so they are skipped.
+    """
+    for name in _CACHED_PROVIDERS:
+        provider = getattr(state, name, None)
+        invalidate = getattr(provider, "invalidate", None)
+        if callable(invalidate):
+            invalidate(user_id)
 
 
 def get_companion_catalog_service(

@@ -295,14 +295,21 @@ class CompanionAdminService:
         actor_user_id: int,
         seeder: CompanionSeederProtocol | None = None,
         clock: Callable[[], datetime],
+        invalidate: Callable[[int | None], None] | None = None,
     ) -> None:
         self.store = store
+        self.invalidate = invalidate or (lambda _user_id: None)
         self.actor_user_id = actor_user_id
         self.seeder = seeder
         self.clock = clock
         self._static = StaticCompanionContentProvider()
 
     # --- shared helpers -------------------------------------------------------
+
+    async def _content_changed(self) -> None:
+        """Bump the content version and drop cached world content everywhere."""
+        await self.store.bump_content_version()
+        self.invalidate(None)
 
     async def _log(
         self,
@@ -320,6 +327,7 @@ class CompanionAdminService:
             companion_ref=companion_ref,
             at=self.clock(),
         )
+        self.invalidate(target_user_id)
 
     async def _account(self, user_id: int) -> AccountRow:
         account = await self.store.get_account(user_id)
@@ -482,7 +490,7 @@ class CompanionAdminService:
             row.is_global_default = True
         row.admin_modified = True
         row.updated_by_user_id = self.actor_user_id
-        await self.store.bump_content_version()
+        await self._content_changed()
         await self.store.flush()
         return next(preset for preset in await self.list_presets() if preset.id == preset_id)
 
@@ -534,7 +542,7 @@ class CompanionAdminService:
             row.persona = payload.persona.strip()
         row.admin_modified = True
         row.updated_by_user_id = self.actor_user_id
-        await self.store.bump_content_version()
+        await self._content_changed()
         await self.store.flush()
         return self._preset_text_schema(row)
 
@@ -552,7 +560,7 @@ class CompanionAdminService:
                 row.admin_modified = False
                 row.upstream_seed_hash = None
                 row.updated_by_user_id = self.actor_user_id
-            await self.store.bump_content_version()
+            await self._content_changed()
             await self.store.flush()
         return await self.get_preset_text(preset_id, locale)
 
@@ -712,7 +720,7 @@ class CompanionAdminService:
                 updated_by_user_id=self.actor_user_id,
             )
         )
-        await self.store.bump_content_version()
+        await self._content_changed()
         return await self._lore_schema(row, payload.locale)
 
     async def _require_lore(self, item_id: int) -> CompanionLoreItemModel:
@@ -749,7 +757,7 @@ class CompanionAdminService:
             text.text = payload.text.strip()
             text.admin_modified = True
             text.updated_by_user_id = self.actor_user_id
-        await self.store.bump_content_version()
+        await self._content_changed()
         await self.store.flush()
         return await self._lore_schema(row, payload.locale)
 
@@ -758,7 +766,7 @@ class CompanionAdminService:
         row.retired_at = None if row.retired_at is not None else self.clock()
         row.admin_modified = True
         row.updated_by_user_id = self.actor_user_id
-        await self.store.bump_content_version()
+        await self._content_changed()
         await self.store.flush()
         return await self._lore_schema(row, "en")
 
@@ -791,7 +799,7 @@ class CompanionAdminService:
                 text.text = match.text
                 text.admin_modified = False
                 text.upstream_seed_hash = None
-        await self.store.bump_content_version()
+        await self._content_changed()
         await self.store.flush()
         return await self._lore_schema(row, "en")
 
@@ -889,7 +897,7 @@ class CompanionAdminService:
         row.updated_by_user_id = self.actor_user_id
         for stale in (await self.store.list_doc_revisions(doc_key, locale))[REVISIONS_KEPT:]:
             await self.store.delete(stale)
-        await self.store.bump_content_version()
+        await self._content_changed()
         await self.store.flush()
         return self._doc_schema(row)
 
@@ -925,7 +933,7 @@ class CompanionAdminService:
             row.version = row.version + 1
             row.admin_modified = False
             row.upstream_seed_hash = None
-            await self.store.bump_content_version()
+            await self._content_changed()
             await self.store.flush()
         doc = await self.get_world_doc(doc_key, locale)
         assert doc is not None
@@ -973,7 +981,7 @@ class CompanionAdminService:
         row.summary = payload.summary.strip()
         row.admin_modified = True
         row.updated_by_user_id = self.actor_user_id
-        await self.store.bump_content_version()
+        await self._content_changed()
         await self.store.flush()
         return CompanionCanonEntitySchema(
             entity_id=row.entity_id,
@@ -1014,6 +1022,7 @@ class CompanionAdminService:
         row.admin_modified = True
         row.updated_by_user_id = self.actor_user_id
         await self.store.flush()
+        self.invalidate(None)
         return await self.get_config()
 
     async def reset_config(self) -> CompanionConfigAdminSchema:
@@ -1024,6 +1033,7 @@ class CompanionAdminService:
         row.admin_modified = False
         row.updated_by_user_id = self.actor_user_id
         await self.store.flush()
+        self.invalidate(None)
         return await self.get_config()
 
     @staticmethod
@@ -1093,7 +1103,7 @@ class CompanionAdminService:
         row.body = payload.body
         row.admin_modified = True
         row.updated_by_user_id = self.actor_user_id
-        await self.store.bump_content_version()
+        await self._content_changed()
         await self.store.flush()
         return self._template_schema(key, locale, row.body, row)
 
@@ -1109,7 +1119,7 @@ class CompanionAdminService:
                 row.version = row.version + 1
                 row.admin_modified = False
                 row.upstream_seed_hash = None
-            await self.store.bump_content_version()
+            await self._content_changed()
             await self.store.flush()
         return self._template_schema(key, locale, row.body if row else default, row)
 

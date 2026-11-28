@@ -89,6 +89,16 @@ export function AboutPage() {
     <div className="page about-page">
       <div className="content-container content-container--reading">
         <header className="about-hero" id="about-top">
+          <img
+            className="about-hero__door"
+            src="/companions/world/first-door.avif"
+            alt=""
+            width={1024}
+            height={683}
+            decoding="async"
+            fetchPriority="high"
+            style={{ backgroundImage: "url(/companions/world/first-door-placeholder.avif)" }}
+          />
           <span className="shell-tag">{t("insights.about.hero.kicker")}</span>
           <h1 className="about-hero__title">{t("insights.about.hero.title")}</h1>
           <LibrarianWelcome />

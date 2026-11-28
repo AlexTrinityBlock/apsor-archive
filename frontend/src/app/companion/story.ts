@@ -24,6 +24,10 @@ export interface LoreFragment {
   readonly themes: readonly string[];
   readonly isDefault: boolean;
   readonly edited: boolean;
+  /** Written or edited by this account (always shown in the story editor). */
+  readonly own: boolean;
+  /** Already told to this account; untold memories stay a mystery. */
+  readonly heard: boolean;
 }
 
 export interface LoreInput {
@@ -68,6 +72,27 @@ export function parseLoreFragment(value: unknown): LoreFragment | null {
     themes,
     isDefault: value.is_default === true || value.isDefault === true,
     edited: value.edited === true,
+    own: value.own === true || value.edited === true,
+    heard:
+      value.heard === true ||
+      (typeof value.told_count === "number" && value.told_count > 0),
+  };
+}
+
+export interface StorySplit {
+  readonly heard: readonly LoreFragment[];
+  readonly own: readonly LoreFragment[];
+}
+
+/**
+ * The account-facing view of a story: memories it has already heard and the
+ * ones it wrote itself. Untold memories are never listed, so the story keeps
+ * its mystery; tiers and locks are root's concern only.
+ */
+export function splitHeardAndOwn(fragments: readonly LoreFragment[]): StorySplit {
+  return {
+    own: fragments.filter((fragment) => fragment.own),
+    heard: fragments.filter((fragment) => fragment.heard && !fragment.own),
   };
 }
 
