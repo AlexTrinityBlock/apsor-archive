@@ -186,7 +186,7 @@ def test_lore_is_copy_on_write_and_resettable(client: TestClient) -> None:
 
     created = client.post(
         f"{STORIES}/{VELLUM}/lore",
-        json={"text": "A memory the Keeper wrote.", "tier": "rare"},
+        json={"text": "A memory the user wrote.", "tier": "rare"},
     )
     assert created.status_code == 201, created.text
     added = created.json()["fragments"][-1]
