@@ -298,10 +298,6 @@ async def _dispatch(
     raise ValueError(f"No handler is registered for tool {name!r}.")
 
 
-LIBRARIAN_MEMORY_GUIDANCE = (
-    "These are your own memories, not the user's archive. You may weave one in "
-    "as a brief aside if it feels natural; never cite it as evidence."
-)
 
 
 async def _search_knowledge(
@@ -442,7 +438,8 @@ async def _search_knowledge(
     if memories:
         # The librarian's own lore is a separate block after every archive
         # source; it never enters the source list or the citation vocabulary.
-        content.append(_open("librarian_memories") + xml_text(LIBRARIAN_MEMORY_GUIDANCE))
+        guidance = next((memory.guidance for memory in memories if memory.guidance), "")
+        content.append(_open("librarian_memories") + xml_text(guidance))
         for memory in memories:
             content.append(
                 _open("librarian_memory", {"id": memory.id, "tier": memory.tier})

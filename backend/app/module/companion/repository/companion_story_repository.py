@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.module.companion.model.companion_story_model import (
     CompanionBondModel,
     CompanionLoreFragmentModel,
+    CompanionLoreToldModel,
     CompanionStoryModel,
 )
 
@@ -173,12 +174,78 @@ class CompanionStoryRepository:
         )
         return (await self.session.execute(statement)).scalar_one()
 
+    async def set_last_story_run(self, companion_ref: str, run: int, now: datetime) -> None:
+        """Remember the completed-run count at the latest story moment."""
+        statement = (
+            insert(CompanionBondModel)
+            .values(
+                user_id=self.user_id,
+                companion_ref=companion_ref,
+                completed_runs=run,
+                last_story_run=run,
+                updated_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=[CompanionBondModel.user_id, CompanionBondModel.companion_ref],
+                set_={"last_story_run": run, "updated_at": now},
+            )
+        )
+        await self.session.execute(statement)
+
+    async def list_told(self, companion_ref: str) -> list[CompanionLoreToldModel]:
+        statement = select(CompanionLoreToldModel).where(
+            CompanionLoreToldModel.user_id == self.user_id,
+            CompanionLoreToldModel.companion_ref == companion_ref,
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def record_told(
+        self,
+        companion_ref: str,
+        fragment_keys: list[str],
+        source: str,
+        now: datetime,
+    ) -> None:
+        """Count one telling of each fragment atomically."""
+        for key in fragment_keys:
+            statement = (
+                insert(CompanionLoreToldModel)
+                .values(
+                    user_id=self.user_id,
+                    companion_ref=companion_ref,
+                    fragment_key=key,
+                    told_count=1,
+                    source=source,
+                    offered_at=now,
+                    last_told_at=now,
+                )
+                .on_conflict_do_update(
+                    index_elements=[
+                        CompanionLoreToldModel.user_id,
+                        CompanionLoreToldModel.companion_ref,
+                        CompanionLoreToldModel.fragment_key,
+                    ],
+                    set_={
+                        "told_count": CompanionLoreToldModel.told_count + 1,
+                        "source": source,
+                        "last_told_at": now,
+                    },
+                )
+            )
+            await self.session.execute(statement)
+
     async def clear_companion_ref(self, companion_ref: str) -> None:
-        """Delete the bond row for a companion that no longer exists."""
+        """Delete the bond and told rows for a companion that no longer exists."""
         await self.session.execute(
             delete(CompanionBondModel).where(
                 CompanionBondModel.user_id == self.user_id,
                 CompanionBondModel.companion_ref == companion_ref,
+            )
+        )
+        await self.session.execute(
+            delete(CompanionLoreToldModel).where(
+                CompanionLoreToldModel.user_id == self.user_id,
+                CompanionLoreToldModel.companion_ref == companion_ref,
             )
         )
 

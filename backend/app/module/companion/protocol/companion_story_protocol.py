@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
+from app.module.companion.domain.story_domain import CompanionStoryConfig
 from app.module.companion.model.companion_model import (
     CompanionModel,
     CompanionPreferenceModel,
@@ -11,6 +12,7 @@ from app.module.companion.model.companion_model import (
 from app.module.companion.model.companion_story_model import (
     CompanionBondModel,
     CompanionLoreFragmentModel,
+    CompanionLoreToldModel,
     CompanionStoryModel,
 )
 
@@ -66,6 +68,18 @@ class CompanionStoryRepositoryProtocol(Protocol):
 
     async def increment_bond(self, companion_ref: str, now: datetime) -> CompanionBondModel: ...
 
+    async def set_last_story_run(self, companion_ref: str, run: int, now: datetime) -> None: ...
+
+    async def list_told(self, companion_ref: str) -> list[CompanionLoreToldModel]: ...
+
+    async def record_told(
+        self,
+        companion_ref: str,
+        fragment_keys: list[str],
+        source: str,
+        now: datetime,
+    ) -> None: ...
+
     async def clear_companion_ref(self, companion_ref: str) -> None: ...
 
 
@@ -79,6 +93,12 @@ class CompanionLookupProtocol(Protocol):
     ) -> CompanionModel | None: ...
 
     async def get_preference(self, user_id: int) -> CompanionPreferenceModel | None: ...
+
+
+class CompanionStoryConfigProviderProtocol(Protocol):
+    """Supply the live story tunables (root-editable; seeded from defaults)."""
+
+    async def load(self) -> CompanionStoryConfig: ...
 
 
 class LoreEmbedderProtocol(Protocol):
@@ -100,6 +120,7 @@ class LoreEmbeddingQuotaProtocol(Protocol):
 
 __all__ = [
     "CompanionLookupProtocol",
+    "CompanionStoryConfigProviderProtocol",
     "CompanionStoryRepositoryProtocol",
     "LoreEmbedderProtocol",
     "LoreEmbeddingQuotaProtocol",

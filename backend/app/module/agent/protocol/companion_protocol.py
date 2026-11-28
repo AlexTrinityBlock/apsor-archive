@@ -31,8 +31,15 @@ class CompanionRunObserverProtocol(Protocol):
     async def run_completed(self, conversation_id: int) -> None: ...
 
 
+class CompanionStoryMomentProtocol(Protocol):
+    """Offer a paced story moment from the conversation companion, if one is due."""
+
+    async def story_moment(self, conversation_id: int) -> LibrarianMemory | None: ...
+
+
 __all__ = [
     "CompanionPersonaLoaderProtocol",
     "CompanionRunObserverProtocol",
+    "CompanionStoryMomentProtocol",
     "LibrarianMemoryRecallProtocol",
 ]

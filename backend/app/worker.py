@@ -76,14 +76,20 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                     if services.thumbnail_backfill is not None
                     else 0
                 )
+                lore_vectors = (
+                    await services.lore_warmer.run_once()
+                    if services.lore_warmer is not None
+                    else 0
+                )
                 logger.info(
                     "Worker --once finished; processed=%s attachments_removed=%s "
-                    "history_examined=%s history_indexed=%s thumbnails=%s",
+                    "history_examined=%s history_indexed=%s thumbnails=%s lore_vectors=%s",
                     processed,
                     removed,
                     history_batch.examined,
                     history_batch.indexed,
                     thumbnails,
+                    lore_vectors,
                 )
             else:
                 services.start_side_loops(settings, stop_event)

@@ -60,6 +60,7 @@ PRIVATE_TABLES: tuple[str, ...] = (
     "companion_bond",
     "companion_frame",
     "companion_lore_fragment",
+    "companion_lore_told",
     "companion_preference",
     "companion_story",
     "file",

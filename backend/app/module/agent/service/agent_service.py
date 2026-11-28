@@ -53,7 +53,11 @@ from app.module.agent.domain.compaction_domain import (
     estimate_provider_context_tokens,
     render_compaction_prompt,
 )
-from app.module.agent.domain.companion_persona_domain import CompanionPersona
+from app.module.agent.domain.companion_persona_domain import (
+    CompanionPersona,
+    LibrarianMemory,
+    render_story_moment,
+)
 from app.module.agent.domain.context_domain import (
     build_context,
     prefix_hash,
@@ -99,7 +103,10 @@ from app.module.agent.protocol.chat_generator_protocol import (
     ChatResult,
     ChatToolCall,
 )
-from app.module.agent.protocol.companion_protocol import CompanionRunObserverProtocol
+from app.module.agent.protocol.companion_protocol import (
+    CompanionRunObserverProtocol,
+    CompanionStoryMomentProtocol,
+)
 from app.module.agent.protocol.usage_quota_protocol import AgentQuotaProtocol
 from app.module.agent.schema.agent_schema import (
     AgentApprovalSchema,
@@ -272,6 +279,7 @@ class AgentService:
         model_plan: AgentModelPlanProtocol | None = None,
         model_status: str = "assigned",
         companion_runs: CompanionRunObserverProtocol | None = None,
+        story_moments: CompanionStoryMomentProtocol | None = None,
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -283,6 +291,7 @@ class AgentService:
         self.chat_attachments = chat_attachments
         self.server_timezone = server_timezone
         self.companion_runs = companion_runs
+        self.story_moments = story_moments
         # Provider availability is resolved by the composition root from the
         # account assignment. They are safe names only; keys and base URLs never
         # reach the agent service.
@@ -341,6 +350,20 @@ class AgentService:
                 run_id,
                 exc_info=True,
             )
+
+    async def _story_moment(self, conversation_id: int) -> LibrarianMemory | None:
+        """Return a paced story moment for this run; best-effort, never raising."""
+        if self.story_moments is None:
+            return None
+        try:
+            return await self.story_moments.story_moment(conversation_id)
+        except Exception:
+            logger.warning(
+                "companion story moment failed conversation_id=%s",
+                conversation_id,
+                exc_info=True,
+            )
+            return None
 
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
@@ -551,6 +574,10 @@ class AgentService:
         }
         if attachments:
             data["attachments"] = [attachment.to_entry_data() for attachment in attachments]
+        story_moment = await self._story_moment(conversation_id)
+        if story_moment is not None:
+            data["story_moment"] = render_story_moment(story_moment)
+            data["story_moment_id"] = story_moment.id
         compaction_draft = await self._auto_compaction_draft(conversation_id)
         page_context_draft, page_context_key = _page_context_draft(
             payload.page_context,

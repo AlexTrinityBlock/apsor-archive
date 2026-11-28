@@ -1,35 +1,43 @@
-"""Choose the librarian's own memories to offer beside a search.
+"""Choose the librarian's own memories to offer, and pace its story.
 
-The recall is scored against the search query plus the top archive excerpts:
+There are three ways a fragment reaches the model, and none needs a keyword:
 
-- **lexical**: theme overlap through the multilingual vocabulary, plus shared
-  words (Latin words and CJK bigrams);
-- **semantic**: cosine similarity with the account's configured embedder, when
-  it has a dimension and the account's embedding allowance permits it.
+- **Topical recall** beside a search: cosine similarity between the fragment
+  and the query plus the top archive excerpts, using the account's embedder.
+  Only a semantic embedder counts; without one, topical recall offers nothing.
+  Untold fragments are preferred and each earlier telling lowers a fragment.
+- **Self queries** ("tell me about yourself", a librarian's name, "your past"):
+  the next untold fragments of the arc, the most relevant of a small window
+  first (semantic when available, otherwise light word overlap).
+- **Story moments** at the start of a run, every few completed runs: the next
+  untold fragment of the arc, whatever the user talks about, so a person whose
+  life circles a few topics still hears the whole story in time.
 
-Fragment vectors are cached in process memory by ``(model, sha256(text))``, so
-repeated searches embed only the query. Any embedding failure falls back to the
-lexical score. Locked tiers are never offered.
+Every offer is counted in the progress table with its source. Locked tiers are
+never offered. Thresholds, cadence, phrases, and guidance come from the story
+config provider, never from module constants.
 """
 
-import hashlib
 import logging
-from collections import OrderedDict
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.module.companion.domain.story_domain import (
-    MAX_RECALLED_FRAGMENTS,
     LoreFragment,
-    LoreVocabulary,
+    RecalledFragment,
     StoryLocale,
     cosine,
     is_self_query,
-    lexical_score,
-    select_fragments,
+    is_semantic_embedder,
+    lexical_overlap,
+    next_untold,
+    rank_self_query,
+    rank_topical,
+    story_moment_due,
 )
 from app.module.companion.exception.domain_error import CompanionRefNotFoundError
 from app.module.companion.protocol.companion_story_protocol import (
+    CompanionStoryConfigProviderProtocol,
     LoreEmbedderProtocol,
     LoreEmbeddingQuotaProtocol,
 )
@@ -37,45 +45,42 @@ from app.module.companion.service.companion_story_service import (
     CompanionStoryService,
     StoryTarget,
 )
-from app.module.companion.service.preset_lore_catalog import load_presets, load_vocabulary
+from app.module.companion.service.lore_vectors import LoreVectorStore
+from app.module.companion.service.preset_lore_catalog import load_presets
+from app.module.companion.service.story_config import StaticStoryConfigProvider
 
 logger = logging.getLogger(__name__)
 
 _CONTEXT_CHARS = 1200
-_VECTOR_CACHE_SIZE = 4096
-_vector_cache: OrderedDict[tuple[str, str], list[float]] = OrderedDict()
 
 
 @dataclass(frozen=True)
 class RecalledLore:
-    """One fragment offered to the model for this search."""
+    """One fragment offered to the model."""
 
     id: str
     text: str
     tier: str
     score: float
+    # The configured guidance the model reads with this memory.
+    guidance: str = ""
 
 
-def _cache_key(model_name: str, text: str) -> tuple[str, str]:
-    return model_name, hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _cache_get(key: tuple[str, str]) -> list[float] | None:
-    vector = _vector_cache.get(key)
-    if vector is not None:
-        _vector_cache.move_to_end(key)
-    return vector
-
-
-def _cache_put(key: tuple[str, str], vector: list[float]) -> None:
-    _vector_cache[key] = vector
-    _vector_cache.move_to_end(key)
-    while len(_vector_cache) > _VECTOR_CACHE_SIZE:
-        _vector_cache.popitem(last=False)
+def _offered(chosen: Sequence[RecalledFragment], guidance: str) -> list[RecalledLore]:
+    return [
+        RecalledLore(
+            id=item.fragment.key,
+            text=item.fragment.text,
+            tier=item.fragment.tier,
+            score=item.score,
+            guidance=guidance,
+        )
+        for item in chosen
+    ]
 
 
 class CompanionLoreRecall:
-    """Select up to two unlocked fragments of one companion for one search."""
+    """Offer one companion's lore beside searches and as paced story moments."""
 
     def __init__(
         self,
@@ -85,23 +90,29 @@ class CompanionLoreRecall:
         locale: StoryLocale,
         embedder: LoreEmbedderProtocol | None = None,
         quota: LoreEmbeddingQuotaProtocol | None = None,
-        vocabulary: LoreVocabulary | None = None,
+        vectors: LoreVectorStore | None = None,
+        config: CompanionStoryConfigProviderProtocol | None = None,
     ) -> None:
         self.stories = stories
         self.companion_ref = companion_ref
         self.locale = locale
         self.embedder = embedder
         self.quota = quota
-        self.vocabulary = vocabulary or load_vocabulary()
+        self.vectors = vectors or LoreVectorStore()
+        self.config = config or StaticStoryConfigProvider()
 
     async def recall(
         self,
         query: str,
         context: Sequence[str] = (),
         *,
-        limit: int = MAX_RECALLED_FRAGMENTS,
+        limit: int | None = None,
     ) -> list[RecalledLore]:
-        """Return the fragments worth offering; empty when nothing fits."""
+        """Return the fragments worth offering beside one search."""
+        config = await self.config.load()
+        size = config.max_recalled_fragments if limit is None else limit
+        if size <= 0:
+            return []
         try:
             target = await self.stories.resolve(self.companion_ref)
         except CompanionRefNotFoundError:  # a deleted custom companion has no lore
@@ -109,34 +120,65 @@ class CompanionLoreRecall:
         fragments = await self.stories.fragments(target, self.locale)
         if not fragments:
             return []
-        bond = await self.stories.bond(target.ref)
-        unlocked = bond.unlocked_tiers()
+        unlocked = (await self.stories.bond(target.ref)).unlocked_tiers(config)
         candidates = [fragment for fragment in fragments if fragment.tier in unlocked]
         if not candidates:
             return []
+        told = await self.stories.told(target.ref)
         scoring_text = " ".join([query, *context])[: _CONTEXT_CHARS + len(query)]
-        lexical = {
-            fragment.key: lexical_score(scoring_text, fragment, self.vocabulary)
-            for fragment in candidates
-        }
-        semantic = await self._semantic(scoring_text, candidates)
-        chosen = select_fragments(
-            fragments=candidates,
-            unlocked=unlocked,
-            lexical=lexical,
-            semantic=semantic,
-            self_query=is_self_query(query, self._names(target)),
-            limit=limit,
-        )
-        return [
-            RecalledLore(
-                id=item.fragment.key,
-                text=item.fragment.text,
-                tier=item.fragment.tier,
-                score=item.score,
+        if is_self_query(query, self._names(target), config):
+            semantic = await self._semantic(scoring_text, candidates)
+            relevance = (
+                semantic
+                if semantic is not None
+                else {fragment.key: lexical_overlap(query, fragment) for fragment in candidates}
             )
-            for item in chosen
-        ]
+            chosen = rank_self_query(
+                candidates, unlocked, told, relevance, limit=size, config=config
+            )
+            source = "self_query"
+        else:
+            semantic = await self._semantic(scoring_text, candidates)
+            chosen = rank_topical(
+                candidates, unlocked, semantic, told, limit=size, config=config
+            )
+            source = "topical"
+        await self.stories.record_told(
+            target.ref,
+            [item.fragment.key for item in chosen],
+            source,
+        )
+        return _offered(chosen, config.lore_guidance)
+
+    async def story_moment(self) -> RecalledLore | None:
+        """Return the next untold fragment when a story moment is due, else ``None``.
+
+        A due moment is counted at once, so the next one waits for a few more
+        completed runs even if the model chose to keep this one for later.
+        """
+        try:
+            target = await self.stories.resolve(self.companion_ref)
+        except CompanionRefNotFoundError:
+            return None
+        config = await self.config.load()
+        bond = await self.stories.bond(target.ref)
+        if not story_moment_due(bond, config):
+            return None
+        fragments = await self.stories.fragments(target, self.locale)
+        told = await self.stories.told(target.ref)
+        upcoming = next_untold(fragments, bond.unlocked_tiers(config), told, limit=1)
+        if not upcoming:
+            return None
+        fragment = upcoming[0]
+        await self.stories.record_told(target.ref, [fragment.key], "story_moment")
+        await self.stories.mark_story_moment(target.ref, bond.completed_runs)
+        return RecalledLore(
+            id=fragment.key,
+            text=fragment.text,
+            tier=fragment.tier,
+            score=0.0,
+            guidance=config.story_moment_guidance,
+        )
 
     def _names(self, target: StoryTarget) -> list[str]:
         """Return the librarian's own name and every preset librarian's name."""
@@ -150,15 +192,19 @@ class CompanionLoreRecall:
         text: str,
         fragments: Sequence[LoreFragment],
     ) -> dict[str, float] | None:
+        """Return cosine similarities, or ``None`` without a semantic embedder."""
         embedder = self.embedder
-        if embedder is None or embedder.dimension <= 0:
+        if embedder is None or not is_semantic_embedder(embedder.model_name, embedder.dimension):
             return None
         model = embedder.model_name
-        missing = [
-            fragment
-            for fragment in fragments
-            if _cache_get(_cache_key(model, fragment.text)) is None
-        ]
+        known: dict[str, list[float]] = {}
+        missing: list[LoreFragment] = []
+        for fragment in fragments:
+            vector = await self.vectors.get(model, fragment.text)
+            if vector is None:
+                missing.append(fragment)
+            else:
+                known[fragment.key] = vector
         batch = [text, *(fragment.text for fragment in missing)]
         characters = sum(len(item) for item in batch)
         try:
@@ -168,19 +214,15 @@ class CompanionLoreRecall:
             if self.quota is not None:
                 await self.quota.record_embedding(characters)
         except Exception:
-            logger.warning("lore recall embedding failed; using lexical scores only")
+            logger.warning("lore recall embedding failed; offering no topical lore")
             return None
         if len(vectors) != len(batch):
             return None
         query_vector = vectors[0]
         for fragment, vector in zip(missing, vectors[1:], strict=True):
-            _cache_put(_cache_key(model, fragment.text), vector)
-        scores: dict[str, float] = {}
-        for fragment in fragments:
-            cached = _cache_get(_cache_key(model, fragment.text))
-            if cached is not None:
-                scores[fragment.key] = cosine(query_vector, cached)
-        return scores
+            known[fragment.key] = vector
+            await self.vectors.put(model, fragment.text, vector)
+        return {key: cosine(query_vector, vector) for key, vector in known.items()}
 
 
 __all__ = ["CompanionLoreRecall", "RecalledLore"]

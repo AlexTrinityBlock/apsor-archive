@@ -39,7 +39,9 @@ from app.module.agent.domain.tool_args import (
 # (the user by name or "you"; never Keeper, master, or owner) after it.
 # v18 ships the rewritten preset personas from the world bible (ten-thousand-
 # year aeon-porcelain, minds that emerged from the library, equal keeping).
-PROMPT_VERSION = "archive-agent-v18"
+# v19 renders persona rules and story-moment guidance from the companion story
+# config provider and adds story moments to the user entry.
+PROMPT_VERSION = "archive-agent-v19"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -55,8 +57,10 @@ PROMPT_VERSION = "archive-agent-v18"
 # and the trailing <search_hint> to web_search. Existing conversations keep their
 # frozen pi.system snapshot. v15 adds the read-only companion_action gesture tool.
 # v16 lets search_knowledge return the companion's own lore in a separate
-# <librarian_memory> block that is never an archive source.
-TOOLS_VERSION = "archive-tools-v16"
+# <librarian_memory> block that is never an archive source. v17 makes that lore
+# semantic-only with untold preference and explicit self queries. v18 carries the
+# lore guidance from the companion story config instead of a hardcoded string.
+TOOLS_VERSION = "archive-tools-v18"
 
 PLOT_TOOL_NAME = "render_plot"
 
