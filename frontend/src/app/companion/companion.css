@@ -1,5 +1,5 @@
 /*
- * Chat companion: the floating marionette, its rig and effects, the minimized
+ * Chat companion: the free-standing figure, its effects, the minimized
  * tab, and the Settings companion tab. Colors come from global tokens; the
  * per-character accent is manifest data exposed as --companion-accent.
  */
@@ -181,7 +181,7 @@
   transform: translateX(-50%);
 }
 
-/* Stage, rig, and figure -------------------------------------------------- */
+/* Stage and figure -------------------------------------------------------- */
 
 .companion-stage {
   position: relative;
@@ -202,49 +202,12 @@
   pointer-events: none;
 }
 
-.companion-rig {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.companion-rig__string {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-width: 0.9;
-}
-
-.companion-rig__string--head {
-  stroke-opacity: 0.85;
-}
-
-.companion-rig__handle {
-  stroke: var(--mono-l3);
-  stroke-linecap: round;
-  stroke-width: 1.6;
-}
-
-.companion-rig__beam {
-  fill: color-mix(in srgb, var(--accent-ochre) 46%, var(--mono-ink));
-}
-
-.companion-rig__cross {
-  fill: color-mix(in srgb, var(--accent-ochre) 30%, var(--mono-ink));
-}
-
-.companion-rig__cap {
-  fill: var(--companion-accent, var(--accent-ochre));
-  stroke: var(--mono-ink);
-  stroke-width: 0.6;
-}
-
 .companion-figure {
   position: absolute;
   left: 0;
   transform: translateY(var(--companion-bob, 0px)) rotate(var(--companion-sway, 0deg));
-  transform-origin: 50% 0;
+  /* Free-standing: the figure pivots at its feet. */
+  transform-origin: 50% 100%;
   will-change: transform;
 }
 
@@ -328,7 +291,13 @@
 }
 
 .companion-stage.is-animated.is-held .companion-figure__body {
-  animation: companion-dangle 1.1s var(--ease-soft) infinite alternate;
+  animation: companion-lifted 1.1s var(--ease-soft) infinite alternate;
+}
+
+/* While carried the figure floats a little and its shadow softens. */
+.companion-stage.is-held::after {
+  opacity: 0.45;
+  transform: scale(0.8);
 }
 
 @keyframes companion-hop {
@@ -368,12 +337,12 @@
   }
 }
 
-@keyframes companion-dangle {
+@keyframes companion-lifted {
   from {
-    transform: translateY(1px) scaleY(1.01);
+    transform: translateY(-4px);
   }
   to {
-    transform: translateY(-1px) scaleY(0.995);
+    transform: translateY(-7px);
   }
 }
 

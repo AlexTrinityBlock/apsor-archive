@@ -1,5 +1,5 @@
 /**
- * Tiny damped-spring integrator for the marionette's sway. Semi-implicit
+ * Tiny damped-spring integrator for the companion's sway. Semi-implicit
  * Euler is stable for the small, clamped time steps an animation frame gives.
  */
 

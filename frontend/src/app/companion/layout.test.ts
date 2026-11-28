@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   EDGE_MARGIN,
+  FIGURE_HEADROOM,
   avoidance,
   boxSize,
   breakpointFor,
@@ -14,7 +15,6 @@ import {
   type LayoutContext,
 } from "./layout";
 import { breathing, isSettled, stepSpring, swayForVelocity, SWAY_SPRING } from "./spring";
-import { marionetteStrings } from "./strings";
 
 const desktop: LayoutContext = {
   viewport: { width: 1440, height: 900 },
@@ -30,8 +30,9 @@ describe("breakpoints and sizes", () => {
     expect(breakpointFor(1440)).toBe("desktop");
   });
 
-  test("box includes the string span", () => {
-    expect(boxSize("desktop").height).toBeGreaterThan(222);
+  test("box adds only a small headroom above the free-standing figure", () => {
+    expect(boxSize("desktop").height).toBe(222 + FIGURE_HEADROOM);
+    expect(FIGURE_HEADROOM).toBeLessThan(30);
   });
 });
 
@@ -127,31 +128,5 @@ describe("spring", () => {
       expect(Math.abs(bob)).toBeLessThanOrEqual(2.2);
       expect(Math.abs(sway)).toBeLessThanOrEqual(1.1);
     }
-  });
-});
-
-describe("marionette strings", () => {
-  const base = {
-    width: 150,
-    span: 46,
-    figureHeight: 222,
-    anchor: { x: 0.5, y: 0.02 },
-    swayDegrees: 0,
-    slack: 0,
-    tangled: false,
-    time: 0,
-  };
-
-  test("three strings start at the bar", () => {
-    const strings = marionetteStrings(base);
-    expect(strings.map((item) => item.key)).toEqual(["head", "left", "right"]);
-    expect(strings[0]?.d.startsWith("M 75 12")).toBe(true);
-    expect(strings[0]?.fade).toBe(false);
-  });
-
-  test("tangled strings cross over", () => {
-    const straight = marionetteStrings(base);
-    const tangled = marionetteStrings({ ...base, tangled: true });
-    expect(tangled[1]?.d.split(" ")[1]).toBe(straight[2]?.d.split(" ")[1]);
   });
 });

@@ -2,7 +2,7 @@ import { useId, useRef, useState } from "react";
 
 import { useI18n } from "../../i18n";
 import { ACTION_LABEL_KEYS, COMPANION_ACTIONS, type CompanionAction } from "../actions";
-import { STRING_SPAN, figureSize } from "../layout";
+import { FIGURE_HEADROOM, figureSize } from "../layout";
 import type { CompanionCharacter } from "../manifest";
 import type { CompanionMotion } from "../preference";
 import { CompanionStage, type DragMotion } from "./CompanionStage";
@@ -30,7 +30,7 @@ export function CompanionPreview({ character, motion, title }: CompanionPreviewP
           motion={motion}
           width={figure.width}
           figureHeight={figure.height}
-          span={STRING_SPAN}
+          span={FIGURE_HEADROOM}
           dragMotion={dragMotion}
           active
         />

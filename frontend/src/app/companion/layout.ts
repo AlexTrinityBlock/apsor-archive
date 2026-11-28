@@ -57,8 +57,8 @@ export interface BoxSize {
 
 export const EDGE_MARGIN = 10;
 const TOP_MARGIN = 64;
-/** Height of the control bar plus visible strings above the figure. */
-export const STRING_SPAN = 46;
+/** Free space above the figure for floating effects (?, zZ, sparkles). */
+export const FIGURE_HEADROOM = 20;
 
 export function breakpointFor(width: number): Breakpoint {
   if (width < 620) {
@@ -67,7 +67,7 @@ export function breakpointFor(width: number): Breakpoint {
   return width < 980 ? "tablet" : "desktop";
 }
 
-/** Figure size (without strings) per breakpoint, 2:3 like the art. */
+/** Figure size (without headroom) per breakpoint, 2:3 like the art. */
 export function figureSize(breakpoint: Breakpoint): BoxSize {
   switch (breakpoint) {
     case "phone":
@@ -81,7 +81,7 @@ export function figureSize(breakpoint: Breakpoint): BoxSize {
 
 export function boxSize(breakpoint: Breakpoint): BoxSize {
   const figure = figureSize(breakpoint);
-  return { width: figure.width, height: figure.height + STRING_SPAN };
+  return { width: figure.width, height: figure.height + FIGURE_HEADROOM };
 }
 
 function clamp(value: number, min: number, max: number): number {

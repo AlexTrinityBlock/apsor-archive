@@ -101,7 +101,6 @@ export function draftCharacter(
     name: name.trim() || "—",
     gender,
     accent: "#b8933f",
-    anchor: { x: 0.5, y: 0.04 },
     width: 384,
     height: 576,
     portrait: idle.frames[0]?.url ?? null,

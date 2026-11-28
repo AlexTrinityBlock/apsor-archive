@@ -18,7 +18,7 @@ import { useCompanionDirector } from "../hook/useCompanionDirector";
 import { useCompanionDrag, type DragRelease } from "../hook/useCompanionDrag";
 import {
   DOCK_SIDES,
-  STRING_SPAN,
+  FIGURE_HEADROOM,
   avoidance,
   boxSize,
   breakpointFor,
@@ -66,7 +66,7 @@ function readPositions(): Positions {
 }
 
 /**
- * The floating marionette beside the chat box: placement, drag/throw/snap,
+ * The free-standing companion beside the chat box: placement, drag/throw/snap,
  * keyboard moves, minimize, reader-avoidance, and the live caption.
  */
 export function CompanionOverlay({
@@ -249,7 +249,7 @@ export function CompanionOverlay({
           ref={tabRef}
           type="button"
           className={`companion-tab${left ? " is-left" : ""}`}
-          style={{ top: box.top + STRING_SPAN }}
+          style={{ top: box.top + FIGURE_HEADROOM }}
           onClick={() => setMinimizedPersisted(false, true)}
           aria-label={t("companion.overlay.restore", { name: character.name })}
           title={t("companion.overlay.restore", { name: character.name })}
@@ -306,7 +306,7 @@ export function CompanionOverlay({
           motion={motion}
           width={figure.width}
           figureHeight={figure.height}
-          span={STRING_SPAN}
+          span={FIGURE_HEADROOM}
           dragMotion={drag.dragMotion}
           active={presence !== "hidden"}
         />
