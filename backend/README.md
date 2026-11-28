@@ -938,30 +938,38 @@ metadata only and never gate recall.
   `POST /api/v1/agent/conversations` takes an optional `locale`
   (`en`, `zh-TW`, `zh-CN`). A disabled companion adds nothing. Saved-question
   answers never carry a persona.
-- **Lore recall (topical).** `search_knowledge` in a conversation with a frozen
-  companion offers at most two unlocked fragments in a separate
-  `<librarian_memories>` block after every archive source, with the configured
-  guidance that they are the librarian's own memories and never evidence. Tool
-  data carries them as `lore: [{id, tier, text}]`; they are never in the source
-  lists or the citation vocabulary. Relevance is **semantic only**: cosine
-  similarity between the fragment and the query plus the top archive excerpts,
-  using the account's embedder, must reach 0.30. There is no keyword list, so no
-  topic is needed to reach any fragment; the offline hashing embedder offers no
-  topical lore. Untold fragments get a small bonus and each earlier telling a
-  small penalty. Fragment vectors are cached per embedder model in process and
-  in Valkey; the dedicated worker warms every shipped preset fragment, so a
-  search embeds only the query (which counts against the embedding allowance).
-- **Self queries.** An explicit question about the librarian ("tell me about
-  yourself", "your past", a librarian's name, "your Vespers"; bare words such as
-  "archive" or "curator" do not count) returns the next untold fragments of its
-  arc, the most relevant of a small window first.
-- **Story moments.** At the start of a run, once at least one run has completed
-  and then every 3 completed runs, the next untold fragment of the arc (first,
-  familiar, rare; then id) is appended to that user message as
-  `<librarian_memory moment="story">` with guidance to tell it only if the
-  moment is calm and fits. It is stored on the user entry (`data.story_moment`,
-  `data.story_moment_id`) so the transcript and prompt cache stay stable.
-  Whatever a person talks about, every unlocked fragment surfaces in time.
+- **One context pipeline.** The companion's own memories reach a run through a
+  single context contributor. Every input site builds one signal: the user's
+  message, the page-context text of a document preview, attachment display names
+  (never bytes), and the successful results of `search_knowledge`, `read_file`,
+  `read_memory`, `read_timeline`, `present_resource`, and `web_fetch`. Offers
+  are rendered as one `<librarian_memories>` block (with `moment` and the
+  configured guidance) after every archive source; tool data carries them as
+  `lore: [{id, tier, text, moment}]`; they are never in the source lists or the
+  citation vocabulary. A run offers at most `max_contributions_per_run`
+  fragments across all sites and never repeats one.
+- **Topical recall.** Page context, attachment names, and tool results use
+  **semantic** relevance only: cosine similarity between the fragment and the
+  input, using the account's embedder, must reach 0.30. There is no keyword
+  list; the offline hashing embedder offers no topical lore. Untold fragments
+  get a small bonus and each earlier telling a small penalty. Fragment vectors
+  are cached per embedder model in process and in Valkey; the dedicated worker
+  warms every shipped preset fragment, so only the input is embedded (which
+  counts against the embedding allowance). The user's message itself never
+  draws topical asides.
+- **Self queries.** An explicit question about the librarian in the user's
+  message or a search query ("tell me about yourself", "your past", a
+  librarian's name, "your Vespers"; bare words such as "archive" or "curator"
+  do not count) returns the next untold fragments of its arc, the most relevant
+  of a small window first.
+- **Story moments.** When the user's message is not a self query, and at least
+  one run has completed and then every 3 completed runs, the next untold
+  fragment of the arc (first, familiar, rare; then id) is offered with the
+  message (`moment="story"`) with guidance to tell it only if the moment is calm
+  and fits. Offers made with a message are stored on the user entry
+  (`data.companion_context`, `data.companion_context_ids`) so the transcript and
+  prompt cache stay stable. Whatever a person talks about, every unlocked
+  fragment surfaces in time.
 - **Progress.** `companion_lore_told` records, per account and companion, each
   offered fragment's `told_count`, `offered_at`, `last_told_at`, and latest
   `source` (`topical`, `story_moment`, `self_query`); `companion_bond` keeps
