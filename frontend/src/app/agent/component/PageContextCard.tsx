@@ -7,7 +7,7 @@ import { readPageContextEntry } from "../page-context";
 /**
  * A captured page snapshot in the transcript.
  *
- * This is deliberately not a user marginalium: the keeper did not write it,
+ * This is deliberately not a user marginalium: the user did not write it,
  * and it is excluded from user-message counts. The full text is expandable
  * because the model receives it as a data envelope.
  */

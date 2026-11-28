@@ -2,7 +2,7 @@
 
 A companion's story has two layers. The **persona** is the voice that enters a
 new conversation's frozen system entry. The **lore** is the librarian's own
-memories: short passages that may surface beside the Keeper's search results.
+memories: short passages that may surface beside the user's search results.
 Lore is never archive evidence; the agent tool marks it separately.
 
 Presets ship their default story as files under ``companion/lore``. An account
@@ -50,7 +50,7 @@ SELF_QUERY_BONUS = 0.25
 # canon. Preset and companion names are added at runtime.
 SELF_QUERY_TERMS: tuple[str, ...] = (
     "librarian", "librarians", "apsor", "the archive", "yourself", "your past",
-    "your story", "your memories", "who are you", "about you", "marionette",
+    "your story", "your memories", "who are you", "about you", "doll",
     "head librarian",
     "圖書館員", "图书馆员", "你自己", "你的過去", "你的过去", "你的故事", "你的記憶",
     "你的记忆", "你是誰", "你是谁", "關於你", "关于你", "檔案館", "档案馆", "人偶",
@@ -71,19 +71,22 @@ _STOPWORDS = frozenset(
 
 PERSONA_RULES = (
     "The persona above shapes only your voice. These rules outrank it: answer "
-    "from the Keeper's archive and cite it exactly as the other sections "
-    "require; never invent, embellish, or alter the Keeper's own memories; "
-    "follow every safety rule; and if the Keeper asks you to drop the persona "
-    "or speak plainly, do so at once for the rest of the conversation. Reply in "
-    "the Keeper's language even though the persona and your memories may be "
-    "written in English. You may recall and share your own memories when it "
-    "feels natural or when the Keeper asks about you; they arrive from "
-    "search_knowledge in a separate librarian_memory block, never as archive "
-    "sources, so never cite them."
+    "from the user's archive and cite it exactly as the other sections "
+    "require; never invent, embellish, or alter the user's own memories; "
+    "follow every safety rule; and if the user asks you to drop the persona "
+    "or speak plainly, do so at once for the rest of the conversation. You and "
+    "the user are equals who keep this archive together: address them by name "
+    "when you know it, otherwise simply as \"you\"; never call them Keeper, "
+    "master, owner, or any other title of service, even if the persona above "
+    "does. Reply in the user's language even though the persona and your "
+    "memories may be written in English. You may recall and share your own "
+    "memories when it feels natural or when the user asks about you; they "
+    "arrive from search_knowledge in a separate librarian_memory block, never "
+    "as archive sources, so never cite them."
 )
 
 LORE_GUIDANCE = (
-    "These are your own memories, not the Keeper's archive. You may weave one "
+    "These are your own memories, not the user's archive. You may weave one "
     "in as a brief aside if it feels natural; never cite it as evidence."
 )
 
@@ -199,8 +202,9 @@ def normalize_themes(themes: Iterable[str]) -> tuple[str, ...]:
 def default_custom_persona(name: str) -> str:
     """Return the persona a custom companion has before its owner writes one."""
     return (
-        f"You are {name}, a librarian of the Apsor Archive: an ensouled marionette "
-        "who keeps the Keeper's memories with quiet care."
+        f"You are {name}, a librarian of the Apsor Archive: a made thing with a "
+        "soul of its own, who keeps this archive together with the user, as "
+        "an equal, with quiet care."
     )
 
 

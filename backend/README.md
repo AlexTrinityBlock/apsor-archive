@@ -933,7 +933,7 @@ keywords so a Chinese query can find English-themed lore.
 - **Persona.** When a conversation is created, the account's enabled companion
   (the selection, or the flagship `preset:vellum`) is frozen into `pi.system` as
   a final `companion_persona` section: the persona, then the rules that outrank
-  it (grounding and citations, never inventing the Keeper's memories, safety,
+  it (grounding and citations, never inventing the user's memories, safety,
   dropping the voice on request). `data.companion` records `{ref, name, locale}`.
   `POST /api/v1/agent/conversations` takes an optional `locale`
   (`en`, `zh-TW`, `zh-CN`). A disabled companion adds nothing. Saved-question

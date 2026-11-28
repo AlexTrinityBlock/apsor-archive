@@ -47,7 +47,7 @@ export const core = {
     apiOffline: "API 離線",
     localFirst: "本機優先",
     version: "v{version}",
-    owner: "館長",
+    owner: "你",
   },
   status: {
     ok: "正常",

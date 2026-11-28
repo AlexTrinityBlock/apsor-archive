@@ -46,7 +46,7 @@ export const core = {
     apiOffline: "API offline",
     localFirst: "Local-first",
     version: "v{version}",
-    owner: "Owner",
+    owner: "You",
   },
   status: {
     ok: "ok",

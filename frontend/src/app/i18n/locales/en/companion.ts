@@ -33,13 +33,13 @@ export const companion = {
     eyebrow: "Companion",
     title: "Chat companion",
     description:
-      "A marionette librarian keeps you company beside the chat. It searches, reads, and writes along with the assistant, and steps aside whenever it would cover what you are reading.",
+      "A librarian keeps you company beside the chat, free to move on its own. It searches, reads, and writes along with the assistant, and steps aside whenever it would cover what you are reading.",
     enabled: "Show the companion",
     enabledHint:
       "Appears beside the chat box. Drag it anywhere, or minimize it to a small tab.",
     motionLegend: "Motion",
     motionFull: "Full",
-    motionFullHint: "Swaying strings, animated poses, and small effects.",
+    motionFullHint: "Gentle sway and breathing, animated poses, and small effects.",
     motionReduced: "Reduced",
     motionReducedHint: "Still poses with soft crossfades.",
     motionOff: "Off",

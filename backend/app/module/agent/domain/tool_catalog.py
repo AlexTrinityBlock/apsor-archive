@@ -35,8 +35,9 @@ from app.module.agent.domain.tool_args import (
 # conversations keep their frozen ``pi.system`` and old version string, so their
 # KV cache lineage is untouched. v15 adds the companion_action guidance line.
 # v16 adds the optional companion persona section (persona, then the rules that
-# outrank it) frozen per conversation.
-PROMPT_VERSION = "archive-agent-v16"
+# outrank it) frozen per conversation. v17 makes those rules address the user
+# as an equal (by name or "you"; never Keeper, master, or owner).
+PROMPT_VERSION = "archive-agent-v17"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on

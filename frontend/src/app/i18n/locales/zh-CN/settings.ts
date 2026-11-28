@@ -293,7 +293,7 @@ export const settings = {
       "这座档案馆为每个账号提供私人档案库，全局设置由 root 管理。Root 负责账号与运行环境设置；每个账号只能读取自己的文件、记忆与对话。你目前以身份“",
     accessCopyAfter:
       "”登录。请从主导航的账号页面管理账号。这里没有云端账号或电子邮件恢复；离开共享机器时，请从侧栏退出登录。",
-    keeperFallback: "root 账号",
+    rootFallback: "root 账号",
     readMethod: "阅读方法",
   },
   diagnostics: {

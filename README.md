@@ -574,8 +574,8 @@ prompt text; it does not send the message. The API is
 
 ### Chat companion
 
-A small marionette librarian can stand beside the chat and react to the agent:
-it thinks while the model reasons, searches during `search_knowledge`, reads,
+A small librarian can stand freely beside the chat (no strings or control bar)
+and react to the agent: it thinks while the model reasons, searches during `search_knowledge`, reads,
 writes, calculates, browses, and presents during the matching tools, and the
 agent can also call the read-only `companion_action` tool for an explicit
 gesture. Built-in presets ship with the frontend. Each account may also create up
@@ -590,13 +590,15 @@ order, frame delete, frame image, and `GET/PATCH /api/v1/companions/preference`)
 
 Each companion also has a story: a persona that becomes its voice in new
 conversations (frozen per conversation, in the conversation's language), and
-lore, its own memories. When the agent searches the Keeper's archive, up to two
+lore, its own memories. When the agent searches the user's archive, up to two
 relevant memories of the librarian's own may ride beside the results in a
 separate block; they are never archive evidence or citations. Asking the
 librarian about itself or the Archive lets it tell its own story. Deeper
 memories unlock as the account completes more conversations with that
-companion. Every account can edit the persona and lore of any companion per
-language and reset to the default (`/api/v1/companions/stories/...`).
+companion. The persona rules treat the user as an equal: the librarian uses
+their name or a plain "you", never a title such as Keeper or master. Every
+account can edit the persona and lore of any companion per language and reset
+to the default (`/api/v1/companions/stories/...`).
 
 ### Agent runtime settings
 
@@ -1354,7 +1356,7 @@ a pending state for the seconds the turn takes.
 `/chat` and `/chat/:conversationId` are the persistent reading room for the
 agent. The thread rail lists active and archived conversations and supports
 rename, archive/restore, delete, and a new thread; the sheet renders immutable
-entries as keeper marginalia, archive sheets, field-note tool results, and
+entries as user marginalia, archive sheets, field-note tool results, and
 structured resource cards. The composer streams over SSE, supports
 Cmd/Ctrl+Enter and a stop action, and refreshes the thread list plus the active
 transcript when the run settles (other conversations are not refetched).
