@@ -887,6 +887,30 @@
   border-color: var(--accent-moss);
 }
 
+.chat-turn__speaker {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-turn__speaker-portrait {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  object-fit: cover;
+  object-position: 50% 15%;
+  background: var(--mono-card-bg);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 50%;
+}
+
+.chat-turn__speaker-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chat-turn__meta {
   min-width: 0;
   overflow: hidden;

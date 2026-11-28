@@ -12,6 +12,7 @@ import {
   type ToolResultInfo,
 } from "../types";
 import { MarkdownBody } from "./MarkdownBody";
+import { SpeakerMark } from "./SpeakerMark";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallCard } from "./ToolCallCard";
 import { finishReasonTone } from "./status";
@@ -101,10 +102,16 @@ export function AssistantEntry({
   return (
     <article className="chat-turn chat-turn--agent">
       <header className="chat-turn__author">
-        <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
-          <Icon name="spark" size={11} />
-        </span>
-        <span>{t("chat.assistant.author")}</span>
+        {entry.speaker ? (
+          <SpeakerMark speaker={entry.speaker} />
+        ) : (
+          <>
+            <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
+              <Icon name="spark" size={11} />
+            </span>
+            <span>{t("chat.assistant.author")}</span>
+          </>
+        )}
         <span className="chat-turn__meta">
           {[meta.provider, meta.model]
             .filter((item): item is string => Boolean(item))
