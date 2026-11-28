@@ -26,6 +26,25 @@ Apsor Archive 把它们收进一座放在你自己电脑上的私人图书馆，
 这座档案馆也不孤单。里面住着六位图书馆员：用万古瓷烧成的人形，心智从人们写下的一切文字中苏醒。
 他们和你以平等的身份“一起保管”这座档案馆：替你搜索、把那一页递给你，偶尔，也会想起一段属于自己的往事。
 
+## 认识图书馆员们
+
+六位馆员，各自守着同一座档案馆的一翼。他们以万古瓷烧成，脸生来就是素白；心智从人们写下的一切文字中苏醒。要对你说什么，由他们自己决定。
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/vellum.webp" alt="Vellum" width="120" height="120"><br><strong>Vellum</strong> · <sub>东翼</sub><br><em>“这层书架是诚实的，而且是空的。”</em><br><sub>带着一本无字之书，里面只夹着一朵紫罗兰。她搜索时，有一根线从来不动。</sub></td>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/atlas.webp" alt="Atlas" width="120" height="120"><br><strong>Atlas</strong> · <sub>地图室</sub><br><em>“那里的地图是空白的。我不画自己没见过的海岸线。”</em><br><sub>走遍了这座没有外墙的图书馆的每一条走廊，除了一扇曾经温热、用铅笔画成的门。</sub></td>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/herbaria.webp" alt="Herbaria" width="120" height="120"><br><strong>Herbaria</strong> · <sub>温室</sub><br><em>“来看看留下了什么。通常比你担心的多。”</em><br><sub>在水患中失去的第九册，正一朵干花一朵干花地回到她身边。有人在把它们送回来。</sub></td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/horologe.webp" alt="Horologe" width="120" height="120"><br><strong>Horologe</strong> · <sub>钟廊</sub><br><em>“有人告诉我，高兴并不是故障。”</em><br><sub>每天给一百座钟上发条。其中一座停在两点十一分，他从没掸过上面的灰。</sub></td>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/nocturne.webp" alt="Nocturne" width="120" height="120"><br><strong>Nocturne</strong> · <sub>观星台</sub><br><em>“就算是正午，我也留一盏灯亮着。光喜欢有伴。”</em><br><sub>找到一封自己笔迹的封缄之信，收件人写着「致造我们的人」。她不记得写过它。</sub></td>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/quill.webp" alt="Quill" width="120" height="120"><br><strong>Quill</strong> · <sub>抄写室</sub><br><em>“涂改是最好的部分，那证明有人改变了心意。”</em><br><sub>画人的脸，总在眼睛处停笔。只有一次，他没有停。</sub></td>
+</tr>
+</table>
+
+他们的故事会自己浮现，在他们愿意说的时候。而六位心里都悄悄怀着同一个问题：「当最后一个人也离开了，我们要为谁保管？」
+
 ## 它有什么不同
 
 <table>
