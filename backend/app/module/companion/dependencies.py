@@ -11,10 +11,15 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import State
 
-from app.dependency.auth import require_authenticated
-from app.infrastructure.database.session import get_db_session
+from app.dependency.auth import require_authenticated, require_root
+from app.infrastructure.database.session import (
+    ADMIN_SCOPE_COMPANION,
+    apply_admin_scope,
+    get_db_session,
+)
 from app.module.auth.schema.auth_schema import UserSchema
 from app.module.companion.domain.story_domain import StoryLocale
+from app.module.companion.protocol.companion_admin_protocol import CompanionSeederProtocol
 from app.module.companion.protocol.companion_protocol import CompanionStorageProtocol
 from app.module.companion.protocol.companion_story_protocol import (
     CompanionContentProviderProtocol,
@@ -23,9 +28,14 @@ from app.module.companion.protocol.companion_story_protocol import (
     LoreEmbedderProtocol,
     LoreEmbeddingQuotaProtocol,
 )
+from app.module.companion.repository.companion_admin_repository import CompanionAdminRepository
 from app.module.companion.repository.companion_repository import CompanionRepository
 from app.module.companion.repository.companion_story_repository import (
     CompanionStoryRepository,
+)
+from app.module.companion.service.companion_admin_service import (
+    CompanionAdminService,
+    CompanionCatalogService,
 )
 from app.module.companion.service.companion_service import CompanionService
 from app.module.companion.service.companion_story_service import CompanionStoryService
@@ -40,6 +50,7 @@ from app.module.companion.service.story_config import (
     StaticCompanionPolicyProvider,
     StaticStoryConfigProvider,
 )
+from app.shared.time import utcnow
 
 
 def get_companion_service(
@@ -149,6 +160,38 @@ def build_lore_recall(
     )
 
 
+# --- D: admin ---------------------------------------------------------------
+
+
+async def get_companion_admin_service(
+    request: Request,
+    session: AsyncSession = Depends(get_db_session),  # noqa: B008
+    user: UserSchema = Depends(require_root),  # noqa: B008
+) -> CompanionAdminService:
+    """Build root's companion admin service on an admin-scoped request transaction.
+
+    ``require_root`` rejects normal accounts and impersonated sessions (they carry
+    the target's role). The companion admin scope then lets RLS expose companion
+    tables across accounts for this transaction only; archive tables stay owner-only.
+    """
+    await apply_admin_scope(session, ADMIN_SCOPE_COMPANION)
+    seeder = getattr(request.app.state, "companion_seeder", None)
+    return CompanionAdminService(
+        CompanionAdminRepository(session),
+        actor_user_id=user.user_id,
+        seeder=cast(CompanionSeederProtocol | None, seeder),
+        clock=utcnow,
+    )
+
+
+def get_companion_catalog_service(
+    session: AsyncSession = Depends(get_db_session),  # noqa: B008
+    user: UserSchema = Depends(require_authenticated),  # noqa: B008
+) -> CompanionCatalogService:
+    """Build the account's preset catalog on its own owner-scoped transaction."""
+    return CompanionCatalogService(CompanionAdminRepository(session), user_id=user.user_id)
+
+
 __all__ = [
     "build_companion_story_service",
     "build_content_provider",
@@ -156,6 +199,8 @@ __all__ = [
     "build_lore_vector_warmer",
     "build_policy_provider",
     "build_story_config_provider",
+    "get_companion_admin_service",
+    "get_companion_catalog_service",
     "get_companion_service",
     "get_companion_story_service",
 ]

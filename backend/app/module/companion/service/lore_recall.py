@@ -141,9 +141,7 @@ class CompanionLoreRecall:
             source = "self_query"
         else:
             semantic = await self._semantic(scoring_text, candidates)
-            chosen = rank_topical(
-                candidates, unlocked, semantic, told, limit=size, config=config
-            )
+            chosen = rank_topical(candidates, unlocked, semantic, told, limit=size, config=config)
             source = "topical"
         await self.stories.record_told(
             target.ref,

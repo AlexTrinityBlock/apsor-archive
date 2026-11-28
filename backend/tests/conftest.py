@@ -96,7 +96,7 @@ ADMIN_MANAGED_PRIVATE_TABLES: tuple[str, ...] = (
 # Append-only audit: root reads and inserts under the companion admin scope.
 AUDIT_TABLES: tuple[str, ...] = ("companion_admin_access_log",)
 # ``companion`` is owner-only plus a root read policy for custom companion names.
-COMPANION_ADMIN_READ_TABLES: tuple[str, ...] = ("companion",)
+COMPANION_ADMIN_READ_TABLES: tuple[str, ...] = ("companion", "companion_preference")
 GLOBAL_TABLES: tuple[str, ...] = (
     "agent_config",
     "chat_provider_config",
