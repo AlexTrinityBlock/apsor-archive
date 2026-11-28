@@ -588,6 +588,16 @@ motion level (`full`, `reduced`, `off`), and its normalized position. The API is
 under `/api/v1/companions` (list, create, update, delete, frame upload, frame
 order, frame delete, frame image, and `GET/PATCH /api/v1/companions/preference`).
 
+Each companion also has a story: a persona that becomes its voice in new
+conversations (frozen per conversation, in the conversation's language), and
+lore, its own memories. When the agent searches the Keeper's archive, up to two
+relevant memories of the librarian's own may ride beside the results in a
+separate block; they are never archive evidence or citations. Asking the
+librarian about itself or the Archive lets it tell its own story. Deeper
+memories unlock as the account completes more conversations with that
+companion. Every account can edit the persona and lore of any companion per
+language and reset to the default (`/api/v1/companions/stories/...`).
+
 ### Agent runtime settings
 
 The **Agent runtime** panel on `/settings` (root only) edits the singleton

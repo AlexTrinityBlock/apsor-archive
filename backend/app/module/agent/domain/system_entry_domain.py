@@ -13,6 +13,7 @@ copy.
 
 from typing import Any
 
+from app.module.agent.domain.companion_persona_domain import CompanionPersona
 from app.module.agent.domain.system_prompt_domain import SystemPromptSection
 from app.module.agent.domain.tool_catalog import (
     PROMPT_VERSION,
@@ -187,6 +188,7 @@ def build_system_data(
     model: str,
     sections: list[SystemPromptSection] | None = None,
     user_profile: UserProfile | None = None,
+    companion: CompanionPersona | None = None,
 ) -> dict[str, Any]:
     """Build the immutable data payload for the initial system entry.
 
@@ -199,7 +201,9 @@ def build_system_data(
     conversation look as if its content was replaced.
 
     The payload is created once per conversation, so editing a section never
-    rewrites an existing KV-cache prefix.
+    rewrites an existing KV-cache prefix. An active companion adds its persona
+    section last (the persona, then the rules that outrank it) and records its
+    reference and locale under ``companion`` so tools can find its lore.
     """
     rendered_sections = [
         {
@@ -220,7 +224,9 @@ def build_system_data(
                 "content": "\n".join(user_profile.prompt_lines()),
             }
         )
-    return {
+    if companion is not None and companion.content.strip():
+        rendered_sections.append(companion.section())
+    data: dict[str, Any] = {
         "prompt_version": PROMPT_VERSION,
         "tools_version": TOOLS_VERSION,
         "provider": provider,
@@ -228,6 +234,9 @@ def build_system_data(
         "sections": rendered_sections,
         "tools": tool_definitions(),
     }
+    if companion is not None and companion.content.strip():
+        data["companion"] = companion.frozen()
+    return data
 
 
 def build_system_model(system_data: dict[str, Any]) -> list[dict[str, Any]]:

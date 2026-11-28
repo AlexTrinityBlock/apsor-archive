@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.module.agent.domain.agent_domain import ToolOutcome
 from app.module.agent.domain.calculation_domain import evaluate_expression
+from app.module.agent.domain.companion_persona_domain import LibrarianMemory
 from app.module.agent.domain.history_domain import (
     HISTORY_MESSAGE_MAX_CHARS,
     HistoryMessage,
@@ -57,6 +58,7 @@ from app.module.knowledge.exception.domain_error import (
     KnowledgeError,
 )
 from app.module.knowledge.schema.memory_schema import MemorySchema
+from app.module.knowledge.schema.search_schema import SearchResponseSchema
 from app.module.knowledge.schema.timeline_schema import TimelineEventSchema
 from app.module.web_research.domain.fetch_quality_domain import looks_structurally_incomplete
 from app.module.web_research.exception.domain_error import (
@@ -296,6 +298,12 @@ async def _dispatch(
     raise ValueError(f"No handler is registered for tool {name!r}.")
 
 
+LIBRARIAN_MEMORY_GUIDANCE = (
+    "These are your own memories, not the Keeper's archive. You may weave one in "
+    "as a brief aside if it feels natural; never cite it as evidence."
+)
+
+
 async def _search_knowledge(
     args: SearchKnowledgeArgs,
     services: AgentToolServices,
@@ -430,7 +438,44 @@ async def _search_knowledge(
             for item in result.history_results
         ],
     }
+    memories = await _librarian_memories(args.query, result, services)
+    if memories:
+        # The librarian's own lore is a separate block after every archive
+        # source; it never enters the source list or the citation vocabulary.
+        content.append(_open("librarian_memories") + xml_text(LIBRARIAN_MEMORY_GUIDANCE))
+        for memory in memories:
+            content.append(
+                _open("librarian_memory", {"id": memory.id, "tier": memory.tier})
+                + xml_text(memory.text)
+                + _close("librarian_memory")
+            )
+        content.append(_close("librarian_memories"))
+        data["lore"] = [
+            {"id": memory.id, "tier": memory.tier, "text": memory.text}
+            for memory in memories
+        ]
     return "".join(content), data, None
+
+
+async def _librarian_memories(
+    query: str,
+    result: SearchResponseSchema,
+    services: AgentToolServices,
+) -> list[LibrarianMemory]:
+    """Return the companion's own memories for this search, never raising."""
+    recall = services.librarian_memory
+    if recall is None:
+        return []
+    context = [
+        *(item.content for item in result.memory_results[:3]),
+        *(item.content for item in result.file_results[:3]),
+        *(item.content for item in result.summary_results[:2]),
+    ]
+    try:
+        return await recall.recall(query, [clip(text, 400) for text in context])
+    except Exception:
+        logger.warning("librarian memory recall failed; continuing without it")
+        return []
 
 
 async def _read_file(

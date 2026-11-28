@@ -27,13 +27,26 @@ import type {
   BodyUploadCompanionFrames,
   CompanionCreateSchema,
   CompanionFrameOrderSchema,
+  CompanionLoreCreateSchema,
+  CompanionLoreSchema,
+  CompanionLoreUpdateSchema,
+  CompanionPersonaSchema,
+  CompanionPersonaUpdateSchema,
   CompanionPreferenceSchema,
   CompanionPreferenceUpdateSchema,
   CompanionSchema,
   CompanionUpdateSchema,
+  CreateCompanionLoreParams,
+  DeleteCompanionLoreParams,
   GetCompanionFrameParams,
+  GetCompanionPersonaParams,
   HTTPValidationError,
-  ListResponseSchemaCompanionSchema
+  ListCompanionLoreParams,
+  ListResponseSchemaCompanionSchema,
+  ResetCompanionLoreParams,
+  ResetCompanionPersonaParams,
+  UpdateCompanionLoreParams,
+  UpdateCompanionPersonaParams
 } from '../schemas';
 
 import { apiFetch } from '../../../apis/fetch-client';
@@ -435,6 +448,785 @@ export const useUpdateCompanionPreference = <TError = HTTPValidationError,
         TContext
       > => {
       return useMutation(getUpdateCompanionPreferenceMutationOptions(options), queryClient);
+    }
+    export const getListCompanionLoreUrl = (companionRef: string,
+    params?: ListCompanionLoreParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/companions/stories/${companionRef}/lore?${stringifiedParams}` : `/api/v1/companions/stories/${companionRef}/lore`
+}
+
+/**
+ * Return every lore fragment with its tier and unlock state.
+ * @summary List Companion Lore
+ */
+export const listCompanionLore = async (companionRef: string,
+    params?: ListCompanionLoreParams, options?: Parameters<typeof apiFetch>[1]): Promise<CompanionLoreSchema> => {
+
+  return apiFetch<CompanionLoreSchema>(getListCompanionLoreUrl(companionRef,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCompanionLoreQueryKey = (companionRef: string,
+    params?: ListCompanionLoreParams,) => {
+    return [
+    `/api/v1/companions/stories/${companionRef}/lore`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCompanionLoreQueryOptions = <TData = Awaited<ReturnType<typeof listCompanionLore>>, TError = HTTPValidationError>(companionRef: string,
+    params?: ListCompanionLoreParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionLore>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCompanionLoreQueryKey(companionRef,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCompanionLore>>> = ({ signal }) => listCompanionLore(companionRef,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: companionRef !== null && companionRef !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCompanionLore>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListCompanionLoreQueryResult = NonNullable<Awaited<ReturnType<typeof listCompanionLore>>>
+export type ListCompanionLoreQueryError = HTTPValidationError
+
+
+export function useListCompanionLore<TData = Awaited<ReturnType<typeof listCompanionLore>>, TError = HTTPValidationError>(
+ companionRef: string,
+    params: undefined |  ListCompanionLoreParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionLore>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCompanionLore>>,
+          TError,
+          Awaited<ReturnType<typeof listCompanionLore>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCompanionLore<TData = Awaited<ReturnType<typeof listCompanionLore>>, TError = HTTPValidationError>(
+ companionRef: string,
+    params?: ListCompanionLoreParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionLore>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCompanionLore>>,
+          TError,
+          Awaited<ReturnType<typeof listCompanionLore>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCompanionLore<TData = Awaited<ReturnType<typeof listCompanionLore>>, TError = HTTPValidationError>(
+ companionRef: string,
+    params?: ListCompanionLoreParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionLore>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Companion Lore
+ */
+
+export function useListCompanionLore<TData = Awaited<ReturnType<typeof listCompanionLore>>, TError = HTTPValidationError>(
+ companionRef: string,
+    params?: ListCompanionLoreParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionLore>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListCompanionLoreQueryOptions(companionRef,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getCreateCompanionLoreUrl = (companionRef: string,
+    params?: CreateCompanionLoreParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/companions/stories/${companionRef}/lore?${stringifiedParams}` : `/api/v1/companions/stories/${companionRef}/lore`
+}
+
+/**
+ * Add a fragment (copying this locale's defaults on the first edit).
+ * @summary Create Companion Lore
+ */
+export const createCompanionLore = async (companionRef: string,
+    companionLoreCreateSchema: CompanionLoreCreateSchema,
+    params?: CreateCompanionLoreParams, options?: Parameters<typeof apiFetch>[1]): Promise<CompanionLoreSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<CompanionLoreSchema>(getCreateCompanionLoreUrl(companionRef,params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(companionLoreCreateSchema)
+  }
+);}
+
+
+
+
+
+export const getCreateCompanionLoreMutationKey = () => ['createCompanionLore'] as const;
+
+export const getCreateCompanionLoreMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCompanionLore>>, TError,CreateCompanionLoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCompanionLore>>, TError,CreateCompanionLoreMutationVariables, TContext> => {
+
+const mutationKey = getCreateCompanionLoreMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCompanionLore>>, CreateCompanionLoreMutationVariables> = (props) => {
+          const {companionRef,data,params} = props ?? {};
+
+          return  createCompanionLore(companionRef,data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCompanionLoreMutationResult = NonNullable<Awaited<ReturnType<typeof createCompanionLore>>>
+    export type CreateCompanionLoreMutationBody = CompanionLoreCreateSchema
+    export type CreateCompanionLoreMutationError = HTTPValidationError
+    export type CreateCompanionLoreMutationVariables = {companionRef: string;data: CompanionLoreCreateSchema;params?: CreateCompanionLoreParams}
+
+    /**
+ * @summary Create Companion Lore
+ */
+export const useCreateCompanionLore = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCompanionLore>>, TError,CreateCompanionLoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createCompanionLore>>,
+        TError,
+        CreateCompanionLoreMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateCompanionLoreMutationOptions(options), queryClient);
+    }
+    export const getResetCompanionLoreUrl = (companionRef: string,
+    params?: ResetCompanionLoreParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/companions/stories/${companionRef}/lore/reset?${stringifiedParams}` : `/api/v1/companions/stories/${companionRef}/lore/reset`
+}
+
+/**
+ * Discard this locale's lore copy and return the default fragments.
+ * @summary Reset Companion Lore
+ */
+export const resetCompanionLore = async (companionRef: string,
+    params?: ResetCompanionLoreParams, options?: Parameters<typeof apiFetch>[1]): Promise<CompanionLoreSchema> => {
+
+  return apiFetch<CompanionLoreSchema>(getResetCompanionLoreUrl(companionRef,params),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getResetCompanionLoreMutationKey = () => ['resetCompanionLore'] as const;
+
+export const getResetCompanionLoreMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetCompanionLore>>, TError,ResetCompanionLoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetCompanionLore>>, TError,ResetCompanionLoreMutationVariables, TContext> => {
+
+const mutationKey = getResetCompanionLoreMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetCompanionLore>>, ResetCompanionLoreMutationVariables> = (props) => {
+          const {companionRef,params} = props ?? {};
+
+          return  resetCompanionLore(companionRef,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetCompanionLoreMutationResult = NonNullable<Awaited<ReturnType<typeof resetCompanionLore>>>
+
+    export type ResetCompanionLoreMutationError = HTTPValidationError
+    export type ResetCompanionLoreMutationVariables = {companionRef: string;params?: ResetCompanionLoreParams}
+
+    /**
+ * @summary Reset Companion Lore
+ */
+export const useResetCompanionLore = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetCompanionLore>>, TError,ResetCompanionLoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resetCompanionLore>>,
+        TError,
+        ResetCompanionLoreMutationVariables,
+        TContext
+      > => {
+      return useMutation(getResetCompanionLoreMutationOptions(options), queryClient);
+    }
+    export const getDeleteCompanionLoreUrl = (companionRef: string,
+    fragmentId: string,
+    params?: DeleteCompanionLoreParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/companions/stories/${companionRef}/lore/${fragmentId}?${stringifiedParams}` : `/api/v1/companions/stories/${companionRef}/lore/${fragmentId}`
+}
+
+/**
+ * Remove one fragment from this account's copy.
+ * @summary Delete Companion Lore
+ */
+export const deleteCompanionLore = async (companionRef: string,
+    fragmentId: string,
+    params?: DeleteCompanionLoreParams, options?: Parameters<typeof apiFetch>[1]): Promise<CompanionLoreSchema> => {
+
+  return apiFetch<CompanionLoreSchema>(getDeleteCompanionLoreUrl(companionRef,fragmentId,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteCompanionLoreMutationKey = () => ['deleteCompanionLore'] as const;
+
+export const getDeleteCompanionLoreMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCompanionLore>>, TError,DeleteCompanionLoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCompanionLore>>, TError,DeleteCompanionLoreMutationVariables, TContext> => {
+
+const mutationKey = getDeleteCompanionLoreMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCompanionLore>>, DeleteCompanionLoreMutationVariables> = (props) => {
+          const {companionRef,fragmentId,params} = props ?? {};
+
+          return  deleteCompanionLore(companionRef,fragmentId,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCompanionLoreMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCompanionLore>>>
+
+    export type DeleteCompanionLoreMutationError = HTTPValidationError
+    export type DeleteCompanionLoreMutationVariables = {companionRef: string;fragmentId: string;params?: DeleteCompanionLoreParams}
+
+    /**
+ * @summary Delete Companion Lore
+ */
+export const useDeleteCompanionLore = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCompanionLore>>, TError,DeleteCompanionLoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCompanionLore>>,
+        TError,
+        DeleteCompanionLoreMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteCompanionLoreMutationOptions(options), queryClient);
+    }
+    export const getUpdateCompanionLoreUrl = (companionRef: string,
+    fragmentId: string,
+    params?: UpdateCompanionLoreParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/companions/stories/${companionRef}/lore/${fragmentId}?${stringifiedParams}` : `/api/v1/companions/stories/${companionRef}/lore/${fragmentId}`
+}
+
+/**
+ * Edit one fragment's text, themes, tier, or position.
+ * @summary Update Companion Lore
+ */
+export const updateCompanionLore = async (companionRef: string,
+    fragmentId: string,
+    companionLoreUpdateSchema: CompanionLoreUpdateSchema,
+    params?: UpdateCompanionLoreParams, options?: Parameters<typeof apiFetch>[1]): Promise<CompanionLoreSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<CompanionLoreSchema>(getUpdateCompanionLoreUrl(companionRef,fragmentId,params),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(companionLoreUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateCompanionLoreMutationKey = () => ['updateCompanionLore'] as const;
+
+export const getUpdateCompanionLoreMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCompanionLore>>, TError,UpdateCompanionLoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCompanionLore>>, TError,UpdateCompanionLoreMutationVariables, TContext> => {
+
+const mutationKey = getUpdateCompanionLoreMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCompanionLore>>, UpdateCompanionLoreMutationVariables> = (props) => {
+          const {companionRef,fragmentId,data,params} = props ?? {};
+
+          return  updateCompanionLore(companionRef,fragmentId,data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCompanionLoreMutationResult = NonNullable<Awaited<ReturnType<typeof updateCompanionLore>>>
+    export type UpdateCompanionLoreMutationBody = CompanionLoreUpdateSchema
+    export type UpdateCompanionLoreMutationError = HTTPValidationError
+    export type UpdateCompanionLoreMutationVariables = {companionRef: string;fragmentId: string;data: CompanionLoreUpdateSchema;params?: UpdateCompanionLoreParams}
+
+    /**
+ * @summary Update Companion Lore
+ */
+export const useUpdateCompanionLore = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCompanionLore>>, TError,UpdateCompanionLoreMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateCompanionLore>>,
+        TError,
+        UpdateCompanionLoreMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateCompanionLoreMutationOptions(options), queryClient);
+    }
+    export const getResetCompanionPersonaUrl = (companionRef: string,
+    params?: ResetCompanionPersonaParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/companions/stories/${companionRef}/persona?${stringifiedParams}` : `/api/v1/companions/stories/${companionRef}/persona`
+}
+
+/**
+ * Drop this locale's persona override and return the default.
+ * @summary Reset Companion Persona
+ */
+export const resetCompanionPersona = async (companionRef: string,
+    params?: ResetCompanionPersonaParams, options?: Parameters<typeof apiFetch>[1]): Promise<CompanionPersonaSchema> => {
+
+  return apiFetch<CompanionPersonaSchema>(getResetCompanionPersonaUrl(companionRef,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getResetCompanionPersonaMutationKey = () => ['resetCompanionPersona'] as const;
+
+export const getResetCompanionPersonaMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetCompanionPersona>>, TError,ResetCompanionPersonaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resetCompanionPersona>>, TError,ResetCompanionPersonaMutationVariables, TContext> => {
+
+const mutationKey = getResetCompanionPersonaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resetCompanionPersona>>, ResetCompanionPersonaMutationVariables> = (props) => {
+          const {companionRef,params} = props ?? {};
+
+          return  resetCompanionPersona(companionRef,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResetCompanionPersonaMutationResult = NonNullable<Awaited<ReturnType<typeof resetCompanionPersona>>>
+
+    export type ResetCompanionPersonaMutationError = HTTPValidationError
+    export type ResetCompanionPersonaMutationVariables = {companionRef: string;params?: ResetCompanionPersonaParams}
+
+    /**
+ * @summary Reset Companion Persona
+ */
+export const useResetCompanionPersona = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resetCompanionPersona>>, TError,ResetCompanionPersonaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resetCompanionPersona>>,
+        TError,
+        ResetCompanionPersonaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getResetCompanionPersonaMutationOptions(options), queryClient);
+    }
+    export const getGetCompanionPersonaUrl = (companionRef: string,
+    params?: GetCompanionPersonaParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/companions/stories/${companionRef}/persona?${stringifiedParams}` : `/api/v1/companions/stories/${companionRef}/persona`
+}
+
+/**
+ * Return the persona in effect for this account and locale.
+ * @summary Get Companion Persona
+ */
+export const getCompanionPersona = async (companionRef: string,
+    params?: GetCompanionPersonaParams, options?: Parameters<typeof apiFetch>[1]): Promise<CompanionPersonaSchema> => {
+
+  return apiFetch<CompanionPersonaSchema>(getGetCompanionPersonaUrl(companionRef,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCompanionPersonaQueryKey = (companionRef: string,
+    params?: GetCompanionPersonaParams,) => {
+    return [
+    `/api/v1/companions/stories/${companionRef}/persona`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCompanionPersonaQueryOptions = <TData = Awaited<ReturnType<typeof getCompanionPersona>>, TError = HTTPValidationError>(companionRef: string,
+    params?: GetCompanionPersonaParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompanionPersona>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCompanionPersonaQueryKey(companionRef,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCompanionPersona>>> = ({ signal }) => getCompanionPersona(companionRef,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: companionRef !== null && companionRef !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCompanionPersona>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCompanionPersonaQueryResult = NonNullable<Awaited<ReturnType<typeof getCompanionPersona>>>
+export type GetCompanionPersonaQueryError = HTTPValidationError
+
+
+export function useGetCompanionPersona<TData = Awaited<ReturnType<typeof getCompanionPersona>>, TError = HTTPValidationError>(
+ companionRef: string,
+    params: undefined |  GetCompanionPersonaParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompanionPersona>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCompanionPersona>>,
+          TError,
+          Awaited<ReturnType<typeof getCompanionPersona>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCompanionPersona<TData = Awaited<ReturnType<typeof getCompanionPersona>>, TError = HTTPValidationError>(
+ companionRef: string,
+    params?: GetCompanionPersonaParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompanionPersona>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCompanionPersona>>,
+          TError,
+          Awaited<ReturnType<typeof getCompanionPersona>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCompanionPersona<TData = Awaited<ReturnType<typeof getCompanionPersona>>, TError = HTTPValidationError>(
+ companionRef: string,
+    params?: GetCompanionPersonaParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompanionPersona>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Companion Persona
+ */
+
+export function useGetCompanionPersona<TData = Awaited<ReturnType<typeof getCompanionPersona>>, TError = HTTPValidationError>(
+ companionRef: string,
+    params?: GetCompanionPersonaParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCompanionPersona>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCompanionPersonaQueryOptions(companionRef,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getUpdateCompanionPersonaUrl = (companionRef: string,
+    params?: UpdateCompanionPersonaParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/companions/stories/${companionRef}/persona?${stringifiedParams}` : `/api/v1/companions/stories/${companionRef}/persona`
+}
+
+/**
+ * Replace this account's persona; it applies to new conversations.
+ * @summary Update Companion Persona
+ */
+export const updateCompanionPersona = async (companionRef: string,
+    companionPersonaUpdateSchema: CompanionPersonaUpdateSchema,
+    params?: UpdateCompanionPersonaParams, options?: Parameters<typeof apiFetch>[1]): Promise<CompanionPersonaSchema> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<CompanionPersonaSchema>(getUpdateCompanionPersonaUrl(companionRef,params),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(companionPersonaUpdateSchema)
+  }
+);}
+
+
+
+
+
+export const getUpdateCompanionPersonaMutationKey = () => ['updateCompanionPersona'] as const;
+
+export const getUpdateCompanionPersonaMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCompanionPersona>>, TError,UpdateCompanionPersonaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCompanionPersona>>, TError,UpdateCompanionPersonaMutationVariables, TContext> => {
+
+const mutationKey = getUpdateCompanionPersonaMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCompanionPersona>>, UpdateCompanionPersonaMutationVariables> = (props) => {
+          const {companionRef,data,params} = props ?? {};
+
+          return  updateCompanionPersona(companionRef,data,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCompanionPersonaMutationResult = NonNullable<Awaited<ReturnType<typeof updateCompanionPersona>>>
+    export type UpdateCompanionPersonaMutationBody = CompanionPersonaUpdateSchema
+    export type UpdateCompanionPersonaMutationError = HTTPValidationError
+    export type UpdateCompanionPersonaMutationVariables = {companionRef: string;data: CompanionPersonaUpdateSchema;params?: UpdateCompanionPersonaParams}
+
+    /**
+ * @summary Update Companion Persona
+ */
+export const useUpdateCompanionPersona = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCompanionPersona>>, TError,UpdateCompanionPersonaMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateCompanionPersona>>,
+        TError,
+        UpdateCompanionPersonaMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateCompanionPersonaMutationOptions(options), queryClient);
     }
     export const getDeleteCompanionUrl = (companionId: number,) => {
 

@@ -920,6 +920,55 @@ The agent tool `companion_action` (`{action, note?}`) is read-only and needs no
 approval. It returns `{ok, action, note}` in the tool-result data so the browser
 can play the gesture; it touches no archive data.
 
+### Companion stories: persona and lore
+
+Each companion has a story in two layers. The **persona** is its voice; the
+**lore** is its own memories. Presets ship them as files under
+`app/module/companion/lore/`: `<id>.json` is the canonical English story (it
+owns fragment ids, tiers, and themes), `zh-TW/<id>.json` and `zh-CN/<id>.json`
+may override `name`, `persona`, and each fragment's `text` with the same ids,
+falling back to English per item. `vocabulary.json` maps themes to multilingual
+keywords so a Chinese query can find English-themed lore.
+
+- **Persona.** When a conversation is created, the account's enabled companion
+  (the selection, or the flagship `preset:vellum`) is frozen into `pi.system` as
+  a final `companion_persona` section: the persona, then the rules that outrank
+  it (grounding and citations, never inventing the Keeper's memories, safety,
+  dropping the voice on request). `data.companion` records `{ref, name, locale}`.
+  `POST /api/v1/agent/conversations` takes an optional `locale`
+  (`en`, `zh-TW`, `zh-CN`). A disabled companion adds nothing. Saved-question
+  answers never carry a persona.
+- **Lore recall.** `search_knowledge` in a conversation with a frozen companion
+  offers at most two unlocked fragments in a separate
+  `<librarian_memories>` block after every archive source, with the guidance
+  that they are the librarian's own memories and never evidence. Tool data
+  carries them as `lore: [{id, tier, text}]`; they are never in the source
+  lists or the citation vocabulary. Scoring combines theme/word overlap with the
+  account's embedder (fragment vectors cached in process; the query counts
+  against the embedding allowance). A question about the librarian, the other
+  librarians, or the Archive lowers the threshold so it can tell its own story.
+  How often a memory is woven in is left to the model.
+- **Tiers.** `first` is always eligible; `familiar` opens after 5 completed runs
+  with that companion and `rare` after 20. `companion_bond` counts completed
+  runs per companion reference (best-effort, after the run is settled) and
+  stamps when each tier opened.
+- **Editing.** Accounts edit per locale, copy-on-write: the first lore edit
+  copies that locale's defaults into `companion_lore_fragment` rows; reset
+  deletes the copy. A custom companion's story is its rows, falling back from
+  the requested locale to English and then to any locale the owner wrote; it is
+  deleted with the companion. Persona ≤ 4000 characters, fragment ≤ 2000,
+  ≤ 200 fragments per companion.
+
+| Method | Path (`?locale=en\|zh-TW\|zh-CN`) | Operation id |
+|---|---|---|
+| GET/PUT/DELETE | `/api/v1/companions/stories/{companion_ref}/persona` | `getCompanionPersona` / `updateCompanionPersona` / `resetCompanionPersona` |
+| GET/POST | `/api/v1/companions/stories/{companion_ref}/lore` | `listCompanionLore` / `createCompanionLore` |
+| PATCH/DELETE | `/api/v1/companions/stories/{companion_ref}/lore/{fragment_id}` | `updateCompanionLore` / `deleteCompanionLore` |
+| POST | `/api/v1/companions/stories/{companion_ref}/lore/reset` | `resetCompanionLore` |
+
+Errors: `companion_not_found` (unknown or foreign reference),
+`companion_lore_not_found`, `companion_lore_limit`, and `400 invalid_request`.
+
 ### Tool result preview data
 
 `pi.tool-result.data` is UI-only and is never sent to the provider. It contains

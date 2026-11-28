@@ -7,7 +7,10 @@ from app.module.companion.exception.domain_error import (
     CompanionFrameUnsupportedError,
     CompanionInvalidError,
     CompanionLimitError,
+    CompanionLoreLimitError,
+    CompanionLoreNotFoundError,
     CompanionNotFoundError,
+    CompanionRefNotFoundError,
     CompanionStorageError,
 )
 from app.shared.exception.registry import ExceptionRegistry
@@ -26,6 +29,9 @@ def register_exceptions() -> None:
         "companion_frame_unsupported",
     )
     ExceptionRegistry.register(CompanionInvalidError, 422, "companion_invalid")
+    ExceptionRegistry.register(CompanionRefNotFoundError, 404, "companion_not_found")
+    ExceptionRegistry.register(CompanionLoreNotFoundError, 404, "companion_lore_not_found")
+    ExceptionRegistry.register(CompanionLoreLimitError, 409, "companion_lore_limit")
     ExceptionRegistry.register(CompanionStorageError, 503, "companion_storage_unavailable")
 
 
