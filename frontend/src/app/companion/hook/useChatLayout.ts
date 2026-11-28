@@ -13,6 +13,7 @@ export const CHAT_LAYOUT_SELECTORS = {
   composer: ".chat-composer-dock",
   column: ".chat-stream__inner",
   scroller: ".chat-stream__scroll",
+  content: ".app-main",
 } as const;
 
 const POLL_MS = 450;
@@ -73,6 +74,7 @@ function measure(): ChatLayoutSnapshot {
       panel: rectOf(CHAT_LAYOUT_SELECTORS.panel),
       composer: rectOf(CHAT_LAYOUT_SELECTORS.composer),
       column: visibleColumn(),
+      content: rectOf(CHAT_LAYOUT_SELECTORS.content),
     },
     dialogOpen: isDialogOpen(),
   };
@@ -97,7 +99,8 @@ function sameSnapshot(a: ChatLayoutSnapshot, b: ChatLayoutSnapshot): boolean {
     a.context.viewport.height === b.context.viewport.height &&
     sameRect(a.context.panel, b.context.panel) &&
     sameRect(a.context.composer, b.context.composer) &&
-    sameRect(a.context.column, b.context.column)
+    sameRect(a.context.column, b.context.column) &&
+    sameRect(a.context.content ?? null, b.context.content ?? null)
   );
 }
 
