@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Literal, Protocol
 
 from app.module.agent.domain.history_domain import HistoryMessageRead
+from app.module.agent.protocol.companion_protocol import LibrarianMemoryRecallProtocol
 from app.module.knowledge.schema.file_schema import FileChunksSchema, FileSchema, PathListingSchema
 from app.module.knowledge.schema.memory_schema import (
     MemoryReadSchema,
@@ -139,6 +140,8 @@ class AgentToolServices:
     timeline_service: TimelineToolServiceProtocol
     history_service: HistoryToolServiceProtocol
     web_research_service: WebResearchServiceProtocol
+    # Present only when the conversation froze a companion persona.
+    librarian_memory: LibrarianMemoryRecallProtocol | None = None
 
 
 class ToolServiceScopeProtocol(Protocol):

@@ -34,7 +34,9 @@ from app.module.agent.domain.tool_args import (
 # Composition changed, so the new-conversation prefix changes; existing
 # conversations keep their frozen ``pi.system`` and old version string, so their
 # KV cache lineage is untouched. v15 adds the companion_action guidance line.
-PROMPT_VERSION = "archive-agent-v15"
+# v16 adds the optional companion persona section (persona, then the rules that
+# outrank it) frozen per conversation.
+PROMPT_VERSION = "archive-agent-v16"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -49,7 +51,9 @@ PROMPT_VERSION = "archive-agent-v15"
 # enforces them. v14 adds per-result content_chars/excerpt_chars/excerpt_truncated
 # and the trailing <search_hint> to web_search. Existing conversations keep their
 # frozen pi.system snapshot. v15 adds the read-only companion_action gesture tool.
-TOOLS_VERSION = "archive-tools-v15"
+# v16 lets search_knowledge return the companion's own lore in a separate
+# <librarian_memory> block that is never an archive source.
+TOOLS_VERSION = "archive-tools-v16"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -98,7 +102,11 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "past conversation windows. Use this before making factual claims. "
             "Results carry source labels such as [file:10#2], [memory:7], and "
             "[history:123]. A history hit is a raw 256-character window; use "
-            "history_message with its id when the excerpt is not enough."
+            "history_message with its id when the excerpt is not enough. When "
+            "you speak as a librarian companion, the result may also carry up "
+            "to two of your own memories in <librarian_memory> blocks; they "
+            "are not archive sources and are never cited. Search with a "
+            "question about yourself or the Archive to recall your own story."
         ),
         args_model=SearchKnowledgeArgs,
     ),

@@ -53,6 +53,7 @@ from app.module.agent.domain.compaction_domain import (
     estimate_provider_context_tokens,
     render_compaction_prompt,
 )
+from app.module.agent.domain.companion_persona_domain import CompanionPersona
 from app.module.agent.domain.context_domain import build_context, render_tool_result
 from app.module.agent.domain.plot_spec_domain import PlotLimits
 from app.module.agent.domain.tool_args import MAX_EXPRESSION_CHARS
@@ -92,6 +93,7 @@ from app.module.agent.protocol.chat_generator_protocol import (
     ChatResult,
     ChatToolCall,
 )
+from app.module.agent.protocol.companion_protocol import CompanionRunObserverProtocol
 from app.module.agent.protocol.usage_quota_protocol import AgentQuotaProtocol
 from app.module.agent.schema.agent_schema import (
     AgentApprovalSchema,
@@ -265,6 +267,7 @@ class AgentService:
         quota: AgentQuotaProtocol | None = None,
         model_plan: AgentModelPlanProtocol | None = None,
         model_status: str = "assigned",
+        companion_runs: CompanionRunObserverProtocol | None = None,
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -275,6 +278,7 @@ class AgentService:
         self.system_prompt_service = system_prompt_service
         self.chat_attachments = chat_attachments
         self.server_timezone = server_timezone
+        self.companion_runs = companion_runs
         # Provider availability is resolved by the composition root from the
         # account assignment. They are safe names only; keys and base URLs never
         # reach the agent service.
@@ -299,6 +303,36 @@ class AgentService:
         # ignored once a real response reports it.
         self._prompt_token_floor = 0
 
+    async def _complete_run(
+        self,
+        *,
+        conversation_id: int,
+        run_id: int,
+        last_entry_id: int | None,
+    ) -> None:
+        """Settle a completed run, then count it toward the companion bond.
+
+        The bond is best-effort: a failure there is logged and never turns a
+        finished answer into a failed run.
+        """
+        await self.repository.complete_run(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            last_entry_id=last_entry_id,
+            now=utcnow(),
+        )
+        if self.companion_runs is None:
+            return
+        try:
+            await self.companion_runs.run_completed(conversation_id)
+        except Exception:
+            logger.warning(
+                "companion bond update failed conversation_id=%s run_id=%s",
+                conversation_id,
+                run_id,
+                exc_info=True,
+            )
+
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
             raise AgentUsageLimitExceededError()
@@ -308,6 +342,7 @@ class AgentService:
         payload: AgentConversationCreateSchema,
         *,
         user_profile: UserProfile | None = None,
+        companion: CompanionPersona | None = None,
     ) -> AgentConversationSchema:
         provider = payload.provider or self.default_provider
         if provider not in {"deepseek", "openai-compatible", "anthropic"}:
@@ -320,6 +355,7 @@ class AgentService:
             model=model,
             sections=sections,
             user_profile=user_profile,
+            companion=companion,
         )
         system_model = build_system_model(system_data)
         conversation, _entry = await self.repository.create_conversation(
@@ -1422,11 +1458,10 @@ class AgentService:
                 )
 
                 if not result.tool_calls:
-                    await self.repository.complete_run(
+                    await self._complete_run(
                         conversation_id=conversation_id,
                         run_id=run_id,
                         last_entry_id=last_entry_id,
-                        now=utcnow(),
                     )
                     logger.info(
                         "agent run completed run_id=%s conversation_id=%s "
@@ -2319,11 +2354,10 @@ class AgentService:
                 "finish_reason": "stop",
             },
         )
-        await self.repository.complete_run(
+        await self._complete_run(
             conversation_id=conversation_id,
             run_id=run_id,
             last_entry_id=entry.id,
-            now=utcnow(),
         )
         logger.info(
             "agent run completed run_id=%s conversation_id=%s step=%d "
@@ -2458,11 +2492,10 @@ class AgentService:
                 "finish_reason": finish_reason,
             },
         )
-        await self.repository.complete_run(
+        await self._complete_run(
             conversation_id=conversation_id,
             run_id=run_id,
             last_entry_id=entry.id,
-            now=utcnow(),
         )
         logger.info(
             "agent run completed run_id=%s conversation_id=%s step=%s "

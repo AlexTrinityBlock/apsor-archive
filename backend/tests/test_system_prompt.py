@@ -178,10 +178,12 @@ def test_system_prompt_module_and_section_order(
     # ------------------------------------------------------------------
     conversation_id = _create_conversation(client, "Ordered sections")
     system_entry = _system_entry(client, conversation_id)
+    # The account's default companion persona is appended after every row.
     assert _section_names(system_entry) == [
-        f"system_prompt:{section_id}" for section_id in reordered_ids
+        *(f"system_prompt:{section_id}" for section_id in reordered_ids),
+        "companion_persona",
     ]
-    assert system_entry["data"]["prompt_version"] == "archive-agent-v15"
+    assert system_entry["data"]["prompt_version"] == "archive-agent-v16"
     sections = system_entry["data"]["sections"]
     assert sections[0] == {
         "name": f"system_prompt:{late_id}",
