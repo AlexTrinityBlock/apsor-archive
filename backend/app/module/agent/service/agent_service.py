@@ -59,8 +59,12 @@ from app.module.agent.domain.companion_context_domain import (
     signal_text,
 )
 from app.module.agent.domain.companion_persona_domain import (
+    COMPANION_HANDOFF_KEY,
     COMPANION_PERSONA_HEADING,
+    COMPANION_SWITCH_KEY,
     CompanionPersona,
+    render_handoff,
+    switch_record,
 )
 from app.module.agent.domain.context_domain import (
     build_context,
@@ -109,6 +113,7 @@ from app.module.agent.protocol.chat_generator_protocol import (
 )
 from app.module.agent.protocol.companion_protocol import (
     CompanionContextContributorProtocol,
+    CompanionHandoffProtocol,
     CompanionRunObserverProtocol,
     ContextContribution,
     ContextSignal,
@@ -288,6 +293,7 @@ class AgentService:
         model_status: str = "assigned",
         companion_runs: CompanionRunObserverProtocol | None = None,
         companion_context: CompanionContextContributorProtocol | None = None,
+        companion_handoff: CompanionHandoffProtocol | None = None,
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -300,6 +306,10 @@ class AgentService:
         self.server_timezone = server_timezone
         self.companion_runs = companion_runs
         self.companion_context = companion_context
+        self.companion_handoff = companion_handoff
+        # Whether the run this instance drives speaks as a companion (resolved at
+        # run start from the latest handoff, else the frozen system entry).
+        self._companion_active: bool | None = None
         # Per-run companion state for the run this service instance drives;
         # every tool result of the run shares it.
         self._companion_turn: CompanionTurnContext | None = None
@@ -407,6 +417,51 @@ class AgentService:
                     exc_info=True,
                 )
         return offered
+
+    async def _current_companion_active(self, conversation_id: int) -> bool | None:
+        """Return whether the conversation speaks as a companion now; ``None`` if unknown."""
+        if self.companion_handoff is None:
+            return None
+        try:
+            return await self.companion_handoff.current(conversation_id) is not None
+        except Exception:
+            logger.warning(
+                "companion lookup failed conversation_id=%s",
+                conversation_id,
+                exc_info=True,
+            )
+            return None
+
+    async def _companion_handoff(
+        self,
+        conversation_id: int,
+    ) -> tuple[dict[str, str | None], str] | None:
+        """Return ``(switch_record, handoff_text)`` when the speaker must change.
+
+        The account may have chosen another companion (or disabled it) since the
+        conversation started. The frozen system entry never changes; the new
+        persona rides on this user message only, and the record makes later turns
+        and the speaker stamp follow the new companion. Best-effort.
+        """
+        if self.companion_handoff is None:
+            return None
+        try:
+            current = await self.companion_handoff.current(conversation_id)
+            locale = current.get("locale") if current is not None else None
+            active = await self.companion_handoff.active(locale)
+        except Exception:
+            logger.warning(
+                "companion handoff lookup failed conversation_id=%s",
+                conversation_id,
+                exc_info=True,
+            )
+            return None
+        current_ref = current.get("ref") if current is not None else None
+        active_ref = active.ref if active is not None else None
+        if current_ref == active_ref:
+            return None
+        previous = current.get("name") if current is not None else None
+        return switch_record(active), render_handoff(active, previous)
 
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
@@ -627,6 +682,9 @@ class AgentService:
         }
         if attachments:
             data["attachments"] = [attachment.to_entry_data() for attachment in attachments]
+        handoff = await self._companion_handoff(conversation_id)
+        if handoff is not None:
+            data[COMPANION_SWITCH_KEY], data[COMPANION_HANDOFF_KEY] = handoff
         contributions = await self._message_contributions(
             conversation_id,
             content=content,
@@ -895,7 +953,12 @@ class AgentService:
     ) -> ProviderContext:
         """Drop withheld tools from the outbound request; the transcript is unchanged."""
         unavailable = await self._unavailable_tool_names(run_id)
-        if not _has_companion_persona(context):
+        has_companion = (
+            self._companion_active
+            if self._companion_active is not None
+            else _has_companion_persona(context)
+        )
+        if not has_companion:
             # Only a conversation with a companion has own memories to recall.
             unavailable = unavailable | {COMPANION_MEMORY_TOOL}
         self._withheld_tools = tuple(sorted(unavailable))
@@ -1200,6 +1263,7 @@ class AgentService:
         conversation_id = turn.conversation.id
         run_id = turn.run.id
         self._companion_turn = _companion_turn(turn)
+        self._companion_active = await self._current_companion_active(conversation_id)
         # The reported prompt floor is scoped to this run. A resumed approval
         # starts a fresh loop snapshot, so it re-learns the floor from the first
         # successful call in the resumed segment.

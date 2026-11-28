@@ -589,6 +589,26 @@ class _CompanionPersonaLoader:
         )
 
 
+class _CompanionHandoff:
+    """Resolve a conversation's current companion and the account's choice."""
+
+    def __init__(self, database: Database, state: State, *, user_id: int, role: str) -> None:
+        self.database = database
+        self.state = state
+        self.user_id = user_id
+        self.role = role
+        self.loader = _CompanionPersonaLoader(database, state, user_id=user_id, role=role)
+
+    async def current(self, conversation_id: int) -> dict[str, str] | None:
+        async with self.database.user_session(self.user_id, self.role) as session:
+            return await CompanionContextRepository(session, self.user_id).current(
+                conversation_id
+            )
+
+    async def active(self, locale: str | None) -> CompanionPersona | None:
+        return await self.loader(locale)
+
+
 class _CompanionRunObserver:
     """Count completed runs toward the conversation companion's bond."""
 
@@ -816,6 +836,12 @@ def get_agent_service(
         quota=AccountQuotaService(database, user.user_id),
         companion_runs=companion_observer,
         companion_context=_MessageContextContributor(
+            database,
+            request.app.state,
+            user_id=user.user_id,
+            role=user.role,
+        ),
+        companion_handoff=_CompanionHandoff(
             database,
             request.app.state,
             user_id=user.user_id,

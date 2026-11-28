@@ -106,6 +106,20 @@ class CompanionPersonaLoaderProtocol(Protocol):
     async def __call__(self, locale: str | None) -> CompanionPersona | None: ...
 
 
+class CompanionHandoffProtocol(Protocol):
+    """Who speaks in a conversation now, and who the account has chosen.
+
+    ``current`` returns ``{ref, name, locale}`` of the conversation's current
+    companion (latest handoff, else the one frozen at creation) or ``None`` for
+    the plain archive assistant. ``active`` resolves the account's chosen
+    companion persona for ``locale`` or ``None`` when the companion is disabled.
+    """
+
+    async def current(self, conversation_id: int) -> dict[str, str] | None: ...
+
+    async def active(self, locale: str | None) -> CompanionPersona | None: ...
+
+
 class CompanionRunObserverProtocol(Protocol):
     """Count a completed run toward the conversation companion's bond."""
 
@@ -114,6 +128,7 @@ class CompanionRunObserverProtocol(Protocol):
 
 __all__ = [
     "CompanionContextContributorProtocol",
+    "CompanionHandoffProtocol",
     "CompanionIdentity",
     "CompanionOwnMemoriesProtocol",
     "CompanionPersonaLoaderProtocol",

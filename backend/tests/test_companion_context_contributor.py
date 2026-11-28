@@ -102,9 +102,19 @@ def test_render_contributions_is_one_block_with_guidance_once() -> None:
 
 
 def test_user_suffixes_keep_their_order_and_read_the_legacy_key() -> None:
-    assert USER_SUFFIX_KEYS == ("time_context", "companion_context", "story_moment")
-    data = {"story_moment": "legacy", "time_context": "time", "companion_context": "lore"}
-    assert merge_user_suffixes(data) == ["time", "lore", "legacy"]
+    assert USER_SUFFIX_KEYS == (
+        "time_context",
+        "companion_handoff",
+        "companion_context",
+        "story_moment",
+    )
+    data = {
+        "story_moment": "legacy",
+        "time_context": "time",
+        "companion_context": "lore",
+        "companion_handoff": "handoff",
+    }
+    assert merge_user_suffixes(data) == ["time", "handoff", "lore", "legacy"]
     assert merge_user_suffixes(None) == []
     assert signal_text("<a>Hello</a>", None, "  world ") == "Hello world"
 
