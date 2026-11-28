@@ -197,6 +197,10 @@ export const router = createBrowserRouter([
         children: [
           { path: "dashboard", element: <DashboardPage /> },
           { path: "overview", element: <Navigate to="/dashboard" replace /> },
+          // Sign-in is rendered by AuthGate on any path; these common URLs
+          // land on the archive home once the session exists.
+          { path: "login", element: <Navigate to="/" replace /> },
+          { path: "signin", element: <Navigate to="/" replace /> },
           { path: "search", element: <SearchPage /> },
           { path: "timeline", element: <TimelinePage /> },
           { path: "library/*", element: <LibraryPage /> },

@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { renderAsync } from "docx-preview";
 
 import { ChunkFallback } from "./ChunkFallback";
-import { DOCX_FRAME, DOCX_OPTIONS, hardenFrame } from "./docx-config";
+import { DOCX_FRAME, DOCX_OPTIONS, fitDocxPages, hardenFrame } from "./docx-config";
+import { restoreNativeFileReader } from "../../../lib/native-file-reader";
 import { ViewerErrorState, ViewerLoading } from "./ViewerStates";
 import { fetchViewerBinary, fileDownloadUrl } from "./viewer-utils";
 import { useI18n } from "../../i18n";
@@ -55,21 +56,34 @@ export function DocxView({ fileId, fileUrl, fileName, totalChunks }: DocxViewPro
     body.replaceChildren();
     head.querySelectorAll("style").forEach((style) => style.remove());
 
+    let rendered = false;
+    let fittedWidth = -1;
     const resize = () => {
       if (!cancelled) {
-        iframe.style.height = `${Math.min(20_000, Math.max(480, body.scrollHeight + 24))}px`;
+        // Refit only when the frame width changes, so the zoom change itself
+        // does not feed back into the observer.
+        if (rendered && iframe.clientWidth !== fittedWidth) {
+          fittedWidth = iframe.clientWidth;
+          fitDocxPages(frameDocument, fittedWidth);
+        }
+        // The bounding box includes the fit zoom; scrollHeight would not.
+        const height = Math.ceil(body.getBoundingClientRect().height);
+        iframe.style.height = `${Math.min(20_000, Math.max(320, height + 24))}px`;
       }
     };
     const observer = new ResizeObserver(resize);
     observer.observe(body);
+    observer.observe(iframe);
 
     const source = binaryQuery.data.slice(0);
+    restoreNativeFileReader();
     void renderAsync(source, body, head, { ...DOCX_OPTIONS })
       .then(() => {
         if (cancelled) {
           return;
         }
         hardenFrame(frameDocument);
+        rendered = true;
         setRendering(false);
         window.requestAnimationFrame(resize);
       })

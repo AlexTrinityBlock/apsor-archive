@@ -1,5 +1,7 @@
 import type { PPTXViewer as PptxViewerInstance } from "pptxviewjs";
 
+import { importPptxViewer, restoreNativeFileReader } from "../../../../lib/native-file-reader";
+
 import {
   fetchViewerBinary,
   fileContentUrl,
@@ -128,7 +130,7 @@ export async function renderPptxThumb(
   let canvas: HTMLCanvasElement | null = null;
 
   const render = async (): Promise<string> => {
-    const { PPTXViewer } = await import("pptxviewjs");
+    const { PPTXViewer } = await importPptxViewer();
     signal.throwIfAborted();
 
     const instance = new PPTXViewer({
@@ -141,6 +143,7 @@ export async function renderPptxThumb(
     });
     viewer = instance;
     await instance.loadFile(buffer);
+    restoreNativeFileReader();
     signal.throwIfAborted();
 
     if (instance.getSlideCount() <= 0) {
@@ -164,6 +167,7 @@ export async function renderPptxThumb(
     document.body.appendChild(element);
 
     await instance.render(element, { slideIndex: 0 });
+    restoreNativeFileReader();
     signal.throwIfAborted();
 
     const dataUrl = element.toDataURL("image/webp", SLIDE_QUALITY);

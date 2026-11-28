@@ -14,6 +14,7 @@ import { ChunkFallback } from "./ChunkFallback";
 import { ViewerErrorState, ViewerLoading } from "./ViewerStates";
 import { fetchViewerBinary, fileDownloadUrl } from "./viewer-utils";
 import { useElementWidth } from "./useElementWidth";
+import { importPptxViewer, restoreNativeFileReader } from "../../../lib/native-file-reader";
 
 interface PptxViewProps {
   readonly fileId: number;
@@ -88,7 +89,7 @@ export function PptxView({ fileId, fileUrl, fileName, totalChunks }: PptxViewPro
     let cancelled = false;
     let viewer: PptxViewerInstance | null = null;
 
-    void import("pptxviewjs")
+    void importPptxViewer()
       .then(async ({ PPTXViewer }) => {
         if (cancelled) {
           return;
@@ -105,6 +106,7 @@ export function PptxView({ fileId, fileUrl, fileName, totalChunks }: PptxViewPro
         });
         viewerRef.current = viewer;
         await viewer.loadFile(data);
+        restoreNativeFileReader();
         if (cancelled || viewerRef.current !== viewer) {
           return;
         }
@@ -154,6 +156,7 @@ export function PptxView({ fileId, fileUrl, fileName, totalChunks }: PptxViewPro
     void viewer
       .render(canvas, { slideIndex })
       .then(() => {
+        restoreNativeFileReader();
         if (cancelled) {
           return;
         }
