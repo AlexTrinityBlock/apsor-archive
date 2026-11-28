@@ -287,6 +287,59 @@ class ChunkRepository:
             .values(embedding=embedding, embedding_model=model, updated_at=func.now())
         )
 
+    async def list_pending_embeddings(
+        self,
+        *,
+        after_id: int,
+        limit: int,
+        max_failures: int,
+    ) -> list[ChunkModel]:
+        """List this owner's chunks still waiting for a vector, by id.
+
+        Pending means ``embedding IS NULL`` with fewer than ``max_failures``
+        text-specific failures. Current and historical rows both qualify because
+        ``include_history`` searches reach both. Keyset pagination keeps a
+        concurrent insert or soft-delete from shifting the batch.
+        """
+        statement = (
+            select(ChunkModel)
+            .where(
+                ChunkModel.user_id == self.user_id,
+                ChunkModel.id > after_id,
+                ChunkModel.embedding.is_(None),
+                ChunkModel.embedding_failures < max_failures,
+            )
+            .order_by(ChunkModel.id)
+            .limit(limit)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def count_pending_embeddings(self, *, max_failures: int) -> int:
+        """Count this owner's chunks still waiting for a vector."""
+        statement = select(func.count(ChunkModel.id)).where(
+            ChunkModel.user_id == self.user_id,
+            ChunkModel.embedding.is_(None),
+            ChunkModel.embedding_failures < max_failures,
+        )
+        return int((await self.session.execute(statement)).scalar_one())
+
+    async def record_embedding_failure(self, chunk_ids: Sequence[int]) -> None:
+        """Count one text-specific embedding failure on each given chunk."""
+        if not chunk_ids:
+            return
+        await self.session.execute(
+            update(ChunkModel)
+            .where(
+                ChunkModel.user_id == self.user_id,
+                ChunkModel.id.in_(tuple(chunk_ids)),
+                ChunkModel.embedding.is_(None),
+            )
+            .values(
+                embedding_failures=ChunkModel.embedding_failures + 1,
+                updated_at=func.now(),
+            )
+        )
+
     @staticmethod
     def _source_filters(
         source_kinds: Sequence[str] | None,

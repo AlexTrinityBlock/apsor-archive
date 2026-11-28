@@ -43,6 +43,7 @@ from app.module.companion.dependencies import (
 from app.module.companion.service.life_story_worker import LifeStoryWorker
 from app.module.companion.service.lore_vectors import LoreVectorWarmer
 from app.module.knowledge.dependencies import (
+    build_embedding_backfill,
     build_history_chunk_store,
     build_ingest_worker,
     build_job_consumer,
@@ -52,6 +53,7 @@ from app.module.knowledge.dependencies import (
     load_ingest_runtime_config,
     reload_ai_runtime,
 )
+from app.module.knowledge.service.embedding_backfill import EmbeddingBackfill
 from app.module.knowledge.service.ingest_job_service import IngestWorker
 from app.module.knowledge.service.provider_error_notice_service import (
     ProviderErrorNoticeService,
@@ -158,10 +160,11 @@ class BackgroundServices:
     history_indexer: AgentHistoryIndexer
     lore_warmer: LoreVectorWarmer | None = None
     consumer: RabbitMQJobConsumer | None = None
-    # Only the dedicated worker process starts the backfill (see worker.py).
+    # Only the dedicated worker process starts the backfills (see worker.py).
     thumbnail_backfill: FileThumbnailBackfill | None = None
     # --- C: life stories --- written only by the dedicated worker.
     life_stories: LifeStoryWorker | None = None
+    embedding_backfill: EmbeddingBackfill | None = None
     _tasks: list[asyncio.Task[None]] = field(default_factory=list)
 
     def _spawn(self, coroutine: Coroutine[Any, Any, None], name: str) -> None:
@@ -192,6 +195,14 @@ class BackgroundServices:
         """Start the life-story writer loop (dedicated worker only)."""
         if self.life_stories is not None:
             self._spawn(self.life_stories.run_forever(stop_event), "companion-life-stories")
+
+    def start_embedding_backfill(self, stop_event: asyncio.Event | None) -> None:
+        """Start the pending-embedding backfill loop (dedicated worker only)."""
+        if self.embedding_backfill is not None:
+            self._spawn(
+                self.embedding_backfill.run_forever(stop_event),
+                "embedding-backfill",
+            )
 
     def start_worker_loop(self) -> None:
         """Run the ingestion poller as a background task (API dev mode)."""
@@ -238,6 +249,11 @@ async def build_background_services(state: State, settings: Settings) -> Backgro
         thumbnail_backfill=(
             build_thumbnail_backfill(state, database)
             if settings.thumbnail_backfill_enabled
+            else None
+        ),
+        embedding_backfill=(
+            build_embedding_backfill(state, database)
+            if settings.embedding_backfill_enabled
             else None
         ),
     )

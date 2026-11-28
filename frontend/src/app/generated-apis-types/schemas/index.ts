@@ -107,6 +107,7 @@ export * from './createCompanionLoreParams';
 export * from './deleteCompanionLoreLocale';
 export * from './deleteCompanionLoreParams';
 export * from './directorySchema';
+export * from './embeddingBackfillStatusSchema';
 export * from './embeddingReindexSchema';
 export * from './fileChunksSchema';
 export * from './fileCopySchema';

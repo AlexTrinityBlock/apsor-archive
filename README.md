@@ -1730,10 +1730,33 @@ corpus.
    `history_message`. Deleted conversations are marked non-current and disappear
    from this lane.
 
-If vector recall is unavailable, search still returns BM25 results. Synchronous
-ingestion keeps a chunk text-only when its embedding call fails within the
-retry budget; the durable worker treats an exhausted embedding retry as a job
-failure, so no partial file is published.
+If vector recall is unavailable, search still returns BM25 results. An
+embedding failure never loses a passage: when the provider is out of credits
+(for example OpenAI `insufficient_quota`), rejects the key, is unreachable, or
+the account's embedding allowance is spent, every ingestion path (durable
+worker jobs, synchronous text, Markdown edits, memories, summaries, and
+conversation history) still stores the chunk's text and n-grams, so keyword
+search finds it at once, and leaves its vector *pending* (`embedding IS NULL`).
+The dedicated worker's `EmbeddingBackfill` loop
+(`APSOR_EMBEDDING_BACKFILL_ENABLED`, on by default) fills pending vectors in
+automatically:
+
+- Provider failures (billing, quota, authentication, rate limits, outages)
+  pause the loop with exponential backoff up to 30 minutes and never count
+  against a passage. It resumes on its own after the backoff, immediately when
+  the embedding provider configuration changes, or when root presses
+  **Retry now** in the system notices after recharging.
+- An account whose own embedding allowance is spent is skipped until root raises
+  the grant or the period resets; the backfill records usage like any other
+  embedding.
+- A passage the provider rejects as input (HTTP 400/413/422) is retried alone
+  up to five times and then left keyword-only.
+
+Root sees the pending count, the worker state, and the next retry time in the
+system notices (`GET /api/v1/system/embedding-backfill`; `POST
+/api/v1/system/embedding-backfill/retry`). Only a provider refresh that would
+switch model or dimension in the middle of a durable job still fails that job,
+so one file never mixes two vector spaces.
 
 ### Do I need an embedding model key?
 

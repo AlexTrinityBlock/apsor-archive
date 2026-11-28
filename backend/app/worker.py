@@ -20,7 +20,10 @@ default). Pure-Python CPU-bound work can later move to a process pool; the job,
 lease, and progress contracts do not depend on the executor type.
 
 Only this process backfills WebP thumbnails for files that predate them
-(``APSOR_THUMBNAIL_BACKFILL_ENABLED``); the API never starts that loop.
+(``APSOR_THUMBNAIL_BACKFILL_ENABLED``) and fills in chunk embeddings left
+pending by provider outages, billing or quota failures, or a spent account
+allowance (``APSOR_EMBEDDING_BACKFILL_ENABLED``); the API never starts those
+loops.
 """
 
 import argparse
@@ -86,10 +89,15 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                     if services.lore_warmer is not None
                     else 0
                 )
+                embeddings = (
+                    (await services.embedding_backfill.run_once()).embedded
+                    if services.embedding_backfill is not None
+                    else 0
+                )
                 logger.info(
                     "Worker --once finished; processed=%s attachments_removed=%s "
                     "history_examined=%s history_indexed=%s thumbnails=%s lore_vectors=%s "
-                    "life_stories=%s",
+                    "life_stories=%s embeddings_backfilled=%s",
                     processed,
                     removed,
                     history_batch.examined,
@@ -97,11 +105,13 @@ async def run_worker(settings: Settings, *, once: bool = False) -> None:
                     thumbnails,
                     lore_vectors,
                     life_stories,
+                    embeddings,
                 )
             else:
                 services.start_side_loops(settings, stop_event)
                 services.start_thumbnail_backfill(stop_event)
                 services.start_life_stories(stop_event)
+                services.start_embedding_backfill(stop_event)
                 await services.worker.run_forever(stop_event)
         finally:
             await services.stop()

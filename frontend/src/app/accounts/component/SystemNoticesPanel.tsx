@@ -16,6 +16,7 @@ import type {
   ProviderErrorNoticeListSchema,
 } from "../../generated-apis-types/schemas";
 import { useApiErrorMessage, useI18n, type Translate } from "../../i18n";
+import { EmbeddingBackfillNotice } from "./EmbeddingBackfillNotice";
 
 function capabilityLabel(
   capability: ProviderErrorNoticeReadSchema["capability"],
@@ -247,6 +248,7 @@ export function SystemNoticesPanel() {
         </div>
       }
     >
+      <EmbeddingBackfillNotice />
       {body}
     </Panel>
   );

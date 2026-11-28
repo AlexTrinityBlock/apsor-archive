@@ -94,6 +94,10 @@ from app.module.knowledge.repository.provider_config_repository import (
 from app.module.knowledge.repository.stats_repository import StatsRepository
 from app.module.knowledge.repository.summary_repository import SummaryRepository
 from app.module.knowledge.service.ai_service import AiService
+from app.module.knowledge.service.embedding_backfill import EmbeddingBackfill
+from app.module.knowledge.service.embedding_backfill_status import (
+    EmbeddingBackfillStatusService,
+)
 from app.module.knowledge.service.file_service import CpuRunner, FileService
 from app.module.knowledge.service.history_chunk_store import HistoryChunkStore
 from app.module.knowledge.service.indexer_service import IndexerService
@@ -869,6 +873,39 @@ def get_provider_config_service(
         chunk_repository_factory=ChunkRepository,
         cache=get_cache(request),
         tester=cast(ProviderTesterProtocol, tester),
+    )
+
+
+def get_embedding_backfill_status_service(
+    request: Request,
+) -> EmbeddingBackfillStatusService:
+    """Compose the root status view of the worker's embedding backfill."""
+    return EmbeddingBackfillStatusService(
+        cast(Database, request.app.state.db),
+        cast(CacheProtocol, request.app.state.cache),
+    )
+
+
+def build_embedding_backfill(state: State, database: Database) -> EmbeddingBackfill:
+    """Compose the worker-only loop that fills in pending chunk embeddings.
+
+    The loop refreshes the provider snapshot each cycle (so a recharged key or
+    a new provider takes effect without a restart), uses the account's own
+    embedding allowance, and reaches chunks only through owner-scoped
+    repositories inside ``user_session``.
+    """
+    runtime = cast(AiRuntime, state.ai_runtime)
+
+    def fingerprint() -> object:
+        return tuple(runtime.embedding_chain)
+
+    return EmbeddingBackfill(
+        database=database,
+        embedder_refresh=build_provider_refresh(runtime, database.session_factory),
+        chunk_repository_factory=lambda session, user_id: ChunkRepository(session, user_id),
+        quota_factory=lambda user_id: AccountQuotaService(database, user_id),
+        cache=cast(CacheProtocol, state.cache),
+        fingerprint=fingerprint,
     )
 
 
