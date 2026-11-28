@@ -32,7 +32,7 @@
 - [技术栈](#技术栈)
 - [快速开始](#快速开始)
   - [Docker Compose（常规）](#docker-compose常规)
-  - [对象存储（本地或 R2）](#对象存储本地或-r2)
+  - [对象存储（RustFS、R2、S3 或本地）](#对象存储rustfsr2s3-或本地)
   - [在应用中配置提供商](#在应用中配置提供商)
   - [每个账户的模型分配](#每个账户的模型分配)
   - [网页研究工具](#网页研究工具)
@@ -72,7 +72,7 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 
 > 状态：v0.1.0 — 文件/记忆档案、root 加每用户账户、持久化的 Pi 形态
 > agent（运行时限制由数据库支撑）、压缩、并行工具、SSE 聊天、已保存
-> 问题问答库、持久化异步摄取、专用的 PDF/DOCX/电子表格/图像/文本预览引擎、
+> 问题问答库、持久化异步摄取、专用的 PDF/DOCX/PPTX/电子表格/图像/文本预览引擎、
 > 一个文件夹工作区，以及一个三栏聊天工作区。
 
 ## 亮点
@@ -102,7 +102,9 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 - **记忆是线性的、可追溯的。** 新的判断可以取代旧的判断。
   旧记忆会离开检索界面，但仍可通过其链条读取。
 - **搜索是混合式的。** 基于 CJK 二元组和拉丁词元的 BM25 与向量
-  召回并行运行。结果会去重并融合，同时记录原因。
+  召回并行运行。结果会去重并融合，同时记录原因。过去的对话消息也会以原始的
+  256 字符窗口建立索引；另一条 cosine → BM25 → RRF 通道会返回最佳的 15 个
+  窗口，Agent 可以用稳定的消息 ID 展开任何命中结果。
 - **时间采样是诚实的。** 时间线为每种事件类型最多返回五个锚点，
   并准确报告跳过了多少事件。人类时间线页面则用 `complete=true`
   获取所选窗口的全部事件，并在向下滚动时自动加载更早的窗口。
@@ -112,6 +114,15 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 - **问题比对话更长久。** 可以在还没有答案时保存问题，稍后再提问，
   并把答案、引用、运行状态以及指向对话的链接保留在同一行。编辑问题
   会清除过期的答案，而不是在屏幕上留下一对不匹配的内容。
+- **聊天图像是临时的。** 粘贴到聊天输入框的截图会立即上传（逐张显示字节
+  进度）到当前登录账户的 `users/{user_id}/chat-temp/` 对象存储区，经缩小和
+  重新编码后，列在可移除的临时图像管理器中。在所有选中的图像都保存完成前，
+  无法发送。移除尚未发送的图像或离开聊天，会中止其上传并立即丢弃暂存行；
+  关闭标签页后遗留的暂存图像，会在数据库配置的存活时间（默认一小时）后过期。
+  发送消息时，会先把对象提升到 `users/{user_id}/chat-images/` 再认领该行，
+  因此已发送的图像会一直保留，直到所有者删除。提供商收到的是 OpenAI 兼容的
+  `image_url` 部分。删除聊天图像会移除对象，并在对话记录中留下如实的占位
+  说明。聊天图像不是档案文件，也无法被搜索。
 - **图像保存在文件库中。** 图像是一条普通的文件记录，带有原始字节、
   路径和分块。支持视觉的聊天提供商会补充 OCR、GitHub-Flavored Markdown
   表格和完整的视觉描述；OCR 文本保留原文语言，描述语言与图像／文档提示词
@@ -122,9 +133,9 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
   扫描页系统提示词。保存时只验证九个输出 JSON 键仍然存在；当前模板存放
   在 `ingest_config`。现有文件会保留当前提取结果，直到显式重新摄取并创建
   新的文件版本。
-- **文档自行选择提取器。** PDF 先尝试文本，扫描页则使用文档页模式提取
-  OCR、表格和简短版面说明。DOCX、TXT、JSON、CSV 和日志使用文本，并辅以
-  AI 结构化元数据；图像使用完整图像模式或文件名回退。XLSX、XLS、XLSM 和
+- **文档自行选择提取器。** PDF 先尝试文本，扫描页则回退到视觉提取。DOCX、
+  PPTX、TXT、JSON、CSV 和日志使用文本，并辅以 AI 结构化元数据；图像使用
+  视觉或文件名回退。XLSX、XLS、XLSM 和
   ODS 工作簿会逐工作表读成 Markdown 表格，包含日期、数字、合并标题、隐藏
   工作表和公式回退；它们永远不会进入视觉流程。
 - **界面支持三种语言。** 可以在设置页面切换英语、繁体中文和简体中文。
@@ -136,17 +147,17 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
   缺少查询过滤条件，也无法暴露他人的档案。密码使用 Argon2，会话使用
   HttpOnly cookie。请在自己的机器上运行；只有在具备自己的访问控制时，
   才把它放到 Cloudflare Tunnel 之后。
-- **原始字节可以存放在 Cloudflare R2 中。** `APSOR_STORAGE_BACKEND=local|r2`
-  选择新原始文件的写入位置。读取时遵循每一行记录的存储后端，因此
-  分阶段迁移可以提供混合档案。R2 存储桶是私有的，应用从不签发
-  预签名 URL 或公开 URL。
+- **原始字节存放在 S3 兼容存储中。** 默认是随附的 RustFS 服务；也可以在
+  设置向导中改选 Cloudflare R2、任何 S3 端点或本地磁盘。读取时遵循每一行
+  记录的存储后端，因此分阶段迁移可以提供混合档案。存储桶始终保持私有，
+  应用从不签发预签名 URL 或公开 URL。
 
 ## 技术栈
 
 | 层 | 选择 |
 |---|---|
 | API | Python 3.13、FastAPI、SQLAlchemy 2 async、Alembic、psycopg 3 |
-| 存储 | PostgreSQL 17（`pg_trgm` 用于路径模糊搜索）；原始字节位于本地磁盘或私有 Cloudflare R2 |
+| 存储 | PostgreSQL 17（`pg_trgm` 用于路径模糊搜索）；原始字节位于 RustFS（默认）、Cloudflare R2、任何 S3 兼容存储桶或本地磁盘 |
 | 缓存 | Valkey / Redis 兼容，带内存回退 |
 | 检索 | CJK 二元组 + 拉丁词元 n-gram、BM25、带符号哈希向量、RRF |
 | AI | DeepSeek `deepseek-flash`、Anthropic Claude，或任何 OpenAI 兼容的聊天端点 |
@@ -155,31 +166,27 @@ Apsor Archive 不是一份笔记列表。它是一个为少量、有针对性的
 
 ## 快速开始
 
-> **设置向导：** 不必手写环境变量，运行 `./start.sh setup`（或 `make setup`）
-> 即可。向导会询问公开主机名、存储后端（默认为随附的 **RustFS**，也可选
-> Cloudflare R2、任何 S3 兼容端点或本地磁盘）、会话时长、可选的 DeepSeek
-> 密钥与 Cloudflare Tunnel 令牌，并写出 `.env`、生成 RustFS 与 RabbitMQ 凭据，
-> 不回显任何机密。`./setup.sh --defaults` 以非交互方式运行。摄取由独立的
-> worker 进程负责；`./start.sh` 会同时启动 API 与 worker。完整说明请见英文版
-> [README](README.md)。
-
 ### Docker Compose（生产环境）
 
-生产栈是 **Cloudflare Tunnel → Caddy → API**，不发布任何主机端口。
-请准备 tunnel 令牌、公开主机名和数据目录：
+生产栈是 **Cloudflare Tunnel → Caddy → API + 摄取 worker**，并在私有的 Compose
+网络上运行 PostgreSQL、Valkey、RabbitMQ，以及（默认）随附的 RustFS 对象存储。
+它不发布任何主机端口。
+
+请运行设置向导，而不是手动编写环境变量：
 
 ```bash
-mkdir -p data secrets
-sudo chown -R 10001:10001 data
-# Write the tunnel token; no trailing newline.
-printf '%s' 'your-tunnel-token' > secrets/cf_token.txt
-chmod 755 secrets
-sudo chown 65532 secrets/cf_token.txt && chmod 640 secrets/cf_token.txt
-# The production default is R2; local disk is the simplest first run.
-export APSOR_STORAGE_BACKEND=local
-export APSOR_PUBLIC_HOST=archive.example.com
+./start.sh setup        # or: make setup
+mkdir -p data && sudo chown -R 10001:10001 data
 docker compose up -d --build
 ```
+
+向导会询问公开主机名、存储后端（默认为随附的 **RustFS**，也可选 Cloudflare R2、
+任何 S3 兼容端点或本地磁盘）、会话时长、可选的 DeepSeek 密钥，以及 Cloudflare
+Tunnel 令牌。它会写出非机密的 `.env`，生成 RustFS 与 RabbitMQ 凭据，把粘贴的
+密钥存入 `.secrets/*.env` 与 `secrets/*.txt` 且不回显，除非你确认覆盖，否则保留
+任何现有文件，并打印容器读取机密文件所需的 `sudo chgrp` 命令。
+`./setup.sh --defaults` 以非交互方式运行同一流程（生产环境搭配 RustFS）；加上
+`--dev` 则写出开发用的 `.env`。
 
 把 Cloudflare Tunnel 的公开主机指向 **HTTP `caddy:80`**，然后打开
 `https://$APSOR_PUBLIC_HOST`。请把 `APSOR_PUBLIC_HOST` 放进 `.env`，重启后
@@ -188,8 +195,8 @@ docker compose up -d --build
 更改。新账户还会继承部署的主要聊天端点与模型，因此聊天和后台 AI 可立即
 使用；如果部署没有活动的聊天端点，账户会保持未分配，root 必须先分配。
 PostgreSQL 使用命名卷；本地原始字节和生成的密钥文件位于宿主机的 `./data`
-目录下。生产 Compose 文件默认使用 `APSOR_STORAGE_BACKEND=r2`；其所需凭据见
-[对象存储](#对象存储本地或-r2)，或者为自包含主机保留本地存储。
+目录下。原始文件字节会写入向导所选的后端；请见
+[对象存储](#对象存储rustfsr2s3-或本地)。
 
 > 注意：`./data` 会以绑定挂载方式挂入容器，容器进程以 uid `10001`
 > 运行。请在首次启动前创建该目录并修正其所有者，否则上传和
@@ -221,43 +228,47 @@ docker compose up -d --build
 
 Compose 文件以只读方式挂载 `.secrets/`。应用自己读取该 env 文件，
 因此密钥永远不会成为容器环境变量，也不会出现在
-`docker compose config` 中。由于 API 容器以非 root 用户运行，
-必须使用 `644` 权限。密钥被 gitignore，API 也从不返回它。
+`docker compose config` 中。API 容器以 uid `10001` 运行，因此该文件必须能被
+这个 uid 读取：组 `10001` 搭配权限 `640`，或在单用户主机上使用 `644`。密钥被
+gitignore，API 也从不返回它。
 没有密钥时，摘要会回退到确定性的抽取式形式，图像上传使用
 文件名说明文字，Agent 消息返回 `503 agent_not_configured`。
 
-### 对象存储（本地或 R2）
+### 对象存储（RustFS、R2、S3 或本地）
 
-`APSOR_STORAGE_BACKEND` 为新原始字节选择默认后端：
+`APSOR_STORAGE_BACKEND` 为新原始字节选择默认后端。设置向导会设置它；除了
+`local` 之外，所有选项都使用同一个 S3 兼容适配器。
 
-- `local` 写入 `APSOR_DATA_DIR` 下，是开发和测试的默认值。
-- `r2` 写入私有的 Cloudflare R2 存储桶。两个生产 Compose 文件都
-  默认使用 `r2`；首次启动或回滚时请设置 `APSOR_STORAGE_BACKEND=local`。
+| 值 | 字节写入位置 | 凭据 |
+|---|---|---|
+| `rustfs` | 随附的 RustFS 服务（以 `COMPOSE_PROFILES=rustfs` 启动）。新安装的默认值。 | 由向导生成到 `.secrets/s3.env` 与 `secrets/rustfs_*_key.txt` |
+| `r2` | 私有的 Cloudflare R2 存储桶 | `.secrets/r2.env` |
+| `s3` | 任何 S3 兼容端点（AWS S3、MinIO、另一个 RustFS） | `.secrets/s3.env` |
+| `local` | `APSOR_DATA_DIR`；开发和测试的默认值 | 无 |
+| `auto` | `.secrets/r2.env` 完整时用 R2，否则用 S3，再否则用本地 | — |
 
-非机密的 R2 值是 `APSOR_R2_ENDPOINT_URL`、`APSOR_R2_BUCKET`
-（部署中为 `apsor-archive`）、`APSOR_R2_REGION`（`auto`）和
-`APSOR_R2_PREFIX`。账户端点没有默认值：在使用 `r2` 后端运行之前，
-把 `APSOR_R2_ENDPOINT_URL=https://<account-id>.r2.cloudflarestorage.com`
-放入 Compose 文件旁被 gitignore 的 `.env` 文件，或将其导出。
-凭据位于被 gitignore 的 `.secrets/r2.env`，Compose 以只读方式
-挂载它，应用自己读取，因此它们永远不会成为容器环境变量：
+`rustfs` 是 `s3` 的别名。未设置 `APSOR_STORAGE_BACKEND` 时，生产 Compose 文件会
+使用 `auto`，因此现有的 R2 部署无需修改 `.env` 就会继续写入 R2。每一行都会记录
+保存其字节的后端（`local`、`r2` 或 `s3`），而设置完整的每个后端都保持可读，
+因此分阶段迁移可以提供混合档案。
 
-```bash
-mkdir -p .secrets
-# Fill these in locally; never commit the file.
-printf 'APSOR_R2_ACCESS_KEY_ID=...\nAPSOR_R2_SECRET_ACCESS_KEY=...\n' \
-  > .secrets/r2.env
-chmod 755 .secrets
-# Container uid 10001 needs read access; other host users do not.
-sudo chgrp 10001 .secrets/r2.env
-chmod 640 .secrets/r2.env
-```
+非机密设置放在 `.env`：
 
-该文件必须可被容器 uid `10001` 读取（权限 `640`、组 `10001`，
-或在单用户主机上使用 `644`）。存储桶保持私有：没有预签名 URL，
-没有公开存储桶访问，也不对 `files/` 设置生命周期过期。
-`data/.secret_key` 是 Fernet 主密钥，始终留在本地；请与 PostgreSQL
-分开备份。
+- R2：`APSOR_R2_ENDPOINT_URL`（`https://<account-id>.r2.cloudflarestorage.com`，
+  没有默认值）、`APSOR_R2_BUCKET`（`apsor-archive`）、`APSOR_R2_REGION`
+  （`auto`）、`APSOR_R2_PREFIX`。
+- S3／RustFS：`APSOR_S3_ENDPOINT_URL`（Compose 默认 `http://rustfs:9000`）、
+  `APSOR_S3_BUCKET`（`apsor-archive`）、`APSOR_S3_REGION`（`us-east-1`）、
+  `APSOR_S3_PREFIX`、`APSOR_S3_ADDRESSING_STYLE`（`path` 或 `virtual`），以及
+  `APSOR_S3_CREATE_BUCKET`（首次写入时创建缺失的存储桶；随附的 RustFS 需要它）。
+
+访问密钥绝不放进 `.env` 或容器环境变量。Compose 以只读方式挂载 `.secrets/`，
+由应用自己读取 `r2.env`／`s3.env`；RustFS 容器则以 Docker secrets 读取自己的
+密钥对。它们都以 uid `10001` 运行，因此这些文件需要组 `10001` 与权限 `640`
+（向导会打印 `sudo chgrp` 命令）。存储桶保持私有：没有预签名 URL，没有公开
+访问，也不对 `files/` 设置生命周期过期。`data/.secret_key` 是 Fernet 主密钥，
+始终留在本地；请与 PostgreSQL 分开备份。请把 `apsor-archive_rustfs-data` 卷
+（或外部存储桶）与数据库一起备份为同一组备份。
 
 要把现有档案从本地磁盘迁移到 R2，请停止 API 和 worker，并在
 `backend/` 下运行存储 CLI：
@@ -278,65 +289,80 @@ PostgreSQL 转储、数据目录备份和 R2 存储桶内容作为一个备份�
 
 ### 在应用中配置提供商
 
-设置页面是配置提供商的常规方式，只有 root 账户可以编辑全局注册表。
-它会写入四张独立的能力表，因此一种能力永远不会覆盖另一种：
+设置页面是配置提供商的标准方式，且只有 root 账户能编辑全局注册表。它会写入
+四张相互独立的能力表，因此一种能力永远不会覆盖另一种：
 
-- **聊天** — `chat_provider_config`：DeepSeek、Anthropic Claude 或任何
-  OpenAI 兼容的聊天端点。聊天行是账户所分配的 **端点**；它有一个可选的
+- **聊天** —— `chat_provider_config`：DeepSeek、Anthropic Claude 或任何
+  OpenAI 兼容的聊天端点。聊天行是账户所分配的 **端点**；它有可选的
   `max_output_tokens` 上限（256–131,072）。
-- **嵌入** — `embedding_provider_config`：离线 `hashing`、`openai` 或
-  `openai-compatible`。允许保存多行；恰好有一行处于活动状态。
-- **网页搜索** — `web_search_provider_config`：目前是 Tavily，并为未来
-  的搜索 API 预留提供商适配器接缝。允许保存多行；恰好有一行处于
-  活动状态。
-- **网页抓取** — `web_fetch_provider_config`：目前是 Tavily `extract`。
-  网页搜索和网页抓取刻意分成不同的行，因此它们可以使用不同的
-  提供商或不同的凭据。
+- **嵌入** —— `embedding_provider_config`：离线的 `hashing`、`openai` 或
+  `openai-compatible`。多行可以组成一条链，但每个活动行都必须使用相同的
+  模型和维度。
+- **网页搜索** —— `web_search_provider_config`：Tavily、Exa 或 DeepSeek。
+  多行可以同时处于活动状态，组成一条有序的链。
+- **网页抓取** —— `web_fetch_provider_config`：Tavily `extract`、Exa
+  `contents` 或 DeepSeek `fetch`。网页搜索和网页抓取被刻意分为不同的行，
+  因此它们可以使用不同的提供商或不同的凭据。
 
-每张表都存储从零开始的 `priority`，并在 `priority WHERE is_active` 上有
-部分唯一索引。对嵌入、网页搜索和网页抓取而言，链中的第一行是主行，其余
-是备用行；只有在提供商或传输失败时才会前进到下一行，并且所有行都失败后
-操作才会失败。聊天不同：每个账户分配到一个确切的聊天行，Agent 轮次永远
-不会故障转移到另一个聊天行。嵌入备用行必须与主行使用相同的模型和维度，
-因为混合向量空间会破坏每个所有者的索引。删除一行不会复用其标识 id。
+每张表都存储从零开始的 `priority`，并对 `priority WHERE is_active` 设有部分
+唯一索引。对嵌入、网页搜索和网页抓取而言，链中的第一行是主行，其余是备用；
+只有在提供商或传输失败时才会前进到下一行，且所有行都失败后操作才失败。
+聊天不同：每个账户被分配到一个确切的聊天行，Agent 轮次永远不会故障转移到
+另一个聊天行。嵌入备用必须与主行共享模型和维度，因为混合向量空间会损坏
+每个所有者的索引。删除一行不会复用其身份 ID。
 
-提供商行是全局部署配置：只有 root 账户可以列出、编辑、测试或删除它们，
-普通用户永远不会收到提供商密钥或全局运行时设置。API 从不返回明文密钥：
-浏览器只会收到诸如 `...14f8` 的提示。`APSOR_SECRET_KEY` 提供 Fernet
-主密钥。如果未设置，会在 `data/.secret_key`（Docker 中为
-`/data/.secret_key`）创建一个 `0600` 密钥文件，因此加密值在重启后仍然
-有效。`APSOR_TAVILY_API_KEY` 是两种网页能力的可选环境回退。Anthropic
+提供商行属于全局部署配置：只有 root 账户可以列出、编辑、测试或删除它们，
+普通用户永远不会收到提供商机密或全局运行时设置。API 从不返回明文密钥：
+浏览器只会收到诸如 `...14f8` 的提示。`APSOR_SECRET_KEY` 提供 Fernet 主密钥。
+如果未设置，会在 `data/.secret_key`（Docker 中为 `/data/.secret_key`）创建
+权限为 `0600` 的密钥文件，因此加密值能在重启后保留。`APSOR_TAVILY_API_KEY`
+是两种网页能力可选的环境回退。Exa 密钥可以放在被 gitignore 的
+`.secrets/exa.env` 中，名为 `EXA_API_KEY`（或 `APSOR_EXA_API_KEY`）；加密的
+提供商行仍然优先。聊天所用的同一个 `APSOR_DEEPSEEK_API_KEY` 也是 DeepSeek
+网页搜索和网页抓取提供商的环境回退，因此不需要单独的网页凭据。Anthropic
 密钥可以放在 `.secrets/anthropic.env` 中，名为 `ANTHROPIC_API_KEY`（或
 `APSOR_ANTHROPIC_API_KEY`）；端点行上的数据库密钥仍然优先。
 
-聊天端点拥有自己的密钥，而不是账户。多个账户可以共享一个端点，轮换或
-清除该端点的密钥会影响分配到它的每个账户。没有加密密钥的行可以使用
-提供商范围的环境密钥作为行补充，但不存在每用户密钥，也不存在部署级聊天
-回退：未分配的账户永远不会被另一个活动行或单独的环境密钥拯救。
+聊天端点拥有其密钥，而不是账户。多个账户可以共享一个端点，轮换或清除该端点
+的密钥会影响分配到它的每个账户。没有加密密钥的行可以使用提供商范围的环境
+密钥作为行补充，但不存在每用户密钥，也不存在部署全局的聊天回退：未分配的
+账户永远不会被另一个活动行或单独的环境密钥挽救。
 
-嵌入、网页搜索和网页抓取的优先级是：**活动数据库链 → 环境 → 内置默认值**。
-对于聊天，账户分配会按 id 选择端点行；提供商范围的环境密钥只能补足该行。
-设置页面会为每个提供商标注其来源和链顺序。更改嵌入模型不会重写现有向量；
-`reindex_required` 会发出警告。运行 **重新嵌入文件库**（或
-`POST /api/v1/settings/providers/embedding/reindex`）以刷新当前分块。
-向量搜索会跳过维度与当前嵌入器不匹配的分块。
+嵌入、网页搜索和网页抓取的优先顺序为：**活动的数据库链 → 环境 → 内置
+默认值**。就聊天而言，账户分配按 ID 选择端点行；提供商范围的环境密钥只能
+补全该行。设置页面会标注每个提供商的来源并显示链的顺序。更改嵌入模型不会
+重写现有向量；`reindex_required` 会发出警告。请运行 **重新嵌入文件库**（或
+`POST /api/v1/settings/providers/embedding/reindex`）来刷新当前分块。向量
+搜索会跳过维度与当前嵌入器不匹配的分块。
 
 提供商注册表 API：
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
-| `GET` | `/api/v1/settings/providers` | 四个能力组、掩码提示、活动行、重建索引建议 |
-| `POST` | `/api/v1/settings/providers/{capability}` | 创建一个已保存的提供商；可选择将其激活 |
-| `PUT` | `/api/v1/settings/providers/{capability}/{provider_id}` | 替换一个已保存的提供商 |
-| `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | 删除一个已保存的提供商 |
-| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | 使其成为该能力唯一的活动行 |
-| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | 清除整条链；嵌入/网页回退到环境/默认值，聊天分配变为未激活 |
-| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/test` | 一次小型提供商请求及延迟 |
-| `POST` | `/api/v1/settings/providers/embedding/reindex` | 使用活动提供商重新嵌入每个当前分块 |
+| `GET` | `/api/v1/settings/providers` | 四个能力组、掩码提示、有序的链、重建索引建议 |
+| `POST` | `/api/v1/settings/providers/{capability}` | 创建一个已保存的提供商；可选择将其追加到链中 |
+| `PUT` | `/api/v1/settings/providers/{capability}/{provider_id}` | 替换一个已保存的提供商，不重新排序链 |
+| `DELETE` | `/api/v1/settings/providers/{capability}/{provider_id}` | 删除一个已保存的提供商并填补链中的空缺 |
+| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/activate` | 追加该行，或传入 `priority=0` 使其成为主行 |
+| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/deactivate` | 从链中移除一行并填补空缺 |
+| `POST` | `/api/v1/settings/providers/{capability}/deactivate` | 清空整条链；嵌入／网页回退到环境／默认值，聊天分配变为未启用 |
+| `POST` | `/api/v1/settings/providers/{capability}/{provider_id}/test` | 发送一个小型提供商请求并测量延迟 |
+| `POST` | `/api/v1/settings/providers/embedding/reindex` | 用活动提供商重新嵌入每个当前分块 |
 
-`{capability}` 是 `chat`、`embedding`、`web_search` 或 `web_fetch`
-之一。注册表响应在 `providers` 缓存作用域下缓存 30 秒；每次写入
-提供商都会递增该作用域的版本。
+`{capability}` 是 `chat`、`embedding`、`web_search` 或 `web_fetch` 之一。
+注册表响应会在 `providers` 缓存范围下缓存 30 秒；每次提供商写入都会刷新该
+范围。
+
+当整条链都失败时，API 和 worker 会记录一条经过清理的 `provider_error_notice`
+行，root 会在账户页面看到它。通知会在 15 分钟的窗口内按能力、操作和错误代码
+去重；重复发生时 `count` 和 `last_seen_at` 会前进。这张表只保存提供商元数据，
+绝不保存提示词或档案内容。root 可以列出通知、解决单条通知，或全部解决：
+
+| 方法 | 路径 | 用途 |
+|---|---|---|
+| `GET` | `/api/v1/system/provider-notices?status=open\|all&limit=50` | 未解决的通知与未解决数量 |
+| `POST` | `/api/v1/system/provider-notices/{notice_id}/resolve` | 解决一条通知 |
+| `POST` | `/api/v1/system/provider-notices/resolve-all` | 解决所有未解决的通知 |
 
 ### 每个账户的模型分配
 
@@ -420,17 +446,21 @@ Agent 有两个用于外部研究的只读工具：
 
 | 工具 | 作用 |
 |---|---|
-| `web_search` | 使用活动的 `web_search` 提供商搜索公共网络；返回标题、URL、分数和有界摘录。 |
+| `web_search` | 使用活动的 `web_search` 提供商搜索公共网络；返回标题、URL、可选的分数和有界摘录。 |
 | `web_fetch` | 使用活动的 `web_fetch` 提供商抓取一个公共 `http(s)` URL，并返回一个由服务器定义的 Markdown 页面。 |
 
-Tavily 是第一个适配器（`/search` 和 `/extract`）。提供商接缝是一个
-协议，因此可以在不更改工具层的情况下加入另一个搜索或抓取 API。
+已实现的适配器有 Tavily（`/search` 和 `/extract`）、Exa（`/search` 和
+`/contents`）以及 DeepSeek（`/v1/tools/search` 和 `/v1/tools/fetch`）。提供商
+接缝是一个协议，因此可以在不更改工具层的情况下加入另一个搜索或抓取 API。
 搜索结果在 `providers` 缓存作用域下缓存 15 分钟；写入提供商会使其
 失效。`web_fetch` 会拒绝非 HTTP(S)、URL 中的凭据、
 `localhost`/`.local`/`.internal`，以及私有或特殊用途的 IP 字面量。
 
 `web_fetch` 会为每个 URL 缓存完整的提取文档一小时，因此翻页永远
-不会再次调用提供商。它面向模型的参数只有 `url` 和 `page`
+不会再次调用提供商。结构可疑的提取结果（标题后紧跟同级或更高级的标题，或
+文档以标题结尾）不会被缓存，因此之后的页面请求会重新查询提供商，而不是
+固定住不完整的文档。最后一页的页脚会写着 `End of extracted content.`，并在
+某个标题到下一个标题之间没有正文时附加警告。它面向模型的参数只有 `url` 和 `page`
 （从 1 开始，默认 1）。服务器会把每一行源文本硬换行到 800 字符，
 并把整行装入最多 12,000 字符的页面（或者更小的已配置
 `web_fetch_max_chars`，绝不低于 801），因此一页永远不会超出预算，
@@ -484,15 +514,16 @@ Agent 会在工具结果本身中看到 `view="compressed"`、覆盖窗口和原
 
 `/settings` 上的 **Agent 运行时** 面板（仅 root）编辑单例
 `agent_config` 行（`id=1`）。聊天端点和模型选择是每账户的分配（见
-**每个账户的模型分配**）；该行包含步骤与工具预算、部署默认的上下文预算，
-以及压缩和升级控制。这些运行时值都存储在 PostgreSQL 中，无需重启即可
-应用于新的运行，并由每个账户共享。账户自己的上下文窗口和压缩阈值在设置
-后会覆盖这些部署默认值。
+**每个账户的模型分配**）；该行包含并行工具与单条工具结果预算、部署默认的
+上下文预算，以及压缩和升级控制。全部十九个运行时值都存储在 PostgreSQL 中，
+无需重启即可应用于新的运行，并由每个账户共享。账户自己的上下文窗口和压缩
+阈值在设置后会覆盖这些部署默认值。两个聊天图像存活时间值也由后台清理循环
+从这一行读取；它们不是环境变量。
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | `GET` | `/api/v1/agent/settings` | 有效配置、默认值、来源、`updated_at` |
-| `PUT` | `/api/v1/agent/settings` | 完整替换；所有字段都是必填 |
+| `PUT` | `/api/v1/agent/settings` | 完整替换；全部十九个字段都是必填 |
 | `POST` | `/api/v1/agent/settings/reset` | 持久化并返回内置默认值 |
 
 生成的操作是 `getAgentSettings`、`updateAgentSettings` 和
@@ -506,8 +537,6 @@ Agent 会在工具结果本身中看到 `view="compressed"`、覆盖窗口和原
 |---|---|---|
 | `compaction_threshold_tokens` | 75,000 | 1,000–1,000,000；低于上下文窗口 |
 | `context_window_tokens` | 1,000,000 | 8,000–2,000,000；部署默认预算 |
-| `max_steps` | 24 | 1–32 |
-| `max_tool_calls_per_turn` | 20 | 1–24 |
 | `max_parallel_tools` | 6 | 1–24 |
 | `max_tool_result_chars` | 100,000 | 1,000–200,000 |
 | `max_page_context_chars` | 6,000 | 500–50,000 |
@@ -520,19 +549,22 @@ Agent 会在工具结果本身中看到 `view="compressed"`、覆盖窗口和原
 | `auto_compaction_enabled` | `true` | 布尔值 |
 | `parallel_tools_enabled` | `true` | 布尔值 |
 | `save_memory_requires_approval` | `true` | 布尔值；`save_memory` 需要人工审批 |
+| `chat_attachment_staged_ttl_hours` | 1 | 1–168；未发送上传的保留期限 |
+| `chat_attachment_cleanup_interval_seconds` | 900 | 60–86,400；清理扫描间隔 |
+| `max_plot_points` | 10,000 | 100–50,000；每张渲染图表的数据点数 |
+| `max_plot_bytes` | 600,000 | 10,000–2,000,000；序列化后的图表大小 |
+| `max_plot_nodes` | 100,000 | 1,000–500,000；每张图表的 JSON 节点数 |
 
-Pydantic 和匹配的 PostgreSQL 检查约束会强制执行范围以及两条跨字段规则：
-压缩阈值必须低于模型上下文窗口，并行宽度不得超过每轮工具调用数。压缩
-模板还必须包含 `{max_output_tokens}`；未知占位符、转换、格式说明或缺少
-输出上限会返回 `422 compaction_prompt_invalid`，而不是
-`400 invalid_request`。应用的全局校验封装会把其他请求校验失败映射为
-`400 invalid_request`，而不是 422。
+Pydantic 和匹配的 PostgreSQL 检查约束会强制执行范围以及三条跨字段规则：
+压缩阈值必须低于模型上下文窗口、并行宽度不得超过每轮工具调用数，且
+`max_plot_nodes` 至少要等于 `max_plot_points`。压缩模板也必须能用已知占位符
+渲染；字面大括号需要成对重复，缺少 `{max_output_tokens}` 或含有未知占位符时，
+会以 `422 compaction_prompt_invalid` 拒绝，而不是 `400 invalid_request`。绘图
+预算会应用到每个账户的 `render_plot`。应用的全局校验封装会把其他请求校验
+失败映射为 `400 invalid_request`，而不是 422。
 
 一次请求会在短生命周期的数据库会话中加载一个不可变的运行时快照。活动
-的 SSE 运行会保留它启动时的快照；后续运行使用更改后的设置。已存储的
-账户预算对会应用到快照上；如果继承的配对不再满足阈值规则，会报告为
-`invalid_threshold` 并保留部署值。主提供商和模型仍来自账户分配，而不是
-`/api/v1/ai/status` 或 `runtime.chat_config`。后端契约描述于
+的 SSE 运行会保留它启动时的快照；后续运行使用更改后的设置。后端契约描述于
 `backend/README.md`。
 
 ### 摄取运行时
@@ -550,18 +582,19 @@ Pydantic 和匹配的 PostgreSQL 检查约束会强制执行范围以及两条�
 | `POST` | `/api/v1/files/ingest-jobs/{id}/retry` | `retryIngestJob` |
 | `POST` | `/api/v1/files/{file_id}/reingest` | `reingestFile` |
 
-一个任务会经过 `queued(0)`、`parsing(5)`、`chunking(15–20)`、
-`embedding(25–90)`、`summarizing(95)` 和 `ready(100)`，或以
-`failed` 结束。`progress_pct`、`chunks_total` 和 `chunks_embedded`
-是持久化的，因此重新加载的页面可以恢复相同的显示。暂存的文件行和
-分块行只有在任务就绪时才会发布；失败的任务保留其错误，但不会暴露
-任何部分的当前文件。
+任务会依次经过 `queued(0)`、`parsing(5)`、`chunking(15–20)`、
+`embedding(25–90)`、`summarizing(95)` 和 `ready(100)`，或以 `failed` 结束。
+`progress_pct`、`chunks_total` 和 `chunks_embedded` 是持久化的，因此重新加载
+的页面可以继续相同的显示。暂存的文件和分块行只有在任务就绪时才会发布；
+失败的任务保留其错误，但不会暴露任何部分的当前文件。
 
 一个 worker 进程在空闲时每秒轮询数据库，并用
 `SELECT ... FOR UPDATE SKIP LOCKED` 认领排队的行。它运行两个提取
 线程、最多两个在途任务，全局异步嵌入并发为六，并批量更新进度。
-崩溃后陈旧任务会被重新排队，嵌入重试是有界的。API 生命周期会为
-本地使用启动一个 worker；生产环境请运行专用进程：
+崩溃后陈旧任务会被重新排队，嵌入重试是有界的。API 只会把任务加入队列，
+因此请在它旁边运行 worker（本地用 `make worker`，生产环境用专用服务）。
+如果改为设置 `APSOR_INGEST_WORKER_ENABLED=true`，同样的循环会在 API 进程内
+运行，作为单进程的开发捷径；其默认值为 `false`。
 
 ```bash
 cd backend
@@ -576,11 +609,36 @@ uv run python -m app.worker --once
 并在 API 上设置 `APSOR_INGEST_WORKER_ENABLED=false`，因此恰好有
 一个进程拥有该队列。
 
-`/settings` 上的 **摄取运行时** 面板（仅 root）编辑单例
-`ingest_config` 行。它是完整替换，而不是补丁；读取响应携带
-`{config, defaults, source, updated_at}`，并带有 Database/Defaults
-徽标。worker 可以跨账户认领任务，但每个解析、分块、嵌入和发布
-步骤都在任务所有者的行级安全上下文中运行。
+#### RabbitMQ 派发
+
+Compose 栈还会运行 `rabbitmq:4-management-alpine`，作为持久化摄取的可选
+低延迟派发路径。PostgreSQL 的 `file_ingest_job` 仍是权威的任务账本：消息
+只携带 `{job_id, retry_count}`，消费者会重新读取该行，用
+`SELECT ... FOR UPDATE SKIP LOCKED` 认领它，并根据数据库状态做决定。重复、
+迟到或丢失的消息最多只会增加延迟，永远不会成为第二个事实来源。
+
+- API 以发布者确认（publisher confirms）把持久化 JSON 消息发布到持久的
+  `apsor.ingest` direct exchange。发布路径的时限为一秒
+  （`APSOR_RABBITMQ_PUBLISH_TIMEOUT_SECONDS`）；消息代理（broker）失败时只按
+  异常类型记录并吞掉错误，因此上传仍会返回 `202`，任务保持 `queued`。
+- worker 以 `prefetch_count=1` 和手动确认消费 `apsor.ingest.jobs`。它只会在
+  `process_notified_job` 返回后才确认：worker 崩溃时投递保持未确认，
+  RabbitMQ 会重新投递，任务则从其行继续或重试。
+- `retry` 结果和意外的处理失败会发布到 `apsor.ingest.jobs.retry`，这是一个
+  30 秒 TTL 的队列，会以死信（dead-letter）转回主队列。派发重试上限为 20 次，
+  因此损坏的任务不会无限循环。
+- 容器上限为 384 MB，VM 水位线为 200 MB（`docker/rabbitmq/rabbitmq.conf`）。
+  管理 UI 只留在 Compose 网络内，不会发布到主机；本地演示凭据是
+  `apsor` / `apsor`，在任何共享部署之前都必须通过
+  `RABBITMQ_DEFAULT_USER`/`RABBITMQ_DEFAULT_PASS` 更改。
+- 用 `APSOR_RABBITMQ_ENABLED=false` 停用派发。此时 API 使用空操作通知器，
+  worker 仍每秒轮询 PostgreSQL，因此不会丢失任何任务。消息代理停机或通知器
+  连接失败时，也适用同样的轮询回退。
+
+`/settings` 上的 **摄取运行时** 面板（仅 root）编辑单例 `ingest_config` 行。
+它是完整替换，而不是补丁，读取正文带有 `{config, defaults, source,
+updated_at}` 以及“数据库／默认”标签。worker 可以跨账户认领任务，但每个解析、
+分块、嵌入和发布步骤都在任务所有者的行级安全上下文中运行。
 
 | 方法 | 路径 | 操作 |
 |---|---|---|
@@ -595,16 +653,15 @@ uv run python -m app.worker --once
 | `max_inflight_jobs` | 2 | 1–4 |
 | `embedding_concurrency` | 6 | 1–32 |
 | `chunk_target_chars` | 4,000 | 1,000–20,000 |
-| `chunk_overlap_chars` | 500 | 0–5,000；低于目标值 |
+| `chunk_overlap_chars` | 500 | 0–5,000；须低于目标值 |
 | `vision_description_language` | `English` | 1–80 个字符；自由文本 |
 
-worker 在每一轮循环和每个任务中读取新的数据库快照，因此保存的
-worker 更改无需重启即可生效；已在运行的任务保留其快照。环境值用于
-初始化全新安装，并保留为回退。更改分块大小只会影响未来的摄取。
-`vision_description_language` 只控制视觉描述、说明文字、标题、摘要和
-标签；OCR 文本与表格单元格文本保持原文语言。更改该设置只会影响未来的
-摄取，现有文件保留当前的提取结果。后端契约描述于
-`backend/README.md`。
+worker 会在每次循环和每个任务读取最新的数据库快照，因此已保存的 worker 更改
+无需重启即可应用；已在运行的任务保留其快照。环境值为全新安装提供初始值，并
+持续作为回退。更改分块大小只影响以后的摄取。`vision_description_language`
+只控制视觉描述、说明文字、标题、摘要和标签；OCR 文本和表格单元格文本会逐字
+保持原文语言。更改此设置只影响以后的摄取，现有文件保留当前的提取结果。后端
+契约描述于 `backend/README.md`。
 
 #### 视觉提示词
 
@@ -625,8 +682,8 @@ invalid_vision_prompt`）。如果提示词缺少 `verbatim`、`do not translate
 GitHub-Flavored Markdown 措辞，响应也会带回警告。
 
 `POST /api/v1/files/{file_id}/reingest` 接受 `{expected_version}`，为当前
-且具有已存储原始文件的图像、PDF 或 DOCX 排队执行强制视觉流程。任务只会在
-提取和索引成功后创建新的文件版本；在此之前，旧版本仍是最新且可读取的。
+且具有已存储原始文件的图像、PDF、DOCX 或 PPTX 排队执行强制视觉流程。任务只会
+在提取和索引成功后创建新的文件版本；在此之前，旧版本仍是最新且可读取的。
 原始字节会被共用，不会被任务复制或删除。如果路径已更改，或已有更新的上传
 成为最新，任务会以 `409 ingest_source_stale` 失败，更新的文件保持最新。
 
@@ -658,9 +715,14 @@ Vite 运行在 <http://127.0.0.1:5173>，并把 `/api` 代理到 API。
 cd frontend && bun run build
 ```
 
-`./start.sh` 是最短的裸机路径：如果 Docker 可用，它会启动开发
-数据库/缓存，加载 `.secrets/deepseek.env`，同步后端，并在
-<http://127.0.0.1:8000> 提供 API 和已提交的客户端。
+`./start.sh` 是最短的裸机路径。先运行一次 `./start.sh setup --dev` 写出开发用
+的 `.env`（默认为本地存储），之后 `./start.sh` 会在 Docker 可用时启动开发
+数据库/缓存、同步后端，并在 <http://127.0.0.1:8000> 运行 API，同时启动专用的
+摄取 worker；按 Ctrl+C 会同时停止两者。设置 `APSOR_START_WORKER=false` 则只
+运行 API。首次裸机启动前，请先运行一次 `cd frontend && bun run build`。如果要
+在本地试用 S3 路径，请在向导中选择 `rustfs`，并用
+`docker compose -f docker-compose.dev.yml --profile rustfs up -d` 启动开发用的
+存储服务。
 
 在 Windows 上，`./start.sh` 需要 bash shell。`./run-local.ps1` 是
 等效的 PowerShell 脚本：如果 Docker 可用，它会启动开发数据库/缓存，
@@ -695,7 +757,7 @@ psycopg 的异步模式拒绝 uvicorn 在 Windows 上默认选择的
 
 | 工具 | 端点 | 返回内容 |
 |---|---|---|
-| `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | 来自 BM25 + 向量的每种来源类型的顶部结果，使用 RRF 融合并去重 |
+| `search_knowledge` | `GET /api/v1/search?query=&result_number=2` | 来自 BM25 + 向量的每种档案来源类型的顶部结果，使用 RRF 融合；另加最佳的 15 个过去对话窗口 |
 | `read_file` | `GET /api/v1/files/{file_id}/chunks/{chunk}?chunk_range=1` | 一个从 1 开始的分块窗口 |
 | `read_timeline` | `GET /api/v1/timeline?year=&month=&day=&day_range=1` | 默认稀疏：每种类型最多五个采样事件、密度以及跳过计数；`complete=true` 返回整个窗口 |
 | `read_path` | `GET /api/v1/paths?path=/history&path_depth=1&fuzzy_search=` | 目录和文件，或模糊路径匹配 |
@@ -708,13 +770,15 @@ Agent 工具与 `/api/v1/tools/read_timeline` 始终使用稀疏默认值；时�
 `skips`，并且每个事件的 `anchor=null`。页面会把事件主轴排除在页面上下文之外，
 因此完整列表不会成为 Agent 的上下文。
 
-持久化档案 agent 暴露九个模型工具：上述六个加上
-`present_resource`、`web_search` 和 `web_fetch`。HTTP 示例使用
+持久化档案 agent 暴露十个模型工具：上述六个加上
+`present_resource`、`web_search`、`web_fetch` 和 `history_message`。HTTP 示例使用
 显式参数；HTTP 服务器默认值是 `result_number=2`、`chunk_range=1`、
 `day_range=1`、`path_depth=1` 和 `memory_range=0`。文本按约 4,000
 字符分块，重叠 500 字符；现有文件在重新摄取之前保留其原始分块
-边界。Agent 的工具架构会选择自己的默认值，例如 `result_number=8`
-和 `day_range=7`。对于外部 LLM 调用者，单独的 `/api/v1/tools/*`
+边界。过去的对话消息使用另一种固定窗口：256 字符、32 字符重叠（步幅
+224）。Agent 的工具架构会选择自己的默认值，例如 `result_number=8`
+和 `day_range=7`。`history_message` 接受 `<history_message>` 搜索命中上
+显示的 `id`，并返回完整消息以及有界的相邻消息。对于外部 LLM 调用者，单独的 `/api/v1/tools/*`
 外观会把相同的服务渲染为紧凑 XML；持久化 agent 通过自己的注册表
 直接调用这些服务。
 
@@ -771,14 +835,17 @@ Agent 工具与 `/api/v1/tools/read_timeline` 始终使用稀疏默认值；时�
 `POST /api/v1/memories`、`PATCH /api/v1/memories/{memory_id}`
 （编辑文本；标题会重新生成）、
 `POST /api/v1/memories/{memory_id}/deprecate`（直接停用，可选
-`reason`）、`POST /api/v1/summaries`、`GET /api/v1/stats`、
-`GET /api/v1/health` 和 `GET /api/v1/ai/status`。
+`reason`）、`GET /api/v1/memories/{memory_id}/related` 和
+`GET /api/v1/memories/related/files/{file_id}`（根据已存储的嵌入和关键词找出
+关联记忆；不调用提供商）、`POST /api/v1/summaries`、`GET /api/v1/stats`、
+`GET /api/v1/health` 和 `GET /api/v1/ai/status`。`ai/status` 报告部署全局的
+运行时，供 root 诊断使用；它不是某个账户的模型分配。
 
 ### 文件夹工作区
 
 `/library` 是一个文件夹优先的工作区。面包屑和文件夹栏描述你所在的
 位置；主区域显示当前路径的文件夹卡片和文件卡片。之前的表格仍作为
-紧凑列表视图提供，用于密集浏览，并且是窄屏幕上的回退布局。
+紧凑列表视图提供，用于密集浏览，需要用 `view=list` 显式选择。
 
 - **新建文件夹** 会创建请求的文件夹以及任何缺失的祖先。该操作是
   幂等的：重复执行会返回同一个文件夹，状态码 `201`。
@@ -788,6 +855,10 @@ Agent 工具与 `/api/v1/tools/read_timeline` 始终使用稀疏默认值；时�
   `.json`、`.jsonl`、`.toml`、`.ini`、`.env`、`.log`、`.pdf`、`.docx`、
   `.pptx`、`.xlsx`、`.xls`、`.xlsm`、`.ods`、`.jpg`、`.jpeg`、`.png` 或
   `.webp`。对话框还支持 2 MB 的纯文本创建。拖放的文件永远不会被打开或执行。
+- **剪贴板粘贴** 通过同一条摄取路径上传文件。当剪贴板中的名称已存在于目标
+  文件夹时，粘贴的文件会获得第一个可用的 ` (n)` 后缀（`image (1).png`），
+  而不是悄悄成为新版本；一次粘贴多个同名文件时会依次编号。拖放或使用上传
+  对话框则保持显式的同名版本行为。
 - **移动与复制** 是显式的。普通拖放到文件夹会移动文件；拖放时按住
   Alt/Option 则会复制它。触摸和键盘用户会得到单独的 **移动** 和
   **复制** 操作，而不是拖拽。
@@ -822,15 +893,26 @@ Pi coding-agent harness 的持久化对话记录模型：对话是一份由不�
 - `agent_conversation` — 对话记录范围、提供商/模型标识和元数据。
 - `agent_entry` — 不可变的 `pi.user`、`pi.assistant`、`pi.tool-result`、
   `pi.page-context`、`pi.system`、`pi.reset`、`pi.compaction` 和
-  `ui.notice` 条目。`model` 恰好是提供商负载；`data` 仅用于 UI/诊断。
+  `ui.notice` 条目。`model` 是规范的提供商消息文本；关联的临时图像会在调用
+  提供商时具体化为 `image_url` 部分，`data` 仅用于 UI/诊断。
 - `agent_run` — 一次提交的持久化状态（`request_id`、状态、中止、
   最后条目、安全错误）。`agent_commit_seq` 对在一个事务中写入的条目
   进行分组。
 - `agent_approval` — 针对需要确认的工具调用的一个持久化待处理/
   已批准/已拒绝/已过期人工决定，包括经过校验的参数、安全预览，以及
   用于恢复等待运行的循环快照。
-- `agent_config` — 单例运行时配置（`id=1`），保存经过校验的令牌、
-  步骤、工具、页面上下文和压缩限制，以及压缩模板、其输出上限和升级开关。
+- `agent_chat_attachment` — 属于单个账户的聊天图像，包含对象存储键、经过清理
+  的元数据，以及指向发送它们的用户条目的可选链接。尚未发送的图像位于
+  `users/{user_id}/chat-temp/`；发送时会提升到 `users/{user_id}/chat-images/`。
+  行采用软删除。
+- `agent_config` — 单例运行时配置（`id=1`），保存经过校验的令牌、步骤、
+  工具、页面上下文、压缩和聊天图像存活时间限制。
+
+用户和 assistant 条目也会以 `source_kind='history'` 复制到共享的扁平分块索引
+中，每个 256 字符窗口一行。后台的历史索引器会回填现有对话、跳过只有工具调用
+而没有内容的 assistant 条目，并把软删除对话的窗口标记为非当前。Agent 会把
+每个命中看作 `<history_message id="...">`，并调用 `history_message` 读取完整的
+不可变条目及其相邻条目。
 
 第一个条目是冻结的 `pi.system` 提示词和工具快照。上下文构建器会
 确定性地重放条目：它遵循 `head_entry_id` 和 `edits`，保留系统条目，
@@ -841,72 +923,80 @@ Pi coding-agent harness 的持久化对话记录模型：对话是一份由不�
 | 方法 | 路径 | 用途 |
 |---|---|---|
 | `POST` | `/api/v1/agent/conversations` | 创建一个对话及其系统条目 |
-| `GET` | `/api/v1/agent/conversations` | 列出活动/已归档对话，最新活动在前 |
+| `GET` | `/api/v1/agent/conversations` | 列出活动/已归档的对话，最新活动优先 |
 | `GET` | `/api/v1/agent/conversations/{conversation_id}` | 元数据加上第一页条目 |
-| `GET` | `/api/v1/agent/conversations/{conversation_id}/entries?after_id=&limit=` | 升序条目页 |
-| `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | 重命名、归档或还原 |
+| `GET` | `/api/v1/agent/conversations/{conversation_id}/entries?after_id=&limit=` | 升序的条目分页 |
+| `PATCH` | `/api/v1/agent/conversations/{conversation_id}` | 重命名、归档或恢复 |
 | `DELETE` | `/api/v1/agent/conversations/{conversation_id}` | 软删除；条目保留以供审计 |
-| `POST` | `/api/v1/agent/conversations/{conversation_id}/compact` | 追加手动压缩边界 |
-| `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | 追加重置边界；对话记录保留 |
-| `POST` | `/api/v1/agent/conversations/{conversation_id}/fork` | 通过包含式截止点把条目复制到新线程 |
-| `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | 追加用户条目并运行循环 |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/compact` | 追加一个手动压缩边界 |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/clear` | 追加一个重置边界；对话记录会保留 |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/fork` | 把截至（含）截止点的条目复制到新线程 |
+| `POST` | `/api/v1/agent/attachments` | 上传一张临时聊天图像（`multipart/form-data`，可选 `client_token`） |
+| `POST` | `/api/v1/agent/attachments/cancel` | 按 `client_token` 幂等地丢弃暂存上传（`204`） |
+| `GET` | `/api/v1/agent/attachments?status=&limit=&offset=` | 列出账户的临时聊天图像 |
+| `GET` | `/api/v1/agent/attachments/{attachment_id}/content` | 流式传输一张仍有效的临时图像 |
+| `DELETE` | `/api/v1/agent/attachments/{attachment_id}` | 删除对象并软删除其行（`204`） |
+| `POST` | `/api/v1/agent/conversations/{conversation_id}/messages` | 追加一个用户条目并运行循环 |
 | `POST` | `/api/v1/agent/conversations/{conversation_id}/retry` | 重试最近一次失败/取消的运行 |
-| `GET` | `/api/v1/agent/conversations/{conversation_id}/approvals?status=` | 持久化审批，最旧在前（默认 `pending`） |
-| `POST` | `/api/v1/agent/approvals/{approval_id}/approve` | 执行一次，追加工具结果，恢复 |
-| `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | 追加 `memory_rejected`，不写入并恢复 |
-| `GET` | `/api/v1/agent/tools` | 当前工具目录以及提示词/工具版本 |
-| `GET` | `/api/v1/agent/settings/system-prompt` | 列出每个系统提示词区段 |
-| `POST` | `/api/v1/agent/settings/system-prompt` | 创建一个区段（`201`） |
-| `PUT` | `/api/v1/agent/settings/system-prompt/order` | 重新排序每个区段 |
-| `PUT` | `/api/v1/agent/settings/system-prompt/{section_id}` | 替换一个区段 |
-| `DELETE` | `/api/v1/agent/settings/system-prompt/{section_id}` | 删除一个区段（`204`） |
-| `POST` | `/api/v1/agent/settings/system-prompt/reset` | 用四个预置默认值替换每个区段 |
+| `GET` | `/api/v1/agent/conversations/{conversation_id}/approvals?status=` | 持久化的审批，最早的优先（默认 `pending`） |
+| `POST` | `/api/v1/agent/approvals/{approval_id}/approve` | 执行一次，追加工具结果，继续 |
+| `POST` | `/api/v1/agent/approvals/{approval_id}/reject` | 追加 `memory_rejected`，不写入即继续 |
+| `GET` | `/api/v1/agent/tools` | 当前工具目录加上提示词/工具版本 |
+| `GET` | `/api/v1/agent/settings/system-prompt` | 列出每个系统提示词分区 |
+| `POST` | `/api/v1/agent/settings/system-prompt` | 创建一个分区（`201`） |
+| `PUT` | `/api/v1/agent/settings/system-prompt/order` | 重新排序每个分区 |
+| `PUT` | `/api/v1/agent/settings/system-prompt/{section_id}` | 替换一个分区 |
+| `DELETE` | `/api/v1/agent/settings/system-prompt/{section_id}` | 删除一个分区（`204`） |
+| `POST` | `/api/v1/agent/settings/system-prompt/reset` | 用四个初始默认分区替换每个分区 |
 
 `POST /api/v1/agent/conversations/{conversation_id}/messages` 接受
-`{content, request_id?, page_context?, client_timezone?,
-client_utc_offset_minutes?}`，而 `.../retry` 接受 `{request_id?}`。
-两者默认都流式传输 `text/event-stream`。客户端时区会与服务器渲染的
-`<current_time>` 块一起存储在每个用户条目上；该块在消息文本之后
-恰好追加一次。有序的系统提示词区段在创建对话时写入，并冻结到该
-线程中。四个默认值作为普通行预置；设置允许 root 账户为整个部署
-编辑、删除或重新排序每一行。事件名称是 `run_start`、
-`message_start`、`message_delta`、`message_end`、`tool_start`、
-`tool_end`、`approval_required`、`run_end` 和 `error`。`run_start`
-报告 `page_context_entry_id`（或 `null`）、`page_context_attached`
-和 `resumed`，以便客户端标记是否写入了新快照，以及流是否继续一个
-持久化的等待运行。`tool_start` 和 `tool_end` 还携带 assistant 调用
-批次的 `parallel`、`batch_size` 和 `parallel_index`。`tool_end`
-携带持久化的工具结果 `data` 负载以及 `duration_ms` 和 `error_code`，
-因此检查器可以在对话记录重新获取完成之前渲染预览。`message_start`
-的 `entry_id=null`，因为 assistant 条目只在 `message_end` 时持久化；
-增量仅用于传输。要获取完成的轮次，请发送
-`Accept: application/json`。SSE 响应设置
-`Cache-Control: no-cache, no-transform` 和 `X-Accel-Buffering: no`，
-并且 Starlette 的 GZip 中间件排除 `text/event-stream`。
+`{content, attachment_ids?, request_id?, page_context?, client_timezone?,
+client_utc_offset_minutes?}`，`.../retry` 接受 `{request_id?}`。最多可以附上
+四张已暂存的聊天图像；有图像时文本可以为空。两者默认都流式返回
+`text/event-stream`。客户端时区会与服务器渲染的 `<current_time>` 块一起存储在
+每个用户条目上；该块会恰好在消息文本之后追加一次。排序后的系统提示词分区会在
+创建对话时写入，并冻结到该线程中。四个默认值以普通行的形式初始写入；设置页面
+让 root 账户可以为整个部署编辑、删除或重新排序每一行。事件名称为
+`run_start`、`message_start`、`message_delta`、`reasoning_delta`、
+`message_end`、`tool_start`、`tool_end`、`approval_required`、`run_end` 和
+`error`。`reasoning_delta` 携带在对应回答或工具调用之前到达的提供商推理文本，
+并且永远不会并入 `message_delta`。`run_start` 会报告 `page_context_entry_id`
+（或 `null`）、`page_context_attached` 和 `resumed`，让客户端能标记是否写入了
+新快照，以及流是否延续一个持久化的等待运行。`tool_start` 和 `tool_end` 还带有
+assistant 调用批次的 `parallel`、`batch_size` 和 `parallel_index`。`tool_end`
+带有已持久化的工具结果 `data` 负载，以及 `duration_ms` 和 `error_code`，因此
+检查器可以在对话记录重新获取完成之前先渲染预览。`message_start` 的
+`entry_id=null`，因为 assistant 条目只在 `message_end` 时持久化；增量仅用于
+传输。提供商推理会作为有界的显示用遥测保存在 assistant 条目中，并以纯文本
+`Thinking` 块显示；它永远不会进入提供商消息、冻结的系统前缀或缓存前缀哈希。
+确定性的压缩摘要可能带有一行有界的 `Thinking:`。如果想获取完成的轮次，请改为
+发送 `Accept: application/json`。SSE 响应会设置
+`Cache-Control: no-cache, no-transform` 和 `X-Accel-Buffering: no`，并且
+Starlette 的 GZip 中间件会排除 `text/event-stream`。
 
-每个对话一次只允许一个活动运行。默认值允许 24 个模型步骤、每个用户
-轮次 20 次工具调用、6 个并行工具、自动压缩前 75,000 个令牌的活动
-上下文，以及每个工具 100,000 个结果字符。没有累计的每轮令牌上限；
-轮次只会在最终答案、步骤或工具调用上限、用户取消或提供商失败时结束。
-1,000,000 令牌的模型上下文窗口记录提供商容量，也是压缩阈值的比较基准。
-每个结果都会按该每结果上限独立裁剪，并带有可见的 `[truncated]` 标记；
-不存在轮次范围的结果预算，也没有第二次摘要调用。100,000 字符的上限大致跨越二十五个
-4,000 字符的分块。这些是运行时设置，不是代码常量；见上文的
-**Agent 运行时设置**。启用并行工具时，符合条件的工具调用会一起
-启动并通过 `asyncio.gather` 执行。结果持久化和 `tool_end` 顺序遵循
-assistant 调用顺序，而不是完成顺序。禁用并行工具时，执行是顺序的，
-事件报告 `parallel=false`。
+每个对话一次只允许一个活动运行。默认值允许 6 个并行工具、自动压缩前 75,000
+个令牌的活动上下文，以及每个工具 100,000 个结果字符。没有步骤上限、工具调用
+上限，也没有累计的每轮令牌上限；轮次只会在最终答案、用户取消或提供商失败时
+结束。有效的上下文窗口是部署默认值（1,000,000），除非账户分配了自己的预算；
+它是由本地溢出阶梯强制执行的真实出站输入预算，压缩阈值必须低于它。预算估算中，
+CJK 字符大约按每个令牌 1.6 个字符计算，ASCII 文本则保持模型目录的比例，并且
+当前上下文段中提供商报告的最大成功 `prompt_tokens` 会作为下限。因此，仅提供商
+可见的状态块中的 `context_used` 是保守估计，而不是与提供商完全一致的令牌数。
+每个结果都会按该单条结果上限独立截断，并附上可见的 `[truncated]` 标记；不存在
+整轮的结果预算，也没有第二次摘要调用。100,000 字符的上限大约涵盖二十五个
+4,000 字符的分块。这些是运行时设置，不是代码常量；请见上方的
+**Agent 运行时设置**。符合条件的工具调用会同时开始，并在启用并行工具时通过
+`asyncio.gather` 执行。结果持久化和 `tool_end` 的顺序遵循 assistant 调用顺序，
+而不是完成顺序。停用并行工具时，执行按顺序进行，事件会报告 `parallel=false`。
 
-失败或取消的运行可以在不重复用户条目的情况下重试。当最新条目是
-失败/取消的 assistant 回答、末尾的硬限制工具结果（`step_limit`、
-`token_limit`、`tool_call_limit` 或
-`tool_result_budget_exhausted`），或者在记录 assistant 条目之前最后
-一次流失败时，聊天工作台和停靠的 agent 会显示重试操作。重试会为
-同一个用户条目启动新的运行；UI 不会追加第二条消息，并在流处于活动
-状态时禁用该操作。如果对话记录仍然太长，重试可能再次触及相同的
-上下文限制。当最新运行已完成或并非失败/取消时，端点返回
-`409 agent_run_not_retryable`；该错误之后 UI 会重新获取对话记录，
-使过期的重试操作消失。
+失败或取消的运行可以重试，而不会重复用户条目。当最新条目是失败/取消的
+assistant 回答、结尾的硬性上限工具结果（`step_limit`、`token_limit`、
+`tool_call_limit` 或 `tool_result_budget_exhausted`），或最后一次流在记录
+assistant 条目之前就失败时，聊天工作台和停靠的 agent 都会显示“重试”操作。
+重试会为同一个用户条目启动新的运行；UI 不会追加第二条消息，并在流进行中禁用
+该操作。如果连溢出阶梯都无法让请求放得下，重试仍可能被提供商拒绝。当最近一次
+运行已完成或并非失败/取消时，端点会返回 `409 agent_run_not_retryable`；UI 会在
+该错误后重新获取对话记录，让过期的“重试”操作消失。
 
 #### 对 `save_memory` 的人工审批
 
@@ -1136,7 +1226,7 @@ UI 使用生成的 Orval hooks 处理对话元数据和生命周期，并使用�
 agent 轮次。
 
 导航栏是分组的，而不是扁平的。档案工作区排在最前（聊天、文件库、
-时间线、记忆、搜索、仪表盘），然后是包含 **用户资料** 的个人区块，
+时间线、搜索、仪表盘；记忆是文件库的“记忆”标签页），然后是包含 **用户资料** 的个人区块，
 接着是系统区块（设置、**更改密码**、仅 root 账户可见的 **账户**、
 关于），以及一个单独的 **会话** 区块，包含 **登出**。页脚身份也是
 root 用户切换器：root 点击它会打开可搜索的账户对话框，而普通账户
@@ -1186,14 +1276,16 @@ Docker 镜像内从 `frontend/` 编译，因此修改前端后只需重新构建
 
 ### 资源预览
 
-文件在文件库内的就地预览模态框中打开；记忆阅读器是 `/memory/:id`
-的普通路由。旧的 `/viewer/*` URL 会重定向到这些界面，因此旧引用和
-书签仍然有效。
+文件在文件库内的就地预览模态框中打开；记忆位于文件库的“记忆”标签页，
+阅读器在 `/library/memories/:id`，并有一个按已存储的嵌入、共同关键词和共同
+摘要排序的“关联记忆”分区。旧的 `/memory/*` 和 `/viewer/*` URL 会重定向到
+这些界面，因此旧引用和书签仍然有效。
 
 | 资源 | 渲染器 |
 |---|---|
 | PDF | `react-pdf` 11 + 捆绑的 `pdfjs-dist` 6，页面导航、缩放、适应宽度、文本层 |
 | DOCX | 脚本禁用沙箱中的 `docx-preview` |
+| PPTX | `pptxviewjs` Canvas 渲染器，支持幻灯片导航和键盘方向键 |
 | 电子表格（XLSX/XLS/XLSM/ODS） | 延迟加载的 SheetJS 网格、工作表标签、隐藏标记、冻结表头，以及 500 × 50 的受限预览 |
 | 图像 | 使用标准文件内容端点的原生图像 |
 | 文本 / JSON / Markdown / CSV | 带换行/复制/下载的档案页，美化 JSON，GFM Markdown |
@@ -1204,6 +1296,12 @@ Docker 镜像内从 `frontend/` 编译，因此修改前端后只需重新构建
 （`206`/`416`；`If-None-Match` 返回 `304`）。`/download` 仍然是
 附件。旧的纯文本记录具有 `has_original=false`；页面会完全跳过
 `/content` 探测，并读取已索引的分块。
+
+每个上传的图像、PDF，以及内嵌预览图的 Office 文件，也会在摄取时生成一张
+极小的 WebP 缩略图（`GET /api/v1/files/{file_id}/thumbnail`）。文件库卡片、
+媒体网格、聊天资源卡片和预览加载状态，都会先在按已知尺寸预留的框内绘制
+缩略图，因此完整预览加载时不会跳动或闪烁。摄取 worker 会为较早上传的文件
+回填缩略图（`APSOR_THUMBNAIL_BACKFILL_ENABLED`，默认开启）。
 
 PDF.js 的 CMaps 和标准字体由 `bun run pdf-assets` 从固定版本的
 `pdfjs-dist` 包复制到 `frontend/public/pdfjs/`，`dev` 和 `build` 会
@@ -1299,6 +1397,9 @@ SPA 外壳是公开的。工具端点也需要会话 cookie。
   视觉提取：OCR、表格和简短版面说明。
 - **DOCX** — python-docx 段落和表格；嵌入图像可以提供视觉回退，并使用
   完整图像模式的描述和表格。
+- **PPTX** — python-pptx 幻灯片文本框、表格、组合形状和演讲者备注；嵌入的
+  `ppt/media` 图像可以提供视觉回退，并使用完整图像模式的描述和表格。不支持
+  旧版二进制 `.ppt`。
 - **XLSX / XLS / XLSM / ODS** — python-calamine 按顺序读取工作表，包含隐藏
   工作表和合并单元格，并把每个工作表渲染成 GitHub-Flavored Markdown 表格。
   优先使用公式缓存值；对于 OOXML 工作簿，openpyxl 会在生成的文件没有缓存
@@ -1310,7 +1411,7 @@ SPA 外壳是公开的。工具端点也需要会话 cookie。
 （`image` 或 `document`）和 `vision_description_language`；旧行保持
 `null`，表示未记录提示词。自定义提示词只会应用于未来的摄取。若要基于
 已存储的原始文件创建新版本，请使用上文的重新摄取路由；文本文件不符合
-条件，而没有嵌入图像的 DOCX 会保留纯文本结果，不记录提示词指纹。
+条件，而没有嵌入图像的 DOCX 或 PPTX 会保留纯文本结果，不记录提示词指纹。
 
 相同的摄取可通过 `POST /api/v1/files/async` 和
 `POST /api/v1/files/text/async` 异步使用；轮询
@@ -1391,9 +1492,15 @@ uv run python -m script.ingest_wikipedia \
 4. **向量召回** 默认使用 384 维的带符号特征哈希嵌入器，因此可以
    离线工作。设置 `APSOR_EMBEDDING_PROVIDER=openai` 以及匹配的基础
    URL/模型，即可改用托管的嵌入模型。
-5. **融合**：使用倒数排名融合。每种来源类型保留自己的顶部
+5. **融合**：使用倒数排名融合。每种档案来源类型保留自己的顶部
    `result_number`，因此摘要不会被文件分块挤掉。
 6. **去重**：按分块 id 去重，然后填充文件、记忆或摘要行。
+7. **对话历史**：走另一条扁平索引通道。每条超过 256 字符的用户或 assistant
+   消息会被切成 256 字符、32 字符重叠（步幅 224）的窗口。查询嵌入按余弦
+   相似度取前 128 个窗口；BM25 为每个召回的窗口评分；倒数排名融合会重新排序
+   并集，并保留前 15 名。无论档案历史开关如何，历史窗口始终纳入。每个命中都
+   带有稳定的 `agent_entry` id，Agent 会用 `history_message` 展开它。已删除的
+   对话会被标记为非当前，并从这条通道消失。
 
 如果向量召回不可用，搜索仍然返回 BM25 结果。当嵌入调用在重试预算
 内失败时，同步摄取会让分块保持纯文本；持久化 worker 会把耗尽嵌入
@@ -1457,7 +1564,8 @@ token -> BLAKE2b -> bucket 0..383 + sign(+1/-1) -> accumulate -> normalize
 file ─────────────┐
 folder ───────────┤
 memory ───────────┼──> chunk ──> chunk_ngram
-memory_summary ───┘
+memory_summary ───┤
+agent_entry ──────┘  (source_kind = history)
 ```
 
 下面的私有档案表携带 `user_id bigint NOT NULL`。例外是全局配置表
@@ -1471,13 +1579,15 @@ memory_summary ───┘
 
 - `file`：每个版本一行。`is_current` 和 `deleted_at` 是软状态；id
   永远不会被复用。文件叶不会在文件夹表中重复：它们的位置是
-  `raw_file_path`。`storage_backend` 记录原始字节的 `local` 或 `r2`，
+  `raw_file_path`。`storage_backend` 记录原始字节的 `local`、`r2` 或 `s3`，
   并且当且仅当 `storage_key` 为 null 时为 null。
 - `folder`：显式的文件夹记录（`parent_id`、`path`、`name`、
   `depth`）。空文件夹和文件夹身份独立于文件而存在。唯一性按账户：
   `(user_id, path)`。
 - `chunk`：`(source_kind, source_id, chunk_index)`，带有一个可选的
-  JSONB 向量。
+  JSONB 向量。`source_kind` 是 `file`、`memory`、`summary` 或 `history`；
+  历史分块的 `source_id` 是不可变的 `agent_entry` id，内容是一个原始的
+  256 字符窗口。
 - `chunk_ngram`：BM25 使用的倒排索引。
 - `memory`：线性时间线，带有自动生成的 `title`、`supersedes_ids`、
   `superseded_by_id`、`status=active|deprecated`，以及直接停用的来源
@@ -1511,7 +1621,7 @@ memory_summary ───┘
   已过期人工决定，带有经过校验的参数、安全预览，以及用于恢复等待
   运行的循环快照。
 - `agent_config`：一行（`id=1`），带有 agent 循环和设置 API 使用的
-  经过校验的运行时限制。
+  经过校验的运行时限制，包括压缩模板与输出上限，以及升级开关。
 - `saved_question`：账户的问答库。`question` 由用户撰写；`answer`、
   `citations`、`conversation_id` 以及运行状态/错误字段只由提问写入。
   `conversation_id` 使用 `ON DELETE SET NULL`，`last_asked_at` 记录
@@ -1521,24 +1631,35 @@ memory_summary ───┘
   时间戳。每个账户的一条路径只能有一个活动任务。任务指向其暂存
   文件，失败时清除该链接，并且只有任务发布文件时，文件及其分块才会
   成为当前。
+- `file_thumbnail`：每个文件版本一张极小的 WebP，以 `file_id` 为键，带有
+  `status`（`ready`、`none` 或 `failed`）、像素尺寸、SHA-256、生成器版本和
+  尝试次数。它会随其文件一起级联删除。
 - `ingest_config`：一行（`id=1`），带有经过校验的 worker 轮询、
   提取、在途、嵌入和分块大小设置。它不是分块来源；队列引用最终
   发布的文件。
 
-原始字节不存储在 PostgreSQL 中。它们位于本地磁盘或私有 R2 存储桶
-中，由每个文件的 `storage_backend` 选择；提取的分块及其 n-gram
+原始字节不存储在 PostgreSQL 中。它们位于本地磁盘、私有 R2 存储桶，或
+S3 兼容存储桶（默认为 RustFS）中，由每个文件的 `storage_backend` 选择；提取的分块及其 n-gram
 保留在 PostgreSQL 中。
 
-已提交的代码、注释、UI 文案和文档均为英语。
+代码、注释和文档以英语编写，英语为规范版本。界面和本 README 也提供完整的
+繁体中文与简体中文翻译，并与英文源一起更新。
 
 ## 开发检查
 
 ```bash
+# Everything at once (offline lint, then tests, then the contract gate)
+make lint
+make test
+make api-check
+make audit        # needs network
+
 # Backend
 cd backend
 uv run ruff check .
-uv run mypy app
-PYTHONUTF8=1 uv run bandit -r app -c pyproject.toml
+uv run mypy app script
+uv run lint-imports          # layer and slice-boundary contracts
+PYTHONUTF8=1 uv run bandit -r app script -c pyproject.toml
 uv run pip-audit
 PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 
@@ -1546,15 +1667,23 @@ PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 cd frontend
 bun run lint
 bun run typecheck
+bun run i18n:check
+bun run check:boundaries     # workspace import boundaries
+bun run test
 bun run build
 bun audit
 ```
 
+`make lint` 是架构与安全闸门：ruff、mypy、让路由器、服务、领域代码和各切片
+守在自身层级内的 import-linter 契约、bandit、ESLint、TypeScript、i18n 键值
+一致性，以及前端工作区边界检查。分支遵循 Gitflow：`feat/*` 和 `fix/*` 从
+`develop` 创建并通过 pull request 合并回去，`develop` 再合并到 `main` 进行发布。
+
 集成测试套件在同一实例上使用一个真实的 PostgreSQL 测试数据库
 （`apsor_archive_test`），顺序运行，并在测试之间重置每张被跟踪的表。
 数据库由 `alembic upgrade head` 构建，而不是 `create_all`，因此
-`apsor_app` 角色、授权和 RLS 策略在每个请求中都存在。共收集 46 个
-测试；每个测试都会演练真实的 HTTP 接口和数据库。多用户测试覆盖
+`apsor_app` 角色、授权和 RLS 策略在每个请求中都存在。每个测试都会演练
+真实的 HTTP 接口和数据库。多用户测试覆盖
 root/user 生命周期、强制更改密码、一次性临时密码、禁用/重置的会话
 撤销、仅 root 的账户和全局设置、跨文件/文件夹/记忆/摘要/对话/
 问题/提示词的私有档案隔离、每账户提示词上限、直接 SQL 的 RLS 拒绝、
@@ -1574,7 +1703,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `a4c9e2f7b1d6`。此分支上
+最新的迁移是 `c7a3e9f1d5b2`。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1655,7 +1784,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   拥有者安全的复合外键、重新摄取检查、活动来源唯一索引和查询索引。
   它不会预置或回填提示词／指纹值。降级会先删除重新摄取任务，再恢复旧的
   来源类型检查；
-- `a4c9e2f7b1d6`（当前 head）新增八个 `app_user` 分配列及两个指向
+- `a4c9e2f7b1d6`新增八个 `app_user` 分配列及两个指向
   `chat_provider_config` 的 `ON DELETE SET NULL` 外键、七项检查约束、
   `chat_provider_config.max_output_tokens`（256–131,072）、允许 `anthropic`
   的更宽聊天提供商检查，以及四个新的 `agent_config` 列
@@ -1665,7 +1794,20 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   行，每个账户都会保持未分配。升级后创建的新账户也会继承同一个主要端点
   与模型；只有在没有活动聊天行时才会保持未分配。`app_user` 仍在 RLS 之外，因此不需要更改
   策略或授权。降级会删除分配列，并在仍有 `anthropic` 行时拒绝恢复较窄的
-  提供商检查。
+  提供商检查；
+- `d8f2a6c4e1b9` 移除 `agent_config.max_steps` 和
+  `agent_config.max_tool_calls_per_turn` 及其检查约束，以及
+  `parallel_within_tool_calls` 关系，因此工具密集的轮次会一直运行到模型回答
+  为止。并发上限 `max_parallel_tools` 保留。降级会恢复两个列，并把恢复的调用
+  上限提高到至少 `max_parallel_tools`；
+- `c3e7a1f5b9d2` 放宽 `file`、`file_ingest_job` 和 `agent_chat_attachment`
+  上的 `storage_backend` 检查，允许 `s3`（RustFS、AWS S3、MinIO）；`rustfs`
+  只是配置别名，`r2` 仍是独立的值。降级会恢复只有两个值的检查，并在仍有行
+  记录 `s3` 时失败；
+- `c7a3e9f1d5b2`（当前 head）创建私有的 `file_thumbnail` 表：每个文件版本
+  一张极小的 WebP（最多 32 KiB、512 px）、指向 `file` 且带
+  `ON DELETE CASCADE` 的所有者安全复合外键、带所有者策略的强制 RLS，以及
+  `apsor_app` 授权。现有文件由 worker 回填补上。降级会删除该表。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，
@@ -1682,6 +1824,7 @@ backend/
   app/
     main.py                     API assembly, lifespan, gzip, SPA mount
     worker.py                   dedicated durable-ingestion process
+    bootstrap.py                shared process setup and background loops
     shared/                     error registry and list envelope
     infrastructure/             config, database, cache, embeddings, AI, web, files
     module/knowledge/
@@ -1696,9 +1839,9 @@ backend/
     module/agent/               transcript, runtime settings, compaction, tools,
                                 saved questions, SSE
     module/prompt/              editable frequently used chat prompts
-    module/web_research/        Tavily search/fetch service, URL safety, cache
+    module/web_research/        web search/fetch service, URL safety, cache
   alembic/                      migrations
-  tests/                        46 integration tests
+  tests/                        integration tests (PostgreSQL, offline fakes)
 frontend/
   src/app/
     component/                  shared archive UI
@@ -1709,13 +1852,13 @@ frontend/
     chat/                       reading room, retry, context actions
     questions/                  saved-question Q&A library
     settings/                   role-filtered provider and runtime panels
-    library/                    files, media gallery, preview modal, intake
-    dashboard/ search/ timeline/ memory/ about/ ...
+    library/                    files, media gallery, memories, preview modal, intake
+    dashboard/ search/ timeline/ about/ ...
   src/apis/fetch-client.ts      the only JSON mutator
   src/apis/agent-stream.ts      SSE transport for agent turns
   src/lib/                      formatting and safe highlighting
   src/styles/                   paper / night archive tokens
-  scripts/copy-pdfjs-assets.mjs copies pinned PDF.js CMaps/fonts
+  scripts/                      PDF.js asset copy, i18n parity, workspace boundaries
   dist/                         generated build output, gitignored
 docker-compose.yml              production stack: Caddy + Cloudflare Tunnel
 docker-compose.dev.yml          local dependencies
@@ -1753,12 +1896,14 @@ docker/caddy/                   non-root reverse proxy
 - 路径会拒绝遍历段、反斜杠、控制字符和过长的值。上传限制为 10 MB，
   并受扩展名允许列表限制。
 - 来自文件和记忆的 HTML 通过 React 作为文本渲染。Agent Markdown
-  使用 `skipHtml`；DOCX 预览在禁用脚本的沙箱中运行。UI 从不使用
+  使用 `skipHtml`；DOCX 预览在禁用脚本的沙箱中运行，PPTX 幻灯片则绘制到本地
+canvas。UI 从不使用
   `dangerouslySetInnerHTML`。
 - DeepSeek 密钥位于 `.secrets/deepseek.env` 或环境中。它永远不会被
   记录、返回或提交。从设置页面保存的密钥在 PostgreSQL 中加密，并且
   只作为四字符提示返回。
-- R2 凭据位于被 gitignore 的 `.secrets/r2.env`，以只读方式挂载，
+- 对象存储凭据位于被 gitignore 的 `.secrets/r2.env` 或 `.secrets/s3.env`
+  （随附的 RustFS 另有 `secrets/` 下的 Docker secret 文件），以只读方式挂载，
   永远不会成为容器环境变量。存储桶是私有的，没有预签名或公开 URL。
 - 摘要和 agent 轮次会发生 AI 调用。如果提供商失败，API 会返回稳定
   的错误，而不是编造答案。

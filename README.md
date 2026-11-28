@@ -1834,16 +1834,25 @@ bucket, or in an S3-compatible bucket (RustFS by default), selected per file by
 `storage_backend`; the extracted chunks
 and their n-grams remain in PostgreSQL.
 
-The committed code, comments, UI copy, and documentation are English.
+Code, comments, and documentation are written in English, which is canonical.
+The interface and this README also ship complete Traditional and Simplified
+Chinese translations that are updated together with the English source.
 
 ## Development checks
 
 ```bash
+# Everything at once (offline lint, then tests, then the contract gate)
+make lint
+make test
+make api-check
+make audit        # needs network
+
 # Backend
 cd backend
 uv run ruff check .
-uv run mypy app
-PYTHONUTF8=1 uv run bandit -r app -c pyproject.toml
+uv run mypy app script
+uv run lint-imports          # layer and slice-boundary contracts
+PYTHONUTF8=1 uv run bandit -r app script -c pyproject.toml
 uv run pip-audit
 PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 
@@ -1851,16 +1860,24 @@ PYTHONUNBUFFERED=1 uv run pytest -q 2>&1 | tee /tmp/apsor-archive-pytest.log
 cd frontend
 bun run lint
 bun run typecheck
+bun run i18n:check
+bun run check:boundaries     # workspace import boundaries
+bun run test
 bun run build
 bun audit
 ```
+
+`make lint` is the architecture and security gate: ruff, mypy, import-linter
+contracts that keep routers, services, domain code, and slices in their layers,
+bandit, ESLint, TypeScript, i18n key parity, and the frontend workspace-boundary
+check. Branches follow Gitflow: `feat/*` and `fix/*` start from `develop` and
+merge back through a pull request, and `develop` merges into `main` for release.
 
 The integration suite uses one real PostgreSQL test database
 (`apsor_archive_test`) on the same instance, runs sequentially, and resets every
 tracked table between tests. The database is built by `alembic upgrade head`,
 not `create_all`, so the `apsor_app` role, grants, and RLS policies are present
-in every request. There are 46 collected tests; each one exercises the real HTTP
-surface and database. The multi-user tests cover the root/user lifecycle,
+in every request. Each test exercises the real HTTP surface and database. The multi-user tests cover the root/user lifecycle,
 forced password change, one-time temporary passwords, disable/reset session
 revocation, root-only accounts and global settings, private archive isolation
 across files, folders, memories, summaries, conversations, questions, and
@@ -1990,7 +2007,12 @@ this branch are:
   `parallel_within_tool_calls` relation, so a tool-heavy turn keeps running
   until the model answers. The concurrency bound `max_parallel_tools` stays.
   The downgrade restores both columns and raises the restored call cap to at
-  least `max_parallel_tools`.
+  least `max_parallel_tools`;
+- `c3e7a1f5b9d2` widens the `storage_backend` checks on `file`,
+  `file_ingest_job`, and `agent_chat_attachment` to admit `s3` (RustFS, AWS S3,
+  MinIO); `rustfs` is only a configuration alias and `r2` stays distinct. The
+  downgrade restores the two-value checks and fails while any row still records
+  `s3`;
 - `c7a3e9f1d5b2` (current head) creates the private `file_thumbnail` table:
   one tiny WebP per file version (at most 32 KiB, 512 px), owner-safe composite
   foreign key to `file` with `ON DELETE CASCADE`, forced RLS with an owner
@@ -2012,6 +2034,7 @@ backend/
   app/
     main.py                     API assembly, lifespan, gzip, SPA mount
     worker.py                   dedicated durable-ingestion process
+    bootstrap.py                shared process setup and background loops
     shared/                     error registry and list envelope
     infrastructure/             config, database, cache, embeddings, AI, web, files
     module/knowledge/
