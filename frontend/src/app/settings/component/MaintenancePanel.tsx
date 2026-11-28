@@ -40,7 +40,7 @@ export function MaintenancePanel() {
           <p className="maintenance-block__copy">
             {t("settings.maintenance.accessCopyBefore")}
             <strong>
-              {user?.username ?? t("settings.maintenance.keeperFallback")}
+              {user?.username ?? t("settings.maintenance.rootFallback")}
             </strong>
             {t("settings.maintenance.accessCopyAfter")}
           </p>

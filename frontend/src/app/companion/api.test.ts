@@ -7,6 +7,7 @@ import {
   companionRef,
   customCharacter,
   customCompanionId,
+  preferenceBody,
 } from "./api";
 
 function frame(id: number, action: string, position: number) {
@@ -69,5 +70,23 @@ describe("customCharacter", () => {
       "/api/v1/companions/7/frames/5/image?v=abc",
     ]);
     expect(customCharacter(companion([]))).toBeNull();
+  });
+});
+
+describe("preference body", () => {
+  test("a resize sends scale with its derived size", () => {
+    expect(preferenceBody({ scale: 0.42, size: "medium" })).toEqual({ scale: 0.42, size: "medium" });
+  });
+
+  test("a preset button clears scale", () => {
+    expect(preferenceBody({ size: "full", scale: null })).toEqual({ size: "full", scale: null });
+  });
+
+  test("unrelated fields pass through and unset ones are omitted", () => {
+    expect(preferenceBody({ opacityMode: "auto", enabled: false })).toEqual({
+      opacity_mode: "auto",
+      enabled: false,
+    });
+    expect(preferenceBody({})).toEqual({});
   });
 });

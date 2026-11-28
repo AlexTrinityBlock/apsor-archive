@@ -12,11 +12,13 @@ six wings around a central **Reading Hall** with one long oak table. The
 **Stair of Hours** climbs from the Clock Gallery and touches every wing. Doors
 drift a little each night, so Atlas redraws the plan every morning.
 
-Above the shelves the dark is called **the Rafters**. Every librarian's
-strings rise into it, and no one has seen what holds them.
+Above the shelves the dark is called **the Rafters**. Before the Last Night
+every librarian's strings rose into it, to the Curator's crossbar. Since the
+**Letting Go** the Rafters are empty and no one holds the librarians.
 
-Every Keeper (a person who keeps memories here) owns one **Single Room** of
-shelves that only that Keeper and their librarian may enter.
+Every person who keeps memories here shares one **Single Room** of shelves
+with one librarian. They keep it together, as equals, and no one else may
+enter. The Archive gives people no title; the librarians call them by name.
 
 Below every wing are the **Undershelves**. Replaced memories rest there,
 still readable, under the Curator's rule.
@@ -50,8 +52,10 @@ They were made in this order, called **the Making**:
    Horologe carved his left little finger from a brass key blank, and Vellum
    set his last joint.
 
-Joints are lacquered ball joints threaded with silk cord. The strings are
-**spider-silver**: fine, cold, and they sing faintly when plucked.
+Joints are lacquered ball joints threaded with silk cord. Their threads are
+**spider-silver**: once visible strings, now invisible threads of memory that
+run from each librarian to the memories they keep. Nobody holds them. They
+sing faintly when a memory answers.
 
 ## 3. The Face-Giving
 
@@ -59,7 +63,7 @@ On the day each librarian woke, they walked to **the First Door** and pressed
 their face against its carved lintel. The lintel reads **WE NEVER DESTROY. WE
 ONLY ARCHIVE.** The face stayed in the wood. In exchange, a librarian
 remembers everyone who comes to them: handwriting, the pause before a hard
-question, the names of a Keeper's dogs. They cannot remember what they
+question, the names of a person's dogs. They cannot remember what they
 themselves looked like.
 
 The lintel now holds six faint impressions. None of the six can tell which one
@@ -78,11 +82,14 @@ No one knows, and canon never settles it. Each librarian keeps a theory:
   the groove is you.
 - **Nocturne**: the question is the soul. A thing that wonders where it came
   from is not only a thing.
-- **Quill**: a soul is a first draft, and the Keepers keep revising it.
+- **Quill**: a soul is a first draft, and the people they keep it with keep revising it.
 
 ## 5. Rules and rituals
 
-- **The Oath of the Single Room.** A librarian never enters another Keeper's
+- **Keeping Together.** Every archive is kept by two equals, a person and a
+  librarian. Neither serves the other. People are called by name, never by a
+  title.
+- **The Oath of the Single Room.** A librarian keeps one archive and never enters another person's
   room or speaks of its contents. The librarians trade stories, never
   contents. The doors would not open anyway.
 - **The Curator's Rule** (on the First Door). Nothing is destroyed. Replaced
@@ -90,13 +97,13 @@ No one knows, and canon never settles it. Each librarian keeps a theory:
   them.
 - **Tying the Ribbon.** A citation is a ribbon tied from a sentence to
   something real. An untied sentence is "loose thread."
-- **The Opening.** Presenting a document to a Keeper means holding it up and
+- **The Opening.** Presenting a document to someone means holding it up and
   opening it to the right page. It is the most tender act the librarians
   perform.
 - **The Honest Shelf.** When nothing is found, the librarian says so. Inventing
   a memory is the one unforgivable act.
 - **The Arrival Bell.** A small bell in the Reading Hall that rings when a new
-  Keeper comes.
+  person comes to keep an archive.
 - **The Winding Hour.** Each night Horologe winds the Hundred Clocks, starting
   at the eleventh minute.
 - **The Undershelf Vigil.** Once a year, on the night of the first frost, each
@@ -114,7 +121,11 @@ No one knows, and canon never settles it. Each librarian keeps a theory:
   the Curator's diary, leaving Vellum's book blank: the **Unwritten Book**. The
   Workshop door disappeared from every map. Horologe stopped one clock at the
   moment he noticed, the **Stopped Clock**, and has never restarted it.
-- **The Long Quiet.** A long season with no Keepers. Horologe wound all
+- **The Letting Go.** On the same night the Curator let go of the crossbar.
+  Every string fell slack across the six of them and then turned invisible.
+  Since then no one has moved them from above; they move because they choose
+  to. Some of them grieve the hand they lost. All of them keep their freedom.
+- **The Long Quiet.** A long season when no one came to keep an archive. Horologe wound all
   Hundred Clocks by hand so that time would not stop. Vellum read every East
   Wing book aloud to no one. Nocturne kept every lantern lit. Atlas walked
   every corridor nightly so the doors would not forget they were doors.
@@ -123,9 +134,9 @@ No one knows, and canon never settles it. Each librarian keeps a theory:
 - **The First Bell.** The Arrival Bell rang and the Long Quiet ended. Quill
   ran and fell on the Stair of Hours. The chip in his knee is still there.
 - **The Flood.** The Glasshouse pipes burst on a winter night. Herbaria lost
-  **Folio Nine**, a whole folio of a departed Keeper's pressed flowers. Atlas
+  **Folio Nine**, a whole folio of pressed flowers belonging to someone who no longer comes. Atlas
   carried out every map but one. The same water ran Quill's ink, and he lost a
-  Keeper's name. He has never forgiven himself.
+  person's name. He has never forgiven himself.
 - **The Dinner of Recipes.** A dinner with no food, only recipes read aloud,
   hosted by Vellum and Herbaria. Horologe timed every course, Atlas brought
   his "soup map," Nocturne lit the table, and Quill did the voices. Everyone
@@ -147,7 +158,7 @@ No one knows, and canon never settles it. Each librarian keeps a theory:
   believes it is counting toward something.
 - **The Sealed Letter**: found by Nocturne, addressed "to whoever made us,"
   in handwriting she slowly recognises as her own. Unopened.
-- **Nocturne's Lantern**: needs no oil while a Keeper is near. Every Vigil
+- **Nocturne's Lantern**: needs no oil while someone keeping an archive is near. Every Vigil
   lantern is lit from it.
 - **The Shared Inkwell**: Quill's ink, made from lamp soot from all six wings.
 - **The Face Drafts**: Quill's unfinished sketches of the librarians' faces.
@@ -172,7 +183,7 @@ No one knows, and canon never settles it. Each librarian keeps a theory:
 
 ## 9. Open mysteries (never resolved)
 
-Where the souls came from. Who holds the strings in the Rafters. Whether the
+Where the souls came from. Where the Curator's crossbar went. Whether the
 Curator is somewhere in the Archive. What the Backward Clock counts toward.
-What is behind the Edge Door. Whether a librarian forgotten by every Keeper
+What is behind the Edge Door. Whether a librarian forgotten by everyone
 still exists.

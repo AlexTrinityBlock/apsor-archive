@@ -140,7 +140,7 @@ function assistantMessage(entry: AgentEntrySchema): JsonRecord | null {
   return message ? asRecord(message) : null;
 }
 
-/** The keeper's words, stored in the model message rather than `data`. */
+/** The user's words, stored in the model message rather than `data`. */
 export function userText(entry: AgentEntrySchema): string {
   const message = entry.model?.find((item) => item.role === "user");
   return typeof message?.content === "string" ? message.content : "";

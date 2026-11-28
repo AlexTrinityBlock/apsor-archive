@@ -147,13 +147,25 @@ class CompanionFrameModel(Base):
 
 
 class CompanionPreferenceModel(Base):
-    """One account's companion choice, visibility, motion level, and position."""
+    """One account's companion choice, visibility, look, motion, and position."""
 
     __tablename__ = "companion_preference"
     __table_args__ = (
         CheckConstraint(
             "motion IN ('full', 'reduced', 'off')",
             name="motion_valid",
+        ),
+        CheckConstraint(
+            "size IN ('compact', 'medium', 'full')",
+            name="size_valid",
+        ),
+        CheckConstraint(
+            "opacity_mode IN ('opaque', 'translucent', 'auto')",
+            name="opacity_mode_valid",
+        ),
+        CheckConstraint(
+            "scale IS NULL OR (scale >= 0 AND scale <= 1)",
+            name="scale_range",
         ),
         CheckConstraint(
             "selected IS NULL OR char_length(selected) BETWEEN 1 AND 64",
@@ -191,6 +203,20 @@ class CompanionPreferenceModel(Base):
         default="full",
         server_default=text("'full'"),
     )
+    size: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="full",
+        server_default=text("'full'"),
+    )
+    opacity_mode: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="opaque",
+        server_default=text("'opaque'"),
+    )
+    # Continuous display scale (0 compact .. 1 full); NULL means "use ``size``".
+    scale: Mapped[float | None] = mapped_column(Float, nullable=True)
     position_x: Mapped[float | None] = mapped_column(Float, nullable=True)
     position_y: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

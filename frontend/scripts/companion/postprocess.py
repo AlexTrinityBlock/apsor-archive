@@ -117,7 +117,7 @@ def _ramp(y: np.ndarray, full: float, zero: float) -> np.ndarray:
 
 
 def warp(img: Image.Image, tilt: float = 0.0, nod: float = 0.0, lift: float = 0.0, bob: float = 0.0) -> Image.Image:
-    """Pixel-locked marionette motion: the head pivots at the neck, the chest
+    """Pixel-locked free-standing motion: the head pivots at the neck, the chest
     rises, and detached props (sparkles, ribbons, cards) float upward."""
     rgba = np.array(img.convert("RGBA"), dtype=np.float32) / 255.0
     alpha = rgba[:, :, 3]
@@ -227,7 +227,6 @@ def export(work: Path, catalog: dict, only: set[str]) -> None:
             "name": spec["name"],
             "gender": spec["gender"],
             "palette": {"accent": spec["accent"]},
-            "anchor": anchor_of(placed["idle"]),
             "size": {"width": FRAME_W, "height": FRAME_H},
             "portrait": "portrait.avif",
             "actions": actions,
@@ -239,16 +238,6 @@ def export(work: Path, catalog: dict, only: set[str]) -> None:
         encoding="utf-8",
     )
     print(f"total {total} bytes, largest frame {largest} bytes")
-
-
-def anchor_of(frame: Image.Image) -> dict[str, float]:
-    alpha = np.array(frame.getchannel("A"))
-    rows = np.where(alpha.max(axis=1) > 40)[0]
-    top = int(rows[0])
-    band = alpha[top : top + 24]
-    cols = np.where(band.max(axis=0) > 40)[0]
-    cx = float(cols.mean()) if len(cols) else FRAME_W / 2
-    return {"x": round(cx / FRAME_W, 3), "y": round(top / FRAME_H, 3)}
 
 
 def sheet(paths: list[Path], out: Path, cell: int = 200) -> None:

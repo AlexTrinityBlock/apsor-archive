@@ -6,6 +6,8 @@
  */
 import type { CompanionPositionSchema } from './companionPositionSchema';
 import type { CompanionPreferenceUpdateSchemaMotion } from './companionPreferenceUpdateSchemaMotion';
+import type { CompanionPreferenceUpdateSchemaOpacityMode } from './companionPreferenceUpdateSchemaOpacityMode';
+import type { CompanionPreferenceUpdateSchemaSize } from './companionPreferenceUpdateSchemaSize';
 
 /**
  * Change part of the preference; omitted fields keep their stored value.
@@ -13,6 +15,9 @@ import type { CompanionPreferenceUpdateSchemaMotion } from './companionPreferenc
 export interface CompanionPreferenceUpdateSchema {
   enabled?: boolean | null;
   motion?: CompanionPreferenceUpdateSchemaMotion;
+  opacity_mode?: CompanionPreferenceUpdateSchemaOpacityMode;
   position?: CompanionPositionSchema | null;
+  scale?: number | null;
   selected?: string | null;
+  size?: CompanionPreferenceUpdateSchemaSize;
 }

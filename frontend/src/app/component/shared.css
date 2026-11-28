@@ -95,3 +95,94 @@
 .settings-dialog__copy:last-child {
   margin-bottom: 0;
 }
+
+/* --------------------------------------------------------------------------
+   Switch
+   -------------------------------------------------------------------------- */
+
+.switch-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.switch-field__control {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  margin-top: 1px;
+}
+
+.switch-field__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.switch-field__track {
+  display: block;
+  width: 30px;
+  height: 16px;
+  padding: 2px;
+  background: var(--mono-subtle);
+  border: 0.7px solid var(--mono-grid);
+  border-radius: 9px;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.switch-field__thumb {
+  display: block;
+  width: 10px;
+  height: 10px;
+  background: var(--mono-muted);
+  border-radius: 50%;
+  transition:
+    transform var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.switch-field__input:checked + .switch-field__track {
+  background: var(--accent-moss);
+  border-color: var(--accent-moss);
+}
+
+.switch-field__input:checked
+  + .switch-field__track
+  .switch-field__thumb {
+  background: #ffffff;
+  transform: translateX(14px);
+}
+
+.switch-field__input:focus-visible + .switch-field__track {
+  outline: 2px solid var(--accent-seal);
+  outline-offset: 2px;
+}
+
+.switch-field:has(.switch-field__input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.switch-field__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.switch-field__title {
+  color: var(--mono-ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.switch-field__hint {
+  color: var(--mono-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}

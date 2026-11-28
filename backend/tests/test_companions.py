@@ -209,6 +209,9 @@ def test_companion_preference_round_trip(client: TestClient) -> None:
         "selected": None,
         "enabled": True,
         "motion": "full",
+        "size": "full",
+        "scale": None,
+        "opacity_mode": "opaque",
         "position": None,
         "updated_at": None,
     }
@@ -227,14 +230,32 @@ def test_companion_preference_round_trip(client: TestClient) -> None:
     assert motion.json()["selected"] == "preset:archivist-elise"
     assert motion.json()["motion"] == "reduced"
     assert motion.json()["enabled"] is False
+    assert motion.json()["size"] == "full"
+
+    look = client.patch(f"{BASE}/preference", json={"size": "compact", "opacity_mode": "opaque"})
+    assert look.status_code == 200, look.text
+    assert look.json()["size"] == "compact"
+    assert look.json()["opacity_mode"] == "opaque"
+    # Omitted fields keep their stored values.
+    assert look.json()["motion"] == "reduced"
+    kept = client.patch(f"{BASE}/preference", json={"enabled": True})
+    assert kept.json()["size"] == "compact"
+    assert kept.json()["opacity_mode"] == "opaque"
 
     for invalid in (
         {"selected": "preset:Bad Id"},
         {"selected": "custom:abc"},
         {"selected": "other:1"},
         {"motion": "wild"},
+        {"size": "huge"},
+        {"size": None},
+        {"opacity_mode": "ghost"},
+        {"opacity_mode": None},
         {"enabled": None},
         {"position": {"x": 1.5, "y": 0}},
+        {"scale": 1.5},
+        {"scale": -0.1},
+        {"scale": "big"},
     ):
         response = client.patch(f"{BASE}/preference", json=invalid)
         assert response.status_code == 400, invalid
@@ -252,6 +273,34 @@ def test_companion_preference_round_trip(client: TestClient) -> None:
 
     cleared = client.patch(f"{BASE}/preference", json={"position": None})
     assert cleared.json()["position"] is None
+
+
+def test_companion_preference_scale_merge_rules(client: TestClient) -> None:
+    """scale-only derives size; size-only clears scale; both are stored as sent."""
+    scaled = client.patch(f"{BASE}/preference", json={"scale": 0.53219})
+    assert scaled.status_code == 200, scaled.text
+    assert scaled.json()["scale"] == 0.532
+    assert scaled.json()["size"] == "medium"
+
+    small = client.patch(f"{BASE}/preference", json={"scale": 0.1})
+    assert small.json()["size"] == "compact"
+    big = client.patch(f"{BASE}/preference", json={"scale": 0.9})
+    assert big.json()["size"] == "full"
+
+    preset = client.patch(f"{BASE}/preference", json={"size": "medium"})
+    assert preset.json()["size"] == "medium"
+    assert preset.json()["scale"] is None
+
+    both = client.patch(f"{BASE}/preference", json={"size": "full", "scale": 0.7})
+    assert both.json()["size"] == "full"
+    assert both.json()["scale"] == 0.7
+
+    untouched = client.patch(f"{BASE}/preference", json={"motion": "reduced"})
+    assert untouched.json()["scale"] == 0.7
+
+    cleared = client.patch(f"{BASE}/preference", json={"scale": None})
+    assert cleared.json()["scale"] is None
+    assert cleared.json()["size"] == "full"
 
 
 def test_companions_are_private_per_account(

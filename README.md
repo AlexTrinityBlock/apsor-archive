@@ -574,8 +574,20 @@ prompt text; it does not send the message. The API is
 
 ### Chat companion
 
-A small marionette librarian can stand beside the chat and react to the agent:
-it thinks while the model reasons, searches during `search_knowledge`, reads,
+> *We could never travel that far. So we made someone who could, and taught
+> them everything we loved.*
+
+The six built-in librarians (Vellum, Atlas, Herbaria, Horologe, Nocturne,
+Quill) are figures of ten-thousand-year aeon-porcelain whose minds woke, undesigned,
+from the library's human writing; they keep each archive together with one
+person, as equals. Their world is written down in
+[`backend/app/module/companion/lore/BIBLE.md`](backend/app/module/companion/lore/BIBLE.md)
+with one character bible per librarian under `lore/characters/`, an English
+canon (`canon.json`, `GLOSSARY.md`), and complete zh-TW and zh-CN translations
+with shared term tables (`lore/zh-*/TERMS.md`).
+
+A small librarian can stand freely beside the chat (no strings or control bar)
+and react to the agent: it thinks while the model reasons, searches during `search_knowledge`, reads,
 writes, calculates, browses, and presents during the matching tools, and the
 agent can also call the read-only `companion_action` tool for an explicit
 gesture. Built-in presets ship with the frontend. Each account may also create up
@@ -584,19 +596,28 @@ JPEG, WebP, or AVIF, at most 8 MB each); the server re-encodes every image as
 AVIF (WebP only when the AVIF codec is unavailable) that fits 384x576 and 40 KB
 and strips its metadata. The per-account preference stores
 the selected companion (`preset:<id>` or `custom:<id>`), whether it is shown, the
-motion level (`full`, `reduced`, `off`), and its normalized position. The API is
+motion level (`full`, `reduced`, `off`), its display size (`compact`, `medium`,
+`full`; full shows the art at up to 384x576 and only scales down to fit the
+window and the free space beside the chat), its opacity mode (`opaque`,
+`translucent`, or `auto`, which fades only while it overlaps the page or you
+type or scroll), and its normalized position. Each account configures all of
+this on its own **Companion** page (`/companion`, in the sidebar's personal
+section), which also hosts the story editor and custom companions; old
+`/settings#settings-companion` links redirect there. The API is
 under `/api/v1/companions` (list, create, update, delete, frame upload, frame
 order, frame delete, frame image, and `GET/PATCH /api/v1/companions/preference`).
 
 Each companion also has a story: a persona that becomes its voice in new
 conversations (frozen per conversation, in the conversation's language), and
-lore, its own memories. When the agent searches the Keeper's archive, up to two
+lore, its own memories. When the agent searches the user's archive, up to two
 relevant memories of the librarian's own may ride beside the results in a
 separate block; they are never archive evidence or citations. Asking the
 librarian about itself or the Archive lets it tell its own story. Deeper
 memories unlock as the account completes more conversations with that
-companion. Every account can edit the persona and lore of any companion per
-language and reset to the default (`/api/v1/companions/stories/...`).
+companion. The persona rules treat the user as an equal: the librarian uses
+their name or a plain "you", never a title such as Keeper or master. Every
+account can edit the persona and lore of any companion per language and reset
+to the default (`/api/v1/companions/stories/...`).
 
 ### Agent runtime settings
 
@@ -1354,7 +1375,7 @@ a pending state for the seconds the turn takes.
 `/chat` and `/chat/:conversationId` are the persistent reading room for the
 agent. The thread rail lists active and archived conversations and supports
 rename, archive/restore, delete, and a new thread; the sheet renders immutable
-entries as keeper marginalia, archive sheets, field-note tool results, and
+entries as user marginalia, archive sheets, field-note tool results, and
 structured resource cards. The composer streams over SSE, supports
 Cmd/Ctrl+Enter and a stop action, and refreshes the thread list plus the active
 transcript when the run settles (other conversations are not refetched).
@@ -1938,7 +1959,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `b8e4d2f6a1c3`. The migrations after `agent_config` on
+The latest migration is `d2b6f4a8c1e9`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -2057,12 +2078,21 @@ this branch are:
   forced owner-only RLS, and `apsor_app` grants. Frames reference their
   companion through an owner-safe composite foreign key and cascade with it; the
   preference row is keyed by `user_id`. The downgrade drops the three tables;
-- `b8e4d2f6a1c3` (current head) creates the private `companion_story`,
+- `b8e4d2f6a1c3` creates the private `companion_story`,
   `companion_lore_fragment`, and `companion_bond` tables with forced owner-only
   RLS and `apsor_app` grants: one account's per-locale copy of a companion's
   persona and lore, its fragments, and the completed-run count that unlocks lore
   tiers. A custom companion's story cascades with the companion. The downgrade
   drops the three tables.
+- `c5f1a8d3e7b4` adds `size` (`compact`, `medium`, `full`;
+  default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
+  `opaque`) to `companion_preference`, with check constraints and server
+  defaults. RLS and grants are unchanged; the downgrade drops both columns.
+- `d2b6f4a8c1e9` (current head) adds the nullable `scale` float (0 compact to
+  1 full) to `companion_preference` for direct on-screen resizing, with a
+  range check. NULL means "use `size`"; sending only `scale` derives `size`,
+  and sending only `size` clears `scale`. RLS and grants are unchanged; the
+  downgrade drops the column.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

@@ -293,7 +293,7 @@ export const settings = {
       "這座檔案館為每個帳號提供私人檔案庫，全域設定則由 root 管理。Root 負責帳號與執行環境設定；每個帳號只能讀取自己的檔案、記憶與對話。你目前以身分「",
     accessCopyAfter:
       "」登入。請從主導覽的帳號頁面管理帳號。這裡沒有雲端帳號或電子郵件復原；離開共用機器時，請從側欄登出。",
-    keeperFallback: "root 帳號",
+    rootFallback: "root 帳號",
     readMethod: "閱讀方法",
   },
   diagnostics: {

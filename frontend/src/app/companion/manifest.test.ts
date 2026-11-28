@@ -61,13 +61,13 @@ describe("parseManifest", () => {
     expect(parseManifest(null, BASE)).toBeNull();
   });
 
-  test("defaults bad accent, anchor, and size", () => {
+  test("defaults bad accent and size, and ignores a legacy string anchor", () => {
     const character = parseManifest(
       { id: "x", actions: { idle: { frames: ["idle.webp"] } }, palette: { accent: "red" }, anchor: { x: 4 } },
       "/companions/x",
     );
     expect(character?.accent).toBe("#b8933f");
-    expect(character?.anchor).toEqual({ x: 1, y: 0.04 });
+    expect(character).not.toHaveProperty("anchor");
     expect(character?.width).toBe(384);
     expect(character?.gender).toBe("unspecified");
   });

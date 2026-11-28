@@ -1,0 +1,65 @@
+/* The Curator's epigraph above the librarian roster. */
+.about-spirit {
+  margin: 0 0 18px;
+  padding: 14px 18px;
+  border-left: 2px solid var(--accent-ochre);
+  background: color-mix(in srgb, var(--accent-ochre) 5%, var(--mono-card-bg));
+  border-radius: var(--radius-md);
+}
+
+.about-spirit blockquote {
+  margin: 0;
+}
+
+.about-spirit p {
+  margin: 0;
+  color: var(--mono-ink);
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.6;
+}
+
+.about-spirit figcaption {
+  margin-top: 6px;
+  color: var(--mono-l3);
+  font-size: 12px;
+}
+
+/* Behaviour → lore mapping inside the technical details. */
+.about-tech__lore-title {
+  margin: 18px 0 4px;
+  color: var(--mono-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.about-tech__lore {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+}
+
+.about-tech__lore-row {
+  display: grid;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr);
+  gap: 4px 14px;
+  padding: 8px 0;
+  border-top: 0.7px solid var(--mono-grid);
+}
+
+.about-tech__lore-row dt {
+  color: var(--mono-ink);
+  font-weight: 600;
+}
+
+.about-tech__lore-row dd {
+  margin: 0;
+  color: var(--mono-l2);
+  font-style: italic;
+}
+
+@media (max-width: 560px) {
+  .about-tech__lore-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

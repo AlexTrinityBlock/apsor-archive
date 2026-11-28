@@ -163,7 +163,7 @@ function TraceMeta({ item }: { readonly item: TraceItem }) {
 /**
  * The expanded workspace workbench.
  *
- * Auto-follow selects the newest trace item until the keeper pins something.
+ * Auto-follow selects the newest trace item until the user pins something.
  * A pinned item is never stolen by later tool calls, and the last resource-
  * bearing item stays mounted under panels that have no resource of their own.
  */

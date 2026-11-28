@@ -529,7 +529,7 @@ export const chat = {
         "这次执行在工具调用完成前停止。助手错误已保留；没有写入不完整的工具结果。",
       suggestionInvalidArguments:
         "请以必要的标量参数重新发出调用；数组与对象必须符合工具目录。",
-      suggestionConfirmation: "馆长必须明确确认记忆文字，才能压进档案馆。",
+      suggestionConfirmation: "你必须明确确认记忆文字，才能压进档案馆。",
       suggestionUnavailable:
         "这个工具不在对话冻结的工具集中。请打开新的对话串以重新整理。",
       suggestionExecution:

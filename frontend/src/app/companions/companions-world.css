@@ -1,0 +1,71 @@
+/* A quiet introduction to the librarians' world below the controls. */
+.companions-world {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 72ch;
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 0.7px solid var(--mono-grid);
+}
+
+.companions-world h2 {
+  margin: 0;
+  color: var(--mono-ink);
+  font-size: 18px;
+}
+
+.companions-world p {
+  margin: 0;
+  color: var(--mono-l2);
+  line-height: 1.65;
+}
+
+.companions-world__spirit {
+  margin: 4px 0;
+  padding: 12px 16px;
+  border-left: 2px solid var(--accent-ochre);
+  background: color-mix(in srgb, var(--accent-ochre) 5%, var(--mono-card-bg));
+  border-radius: var(--radius-md);
+}
+
+.companions-world__spirit blockquote {
+  margin: 0;
+}
+
+.companions-world__spirit p {
+  color: var(--mono-ink);
+  font-style: italic;
+}
+
+.companions-world__spirit figcaption {
+  margin-top: 6px;
+  color: var(--mono-l3);
+  font-size: 12px;
+}
+
+.companions-world__roster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: 8px 18px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.companions-world__roster li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.companions-world__roster strong {
+  color: var(--mono-ink);
+  font-size: 13px;
+}
+
+.companions-world__roster span {
+  color: var(--mono-l3);
+  font-size: 12px;
+}

@@ -14,7 +14,7 @@ interface UserMarginaliaProps {
   readonly copyAction?: ReactNode;
 }
 
-/** The keeper's turn: a compact author line and an ink speech bubble. */
+/** The user's turn: a compact author line and an ink speech bubble. */
 export function UserMarginalia({
   text,
   attachments = [],

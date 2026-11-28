@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useI18n } from "../../i18n";
 import type { TranslationKey } from "../../i18n";
 import { LibrarianPortrait } from "./LibrarianPortrait";
+import "../about-lore.css";
 
 /** Built-in presets in display order; names are proper nouns and stay Latin. */
 const LIBRARIANS: readonly {
@@ -30,14 +31,20 @@ const LIBRARIANS: readonly {
   { id: "quill", name: "Quill", line: "insights.about.librarians.quill" },
 ];
 
-/** The Companion tab in Settings; the hash selects the tab. */
-const COMPANION_SETTINGS_HREF = "/settings#settings-companion";
+/** The per-account companion workspace. */
+const COMPANION_SETTINGS_HREF = "/companion";
 
-/** "Meet the librarians": six portraits with one line each. */
+/** "Meet the librarians": the Curator's epigraph, then six portraits. */
 export function LibrarianRoster() {
   const { t } = useI18n();
   return (
     <>
+      <figure className="about-spirit">
+        <blockquote>
+          <p>{t("insights.about.librarians.spirit")}</p>
+        </blockquote>
+        <figcaption>{t("insights.about.librarians.spiritBy")}</figcaption>
+      </figure>
       <ul
         className="about-roster"
         aria-label={t("insights.about.librarians.listAria")}

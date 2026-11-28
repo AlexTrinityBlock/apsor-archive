@@ -25,8 +25,6 @@ export interface CompanionCharacter {
   readonly name: string;
   readonly gender: CompanionGender;
   readonly accent: string;
-  /** Normalized point where the head string attaches. */
-  readonly anchor: { readonly x: number; readonly y: number };
   readonly width: number;
   readonly height: number;
   readonly portrait: string | null;
@@ -58,12 +56,6 @@ export function isSafeCompanionId(value: unknown): value is string {
 
 function readGender(value: unknown): CompanionGender {
   return value === "female" || value === "male" ? value : "unspecified";
-}
-
-function clampUnit(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.min(1, Math.max(0, value))
-    : fallback;
 }
 
 function positiveInt(value: unknown, fallback: number): number {
@@ -140,7 +132,6 @@ export function parseManifest(
   if (actions.idle === undefined) {
     return null;
   }
-  const anchor = isObject(value.anchor) ? value.anchor : {};
   const size = isObject(value.size) ? value.size : {};
   const palette = isObject(value.palette) ? value.palette : {};
   const accent =
@@ -156,7 +147,6 @@ export function parseManifest(
     name,
     gender: readGender(value.gender),
     accent,
-    anchor: { x: clampUnit(anchor.x, 0.5), y: clampUnit(anchor.y, 0.04) },
     width: positiveInt(size.width, 384),
     height: positiveInt(size.height, 576),
     // Frame and portrait extensions come from the manifest (AVIF or WebP);
