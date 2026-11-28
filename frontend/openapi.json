@@ -515,6 +515,23 @@
         "additionalProperties": false,
         "description": "Create a transcript scope with one frozen system entry.",
         "properties": {
+          "locale": {
+            "anyOf": [
+              {
+                "enum": [
+                  "en",
+                  "zh-TW",
+                  "zh-CN"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Interface language for the companion persona and lore, frozen with the conversation. Omitted means English.",
+            "title": "Locale"
+          },
           "model": {
             "anyOf": [
               {
@@ -2390,6 +2407,54 @@
         "title": "ChunkSchema",
         "type": "object"
       },
+      "CompanionBondSchema": {
+        "description": "How far this account has come with the companion.",
+        "properties": {
+          "completed_runs": {
+            "title": "Completed Runs",
+            "type": "integer"
+          },
+          "familiar_unlock_runs": {
+            "title": "Familiar Unlock Runs",
+            "type": "integer"
+          },
+          "familiar_unlocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Familiar Unlocked At"
+          },
+          "rare_unlock_runs": {
+            "title": "Rare Unlock Runs",
+            "type": "integer"
+          },
+          "rare_unlocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rare Unlocked At"
+          }
+        },
+        "required": [
+          "completed_runs",
+          "familiar_unlock_runs",
+          "rare_unlock_runs"
+        ],
+        "title": "CompanionBondSchema",
+        "type": "object"
+      },
       "CompanionCreateSchema": {
         "additionalProperties": false,
         "description": "Create an empty companion; frames are uploaded per action afterwards.",
@@ -2540,6 +2605,289 @@
           "url"
         ],
         "title": "CompanionFrameSchema",
+        "type": "object"
+      },
+      "CompanionLoreCreateSchema": {
+        "additionalProperties": false,
+        "description": "Add one fragment to this account's copy of the lore.",
+        "properties": {
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "tier": {
+            "default": "first",
+            "enum": [
+              "first",
+              "familiar",
+              "rare"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "CompanionLoreCreateSchema",
+        "type": "object"
+      },
+      "CompanionLoreFragmentSchema": {
+        "description": "One lore fragment as shown in the story editor.\n\n``unlocked`` only says whether retrieval may surface the fragment yet; the\neditor always shows the full text.",
+        "properties": {
+          "edited": {
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "tier": {
+            "enum": [
+              "first",
+              "familiar",
+              "rare"
+            ],
+            "title": "Tier",
+            "type": "string"
+          },
+          "unlocked": {
+            "title": "Unlocked",
+            "type": "boolean"
+          },
+          "unlocked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unlocked At"
+          }
+        },
+        "required": [
+          "id",
+          "tier",
+          "themes",
+          "text",
+          "unlocked",
+          "edited",
+          "position"
+        ],
+        "title": "CompanionLoreFragmentSchema",
+        "type": "object"
+      },
+      "CompanionLoreSchema": {
+        "description": "A companion's lore in one locale, for the story editor.",
+        "properties": {
+          "bond": {
+            "$ref": "#/components/schemas/CompanionBondSchema"
+          },
+          "companion_ref": {
+            "title": "Companion Ref",
+            "type": "string"
+          },
+          "customized": {
+            "description": "True when this locale's lore is an account copy.",
+            "title": "Customized",
+            "type": "boolean"
+          },
+          "fragments": {
+            "items": {
+              "$ref": "#/components/schemas/CompanionLoreFragmentSchema"
+            },
+            "title": "Fragments",
+            "type": "array"
+          },
+          "locale": {
+            "enum": [
+              "en",
+              "zh-TW",
+              "zh-CN"
+            ],
+            "title": "Locale",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "companion_ref",
+          "locale",
+          "name",
+          "customized",
+          "bond",
+          "fragments"
+        ],
+        "title": "CompanionLoreSchema",
+        "type": "object"
+      },
+      "CompanionLoreUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Edit one fragment; omitted fields keep their values.",
+        "properties": {
+          "position": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "themes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Themes"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "enum": [
+                  "first",
+                  "familiar",
+                  "rare"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          }
+        },
+        "title": "CompanionLoreUpdateSchema",
+        "type": "object"
+      },
+      "CompanionPersonaSchema": {
+        "description": "The persona a companion speaks with in this account and locale.",
+        "properties": {
+          "companion_ref": {
+            "title": "Companion Ref",
+            "type": "string"
+          },
+          "default_persona": {
+            "title": "Default Persona",
+            "type": "string"
+          },
+          "is_default": {
+            "description": "True when no account override exists.",
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "locale": {
+            "enum": [
+              "en",
+              "zh-TW",
+              "zh-CN"
+            ],
+            "title": "Locale",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "persona": {
+            "title": "Persona",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "companion_ref",
+          "locale",
+          "name",
+          "persona",
+          "is_default",
+          "default_persona"
+        ],
+        "title": "CompanionPersonaSchema",
+        "type": "object"
+      },
+      "CompanionPersonaUpdateSchema": {
+        "additionalProperties": false,
+        "description": "Replace this account's persona for one companion and locale.",
+        "properties": {
+          "persona": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Persona",
+            "type": "string"
+          }
+        },
+        "required": [
+          "persona"
+        ],
+        "title": "CompanionPersonaUpdateSchema",
         "type": "object"
       },
       "CompanionPositionSchema": {
@@ -8259,7 +8607,7 @@
         ]
       },
       "post": {
-        "description": "Create a transcript scope and its immutable system entry.",
+        "description": "Create a transcript scope and its immutable system entry.\n\nThe account's active companion persona (in ``locale``) is frozen with it.",
         "operationId": "createAgentConversation",
         "requestBody": {
           "content": {
@@ -9975,6 +10323,552 @@
           }
         },
         "summary": "Update Companion Preference",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/stories/{companion_ref}/lore": {
+      "get": {
+        "description": "Return every lore fragment with its tier and unlock state.",
+        "operationId": "listCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      },
+      "post": {
+        "description": "Add a fragment (copying this locale's defaults on the first edit).",
+        "operationId": "createCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionLoreCreateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/stories/{companion_ref}/lore/reset": {
+      "post": {
+        "description": "Discard this locale's lore copy and return the default fragments.",
+        "operationId": "resetCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/stories/{companion_ref}/lore/{fragment_id}": {
+      "delete": {
+        "description": "Remove one fragment from this account's copy.",
+        "operationId": "deleteCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fragment_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Fragment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      },
+      "patch": {
+        "description": "Edit one fragment's text, themes, tier, or position.",
+        "operationId": "updateCompanionLore",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "fragment_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Fragment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionLoreUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionLoreSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Companion Lore",
+        "tags": [
+          "companions"
+        ]
+      }
+    },
+    "/api/v1/companions/stories/{companion_ref}/persona": {
+      "delete": {
+        "description": "Drop this locale's persona override and return the default.",
+        "operationId": "resetCompanionPersona",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPersonaSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Companion Persona",
+        "tags": [
+          "companions"
+        ]
+      },
+      "get": {
+        "description": "Return the persona in effect for this account and locale.",
+        "operationId": "getCompanionPersona",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPersonaSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Companion Persona",
+        "tags": [
+          "companions"
+        ]
+      },
+      "put": {
+        "description": "Replace this account's persona; it applies to new conversations.",
+        "operationId": "updateCompanionPersona",
+        "parameters": [
+          {
+            "description": "preset:<id> or custom:<id>",
+            "in": "path",
+            "name": "companion_ref",
+            "required": true,
+            "schema": {
+              "description": "preset:<id> or custom:<id>",
+              "maxLength": 64,
+              "title": "Companion Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Story language to read or edit.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "description": "Story language to read or edit.",
+              "enum": [
+                "en",
+                "zh-TW",
+                "zh-CN"
+              ],
+              "title": "Locale",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanionPersonaUpdateSchema"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanionPersonaSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Companion Persona",
         "tags": [
           "companions"
         ]

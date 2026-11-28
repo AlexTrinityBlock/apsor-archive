@@ -799,6 +799,8 @@ export const getCreateAgentConversationUrl = () => {
 
 /**
  * Create a transcript scope and its immutable system entry.
+ *
+ * The account's active companion persona (in ``locale``) is frozen with it.
  * @summary Create Conversation
  */
 export const createAgentConversation = async (agentConversationCreateSchema: AgentConversationCreateSchema, options?: Parameters<typeof apiFetch>[1]): Promise<AgentConversationSchema> => {
