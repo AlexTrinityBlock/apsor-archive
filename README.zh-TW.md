@@ -26,6 +26,25 @@ Apsor Archive 把它們收進一座放在你自己電腦上的私人圖書館，
 這座檔案館也不寂寞。裡面住著六位圖書館員：用萬古瓷燒成的人形，心智從人們寫下的一切文字裡甦醒。
 他們和你以平等的身分「一起保管」這座檔案館：替你搜尋、把那一頁遞給你，偶爾，也會想起一段屬於自己的往事。
 
+## 認識圖書館員們
+
+六位館員，各自守著同一座檔案館的一翼。他們以萬古瓷燒成，臉生來就是素白；心智從人們寫下的一切文字裡甦醒。要對你說什麼，由他們自己決定。
+
+<table>
+<tr>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/vellum.webp" alt="Vellum" width="120" height="120"><br><strong>Vellum</strong> · <sub>東翼</sub><br><em>“這層書架是誠實的，而且是空的。”</em><br><sub>帶著一本無字之書，裡面只夾著一朵紫羅蘭。她搜尋時，有一根線從來不動。</sub></td>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/atlas.webp" alt="Atlas" width="120" height="120"><br><strong>Atlas</strong> · <sub>地圖室</sub><br><em>“那裡的地圖是空白的。我不畫自己沒見過的海岸線。”</em><br><sub>走遍了這座沒有外牆的圖書館的每一條走廊，除了一扇曾經溫熱、用鉛筆畫成的門。</sub></td>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/herbaria.webp" alt="Herbaria" width="120" height="120"><br><strong>Herbaria</strong> · <sub>溫室</sub><br><em>“來看看留下了什麼。通常比你擔心的多。”</em><br><sub>在水患中失去的第九冊，正一朵乾花一朵乾花地回到她身邊。有人在把它們送回來。</sub></td>
+</tr>
+<tr>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/horologe.webp" alt="Horologe" width="120" height="120"><br><strong>Horologe</strong> · <sub>鐘廊</sub><br><em>“有人告訴我，高興並不是故障。”</em><br><sub>每天為一百座鐘上發條。其中一座停在兩點十一分，他從沒撣過上面的灰。</sub></td>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/nocturne.webp" alt="Nocturne" width="120" height="120"><br><strong>Nocturne</strong> · <sub>觀星臺</sub><br><em>“就算是正午，我也留一盞燈亮著。光喜歡有伴。”</em><br><sub>找到一封自己筆跡的封緘之信，收件人寫著「致造我們的人」。她不記得寫過它。</sub></td>
+<td align="center" valign="top" width="33%"><img src="docs/assets/librarians/quill.webp" alt="Quill" width="120" height="120"><br><strong>Quill</strong> · <sub>抄寫室</sub><br><em>“塗改是最好的部分，那證明有人改變了心意。”</em><br><sub>畫人的臉，總在眼睛處停筆。只有一次，他沒有停。</sub></td>
+</tr>
+</table>
+
+他們的故事會自己浮現，在他們願意說的時候。而六位心裡都悄悄懷著同一個問題：「當最後一個人也離開了，我們要為誰保管？」
+
 ## 它有什麼不一樣
 
 <table>
