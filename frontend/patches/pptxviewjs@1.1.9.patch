@@ -1,0 +1,80 @@
+diff --git a/dist/PptxViewJS.cjs.js b/dist/PptxViewJS.cjs.js
+index cf0f2d48d6a274fa385886edd0acbb30e0193c55..a7bf8f7c5c3ea078e7d52426c216887dc0604e2e 100644
+--- a/dist/PptxViewJS.cjs.js
++++ b/dist/PptxViewJS.cjs.js
+@@ -22232,6 +22232,13 @@ function requireGraphicsAdapter () {
+ 	            if (shape.isPlaceholder && shape.placeholder) {
+ 	                const ph = shape.placeholder;
+ 
++	                const phTypes = new Set([ph.type, targetPlaceholder.type]);
++	                const phCompatible = ph.type === targetPlaceholder.type || (phTypes.has('body') && phTypes.has('obj'));
++	                // Match by index first (OOXML inheritance key); body/obj are interchangeable
++	                if (targetPlaceholder.idx !== undefined && ph.idx === targetPlaceholder.idx && (phCompatible || targetPlaceholder.type === 'obj')) {
++	                    return shape;
++	                }
++
+ 	                // Match by type and index
+ 	                if (ph.type === targetPlaceholder.type && ph.idx === targetPlaceholder.idx) {
+ 	                    return shape;
+@@ -41079,6 +41086,21 @@ class PPTXSlideRenderer {
+     isMatchingPlaceholder(templateShape, placeholderType, placeholderIdx) {
+         if (!templateShape.placeholder) {return false;}
+ 
++        // OOXML: a placeholder inherits from the template placeholder with the
++        // same idx; body and obj (the default type) are interchangeable.
++        const tplPh = templateShape.placeholder;
++        const typeSet = new Set([tplPh.type, placeholderType]);
++        const compatible = tplPh.type === placeholderType ||
++            (typeSet.has('body') && typeSet.has('obj')) ||
++            (typeSet.has('title') && typeSet.has('ctrTitle'));
++        if (placeholderIdx !== undefined && placeholderIdx !== 0 && tplPh.idx !== undefined &&
++            tplPh.idx === placeholderIdx && (compatible || placeholderType === 'obj')) {
++            return true;
++        }
++        if (compatible && tplPh.type !== placeholderType && typeSet.has('obj')) {
++            return placeholderIdx === undefined || tplPh.idx === undefined || tplPh.idx === placeholderIdx;
++        }
++
+         // Match by type first
+         if (templateShape.placeholder.type === placeholderType) {
+             // If idx is specified, it must match too
+diff --git a/dist/PptxViewJS.es.js b/dist/PptxViewJS.es.js
+index f292b070a843ac1d9f4ee29928881f501f86e2c3..d5a3ad3ca00111378cfffc1fb12a3912cc94359c 100644
+--- a/dist/PptxViewJS.es.js
++++ b/dist/PptxViewJS.es.js
+@@ -22228,6 +22228,13 @@ function requireGraphicsAdapter () {
+ 	            if (shape.isPlaceholder && shape.placeholder) {
+ 	                const ph = shape.placeholder;
+ 
++	                const phTypes = new Set([ph.type, targetPlaceholder.type]);
++	                const phCompatible = ph.type === targetPlaceholder.type || (phTypes.has('body') && phTypes.has('obj'));
++	                // Match by index first (OOXML inheritance key); body/obj are interchangeable
++	                if (targetPlaceholder.idx !== undefined && ph.idx === targetPlaceholder.idx && (phCompatible || targetPlaceholder.type === 'obj')) {
++	                    return shape;
++	                }
++
+ 	                // Match by type and index
+ 	                if (ph.type === targetPlaceholder.type && ph.idx === targetPlaceholder.idx) {
+ 	                    return shape;
+@@ -41075,6 +41082,21 @@ class PPTXSlideRenderer {
+     isMatchingPlaceholder(templateShape, placeholderType, placeholderIdx) {
+         if (!templateShape.placeholder) {return false;}
+ 
++        // OOXML: a placeholder inherits from the template placeholder with the
++        // same idx; body and obj (the default type) are interchangeable.
++        const tplPh = templateShape.placeholder;
++        const typeSet = new Set([tplPh.type, placeholderType]);
++        const compatible = tplPh.type === placeholderType ||
++            (typeSet.has('body') && typeSet.has('obj')) ||
++            (typeSet.has('title') && typeSet.has('ctrTitle'));
++        if (placeholderIdx !== undefined && placeholderIdx !== 0 && tplPh.idx !== undefined &&
++            tplPh.idx === placeholderIdx && (compatible || placeholderType === 'obj')) {
++            return true;
++        }
++        if (compatible && tplPh.type !== placeholderType && typeSet.has('obj')) {
++            return placeholderIdx === undefined || tplPh.idx === undefined || tplPh.idx === placeholderIdx;
++        }
++
+         // Match by type first
+         if (templateShape.placeholder.type === placeholderType) {
+             // If idx is specified, it must match too
