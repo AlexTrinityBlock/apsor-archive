@@ -45,6 +45,7 @@ import {
   displayLevel,
   figureForDisplayLevel,
   figureForLevel,
+  fittedFigure,
   gripLevel,
   heightForLevel,
   pinchLevel,
@@ -182,12 +183,17 @@ export function CompanionOverlay({
 
   const range = useMemo(() => sizeRange(breakpoint, context), [breakpoint, context]);
   const detents = useMemo(() => detentsFor(range), [range]);
-  const figure = figureForLevel(level, range);
+  // Chosen (persisted level) vs fitted (derived each layout pass).
+  const fitted = fittedFigure(figureForLevel(level, range), breakpoint, context);
+  const figure = fitted.figure;
   const size = boxForFigure(figure);
   const busy = useBusySignal(opacityMode === "auto");
   const position = positions[breakpoint] ?? defaultPosition(breakpoint, context, size);
   const box = useMemo(() => resolveBox(position, context, size), [position, context, size]);
-  const presence = avoidance(box, context, dialogOpen, breakpoint, position.side);
+  let presence = avoidance(box, context, dialogOpen, breakpoint, position.side);
+  if (!fitted.room && presence !== "hidden") {
+    presence = "retract";
+  }
   const settled = !expanded && !held && !resizing;
   const peeking = presence === "peek" && settled;
   // Tucked away at the window edge as a bookmark until tapped or hovered.

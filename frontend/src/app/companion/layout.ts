@@ -106,9 +106,17 @@ export function keyboardOpen(context: LayoutContext): boolean {
   return context.viewport.height - (band.bottom - band.top) > 120;
 }
 
-/** Highest the head may rise: below the top bar, inside the visible band. */
+/** Small margin kept from the visible top while the keyboard is open. */
+export const KEYBOARD_TOP_MARGIN = 8;
+
+/**
+ * Highest the head may rise. Normally below the top bar; with the keyboard
+ * open the free space is precious, so the figure may overlap the header and
+ * use the band from just below its visible top.
+ */
 export function topLimit(context: LayoutContext): number {
-  return visibleBand(context).top + TOP_MARGIN;
+  const band = visibleBand(context);
+  return band.top + (keyboardOpen(context) ? KEYBOARD_TOP_MARGIN : TOP_MARGIN);
 }
 
 /** The line the companion's feet rest on: above the composer and the keyboard. */
@@ -317,11 +325,15 @@ export function avoidance(
   if (dialogOpen) {
     return "hidden";
   }
+  // With the keyboard open, never slide, shrink or tuck away on its own: fit in
+  // the free space (the reader may still collapse it explicitly).
+  if (keyboardOpen(context)) {
+    return "clear";
+  }
   if (!hasRoom(context, figureSize(breakpoint).height)) {
     return "retract";
   }
-  // With the keyboard open, never slide or shrink away: fit in the free space.
-  if (breakpoint === "phone" || keyboardOpen(context)) {
+  if (breakpoint === "phone") {
     return "clear";
   }
   const column = context.column;

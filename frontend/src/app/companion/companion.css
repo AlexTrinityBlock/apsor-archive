@@ -423,17 +423,13 @@
   cursor: pointer;
   pointer-events: auto;
   filter: drop-shadow(0 4px 8px rgba(28, 28, 26, 0.22));
-  transform: translateX(6px);
-  transition: transform var(--speed-fast) var(--ease-out);
-}
-
-.companion-bookmark.is-left {
-  transform: translateX(-6px);
+  /* Always fully on screen: it hugs the visible edge, never past it. */
+  transition: filter var(--speed-fast) var(--ease-out);
 }
 
 .companion-bookmark:hover,
 .companion-bookmark:focus-visible {
-  transform: translateX(0);
+  filter: drop-shadow(0 6px 12px rgba(28, 28, 26, 0.3));
 }
 
 .companion-bookmark:focus-visible {

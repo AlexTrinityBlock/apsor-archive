@@ -14,7 +14,7 @@ import "./companions.css";
 export function CompanionPage() {
   const { t } = useI18n();
   return (
-    <div className="page companions-page">
+    <div className="page content-container companions-page">
       <PageHeader
         eyebrow={t("companion.page.eyebrow")}
         title={t("companion.page.title")}
