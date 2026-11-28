@@ -8,12 +8,12 @@ import { companionRef, useCompanionStory, type CompanionStory as Story } from ".
 import type { CompanionCharacter } from "../manifest";
 import {
   PERSONA_MAX,
-  groupLoreByTier,
+  splitHeardAndOwn,
   loreSnippet,
   type LoreFragment,
   type LoreInput,
 } from "../story";
-import { LoreForm, TIER_LABEL_KEYS } from "./LoreForm";
+import { LoreForm } from "./LoreForm";
 
 const EMPTY_LORE: LoreInput = { text: "", themes: [], tier: "familiar" };
 
@@ -192,7 +192,7 @@ export function CompanionStory({ character }: { readonly character: CompanionCha
   const [confirmReset, setConfirmReset] = useState(false);
   const [busy, setBusy] = useState(false);
   const fragments = story.supported ? story.lore : localLore;
-  const groups = groupLoreByTier(fragments);
+  const split = splitHeardAndOwn(fragments);
 
   const mutate = async (remote: () => Promise<void>, local: () => void, done: string) => {
     if (!story.supported) {
@@ -217,7 +217,10 @@ export function CompanionStory({ character }: { readonly character: CompanionCha
       () => {
         localSequence += 1;
         const id = `local-${localSequence}`;
-        setLocalLore((current) => [...current, { id, ...input, isDefault: false, edited: false }]);
+        setLocalLore((current) => [
+          ...current,
+          { id, ...input, isDefault: false, edited: false, own: true, heard: false },
+        ]);
       },
       t("companion.lore.saved"),
     );
@@ -280,17 +283,15 @@ export function CompanionStory({ character }: { readonly character: CompanionCha
           </div>
         </div>
 
-        {fragments.length === 0 && !adding ? (
-          <p className="companion-lore__empty">
-            {t("companion.lore.empty", { name: character.name })}
-          </p>
-        ) : null}
-
-        {groups.map((group) => (
-          <section key={group.tier} className={`companion-lore__tier is-${group.tier}`}>
-            <h5 className="companion-lore__tier-title">{t(TIER_LABEL_KEYS[group.tier])}</h5>
+        <section className="companion-lore__tier is-heard">
+          <h5 className="companion-lore__tier-title">{t("companion.lore.heardTitle")}</h5>
+          {split.heard.length === 0 ? (
+            <p className="companion-lore__empty">
+              {t("companion.lore.heardEmpty", { name: character.name })}
+            </p>
+          ) : (
             <div className="companion-lore__pages">
-              {group.fragments.map((fragment) => (
+              {split.heard.map((fragment) => (
                 <FragmentCard
                   key={fragment.id}
                   fragment={fragment}
@@ -300,8 +301,29 @@ export function CompanionStory({ character }: { readonly character: CompanionCha
                 />
               ))}
             </div>
-          </section>
-        ))}
+          )}
+        </section>
+
+        <section className="companion-lore__tier is-own">
+          <h5 className="companion-lore__tier-title">{t("companion.lore.ownTitle")}</h5>
+          {split.own.length === 0 && !adding ? (
+            <p className="companion-lore__empty">
+              {t("companion.lore.empty", { name: character.name })}
+            </p>
+          ) : (
+            <div className="companion-lore__pages">
+              {split.own.map((fragment) => (
+                <FragmentCard
+                  key={fragment.id}
+                  fragment={fragment}
+                  busy={busy}
+                  onSave={(input) => saveFragment(fragment.id, input)}
+                  onDelete={() => deleteFragment(fragment.id)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
 
         {adding ? (
           <div className="companion-page is-new">

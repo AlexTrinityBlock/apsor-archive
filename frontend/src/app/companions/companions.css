@@ -253,3 +253,21 @@
     width: 52px;
   }
 }
+
+.companions-admin-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border-left: 2px solid var(--mono-l4);
+  background: var(--mono-card-warm);
+  color: var(--mono-l2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.companions-admin-notice svg {
+  flex: none;
+  margin-top: 2px;
+}

@@ -20,7 +20,11 @@ from app.bootstrap import (
     close_process_state,
     open_process_state,
 )
-from app.dependency.auth import require_authenticated, require_stateless_authenticated
+from app.dependency.auth import (
+    require_authenticated,
+    require_root,
+    require_stateless_authenticated,
+)
 from app.infrastructure.config.settings import Settings, get_settings
 from app.infrastructure.database.migrations import upgrade_to_head
 from app.infrastructure.logger.logging import configure_logging
@@ -33,6 +37,7 @@ from app.module.auth.router.auth_router import router as auth_router
 from app.module.companion.exception.handler import (
     register_exceptions as register_companion_exceptions,
 )
+from app.module.companion.router import admin_router as companion_admin_router
 from app.module.companion.router import router as companion_router
 from app.module.knowledge.dependencies import build_job_notifier
 from app.module.knowledge.exception.handler import (
@@ -148,10 +153,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         left intact; JSON, downloads, auth, and job responses default to no-store.
         """
         response = await call_next(request)
-        if (
-            request.url.path.startswith("/api/v1/")
-            and "cache-control" not in response.headers
-        ):
+        if request.url.path.startswith("/api/v1/") and "cache-control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -165,15 +167,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         Static assets stay at DEBUG so the production log remains readable.
         Query strings are never logged because they can carry user content.
         """
-        raw_request_id = (
-            request.headers.get("cf-ray")
-            or request.headers.get("x-request-id")
-            or ""
-        )
-        request_id = (
-            re.sub(r"[^A-Za-z0-9._:-]", "", raw_request_id)[:128]
-            or uuid4().hex[:12]
-        )
+        raw_request_id = request.headers.get("cf-ray") or request.headers.get("x-request-id") or ""
+        request_id = re.sub(r"[^A-Za-z0-9._:-]", "", raw_request_id)[:128] or uuid4().hex[:12]
         started = time.monotonic()
         try:
             response = await call_next(request)
@@ -230,6 +225,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         companion_router,
         prefix="/api/v1",
         dependencies=[Depends(require_authenticated)],
+    )
+    app.include_router(
+        companion_admin_router,
+        prefix="/api/v1",
+        dependencies=[Depends(require_root)],
     )
 
     @app.get("/health", include_in_schema=False)

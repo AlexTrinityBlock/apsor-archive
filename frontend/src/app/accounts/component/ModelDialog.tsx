@@ -853,6 +853,7 @@ interface ModelDialogProps {
   readonly onReset: () => void;
   readonly submitting: boolean;
   readonly error: string | null;
+  readonly inline?: boolean;
 }
 
 /**
@@ -872,6 +873,7 @@ export function ModelDialog({
   onReset,
   submitting,
   error,
+  inline = false,
 }: ModelDialogProps) {
   const { t } = useI18n();
   const apiErrorMessage = useApiErrorMessage();
@@ -1060,6 +1062,7 @@ export function ModelDialog({
       onClose={onClose}
       busy={submitting}
       size="md"
+      inline={inline}
       actions={
         <>
           {saveBlock ? (

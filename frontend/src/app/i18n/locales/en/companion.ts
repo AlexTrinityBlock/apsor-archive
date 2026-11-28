@@ -95,6 +95,8 @@ export const companion = {
     quill: "Scriptorium · decisive, funny, unfinished",
   },
   page: {
+    adminNotice:
+      "Your administrator can read the stories your librarian writes for you. Each reading is recorded.",
     eyebrow: "Personal",
     title: "Companion",
     description:
@@ -180,6 +182,9 @@ export const companion = {
     description:
       "Fragments of {name}'s own past. When a search touches their themes, the assistant may let {name} tell a line or two of it in their own words.",
     empty: "{name} has no memories yet.",
+    heardTitle: "Memories you've heard",
+    heardEmpty: "{name} has not told you any memories yet. They come in their own time.",
+    ownTitle: "Your own",
     tierFirst: "First impressions",
     tierFamiliar: "Familiar",
     tierRare: "Rare",
