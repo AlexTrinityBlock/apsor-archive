@@ -538,10 +538,12 @@ Agent 也可以调用只读的 `companion_action` 工具做出明确的手势。
 帧图像，以及 `GET/PATCH /api/v1/companions/preference`）。
 
 每个伙伴也有自己的故事：一段人设，会成为它在新对话中的声音（每个对话冻结，
-使用该对话的语言），以及传说，也就是它自己的记忆。Agent 搜索用户的档案馆时，
-最多两段相关的图书馆员自身记忆可能会以独立区块附在结果旁；它们永远不是档案
-证据，也不会被引用。询问图书馆员关于它自己或档案馆的事，它就会讲述自己的故事。
-账户与该伙伴完成越多对话，越深层的记忆就会解锁。每个账户都可以按语言编辑任何
+使用该对话的语言），以及传说，也就是它自己的记忆。没有任何记忆被上锁：每段记忆
+都带有分量（日常小事、往事、心底的事），要不要说、何时说、说多少，由图书馆员
+自己决定，她也知道你们已经相识多久。相关的记忆可能以独立区块附在消息或工具结果
+旁，她也能用 `recall_my_memories` 工具自己回想，包括她与其他图书馆员过去对这个人
+说过的话（每条过去的回复都记得是谁说的）。她的记忆永远不是档案证据，也不会被
+引用；`search_knowledge` 只搜索这个人的档案馆。每个账户都可以按语言编辑任何
 伙伴的人设与传说，并重置为默认值（`/api/v1/companions/stories/...`）。人设规则
 把用户视为平等的伙伴：图书馆员会用对方的名字或直接说“你”，绝不使用馆主、
 主人之类的称谓。
@@ -1691,7 +1693,7 @@ agent_entry ──────┘  (source_kind = history)
   伙伴、每个动作经编码的 AVIF（或 WebP）帧及其位置、大小和 SHA-256，以及账户
   的伙伴选择、是否显示、动态程度和位置。
 - `companion_story` / `companion_lore_fragment` / `companion_bond`：账户按语言
-  覆写的伙伴人设与传说、其片段，以及解锁更深层传说的完成对话数。
+  覆写的伙伴人设与传说、其片段，以及完成的运行与对话次数，和初次相遇的时间。
 - `ingest_config`：一行（`id=1`），带有经过校验的 worker 轮询、
   提取、在途、嵌入和分块大小设置。它不是分块来源；队列引用最终
   发布的文件。
@@ -1761,7 +1763,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `e7b2d5a9c4f1`。此分支上
+最新的迁移是 `d6a1f3c8e2b7`。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1895,9 +1897,14 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   追加的 `companion_admin_access_log`。
 - `b3e8f5a1d6c7` 新增 `companion_generated_story` 与 `companion_story_job`，
   供 worker 撰写生活故事。
-- `e7b2d5a9c4f1`（当前 head）新增 `chunk.embedding_failures` 与待嵌入的部分
+- `e7b2d5a9c4f1` 新增 `chunk.embedding_failures` 与待嵌入的部分
   索引，并把 JSON `null` 嵌入转为 SQL NULL，让 worker 能在供应商或额度中断后
   补上向量。
+- `d6a1f3c8e2b7`（当前 head）把所有传说表的层级换成分量（`first` →
+  `everyday`、`familiar` → `past`、`rare` → `heart`），移除解锁计数与解锁时间，
+  新增 `companion_bond.first_met_at`，让 `companion_lore_told.source` 可记录
+  `recall`，并按对话冻结的伙伴，给每条过去的助手回复盖上
+  `data.speaker = {ref, name}`。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，

@@ -609,12 +609,14 @@ order, frame delete, frame image, and `GET/PATCH /api/v1/companions/preference`)
 
 Each companion also has a story: a persona that becomes its voice in new
 conversations (frozen per conversation, in the conversation's language), and
-lore, its own memories. When the agent searches the user's archive, up to two
-relevant memories of the librarian's own may ride beside the results in a
-separate block; they are never archive evidence or citations. Asking the
-librarian about itself or the Archive lets it tell its own story. Deeper
-memories unlock as the account completes more conversations with that
-companion. The persona rules treat the user as an equal: the librarian uses
+lore, its own memories. Nothing is locked: every memory carries a weight
+(everyday, past, or heart) and the librarian decides whether, when, and how much
+to share, knowing how long she and the person have known each other. Relevant
+memories may ride beside a message or a tool result in a separate block, and she
+can look her own memories up with the `recall_my_memories` tool, including what
+she and the other librarians said to this person before (each past reply records
+who said it). Her memories are never archive evidence or citations;
+`search_knowledge` searches only the person's archive. The persona rules treat the user as an equal: the librarian uses
 their name or a plain "you", never a title such as Keeper or master. Every
 account can edit the persona and lore of any companion per language and reset
 to the default (`/api/v1/companions/stories/...`).
@@ -1902,7 +1904,7 @@ user context exists; global config tables are read-all/root-write.
   level, and position.
 - `companion_story` / `companion_lore_fragment` / `companion_bond`: an
   account's per-locale persona and lore overrides for a companion, their
-  fragments, and the completed runs that unlock deeper lore tiers.
+  fragments, and the run and conversation counts plus when they first met.
 - `ingest_config`: one row (`id=1`) with the validated worker poll, extraction,
   in-flight, embedding, and chunk-size settings. It is not a chunk source; the
   queue references the file that is eventually published.
@@ -1982,7 +1984,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `e7b2d5a9c4f1`. The migrations after `agent_config` on
+The latest migration is `d6a1f3c8e2b7`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -2133,9 +2135,15 @@ this branch are:
   and the append-only `companion_admin_access_log`.
 - `b3e8f5a1d6c7` adds `companion_generated_story` and `companion_story_job`
   for worker-written life stories.
-- `e7b2d5a9c4f1` (current head) adds `chunk.embedding_failures`, a partial
+- `e7b2d5a9c4f1` adds `chunk.embedding_failures`, a partial
   pending-embedding index, and converts JSON `null` embeddings to SQL NULL so
   the worker can backfill vectors after a provider or allowance outage.
+- `d6a1f3c8e2b7` (current head) replaces lore tiers with weights (`first` →
+  `everyday`, `familiar` → `past`, `rare` → `heart`) on every lore table, drops
+  the unlock counters and unlock timestamps, adds `companion_bond.first_met_at`,
+  lets `companion_lore_told.source` record `recall`, and stamps every past
+  assistant entry with `data.speaker = {ref, name}` from its conversation's
+  frozen companion.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

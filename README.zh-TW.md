@@ -536,10 +536,12 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 影格、影格圖片，以及 `GET/PATCH /api/v1/companions/preference`）。
 
 每個夥伴也有自己的故事：一段人設，會成為它在新對話中的聲音（每個對話凍結，
-使用該對話的語言），以及傳說，也就是它自己的記憶。代理搜尋使用者的檔案館時，
-最多兩段相關的圖書館員自身記憶可能會以獨立區塊附在結果旁；它們永遠不是典藏
-證據，也不會被引用。詢問圖書館員關於它自己或檔案館的事，它就會講述自己的故事。
-帳號與該夥伴完成越多對話，越深層的記憶就會解鎖。每個帳號都可以依語言編輯任何
+使用該對話的語言），以及傳說，也就是它自己的記憶。沒有任何記憶被上鎖：每段記憶
+都帶有分量（日常小事、往事、心底的事），要不要說、何時說、說多少，由圖書館員
+自己決定，她也知道你們已經相識多久。相關的記憶可能以獨立區塊附在訊息或工具結果
+旁，她也能用 `recall_my_memories` 工具自己回想，包括她與其他圖書館員過去對這個人
+說過的話（每則過去的回覆都記得是誰說的）。她的記憶永遠不是典藏證據，也不會被
+引用；`search_knowledge` 只搜尋這個人的檔案館。每個帳號都可以依語言編輯任何
 夥伴的人設與傳說，並重設為預設值（`/api/v1/companions/stories/...`）。人設規則
 把使用者視為平等的夥伴：圖書館員會用對方的名字或直接說「你」，絕不使用館主、
 主人之類的稱謂。
@@ -1672,7 +1674,7 @@ agent_entry ──────┘  (source_kind = history)
   夥伴、每個動作經編碼的 AVIF（或 WebP）影格及其位置、大小與 SHA-256，以及
   帳號的夥伴選擇、是否顯示、動態程度與位置。
 - `companion_story` / `companion_lore_fragment` / `companion_bond`：帳號依語言
-  覆寫的夥伴人設與傳說、其片段，以及解鎖更深層傳說的完成對話數。
+  覆寫的夥伴人設與傳說、其片段，以及完成的執行與對話次數，和初次相遇的時間。
 - `ingest_config`：一列（`id=1`），帶有經驗證的 worker 輪詢、擷取、
   進行中工作、嵌入與分塊大小設定。它不是分塊來源；佇列會參照最終發佈
   的檔案。
@@ -1742,7 +1744,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `e7b2d5a9c4f1`。此分支上 `agent_config` 之後的移轉為：
+最新的移轉是 `d6a1f3c8e2b7`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -1876,9 +1878,14 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   新增的 `companion_admin_access_log`。
 - `b3e8f5a1d6c7` 新增 `companion_generated_story` 與 `companion_story_job`，
   供 worker 撰寫生活故事。
-- `e7b2d5a9c4f1`（目前 head）新增 `chunk.embedding_failures` 與待嵌入的部分
+- `e7b2d5a9c4f1` 新增 `chunk.embedding_failures` 與待嵌入的部分
   索引，並把 JSON `null` 嵌入轉為 SQL NULL，讓 worker 能在供應商或額度中斷後
   補上向量。
+- `d6a1f3c8e2b7`（目前 head）把所有傳說資料表的層級換成分量（`first` →
+  `everyday`、`familiar` → `past`、`rare` → `heart`），移除解鎖計數與解鎖時間，
+  新增 `companion_bond.first_met_at`，讓 `companion_lore_told.source` 可記錄
+  `recall`，並依對話凍結的夥伴，替每則過去的助理回覆蓋上
+  `data.speaker = {ref, name}`。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會

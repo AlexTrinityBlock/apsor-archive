@@ -925,7 +925,7 @@ can play the gesture; it touches no archive data.
 Each companion has a story in two layers. The **persona** is its voice; the
 **lore** is its own memories. Presets ship them as files under
 `app/module/companion/lore/`: `<id>.json` is the canonical English story (it
-owns fragment ids, tiers, and themes), `zh-TW/<id>.json` and `zh-CN/<id>.json`
+owns fragment ids, weights, and themes; older files saying `tier` are read as weights), `zh-TW/<id>.json` and `zh-CN/<id>.json`
 may override `name`, `persona`, and each fragment's `text` with the same ids,
 falling back to English per item. The files are seed data; themes are editor
 metadata only and never gate recall.
@@ -941,11 +941,13 @@ metadata only and never gate recall.
 - **One context pipeline.** The companion's own memories reach a run through a
   single context contributor. Every input site builds one signal: the user's
   message, the page-context text of a document preview, attachment display names
-  (never bytes), and the successful results of `search_knowledge`, `read_file`,
-  `read_memory`, `read_timeline`, `present_resource`, and `web_fetch`. Offers
+  (never bytes), and the successful results of `read_file`, `read_memory`,
+  `read_timeline`, `present_resource`, and `web_fetch` (never `search_knowledge`,
+  which searches only the person's archive). Offers
   are rendered as one `<librarian_memories>` block (with `moment` and the
   configured guidance) after every archive source; tool data carries them as
-  `lore: [{id, tier, text, moment}]`; they are never in the source lists or the
+  `lore: [{id, weight, text, moment}]`; the block also carries relationship
+  facts (`days_known`, `conversations_together`, `first_met`); they are never in the source lists or the
   citation vocabulary. A run offers at most `max_contributions_per_run`
   fragments across all sites and never repeats one.
 - **Topical recall.** Page context, attachment names, and tool results use
@@ -958,25 +960,25 @@ metadata only and never gate recall.
   counts against the embedding allowance). The user's message itself never
   draws topical asides.
 - **Self queries.** An explicit question about the librarian in the user's
-  message or a search query ("tell me about yourself", "your past", a
+  message ("tell me about yourself", "your past", a
   librarian's name, "your Vespers"; bare words such as "archive" or "curator"
   do not count) returns the next untold fragments of its arc, the most relevant
   of a small window first.
 - **Story moments.** When the user's message is not a self query, and at least
   one run has completed and then every 3 completed runs, the next untold
-  fragment of the arc (first, familiar, rare; then id) is offered with the
+  fragment of the arc (everyday, past, heart; then id) is offered with the
   message (`moment="story"`) with guidance to tell it only if the moment is calm
   and fits. Offers made with a message are stored on the user entry
   (`data.companion_context`, `data.companion_context_ids`) so the transcript and
-  prompt cache stay stable. Whatever a person talks about, every unlocked
-  fragment surfaces in time.
+  prompt cache stay stable. Whatever a person talks about, every fragment
+  surfaces in time; a moment is only a suggestion she may keep.
 - **Progress.** `companion_lore_told` records, per account and companion, each
   offered fragment's `told_count`, `offered_at`, `last_told_at`, and latest
-  `source` (`topical`, `story_moment`, `self_query`); `companion_bond` keeps
+  `source` (`topical`, `story_moment`, `self_query`, `recall`, `admin`); `companion_bond` keeps
   `last_story_run`. Users never see this progress; it is the source of truth
   for root's view. How a memory is woven in is left to the model.
 - **Configuration and content live in the database.** Nothing about stories is
-  hardcoded: unlock runs, cadence, thresholds, bonuses, word lists (self-query
+  hardcoded: cadence, thresholds, bonuses, word lists (self-query
   phrases, canon terms, banned address terms), life-story knobs, guidance and
   prompt templates (`companion_config`, `companion_prompt_template`), presets
   and personas (`companion_preset`, `companion_preset_text`), lore
@@ -994,15 +996,27 @@ metadata only and never gate recall.
   the version after an edit. Root's per-account overrides
   (`companion_user_config`) and policy (`companion_account_policy`: default,
   allowed set, optional pin) are owner-readable, root-written rows.
-- **Tiers.** `first` is always eligible; `familiar` and `rare` open after the
-  configured numbers of completed runs with that companion (seed: 5 and 20).
-  `companion_bond` counts completed runs per companion reference
-  (best-effort, after the run is settled) and stamps when each tier opened.
+- **Weights, not locks.** Every memory has a `weight`: `everyday`, `past`, or
+  `heart`. Nothing is gated by it; the librarian sees it and decides, with the
+  seeded `memory_agency` note in her persona section ("Your memories are all
+  yours ..."). `companion_bond` counts completed runs and conversations per
+  companion reference and records `first_met_at`.
+- **`recall_my_memories`.** A read-only agent tool (offered only when the
+  conversation froze a companion): `scope=story` returns her lore and the life
+  stories written for this person, any weight (told with source `recall`);
+  `scope=said` returns past assistant replies by **any** librarian in this
+  person's conversations, each labeled `said_by` (`you` for her own words,
+  otherwise the librarian's name), her own first; `scope=all` returns both. The
+  `<my_memories>` block is never archive evidence.
+- **Who said it.** Every assistant entry records `data.speaker = {ref, name}`
+  from the conversation's frozen companion (migration `d6a1f3c8e2b7` backfilled
+  older replies). The entry API exposes `speaker`; history windows and
+  `history_message` show `role` and `speaker`.
 - **Layers and the account's view.** A story resolves per item: preset text
   (locale, then English) < root's per-account override < the account's own
   copy-on-write edit; published generated life stories are appended. The
   account's lore view (`listCompanionLore`) shows only its own fragments and
-  the ones it has already heard; tiers, locks, and progress stay hidden.
+  the ones it has already heard; weights and progress stay hidden.
 - **Editing.** Accounts edit per locale, copy-on-write: the first lore edit
   copies that locale's effective defaults into `companion_lore_fragment` rows;
   reset deletes the copy. A custom companion's story is its rows, falling back from
@@ -1066,7 +1080,7 @@ this.
   recall and story moments (`fragments(..., include_generated=True)`); editing
   surfaces do not list them.
 - **Configuration.** All knobs live in `LifeStoryConfig` on the runtime config
-  (enabled, every_conversations, tier, max_per_30d, memory_limit,
+  (enabled, every_conversations, weight, max_per_30d, memory_limit,
   memory_chars, canon_chars, max_output_tokens, max_chars, require_review,
   poll_seconds, max_attempts). The prompt templates are
   `life_story_system` / `life_story_user` (placeholders `{companion_name}`,
@@ -1463,7 +1477,7 @@ fields, account/session auth (`app_user`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The current head is
-`e7b2d5a9c4f1`; every private table now has `user_id` and forced RLS, the
+`d6a1f3c8e2b7`; every private table now has `user_id` and forced RLS, the
 runtime role is `apsor_app`, and `file` / `file_ingest_job` record
 `storage_backend`. Earlier migrations add per-run and per-account agent usage
 counters and the impersonation session marker. `f7a3c2d9e1b4` adds the editable
@@ -1606,8 +1620,8 @@ and seeds row `id=1` with the defaults. Later migrations in order:
 - `b8e4d2f6a1c3` creates the private `companion_story`,
   `companion_lore_fragment`, and `companion_bond` tables with forced owner-only
   RLS and `apsor_app` grants: one account's per-locale copy of a companion's
-  persona and lore, its fragments, and the completed-run count that unlocks lore
-  tiers. A custom companion's story cascades with the companion. The downgrade
+  persona and lore, its fragments, and the completed-run count (renamed to
+  weights and first-met in `d6a1f3c8e2b7`). A custom companion's story cascades with the companion. The downgrade
   drops the three tables.
 - `c5f1a8d3e7b4` adds `size` (`compact`, `medium`, `full`;
   default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
@@ -1635,9 +1649,15 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   and the append-only `companion_admin_access_log`.
 - `b3e8f5a1d6c7` adds `companion_generated_story` and `companion_story_job`
   for worker-written life stories.
-- `e7b2d5a9c4f1` (current head) adds `chunk.embedding_failures`, a partial
+- `e7b2d5a9c4f1` adds `chunk.embedding_failures`, a partial
   pending-embedding index, and converts JSON `null` embeddings to SQL NULL so
   the worker can backfill vectors after a provider or allowance outage.
+- `d6a1f3c8e2b7` (current head) replaces lore tiers with weights (`first` →
+  `everyday`, `familiar` → `past`, `rare` → `heart`) on every lore table, drops
+  the unlock counters and unlock timestamps, adds `companion_bond.first_met_at`,
+  lets `companion_lore_told.source` record `recall`, and stamps every past
+  assistant entry with `data.speaker = {ref, name}` from its conversation's
+  frozen companion.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact
