@@ -1,5 +1,6 @@
 /**
- * Turns `[file:10#2]`, `[memory:7]`, `[summary:4]`, and `[history:123]` text
+ * Turns `[file:10#2]`, `[memory:7]`, `[summary:4]`, `[history:123]`, and
+ * `[web:w3]` text
  * into ordinary Markdown link nodes before rendering. Full-width brackets are
  * accepted too, because pasted briefs and IMEs commonly emit them. Code,
  * existing links, and images are left untouched, so the transform cannot
@@ -11,8 +12,9 @@ import { citationHref, citationLabel, parseCitationLabel } from "../types";
 import { getActiveLocale, translate } from "../../i18n";
 
 // Literal alternatives plus one digit run: linear, but flagged heuristically.
-// eslint-disable-next-line security/detect-unsafe-regex
-const CITATION = /[［[](?:file|memory|summary|history):\d+(?:#\d+)?[］\]]/g;
+const CITATION =
+  // eslint-disable-next-line security/detect-unsafe-regex
+  /[［[](?:(?:file|memory|summary|history):\d+(?:#\d+)?|web:w[1-9]\d{0,8})[］\]]/g;
 const SKIP = new Set([
   "link",
   "linkReference",
@@ -42,11 +44,7 @@ function splitText(node: Text): PhrasingContent[] {
     }
     pieces.push({
       type: "link",
-      url:
-        citationHref(token) ??
-        (token.kind === "history"
-          ? `#citation-history-${token.id}`
-          : `#citation-summary-${token.id}`),
+      url: citationHref(token) ?? `#citation-${token.kind}-${token.id}`,
       title: translate(
         getActiveLocale(),
         "chat.citation.archiveCitation",

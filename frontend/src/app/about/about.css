@@ -899,3 +899,16 @@
 .about-roster__cta {
   margin: 16px 0 0;
 }
+
+.about-hero__door {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-md);
+  background-color: var(--paper-deep);
+  background-size: cover;
+  object-fit: cover;
+  aspect-ratio: 1024 / 683;
+}

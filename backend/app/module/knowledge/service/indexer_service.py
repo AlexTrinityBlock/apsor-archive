@@ -6,8 +6,8 @@ from collections.abc import Awaitable, Callable, Sequence
 
 from app.module.knowledge.domain.chunking_domain import ChunkDraft
 from app.module.knowledge.exception.domain_error import (
+    EmbeddingConfigurationChangedError,
     EmbeddingProviderError,
-    EmbeddingUsageLimitExceededError,
 )
 from app.module.knowledge.model.chunk_model import ChunkModel
 from app.module.knowledge.protocol.chunk_repository_protocol import ChunkRepositoryProtocol
@@ -46,11 +46,18 @@ class IndexerService:
     concurrently up to that limit, while chunk persistence, checkpoints, and
     progress updates stay serialized on the caller's event loop because the
     SQLAlchemy session is not concurrency-safe. Transient provider failures get a
-    small bounded retry with exponential backoff. Strict callers (the durable
-    ingestion worker) surface the error after the retry budget; other callers
-    keep the legacy text-only fallback. An authentication failure (401/403) may
+    small bounded retry with exponential backoff.
+
+    An embedding failure never loses the text: when the provider is out of
+    credits, rejects the key, is unreachable, or the account allowance is spent,
+    the chunk is stored with its text and n-grams and a NULL ``embedding``. Such
+    a row is *pending*; keyword search finds it at once and the worker's
+    ``EmbeddingBackfill`` loop fills the vector in automatically once the
+    provider and the allowance allow it. An authentication failure (401/403) may
     reload the provider once and retry, but only when the refreshed embedder
-    keeps the job's original model and dimension.
+    keeps the job's original model and dimension. ``fail_on_embedding_error``
+    (the durable ingestion worker) now only fails the job when such a refresh
+    would switch model or dimension mid-job.
     """
 
     def __init__(
@@ -86,27 +93,32 @@ class IndexerService:
         self._embedding_refresh_attempted = False
 
     def _embedding_failure(self, exc: EmbeddingProviderError) -> None:
-        if self.fail_on_embedding_error:
+        if self.fail_on_embedding_error and isinstance(
+            exc, EmbeddingConfigurationChangedError
+        ):
             raise exc
-        logger.warning("Embedding provider failed; indexing text only: %s", exc)
+        logger.warning(
+            "Embedding provider failed; indexing text now and leaving vectors "
+            "pending for the backfill user_id=%s status=%s",
+            self.user_id,
+            exc.status_code,
+        )
 
     async def _embeddings_allowed(self, drafts: Sequence[ChunkDraft]) -> bool:
         """Ask the account allowance before any provider call is scheduled.
 
-        Strict callers (durable ingestion) fail the whole job before staging
-        any row. Foreground callers keep the archive usable by persisting
-        text-only chunks; keyword/BM25 search still works.
+        A spent allowance never fails ingestion: the chunks are stored with
+        their text and n-grams (keyword search works) and left pending, and the
+        backfill embeds them once root raises the grant or the period resets.
         """
         if self.quota is None:
             return True
         characters = sum_embedding_characters(drafts)
         if await self.quota.embedding_allowed(characters):
             return True
-        if self.fail_on_embedding_error:
-            raise EmbeddingUsageLimitExceededError()
         logger.warning(
-            "Embedding usage allowance exhausted; indexing text only user_id=%s "
-            "characters=%d",
+            "Embedding usage allowance exhausted; indexing text now and leaving "
+            "vectors pending user_id=%s characters=%d",
             self.user_id,
             characters,
         )
@@ -160,7 +172,7 @@ class IndexerService:
             candidate.model_name != current.model_name
             or candidate.dimension != current.dimension
         ):
-            raise EmbeddingProviderError(
+            raise EmbeddingConfigurationChangedError(
                 "The embedding provider configuration changed model or dimension "
                 f"during ingestion ({current.model_name}/{current.dimension} -> "
                 f"{candidate.model_name}/{candidate.dimension}). The job keeps its "

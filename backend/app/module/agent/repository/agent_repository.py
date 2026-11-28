@@ -39,6 +39,8 @@ from app.module.agent.domain.agent_domain import (
     ApprovalDraft,
     EntryDraft,
 )
+from app.module.agent.domain.companion_persona_domain import frozen_speaker
+from app.module.agent.domain.web_source_domain import WebSource
 from app.module.agent.exception.domain_error import (
     AgentApprovalNotFoundError,
     AgentApprovalNotPendingError,
@@ -60,6 +62,7 @@ from app.module.agent.model.agent_model import (
     AgentEntryModel,
     AgentRunModel,
 )
+from app.module.agent.repository.web_source_repository import WebSourceRepository
 
 
 class AgentRepository:
@@ -355,6 +358,15 @@ class AgentRepository:
             if not include_deleted and conversation.deleted_at is not None:
                 return None
             return conversation
+
+    async def list_web_sources(self, conversation_id: int) -> list[WebSource]:
+        """Return the conversation's numbered web pages, in number order."""
+        async with self._read() as session:
+            return await WebSourceRepository(
+                session,
+                self.user_id,
+                conversation_id,
+            ).list_sources()
 
     async def list_conversations(
         self,
@@ -817,6 +829,38 @@ class AgentRepository:
             await session.flush()
             return run
 
+    async def _with_speaker(
+        self,
+        session: AsyncSession,
+        conversation_id: int,
+        data: Any,
+    ) -> Any:
+        """Return assistant ``data`` stamped with the companion who said it.
+
+        The speaker is the companion frozen in the conversation's system entry
+        (``None`` when no companion was active: the archive assistant).
+        """
+        if isinstance(data, dict) and "speaker" in data:
+            return data
+        system_data = (
+            await session.execute(
+                select(AgentEntryModel.data)
+                .where(
+                    AgentEntryModel.user_id == self.user_id,
+                    AgentEntryModel.conversation_id == conversation_id,
+                    AgentEntryModel.kind == KIND_SYSTEM,
+                )
+                .order_by(AgentEntryModel.id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        speaker = frozen_speaker(system_data)
+        if speaker is None:
+            return data
+        stamped = dict(data) if isinstance(data, dict) else {}
+        stamped["speaker"] = speaker
+        return stamped
+
     async def append_assistant(
         self,
         *,
@@ -845,7 +889,7 @@ class AgentRepository:
                 commit_seq=commit_seq,
                 kind=draft.kind,
                 model=draft.messages,
-                data=draft.data,
+                data=await self._with_speaker(session, conversation_id, draft.data),
                 by_run_id=run.id,
                 created_at=now,
             )

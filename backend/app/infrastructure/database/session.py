@@ -40,6 +40,12 @@ VALID_ROLES = frozenset({ROLE_ROOT, ROLE_USER})
 
 _USER_ID_SETTING = "app.user_id"
 _USER_ROLE_SETTING = "app.user_role"
+# Transaction-local marker that opens the root-only companion administration
+# policies (``{table}_companion_admin``). It never widens access to archive
+# tables; only companion tables carry a policy that reads it.
+ADMIN_SCOPE_SETTING = "app.admin_scope"
+ADMIN_SCOPE_COMPANION = "companion"
+ADMIN_SCOPES = frozenset({ADMIN_SCOPE_COMPANION})
 
 
 class Database:
@@ -88,6 +94,23 @@ class Database:
             set_rls_role=True,
             role=ROLE_ROOT,
         ) as session:
+            yield session
+
+    @asynccontextmanager
+    async def companion_admin_session(self, actor_user_id: int) -> AsyncIterator[AsyncSession]:
+        """Open a root transaction with the companion administration scope.
+
+        Used by the worker and the seeder to read or write companion rows
+        across accounts. Archive tables stay owner-only: the scope only
+        satisfies the ``{table}_companion_admin`` policies.
+        """
+        async with _scoped_session(
+            self.session_factory,
+            set_rls_role=True,
+            user_id=actor_user_id,
+            role=ROLE_ROOT,
+        ) as session:
+            await apply_admin_scope(session, ADMIN_SCOPE_COMPANION)
             yield session
 
     @asynccontextmanager
@@ -159,6 +182,26 @@ async def apply_user_context(session: AsyncSession, user_id: int, role: str) -> 
     await _set_local_setting(session, _USER_ROLE_SETTING, role)
 
 
+async def apply_admin_scope(session: AsyncSession, scope: str) -> None:
+    """Mark the current root transaction with an administration scope.
+
+    Refuses unless the transaction already carries ``app.user_role = 'root'``,
+    so an ordinary account (or an impersonated session, which carries the
+    target's role) can never open the companion administration policies.
+    """
+    if scope not in ADMIN_SCOPES:
+        raise ValueError(f"Unsupported admin scope: {scope!r}")
+    role = (
+        await session.execute(
+            text("SELECT current_setting(:name, true)"),
+            {"name": _USER_ROLE_SETTING},
+        )
+    ).scalar_one_or_none()
+    if role != ROLE_ROOT:
+        raise PermissionError("admin scope requires the root role")
+    await _set_local_setting(session, ADMIN_SCOPE_SETTING, scope)
+
+
 async def commit_and_reapply(session: AsyncSession, user_id: int, role: str) -> None:
     """Commit a workflow checkpoint and immediately restore the scoped context.
 
@@ -169,9 +212,20 @@ async def commit_and_reapply(session: AsyncSession, user_id: int, role: str) -> 
     can silently read or mutate every archive. Use this helper for checkpoints
     in ingestion or agent workflows instead of calling ``commit()`` directly.
     The request boundary still commits once on exit via ``get_db_session``.
+    An administration scope (``app.admin_scope``) set on the transaction is
+    restored too, so a root companion workflow keeps its scope across
+    checkpoints.
     """
+    scope = (
+        await session.execute(
+            text("SELECT current_setting(:name, true)"),
+            {"name": ADMIN_SCOPE_SETTING},
+        )
+    ).scalar_one_or_none()
     await session.commit()
     await apply_user_context(session, user_id, role)
+    if scope:
+        await apply_admin_scope(session, scope)
 
 
 @asynccontextmanager

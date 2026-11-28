@@ -34,6 +34,19 @@ from app.infrastructure.security.password_hasher import Argon2PasswordHasher
 from app.main import create_app
 from app.module.agent.domain.system_entry_domain import default_sections
 from app.module.auth.domain.auth_domain import AuthDomain
+from app.module.companion.domain.seed_domain import SEED_BUNDLE
+from app.module.companion.model.companion_world_model import (
+    CompanionCanonEntityModel,
+    CompanionConfigModel,
+    CompanionLoreItemModel,
+    CompanionLoreItemTextModel,
+    CompanionPresetModel,
+    CompanionPresetTextModel,
+    CompanionPromptTemplateModel,
+    CompanionSeedStateModel,
+    CompanionWorldDocModel,
+)
+from app.module.companion.service.seed_catalog import load_seed_bundle
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,14 +67,18 @@ PRIVATE_TABLES: tuple[str, ...] = (
     "agent_conversation",
     "agent_entry",
     "agent_run",
+    "agent_web_source",
     "chunk",
     "chunk_ngram",
     "companion",
     "companion_bond",
     "companion_frame",
     "companion_lore_fragment",
+    "companion_lore_told",
     "companion_preference",
     "companion_story",
+    "companion_story_job",
+    "companion_generated_story",
     "file",
     "file_ingest_job",
     "file_thumbnail",
@@ -72,9 +89,41 @@ PRIVATE_TABLES: tuple[str, ...] = (
     "saved_question",
     "user_profile_card",
 )
+# Private companion tables root may also read and write under the companion
+# admin scope (``{table}_owner`` + ``{table}_companion_admin``).
+COMPANION_ADMIN_TABLES: tuple[str, ...] = (
+    "companion_bond",
+    "companion_generated_story",
+    "companion_lore_fragment",
+    "companion_lore_told",
+    "companion_story",
+    "companion_story_job",
+)
+# Private tables root writes for an account; the account may only read its row
+# (``{table}_owner_read`` + ``{table}_companion_admin``).
+ADMIN_MANAGED_PRIVATE_TABLES: tuple[str, ...] = (
+    "companion_account_policy",
+    "companion_admin_lore_override",
+    "companion_admin_story_override",
+    "companion_user_config",
+)
+# Append-only audit: root reads and inserts under the companion admin scope.
+AUDIT_TABLES: tuple[str, ...] = ("companion_admin_access_log",)
+# ``companion`` is owner-only plus a root read policy for custom companion names.
+COMPANION_ADMIN_READ_TABLES: tuple[str, ...] = ("companion", "companion_preference")
 GLOBAL_TABLES: tuple[str, ...] = (
     "agent_config",
     "chat_provider_config",
+    "companion_canon_entity",
+    "companion_config",
+    "companion_lore_item",
+    "companion_lore_item_text",
+    "companion_preset",
+    "companion_preset_text",
+    "companion_prompt_template",
+    "companion_seed_state",
+    "companion_world_doc",
+    "companion_world_doc_revision",
     "embedding_provider_config",
     "ingest_config",
     "provider_error_notice",
@@ -84,7 +133,9 @@ GLOBAL_TABLES: tuple[str, ...] = (
 )
 AUTH_TABLES: tuple[str, ...] = ("app_user", "user_session")
 ALEMBIC_TABLE = "alembic_version"
-APPLICATION_TABLES = frozenset((*PRIVATE_TABLES, *GLOBAL_TABLES, *AUTH_TABLES))
+APPLICATION_TABLES = frozenset(
+    (*PRIVATE_TABLES, *ADMIN_MANAGED_PRIVATE_TABLES, *AUDIT_TABLES, *GLOBAL_TABLES, *AUTH_TABLES)
+)
 EXPECTED_TABLES = APPLICATION_TABLES | {ALEMBIC_TABLE}
 
 OWNER_USERNAME = "owner"
@@ -270,8 +321,9 @@ def _verify_grants(connection: Connection) -> None:
 
     for table in sorted(APPLICATION_TABLES):
         _require(table in table_privileges, f"{APP_ROLE} has no grants on {table}")
+        expected = {"SELECT", "INSERT"} if table in AUDIT_TABLES else set(_TABLE_PRIVILEGES)
         _require(
-            table_privileges[table] == set(_TABLE_PRIVILEGES),
+            table_privileges[table] == expected,
             f"{APP_ROLE} has unexpected grants on {table}: {sorted(table_privileges[table])}",
         )
     _require(
@@ -314,7 +366,7 @@ def _verify_rls_flags(connection: Connection) -> None:
     ).all()
     flags = {name: (enabled, forced) for name, enabled, forced in rows}
 
-    for table in (*PRIVATE_TABLES, *GLOBAL_TABLES):
+    for table in (*PRIVATE_TABLES, *ADMIN_MANAGED_PRIVATE_TABLES, *AUDIT_TABLES, *GLOBAL_TABLES):
         _require(
             flags.get(table) == (True, True),
             f"{table} must have RLS enabled and forced",
@@ -323,6 +375,25 @@ def _verify_rls_flags(connection: Connection) -> None:
         _require(
             flags.get(table) == (False, False),
             f"{table} must not have RLS enabled",
+        )
+
+
+def _verify_admin_policy(entry: Any, table: str, cmd: str) -> None:
+    """A companion admin policy must require root plus the companion scope."""
+    _require(entry is not None, f"{table} is missing its companion admin {cmd} policy")
+    assert entry is not None
+    _require(entry["cmd"] == cmd, f"{entry['policyname']} must be {cmd}")
+    _require(set(entry["roles"]) == {APP_ROLE}, f"{entry['policyname']} has the wrong role")
+    clauses = [entry["qual"] or ""]
+    if cmd == "ALL":
+        clauses.append(entry["with_check"] or "")
+    for clause in clauses:
+        _require(
+            "app.user_role" in clause
+            and "'root'" in clause
+            and "app.admin_scope" in clause
+            and "'companion'" in clause,
+            f"{entry['policyname']} must require root and the companion admin scope",
         )
 
 
@@ -344,11 +415,20 @@ def _verify_policies(connection: Connection) -> None:
 
     for table in PRIVATE_TABLES:
         entries = by_table.get(table, [])
+        policies = {entry["policyname"]: entry for entry in entries}
+        extra: set[str] = set()
+        if table in COMPANION_ADMIN_TABLES:
+            extra = {f"{table}_companion_admin"}
+            _verify_admin_policy(policies.get(f"{table}_companion_admin"), table, "ALL")
+        elif table in COMPANION_ADMIN_READ_TABLES:
+            extra = {f"{table}_companion_admin_read"}
+            _verify_admin_policy(policies.get(f"{table}_companion_admin_read"), table, "SELECT")
         _require(
-            len(entries) == 1 and entries[0]["policyname"] == f"{table}_owner",
-            f"{table} must have exactly one {table}_owner policy",
+            set(policies) == {f"{table}_owner", *extra},
+            f"{table} must have exactly the {table}_owner policy"
+            + (f" and {sorted(extra)}" if extra else ""),
         )
-        entry = entries[0]
+        entry = policies[f"{table}_owner"]
         _require(entry["cmd"] == "ALL", f"{table}_owner must be FOR ALL")
         _require(set(entry["roles"]) == {APP_ROLE}, f"{table}_owner has the wrong role")
         qual = entry["qual"] or ""
@@ -360,6 +440,36 @@ def _verify_policies(connection: Connection) -> None:
         _require(
             "user_id" in check and "app.user_id" in check,
             f"{table}_owner WITH CHECK clause is not owner-scoped",
+        )
+
+    for table in ADMIN_MANAGED_PRIVATE_TABLES:
+        policies = {entry["policyname"]: entry for entry in by_table.get(table, [])}
+        _require(
+            set(policies) == {f"{table}_owner_read", f"{table}_companion_admin"},
+            f"{table} must have only {table}_owner_read and {table}_companion_admin",
+        )
+        read = policies[f"{table}_owner_read"]
+        _require(read["cmd"] == "SELECT", f"{table}_owner_read must be SELECT")
+        _require(set(read["roles"]) == {APP_ROLE}, f"{table}_owner_read has the wrong role")
+        _require(
+            "app.user_id" in (read["qual"] or ""),
+            f"{table}_owner_read USING clause is not owner-scoped",
+        )
+        _verify_admin_policy(policies.get(f"{table}_companion_admin"), table, "ALL")
+
+    for table in AUDIT_TABLES:
+        policies = {entry["policyname"]: entry for entry in by_table.get(table, [])}
+        _require(
+            set(policies) == {f"{table}_root_read", f"{table}_root_insert"},
+            f"{table} must have only {table}_root_read and {table}_root_insert",
+        )
+        _verify_admin_policy(policies.get(f"{table}_root_read"), table, "SELECT")
+        insert = policies[f"{table}_root_insert"]
+        _require(insert["cmd"] == "INSERT", f"{table}_root_insert must be INSERT")
+        check = insert["with_check"] or ""
+        _require(
+            "app.admin_scope" in check and "'root'" in check,
+            f"{table}_root_insert must require root and the companion admin scope",
         )
 
     for table in GLOBAL_TABLES:
@@ -490,6 +600,71 @@ def _seed_system_prompt_defaults(connection: Connection) -> None:
         )
 
 
+_COMPANION_SEED_ROWS: list[tuple[Any, list[dict[str, Any]]]] | None = None
+
+
+def _companion_seed_rows() -> list[tuple[Any, list[dict[str, Any]]]]:
+    """Return the seed bundle as (table, rows) inserts, computed once per session.
+
+    Lore items get explicit ids (the truncation restarted their identity) so
+    the text rows can reference them without a round trip per row.
+    """
+    global _COMPANION_SEED_ROWS
+    if _COMPANION_SEED_ROWS is not None:
+        return _COMPANION_SEED_ROWS
+    bundle = load_seed_bundle()
+    rows = bundle.rows
+    item_ids: dict[tuple[str, str], int] = {}
+    items: list[dict[str, Any]] = []
+    for index, row in enumerate(rows["companion_lore_item"], start=1):
+        item_ids[(row["preset_id"], row["fragment_key"])] = index
+        items.append({**row, "id": index})
+    texts = [
+        {
+            "item_id": item_ids[(row["preset_id"], row["fragment_key"])],
+            "locale": row["locale"],
+            "text": row["text"],
+            "seed_hash": row["seed_hash"],
+        }
+        for row in rows["companion_lore_item_text"]
+    ]
+    _COMPANION_SEED_ROWS = [
+        (CompanionPresetModel.__table__, rows["companion_preset"]),
+        (CompanionPresetTextModel.__table__, rows["companion_preset_text"]),
+        (CompanionLoreItemModel.__table__, items),
+        (CompanionLoreItemTextModel.__table__, texts),
+        (CompanionCanonEntityModel.__table__, rows["companion_canon_entity"]),
+        (CompanionWorldDocModel.__table__, rows["companion_world_doc"]),
+        (CompanionPromptTemplateModel.__table__, rows["companion_prompt_template"]),
+        (CompanionConfigModel.__table__, rows["companion_config"]),
+        (
+            CompanionSeedStateModel.__table__,
+            [
+                {
+                    "bundle": SEED_BUNDLE,
+                    "content_hash": bundle.content_hash,
+                    "content_version": 1,
+                    "seed_version": 1,
+                }
+            ],
+        ),
+    ]
+    return _COMPANION_SEED_ROWS
+
+
+def _seed_companion_world(connection: Connection) -> None:
+    """Reinsert the companion seed exactly as the seeder would write it."""
+    for table, table_rows in _companion_seed_rows():
+        if table_rows:
+            connection.execute(table.insert(), table_rows)
+    connection.execute(
+        text(
+            "SELECT setval(pg_get_serial_sequence('companion_lore_item', 'id'), "
+            "(SELECT max(id) FROM companion_lore_item))"
+        )
+    )
+
+
 def _truncate_application_tables(connection: Connection) -> None:
     """Reset every application table, preserving the Alembic version row."""
     table_names = (
@@ -516,6 +691,7 @@ def _truncate_application_tables(connection: Connection) -> None:
     # RESTART IDENTITY only resets sequences owned by the truncated tables.
     connection.execute(text("ALTER SEQUENCE agent_commit_seq RESTART WITH 1"))
     _seed_system_prompt_defaults(connection)
+    _seed_companion_world(connection)
 
 
 @pytest.fixture(autouse=True)

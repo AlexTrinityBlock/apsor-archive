@@ -15,7 +15,8 @@ import { readThumbnail, type ThumbnailInfo } from "../viewer/component/thumbnail
 export type JsonRecord = Record<string, unknown>;
 
 export interface CitationToken {
-  readonly kind: "file" | "memory" | "summary" | "history";
+  readonly kind: "file" | "memory" | "summary" | "history" | "web";
+  /** For `web` tokens this is N of `[web:wN]`. */
   readonly id: number;
   readonly chunk: number | null;
 }
@@ -558,8 +559,14 @@ export function safeViewerPath(value: unknown): string | null {
 // the label length; the security plugin flags it heuristically.
 // eslint-disable-next-line security/detect-unsafe-regex
 const CITATION_LABEL = /^[［[](file|memory|summary|history):(\d+)(?:#(\d+))?[］\]]$/;
+// `[web:w3]` cites the third web page this conversation saw.
+const WEB_CITATION_LABEL = /^[［[]web:w([1-9]\d{0,8})[］\]]$/;
 
 export function parseCitationLabel(value: string): CitationToken | null {
+  const web = WEB_CITATION_LABEL.exec(value.trim());
+  if (web) {
+    return { kind: "web", id: Number(web[1]), chunk: null };
+  }
   const match = CITATION_LABEL.exec(value.trim());
   if (!match) {
     return null;
@@ -584,6 +591,9 @@ export function parseCitationLabel(value: string): CitationToken | null {
 }
 
 export function citationLabel(token: CitationToken): string {
+  if (token.kind === "web") {
+    return `[web:w${token.id}]`;
+  }
   const suffix = token.chunk === null ? "" : `#${token.chunk}`;
   return `[${token.kind}:${token.id}${suffix}]`;
 }

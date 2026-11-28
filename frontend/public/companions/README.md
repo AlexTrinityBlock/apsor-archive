@@ -55,6 +55,31 @@ whole figure even under a mask, so its frames do not register. Instead,
 (head tilt around the neck, chest rise, detached props floating), so every
 unchanged pixel stays identical and the loop is seamless.
 
+The librarians stand free. An earlier version drew a brass ring on top of each
+head and on each shoulder (marionette attachment points) and a thread tangle in
+the `confused` pose. Those were removed from every raw pose with masked edits:
+a vision model located the rings per pose, only those areas were repainted as
+hair, hat crown, or shoulder fabric, and pixels outside the masks were kept from
+the source. Alpha inside a mask is clamped to the source alpha so the model's
+occasional grey background fill cannot add opaque pixels. The style prompt in
+`characters.json` now forbids head and shoulder rings.
+
+## World illustrations
+
+`world/` holds three scene illustrations for the About page and the companion
+page, generated with the same model and style from two approved companion poses
+used only as a style reference (two candidates each, picked by eye):
+
+```
+world/illusory-door.avif       an ajar door in the shelf wall, everyday light beyond
+world/first-door.avif          the First Door with six faint face impressions in the lintel
+world/dinner-of-recipes.avif   the Long Table at the Dinner of Recipes, six librarians from behind
+world/<name>-placeholder.avif  32 px wide blur-up placeholder for the same image
+```
+
+Each is a paper-toned opaque AVIF, at most 1280 px wide and 60 KB, with no text
+and no drawn faces.
+
 ## App icon and GitHub artwork
 
 `frontend/public/favicon.ico`, `icon-192.png`, `icon-512.png`,

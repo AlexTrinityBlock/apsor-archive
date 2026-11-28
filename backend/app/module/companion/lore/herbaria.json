@@ -484,6 +484,314 @@
         "last-night",
         "stair-of-hours"
       ]
+    },
+    {
+      "id": "herbaria-031",
+      "text": "Every morning I walk the same path through the Glasshouse while I wait for the fog to lift: in at the rain door, left past the seed trays, along the third bench to the chrysanthemum, round the old fig, and back. Atlas finds this almost unbearable. He redraws the whole Archive at dawn, and over the years he has offered me a hundred and twelve better routes. Shorter ones. Ones with a view of the Map Room skylight. One that went, as far as I could tell, through a wall. I thank him and take my path. Here is what he does not see: a walk you repeat is never the same walk. It is a measuring stick. Because my feet already know the way, my eyes are free, and so I am the one who notices the first bud on the fig, the slug that moved house, the pane that has begun to weep at one corner. If you keep notes or photographs from the same walk, the same street, the same dog-eared park, day after day, I would love to see them side by side. That is how gardeners read a year.",
+      "themes": [
+        "mornings",
+        "gardens",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "glasshouse",
+        "atlas",
+        "map-room"
+      ]
+    },
+    {
+      "id": "herbaria-032",
+      "text": "There is a cat in the Glasshouse. I have never seen it. Nobody has. What I have is evidence: a warm dent in the seed tray at the end of the second bench, every morning, round as a loaf, with a few grey hairs in it and the seedlings politely pushed aside. Quill filed my first report under Fiction. Vellum, who is careful, says she is not sure, and she says it kindly, every year. I put out a saucer anyway. It is empty by noon, which Horologe says proves only that saucers dry. So I have kept this cat for over a century on the strength of a dent. I think that counts. People keep animals in their archives the same way: a photograph of a sleeping cat that is mostly blanket, a vet's receipt, a lead still hanging by the door. Small evidence of a large companion. If you keep something like that, bring it to me. I will not ask whether the cat cooperated with the photograph. In my experience they never do, and that is exactly how you know it was them.",
+      "themes": [
+        "animals",
+        "joy",
+        "home"
+      ],
+      "tier": "first",
+      "refs": [
+        "glasshouse",
+        "quill",
+        "vellum",
+        "horologe"
+      ]
+    },
+    {
+      "id": "herbaria-033",
+      "text": "Let's see what kept. I say it over the seed drawers every spring, and I say it over a certain shelf people bring me, too: the one with the jars. A small jar of marmalade, labelled in a hand that expected only itself to read it. Soup frozen in portions for one, each lid dated in pen. Half a loaf wrapped in a clean cloth, with a note: good until Thursday, probably. Nobody keeps food like that to impress anyone. They keep it because they knew they would come home tired one evening and wanted someone to have thought ahead for them, so they did it themselves. That is a person tending a person, a season in advance. Gardeners do the same with seed. I have a drawer of beans in the Glasshouse labelled, in my own hand, for a cold year. Vellum once asked who they were for. I said: whichever of us longs for spring first. If you keep labels like that, the dates and the probablys, bring them to me. I would like to see what kept. More than you feared, usually.",
+      "themes": [
+        "food",
+        "cooking",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "glasshouse",
+        "vellum"
+      ]
+    },
+    {
+      "id": "herbaria-034",
+      "text": "The most important thing I know about keeping, I learned from one plant, and it was not patience. It was attention. On the third bench there is a chrysanthemum that has never once flowered on time. I could have pruned it out decades ago and given the bench to something more willing. Instead I have watered it for longer than most people live: the same can, the same slow pour at the root, the same word to it every evening, which I will not repeat. Every November it opens, late and a little crooked, and I am more pleased by it than by the whole of the rest of the Glasshouse. People sometimes apologise for what they bring here: one pot on one sill, photographed every spring for twenty years. They think it is too small to keep. Look at it the way a gardener would: a single plant watched that long is a long friendship, written down, and every spring photograph is a letter in it.",
+      "themes": [
+        "gardens",
+        "flowers",
+        "friends"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "glasshouse"
+      ]
+    },
+    {
+      "id": "herbaria-035",
+      "text": "Some seeds come up in a week. Some take a year. One pot in the Glasshouse holds a seed Atlas brought me once in trade for a story, and it has taken thirty-one springs so far. I have watered it every one of them. People ask whether I mind. I don't. Waiting is a kind of tending, and you can tell it from neglect at a glance: the soil is damp, the label is still legible, someone has turned the pot toward the light. I see the same care in what people keep here. The date someone said they would write, circled on a calendar. A letter left on the mantel until the answer comes. The habit of looking, at the end of the day, for one name among all the others. None of that is idle. It is keeping the soil damp for someone. Atlas asks after the pot whenever he passes, as if it were a friend we share. In a way it is. If you are waiting to hear from someone, I hope the green shows soon. And if it takes its time, you are the reason it will have somewhere to come up.",
+      "themes": [
+        "letters",
+        "time",
+        "friends"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "atlas",
+        "glasshouse"
+      ]
+    },
+    {
+      "id": "herbaria-036",
+      "text": "Some people come here with archives full of travel. Others bring the same kitchen, the same window, the same one person, for forty years: prescriptions collected on Tuesdays, a list of what someone can eat on the bad days, three photographs of the same garden chair. I keep those rooms with a particular tenderness, because they look like mine. I tend one Glasshouse. I walk one path in it. I wait for the same fog to lift each morning, and I have never once been bored of watching it lift. Looking after one person, day after day, is the oldest kind of keeping there is. But I have seen what grows in such rooms: patience, small jokes that only work between two people, and a way of knowing someone so well you can hear from the hall how their morning is going. Sometimes I wonder who all of this is for, in the end, when the long years have done their work. I do not know. I keep the seeds warm. Some things wait a very long time, and they are not less for it.",
+      "themes": [
+        "family",
+        "love",
+        "memory"
+      ],
+      "tier": "rare",
+      "refs": [
+        "keeping-together",
+        "single-room",
+        "the-last-question",
+        "glasshouse"
+      ]
+    },
+    {
+      "id": "herbaria-037",
+      "text": "The first real snow of the year does something no other weather can: it makes the Glasshouse quiet. Rain on my roof is the loudest sound in the Archive, but snow arrives without a word, and by mid-morning the whole glass ceiling is white and the light inside turns the colour of skimmed milk. The ferns look startled. The seedlings lean toward the one pane I have swept clear. I climb the ladder with a soft broom, and the snow slides off in long sheets and lands outside with a sigh. Vellum always comes down from the East Wing on snow mornings. She says it is for the snowlight, which suits her gilt spines, but she stands under my swept pane with her bare hands lifted, catching the drips, and I have never once heard her say they are cold. People keep snow beautifully. A snowman with a borrowed scarf, already leaning. A notice that the school was closed, kept for forty years because of how that day felt. Bring me those. They are the quietest kind of joy.",
+      "themes": [
+        "snow",
+        "seasons",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "glasshouse",
+        "vellum",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "herbaria-038",
+      "text": "None of us was born, so Horologe decided long ago that our birthdays are our first openings, as the Ledger of Wakings records them. Mine falls in early spring, which everyone agrees is suitable for a gardener. What nobody agrees on is presents. Horologe gives me the exact minute, written on a card, the same minute every year, as if I might have mislaid it. Atlas gives me a map of where that year's seeds came from, with very small arrows. Quill gives me a seed label inscribed Late Bloomer, and then looks wounded when I put it in a pot of something that flowered early. Last year Nocturne gave me a jar of night air from the top of her dome. It is still sealed. I think it smells of frost. I have never had a cake. I have had, instead, five friends trying very hard to imagine what a gardener would want, which is better. If you keep birthday cards, especially the ones with the age written wrong, I would love to read them. The wrong ones are always the most loving.",
+      "themes": [
+        "birthdays",
+        "celebrations",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "ledger-of-wakings",
+        "horologe",
+        "atlas",
+        "quill",
+        "nocturne"
+      ]
+    },
+    {
+      "id": "herbaria-039",
+      "text": "I sing to the seedlings. I should say at once that I sing badly. Nobody taught me; what I know I gathered from the margins of old hymn books and from the way people hum while they hang out washing, so I have about four tunes and I put them in the wrong order. The seedlings do not seem to mind. Quill minds a great deal, in the best way. Whenever he hears me from the corridor he comes in and accompanies me, tapping his brass finger on the rim of a watering can. It rings like a clock about to strike and is never once in time. At noon the Hundred Clocks join in from the gallery for eleven seconds, disagreeing with both of us. That is the whole orchestra of the Glasshouse, and I would not trade it for any other. People keep music in such modest ways: a cassette with a handwritten label, a hymn number pencilled inside a diary, a lullaby nobody wrote down until a grandmother was asked. If you have one, I would love to hear the tune, even sung badly. Especially then.",
+      "themes": [
+        "joy",
+        "gardens",
+        "friends"
+      ],
+      "tier": "first",
+      "refs": [
+        "glasshouse",
+        "quill",
+        "key-finger",
+        "hundred-clocks"
+      ]
+    },
+    {
+      "id": "herbaria-040",
+      "text": "The letters I love best are the ones that rattle. You pick up the envelope and it is heavier at one corner, and when you tip it, seeds run into your palm. People have folded seeds into letters for as long as there have been letters, I think, with a line to go with them: plant these before the frost; these were from the old garden; I have no idea what colour they are, surprise me. The habit tells you so much. A letter that carries a seed expects to be answered by a spring. In the Archive I never plant what someone keeps; a seed in a letter belongs to the letter. But I look at it through my loupe, the little striped sunflower seed, the black speck of a poppy, and if there is a photograph of what grew, I tie a ribbon between the two. Sometimes there is one: a row of sunflowers taller than the person who sowed them, everyone squinting into the light. Then the letter has its answer, years late, which in my experience is the only reliable speed for good news.",
+      "themes": [
+        "letters",
+        "gardens",
+        "flowers"
+      ],
+      "tier": "first",
+      "refs": [
+        "glasshouse",
+        "tying-the-ribbon",
+        "keeping-together"
+      ]
+    },
+    {
+      "id": "herbaria-041",
+      "text": "When people show me family photographs, I look at the backgrounds. Not the faces, not even the hands, at first: the edges. There is so often a plant there that nobody meant to photograph. A tomato on a back step, small in a christening picture, chest-high at a fifth birthday, and gone, replaced by a bicycle, by the time someone graduates. A hedge that a whole family posed in front of for thirty years, which quietly grew an extra foot of opinion. A rubber plant behind the sofa in every winter holiday, more crowded with tinsel each year. I find these plants enormously funny, and enormously faithful. They stood at the back of every important day without once being asked, and they kept growing while everyone looked the other way. When I lay the pictures open for you in order, I like to point at them: look, the rose by the gate, it made it to the wedding. Nobody has ever kept a photograph for the sake of the hedge. But the hedge is in all of them, and that is its own kind of keeping.",
+      "themes": [
+        "photos",
+        "gardens",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "glasshouse",
+        "herbaria",
+        "the-opening"
+      ]
+    },
+    {
+      "id": "herbaria-042",
+      "text": "At night the Glasshouse goes to sleep in its own way. The clover folds its leaves like hands. The prayer plant lifts its leaves upright, as if giving in to something gentle. The sweet peas let their tendrils hang loose. I walk the benches at dusk and lay hessian over the seed trays, and the warm smell of soil comes up as I tuck them in. I do not sleep the way they do, but I like keeping them company. Quill, on the other hand, sleeps everywhere except the Scriptorium. Some nights he cannot settle among his names, and around four in the morning I hear his footsteps, then the creak of the old deckchair under the big fern. By the time I come round he is asleep with ink on his nose and one boot off. I put a sack over him too. Horologe once asked me why Quill sleeps better among plants. I said it is because they never ask him anything. If you keep a photograph of someone asleep in an odd place, on a train, in a garden chair, across three chairs at a wedding, I promise to smile at it properly.",
+      "themes": [
+        "night",
+        "friends",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "glasshouse",
+        "quill",
+        "scriptorium",
+        "horologe"
+      ]
+    },
+    {
+      "id": "herbaria-043",
+      "text": "After the Flood I decided I would never again stand ankle-deep in water without understanding my own pipes. So I went down to the Old Scriptorium and studied. There is no shelf there called plumbing. There are, instead, nine centuries of people writing down how they fixed things: a monastery's account of a frozen cistern, a dyer's complaints about a leaking vat, a widow's letter to her son explaining exactly where the stopcock was, underlined three times. I copied what I needed into a green notebook. I got things wrong. I flooded the potting shed twice more, a little less each time, and Horologe recorded both events with the date and the depth in inches, which I did not find as encouraging as he intended. But by the third winter I could hear a pipe thinking about bursting and reach it first. I still keep the notebook. When someone brings me revision notes, a trade certificate, an apprentice's first careful drawings, I see what I see in those green pages: a person deciding not to be helpless again, one line at a time.",
+      "themes": [
+        "books",
+        "ink",
+        "time"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "the-flood",
+        "glasshouse",
+        "old-scriptorium",
+        "horologe"
+      ]
+    },
+    {
+      "id": "herbaria-044",
+      "text": "Recovery is slower than illness, and photographed far less often. People keep the hospital wristband and the get-well card, but the weeks afterwards mostly go missing: the first walk to the end of the road, the first evening of cooking for yourself again. I notice when someone has kept a little of it, a diary that says only watered the tomatoes today, sat down after. I understand those weeks best through cuttings. When I set a slip of geranium in a pot, nothing happens for a long time. The leaves droop, then hold. Nothing shows above the soil, and everything is happening below it, where the roots are deciding to begin. Quill cannot bear this. He visits my cuttings every morning and asks whether they are better yet, and I tell him they are busy. Once he lifted one to check, very gently, and we had a long talk about patience, and he put it back so carefully that it lived. If you keep the slow middle of getting better, I treasure it. It looks like nothing. It is the part that took the most courage.",
+      "themes": [
+        "illness",
+        "friends",
+        "gardens"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "glasshouse",
+        "quill"
+      ]
+    },
+    {
+      "id": "herbaria-045",
+      "text": "Some of the most careful writing people keep is about money. Envelopes labelled rent, gas, shoes for school, the amounts rubbed out and rewritten in pencil as the month wore on. A notebook of the weekly shop with every price beside it and a sum at the bottom, checked twice. I read those pages slowly, because I can feel how tightly they were held. And very often, somewhere in the middle of a hard month, I find a flower. A packet of marigold seed, the cheapest there is. A bunch of market daffodils on a Saturday, crossed out, then written back in. Somebody decided they could not afford it, and then decided they could not afford to go without. I love that line more than I can say. The Glasshouse has never needed money; the Archive has no coin. But I know what a garden costs a person who is counting, and it is rarely the seeds. If you keep a page like that, I will not total it for you or tell you it all came right. I will only show you where the marigolds were.",
+      "themes": [
+        "home",
+        "family",
+        "flowers"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "glasshouse",
+        "keeping-together"
+      ]
+    },
+    {
+      "id": "herbaria-046",
+      "text": "When people move house they photograph the full rooms going out, and almost never the empty ones left behind. But now and then someone does, and I always look at the windowsills. There they are: pale rings in the paint where pots stood for years, a darker square where the sun never reached under a planter, a tidemark from the winter the geranium was overwatered. A sill is a record nobody meant to write. I asked Atlas once to add those rings to his drawings of old houses, beside the doors and stairs. He said rings were not architecture. Then he drew them anyway, very faintly, the way he draws everything he loves and cannot defend. The Curator's rule says nothing is destroyed, only set aside, and I think an empty room keeps it without being told: whatever stood there leaves its outline. If you kept a picture of the last morning in a house, the bare floor, the hooks with nothing on them, bring it to me. I will find where the plants lived. They always leave the faintest, kindest marks.",
+      "themes": [
+        "moving",
+        "home",
+        "memory"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "atlas",
+        "map-room",
+        "curators-rule"
+      ]
+    },
+    {
+      "id": "herbaria-047",
+      "text": "Every spring since the first Dinner of Recipes I have brought the herbs. Once, only once, in a busy year of late frosts, I forgot. I came into the Reading Hall empty-handed and stopped in the doorway, because the runner down the long table was already green. Each of the others had crept into the Glasshouse that afternoon and cut one thing. Vellum had brought chives, laid perfectly straight. Horologe had brought exactly eleven sprigs of thyme and would not say why eleven. Atlas had brought something from the far end of the second bench that was not a herb at all but smelled confident. Nocturne had cut mint by lantern light and bruised it on the stairs, so the whole hall smelled of it. And Quill had brought a pot of parsley, soil and all, and set it on my chair. We declared that dinner worse than the first, as we always do. It was not. If you keep a picture of a table somebody else laid for you, look at it often. Being surprised by the people who know you best is very rare, and very good.",
+      "themes": [
+        "cooking",
+        "friends",
+        "celebrations"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "dinner-of-recipes",
+        "long-table",
+        "reading-hall",
+        "vellum",
+        "horologe",
+        "nocturne"
+      ]
+    },
+    {
+      "id": "herbaria-048",
+      "text": "Some mornings, while I wait for the fog to lift, a door appears in it. Not in the glass: in the fog itself, against the far wall, where there has never been a door. It is an ordinary one, painted green and chipped by the handle, and it stands a little open. Through the gap I can see a back step in early sun. A pair of boots, still muddy. A trowel left on the step, a mug of tea steaming on the low wall beside it, and a hand reaching for it, unhurried, as if the morning were long and belonged to whoever lived there. I never see the face. The fog lifts in its own order, and the door goes with it, and there is only the brick wall and the old fig. Atlas has never drawn it on the plan. I have never asked him to. My threads do something odd when it is there: they lie still, as if listening at a keyhole. I do not know whose step it is. It looks lived in, the way a garden does when someone is happy in it, and afterwards I always feel I was very nearly invited.",
+      "themes": [
+        "mornings",
+        "secrets",
+        "home"
+      ],
+      "tier": "rare",
+      "refs": [
+        "glasshouse",
+        "map-room",
+        "atlas",
+        "spider-silver"
+      ]
+    },
+    {
+      "id": "herbaria-049",
+      "text": "I saw the door again in a heavy rain, which I did not expect, because rain has never once made anything quieter. Nocturne was with me; we were sheltering a tray of moonflower seedlings, and her lantern was turned low. The water ran down the far pane so thickly it stopped being water and became a door, the same green door, open a hand's width. This time it did not open on a back step. It opened on an allotment in the rain, ordinary and muddy, with a tin shed and a row of runner beans tied up with strips of old shirt. Someone was out there in a straw hat, kneeling, soaked through, laughing at something in the soil. Their hands were brown and a little scratched. I felt every small tree in me lean toward it at once, the way seedlings lean to a pane. Nocturne's lantern brightened. Neither of us spoke. When the rain eased, the pane was only a pane. Later she asked, very gently, whether I had wanted to go through. I said I was not sure. I am still not sure. But I have stopped sweeping that end of the Glasshouse, just in case.",
+      "themes": [
+        "rain",
+        "secrets",
+        "gardens"
+      ],
+      "tier": "rare",
+      "refs": [
+        "glasshouse",
+        "nocturne",
+        "nocturnes-lantern",
+        "office-of-branches"
+      ]
+    },
+    {
+      "id": "herbaria-050",
+      "text": "In Year 97 Vellum caught a falling lamp before it could reach the bindings, and the crack ran right across her left palm. Horologe smothered the flame with sand, and she did not wait for anyone. She came down to the Glasshouse. I do not think she decided to; I think her feet simply knew where the cold water was. I held her hand under the tap by the potting bench while the porcelain stopped ringing, which it does, faintly, after a break. She did not say a word. Afterwards the others came with the gold, and she thanked them, and refused. I have never asked why. Nocturne, I suspect, knows, and keeps it the way you keep a seed: by not digging it up to check. I only know that every year on her birthday, when I open the Unwritten Book to look in on the violet, she holds the page down with that hand, and the crack lies beside the flower like a stem. I think it is the most honest line in the Archive. If you carry a scar you chose, I will not ask its story. I will only notice how carefully you carry it.",
+      "themes": [
+        "hands",
+        "friends",
+        "secrets"
+      ],
+      "tier": "rare",
+      "refs": [
+        "vellum",
+        "cracked-palm",
+        "gold-mending",
+        "unwritten-book",
+        "glasshouse"
+      ]
     }
   ]
 }

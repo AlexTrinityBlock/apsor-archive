@@ -53,7 +53,15 @@ from app.module.agent.domain.compaction_domain import (
     estimate_provider_context_tokens,
     render_compaction_prompt,
 )
-from app.module.agent.domain.companion_persona_domain import CompanionPersona
+from app.module.agent.domain.companion_context_domain import (
+    CompanionTurnContext,
+    render_contributions,
+    signal_text,
+)
+from app.module.agent.domain.companion_persona_domain import (
+    COMPANION_PERSONA_HEADING,
+    CompanionPersona,
+)
 from app.module.agent.domain.context_domain import (
     build_context,
     prefix_hash,
@@ -99,7 +107,13 @@ from app.module.agent.protocol.chat_generator_protocol import (
     ChatResult,
     ChatToolCall,
 )
-from app.module.agent.protocol.companion_protocol import CompanionRunObserverProtocol
+from app.module.agent.protocol.companion_protocol import (
+    CompanionContextContributorProtocol,
+    CompanionRunObserverProtocol,
+    ContextContribution,
+    ContextSignal,
+    ContextSite,
+)
 from app.module.agent.protocol.usage_quota_protocol import AgentQuotaProtocol
 from app.module.agent.schema.agent_schema import (
     AgentApprovalSchema,
@@ -117,6 +131,7 @@ from app.module.agent.schema.agent_schema import (
     AgentToolCatalogSchema,
     AgentToolSchema,
     AgentTurnResultSchema,
+    AgentWebSourceSchema,
 )
 from app.module.agent.service.system_prompt_service import SystemPromptService
 from app.module.agent.service.tool_registry import AgentToolRegistry
@@ -131,7 +146,7 @@ logger = logging.getLogger(__name__)
 
 # Pasted briefs and IME output may use full-width brackets around a token.
 CITATION_PATTERN = re.compile(
-    r"[\[［](?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+)[\]］]"
+    r"[\[［](?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+|web:w[1-9]\d{0,8})[\]］]"
 )
 _PAGE_CONTEXT_LINE_WS = re.compile(r"[ \t\f\v]+")
 _PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")
@@ -272,6 +287,7 @@ class AgentService:
         model_plan: AgentModelPlanProtocol | None = None,
         model_status: str = "assigned",
         companion_runs: CompanionRunObserverProtocol | None = None,
+        companion_context: CompanionContextContributorProtocol | None = None,
     ) -> None:
         self.repository = repository
         self.chat_generator = chat_generator
@@ -283,6 +299,10 @@ class AgentService:
         self.chat_attachments = chat_attachments
         self.server_timezone = server_timezone
         self.companion_runs = companion_runs
+        self.companion_context = companion_context
+        # Per-run companion state for the run this service instance drives;
+        # every tool result of the run shares it.
+        self._companion_turn: CompanionTurnContext | None = None
         # Provider availability is resolved by the composition root from the
         # account assignment. They are safe names only; keys and base URLs never
         # reach the agent service.
@@ -341,6 +361,52 @@ class AgentService:
                 run_id,
                 exc_info=True,
             )
+
+    async def _message_contributions(
+        self,
+        conversation_id: int,
+        *,
+        content: str,
+        page_context: AgentPageContextSchema | None,
+        attachment_names: Sequence[str],
+    ) -> list[ContextContribution]:
+        """Offer the companion's memories for a new message; best-effort.
+
+        One signal per input site (the user's own words, the page they are
+        viewing, the names of attached images), sharing one offered set, so the
+        per-run cap and the no-repeat rule hold across all of them.
+        """
+        if self.companion_context is None:
+            return []
+        page_text = None
+        if page_context is not None:
+            page_text = signal_text(page_context.title, page_context.text)
+        signals: list[tuple[ContextSite, str, str | None]] = [
+            ("user_message", signal_text(content), content or None),
+            ("page_context", page_text or "", None),
+            ("attachment", signal_text(*attachment_names), None),
+        ]
+        offered: list[ContextContribution] = []
+        for site, text, query in signals:
+            if not text:
+                continue
+            signal = ContextSignal(
+                site=site,
+                conversation_id=conversation_id,
+                text=text,
+                offered_this_run=frozenset(item.id for item in offered),
+                query=query,
+            )
+            try:
+                offered.extend(await self.companion_context.contribute(signal))
+            except Exception:
+                logger.warning(
+                    "companion context failed conversation_id=%s site=%s",
+                    conversation_id,
+                    site,
+                    exc_info=True,
+                )
+        return offered
 
     async def _ensure_chat_allowed(self) -> None:
         if self.quota is not None and not await self.quota.chat_allowed():
@@ -451,6 +517,16 @@ class AgentService:
             last_page_context_key=last_page_context_key,
         )
 
+    async def list_web_sources(self, conversation_id: int) -> list[AgentWebSourceSchema]:
+        """Return the short ids of every web page the conversation has seen."""
+        conversation = await self.repository.get_conversation(conversation_id)
+        if conversation is None:
+            raise AgentConversationNotFoundError(conversation_id)
+        return [
+            AgentWebSourceSchema(ref=source.ref, url=source.url, title=source.title)
+            for source in await self.repository.list_web_sources(conversation_id)
+        ]
+
     async def list_entries(
         self,
         conversation_id: int,
@@ -551,6 +627,15 @@ class AgentService:
         }
         if attachments:
             data["attachments"] = [attachment.to_entry_data() for attachment in attachments]
+        contributions = await self._message_contributions(
+            conversation_id,
+            content=content,
+            page_context=payload.page_context,
+            attachment_names=[attachment.file_name for attachment in attachments],
+        )
+        if contributions:
+            data["companion_context"] = render_contributions(contributions)
+            data["companion_context_ids"] = [item.id for item in contributions]
         compaction_draft = await self._auto_compaction_draft(conversation_id)
         page_context_draft, page_context_key = _page_context_draft(
             payload.page_context,
@@ -810,6 +895,9 @@ class AgentService:
     ) -> ProviderContext:
         """Drop withheld tools from the outbound request; the transcript is unchanged."""
         unavailable = await self._unavailable_tool_names(run_id)
+        if not _has_companion_persona(context):
+            # Only a conversation with a companion has own memories to recall.
+            unavailable = unavailable | {COMPANION_MEMORY_TOOL}
         self._withheld_tools = tuple(sorted(unavailable))
         if not unavailable:
             return context
@@ -1111,6 +1199,7 @@ class AgentService:
         """Continue one durable turn from a deterministic loop snapshot."""
         conversation_id = turn.conversation.id
         run_id = turn.run.id
+        self._companion_turn = _companion_turn(turn)
         # The reported prompt floor is scoped to this run. A resumed approval
         # starts a fresh loop snapshot, so it re-learns the floor from the first
         # successful call in the resumed segment.
@@ -1928,6 +2017,10 @@ class AgentService:
                 max_chars=self.config.max_tool_result_chars,
                 approved=True,
                 plot_limits=self._plot_limits(),
+                companion=CompanionTurnContext(
+                    conversation_id=approval.conversation_id,
+                    run_id=run.id,
+                ),
             )
         else:
             outcome = _rejection_outcome(call.name, approval_id)
@@ -2058,6 +2151,7 @@ class AgentService:
                 parse_error=call.parse_error,
                 approved=approved,
                 plot_limits=self._plot_limits(),
+                companion=self._companion_turn,
             )
         except Exception:
             logger.exception(
@@ -2916,6 +3010,36 @@ def _transcript_from_rows(rows: list[AgentEntryModel]) -> list[TranscriptEntry]:
             )
         )
     return transcript
+
+
+COMPANION_MEMORY_TOOL = "recall_my_memories"
+
+
+def _has_companion_persona(context: ProviderContext) -> bool:
+    """Return whether the frozen system message carries a companion persona section."""
+    content = context.system_message.get("content") if context.system_message else None
+    if isinstance(content, str):
+        return COMPANION_PERSONA_HEADING in content
+    if isinstance(content, list):
+        return any(
+            isinstance(part, dict) and COMPANION_PERSONA_HEADING in str(part.get("text", ""))
+            for part in content
+        )
+    return False
+
+
+def _companion_turn(turn: AgentTurnState) -> CompanionTurnContext:
+    """Return the run's companion state, seeded with the message's offers."""
+    data = turn.user_entry.data if isinstance(turn.user_entry.data, dict) else {}
+    seeded = data.get("companion_context_ids")
+    offered: set[str] = set()
+    if isinstance(seeded, list):
+        offered = {item for item in seeded if isinstance(item, str)}
+    return CompanionTurnContext(
+        conversation_id=turn.conversation.id,
+        run_id=turn.run.id,
+        offered=offered,
+    )
 
 
 def _page_context_draft(

@@ -145,6 +145,10 @@ class Settings(BaseSettings):
     # The dedicated worker backfills WebP thumbnails for files that predate
     # them. Disable only to keep a constrained host from reading every original.
     thumbnail_backfill_enabled: bool = True
+    # The dedicated worker embeds chunks that were stored without a vector
+    # (provider out of credits, unreachable, rejected key, spent allowance) as
+    # soon as the provider and the account allow it.
+    embedding_backfill_enabled: bool = True
     ingest_poll_seconds: float = 1.0
     ingest_extract_workers: int = 2
     ingest_max_inflight_jobs: int = 2

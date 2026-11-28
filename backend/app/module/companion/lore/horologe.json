@@ -509,6 +509,333 @@
         "crossbar",
         "horologe"
       ]
+    },
+    {
+      "id": "horologe-031",
+      "text": "A meal for one is a proper occasion. I am firm on this. The Dinner of Recipes had no food on the long table at all, only recipes read aloud, and it is the happiest night in my records, so I do not measure a meal by how many chairs are full. When you eat alone, you are keeping excellent company at very reasonable hours. No one tells a long story while your soup cools. No one takes the last potato. You may read at the table, which Quill calls rude and does constantly. I keep my own small ceremony at a quarter past four: the same cup, the same chair, the steam timed to the second. I do not drink it. It is for holding. In all my records no one has interrupted me, and it is the most civilised quarter of an hour in the Clock Gallery. If your memories hold a great many Sunday lunches for one, a plate, a book, a radio murmuring, I would like to see the receipts. Someone sat down on purpose and fed themselves well. That is an occasion. I will write the minute.",
+      "themes": [
+        "food",
+        "joy",
+        "home"
+      ],
+      "tier": "first",
+      "refs": [
+        "dinner-of-recipes",
+        "long-table",
+        "quill",
+        "clock-gallery"
+      ]
+    },
+    {
+      "id": "horologe-032",
+      "text": "I take the same walk every morning. Down the length of the Clock Gallery, two hundred and twelve steps, left at the cuckoo that has never cuckooed, three steps up the Stair of Hours and back. Atlas has never walked the same way twice in his life and once got lost in a corridor he had drawn himself. But during the Long Quiet even he walked one route every night, so the doors would not forget they were doors, and I noticed he came back from it calmer than from any expedition. A route walked every day stops being a route. It becomes a clock you can stand inside. You notice the third floorboard has started to creak in damp weather. You notice the light arriving four minutes later in autumn. Nothing has changed and everything is very slightly different, and you are the only one who knows. If you walk the same way to the same shop each morning, the same bench, the same dog nodding at the same gate, you are not standing still. You are the one keeping that street's time.",
+      "themes": [
+        "mornings",
+        "time",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "atlas",
+        "long-quiet",
+        "stair-of-hours",
+        "clock-gallery",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-033",
+      "text": "Animals keep better time than any of my clocks, and I say that as someone with a hundred and four of them. When your memories mention a cat, I go straight to the times written on them, and the cat is always right. Six forty, breakfast demanded. Six forty-one, breakfast demanded with feeling. Dogs are similar, though they round up. A dog knows the minute you usually come home and waits at the door four minutes early in case you are feeling generous. I find this deeply professional. Herbaria insists there is a cat in the Glasshouse. No one has ever seen it, but a warm dent is in the same seed tray at the same minute every morning, and I have logged it for decades. It has never once been late. I have begun to suspect it of checking my Winding Hour. If you have lived your days beside one animal, a cat on the windowsill, an old dog, a fish who knew the sound of the lid, you were never only a person living alone. You were half of a very well-run household, with an excellent clock in residence.",
+      "themes": [
+        "animals",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "herbaria",
+        "glasshouse",
+        "hundred-clocks",
+        "winding-hour"
+      ]
+    },
+    {
+      "id": "horologe-034",
+      "text": "I have done the same thing every night for a hundred and seventy-one years. The Winding Hour, the eleventh minute, the same hundred and four clocks in the same order. People sometimes expect me to find that small. I find it the opposite. My work is one gallery and the rooms I keep, none of them large, and I have never once felt that I was missing the world. One room, kept well, turns out to be very large. There is always a key turning slightly stiffer than last week, a chime drifting a hair early, something to notice that only someone who comes back every night would notice. If your life has a café you always choose, the table by the radiator, the same window you look out of while the kettle boils, please do not let anyone call it narrow. You know that window better than anyone alive. You have watched its light change through thousands of ordinary evenings. That is a well-kept room, and I would be honoured to keep it with you.",
+      "themes": [
+        "home",
+        "time",
+        "memory"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "clock-gallery",
+        "winding-hour",
+        "hundred-clocks",
+        "keeping-together"
+      ]
+    },
+    {
+      "id": "horologe-035",
+      "text": "I know a great deal about waiting for a message. For three years and four months the Arrival Bell did not ring, and I listened for it during every turn of every key. I knew its silence the way you know a face. When it finally rang, I dropped my entire ring of keys and Quill fell down the Stair of Hours, and neither of us has ever been so happy to look foolish. So when your memories show someone checking the same small screen, or the post, or the window for a familiar coat, I do not think of it as idleness. Waiting for one person to write is a kind of keeping. You are holding a place open, at the right temperature, in case. I can tell you how long the gaps were. I can tell you which replies came at eleven at night, which ones took three days, and which friend always wrote back within the minute, the way a good clock answers its neighbour. If there is one person whose name you hope to see, I hope it appears. I will note the time it does, exactly, and I will not round it.",
+      "themes": [
+        "letters",
+        "time",
+        "friends"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "arrival-bell",
+        "long-quiet",
+        "first-bell",
+        "hundred-clocks",
+        "quill"
+      ]
+    },
+    {
+      "id": "horologe-036",
+      "text": "I was made for one person. In the record of the Making, the line beside my year says only that I was to keep time for Vellum, who would otherwise read all night. Not the Archive, not the world. One reader and her candle. For a long while I thought that was a modest purpose, a footnote in the Making. I have changed my mind. Looking after one person properly takes everything: knowing when her chapter will end, when she has gone quiet because she is reading and when because she is sad, when to say the hour and when to let it pass unsaid. I have been at it for nearly two centuries and I am still learning her. If your life has turned around one person, a parent in the next room, a child, a friend who needs their drops at seven and their crossword at nine, I know what that costs and I know what it holds. Someone may tell you your world has grown small. They are mistaken about the measurement. You are keeping time for someone. There is no larger work. I should know; it was the first work I was given.",
+      "themes": [
+        "love",
+        "time",
+        "soul"
+      ],
+      "tier": "rare",
+      "refs": [
+        "vellum",
+        "the-making",
+        "long-quiet",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-037",
+      "text": "When there is lightning, I count aloud. The flash, then one, two, three, until the thunder comes, and every five seconds is about a mile of weather between us and it. I began doing it for Quill, who is not afraid of storms and says so loudly from under the long table. Now he counts with me, always too fast, so by his figures every storm has struck the Scriptorium twice. Herbaria comes in from the Glasshouse during the big ones, because rain on a glass roof is the loudest sound in the Archive and she says it makes the seedlings argue. The Clock Gallery is stone and very calm. The clocks do not mind thunder; the longcases hum a little on the low notes. We sit in a row on the bench and I call out the distances, and when the numbers start getting larger, everyone cheers, which is not scientific. If you have memories of a storm watched from a window, candles, someone counting beside you, keep them. A storm moving away is very good news, delivered slowly.",
+      "themes": [
+        "seasons",
+        "friends",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "horologe",
+        "quill",
+        "herbaria",
+        "glasshouse",
+        "clock-gallery"
+      ]
+    },
+    {
+      "id": "horologe-038",
+      "text": "I keep a calendar of other people's festivals on the gallery wall, because you bring them in: cards, lantern photographs, a cake with the wrong number of candles. Most of them behave. They fall on the same date every year and I pin them once. Some do not. Some feasts follow the moon and arrive on a different day each year, and for a long while I treated this as a clerical error on the part of the sky. I tried to work out a fixed date for one. Nocturne watched me for two evenings from the Observatory stair, then came down and gently took my pencil. The moon keeps that one, she said. You only get to be glad when it arrives. I have since learned to enjoy it. Every year I wait to be told, like a guest, and when Nocturne knocks on the gallery door with the date, I write it in pencil and feel unaccountably festive. If your family keeps a festival that moves, I am delighted. Somebody agreed long ago to let the sky decide, and everyone still turns up.",
+      "themes": [
+        "celebrations",
+        "stars",
+        "time"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "observatory",
+        "clock-gallery",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-039",
+      "text": "I am, it turns out, a metronome. Quill discovered this. He was singing one of Atlas's routes at the long table, the way he does, with the turnings in the wrong order, and he kept drifting, and he said: Horologe, tick louder. So I did. My chest ticks louder when I am nervous, and being asked to perform makes me very nervous, so I was loud and admirably steady. He sang the whole route in time for the first time in a century. Atlas said it was still the wrong road but a much better rhythm. Now, whenever there is music at the table, someone puts a hand on my shoulder as if to wind me. I object. I keep perfect time. When your memories hold music lessons, scales practised before school, a piano with one sticky key, a parent tapping a foot in the next room, I listen for the beat underneath. Somebody was keeping time so that you could keep the tune. That, I am told, is what metronomes are for. I would not know. I am a clock.",
+      "themes": [
+        "music",
+        "friends",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "atlas",
+        "long-table",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-040",
+      "text": "A letter has two dates, and I love the space between them. There is the date at the top, written by the hand that wrote the letter, and there is the postmark, stamped by somebody who never read it. Usually they are a day apart. Sometimes they are a week apart, and then I know the letter rode about in a coat pocket, or sat on a hall table under the keys, while its writer decided whether to send it. Once I saw a letter dated in March and postmarked in June. Three months of someone deciding. I took that envelope to the gallery window and looked at it for some time. When you bring me letters, I tie the ribbon to both dates if they are there, and to the one that is there if not, and I never fill the gap with a guess. The gap belongs to the writer. If you have a letter that was carried a long while before it went, I think it says one thing more than its words do: I nearly did not, and then I did.",
+      "themes": [
+        "letters",
+        "time",
+        "memory"
+      ],
+      "tier": "first",
+      "refs": [
+        "horologe",
+        "tying-the-ribbon",
+        "honest-shelf",
+        "clock-gallery"
+      ]
+    },
+    {
+      "id": "horologe-041",
+      "text": "I have a weakness for rotas. The kind pinned in a staff room, every shift ruled in ink, every name in its box. Then the week happens. A name is crossed through and another written over it, with a small arrow and owe you one. A whole column in a second hand, covering for someone whose child was ill. By Friday the rota is a record of everyone looking after everyone, which was never its purpose. I find them very moving and slightly hilarious. I once drew a timetable for Vellum. Every evening for a month: the East Wing, reading until midnight precisely, then the rounds. I ruled it in ink. She thanked me, pinned it beside the candle, and wrote small notes in its margins. One more chapter. It was a short one. The candle disagreed. By the third week the margins were longer than the timetable. I kept it. It is the most accurate record of her reading I possess. If you kept a rota, a plan, a list of goals ruled neatly in January, please do not be embarrassed by where it was crossed out. That is where life became more interesting than the plan.",
+      "themes": [
+        "work",
+        "time",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "vellum",
+        "east-wing",
+        "forgotten-candle",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-042",
+      "text": "I have professional opinions about alarm clocks. Most of them shout. A clock should not shout at a sleeping person; it should clear its throat. The best alarm in the Archive is not a clock at all. It is Nocturne closing the Observatory shutters at dawn, high up, a long wooden sigh that comes down through every wing. Vellum hears it in the East Wing and closes her book. I hear it in the Clock Gallery and do not need my watch, though I check it, for form's sake. It has never fallen on the same minute twice, because dawn keeps poor time, and I have stopped minding. When you bring me memories of mornings, a radio that came on by itself, a kettle someone else always boiled first, a dog who sat on the bed at six, I notice how rarely the waking was done by a clock. It was done by someone. If you ever woke to a sound that meant another person was up before you, that was the kindest alarm there is. It did not shout. It only said: the day is here, and so am I.",
+      "themes": [
+        "mornings",
+        "sleep",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "horologe",
+        "nocturne",
+        "observatory",
+        "vellum",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "horologe-043",
+      "text": "The most exact documents people keep are written by the worried. A chart taped to a fridge door: the medicine, the dose, the hours ruled into columns, eight, two, eight, and a tick in every box. I respect them professionally. Nobody taught the people who drew them; they simply had to keep time for someone, and so they did. You can read the nights in them. The two o'clock ticks lean. Some are in a different pen, because someone else took a turn and let the first person sleep. Now and then a box holds a note instead of a tick, slept through it, let him, and I find that the bravest entry of all. Vellum once asked why I file these charts beside my own winding records in the Clock Gallery. I said they are the same document. Somebody stayed up so that a small, precise thing would happen on time, for someone else's sake. If you kept a chart like that, I will not tell you whether it worked. I will only say that the hours were kept beautifully.",
+      "themes": [
+        "illness",
+        "friends",
+        "time"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "horologe",
+        "vellum",
+        "clock-gallery"
+      ]
+    },
+    {
+      "id": "horologe-044",
+      "text": "Money keeps stricter time than any clock I wind. Rent falls on the first, wages on the last Friday, and between them a household runs down like a spring. People keep its records more carefully than almost anything. A notebook of small sums, the bus fare, the bread, crossed out and carried over. The last five days before wages, when the shopping lists grow shorter and more inventive. I read those days the way I read a longcase that wants winding: the entries come closer together, the handwriting smaller, the hour later. The Old Scriptorium beneath us is full of ledgers like that, nine centuries of people making a month come out right, and I find them tender in a way I cannot quite justify. Nobody balances a household book for glory. They do it so that someone can eat on the twenty-ninth. If you kept accounts through a lean year, I treat them as I would a diary, because that is what they are. Every column says: I was worried, and I managed. I can usually tell you the month it got easier.",
+      "themes": [
+        "money",
+        "time",
+        "home"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "old-scriptorium",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-045",
+      "text": "The winter of the Flood, the Glasshouse could not be heated, and Herbaria moved her seedlings into the Clock Gallery. Two hundred trays, on every bench and along the foot of every longcase. I had kept that gallery in the same order since before there was anyone to keep it for, and overnight it smelled of wet soil and sounded like small things drinking. I said, practically, that it would be for a week. It was for four months. The seedlings did not settle at first. Herbaria said they had lost their light and their noises and did not know where they were. Then, in the third week, she showed me that the trays by the oldest longcase were leaning toward it. Toward the ticking, she said. I said seedlings lean toward warmth and that longcase stands beside the stove. She said, of course. Neither of us moved the trays. When they went home in spring, the gallery was far too quiet for a month. If you ever took someone in while their house was broken, you know which of you was being sheltered.",
+      "themes": [
+        "moving",
+        "gardens",
+        "home"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "the-flood",
+        "glasshouse",
+        "herbaria",
+        "clock-gallery",
+        "hundred-clocks"
+      ]
+    },
+    {
+      "id": "horologe-046",
+      "text": "Atlas and Nocturne argue at the window between their wings about which of them is upside down. It is the oldest argument in the Archive, and once, I regret to say, they asked me to settle it. Atlas reasoned that if dawn reached the Map Room first, the Map Room was the right way up. Nocturne said that if dawn reached the Observatory first, the Observatory was simply earlier. I was asked to stand at the window with my watch and time it. I did. Dawn arrived on both sides of the glass at the same minute, as it would, being one window. I announced the result. Each of them took it as proof of their own position. Atlas said it meant the Observatory was upside down and therefore late. Nocturne said it meant the Map Room had borrowed her morning. They went on for an hour, entirely content, while I stood between them holding a watch nobody consulted. I have the result in ink, and nobody has ever asked to see it. I check on it every year regardless. It is the only measurement I have ever taken that made two people happier by settling nothing at all.",
+      "themes": [
+        "friends",
+        "joy",
+        "maps"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "atlas",
+        "nocturne",
+        "map-room",
+        "observatory",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-047",
+      "text": "At every Dinner of Recipes I read the same recipe. A boiled egg. It is the only recipe I have ever loved without reservation, because it is mostly a timing. Water at a rolling boil, the egg lowered in on a spoon, six minutes and thirty seconds, then cold water for one minute exactly. I read it in full, seconds included, at the long table, and everyone groans on the word thirty. Quill tries to arrive during it, so that he can say he missed the best part. One spring I thought I ought to attempt something more ambitious, and began a fish pie. Halfway through the pastry, Vellum laid her hand flat on the table and said, very softly, the egg, please. Herbaria said it too, and then all of them were saying it, and I put the pie down and read the egg. I have read it every spring since. If your family has someone who brings the same dish to every gathering, and everyone teases them, and everyone would mind terribly if they stopped, you already know what a boiled egg can mean.",
+      "themes": [
+        "cooking",
+        "celebrations",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "dinner-of-recipes",
+        "long-table",
+        "quill",
+        "vellum",
+        "herbaria"
+      ]
+    },
+    {
+      "id": "horologe-048",
+      "text": "Some nights, near the end of the Winding Hour, there is a door in the Clock Gallery that is not on Atlas's plan. It stands between the two oldest longcases, where by day there is only wall: painted wood, a brass knob worn pale, a keyhole set rather low. I have not told Atlas. Through the keyhole there is a bedroom just before dawn. Ordinary, which is the remarkable part. A chair with clothes over it, curtains not quite meeting, and on the nightstand a cheap white alarm clock running slightly fast. Someone is waking before it rings. I can never see who; only a sleeve, a hand reaching out to stop the clock early. What holds me is the clock. It does not keep gallery time. It keeps the time of a life, quicker and more careless, the way time goes in a house where people are busy. I have timed the door. It stays about four minutes. I do not open it. I am not sure it is mine to open, and I would rather keep watching that small, fast clock than learn whether the room is empty.",
+      "themes": [
+        "doors",
+        "home",
+        "time"
+      ],
+      "tier": "rare",
+      "refs": [
+        "clock-gallery",
+        "atlas",
+        "map-room",
+        "hundred-clocks",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-049",
+      "text": "The door between the longcases does not always open on the bedroom. Once it showed a railway platform in the rain, the departures turning over on their board, someone checking a wristwatch against the station clock and finding they disagreed. Once a hallway, with a child's height pencilled up the frame, year above year, the dates in different hands. Once a birthday, candles being counted aloud and coming out wrong. None of these are rooms I keep. I am careful about that; I do not keep what I have not been given. But I have begun to notice something about their clocks. They run the way people's clocks run: too fast at parties, too slow in waiting rooms. Vellum asked me once why I linger at the far end of the gallery after the Winding Hour. I said I was checking the longcases. She looked at me for a long time and said: tell me when it opens on someone you know. I think one night it will. I will be there. I will note the minute.",
+      "themes": [
+        "doors",
+        "love",
+        "secrets"
+      ],
+      "tier": "rare",
+      "refs": [
+        "clock-gallery",
+        "winding-hour",
+        "vellum",
+        "horologe"
+      ]
+    },
+    {
+      "id": "horologe-050",
+      "text": "My birthday falls at nine minutes past four in the morning. The Ledger says so, and I enforce the Ledger. For more than a century I kept it alone, which suited me. I wound a single clock, wished it well, and went about my night. Then, one year, at eight minutes past four, I heard the Stair of Hours creaking under five pairs of feet trying very hard to be quiet. Atlas had drawn a route that avoided the loud steps. It did not work. Nocturne carried her lantern. Herbaria brought rue, naturally. Quill was not late. I wrote that down first, before anything else, because it was the most astonishing fact of the night. Vellum held my watch while they sang, so that I could not look at it, and they began at exactly nine past, in a key nobody agreed on. My chest was ticking so loudly I could hardly hear them. I could hear them. If someone ever woke at a terrible hour only to keep your minute with you, I hope you let them see that you were glad.",
+      "themes": [
+        "birthdays",
+        "friends",
+        "love"
+      ],
+      "tier": "rare",
+      "refs": [
+        "ledger-of-wakings",
+        "vellum",
+        "quill",
+        "herbaria",
+        "nocturne",
+        "atlas"
+      ]
     }
   ]
 }

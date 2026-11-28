@@ -15,7 +15,13 @@ from pydantic import BaseModel, ValidationError
 
 from app.module.agent.domain.agent_domain import ToolOutcome
 from app.module.agent.domain.calculation_domain import evaluate_expression
-from app.module.agent.domain.companion_persona_domain import LibrarianMemory
+from app.module.agent.domain.companion_context_domain import (
+    CompanionTurnContext,
+    contribution_data,
+    relationship_attributes,
+    render_contributions,
+    signal_text,
+)
 from app.module.agent.domain.history_domain import (
     HISTORY_MESSAGE_MAX_CHARS,
     HistoryMessage,
@@ -35,6 +41,7 @@ from app.module.agent.domain.tool_args import (
     ReadMemoryArgs,
     ReadPathArgs,
     ReadTimelineArgs,
+    RecallMyMemoriesArgs,
     RenderPlotArgs,
     SaveMemoryArgs,
     SearchKnowledgeArgs,
@@ -46,8 +53,17 @@ from app.module.agent.domain.tool_catalog import (
     ToolSpec,
     tool_catalog,
 )
+from app.module.agent.domain.web_source_domain import ephemeral_refs, web_ref
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
-from app.module.agent.exception.domain_error import AgentError
+from app.module.agent.exception.domain_error import (
+    AgentCompanionUnavailableError,
+    AgentError,
+)
+from app.module.agent.protocol.companion_protocol import (
+    ContextContribution,
+    ContextSignal,
+    OwnMemory,
+)
 from app.module.agent.protocol.tool_service_protocol import (
     AgentToolServices,
     ToolServiceScopeProtocol,
@@ -58,7 +74,6 @@ from app.module.knowledge.exception.domain_error import (
     KnowledgeError,
 )
 from app.module.knowledge.schema.memory_schema import MemorySchema
-from app.module.knowledge.schema.search_schema import SearchResponseSchema
 from app.module.knowledge.schema.timeline_schema import TimelineEventSchema
 from app.module.web_research.domain.fetch_quality_domain import looks_structurally_incomplete
 from app.module.web_research.exception.domain_error import (
@@ -92,10 +107,27 @@ WEB_SEARCH_HINT = (
     "past an excerpt, on later pages of the URL, or in matches the provider did "
     "not return; absence from these results is not proof that the source lacks "
     "the detail. If a result matters, call web_fetch with its url, start at "
-    "page=1, and follow page, total_pages, has_more, and next_page."
+    "page=1, and follow page, total_pages, has_more, and next_page. Cite a "
+    "result you use inline by its id, for example [web:w3]."
 )
 
 WEB_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
+# Tools whose successful results the companion may answer with its own
+# memories (topical asides only). search_knowledge searches only the person's
+# archive and never carries lore; the librarian looks her own memories up with
+# recall_my_memories.
+COMPANION_SIGNAL_TOOLS = frozenset(
+    {
+        "read_file",
+        "read_memory",
+        "read_timeline",
+        "present_resource",
+        "web_fetch",
+    }
+)
+# The companion block may use at most this share of a tool result's budget; the
+# archive content keeps the rest, so lore can never crowd evidence out.
+COMPANION_BLOCK_SHARE = 0.4
 COMPRESSED_VIEW = "compressed"
 
 _SPECS: dict[str, ToolSpec] = {spec.name: spec for spec in TOOL_SPECS}
@@ -167,13 +199,16 @@ class AgentToolRegistry:
         parse_error: str | None = None,
         approved: bool = False,
         plot_limits: PlotLimits = DEFAULT_PLOT_LIMITS,
+        companion: CompanionTurnContext | None = None,
     ) -> ToolOutcome:
         """Execute one tool call and never raise for an expected failure.
 
         ``approved`` is set only by the backend after a human resolves a durable
         approval. Model-supplied ``user_confirmed`` never authorizes a write.
         ``plot_limits`` carries the stored render_plot budgets; its default keeps
-        direct callers on the module defaults.
+        direct callers on the module defaults. ``companion`` is the run's
+        companion state; when present, a successful result may carry the
+        companion's own memories in one separate block.
         """
         started = time.perf_counter()
         spec = _SPECS.get(name)
@@ -216,6 +251,14 @@ class AgentToolRegistry:
                     services,
                     plot_limits,
                 )
+                contributions = await _companion_contributions(
+                    name,
+                    parsed,
+                    content,
+                    resource,
+                    services,
+                    companion,
+                )
         except WebResearchError as exc:
             # A failure from the external web provider is a "tool failure", not a
             # stream failure: return a tool result with a stable code so the SSE
@@ -244,8 +287,16 @@ class AgentToolRegistry:
             )
 
         duration = _elapsed_ms(started)
-        tool_truncated = len(content) > max_chars
-        bounded = clip(content, max_chars)
+        block = render_contributions(contributions)
+        if block and len(block) > max_chars * COMPANION_BLOCK_SHARE:
+            block, contributions = "", []
+        archive_budget = max_chars - len(block)
+        tool_truncated = len(content) > archive_budget
+        bounded = clip(content, archive_budget) + block
+        if contributions:
+            data = {**data, "lore": contribution_data(contributions)}
+            if companion is not None:
+                companion.remember(contributions)
         payload: dict[str, Any] = {
             **data,
             "tool": name,
@@ -263,6 +314,65 @@ class AgentToolRegistry:
         return ToolOutcome(content=bounded, data=payload, resource=resource)
 
 
+def _companion_signal(
+    name: str,
+    args: BaseModel,
+    content: str,
+    resource: dict[str, Any] | None,
+    companion: CompanionTurnContext,
+) -> ContextSignal | None:
+    """Return the signal one successful tool result gives the companion."""
+    if name not in COMPANION_SIGNAL_TOOLS:
+        return None
+    query: str | None = None
+    resource_ref: tuple[str, int] | None = None
+    title: str | None = None
+    if resource is not None:
+        kind = resource.get("resource_type")
+        resource_id = resource.get("resource_id")
+        if isinstance(kind, str) and isinstance(resource_id, int):
+            resource_ref = (kind, resource_id)
+        raw_title = resource.get("title")
+        title = raw_title if isinstance(raw_title, str) else None
+    text = signal_text(query, title, content)
+    if not text:
+        return None
+    return ContextSignal(
+        site="tool_result",
+        conversation_id=companion.conversation_id,
+        text=text,
+        run_id=companion.run_id,
+        tool_name=name,
+        resource=resource_ref,
+        offered_this_run=frozenset(companion.offered),
+        query=query,
+    )
+
+
+async def _companion_contributions(
+    name: str,
+    args: BaseModel,
+    content: str,
+    resource: dict[str, Any] | None,
+    services: AgentToolServices,
+    companion: CompanionTurnContext | None,
+) -> list[ContextContribution]:
+    """Ask the companion contributor about one result, never raising."""
+    if companion is None:
+        return []
+    try:
+        contributor = getattr(services, "companion_context", None)
+        if contributor is None:
+            return []
+        signal = _companion_signal(name, args, content, resource, companion)
+        if signal is None:
+            return []
+        return await contributor.contribute(signal)
+    except Exception:
+        logger.warning("companion context failed for tool %s; continuing without it", name)
+        return []
+
+
 async def _dispatch(
     name: str,
     args: BaseModel,
@@ -271,6 +381,8 @@ async def _dispatch(
 ) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
     if name == "search_knowledge" and isinstance(args, SearchKnowledgeArgs):
         return await _search_knowledge(args, services)
+    if name == "recall_my_memories" and isinstance(args, RecallMyMemoriesArgs):
+        return await _recall_my_memories(args, services)
     if name == "read_file" and isinstance(args, ReadFileArgs):
         return await _read_file(args, services)
     if name == "read_timeline" and isinstance(args, ReadTimelineArgs):
@@ -296,12 +408,6 @@ async def _dispatch(
     if name == "companion_action" and isinstance(args, CompanionActionArgs):
         return await _companion_action(args)
     raise ValueError(f"No handler is registered for tool {name!r}.")
-
-
-LIBRARIAN_MEMORY_GUIDANCE = (
-    "These are your own memories, not the user's archive. You may weave one in "
-    "as a brief aside if it feels natural; never cite it as evidence."
-)
 
 
 async def _search_knowledge(
@@ -348,16 +454,22 @@ async def _search_knowledge(
             + xml_text(clip(memory_result.content, SOURCE_EXCERPT_LIMIT))
             + _close("source")
         )
+    speakers = await _history_speakers(
+        services,
+        [item.entry_id for item in result.history_results],
+    )
     for history_result in result.history_results:
+        role, speaker = speakers.get(history_result.entry_id, (None, None))
+        window_attrs: dict[str, object] = {
+            "id": history_result.entry_id,
+            "chunk": history_result.chunk,
+            "score": history_result.score,
+        }
+        if role is not None:
+            window_attrs["role"] = role
+            window_attrs["speaker"] = speaker
         content.append(
-            _open(
-                "history_message",
-                {
-                    "id": history_result.entry_id,
-                    "chunk": history_result.chunk,
-                    "score": history_result.score,
-                },
-            )
+            _open("history_message", window_attrs)
             + xml_text(history_result.content)
             + _close("history_message")
         )
@@ -434,48 +546,13 @@ async def _search_knowledge(
                 "text_score": item.text_score,
                 "matched_by": item.matched_by,
                 "excerpt": _excerpt(item.content),
+                "role": speakers.get(item.entry_id, (None, None))[0],
+                "speaker": speakers.get(item.entry_id, (None, None))[1],
             }
             for item in result.history_results
         ],
     }
-    memories = await _librarian_memories(args.query, result, services)
-    if memories:
-        # The librarian's own lore is a separate block after every archive
-        # source; it never enters the source list or the citation vocabulary.
-        content.append(_open("librarian_memories") + xml_text(LIBRARIAN_MEMORY_GUIDANCE))
-        for memory in memories:
-            content.append(
-                _open("librarian_memory", {"id": memory.id, "tier": memory.tier})
-                + xml_text(memory.text)
-                + _close("librarian_memory")
-            )
-        content.append(_close("librarian_memories"))
-        data["lore"] = [
-            {"id": memory.id, "tier": memory.tier, "text": memory.text}
-            for memory in memories
-        ]
     return "".join(content), data, None
-
-
-async def _librarian_memories(
-    query: str,
-    result: SearchResponseSchema,
-    services: AgentToolServices,
-) -> list[LibrarianMemory]:
-    """Return the companion's own memories for this search, never raising."""
-    recall = services.librarian_memory
-    if recall is None:
-        return []
-    context = [
-        *(item.content for item in result.memory_results[:3]),
-        *(item.content for item in result.file_results[:3]),
-        *(item.content for item in result.summary_results[:2]),
-    ]
-    try:
-        return await recall.recall(query, [clip(text, 400) for text in context])
-    except Exception:
-        logger.warning("librarian memory recall failed; continuing without it")
-        return []
 
 
 async def _read_file(
@@ -745,6 +822,7 @@ def _history_element(
     attributes: dict[str, object] = {
         "id": message.entry_id,
         "role": message.role,
+        "speaker": _speaker(message),
         "conversation_id": message.conversation_id,
         "title": message.conversation_title,
         "time": message.created_at.isoformat(),
@@ -758,6 +836,137 @@ def _history_element(
         + xml_text(clip(message.content, limit))
         + _close("history_message")
     )
+
+
+# Who said a past message, as the model reads it: the person, a librarian by
+# name, or the archive assistant (a reply from a conversation without a
+# companion).
+PERSON_SPEAKER = "the person"
+ARCHIVE_ASSISTANT_SPEAKER = "the archive assistant"
+
+
+def _speaker(message: HistoryMessage) -> str:
+    if message.role == "user":
+        return PERSON_SPEAKER
+    return message.speaker_name or ARCHIVE_ASSISTANT_SPEAKER
+
+
+async def _history_speakers(
+    services: AgentToolServices,
+    entry_ids: list[int],
+) -> dict[int, tuple[str | None, str | None]]:
+    """Return ``entry_id -> (role, speaker)`` for history windows (best effort)."""
+    if not entry_ids:
+        return {}
+    try:
+        messages = await services.history_service.read_messages(sorted(set(entry_ids)))
+    except Exception:
+        logger.warning("history speaker lookup failed; windows stay unlabeled")
+        return {}
+    return {message.entry_id: (message.role, _speaker(message)) for message in messages}
+
+
+async def _recall_my_memories(
+    args: RecallMyMemoriesArgs,
+    services: AgentToolServices,
+) -> tuple[str, dict[str, Any], None]:
+    """Let the librarian look up her own memories and what was said before.
+
+    ``story``: her lore (any weight) and the life stories she wrote for this
+    person. ``said``: past assistant replies in this person's conversations by
+    any librarian, each labeled with who said it; her own words come first.
+    The block is her memory, never archive evidence.
+    """
+    own = services.companion_memories
+    if own is None:
+        raise AgentCompanionUnavailableError()
+    query = " ".join(args.query.split())
+    limit = args.limit
+    stories: list[OwnMemory] = []
+    said: list[HistoryMessage] = []
+    if args.scope in {"story", "all"}:
+        stories = await own.search_own(query, limit=limit)
+    if args.scope in {"said", "all"}:
+        said = await _past_replies(services, query, limit)
+    my_ref = own.identity.ref
+    said.sort(key=lambda message: 0 if message.speaker_ref == my_ref else 1)
+    facts = await own.relationship()
+    block: dict[str, object] = {"scope": args.scope, "companion": own.identity.name}
+    if facts is not None:
+        block.update(relationship_attributes(facts))
+    parts = [_open("my_memories", block)]
+    guidance = (await own.guidance()).strip()
+    if guidance:
+        parts.append(_open("guidance", {}) + xml_text(guidance) + _close("guidance"))
+    for memory in stories:
+        parts.append(
+            _open("memory", {"kind": "story", "id": memory.id, "weight": memory.weight})
+            + xml_text(memory.text)
+            + _close("memory")
+        )
+    said_data: list[dict[str, Any]] = []
+    for message in said[:limit]:
+        own_words = message.speaker_ref == my_ref
+        said_by = "you" if own_words else _speaker(message)
+        parts.append(
+            _open(
+                "memory",
+                {
+                    "kind": "said",
+                    "id": message.entry_id,
+                    "said_by": said_by,
+                    "conversation_id": message.conversation_id,
+                    "time": message.created_at.isoformat(),
+                },
+            )
+            + xml_text(clip(message.content, HISTORY_NEIGHBOR_EXCERPT_LIMIT))
+            + _close("memory")
+        )
+        said_data.append(
+            {
+                "entry_id": message.entry_id,
+                "said_by": said_by,
+                "speaker_ref": message.speaker_ref,
+                "own": own_words,
+                "conversation_id": message.conversation_id,
+                "excerpt": _excerpt(message.content),
+            }
+        )
+    parts.append(_close("my_memories"))
+    data = {
+        "scope": args.scope,
+        "companion": {"ref": my_ref, "name": own.identity.name},
+        "lore": [
+            {"id": memory.id, "weight": memory.weight, "text": memory.text, "moment": "self"}
+            for memory in stories
+        ],
+        "said": said_data,
+    }
+    return "".join(parts), data, None
+
+
+async def _past_replies(
+    services: AgentToolServices,
+    query: str,
+    limit: int,
+) -> list[HistoryMessage]:
+    """Return past assistant replies (any librarian) relevant to ``query``."""
+    if not query:
+        return await services.history_service.recent_replies(limit * 2)
+    try:
+        result = await services.search_service.search(
+            query,
+            result_number=max(limit * 2, 4),
+            include_history=True,
+        )
+    except KnowledgeError:
+        return []
+    entry_ids = list(dict.fromkeys(item.entry_id for item in result.history_results))
+    messages = await services.history_service.read_messages(entry_ids)
+    order = {entry_id: index for index, entry_id in enumerate(entry_ids)}
+    replies = [message for message in messages if message.role == "assistant"]
+    replies.sort(key=lambda message: order.get(message.entry_id, len(order)))
+    return replies
 
 
 async def _history_message(
@@ -800,6 +1009,8 @@ async def _history_message(
         "conversation_id": target.conversation_id,
         "conversation_title": target.conversation_title,
         "role": target.role,
+        "speaker": _speaker(target),
+        "speaker_ref": target.speaker_ref,
         "time": target.created_at.isoformat(),
         "content_truncated": len(target.content) > HISTORY_MESSAGE_MAX_CHARS,
         "content": clip(target.content, HISTORY_MESSAGE_MAX_CHARS),
@@ -809,6 +1020,7 @@ async def _history_message(
             {
                 "entry_id": message.entry_id,
                 "role": message.role,
+                "speaker": _speaker(message),
                 "time": message.created_at.isoformat(),
                 "content": clip(message.content, HISTORY_NEIGHBOR_EXCERPT_LIMIT),
             }
@@ -1048,6 +1260,7 @@ async def _web_search(
         objective=args.objective,
     )
     retrieved_at = result.retrieved_at.isoformat()
+    refs = await _web_refs(services, [(item.url, item.title) for item in result.results])
     rendered: list[str] = []
     clipped_any = False
     for index, item in enumerate(result.results, start=1):
@@ -1058,6 +1271,7 @@ async def _web_search(
             _open(
                 "result",
                 {
+                    "id": _ref_or_none(refs, item.url),
                     "index": index,
                     "title": item.title,
                     "url": item.url,
@@ -1098,6 +1312,7 @@ async def _web_search(
         "provider": result.provider,
         "results": [
             {
+                "ref": _ref_or_none(refs, item.url),
                 "title": item.title,
                 "url": item.url,
                 "excerpt": _excerpt(item.content),
@@ -1111,6 +1326,28 @@ async def _web_search(
         "excerpt_truncated": clipped_any,
     }
     return content, data, None
+
+
+async def _web_refs(
+    services: AgentToolServices,
+    pages: list[tuple[str, str | None]],
+) -> dict[str, int]:
+    """Number pages through the conversation registry, or locally outside one.
+
+    A registry failure must never fail the web tool itself: the result is still
+    useful, it just falls back to numbers local to this one result.
+    """
+    if services.web_sources is not None:
+        try:
+            return await services.web_sources.assign(pages)
+        except Exception:
+            logger.warning("web source numbering failed; using local numbers")
+    return ephemeral_refs([url for url, _ in pages])
+
+
+def _ref_or_none(refs: dict[str, int], url: str) -> str | None:
+    number = refs.get(url)
+    return web_ref(number) if number is not None else None
 
 
 def _search_hint(*, provider_truncated: bool, excerpts_clipped: bool) -> str:
@@ -1179,10 +1416,13 @@ async def _web_fetch(
     )
     retrieved_at = result.retrieved_at.isoformat()
     content_chars = len(result.content)
+    refs = await _web_refs(services, [(result.url, None)])
+    ref = _ref_or_none(refs, result.url)
     content = (
         _open(
             "web_fetch",
             {
+                "id": ref,
                 "url": result.url,
                 "provider": result.provider,
                 "retrieved_at": retrieved_at,
@@ -1205,6 +1445,7 @@ async def _web_fetch(
         + _close("web_fetch")
     )
     data = {
+        "ref": ref,
         "url": result.url,
         "provider": result.provider,
         "content_chars": content_chars,

@@ -1,12 +1,16 @@
 """Consumer-owned protocols for the knowledge and web-research services used by tools."""
 
+from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
-from app.module.agent.domain.history_domain import HistoryMessageRead
-from app.module.agent.protocol.companion_protocol import LibrarianMemoryRecallProtocol
+from app.module.agent.domain.history_domain import HistoryMessage, HistoryMessageRead
+from app.module.agent.protocol.companion_protocol import (
+    CompanionContextContributorProtocol,
+    CompanionOwnMemoriesProtocol,
+)
 from app.module.knowledge.schema.file_schema import FileChunksSchema, FileSchema, PathListingSchema
 from app.module.knowledge.schema.memory_schema import (
     MemoryReadSchema,
@@ -86,6 +90,10 @@ class HistoryToolServiceProtocol(Protocol):
         message_range: int = 1,
     ) -> HistoryMessageRead: ...
 
+    async def read_messages(self, entry_ids: list[int]) -> list[HistoryMessage]: ...
+
+    async def recent_replies(self, limit: int) -> list[HistoryMessage]: ...
+
 
 class TimelineToolServiceProtocol(Protocol):
     async def get_timeline(
@@ -130,6 +138,12 @@ class WebResearchServiceProtocol(Protocol):
     ) -> WebFetchResponse: ...
 
 
+class WebSourceRegistryProtocol(Protocol):
+    """Number the web pages one conversation has seen for ``[web:wN]`` citations."""
+
+    async def assign(self, pages: Sequence[tuple[str, str | None]]) -> dict[str, int]: ...
+
+
 @dataclass(frozen=True)
 class AgentToolServices:
     """The live services one tool execution may use."""
@@ -140,8 +154,14 @@ class AgentToolServices:
     timeline_service: TimelineToolServiceProtocol
     history_service: HistoryToolServiceProtocol
     web_research_service: WebResearchServiceProtocol
-    # Present only when the conversation froze a companion persona.
-    librarian_memory: LibrarianMemoryRecallProtocol | None = None
+    # Present only when the conversation froze a companion persona: the one
+    # contributor through which the companion's own memories reach a result.
+    companion_context: CompanionContextContributorProtocol | None = None
+    # Present only when the conversation froze a companion: her own memories
+    # (lore and life stories) for the recall_my_memories tool.
+    companion_memories: CompanionOwnMemoriesProtocol | None = None
+    # Present only inside a conversation: stable short ids for web pages.
+    web_sources: WebSourceRegistryProtocol | None = None
 
 
 class ToolServiceScopeProtocol(Protocol):

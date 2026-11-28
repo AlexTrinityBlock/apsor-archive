@@ -12,6 +12,7 @@ import {
   getListAgentApprovalsQueryKey,
   getListAgentConversationsQueryKey,
   getListAgentEntriesQueryKey,
+  getListAgentWebSourcesQueryKey,
 } from "../generated-apis-types/agent/agent";
 
 const CONVERSATION_LIST_KEY = getListAgentConversationsQueryKey();
@@ -33,6 +34,9 @@ export function invalidateConversationDetail(
     }),
     client.invalidateQueries({
       queryKey: getListAgentApprovalsQueryKey(conversationId),
+    }),
+    client.invalidateQueries({
+      queryKey: getListAgentWebSourcesQueryKey(conversationId),
     }),
   ]).then(() => undefined);
 }

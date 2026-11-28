@@ -24,6 +24,10 @@ export interface LoreFragment {
   readonly themes: readonly string[];
   readonly isDefault: boolean;
   readonly edited: boolean;
+  /** Written or edited by this account (always shown in the story editor). */
+  readonly own: boolean;
+  /** Already told to this account; untold memories stay a mystery. */
+  readonly heard: boolean;
 }
 
 export interface LoreInput {
@@ -49,6 +53,30 @@ export function isLoreTier(value: unknown): value is LoreTier {
   return value === "first" || value === "familiar" || value === "rare";
 }
 
+/** The API's memory weight (everyday, past, heart) for an editor tier. */
+export type LoreWeight = "everyday" | "past" | "heart";
+
+const TIER_WEIGHTS: Readonly<Record<LoreTier, LoreWeight>> = {
+  first: "everyday",
+  familiar: "past",
+  rare: "heart",
+};
+
+export function tierToWeight(tier: LoreTier): LoreWeight {
+  return TIER_WEIGHTS[tier];
+}
+
+/** Read a row's weight (or a legacy tier) as an editor tier. */
+export function readLoreTier(value: unknown): LoreTier | null {
+  if (isLoreTier(value)) {
+    return value;
+  }
+  const match = (Object.keys(TIER_WEIGHTS) as LoreTier[]).find(
+    (tier) => TIER_WEIGHTS[tier] === value,
+  );
+  return match ?? null;
+}
+
 /** Parse one lore fragment from an API row; unknown shapes are dropped. */
 export function parseLoreFragment(value: unknown): LoreFragment | null {
   if (!isObject(value)) {
@@ -63,11 +91,32 @@ export function parseLoreFragment(value: unknown): LoreFragment | null {
     : [];
   return {
     id,
-    tier: isLoreTier(value.tier) ? value.tier : "familiar",
+    tier: readLoreTier(value.weight) ?? readLoreTier(value.tier) ?? "familiar",
     text: value.text,
     themes,
     isDefault: value.is_default === true || value.isDefault === true,
     edited: value.edited === true,
+    own: value.own === true || value.edited === true,
+    heard:
+      value.heard === true ||
+      (typeof value.told_count === "number" && value.told_count > 0),
+  };
+}
+
+export interface StorySplit {
+  readonly heard: readonly LoreFragment[];
+  readonly own: readonly LoreFragment[];
+}
+
+/**
+ * The account-facing view of a story: memories it has already heard and the
+ * ones it wrote itself. Untold memories are never listed, so the story keeps
+ * its mystery; tiers and locks are root's concern only.
+ */
+export function splitHeardAndOwn(fragments: readonly LoreFragment[]): StorySplit {
+  return {
+    own: fragments.filter((fragment) => fragment.own),
+    heard: fragments.filter((fragment) => fragment.heard && !fragment.own),
   };
 }
 

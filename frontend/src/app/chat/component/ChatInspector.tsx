@@ -123,6 +123,7 @@ export const ChatInspector = memo(function ChatInspector({
       ref={inspectorRef}
       className="panel chat-inspector"
       aria-label={t("chat.inspector.aria")}
+      tabIndex={-1}
     >
       <div className="chat-inspector__bar">
         <div
@@ -160,15 +161,19 @@ export const ChatInspector = memo(function ChatInspector({
             {t("chat.inspector.previewTab")}
           </button>
         </div>
-        {!narrow ? (
+        {/*
+          On desktop the header's inspector toggle collapses this column; the
+          phone drawer covers the header, so it keeps its own close button.
+        */}
+        {narrow ? (
           <button
             type="button"
             className="chat-icon-btn chat-inspector__collapse"
             onClick={onCollapse}
-            aria-label={t("chat.inspector.collapse")}
-            title={t("chat.inspector.collapse")}
+            aria-label={t("chat.inspector.close")}
+            title={t("chat.inspector.close")}
           >
-            <Icon name="chevron-right" size={14} />
+            <Icon name="close" size={14} />
           </button>
         ) : null}
       </div>

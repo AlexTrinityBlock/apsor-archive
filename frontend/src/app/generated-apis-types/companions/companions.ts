@@ -34,6 +34,7 @@ import type {
   CompanionPersonaUpdateSchema,
   CompanionPreferenceSchema,
   CompanionPreferenceUpdateSchema,
+  CompanionPresetCatalogSchema,
   CompanionSchema,
   CompanionUpdateSchema,
   CreateCompanionLoreParams,
@@ -42,6 +43,7 @@ import type {
   GetCompanionPersonaParams,
   HTTPValidationError,
   ListCompanionLoreParams,
+  ListCompanionPresetsParams,
   ListResponseSchemaCompanionSchema,
   ResetCompanionLoreParams,
   ResetCompanionPersonaParams,
@@ -449,7 +451,115 @@ export const useUpdateCompanionPreference = <TError = HTTPValidationError,
       > => {
       return useMutation(getUpdateCompanionPreferenceMutationOptions(options), queryClient);
     }
-    export const getListCompanionLoreUrl = (companionRef: string,
+    export const getListCompanionPresetsUrl = (params?: ListCompanionPresetsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/v1/companions/presets?${stringifiedParams}` : `/api/v1/companions/presets`
+}
+
+/**
+ * Presets this account may choose, and how its active companion was resolved.
+ * @summary List Companion Presets
+ */
+export const listCompanionPresets = async (params?: ListCompanionPresetsParams, options?: Parameters<typeof apiFetch>[1]): Promise<CompanionPresetCatalogSchema> => {
+
+  return apiFetch<CompanionPresetCatalogSchema>(getListCompanionPresetsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCompanionPresetsQueryKey = (params?: ListCompanionPresetsParams,) => {
+    return [
+    `/api/v1/companions/presets`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListCompanionPresetsQueryOptions = <TData = Awaited<ReturnType<typeof listCompanionPresets>>, TError = HTTPValidationError>(params?: ListCompanionPresetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionPresets>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCompanionPresetsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCompanionPresets>>> = ({ signal }) => listCompanionPresets(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCompanionPresets>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListCompanionPresetsQueryResult = NonNullable<Awaited<ReturnType<typeof listCompanionPresets>>>
+export type ListCompanionPresetsQueryError = HTTPValidationError
+
+
+export function useListCompanionPresets<TData = Awaited<ReturnType<typeof listCompanionPresets>>, TError = HTTPValidationError>(
+ params: undefined |  ListCompanionPresetsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionPresets>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCompanionPresets>>,
+          TError,
+          Awaited<ReturnType<typeof listCompanionPresets>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCompanionPresets<TData = Awaited<ReturnType<typeof listCompanionPresets>>, TError = HTTPValidationError>(
+ params?: ListCompanionPresetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionPresets>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCompanionPresets>>,
+          TError,
+          Awaited<ReturnType<typeof listCompanionPresets>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCompanionPresets<TData = Awaited<ReturnType<typeof listCompanionPresets>>, TError = HTTPValidationError>(
+ params?: ListCompanionPresetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionPresets>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Companion Presets
+ */
+
+export function useListCompanionPresets<TData = Awaited<ReturnType<typeof listCompanionPresets>>, TError = HTTPValidationError>(
+ params?: ListCompanionPresetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCompanionPresets>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListCompanionPresetsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListCompanionLoreUrl = (companionRef: string,
     params?: ListCompanionLoreParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -466,7 +576,7 @@ export const useUpdateCompanionPreference = <TError = HTTPValidationError,
 }
 
 /**
- * Return every lore fragment with its tier and unlock state.
+ * Return the lore the account may see (its own and what it has heard).
  * @summary List Companion Lore
  */
 export const listCompanionLore = async (companionRef: string,
@@ -849,7 +959,7 @@ export const useDeleteCompanionLore = <TError = HTTPValidationError,
 }
 
 /**
- * Edit one fragment's text, themes, tier, or position.
+ * Edit one fragment's text, themes, weight, or position.
  * @summary Update Companion Lore
  */
 export const updateCompanionLore = async (companionRef: string,

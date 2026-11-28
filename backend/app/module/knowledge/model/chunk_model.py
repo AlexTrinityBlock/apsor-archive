@@ -11,6 +11,7 @@ from sqlalchemy import (
     Identity,
     Index,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -57,6 +58,13 @@ class ChunkModel(Base):
         Index("ix_chunk_current", "is_current"),
         Index("ix_chunk_user_id_source", "user_id", "source_kind", "source_id"),
         Index("ix_chunk_user_id_current", "user_id", "is_current"),
+        # The embedding backfill scans only rows still waiting for a vector.
+        Index(
+            "ix_chunk_pending_embedding",
+            "user_id",
+            "id",
+            postgresql_where=text("embedding IS NULL"),
+        ),
         CheckConstraint(
             "source_kind IN ('file', 'memory', 'summary', 'history')",
             name="source_kind_valid",
@@ -64,6 +72,10 @@ class ChunkModel(Base):
         CheckConstraint("chunk_index >= 1", name="chunk_index_positive"),
         CheckConstraint("char_count >= 0", name="char_count_non_negative"),
         CheckConstraint("token_count >= 0", name="token_count_non_negative"),
+        CheckConstraint(
+            "embedding_failures >= 0",
+            name="embedding_failures_non_negative",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
@@ -82,8 +94,23 @@ class ChunkModel(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     char_count: Mapped[int] = mapped_column(Integer, nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(JSONB, nullable=True)
+    # ``none_as_null`` stores a missing vector as SQL NULL, never JSON ``null``,
+    # so "pending" has one meaning and the partial index below can see it.
+    embedding: Mapped[list[float] | None] = mapped_column(
+        JSONB(none_as_null=True),
+        nullable=True,
+    )
     embedding_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Per-chunk embedding failures (HTTP 400/413/422 on this text). Systemic
+    # failures (billing, quota, auth, outages) never count here, so every
+    # pending row is retried once the provider recovers. A NULL ``embedding``
+    # with ``embedding_failures`` below the backfill limit is still pending.
+    embedding_failures: Mapped[int] = mapped_column(
+        SmallInteger,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     is_current: Mapped[bool] = mapped_column(
         nullable=False, default=True, server_default=text("true")
     )

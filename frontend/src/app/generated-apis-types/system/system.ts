@@ -24,6 +24,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  EmbeddingBackfillStatusSchema,
   HTTPValidationError,
   HealthSchema,
   ListProviderNoticesParams,
@@ -255,7 +256,182 @@ export function useGetStats<TData = Awaited<ReturnType<typeof getStats>>, TError
 
 
 
-export const getListProviderNoticesUrl = (params?: ListProviderNoticesParams,) => {
+export const getGetEmbeddingBackfillStatusUrl = () => {
+
+
+
+
+  return `/api/v1/system/embedding-backfill`
+}
+
+/**
+ * Return how many passages still wait for an embedding, as counts only.
+ * @summary Get Embedding Backfill Status
+ */
+export const getEmbeddingBackfillStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<EmbeddingBackfillStatusSchema> => {
+
+  return apiFetch<EmbeddingBackfillStatusSchema>(getGetEmbeddingBackfillStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetEmbeddingBackfillStatusQueryKey = () => {
+    return [
+    `/api/v1/system/embedding-backfill`
+    ] as const;
+    }
+
+
+export const getGetEmbeddingBackfillStatusQueryOptions = <TData = Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetEmbeddingBackfillStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>> = ({ signal }) => getEmbeddingBackfillStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetEmbeddingBackfillStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>>
+export type GetEmbeddingBackfillStatusQueryError = unknown
+
+
+export function useGetEmbeddingBackfillStatus<TData = Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetEmbeddingBackfillStatus<TData = Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>,
+          TError,
+          Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetEmbeddingBackfillStatus<TData = Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Embedding Backfill Status
+ */
+
+export function useGetEmbeddingBackfillStatus<TData = Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getEmbeddingBackfillStatus>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetEmbeddingBackfillStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getRetryEmbeddingBackfillUrl = () => {
+
+
+
+
+  return `/api/v1/system/embedding-backfill/retry`
+}
+
+/**
+ * Ask the worker to resume the backfill now (after a recharge, say).
+ * @summary Retry Embedding Backfill
+ */
+export const retryEmbeddingBackfill = async ( options?: Parameters<typeof apiFetch>[1]): Promise<EmbeddingBackfillStatusSchema> => {
+
+  return apiFetch<EmbeddingBackfillStatusSchema>(getRetryEmbeddingBackfillUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRetryEmbeddingBackfillMutationKey = () => ['retryEmbeddingBackfill'] as const;
+
+export const getRetryEmbeddingBackfillMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryEmbeddingBackfill>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof retryEmbeddingBackfill>>, TError,void, TContext> => {
+
+const mutationKey = getRetryEmbeddingBackfillMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof retryEmbeddingBackfill>>, void> = () => {
+
+
+          return  retryEmbeddingBackfill(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RetryEmbeddingBackfillMutationResult = NonNullable<Awaited<ReturnType<typeof retryEmbeddingBackfill>>>
+
+    export type RetryEmbeddingBackfillMutationError = unknown
+
+
+    /**
+ * @summary Retry Embedding Backfill
+ */
+export const useRetryEmbeddingBackfill = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof retryEmbeddingBackfill>>, TError,void, TContext>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof retryEmbeddingBackfill>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getRetryEmbeddingBackfillMutationOptions(options), queryClient);
+    }
+    export const getListProviderNoticesUrl = (params?: ListProviderNoticesParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {

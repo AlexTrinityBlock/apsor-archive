@@ -536,10 +536,12 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 影格、影格圖片，以及 `GET/PATCH /api/v1/companions/preference`）。
 
 每個夥伴也有自己的故事：一段人設，會成為它在新對話中的聲音（每個對話凍結，
-使用該對話的語言），以及傳說，也就是它自己的記憶。代理搜尋使用者的檔案館時，
-最多兩段相關的圖書館員自身記憶可能會以獨立區塊附在結果旁；它們永遠不是典藏
-證據，也不會被引用。詢問圖書館員關於它自己或檔案館的事，它就會講述自己的故事。
-帳號與該夥伴完成越多對話，越深層的記憶就會解鎖。每個帳號都可以依語言編輯任何
+使用該對話的語言），以及傳說，也就是它自己的記憶。沒有任何記憶被上鎖：每段記憶
+都帶有分量（日常小事、往事、心底的事），要不要說、何時說、說多少，由圖書館員
+自己決定，她也知道你們已經相識多久。相關的記憶可能以獨立區塊附在訊息或工具結果
+旁，她也能用 `recall_my_memories` 工具自己回想，包括她與其他圖書館員過去對這個人
+說過的話（每則過去的回覆都記得是誰說的）。她的記憶永遠不是典藏證據，也不會被
+引用；`search_knowledge` 只搜尋這個人的檔案館。每個帳號都可以依語言編輯任何
 夥伴的人設與傳說，並重設為預設值（`/api/v1/companions/stories/...`）。人設規則
 把使用者視為平等的夥伴：圖書館員會用對方的名字或直接說「你」，絕不使用館主、
 主人之類的稱謂。
@@ -1521,9 +1523,26 @@ uv run python -m script.ingest_wikipedia \
    帶有穩定的 `agent_entry` ID，代理會以 `history_message` 展開它。已刪除的
    對話會被標記為非目前，並從這條通道消失。
 
-若向量召回無法使用，搜尋仍會傳回 BM25 結果。同步匯入在嵌入呼叫於重試
-預算內失敗時，會讓分塊維持純文字；可持久化的 worker 會將耗盡重試的嵌入
-視為工作失敗，因此不會發佈部分檔案。
+若向量召回無法使用，搜尋仍會傳回 BM25 結果。嵌入失敗絕不會遺失段落：
+當供應商額度用完（例如 OpenAI 的 `insufficient_quota`）、拒絕金鑰、無法連線，
+或帳號的嵌入用量額度已用完時，每一條匯入路徑（可持久化的 worker 工作、同步
+文字、Markdown 編輯、記憶、摘要與對話歷史）仍會儲存分塊的文字與 n-gram，
+讓關鍵字搜尋立刻找得到，並把向量標為*待補*（`embedding IS NULL`）。專屬
+worker 的 `EmbeddingBackfill` 迴圈（`APSOR_EMBEDDING_BACKFILL_ENABLED`，預設
+開啟）會自動補上待補的向量：
+
+- 供應商錯誤（帳務、額度、驗證、速率限制、服務中斷）會讓迴圈以指數退避暫停，
+  最長 30 分鐘，而且不會算到段落頭上。退避結束後會自動恢復；嵌入供應商設定
+  變更時，或 root 在儲值後於系統通知按下**立即重試**時，會立刻恢復。
+- 嵌入用量額度已用完的帳號會先略過，直到 root 提高額度或週期重置；補嵌入
+  和其他嵌入一樣會記錄用量。
+- 被供應商以輸入錯誤拒絕的段落（HTTP 400/413/422）會單獨重試，最多五次，
+  之後只保留關鍵字搜尋。
+
+root 可以在系統通知看到待補數量、worker 狀態與下次重試時間
+（`GET /api/v1/system/embedding-backfill`；`POST
+/api/v1/system/embedding-backfill/retry`）。只有在可持久化工作進行中，供應商
+重新載入後會改變模型或維度時，該工作才會失敗，避免同一個檔案混用兩種向量空間。
 
 ### 我需要嵌入模型的金鑰嗎
 
@@ -1655,7 +1674,7 @@ agent_entry ──────┘  (source_kind = history)
   夥伴、每個動作經編碼的 AVIF（或 WebP）影格及其位置、大小與 SHA-256，以及
   帳號的夥伴選擇、是否顯示、動態程度與位置。
 - `companion_story` / `companion_lore_fragment` / `companion_bond`：帳號依語言
-  覆寫的夥伴人設與傳說、其片段，以及解鎖更深層傳說的完成對話數。
+  覆寫的夥伴人設與傳說、其片段，以及完成的執行與對話次數，和初次相遇的時間。
 - `ingest_config`：一列（`id=1`），帶有經驗證的 worker 輪詢、擷取、
   進行中工作、嵌入與分塊大小設定。它不是分塊來源；佇列會參照最終發佈
   的檔案。
@@ -1725,7 +1744,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `d2b6f4a8c1e9`。此分支上 `agent_config` 之後的移轉為：
+最新的移轉是 `d6a1f3c8e2b7`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -1842,10 +1861,31 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   `medium`、`full`，預設 `full`）與 `opacity_mode`（`opaque`、`translucent`、
   `auto`，預設 `opaque`），附檢查約束與伺服器預設值。RLS 與授權不變；降級會刪除
   這兩個欄位。
-- `d2b6f4a8c1e9`（目前 head）為 `companion_preference` 新增可為 NULL 的
+- `d2b6f4a8c1e9`為 `companion_preference` 新增可為 NULL 的
   `scale` 浮點數（0 為精簡、1 為完整），供直接在畫面上縮放使用，附範圍檢查。
   NULL 表示「使用 `size`」；只送 `scale` 時會推導出 `size`，只送 `size` 時會清除
   `scale`。RLS 與授權不變；降級會刪除這個欄位。
+- `e4c8a2f6b0d3` 新增 `companion_lore_told`（每個帳號、夥伴與片段的
+  `told_count`、`offered_at`、`last_told_at`、`source`）與
+  `companion_bond.last_story_run`，用於故事時刻的節奏。僅限擁有者的 RLS。
+- `f1a6c3e8b2d4` 新增全域、可由 root 編輯的夥伴世界資料表（預設角色、
+  片段、設定詞條、世界觀文件與修訂、設定、提示詞模板、種子狀態），從
+  `lore/` 植入，並以 `seed_hash`／`admin_modified`／`upstream_seed_hash`
+  保留 root 的修改。所有人可讀、僅 root 可寫。
+- `a2d7e4f9c3b5` 新增 `app.admin_scope = 'companion'` 政策（root 只能讀寫
+  夥伴故事相關資料列，永遠碰不到檔案館內容）、由管理員管理的帳號資料表
+  （帳號可讀不可寫）、新的羈絆欄位、`companion_lore_fragment.refs`，以及只能
+  新增的 `companion_admin_access_log`。
+- `b3e8f5a1d6c7` 新增 `companion_generated_story` 與 `companion_story_job`，
+  供 worker 撰寫生活故事。
+- `e7b2d5a9c4f1` 新增 `chunk.embedding_failures` 與待嵌入的部分
+  索引，並把 JSON `null` 嵌入轉為 SQL NULL，讓 worker 能在供應商或額度中斷後
+  補上向量。
+- `d6a1f3c8e2b7`（目前 head）把所有傳說資料表的層級換成分量（`first` →
+  `everyday`、`familiar` → `past`、`rare` → `heart`），移除解鎖計數與解鎖時間，
+  新增 `companion_bond.first_met_at`，讓 `companion_lore_told.source` 可記錄
+  `recall`，並依對話凍結的夥伴，替每則過去的助理回覆蓋上
+  `data.speaker = {ref, name}`。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會
@@ -1920,6 +1960,16 @@ docker/caddy/                   non-root reverse proxy
   將登入存取權轉移給目標帳號；停止模擬需要 root 密碼、會刪除該
   工作階段，並發出全新的 root 工作階段。請將 root 視為最高信任憑證，且不要
   把 RLS 當成防禦惡意 root 的機制。
+- **夥伴管理是明文規定的例外。** 在 `/api/v1/admin/companions` 底下，root
+  的請求會另外設定交易範圍內的 `app.admin_scope = 'companion'`。資料庫政策
+  因此允許 root 跨帳號讀取與管理夥伴相關資料：夥伴選擇與政策、故事進度
+  （羈絆與已說過的記憶）、root 的人格與記憶覆寫、生活故事工作，以及
+  **生活故事的全文**——這些故事取材自該帳號自己的記憶。此範圍永遠不會觸及
+  典藏本身（`file`、`memory`、`chunk`、對話），除 root 之外的角色一律拒絕，
+  在模擬工作階段中也不適用。每次閱讀生活故事全文、每次對帳號夥伴的變更，
+  都會附加到 `companion_admin_access_log`（root 只能新增與讀取，任何人都
+  無法修改或刪除），而故事清單永遠不含內文。帳號的夥伴頁面會明確告知
+  管理員可以閱讀這些故事。
 - **RLS 是應用程式邊界，不是主機邊界。** 部署登入是供移轉與維護使用的
   PostgreSQL 超級使用者；應用程式會為請求交易切換至 `apsor_app`。任何
   本機作業系統使用者、任何位於資料庫／快取網路上的容器，或任何能讀取

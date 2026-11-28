@@ -86,7 +86,7 @@ async def list_companion_lore(
     service: Service,
     locale: Locale = "en",
 ) -> CompanionLoreSchema:
-    """Return every lore fragment with its tier and unlock state."""
+    """Return the lore the account may see (its own and what it has heard)."""
     return await service.list_lore(companion_ref, locale)
 
 
@@ -132,7 +132,7 @@ async def update_companion_lore(
     service: Service,
     locale: Locale = "en",
 ) -> CompanionLoreSchema:
-    """Edit one fragment's text, themes, tier, or position."""
+    """Edit one fragment's text, themes, weight, or position."""
     return await service.update_lore(companion_ref, locale, fragment_id, payload)
 
 

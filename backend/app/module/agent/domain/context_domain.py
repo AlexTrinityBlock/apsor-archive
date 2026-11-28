@@ -25,6 +25,7 @@ from app.module.agent.domain.agent_domain import (
     ProviderContext,
     TranscriptEntry,
 )
+from app.module.agent.domain.companion_context_domain import merge_user_suffixes
 from app.module.agent.domain.tool_catalog import PLOT_TOOL_NAME
 from app.module.agent.domain.xml_domain import attributes
 
@@ -252,12 +253,13 @@ def _contributions(
             normal.append(message)
         if normal:
             if entry.kind == KIND_USER and isinstance(entry.data, dict):
-                time_context = entry.data.get("time_context")
-                if isinstance(time_context, str) and time_context:
+                suffixes = merge_user_suffixes(entry.data)
+                if suffixes:
+                    extra = "\n\n".join(suffixes)
                     for message in normal:
                         content = message.get("content")
                         if message.get("role") == "user" and isinstance(content, str):
-                            message["content"] = f"{content}\n\n{time_context}"
+                            message["content"] = f"{content}\n\n{extra}"
             contributions.append((entry, normal))
             source_entry_ids.append(entry.id)
 

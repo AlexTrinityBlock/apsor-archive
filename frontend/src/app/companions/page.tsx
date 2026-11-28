@@ -1,3 +1,4 @@
+import { Icon } from "../component/Icon";
 import { PageHeader } from "../component/PageHeader";
 import { useI18n } from "../i18n";
 import { CompanionControls } from "./component/CompanionControls";
@@ -13,12 +14,16 @@ import "./companions.css";
 export function CompanionPage() {
   const { t } = useI18n();
   return (
-    <div className="page companions-page">
+    <div className="page content-container companions-page">
       <PageHeader
         eyebrow={t("companion.page.eyebrow")}
         title={t("companion.page.title")}
         description={t("companion.page.description")}
       />
+      <p className="companions-admin-notice" role="note">
+        <Icon name="info" size={14} />
+        <span>{t("companion.page.adminNotice")}</span>
+      </p>
       <CompanionControls />
       <CompanionWorldIntro />
     </div>

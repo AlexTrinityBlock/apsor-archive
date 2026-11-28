@@ -1051,6 +1051,18 @@
   border-left: 2.5px solid var(--accent-moss);
 }
 
+/* A web source opens outside the archive, so it reads lighter and dashed. */
+.citation-chip.web {
+  border-style: dashed;
+  border-left: 2.5px solid var(--mono-l3);
+  color: var(--mono-l2);
+  text-decoration: none;
+}
+
+.citation-chip.web .citation-chip__label {
+  font-weight: 500;
+}
+
 .code-block-mono {
   overflow-x: auto;
   padding: 14px;

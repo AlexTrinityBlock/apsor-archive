@@ -44,6 +44,17 @@ describe("remarkCitations", () => {
     ]);
   });
 
+  test("converts web citation tokens to in-page anchors", () => {
+    const tree = rootWithText("Per [web:w3] and ［web:w12］, not [web:w0].");
+
+    remarkCitations()(tree);
+
+    expect(links(tree)).toEqual([
+      { url: "#citation-web-3", label: "[web:w3]" },
+      { url: "#citation-web-12", label: "［web:w12］" },
+    ]);
+  });
+
   test("converts full-width citation tokens", () => {
     const tree = rootWithText("See ［memory:147］ and ［file:93］.");
 

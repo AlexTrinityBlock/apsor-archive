@@ -40,6 +40,7 @@ import type {
   AgentSettingsUpdateSchema,
   AgentToolCatalogSchema,
   AgentTurnResultSchema,
+  AgentWebSourceSchema,
   BodyUploadAgentChatAttachment,
   GetAgentConversationParams,
   HTTPValidationError,
@@ -1808,7 +1809,108 @@ export const useRetryAgentRun = <TError = HTTPValidationError,
       > => {
       return useMutation(getRetryAgentRunMutationOptions(options), queryClient);
     }
-    export const getGetAgentHistoryMessageUrl = (entryId: number,) => {
+    export const getListAgentWebSourcesUrl = (conversationId: number,) => {
+
+
+
+
+  return `/api/v1/agent/conversations/${conversationId}/web-sources`
+}
+
+/**
+ * List the web pages this conversation cited or saw, by their short ids.
+ * @summary List Web Sources
+ */
+export const listAgentWebSources = async (conversationId: number, options?: Parameters<typeof apiFetch>[1]): Promise<AgentWebSourceSchema[]> => {
+
+  return apiFetch<AgentWebSourceSchema[]>(getListAgentWebSourcesUrl(conversationId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAgentWebSourcesQueryKey = (conversationId: number,) => {
+    return [
+    `/api/v1/agent/conversations/${conversationId}/web-sources`
+    ] as const;
+    }
+
+
+export const getListAgentWebSourcesQueryOptions = <TData = Awaited<ReturnType<typeof listAgentWebSources>>, TError = HTTPValidationError>(conversationId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentWebSources>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAgentWebSourcesQueryKey(conversationId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAgentWebSources>>> = ({ signal }) => listAgentWebSources(conversationId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: conversationId !== null && conversationId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAgentWebSources>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListAgentWebSourcesQueryResult = NonNullable<Awaited<ReturnType<typeof listAgentWebSources>>>
+export type ListAgentWebSourcesQueryError = HTTPValidationError
+
+
+export function useListAgentWebSources<TData = Awaited<ReturnType<typeof listAgentWebSources>>, TError = HTTPValidationError>(
+ conversationId: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentWebSources>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAgentWebSources>>,
+          TError,
+          Awaited<ReturnType<typeof listAgentWebSources>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAgentWebSources<TData = Awaited<ReturnType<typeof listAgentWebSources>>, TError = HTTPValidationError>(
+ conversationId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentWebSources>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listAgentWebSources>>,
+          TError,
+          Awaited<ReturnType<typeof listAgentWebSources>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListAgentWebSources<TData = Awaited<ReturnType<typeof listAgentWebSources>>, TError = HTTPValidationError>(
+ conversationId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentWebSources>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Web Sources
+ */
+
+export function useListAgentWebSources<TData = Awaited<ReturnType<typeof listAgentWebSources>>, TError = HTTPValidationError>(
+ conversationId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listAgentWebSources>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListAgentWebSourcesQueryOptions(conversationId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetAgentHistoryMessageUrl = (entryId: number,) => {
 
 
 

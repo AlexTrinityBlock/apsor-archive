@@ -14,6 +14,8 @@ interface AccountDialogProps {
   readonly busy?: boolean;
   readonly size?: "sm" | "md";
   readonly dismissible?: boolean;
+  /** Render as an in-page panel (no modal, focus trap, or scroll lock). */
+  readonly inline?: boolean;
 }
 
 const FOCUSABLE =
@@ -34,6 +36,7 @@ export function AccountDialog({
   busy = false,
   size = "sm",
   dismissible = true,
+  inline = false,
 }: AccountDialogProps) {
   const { t } = useI18n();
   const titleId = useId();
@@ -41,13 +44,16 @@ export function AccountDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
 
-  useScrollLock(true);
+  useScrollLock(!inline);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
 
   useEffect(() => {
+    if (inline) {
+      return undefined;
+    }
     const previous =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
@@ -61,9 +67,12 @@ export function AccountDialog({
     return () => {
       previous?.focus();
     };
-  }, []);
+  }, [inline]);
 
   useEffect(() => {
+    if (inline) {
+      return undefined;
+    }
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && dismissible && !busy) {
         event.preventDefault();
@@ -98,7 +107,29 @@ export function AccountDialog({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [busy, dismissible]);
+  }, [busy, dismissible, inline]);
+
+  if (inline) {
+    return (
+      <section
+        className="accounts-inline"
+        aria-labelledby={titleId}
+        aria-busy={busy}
+      >
+        <header className="accounts-inline__head">
+          <p className="eyebrow">{eyebrow}</p>
+          <h3 id={titleId}>{title}</h3>
+          {description ? (
+            <p className="accounts-dialog__description" id={descriptionId}>
+              {description}
+            </p>
+          ) : null}
+        </header>
+        <div className="accounts-inline__body">{children}</div>
+        <footer className="accounts-inline__actions">{actions}</footer>
+      </section>
+    );
+  }
 
   return (
     <div
