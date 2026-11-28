@@ -156,9 +156,7 @@ function createInitialForm(assignment: ModelAssignmentSchema): InitialForm {
     : numericText(assignment.aux_provider_config_id);
   const auxModel = assignment.effective_aux_model ?? "";
   const auxEffort =
-    assignment.effective_aux_effort ??
-    assignment.aux_reasoning_effort ??
-    "low";
+    assignment.effective_aux_effort ?? assignment.aux_reasoning_effort ?? "";
   return {
     inheritedAux,
     primaryEndpointId,
@@ -324,7 +322,8 @@ function buildPayload(input: BuildPayloadInput): BuildPayloadResult {
           : null,
       aux_provider_config_id: Number(input.auxEndpointId),
       aux_model: input.auxModel.trim(),
-      aux_reasoning_effort: input.auxEffort.trim(),
+      aux_reasoning_effort:
+        input.auxEffort.trim().length > 0 ? input.auxEffort.trim() : null,
       context_window_tokens: input.budget.window,
       compaction_threshold_tokens: input.budget.threshold,
     },
@@ -951,8 +950,7 @@ export function ModelDialog({
     primaryEndpointValue.length > 0 && primaryModelValue.trim().length > 0;
   const auxComplete =
     auxEndpointValue.length > 0 &&
-    auxModelValue.trim().length > 0 &&
-    auxEffort.trim().length > 0;
+    auxModelValue.trim().length > 0;
   const saveAllowed = canSave({
     submitting,
     probing: probe.isPending,
@@ -991,10 +989,6 @@ export function ModelDialog({
       slot === "primary" ? primaryEndpointValue : auxEndpointValue;
     const model = slot === "primary" ? primaryModelValue : auxModelValue;
     const effort = slot === "primary" ? primaryEffort : auxEffort;
-    if (effort.trim().length === 0 && slot === "auxiliary") {
-      setLocalError(t("core.accounts.modelAuxEffortRequired"));
-      return;
-    }
     const slotFingerprint = fingerprint(endpointId, model, effort);
     setLocalError(null);
     setSlotTest(slot, {
@@ -1164,7 +1158,7 @@ export function ModelDialog({
           test={auxTest}
           disabled={submitting}
           testing={probe.isPending}
-          effortRequired
+          effortRequired={false}
           needsTest={auxNeedsTest}
           onEndpointChange={(value) => {
             setAuxEndpointId(value);

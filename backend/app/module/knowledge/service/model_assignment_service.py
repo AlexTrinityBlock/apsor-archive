@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infrastructure.ai.deepseek_client import effort_unsupported
 from app.infrastructure.ai.model_catalog import (
     MODEL_CATALOG,
     TIER_ORDER,
@@ -205,13 +206,16 @@ class ModelAssignmentService:
         # A shared endpoint with the same model and effort is one connection,
         # so it is tested once even when both slots changed.
         probed: dict[tuple[int, str, str | None], ProbeOutcome] = {}
+        # A slot whose model rejected ``reasoning_effort`` during the probe is
+        # stored without it, so the assignment never fails on that parameter.
+        dropped_effort: set[str] = set()
         for slot, row, model, effort, changed in changed_slots:
             if not changed:
                 continue
             probe_key = (row.id, model, effort)
             outcome = probed.get(probe_key)
+            resolved = self._resolve_usable_config(row, slot)
             if outcome is None:
-                resolved = self._resolve_usable_config(row, slot)
                 outcome = await self.probe.probe(
                     resolved,
                     model=model,
@@ -223,15 +227,21 @@ class ModelAssignmentService:
                     slot,
                     outcome.detail or "the provider probe failed.",
                 )
+            if effort and effort_unsupported(resolved.base_url or "", model):
+                dropped_effort.add(slot)
 
         await self.repository.write_assignment(
             user_id,
             chat_provider_config_id=payload.chat_provider_config_id,
             chat_model=payload.chat_model,
-            chat_reasoning_effort=payload.chat_reasoning_effort,
+            chat_reasoning_effort=(
+                None if "primary" in dropped_effort else payload.chat_reasoning_effort
+            ),
             aux_provider_config_id=payload.aux_provider_config_id,
             aux_model=payload.aux_model,
-            aux_reasoning_effort=payload.aux_reasoning_effort,
+            aux_reasoning_effort=(
+                None if "auxiliary" in dropped_effort else payload.aux_reasoning_effort
+            ),
             chat_context_window_tokens=payload.context_window_tokens,
             chat_compaction_threshold_tokens=payload.compaction_threshold_tokens,
         )

@@ -23,11 +23,7 @@ export interface ModelAssignmentUpdateSchema {
   aux_model: string;
   /** @exclusiveMinimum 0 */
   aux_provider_config_id: number;
-  /**
-     * @minLength 1
-     * @maxLength 32
-     */
-  aux_reasoning_effort?: string;
+  aux_reasoning_effort?: string | null;
   /**
      * @minLength 1
      * @maxLength 128

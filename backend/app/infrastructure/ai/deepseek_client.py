@@ -34,6 +34,17 @@ _RETRYABLE_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504, 529})
 _ERROR_MESSAGE_LIMIT = 300
 
 
+# Endpoint/model pairs that rejected ``reasoning_effort`` with a 400. Once a
+# retry without the field succeeds, every later call in this process omits it,
+# so a model without reasoning support never fails because of an assignment.
+_EFFORT_UNSUPPORTED: set[tuple[str, str]] = set()
+
+
+def effort_unsupported(base_url: str, model: str) -> bool:
+    """Return whether ``model`` at ``base_url`` rejected ``reasoning_effort``."""
+    return (base_url.rstrip("/"), model) in _EFFORT_UNSUPPORTED
+
+
 class DeepSeekClient:
     """The only place that knows the DeepSeek HTTP contract."""
 
@@ -86,12 +97,46 @@ class DeepSeekClient:
             return 0
         return self.chat_max_tokens
 
-    def _effective_effort(self, override: str | None) -> str | None:
+    def _effective_effort(
+        self,
+        override: str | None,
+        model: str | None = None,
+    ) -> str | None:
         """Return the effort to send, or ``None`` when the field must be omitted."""
+        if effort_unsupported(self.base_url, model or self.model_name):
+            return None
         value = self.reasoning_effort if override is None else override
         if isinstance(value, str) and value.strip():
             return value
         return None
+
+    def _effort_rejection(
+        self,
+        payload: dict[str, Any],
+        status_code: int,
+        body: bytes,
+    ) -> bool:
+        """Return whether a 400 rejected ``reasoning_effort``, not something else."""
+        return (
+            status_code == 400
+            and "reasoning_effort" in payload
+            and b"reasoning" in body.lower()
+        )
+
+    def _without_effort(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Remember the rejection and return the payload without the effort."""
+        model = str(payload.get("model") or self.model_name)
+        _EFFORT_UNSUPPORTED.add((self.base_url, model))
+        logger.warning(
+            "provider rejected reasoning_effort; retrying without it "
+            "provider=deepseek model=%s status=400",
+            model or "-",
+        )
+        trimmed = dict(payload)
+        trimmed.pop("reasoning_effort", None)
+        if self.supports_thinking:
+            trimmed["thinking"] = {"type": "disabled"}
+        return trimmed
 
     def _base_payload(
         self,
@@ -112,7 +157,7 @@ class DeepSeekClient:
         )
         if cap and not (chat and self._chat_cap_rejected):
             payload["max_tokens"] = cap
-        effort = self._effective_effort(reasoning_effort)
+        effort = self._effective_effort(reasoning_effort, model or self.model_name)
         if effort is not None:
             # The modern OpenAI-style field replaces the legacy switch: sending
             # both would make some gateways reject the request.
@@ -190,6 +235,13 @@ class DeepSeekClient:
                     headers=self._headers,
                     json=payload,
                 )
+                if self._effort_rejection(payload, response.status_code, response.content):
+                    payload = self._without_effort(payload)
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=self._headers,
+                        json=payload,
+                    )
         except httpx.HTTPError as exc:
             raise _network_error(
                 exc,
@@ -360,6 +412,13 @@ class DeepSeekClient:
                     headers=self._headers,
                     json=payload,
                 )
+                if self._effort_rejection(payload, response.status_code, response.content):
+                    payload = self._without_effort(payload)
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=self._headers,
+                        json=payload,
+                    )
                 if self._chat_cap_rejection(
                     payload,
                     response.status_code,
@@ -549,6 +608,13 @@ class DeepSeekClient:
                         response_content_type = response.headers.get("content-type")
                         if response.status_code >= 400:
                             body = await response.aread()
+                            if self._effort_rejection(
+                                payload,
+                                response.status_code,
+                                body,
+                            ):
+                                payload = self._without_effort(payload)
+                                continue
                             if self._chat_cap_rejection(
                                 payload,
                                 response.status_code,

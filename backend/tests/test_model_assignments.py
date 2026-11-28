@@ -166,7 +166,7 @@ def test_non_root_cannot_write_but_can_read_me(
     assert body["user_id"] == member.user_id
     assert body["source"] == "unassigned"
     assert body["chat_provider_config_id"] is None
-    assert body["aux_reasoning_effort"] == "low"
+    assert body["aux_reasoning_effort"] is None
 
 
 def test_unknown_model_is_accepted_verbatim_with_a_warning(
@@ -433,7 +433,7 @@ def test_q1_shaped_null_auxiliary_inherits_the_primary(
     assert body["aux_model"] is None
     assert body["effective_aux_model"] == "deepseek-chat"
     assert body["effective_aux_provider"] == "deepseek"
-    assert body["effective_aux_effort"] == "low"
+    assert body["effective_aux_effort"] is None
     assert body["aux_provider_label"] == "primary"
     assert body["source"] == "account"
     assert body["degraded_reason"] is None
@@ -467,7 +467,7 @@ def test_reset_clears_every_assignment_column(
     assert body["chat_reasoning_effort"] is None
     assert body["aux_provider_config_id"] is None
     assert body["aux_model"] is None
-    assert body["aux_reasoning_effort"] == "low"
+    assert body["aux_reasoning_effort"] is None
     assert body["chat_context_window_tokens"] is None
     assert body["chat_compaction_threshold_tokens"] is None
     assert body["source"] == "unassigned"
@@ -479,7 +479,7 @@ def test_reset_clears_every_assignment_column(
         None,
         None,
         None,
-        "low",
+        None,
         None,
         None,
     )
