@@ -35,6 +35,7 @@ export const core = {
     openProfile: "Open User Profile",
     userProfile: "User profile",
     profile: "User profile",
+    companion: "Companion",
     personalSection: "Personal",
     accounts: "Accounts",
     changePassword: "Change password",
@@ -596,7 +597,6 @@ export const core = {
     ingestRuntime: "Ingestion runtime",
     maintenance: "Maintenance",
     language: "Language",
-    companion: "Companion",
   },
   settings: {
     model: {

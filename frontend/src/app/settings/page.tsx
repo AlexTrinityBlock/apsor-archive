@@ -6,12 +6,11 @@ import {
   useState,
   type ComponentType,
 } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
 import { PageHeader } from "../component/PageHeader";
 import { useI18n } from "../i18n";
-import { CompanionPanel } from "./component/CompanionPanel";
 import { DiagnosticsPanel } from "./component/DiagnosticsPanel";
 import { FrequentlyUsedPromptsPanel } from "./component/FrequentlyUsedPromptsPanel";
 import { LanguagePanel } from "./component/LanguagePanel";
@@ -42,7 +41,6 @@ const SECTION_PANELS: Record<SettingsSectionId, ComponentType> = {
   "settings-agent-runtime": AgentRuntimeSettingsPanel,
   "settings-ingest-runtime": IngestRuntimeSection,
   "settings-maintenance": MaintenancePanel,
-  "settings-companion": CompanionPanel,
   "settings-language": LanguagePanel,
 };
 
@@ -78,6 +76,21 @@ function resetCanvasScroll(): void {
   });
 }
 
+/** The companion moved to its own workspace; old Settings deep links follow it. */
+const LEGACY_COMPANION_HASH = "#settings-companion";
+
+/**
+ * Settings route entry: redirects the retired companion tab to `/companion`,
+ * otherwise renders the tabbed settings workspace.
+ */
+export function SettingsPage() {
+  const location = useLocation();
+  if (location.hash === LEGACY_COMPANION_HASH) {
+    return <Navigate to="/companion" replace />;
+  }
+  return <SettingsWorkspace />;
+}
+
 /**
  * Settings: a top tab strip that mounts one section at a time. Root accounts
  * see the global configuration tabs; every other account only sees personal
@@ -85,7 +98,7 @@ function resetCanvasScroll(): void {
  * long anchor scroll and the blank canvas that appeared when the language
  * switch changed the whole document layout.
  */
-export function SettingsPage() {
+function SettingsWorkspace() {
   const { t } = useI18n();
   const { user } = useAuth();
   const isRoot = user?.role === "root";

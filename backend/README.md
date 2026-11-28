@@ -1358,7 +1358,7 @@ fields, account/session auth (`app_user`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The current head is
-`b8e4d2f6a1c3`; every private table now has `user_id` and forced RLS, the
+`c5f1a8d3e7b4`; every private table now has `user_id` and forced RLS, the
 runtime role is `apsor_app`, and `file` / `file_ingest_job` record
 `storage_backend`. Earlier migrations add per-run and per-account agent usage
 counters and the impersonation session marker. `f7a3c2d9e1b4` adds the editable
@@ -1366,7 +1366,8 @@ vision prompt templates, per-file prompt fingerprints, and re-ingest source
 linkage. `a4c9e2f7b1d6` adds the per-account chat endpoint assignment and the
 compaction/escalation settings; the later revisions drop the step and tool-call
 caps, admit the `s3` storage backend, add `file_thumbnail`, and add the chat
-companion tables. The migration chain is executed by the test
+companion tables and the companion display size and opacity mode. The
+migration chain is executed by the test
 fixture and verifies the role, grants, and policies; downgrades are still a
 separate check. The agent
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
@@ -1497,12 +1498,16 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   `companion_frame`, and `companion_preference` tables with forced owner-only
   RLS and `apsor_app` grants; frames cascade with their companion. The downgrade
   drops the three tables;
-- `b8e4d2f6a1c3` (current head) creates the private `companion_story`,
+- `b8e4d2f6a1c3` creates the private `companion_story`,
   `companion_lore_fragment`, and `companion_bond` tables with forced owner-only
   RLS and `apsor_app` grants: one account's per-locale copy of a companion's
   persona and lore, its fragments, and the completed-run count that unlocks lore
   tiers. A custom companion's story cascades with the companion. The downgrade
   drops the three tables.
+- `c5f1a8d3e7b4` (current head) adds `size` (`compact`, `medium`, `full`;
+  default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
+  `auto`) to `companion_preference`, with check constraints and server
+  defaults. RLS and grants are unchanged; the downgrade drops both columns.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

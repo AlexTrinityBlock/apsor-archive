@@ -53,7 +53,8 @@ export type IconName =
   | "user"
   | "users"
   | "key"
-  | "logout";
+  | "logout"
+  | "companion";
 
 const ICONS: Record<IconName, ReactNode> = {
   overview: (
@@ -314,6 +315,14 @@ const ICONS: Record<IconName, ReactNode> = {
       <circle cx="12" cy="12" r="8.5" />
       <circle cx="12" cy="12" r="5.2" />
       <circle cx="12" cy="12" r="1.8" />
+    </>
+  ),
+  companion: (
+    <>
+      <circle cx="10" cy="5.6" r="2.6" />
+      <path d="M6 21l1.4-6.2L6 9.8c1.2-.9 2.6-1.3 4-1.3s2.8.4 4 1.3l-1.4 5L14 21" />
+      <path d="M14.4 11.6h5.1v6.6h-5.1" />
+      <path d="M16.9 11.6v6.6" />
     </>
   ),
   user: (

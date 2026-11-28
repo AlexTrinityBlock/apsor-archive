@@ -62,6 +62,31 @@ export const companion = {
     previewTitle: "Preview",
     previewAction: "Pose",
   },
+  page: {
+    eyebrow: "Personal",
+    title: "Companion",
+    description:
+      "Choose the librarian who keeps you company beside the chat, decide how it looks and moves, shape its story, or make one of your own. These choices are yours alone.",
+    lookEyebrow: "Display",
+    lookTitle: "How it appears",
+    chooseEyebrow: "Librarians",
+    sizeLegend: "Size",
+    sizeCompact: "Compact",
+    sizeCompactHint: "A small figure that fits narrow gutters.",
+    sizeMedium: "Medium",
+    sizeMediumHint: "A clear figure that still leaves plenty of room.",
+    sizeFull: "Full",
+    sizeFullHint:
+      "The art at its full size, scaled down only when the window or the free space beside the chat is too small.",
+    opacityLegend: "Opacity",
+    opacityOpaque: "Opaque",
+    opacityOpaqueHint: "Always fully visible.",
+    opacityTranslucent: "Translucent",
+    opacityTranslucentHint: "Always see-through, so the page shows behind it.",
+    opacityAuto: "Auto",
+    opacityAutoHint:
+      "Fully visible in empty space; fades while it overlaps the page or while you type or scroll, and returns when you point at it or focus it.",
+  },
   editor: {
     title: "Create your own companion",
     description:

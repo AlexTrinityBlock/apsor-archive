@@ -13,6 +13,7 @@ import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
 import { ACTION_LABEL_KEYS, isAnnouncedAction } from "../actions";
 import type { CompanionStreamInput } from "../director";
+import { useBusySignal } from "../hook/useBusySignal";
 import { useChatLayout } from "../hook/useChatLayout";
 import { useCompanionDirector } from "../hook/useCompanionDirector";
 import { useCompanionDrag, type DragRelease } from "../hook/useCompanionDrag";
@@ -20,11 +21,11 @@ import {
   DOCK_SIDES,
   FIGURE_HEADROOM,
   avoidance,
-  boxSize,
+  boxSizeFor,
   breakpointFor,
   defaultPosition,
   dockX,
-  figureSize,
+  figureSizeFor,
   isLeftSide,
   isViewportSide,
   landingPosition,
@@ -33,7 +34,7 @@ import {
   type SavedPosition,
 } from "../layout";
 import type { CompanionCharacter } from "../manifest";
-import type { CompanionMotion } from "../preference";
+import type { CompanionMotion, CompanionOpacityMode, CompanionSize } from "../preference";
 import { DOCK_SPRING, isSettled, stepSpring, type SpringState } from "../spring";
 import { readMinimized, readPosition, writeMinimized, writePosition } from "../storage";
 import { CompanionStage } from "./CompanionStage";
@@ -41,6 +42,9 @@ import { CompanionStage } from "./CompanionStage";
 interface CompanionOverlayProps {
   readonly character: CompanionCharacter;
   readonly motion: CompanionMotion;
+  /** Display size setting, fitted to the viewport and free gutter. */
+  readonly size: CompanionSize;
+  readonly opacityMode: CompanionOpacityMode;
   readonly stream: CompanionStreamInput | null;
   readonly draft: string;
   readonly conversationKey: string;
@@ -75,6 +79,8 @@ export function CompanionOverlay({
   stream,
   draft,
   conversationKey,
+  size: sizeSetting,
+  opacityMode,
 }: CompanionOverlayProps) {
   const { t } = useI18n();
   const hintId = useId();
@@ -94,9 +100,10 @@ export function CompanionOverlay({
   const director = useCompanionDirector({ stream, draft, conversationKey, held });
   const { action } = director;
 
-  const size = boxSize(breakpoint);
-  const figure = figureSize(breakpoint);
-  const position = positions[breakpoint] ?? defaultPosition(breakpoint, context);
+  const size = boxSizeFor(sizeSetting, breakpoint, context);
+  const figure = figureSizeFor(sizeSetting, breakpoint, context);
+  const busy = useBusySignal(opacityMode === "auto");
+  const position = positions[breakpoint] ?? defaultPosition(breakpoint, context, size);
   const box = useMemo(() => resolveBox(position, context, size), [position, context, size]);
   const presence = avoidance(box, context, dialogOpen, breakpoint);
   const peeking = presence === "peek" && !expanded && !held;
@@ -280,6 +287,8 @@ export function CompanionOverlay({
         className={[
           "companion",
           `is-${breakpoint}`,
+          `opacity-${opacityMode}`,
+          busy ? "is-busy" : null,
           left ? "is-left" : "is-right",
           peekStyle !== "none" ? `is-peek is-peek-${peekStyle}` : null,
           presence === "hidden" ? "is-hidden" : null,

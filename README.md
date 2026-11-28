@@ -584,7 +584,14 @@ JPEG, WebP, or AVIF, at most 8 MB each); the server re-encodes every image as
 AVIF (WebP only when the AVIF codec is unavailable) that fits 384x576 and 40 KB
 and strips its metadata. The per-account preference stores
 the selected companion (`preset:<id>` or `custom:<id>`), whether it is shown, the
-motion level (`full`, `reduced`, `off`), and its normalized position. The API is
+motion level (`full`, `reduced`, `off`), its display size (`compact`, `medium`,
+`full`; full shows the art at up to 384x576 and only scales down to fit the
+window and the free space beside the chat), its opacity mode (`opaque`,
+`translucent`, or `auto`, which fades only while it overlaps the page or you
+type or scroll), and its normalized position. Each account configures all of
+this on its own **Companion** page (`/companion`, in the sidebar's personal
+section), which also hosts the story editor and custom companions; old
+`/settings#settings-companion` links redirect there. The API is
 under `/api/v1/companions` (list, create, update, delete, frame upload, frame
 order, frame delete, frame image, and `GET/PATCH /api/v1/companions/preference`).
 
@@ -1940,7 +1947,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `b8e4d2f6a1c3`. The migrations after `agent_config` on
+The latest migration is `c5f1a8d3e7b4`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -2059,12 +2066,16 @@ this branch are:
   forced owner-only RLS, and `apsor_app` grants. Frames reference their
   companion through an owner-safe composite foreign key and cascade with it; the
   preference row is keyed by `user_id`. The downgrade drops the three tables;
-- `b8e4d2f6a1c3` (current head) creates the private `companion_story`,
+- `b8e4d2f6a1c3` creates the private `companion_story`,
   `companion_lore_fragment`, and `companion_bond` tables with forced owner-only
   RLS and `apsor_app` grants: one account's per-locale copy of a companion's
   persona and lore, its fragments, and the completed-run count that unlocks lore
   tiers. A custom companion's story cascades with the companion. The downgrade
   drops the three tables.
+- `c5f1a8d3e7b4` (current head) adds `size` (`compact`, `medium`, `full`;
+  default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
+  `auto`) to `companion_preference`, with check constraints and server
+  defaults. RLS and grants are unchanged; the downgrade drops both columns.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

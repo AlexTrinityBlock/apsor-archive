@@ -80,6 +80,7 @@ const NAV_SECTIONS: readonly NavSection[] = [
     labelKey: "core.nav.personalSection",
     items: [
       { to: "/profile", labelKey: "core.nav.profile", icon: "user" },
+      { to: "/companion", labelKey: "core.nav.companion", icon: "companion" },
     ],
   },
   {

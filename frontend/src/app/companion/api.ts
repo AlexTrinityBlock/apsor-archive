@@ -59,6 +59,8 @@ import {
 } from "./manifest";
 import {
   preferenceStore,
+  readOpacityMode,
+  readSize,
   type CompanionPreference,
 } from "./preference";
 import {
@@ -230,6 +232,8 @@ function fromServer(value: CompanionPreferenceSchema): CompanionPreference {
     enabled: value.enabled,
     companionId: companionIdFromRef(value.selected),
     motion: value.motion,
+    size: readSize(value.size),
+    opacityMode: readOpacityMode(value.opacity_mode),
   };
 }
 
@@ -258,7 +262,9 @@ export function useCompanionPreference(): readonly [
     if (
       next.enabled !== current.enabled ||
       next.companionId !== current.companionId ||
-      next.motion !== current.motion
+      next.motion !== current.motion ||
+      next.size !== current.size ||
+      next.opacityMode !== current.opacityMode
     ) {
       store.update(next);
     }
@@ -275,6 +281,12 @@ export function useCompanionPreference(): readonly [
       }
       if (patch.motion !== undefined) {
         body.motion = patch.motion;
+      }
+      if (patch.size !== undefined) {
+        body.size = patch.size;
+      }
+      if (patch.opacityMode !== undefined) {
+        body.opacity_mode = patch.opacityMode;
       }
       if (patch.companionId !== undefined) {
         body.selected =

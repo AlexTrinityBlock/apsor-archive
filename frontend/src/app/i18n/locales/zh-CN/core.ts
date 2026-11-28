@@ -36,6 +36,7 @@ export const core = {
     openProfile: "打开用户资料",
     userProfile: "用户资料",
     profile: "用户资料",
+    companion: "伙伴",
     personalSection: "个人",
     accounts: "账号管理",
     changePassword: "修改密码",
@@ -567,7 +568,6 @@ export const core = {
     ingestRuntime: "摄取运行环境",
     maintenance: "维护",
     language: "语言",
-    companion: "伙伴",
   },
   settings: {
     model: {

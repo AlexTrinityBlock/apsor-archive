@@ -4,6 +4,11 @@ import { describe, expect, test } from "bun:test";
 import {
   EDGE_MARGIN,
   FIGURE_HEADROOM,
+  INTRINSIC_FIGURE,
+  boxSizeFor,
+  figureSizeFor,
+  gutterWidth,
+  targetFigure,
   avoidance,
   boxSize,
   breakpointFor,
@@ -128,5 +133,62 @@ describe("spring", () => {
       expect(Math.abs(bob)).toBeLessThanOrEqual(2.2);
       expect(Math.abs(sway)).toBeLessThanOrEqual(1.1);
     }
+  });
+});
+
+describe("size settings", () => {
+  const roomy: LayoutContext = {
+    viewport: { width: 2560, height: 1440 },
+    panel: { left: 230, top: 60, width: 2330, height: 1380 },
+    composer: { left: 900, top: 1300, width: 760, height: 120 },
+    column: { left: 900, top: 100, width: 760, height: 1180 },
+    content: { left: 230, top: 0, width: 2330, height: 1440 },
+  };
+
+  test("targets: compact is the old default, full is the intrinsic art", () => {
+    expect(targetFigure("compact", "desktop")).toEqual({ width: 148, height: 222 });
+    expect(targetFigure("full", "desktop")).toEqual(INTRINSIC_FIGURE);
+    expect(targetFigure("medium", "desktop").height).toBeGreaterThan(222);
+    expect(targetFigure("medium", "desktop").height).toBeLessThan(576);
+  });
+
+  test("full renders at intrinsic size when there is room, never larger", () => {
+    expect(figureSizeFor("full", "desktop", roomy)).toEqual(INTRINSIC_FIGURE);
+  });
+
+  test("full scales down to fit the viewport height", () => {
+    const short = { ...roomy, viewport: { width: 2560, height: 500 } };
+    const figure = figureSizeFor("full", "desktop", short);
+    expect(figure.height).toBeLessThanOrEqual(500 - FIGURE_HEADROOM);
+    expect(figure.height).toBeLessThan(576);
+    expect(figure.width).toBe(Math.round((figure.height * 2) / 3));
+  });
+
+  test("full scales down to fit the free gutter beside the column", () => {
+    const gutter = gutterWidth(desktop);
+    const figure = figureSizeFor("full", "desktop", desktop);
+    expect(figure.width).toBeLessThanOrEqual(Math.max(gutter, 148) + 1);
+  });
+
+  test("never below compact; a too-narrow gutter is left to avoidance", () => {
+    // The column fills the content area right of the 230 px nav rail.
+    const narrow: LayoutContext = {
+      ...desktop,
+      content: { left: 230, top: 0, width: 1210, height: 900 },
+      column: { left: 240, top: 100, width: 1190, height: 640 },
+    };
+    expect(figureSizeFor("full", "desktop", narrow)).toEqual({ width: 148, height: 222 });
+  });
+
+  test("box adds the headroom to the fitted figure", () => {
+    const box = boxSizeFor("full", "desktop", roomy);
+    expect(box).toEqual({ width: 384, height: 576 + FIGURE_HEADROOM });
+  });
+
+  test("a full figure in a roomy gutter does not cover the column or composer", () => {
+    const box = boxSizeFor("full", "desktop", roomy);
+    const placed = resolveBox(defaultPosition("desktop", roomy, box), roomy, box);
+    expect(avoidance(placed, roomy, false, "desktop")).toBe("clear");
+    expect(placed.top + placed.height).toBeLessThanOrEqual(roomy.composer?.top ?? 0);
   });
 });

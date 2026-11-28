@@ -518,7 +518,11 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 圖片（PNG、JPEG、WebP 或 AVIF，每張最多 8 MB）；伺服器會把每張圖片重新編碼為
 符合 384x576 與 40 KB 的 AVIF（只有在無法使用 AVIF 編碼器時才用 WebP），並移除
 其中繼資料。每個帳號的偏好會儲存所選的夥伴（`preset:<id>` 或 `custom:<id>`）、
-是否顯示、動態程度（`full`、`reduced`、`off`）以及正規化的位置。API 位於
+是否顯示、動態程度（`full`、`reduced`、`off`）、顯示大小（`compact`、`medium`、
+`full`；完整大小最多以 384x576 顯示，只在視窗或聊天旁的空間不足時縮小）、透明度
+模式（`opaque`、`translucent`，或只在與頁面重疊、你輸入或捲動時變淡的 `auto`）
+以及正規化的位置。每個帳號都在側欄個人區的 **夥伴** 頁面（`/companion`）設定這些，
+故事編輯與自訂夥伴也在這裡；舊的 `/settings#settings-companion` 連結會轉址過去。API 位於
 `/api/v1/companions` 之下（列出、建立、更新、刪除、上傳影格、影格排序、刪除
 影格、影格圖片，以及 `GET/PATCH /api/v1/companions/preference`）。
 
@@ -1712,7 +1716,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `b8e4d2f6a1c3`。此分支上 `agent_config` 之後的移轉為：
+最新的移轉是 `c5f1a8d3e7b4`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -1820,11 +1824,15 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   `companion_preference` 資料表，每張都帶 `user_id`、僅限擁有者的強制 RLS 與
   `apsor_app` 授權。影格透過擁有者安全的複合外鍵參照其夥伴並一併串聯刪除；
   偏好資料列以 `user_id` 為鍵。降級會移除這三張資料表；
-- `b8e4d2f6a1c3`（目前 head）建立私人的 `companion_story`、
+- `b8e4d2f6a1c3` 建立私人的 `companion_story`、
   `companion_lore_fragment` 與 `companion_bond` 資料表，帶僅限擁有者的強制 RLS
   與 `apsor_app` 授權：帳號依語言保存的夥伴人設與傳說副本、其片段，以及解鎖
   傳說層級的完成對話數。自訂夥伴的故事會隨夥伴一併串聯刪除。降級會移除這三張
   資料表。
+- `c5f1a8d3e7b4`（目前 head）為 `companion_preference` 新增 `size`（`compact`、
+  `medium`、`full`，預設 `full`）與 `opacity_mode`（`opaque`、`translucent`、
+  `auto`，預設 `auto`），附檢查約束與伺服器預設值。RLS 與授權不變；降級會刪除
+  這兩個欄位。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會

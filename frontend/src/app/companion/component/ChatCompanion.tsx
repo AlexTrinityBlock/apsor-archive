@@ -35,6 +35,8 @@ export function ChatCompanion({ stream, draft, conversationKey }: ChatCompanionP
       key={character.id}
       character={character}
       motion={effectiveMotion(preference.motion, systemReduced)}
+      size={preference.size}
+      opacityMode={preference.opacityMode}
       stream={stream}
       draft={draft}
       conversationKey={conversationKey}

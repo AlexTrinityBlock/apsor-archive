@@ -1,7 +1,9 @@
 /**
  * Pure placement geometry for the floating companion: dock lines, release
- * projection, vertical clamping, and the "don't block the reader" rules.
+ * projection, vertical clamping, size fitting, and the "don't block the
+ * reader" rules.
  */
+import type { CompanionSize } from "./preference";
 
 export interface Rect {
   readonly left: number;
@@ -67,7 +69,10 @@ export function breakpointFor(width: number): Breakpoint {
   return width < 980 ? "tablet" : "desktop";
 }
 
-/** Figure size (without headroom) per breakpoint, 2:3 like the art. */
+/** The art's intrinsic frame size; the figure never renders larger than this. */
+export const INTRINSIC_FIGURE: BoxSize = { width: 384, height: 576 };
+
+/** Compact figure size (without headroom) per breakpoint, 2:3 like the art. */
 export function figureSize(breakpoint: Breakpoint): BoxSize {
   switch (breakpoint) {
     case "phone":
@@ -79,8 +84,69 @@ export function figureSize(breakpoint: Breakpoint): BoxSize {
   }
 }
 
+/** Target figure size for a size setting before it is fitted to the screen. */
+export function targetFigure(size: CompanionSize, breakpoint: Breakpoint): BoxSize {
+  if (size === "compact") {
+    return figureSize(breakpoint);
+  }
+  if (breakpoint === "phone") {
+    return size === "full" ? { width: 160, height: 240 } : { width: 124, height: 186 };
+  }
+  return size === "full" ? INTRINSIC_FIGURE : { width: 240, height: 360 };
+}
+
+/**
+ * The widest free gutter beside the reading column inside the main content,
+ * or the whole content width when there is no column.
+ */
+export function gutterWidth(context: LayoutContext): number {
+  const content = context.content ?? null;
+  const contentLeft = content?.left ?? 0;
+  const contentRight =
+    content === null ? context.viewport.width : content.left + content.width;
+  const column = context.column;
+  if (column === null) {
+    return Math.max(0, contentRight - contentLeft - 2 * EDGE_MARGIN);
+  }
+  const leftGutter = column.left - contentLeft;
+  const rightGutter = contentRight - (column.left + column.width);
+  return Math.max(0, Math.max(leftGutter, rightGutter) - 2 * EDGE_MARGIN);
+}
+
+/**
+ * Fit a size setting to the screen: scale the target down (never up) so it
+ * fits the viewport height and the free gutter, but never below the compact
+ * size. When even compact does not fit the gutter, avoidance makes it peek.
+ */
+export function figureSizeFor(
+  size: CompanionSize,
+  breakpoint: Breakpoint,
+  context: LayoutContext,
+): BoxSize {
+  const target = targetFigure(size, breakpoint);
+  const floor = figureSize(breakpoint);
+  if (size === "compact") {
+    return floor;
+  }
+  const maxHeight = context.viewport.height - TOP_MARGIN - EDGE_MARGIN - FIGURE_HEADROOM;
+  const maxWidth = breakpoint === "phone" ? target.width : gutterWidth(context);
+  const scale = Math.min(1, maxHeight / target.height, maxWidth / target.width);
+  const height = Math.max(floor.height, Math.floor(target.height * scale));
+  return { width: Math.round((height * 2) / 3), height };
+}
+
 export function boxSize(breakpoint: Breakpoint): BoxSize {
   const figure = figureSize(breakpoint);
+  return { width: figure.width, height: figure.height + FIGURE_HEADROOM };
+}
+
+/** Box (figure plus headroom) for a size setting in the current layout. */
+export function boxSizeFor(
+  size: CompanionSize,
+  breakpoint: Breakpoint,
+  context: LayoutContext,
+): BoxSize {
+  const figure = figureSizeFor(size, breakpoint, context);
   return { width: figure.width, height: figure.height + FIGURE_HEADROOM };
 }
 
@@ -132,8 +198,8 @@ export function clampTop(top: number, context: LayoutContext, box: BoxSize, left
 export function defaultPosition(
   breakpoint: Breakpoint,
   context: LayoutContext,
+  box: BoxSize = boxSize(breakpoint),
 ): SavedPosition {
-  const box = boxSize(breakpoint);
   const side: DockSide = breakpoint === "phone" ? "viewport-right" : "panel-right";
   const bottom = context.composer?.top ?? context.viewport.height;
   const top = bottom - box.height - 8;

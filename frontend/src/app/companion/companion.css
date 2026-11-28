@@ -50,7 +50,11 @@
     visibility 0s linear var(--speed-fast);
 }
 
-/* Reader avoidance: slide out at the window edge, shrink and fade elsewhere. */
+/*
+ * Reader avoidance: slide out at the window edge, shrink elsewhere. How
+ * see-through the figure becomes is the opacity mode's job: avoidance and
+ * busy signals only set --companion-fade, which auto mode honours.
+ */
 .companion .companion-stage {
   transition:
     transform 0.34s var(--ease-out),
@@ -58,18 +62,39 @@
 }
 
 .companion.is-peek-slide.is-right:not(:hover, :focus-visible, :focus-within) .companion-stage {
+  --companion-fade: 0.78;
   transform: translateX(58%);
-  opacity: 0.78;
 }
 
 .companion.is-peek-slide.is-left:not(:hover, :focus-visible, :focus-within) .companion-stage {
+  --companion-fade: 0.78;
   transform: translateX(-58%);
-  opacity: 0.78;
 }
 
 .companion.is-peek-shrink:not(:hover, :focus-visible, :focus-within) .companion-stage {
+  --companion-fade: 0.45;
   transform: scale(0.6);
-  opacity: 0.45;
+}
+
+/* Opacity modes: opaque always 100%, translucent fixed, auto fades when in the way. */
+.companion.opacity-opaque .companion-stage {
+  opacity: 1;
+}
+
+.companion.opacity-translucent .companion-stage {
+  opacity: 0.55;
+}
+
+.companion.opacity-auto .companion-stage {
+  opacity: var(--companion-fade, 1);
+}
+
+.companion.opacity-auto.is-busy:not(:hover, :focus-visible, :focus-within) {
+  --companion-busy-fade: 0.55;
+}
+
+.companion.opacity-auto.is-busy:not(:hover, :focus-visible, :focus-within) .companion-stage {
+  opacity: min(var(--companion-fade, 1), var(--companion-busy-fade));
 }
 
 .companion.is-peek-shrink.is-right .companion-stage {
@@ -992,6 +1017,7 @@
   position: relative;
   display: grid;
   height: 300px;
+  transition: height 0.3s var(--ease-soft);
   place-items: end center;
   padding-bottom: 14px;
   overflow: hidden;
@@ -1011,9 +1037,36 @@
     var(--mono-card-warm);
 }
 
-.companion-preview__stage > .companion-stage {
-  width: 148px;
-  height: 268px;
+.companion-preview__figure {
+  position: relative;
+  transition:
+    width 0.3s var(--ease-soft),
+    height 0.3s var(--ease-soft);
+}
+
+/* The preview shows each opacity mode the way the overlay applies it. */
+.companion-preview__stage.opacity-translucent .companion-stage {
+  opacity: 0.55;
+}
+
+.companion-preview__stage.opacity-auto .companion-stage {
+  animation: companion-auto-fade 3.2s var(--ease-soft) infinite alternate;
+}
+
+@keyframes companion-auto-fade {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companion-preview__stage.opacity-auto .companion-stage {
+    animation: none;
+  }
 }
 
 .companion-preview__caption {

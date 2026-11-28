@@ -31,7 +31,7 @@ const LIBRARIANS: readonly {
 ];
 
 /** The Companion tab in Settings; the hash selects the tab. */
-const COMPANION_SETTINGS_HREF = "/settings#settings-companion";
+const COMPANION_SETTINGS_HREF = "/companion";
 
 /** "Meet the librarians": six portraits with one line each. */
 export function LibrarianRoster() {

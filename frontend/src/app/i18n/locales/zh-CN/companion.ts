@@ -56,6 +56,30 @@ export const companion = {
     previewTitle: "预览",
     previewAction: "姿势",
   },
+  page: {
+    eyebrow: "个人",
+    title: "伙伴",
+    description:
+      "选一位图书馆员在聊天框旁陪着你，决定它的模样与动作，编写它的故事，或亲手做一位。这些选择只属于你。",
+    lookEyebrow: "显示",
+    lookTitle: "它如何出现",
+    chooseEyebrow: "图书馆员",
+    sizeLegend: "大小",
+    sizeCompact: "精简",
+    sizeCompactHint: "小巧的身影，窄窄的边栏也放得下。",
+    sizeMedium: "中等",
+    sizeMediumHint: "清楚可见，同时保留充足的空间。",
+    sizeFull: "完整",
+    sizeFullHint: "以原始大小显示；只有在窗口或聊天旁的空间不够时才会缩小。",
+    opacityLegend: "透明度",
+    opacityOpaque: "不透明",
+    opacityOpaqueHint: "始终完整显示。",
+    opacityTranslucent: "半透明",
+    opacityTranslucentHint: "始终半透明，能看见后方的页面。",
+    opacityAuto: "自动",
+    opacityAutoHint:
+      "在空白处完整显示；与页面内容重叠，或你正在输入、滚动时会变淡；指向或聚焦时恢复。",
+  },
   editor: {
     title: "创建你自己的伙伴",
     description:

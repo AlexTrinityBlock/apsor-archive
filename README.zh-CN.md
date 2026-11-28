@@ -520,7 +520,11 @@ Agent 也可以调用只读的 `companion_action` 工具做出明确的手势。
 图像（PNG、JPEG、WebP 或 AVIF，每张最多 8 MB）；服务器会把每张图像重新编码为
 符合 384x576 和 40 KB 的 AVIF（只有在无法使用 AVIF 编码器时才用 WebP），并移除
 其元数据。每个账户的偏好会存储所选的伙伴（`preset:<id>` 或 `custom:<id>`）、
-是否显示、动态程度（`full`、`reduced`、`off`）以及归一化的位置。API 位于
+是否显示、动态程度（`full`、`reduced`、`off`）、显示大小（`compact`、`medium`、
+`full`；完整大小最多以 384x576 显示，只在窗口或聊天旁的空间不足时缩小）、透明度
+模式（`opaque`、`translucent`，或只在与页面重叠、你输入或滚动时变淡的 `auto`）
+以及归一化的位置。每个账户都在侧栏个人区的 **伙伴** 页面（`/companion`）设置这些，
+故事编辑与自定义伙伴也在这里；旧的 `/settings#settings-companion` 链接会跳转过去。API 位于
 `/api/v1/companions` 之下（列出、创建、更新、删除、上传帧、帧排序、删除帧、
 帧图像，以及 `GET/PATCH /api/v1/companions/preference`）。
 
@@ -1731,7 +1735,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `b8e4d2f6a1c3`。此分支上
+最新的迁移是 `c5f1a8d3e7b4`。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1840,10 +1844,14 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   `companion_preference` 表，每张都带 `user_id`、仅限所有者的强制 RLS 和
   `apsor_app` 授权。帧通过所有者安全的复合外键引用其伙伴并一起级联删除；
   偏好行以 `user_id` 为键。降级会删除这三张表；
-- `b8e4d2f6a1c3`（当前 head）创建私有的 `companion_story`、
+- `b8e4d2f6a1c3` 创建私有的 `companion_story`、
   `companion_lore_fragment` 和 `companion_bond` 表，带仅限所有者的强制 RLS 和
   `apsor_app` 授权：账户按语言保存的伙伴人设与传说副本、其片段，以及解锁传说
   层级的完成对话数。自定义伙伴的故事会随伙伴一起级联删除。降级会删除这三张表。
+- `c5f1a8d3e7b4`（当前 head）为 `companion_preference` 新增 `size`（`compact`、
+  `medium`、`full`，默认 `full`）与 `opacity_mode`（`opaque`、`translucent`、
+  `auto`，默认 `auto`），附检查约束与服务器默认值。RLS 与授权不变；降级会删除
+  这两个字段。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，
