@@ -73,9 +73,11 @@ export function PresetsPanel() {
           <div className="ca-preset__body">
             <h4>{preset.names.en ?? preset.id}</h4>
             <p className="ca-hint">
-              {LOCALES.map((locale) => preset.names[locale])
-                .filter(Boolean)
-                .join(" · ")}
+              {[
+                ...new Set(
+                  LOCALES.map((locale) => preset.names[locale]).filter(Boolean),
+                ),
+              ].join(" · ")}
             </p>
             <p className="ca-hint">
               {t("companionAdmin.presets.fragments", {

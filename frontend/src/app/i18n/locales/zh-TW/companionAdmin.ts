@@ -47,7 +47,7 @@ export const companionAdmin = {
       admin_default: "你設定的預設",
       global_default: "全域預設",
     },
-    whiteBox: "這裡的一切你都看得到；帳號本身看不到任何進度、鎖定或數字。",
+    whiteBox: "這裡的一切你都看得到；帳號本身看不到任何進度、分量或數字。",
     stats: {
       runs: "一起完成的回合",
       conversations: "對話",

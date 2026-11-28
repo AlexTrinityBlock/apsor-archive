@@ -49,7 +49,7 @@ export const companionAdmin = {
       admin_default: "your default",
       global_default: "global default",
     },
-    whiteBox: "You see everything here; the account sees none of its progress, locks, or counts.",
+    whiteBox: "You see everything here; the account sees none of its progress, weights, or counts.",
     stats: {
       runs: "Runs together",
       conversations: "Conversations",
