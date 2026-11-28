@@ -212,8 +212,8 @@ class CompanionPreferenceModel(Base):
     opacity_mode: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
-        default="auto",
-        server_default=text("'auto'"),
+        default="opaque",
+        server_default=text("'opaque'"),
     )
     # Continuous display scale (0 compact .. 1 full); NULL means "use ``size``".
     scale: Mapped[float | None] = mapped_column(Float, nullable=True)

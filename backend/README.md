@@ -1506,7 +1506,7 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   drops the three tables.
 - `c5f1a8d3e7b4` adds `size` (`compact`, `medium`, `full`;
   default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
-  `auto`) to `companion_preference`, with check constraints and server
+  `opaque`) to `companion_preference`, with check constraints and server
   defaults. RLS and grants are unchanged; the downgrade drops both columns.
 - `d2b6f4a8c1e9` (current head) adds the nullable `scale` float (0 compact to
   1 full) to `companion_preference` for direct on-screen resizing, with a
