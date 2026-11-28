@@ -9,7 +9,7 @@ and the four DML grants for ``apsor_app``:
 
 - ``companion``: one user-created companion. ``(id, user_id)`` is unique so
   frames can reference it through an owner-safe composite foreign key.
-- ``companion_frame``: one encoded WebP frame of one action. Deleting a
+- ``companion_frame``: one encoded AVIF (fallback WebP) frame of one action. Deleting a
   companion cascades to its frames; the service removes the objects.
 - ``companion_preference``: one row per account (primary key ``user_id``).
 
@@ -96,6 +96,7 @@ def upgrade() -> None:
         sa.Column("position", sa.Integer(), nullable=False),
         sa.Column("storage_backend", sa.String(length=16), nullable=False),
         sa.Column("storage_key", sa.Text(), nullable=False),
+        sa.Column("mime_type", sa.String(length=32), nullable=False),
         sa.Column("width", sa.Integer(), nullable=False),
         sa.Column("height", sa.Integer(), nullable=False),
         sa.Column("size_bytes", sa.Integer(), nullable=False),
@@ -117,6 +118,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "storage_backend IN ('local', 'r2', 's3')",
             name=op.f("ck_companion_frame_storage_backend_valid"),
+        ),
+        sa.CheckConstraint(
+            "mime_type IN ('image/avif', 'image/webp')",
+            name=op.f("ck_companion_frame_mime_type_valid"),
         ),
         sa.CheckConstraint(
             "width BETWEEN 1 AND 384 AND height BETWEEN 1 AND 576",

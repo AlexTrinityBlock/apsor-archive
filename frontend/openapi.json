@@ -2499,6 +2499,14 @@
             "title": "Id",
             "type": "integer"
           },
+          "mime_type": {
+            "enum": [
+              "image/avif",
+              "image/webp"
+            ],
+            "title": "Mime Type",
+            "type": "string"
+          },
           "position": {
             "title": "Position",
             "type": "integer"
@@ -2527,6 +2535,7 @@
           "width",
           "height",
           "size_bytes",
+          "mime_type",
           "version",
           "url"
         ],
@@ -10253,6 +10262,12 @@
         "responses": {
           "200": {
             "content": {
+              "image/avif": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
               "image/webp": {
                 "schema": {
                   "format": "binary",
@@ -10260,7 +10275,7 @@
                 }
               }
             },
-            "description": "The encoded WebP frame."
+            "description": "The encoded AVIF frame (WebP when AVIF was unavailable)."
           },
           "304": {
             "description": "The cached frame is still current."

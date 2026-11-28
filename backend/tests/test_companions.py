@@ -19,6 +19,7 @@ from app.module.companion.domain.companion_domain import (
     MAX_FRAMES_PER_ACTION,
     parse_selection,
 )
+from app.module.companion.service.companion_frame_image import encode_frame
 from tests.conftest import UserClient, rls_connection
 
 BASE = "/api/v1/companions"
@@ -75,15 +76,16 @@ def test_companion_crud_and_frame_processing(client: TestClient) -> None:
     assert (first["width"], first["height"]) == (384, 576)
     assert (second["width"], second["height"]) == (300, 300)
     assert first["size_bytes"] <= FRAME_MAX_ENCODED_BYTES
+    assert first["mime_type"] == "image/avif"
 
     image = client.get(first["url"])
     assert image.status_code == 200
-    assert image.headers["content-type"] == "image/webp"
+    assert image.headers["content-type"] == "image/avif"
     assert image.headers["x-content-type-options"] == "nosniff"
     assert "sandbox" in image.headers["content-security-policy"]
     assert image.headers["cache-control"] == "private, max-age=31536000, immutable"
     decoded = Image.open(BytesIO(image.content))
-    assert decoded.format == "WEBP"
+    assert decoded.format == "AVIF"
     assert decoded.mode == "RGBA"
 
     unversioned = client.get(f"{BASE}/{companion_id}/frames/{first['id']}/image")
@@ -127,7 +129,7 @@ def test_companion_crud_and_frame_processing(client: TestClient) -> None:
 
 
 def test_frame_strips_metadata_and_applies_orientation(client: TestClient) -> None:
-    """EXIF orientation is applied and no EXIF survives the WebP re-encode."""
+    """EXIF orientation is applied and no EXIF survives the re-encode."""
     companion_id = _create(client)
     response = client.post(
         f"{BASE}/{companion_id}/frames",
@@ -289,6 +291,21 @@ def test_companions_are_private_per_account(
             assert connection.execute(text(f"SELECT count(*) FROM {table}")).scalar_one() == 0
         with rls_connection(owner_engine, user_id=owner_id, role="root") as connection:
             assert connection.execute(text(f"SELECT count(*) FROM {table}")).scalar_one() == 1
+
+
+def test_frame_accepts_avif_and_falls_back_to_webp() -> None:
+    """AVIF uploads are accepted; without the AVIF codec the encoder emits WebP."""
+    avif_source = BytesIO()
+    Image.new("RGBA", (500, 500), (10, 20, 30, 128)).save(avif_source, format="AVIF")
+    encoded = encode_frame(avif_source.getvalue())
+    assert encoded.mime_type == "image/avif"
+    assert (encoded.width, encoded.height) == (384, 384)
+    assert Image.open(BytesIO(encoded.data)).format == "AVIF"
+
+    fallback = encode_frame(_png(), prefer_avif=False)
+    assert fallback.mime_type == "image/webp"
+    assert len(fallback.data) <= FRAME_MAX_ENCODED_BYTES
+    assert Image.open(BytesIO(fallback.data)).format == "WEBP"
 
 
 def test_parse_selection() -> None:

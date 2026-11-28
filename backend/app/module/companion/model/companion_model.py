@@ -77,7 +77,7 @@ class CompanionModel(Base):
 
 
 class CompanionFrameModel(Base):
-    """One encoded WebP frame of a companion action.
+    """One encoded AVIF (or fallback WebP) frame of a companion action.
 
     A frame's bytes never change after upload, so ``sha256`` is both the ETag
     and the cache-busting version. ``position`` orders frames within an action.
@@ -97,6 +97,10 @@ class CompanionFrameModel(Base):
         CheckConstraint(
             "storage_backend IN ('local', 'r2', 's3')",
             name="storage_backend_valid",
+        ),
+        CheckConstraint(
+            "mime_type IN ('image/avif', 'image/webp')",
+            name="mime_type_valid",
         ),
         CheckConstraint(
             "width BETWEEN 1 AND 384 AND height BETWEEN 1 AND 576",
@@ -129,6 +133,7 @@ class CompanionFrameModel(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_backend: Mapped[str] = mapped_column(String(16), nullable=False)
     storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(32), nullable=False)
     width: Mapped[int] = mapped_column(Integer, nullable=False)
     height: Mapped[int] = mapped_column(Integer, nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)

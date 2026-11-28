@@ -882,7 +882,7 @@ conversation and replaces the stored answer on the same row.
 The `companion` slice owns three private, owner-only RLS tables:
 
 - `companion` (`id`, `user_id`, `name`, nullable `gender`): at most 20 per account.
-- `companion_frame`: one WebP frame of one action, referenced through the
+- `companion_frame`: one AVIF (fallback WebP) frame of one action, with its `mime_type`, referenced through the
   owner-safe `(companion_id, user_id)` pair and deleted with its companion. The
   action list is the shared vocabulary in `app/shared/companion_action.py`.
 - `companion_preference`: one row per account with `selected`
@@ -901,10 +901,12 @@ The `companion` slice owns three private, owner-only RLS tables:
 | GET | `/api/v1/companions/{companion_id}/frames/{frame_id}/image?v=` | `getCompanionFrame` |
 | GET/PATCH | `/api/v1/companions/preference` | `getCompanionPreference` / `updateCompanionPreference` |
 
-Uploads accept still PNG, JPEG, or WebP files of at most 8 MB and 40 million
-pixels, at most 12 frames per action. The server applies EXIF orientation,
-drops all metadata, keeps transparency, fits the image into 384x576, and
-re-encodes WebP within 60 KB. A frame never changes after upload, so its
+Uploads accept still PNG, JPEG, WebP, or AVIF files of at most 8 MB and 40
+million pixels, at most 12 frames per action. The server applies EXIF
+orientation, drops all metadata, keeps transparency, fits the image into
+384x576, and re-encodes AVIF (quality 60 stepping down, speed 4) within 40 KB.
+If the running Pillow build has no AVIF codec it falls back to WebP; the frame
+records its `mime_type` and is served with that content type. A frame never changes after upload, so its
 SHA-256 is the strong `ETag` and its first 16 hex digits are the `v` version;
 a matching `v` is served `private, max-age=31536000, immutable`, any other
 request revalidates. Errors use the stable codes `companion_not_found`,

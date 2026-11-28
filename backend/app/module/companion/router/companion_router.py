@@ -180,8 +180,11 @@ async def delete_companion_frame(
     response_class=Response,
     responses={
         200: {
-            "description": "The encoded WebP frame.",
-            "content": {"image/webp": {"schema": {"type": "string", "format": "binary"}}},
+            "description": "The encoded AVIF frame (WebP when AVIF was unavailable).",
+            "content": {
+                "image/avif": {"schema": {"type": "string", "format": "binary"}},
+                "image/webp": {"schema": {"type": "string", "format": "binary"}},
+            },
         },
         304: {"description": "The cached frame is still current."},
     },
@@ -209,7 +212,7 @@ async def get_companion_frame(
     if _etag_matches(request.headers.get("if-none-match"), etag):
         return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
     image = await service.frame_image(companion_id, frame_id)
-    return Response(content=image.data, media_type="image/webp", headers=headers)
+    return Response(content=image.data, media_type=image.meta.mime_type, headers=headers)
 
 
 def _etag_matches(header: str | None, etag: str) -> bool:

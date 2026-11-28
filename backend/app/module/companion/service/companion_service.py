@@ -69,6 +69,7 @@ class FrameMeta:
 
     etag: str
     version: str
+    mime_type: str
 
 
 @dataclass(frozen=True)
@@ -180,7 +181,12 @@ class CompanionService:
             next_position = max((frame.position for frame in existing), default=-1) + 1
             now = utcnow()
             for offset, frame in enumerate(encoded):
-                key = frame_storage_key(self.user_id, companion.id, uuid4().hex)
+                key = frame_storage_key(
+                    self.user_id,
+                    companion.id,
+                    uuid4().hex,
+                    frame.mime_type,
+                )
                 try:
                     await self.storage.save(key, frame.data)
                 except (StorageError, OSError) as exc:
@@ -198,6 +204,7 @@ class CompanionService:
                     position=next_position + offset,
                     storage_backend=backend,
                     storage_key=key,
+                    mime_type=frame.mime_type,
                     width=frame.width,
                     height=frame.height,
                     size_bytes=len(frame.data),
@@ -371,7 +378,11 @@ class CompanionService:
 
 
 def _frame_meta(frame: CompanionFrameModel) -> FrameMeta:
-    return FrameMeta(etag=frame.sha256, version=frame_version(frame.sha256))
+    return FrameMeta(
+        etag=frame.sha256,
+        version=frame_version(frame.sha256),
+        mime_type=frame.mime_type,
+    )
 
 
 def _frame_schema(frame: CompanionFrameModel) -> CompanionFrameSchema:
@@ -383,6 +394,7 @@ def _frame_schema(frame: CompanionFrameModel) -> CompanionFrameSchema:
         width=frame.width,
         height=frame.height,
         size_bytes=frame.size_bytes,
+        mime_type=frame.mime_type,  # type: ignore[arg-type]
         version=version,
         url=f"{API_PREFIX}/{frame.companion_id}/frames/{frame.id}/image?v={version}",
     )

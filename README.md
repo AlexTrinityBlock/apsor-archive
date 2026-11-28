@@ -570,8 +570,9 @@ writes, calculates, browses, and presents during the matching tools, and the
 agent can also call the read-only `companion_action` tool for an explicit
 gesture. Built-in presets ship with the frontend. Each account may also create up
 to 20 private custom companions and upload up to 12 images per action (PNG,
-JPEG, or WebP, at most 8 MB each); the server re-encodes every image as WebP that
-fits 384x576 and 60 KB and strips its metadata. The per-account preference stores
+JPEG, WebP, or AVIF, at most 8 MB each); the server re-encodes every image as
+AVIF (WebP only when the AVIF codec is unavailable) that fits 384x576 and 40 KB
+and strips its metadata. The per-account preference stores
 the selected companion (`preset:<id>` or `custom:<id>`), whether it is shown, the
 motion level (`full`, `reduced`, `off`), and its normalized position. The API is
 under `/api/v1/companions` (list, create, update, delete, frame upload, frame

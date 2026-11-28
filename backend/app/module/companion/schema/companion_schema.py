@@ -1,6 +1,7 @@
 """HTTP contracts for custom companions and the companion preference."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -33,6 +34,7 @@ class CompanionFrameSchema(BaseModel):
     width: int
     height: int
     size_bytes: int
+    mime_type: Literal["image/avif", "image/webp"]
     version: str
     url: str
 

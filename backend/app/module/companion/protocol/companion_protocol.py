@@ -72,6 +72,7 @@ class CompanionRepositoryProtocol(Protocol):
         position: int,
         storage_backend: str,
         storage_key: str,
+        mime_type: str,
         width: int,
         height: int,
         size_bytes: int,

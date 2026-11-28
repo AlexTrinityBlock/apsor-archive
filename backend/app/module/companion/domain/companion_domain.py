@@ -19,7 +19,9 @@ MAX_FRAME_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_SOURCE_PIXELS = 40_000_000
 FRAME_MAX_WIDTH = 384
 FRAME_MAX_HEIGHT = 576
-FRAME_MAX_ENCODED_BYTES = 60 * 1024
+FRAME_MAX_ENCODED_BYTES = 40 * 1024
+FRAME_MIME_TYPES: tuple[str, ...] = ("image/avif", "image/webp")
+_FRAME_EXTENSIONS = {"image/avif": ".avif", "image/webp": ".webp"}
 NAME_MAX_CHARS = 40
 
 # A preset id names a directory under ``frontend/public/companions``. The server
@@ -69,9 +71,9 @@ def frame_version(sha256: str) -> str:
     return sha256[:16]
 
 
-def frame_storage_key(user_id: int, companion_id: int, token: str) -> str:
+def frame_storage_key(user_id: int, companion_id: int, token: str, mime_type: str) -> str:
     """Return the owner-prefixed object key for one encoded frame."""
-    return f"users/{user_id}/companions/{companion_id}/{token}.webp"
+    return f"users/{user_id}/companions/{companion_id}/{token}{_FRAME_EXTENSIONS[mime_type]}"
 
 
 __all__ = [
@@ -80,6 +82,7 @@ __all__ = [
     "FRAME_MAX_ENCODED_BYTES",
     "FRAME_MAX_HEIGHT",
     "FRAME_MAX_WIDTH",
+    "FRAME_MIME_TYPES",
     "MAX_COMPANIONS_PER_ACCOUNT",
     "MAX_FILES_PER_UPLOAD",
     "MAX_FRAMES_PER_ACTION",

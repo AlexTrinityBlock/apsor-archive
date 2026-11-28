@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CompanionFrameSchemaAction } from './companionFrameSchemaAction';
+import type { CompanionFrameSchemaMimeType } from './companionFrameSchemaMimeType';
 
 /**
  * One stored frame; ``url`` already carries the cache-busting version.
@@ -13,6 +14,7 @@ export interface CompanionFrameSchema {
   action: CompanionFrameSchemaAction;
   height: number;
   id: number;
+  mime_type: CompanionFrameSchemaMimeType;
   position: number;
   size_bytes: number;
   url: string;

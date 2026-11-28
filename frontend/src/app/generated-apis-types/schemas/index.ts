@@ -77,6 +77,7 @@ export * from './companionFrameOrderSchema';
 export * from './companionFrameOrderSchemaAction';
 export * from './companionFrameSchema';
 export * from './companionFrameSchemaAction';
+export * from './companionFrameSchemaMimeType';
 export * from './companionPositionSchema';
 export * from './companionPreferenceSchema';
 export * from './companionPreferenceSchemaMotion';
