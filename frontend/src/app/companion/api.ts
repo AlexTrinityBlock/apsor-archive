@@ -16,7 +16,7 @@
  * - The story (persona and lore) uses the persona and lore endpoints in the
  *   current interface locale.
  */
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "../auth/AuthProvider";
@@ -57,6 +57,7 @@ import {
   type CompanionCharacter,
   type CompanionGender,
 } from "./manifest";
+import { readScale } from "./size";
 import {
   preferenceStore,
   readOpacityMode,
@@ -233,6 +234,7 @@ function fromServer(value: CompanionPreferenceSchema): CompanionPreference {
     companionId: companionIdFromRef(value.selected),
     motion: value.motion,
     size: readSize(value.size),
+    scale: readScale(value.scale),
     opacityMode: readOpacityMode(value.opacity_mode),
   };
 }
@@ -242,9 +244,43 @@ function fromServer(value: CompanionPreferenceSchema): CompanionPreference {
  * mirrors the server row once it loads; every change is written to the
  * server, and the cache follows.
  */
+type PreferenceBody = Parameters<typeof updateCompanionPreference>[0];
+
+export interface PreferenceUpdateOptions {
+  /**
+   * Coalesce rapid changes (keyboard or slider steps) into one server write
+   * after this many quiet milliseconds; the local value changes at once.
+   */
+  readonly deferMs?: number;
+}
+
+/** The server body for a local preference change. */
+export function preferenceBody(patch: Partial<CompanionPreference>): PreferenceBody {
+  const body: PreferenceBody = {};
+  if (patch.enabled !== undefined) {
+    body.enabled = patch.enabled;
+  }
+  if (patch.motion !== undefined) {
+    body.motion = patch.motion;
+  }
+  if (patch.size !== undefined) {
+    body.size = patch.size;
+  }
+  if (patch.scale !== undefined) {
+    body.scale = patch.scale;
+  }
+  if (patch.opacityMode !== undefined) {
+    body.opacity_mode = patch.opacityMode;
+  }
+  if (patch.companionId !== undefined) {
+    body.selected = patch.companionId === null ? null : companionRef({ id: patch.companionId });
+  }
+  return body;
+}
+
 export function useCompanionPreference(): readonly [
   CompanionPreference,
-  (patch: Partial<CompanionPreference>) => void,
+  (patch: Partial<CompanionPreference>, options?: PreferenceUpdateOptions) => void,
 ] {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -264,45 +300,52 @@ export function useCompanionPreference(): readonly [
       next.companionId !== current.companionId ||
       next.motion !== current.motion ||
       next.size !== current.size ||
+      next.scale !== current.scale ||
       next.opacityMode !== current.opacityMode
     ) {
       store.update(next);
     }
   }, [server, store]);
+  const pending = useRef<PreferenceBody>({});
+  const timer = useRef<number | null>(null);
+  const flush = useCallback(() => {
+    if (timer.current !== null) {
+      window.clearTimeout(timer.current);
+      timer.current = null;
+    }
+    const body = pending.current;
+    pending.current = {};
+    if (Object.keys(body).length === 0) {
+      return;
+    }
+    void updateCompanionPreference(body)
+      .then((saved) => {
+        queryClient.setQueryData(getGetCompanionPreferenceQueryKey(), saved);
+      })
+      .catch(() => {
+        void queryClient.invalidateQueries({
+          queryKey: getGetCompanionPreferenceQueryKey(),
+        });
+      });
+  }, [queryClient]);
+  useEffect(() => flush, [flush]);
   const update = useCallback(
-    (patch: Partial<CompanionPreference>) => {
+    (patch: Partial<CompanionPreference>, options?: PreferenceUpdateOptions) => {
       store.update(patch);
       if (!signedIn) {
         return;
       }
-      const body: Parameters<typeof updateCompanionPreference>[0] = {};
-      if (patch.enabled !== undefined) {
-        body.enabled = patch.enabled;
+      pending.current = { ...pending.current, ...preferenceBody(patch) };
+      if (options?.deferMs === undefined) {
+        flush();
+        return;
       }
-      if (patch.motion !== undefined) {
-        body.motion = patch.motion;
+      if (timer.current !== null) {
+        window.clearTimeout(timer.current);
       }
-      if (patch.size !== undefined) {
-        body.size = patch.size;
-      }
-      if (patch.opacityMode !== undefined) {
-        body.opacity_mode = patch.opacityMode;
-      }
-      if (patch.companionId !== undefined) {
-        body.selected =
-          patch.companionId === null ? null : companionRef({ id: patch.companionId });
-      }
-      void updateCompanionPreference(body)
-        .then((saved) => {
-          queryClient.setQueryData(getGetCompanionPreferenceQueryKey(), saved);
-        })
-        .catch(() => {
-          void queryClient.invalidateQueries({
-            queryKey: getGetCompanionPreferenceQueryKey(),
-          });
-        });
+      timer.current = window.setTimeout(flush, options.deferMs);
     },
-    [store, signedIn, queryClient],
+    [store, signedIn, flush],
   );
   return [preference, update] as const;
 }

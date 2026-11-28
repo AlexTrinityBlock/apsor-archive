@@ -2,17 +2,18 @@ import { useId, useRef, useState } from "react";
 
 import { useI18n } from "../../i18n";
 import { ACTION_LABEL_KEYS, COMPANION_ACTIONS, type CompanionAction } from "../actions";
-import { FIGURE_HEADROOM, targetFigure } from "../layout";
+import { FIGURE_HEADROOM } from "../layout";
 import type { CompanionCharacter } from "../manifest";
-import type { CompanionMotion, CompanionOpacityMode, CompanionSize } from "../preference";
+import type { CompanionMotion, CompanionOpacityMode } from "../preference";
+import { figureForLevel, previewRange } from "../size";
 import { CompanionStage, type DragMotion } from "./CompanionStage";
 
 interface CompanionPreviewProps {
   readonly character: CompanionCharacter;
   readonly motion: CompanionMotion;
   readonly title: string;
-  /** Size setting to preview; scaled into the preview frame. */
-  readonly size?: CompanionSize;
+  /** Size level (0 compact .. 1 full) to preview, scaled into the frame. */
+  readonly level?: number;
   /** Opacity mode to preview; auto shows its gentle fade. */
   readonly opacityMode?: CompanionOpacityMode;
 }
@@ -25,16 +26,14 @@ export function CompanionPreview({
   character,
   motion,
   title,
-  size = "compact",
+  level = 0,
   opacityMode = "opaque",
 }: CompanionPreviewProps) {
   const { t } = useI18n();
   const selectId = useId();
   const [action, setAction] = useState<CompanionAction>("idle");
   const dragMotion = useRef<DragMotion>({ vx: 0 });
-  const target = targetFigure(size, "desktop");
-  const height = Math.min(PREVIEW_MAX_HEIGHT, target.height);
-  const figure = { width: Math.round((height * 2) / 3), height };
+  const figure = figureForLevel(level, previewRange(PREVIEW_MAX_HEIGHT));
 
   return (
     <figure className="companion-preview">

@@ -22,12 +22,31 @@ export const companion = {
     sleeping: "Dozing",
     held: "Being carried",
   },
+  size: {
+    compact: "Compact",
+    medium: "Medium",
+    full: "Full",
+    fit: "Fits beside chat",
+    percent: "{percent}%",
+  },
   overlay: {
     label: "{name}, your archive companion",
-    hint: "Drag, or use the arrow keys to move. Enter wakes it. Escape minimizes it.",
+    hint: "Drag, or use the arrow keys to move. Plus and minus resize; double-click toggles full size. Enter wakes it. Escape minimizes it.",
     minimize: "Minimize companion",
     restore: "Show {name}",
     announce: "{name}: {action}",
+    resize: {
+      handle: "Resize {name}",
+      handleHint:
+        "Drag up and outward to enlarge. Arrow keys resize; Page Up and Page Down jump between sizes.",
+      valueText: "{label} ({percent}%)",
+      announce: "{name} size: {label}",
+      stepsAside: "Steps aside while you read",
+      coach:
+        "Drag the corner to resize. Ctrl-scroll or pinch over the figure, or double-click for full size.",
+      coachTouch: "Pinch to resize, or double-tap for full size.",
+      coachDismiss: "Got it",
+    },
   },
   settings: {
     eyebrow: "Companion",
@@ -78,6 +97,9 @@ export const companion = {
     sizeFull: "Full",
     sizeFullHint:
       "The art at its full size, scaled down only when the window or the free space beside the chat is too small.",
+    sizeFine: "Exact size",
+    sizeFineHint:
+      "Slide for any size in between. You can also resize the figure directly beside the chat: drag its corner, pinch, or double-click.",
     opacityLegend: "Opacity",
     opacityOpaque: "Opaque",
     opacityOpaqueHint: "Always fully visible.",

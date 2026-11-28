@@ -1735,7 +1735,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `c5f1a8d3e7b4`。此分支上
+最新的迁移是 `d2b6f4a8c1e9`。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1848,10 +1848,14 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   `companion_lore_fragment` 和 `companion_bond` 表，带仅限所有者的强制 RLS 和
   `apsor_app` 授权：账户按语言保存的伙伴人设与传说副本、其片段，以及解锁传说
   层级的完成对话数。自定义伙伴的故事会随伙伴一起级联删除。降级会删除这三张表。
-- `c5f1a8d3e7b4`（当前 head）为 `companion_preference` 新增 `size`（`compact`、
+- `c5f1a8d3e7b4` 为 `companion_preference` 新增 `size`（`compact`、
   `medium`、`full`，默认 `full`）与 `opacity_mode`（`opaque`、`translucent`、
   `auto`，默认 `auto`），附检查约束与服务器默认值。RLS 与授权不变；降级会删除
   这两个字段。
+- `d2b6f4a8c1e9`（当前 head）为 `companion_preference` 新增可为 NULL 的
+  `scale` 浮点数（0 为精简、1 为完整），用于直接在屏幕上缩放，附范围检查。
+  NULL 表示“使用 `size`”；只发送 `scale` 时会推导出 `size`，只发送 `size` 时会清除
+  `scale`。RLS 与授权不变；降级会删除这个字段。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，

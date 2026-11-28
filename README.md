@@ -1947,7 +1947,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `c5f1a8d3e7b4`. The migrations after `agent_config` on
+The latest migration is `d2b6f4a8c1e9`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -2072,10 +2072,15 @@ this branch are:
   persona and lore, its fragments, and the completed-run count that unlocks lore
   tiers. A custom companion's story cascades with the companion. The downgrade
   drops the three tables.
-- `c5f1a8d3e7b4` (current head) adds `size` (`compact`, `medium`, `full`;
+- `c5f1a8d3e7b4` adds `size` (`compact`, `medium`, `full`;
   default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
   `auto`) to `companion_preference`, with check constraints and server
   defaults. RLS and grants are unchanged; the downgrade drops both columns.
+- `d2b6f4a8c1e9` (current head) adds the nullable `scale` float (0 compact to
+  1 full) to `companion_preference` for direct on-screen resizing, with a
+  range check. NULL means "use `size`"; sending only `scale` derives `size`,
+  and sending only `size` clears `scale`. RLS and grants are unchanged; the
+  downgrade drops the column.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

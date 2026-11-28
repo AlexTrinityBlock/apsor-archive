@@ -4,11 +4,11 @@ import { describe, expect, test } from "bun:test";
 import {
   EDGE_MARGIN,
   FIGURE_HEADROOM,
-  INTRINSIC_FIGURE,
-  boxSizeFor,
-  figureSizeFor,
+  anchorFeet,
   gutterWidth,
-  targetFigure,
+  peekGeometry,
+  positionAt,
+  shiftPosition,
   avoidance,
   boxSize,
   breakpointFor,
@@ -136,59 +136,67 @@ describe("spring", () => {
   });
 });
 
-describe("size settings", () => {
-  const roomy: LayoutContext = {
-    viewport: { width: 2560, height: 1440 },
-    panel: { left: 230, top: 60, width: 2330, height: 1380 },
-    composer: { left: 900, top: 1300, width: 760, height: 120 },
-    column: { left: 900, top: 100, width: 760, height: 1180 },
-    content: { left: 230, top: 0, width: 2330, height: 1440 },
-  };
-
-  test("targets: compact is the old default, full is the intrinsic art", () => {
-    expect(targetFigure("compact", "desktop")).toEqual({ width: 148, height: 222 });
-    expect(targetFigure("full", "desktop")).toEqual(INTRINSIC_FIGURE);
-    expect(targetFigure("medium", "desktop").height).toBeGreaterThan(222);
-    expect(targetFigure("medium", "desktop").height).toBeLessThan(576);
+describe("feet-anchored placement", () => {
+  test("positions record the feet and resolve from them", () => {
+    const size = boxSize("desktop");
+    const position = positionAt("panel-right", 300, size, desktop);
+    expect(position.feet).toBeCloseTo((300 + size.height) / 900, 6);
+    const bigger = { width: 240, height: 380 };
+    const box = resolveBox(position, desktop, bigger);
+    expect(box.top + box.height).toBeCloseTo(300 + size.height, 0);
   });
 
-  test("full renders at intrinsic size when there is room, never larger", () => {
-    expect(figureSizeFor("full", "desktop", roomy)).toEqual(INTRINSIC_FIGURE);
+  test("old top-based positions still resolve", () => {
+    const old = readSavedPosition({ side: "panel-right", y: 0.3 });
+    expect(old).toEqual({ side: "panel-right", y: 0.3 });
+    const box = resolveBox(old ?? { side: "panel-right", y: 0 }, desktop, boxSize("desktop"));
+    expect(box.top).toBeCloseTo(270, 0);
+    expect(readSavedPosition({ side: "panel-right", y: 0.3, feet: 0.6 })?.feet).toBeCloseTo(0.6, 9);
   });
 
-  test("full scales down to fit the viewport height", () => {
-    const short = { ...roomy, viewport: { width: 2560, height: 500 } };
-    const figure = figureSizeFor("full", "desktop", short);
-    expect(figure.height).toBeLessThanOrEqual(500 - FIGURE_HEADROOM);
-    expect(figure.height).toBeLessThan(576);
-    expect(figure.width).toBe(Math.round((figure.height * 2) / 3));
+  test("a resize keeps the feet within 1 px", () => {
+    const size = boxSize("desktop");
+    const from = resolveBox({ side: "panel-right", y: 0.4 }, desktop, size);
+    const next = { width: 200, height: 320 };
+    const anchored = anchorFeet({ side: "panel-right", y: 0.4 }, desktop, from, next);
+    const placed = resolveBox(anchored, desktop, next);
+    expect(Math.abs(placed.top + placed.height - (from.top + from.height))).toBeLessThanOrEqual(1);
   });
 
-  test("full scales down to fit the free gutter beside the column", () => {
-    const gutter = gutterWidth(desktop);
-    const figure = figureSizeFor("full", "desktop", desktop);
-    expect(figure.width).toBeLessThanOrEqual(Math.max(gutter, 148) + 1);
+  test("when the head would cross the top, the feet move down but stay above the composer", () => {
+    const size = boxSize("desktop");
+    const from = resolveBox({ side: "panel-right", y: 0.1 }, desktop, size);
+    const next = { width: 384, height: 596 };
+    const anchored = anchorFeet({ side: "panel-right", y: 0.1 }, desktop, from, next);
+    const placed = resolveBox(anchored, desktop, next);
+    expect(placed.top).toBeGreaterThanOrEqual(64);
+    expect(placed.top + placed.height).toBeLessThanOrEqual(760 - 6);
   });
 
-  test("never below compact; a too-narrow gutter is left to avoidance", () => {
-    // The column fills the content area right of the 230 px nav rail.
+  test("shiftPosition moves both edges", () => {
+    const moved = shiftPosition({ side: "panel-left", y: 0.2, feet: 0.5 }, 0.1);
+    expect(moved.y).toBeCloseTo(0.3, 6);
+    expect(moved.feet).toBeCloseTo(0.6, 6);
+    expect(shiftPosition({ side: "panel-left", y: 0.2 }, -0.5)).toEqual({ side: "panel-left", y: 0 });
+  });
+});
+
+describe("peek geometry", () => {
+  test("small boxes keep the classic peek amounts", () => {
+    const roomy: LayoutContext = { ...desktop, column: { left: 600, top: 100, width: 300, height: 600 } };
+    expect(peekGeometry({ width: 148, height: 242 }, roomy)).toEqual({ scale: 0.6, slide: 0.58 });
+  });
+
+  test("a full-size figure in a narrow gutter shrinks and slides further", () => {
     const narrow: LayoutContext = {
       ...desktop,
-      content: { left: 230, top: 0, width: 1210, height: 900 },
-      column: { left: 240, top: 100, width: 1190, height: 640 },
+      content: { left: 230, top: 0, width: 1050, height: 800 },
+      column: { left: 305, top: 100, width: 900, height: 640 },
     };
-    expect(figureSizeFor("full", "desktop", narrow)).toEqual({ width: 148, height: 222 });
-  });
-
-  test("box adds the headroom to the fitted figure", () => {
-    const box = boxSizeFor("full", "desktop", roomy);
-    expect(box).toEqual({ width: 384, height: 576 + FIGURE_HEADROOM });
-  });
-
-  test("a full figure in a roomy gutter does not cover the column or composer", () => {
-    const box = boxSizeFor("full", "desktop", roomy);
-    const placed = resolveBox(defaultPosition("desktop", roomy, box), roomy, box);
-    expect(avoidance(placed, roomy, false, "desktop")).toBe("clear");
-    expect(placed.top + placed.height).toBeLessThanOrEqual(roomy.composer?.top ?? 0);
+    const gutter = gutterWidth(narrow);
+    const peek = peekGeometry({ width: 384, height: 596 }, narrow);
+    expect(gutter).toBeLessThan(80);
+    expect(peek.scale).toBeCloseTo(0.22, 9);
+    expect(peek.slide).toBeCloseTo(0.82, 9);
   });
 });

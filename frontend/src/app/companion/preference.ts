@@ -3,6 +3,7 @@
  * external store so the chat overlay and the settings panel stay in sync, and
  * so other tabs follow through the `storage` event.
  */
+import { readScale } from "./size";
 import { readJson, storageKeyMatches, writeJson } from "./storage";
 
 export type CompanionMotion = "full" | "reduced" | "off";
@@ -24,6 +25,11 @@ export interface CompanionPreference {
   readonly companionId: string | null;
   readonly motion: CompanionMotion;
   readonly size: CompanionSize;
+  /**
+   * Continuous size from direct resizing, 0 (compact) to 1 (full); null
+   * means "use the size preset".
+   */
+  readonly scale: number | null;
   readonly opacityMode: CompanionOpacityMode;
 }
 
@@ -32,6 +38,7 @@ export const DEFAULT_PREFERENCE: CompanionPreference = {
   companionId: null,
   motion: "full",
   size: "full",
+  scale: null,
   opacityMode: "auto",
 };
 
@@ -59,6 +66,7 @@ export function readPreference(value: unknown): CompanionPreference {
         : null,
     motion: motion === "reduced" || motion === "off" || motion === "full" ? motion : "full",
     size: readSize(record.size),
+    scale: readScale(record.scale),
     opacityMode: readOpacityMode(record.opacityMode),
   };
 }

@@ -1358,7 +1358,7 @@ fields, account/session auth (`app_user`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The current head is
-`c5f1a8d3e7b4`; every private table now has `user_id` and forced RLS, the
+`d2b6f4a8c1e9`; every private table now has `user_id` and forced RLS, the
 runtime role is `apsor_app`, and `file` / `file_ingest_job` record
 `storage_backend`. Earlier migrations add per-run and per-account agent usage
 counters and the impersonation session marker. `f7a3c2d9e1b4` adds the editable
@@ -1504,10 +1504,15 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   persona and lore, its fragments, and the completed-run count that unlocks lore
   tiers. A custom companion's story cascades with the companion. The downgrade
   drops the three tables.
-- `c5f1a8d3e7b4` (current head) adds `size` (`compact`, `medium`, `full`;
+- `c5f1a8d3e7b4` adds `size` (`compact`, `medium`, `full`;
   default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
   `auto`) to `companion_preference`, with check constraints and server
   defaults. RLS and grants are unchanged; the downgrade drops both columns.
+- `d2b6f4a8c1e9` (current head) adds the nullable `scale` float (0 compact to
+  1 full) to `companion_preference` for direct on-screen resizing, with a
+  range check. NULL means "use `size`"; sending only `scale` derives `size`,
+  and sending only `size` clears `scale`. RLS and grants are unchanged; the
+  downgrade drops the column.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

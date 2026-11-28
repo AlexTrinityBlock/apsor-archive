@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useId, type CSSProperties, type ReactNode } from "react";
 
 import { Button } from "../../component/Button";
 import { Icon } from "../../component/Icon";
@@ -22,6 +22,11 @@ import {
   type CompanionOpacityMode,
   type CompanionSize,
 } from "../../companion/preference";
+import {
+  SIZE_LEVELS,
+  effectiveLevel,
+  presetForLevel,
+} from "../../companion/size";
 import { removeKey } from "../../companion/storage";
 
 interface Choice<T extends string> {
@@ -170,6 +175,59 @@ function SizeSwatch({ size }: { readonly size: CompanionSize }) {
   );
 }
 
+/** Quiet time before slider movement is written to the server. */
+const SLIDER_WRITE_DEFER_MS = 400;
+
+const PRESET_LEVELS: readonly { readonly id: CompanionSize; readonly level: number }[] = [
+  { id: "compact", level: SIZE_LEVELS.compact },
+  { id: "medium", level: SIZE_LEVELS.medium },
+  { id: "full", level: SIZE_LEVELS.full },
+];
+
+/** Fine size control: any size between the presets, with preset ticks. */
+function SizeSlider({
+  level,
+  onChange,
+}: {
+  readonly level: number;
+  readonly onChange: (level: number) => void;
+}) {
+  const { t } = useI18n();
+  const id = useId();
+  const listId = useId();
+  const value = Math.round(level * 100);
+  const preset = PRESET_LEVELS.find((item) => Math.abs(item.level - level) < 0.001);
+  const label =
+    preset === undefined
+      ? t("companion.size.percent", { percent: value })
+      : t(`companion.size.${preset.id}`);
+  return (
+    <div className="companions-size-slider">
+      <label htmlFor={id}>
+        <span>{t("companion.page.sizeFine")}</span>
+        <output htmlFor={id}>{label}</output>
+      </label>
+      <input
+        id={id}
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={value}
+        list={listId}
+        aria-valuetext={label}
+        onChange={(event) => onChange(Number(event.currentTarget.value) / 100)}
+      />
+      <datalist id={listId}>
+        {PRESET_LEVELS.map((item) => (
+          <option key={item.id} value={item.level * 100} label={t(`companion.size.${item.id}`)} />
+        ))}
+      </datalist>
+      <p className="companions-segmented__hint">{t("companion.page.sizeFineHint")}</p>
+    </div>
+  );
+}
+
 /**
  * The companion workspace body: visibility, look (size and opacity), motion,
  * character choice with a live preview, the selected companion's story, and
@@ -183,6 +241,7 @@ export function CompanionControls() {
   const systemReduced = useReducedMotion();
   const motion = effectiveMotion(preference.motion, systemReduced);
   const selected = selectCharacter(catalog, preference.companionId);
+  const level = effectiveLevel(preference.scale, preference.size);
 
   const resetPosition = () => {
     for (const breakpoint of ["phone", "tablet", "desktop"]) {
@@ -267,9 +326,18 @@ export function CompanionControls() {
               name="companion-size"
               legend={t("companion.page.sizeLegend")}
               choices={SIZES}
-              value={preference.size}
-              onChange={(size) => update({ size })}
+              value={presetForLevel(level)}
+              onChange={(size) => update({ size, scale: null })}
               visual={(id) => <SizeSwatch size={id} />}
+            />
+            <SizeSlider
+              level={level}
+              onChange={(value) =>
+                update(
+                  { scale: value, size: presetForLevel(value) },
+                  { deferMs: SLIDER_WRITE_DEFER_MS },
+                )
+              }
             />
             <Segmented
               name="companion-opacity"
@@ -305,7 +373,7 @@ export function CompanionControls() {
             <CompanionPreview
               character={selected}
               motion={motion}
-              size={preference.size}
+              level={level}
               opacityMode={preference.opacityMode}
               title={t("companion.settings.previewTitle")}
             />

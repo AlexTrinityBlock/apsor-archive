@@ -1716,7 +1716,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `c5f1a8d3e7b4`。此分支上 `agent_config` 之後的移轉為：
+最新的移轉是 `d2b6f4a8c1e9`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -1829,10 +1829,14 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   與 `apsor_app` 授權：帳號依語言保存的夥伴人設與傳說副本、其片段，以及解鎖
   傳說層級的完成對話數。自訂夥伴的故事會隨夥伴一併串聯刪除。降級會移除這三張
   資料表。
-- `c5f1a8d3e7b4`（目前 head）為 `companion_preference` 新增 `size`（`compact`、
+- `c5f1a8d3e7b4` 為 `companion_preference` 新增 `size`（`compact`、
   `medium`、`full`，預設 `full`）與 `opacity_mode`（`opaque`、`translucent`、
   `auto`，預設 `auto`），附檢查約束與伺服器預設值。RLS 與授權不變；降級會刪除
   這兩個欄位。
+- `d2b6f4a8c1e9`（目前 head）為 `companion_preference` 新增可為 NULL 的
+  `scale` 浮點數（0 為精簡、1 為完整），供直接在畫面上縮放使用，附範圍檢查。
+  NULL 表示「使用 `size`」；只送 `scale` 時會推導出 `size`，只送 `size` 時會清除
+  `scale`。RLS 與授權不變；降級會刪除這個欄位。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會

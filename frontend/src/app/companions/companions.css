@@ -113,6 +113,33 @@
   line-height: 1.5;
 }
 
+/* Fine size slider with preset ticks. */
+.companions-size-slider {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.companions-size-slider label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.companions-size-slider output {
+  color: var(--mono-l2);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.companions-size-slider input[type="range"] {
+  width: 100%;
+  accent-color: var(--mono-ink);
+}
+
 /* Opacity swatch: text lines with the figure standing over them. */
 .companions-swatch {
   position: relative;
