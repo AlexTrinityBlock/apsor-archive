@@ -256,6 +256,14 @@ class AgentApprovalSchema(BaseModel):
     created_at: datetime
 
 
+class AgentWebSourceSchema(BaseModel):
+    """One web page a conversation's tools saw, with its ``[web:wN]`` short id."""
+
+    ref: str = Field(description="Short id cited inline as [web:<ref>], for example w3.")
+    url: str
+    title: str | None = None
+
+
 class AgentTurnResultSchema(BaseModel):
     """The completed turn returned by the JSON fallback."""
 

@@ -5,6 +5,7 @@ from typing import Any, Protocol
 from uuid import UUID
 
 from app.module.agent.domain.agent_domain import ApprovalDraft, EntryDraft
+from app.module.agent.domain.web_source_domain import WebSource
 from app.module.agent.model.agent_model import (
     AgentApprovalModel,
     AgentConversationModel,
@@ -48,6 +49,8 @@ class AgentRepositoryProtocol(Protocol):
         *,
         include_deleted: bool = False,
     ) -> AgentConversationModel | None: ...
+
+    async def list_web_sources(self, conversation_id: int) -> list[WebSource]: ...
 
     async def list_conversations(
         self,

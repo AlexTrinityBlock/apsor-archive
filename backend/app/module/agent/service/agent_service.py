@@ -131,6 +131,7 @@ from app.module.agent.schema.agent_schema import (
     AgentToolCatalogSchema,
     AgentToolSchema,
     AgentTurnResultSchema,
+    AgentWebSourceSchema,
 )
 from app.module.agent.service.system_prompt_service import SystemPromptService
 from app.module.agent.service.tool_registry import AgentToolRegistry
@@ -145,7 +146,7 @@ logger = logging.getLogger(__name__)
 
 # Pasted briefs and IME output may use full-width brackets around a token.
 CITATION_PATTERN = re.compile(
-    r"[\[［](?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+)[\]］]"
+    r"[\[［](?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+|web:w[1-9]\d{0,8})[\]］]"
 )
 _PAGE_CONTEXT_LINE_WS = re.compile(r"[ \t\f\v]+")
 _PAGE_CONTEXT_BLANK_LINES = re.compile(r"\n{3,}")
@@ -515,6 +516,16 @@ class AgentService:
             entries_has_previous=page.has_previous,
             last_page_context_key=last_page_context_key,
         )
+
+    async def list_web_sources(self, conversation_id: int) -> list[AgentWebSourceSchema]:
+        """Return the short ids of every web page the conversation has seen."""
+        conversation = await self.repository.get_conversation(conversation_id)
+        if conversation is None:
+            raise AgentConversationNotFoundError(conversation_id)
+        return [
+            AgentWebSourceSchema(ref=source.ref, url=source.url, title=source.title)
+            for source in await self.repository.list_web_sources(conversation_id)
+        ]
 
     async def list_entries(
         self,

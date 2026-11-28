@@ -47,7 +47,9 @@ from app.module.agent.domain.tool_args import (
 # v21 removes the unlock gates (memories carry a weight, everyday / past /
 # heart, that the librarian judges for herself), adds the memory-agency note to
 # the persona section, and tells the model about recall_my_memories.
-PROMPT_VERSION = "archive-agent-v21"
+# v22 replaces "cite the url" with short web ids: cite a web page inline as
+# [web:wN], never by pasting a bare url, and never mix web ids with archive labels.
+PROMPT_VERSION = "archive-agent-v22"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -74,7 +76,9 @@ PROMPT_VERSION = "archive-agent-v21"
 # life stories, and past replies with their speakers), labels history windows
 # and history_message output with who said each message, shows each memory's
 # weight, and stops search_knowledge from carrying lore.
-TOOLS_VERSION = "archive-tools-v20"
+# v21 gives every web_search result and web_fetch page a short id (id="w3",
+# stable per conversation) and tells the model to cite it as [web:w3].
+TOOLS_VERSION = "archive-tools-v21"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -244,8 +248,9 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "Use for current external facts not in the archive. Provide both "
             "query and objective. Results are bounded excerpts with title, URL, "
             "score, and excerpt metadata; the <search_hint> element states when "
-            "content was clipped and that web_fetch recovers the rest. Cite the "
-            "URL. Read-only."
+            "content was clipped and that web_fetch recovers the rest. Every "
+            "result has a short id such as w3; cite it inline as [web:w3]. Web "
+            "results are never archive evidence. Read-only."
         ),
         args_model=WebSearchArgs,
         requires_confirmation=False,
@@ -257,7 +262,8 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "Fetch one server-defined page of a public http(s) URL as Markdown. "
             "Call page=1, then page=2, ... until has_more=false. Pages are "
             "server-sized, contiguous, and do not require offsets. Never claim "
-            "content beyond what you actually read. Cite the URL. Read-only."
+            "content beyond what you actually read. The page has a short id such "
+            "as w3; cite it inline as [web:w3]. Read-only."
         ),
         args_model=WebFetchArgs,
         requires_confirmation=False,

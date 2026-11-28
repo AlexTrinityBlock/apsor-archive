@@ -102,7 +102,7 @@ def test_memory_agency_note_is_seeded_editable_and_before_the_address_rule() -> 
 
 def test_recall_tool_is_offered_only_with_a_companion(client: TestClient) -> None:
     assert "recall_my_memories" in {item["function"]["name"] for item in tool_definitions()}
-    assert TOOLS_VERSION == "archive-tools-v20"
+    assert TOOLS_VERSION == "archive-tools-v21"
 
     generator = FakeChatGenerator([text_result("ok."), text_result("ok.")])
     client.app.state.agent_chat_generator = generator

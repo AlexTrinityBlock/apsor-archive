@@ -496,3 +496,54 @@ class AgentRunModel(Base):
         default=0,
         server_default=text("0"),
     )
+
+
+class AgentWebSourceModel(Base):
+    """One public web page the agent saw in a conversation, with its short id.
+
+    ``ref_no`` is the ``N`` in a ``[web:wN]`` citation. Numbers are assigned in
+    order of first appearance and reused when the same URL comes back, so a
+    citation keeps pointing at the same page for the whole conversation.
+    """
+
+    __tablename__ = "agent_web_source"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "conversation_id",
+            "url",
+            name="uq_agent_web_source_conversation_url",
+        ),
+        UniqueConstraint(
+            "user_id",
+            "conversation_id",
+            "ref_no",
+            name="uq_agent_web_source_conversation_ref",
+        ),
+        ForeignKeyConstraint(
+            ["conversation_id", "user_id"],
+            ["agent_conversation.id", "agent_conversation.user_id"],
+            name="fk_agent_web_source_conversation_user",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("ref_no > 0", name="ref_no_positive"),
+        CheckConstraint("char_length(url) BETWEEN 1 AND 2048", name="url_length"),
+        Index("ix_agent_web_source_conversation", "user_id", "conversation_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("app_user.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    conversation_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    ref_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=text("now()"),
+    )

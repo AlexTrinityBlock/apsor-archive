@@ -75,6 +75,7 @@ from app.module.agent.repository.companion_context_repository import (
 )
 from app.module.agent.repository.saved_question_repository import SavedQuestionRepository
 from app.module.agent.repository.system_prompt_repository import SystemPromptRepository
+from app.module.agent.repository.web_source_repository import WebSourceRepository
 from app.module.agent.service.agent_service import AgentService
 from app.module.agent.service.agent_settings_service import AgentSettingsService
 from app.module.agent.service.chat_attachment_service import ChatAttachmentService
@@ -411,6 +412,11 @@ class _ToolServiceScope:
                 ),
                 companion_context=companion_context,
                 companion_memories=companion_memories,
+                web_sources=(
+                    WebSourceRepository(session, self.user_id, conversation_id)
+                    if conversation_id is not None
+                    else None
+                ),
             )
             yield services
 
