@@ -37,6 +37,7 @@
   - [Per-account model assignment](#per-account-model-assignment)
   - [Web research tools](#web-research-tools)
   - [Frequently used prompts](#frequently-used-prompts)
+  - [Chat companion](#chat-companion)
   - [Agent runtime settings](#agent-runtime-settings)
   - [Ingestion runtime](#ingestion-runtime)
   - [Local development](#local-development)
@@ -1841,6 +1842,10 @@ user context exists; global config tables are read-all/root-write.
 - `file_thumbnail`: one tiny WebP per file version, keyed by `file_id`, with
   `status` (`ready`, `none`, or `failed`), pixel size, SHA-256, generator
   version, and attempt count. It cascades with its file.
+- `companion` / `companion_frame` / `companion_preference`: an account's custom
+  chat companions, their encoded AVIF (or WebP) frames per action with position,
+  size, and SHA-256, and the account's companion choice, visibility, motion
+  level, and position.
 - `ingest_config`: one row (`id=1`) with the validated worker poll, extraction,
   in-flight, embedding, and chunk-size settings. It is not a chunk source; the
   queue references the file that is eventually published.
@@ -1920,7 +1925,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `c7a3e9f1d5b2`. The migrations after `agent_config` on
+The latest migration is `a7d3c9e1f5b2`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -2029,11 +2034,16 @@ this branch are:
   MinIO); `rustfs` is only a configuration alias and `r2` stays distinct. The
   downgrade restores the two-value checks and fails while any row still records
   `s3`;
-- `c7a3e9f1d5b2` (current head) creates the private `file_thumbnail` table:
+- `c7a3e9f1d5b2` creates the private `file_thumbnail` table:
   one tiny WebP per file version (at most 32 KiB, 512 px), owner-safe composite
   foreign key to `file` with `ON DELETE CASCADE`, forced RLS with an owner
   policy, and `apsor_app` grants. Existing files are filled in by the worker
-  backfill. The downgrade drops the table.
+  backfill. The downgrade drops the table;
+- `a7d3c9e1f5b2` (current head) creates the private `companion`,
+  `companion_frame`, and `companion_preference` tables, each with `user_id`,
+  forced owner-only RLS, and `apsor_app` grants. Frames reference their
+  companion through an owner-safe composite foreign key and cascade with it; the
+  preference row is keyed by `user_id`. The downgrade drops the three tables.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable

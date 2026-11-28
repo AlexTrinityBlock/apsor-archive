@@ -37,6 +37,7 @@
   - [每个账户的模型分配](#每个账户的模型分配)
   - [网页研究工具](#网页研究工具)
   - [常用提示词](#常用提示词)
+  - [聊天伙伴](#聊天伙伴)
   - [Agent 运行时设置](#agent-运行时设置)
   - [摄取运行时](#摄取运行时)
   - [本地开发](#本地开发)
@@ -509,6 +510,19 @@ Agent 会在工具结果本身中看到 `view="compressed"`、覆盖窗口和原
 并在该账户的 `prompts` 缓存作用域下缓存 60 秒。点击快捷方式会把
 完整的提示词文本填入输入框；它不会发送消息。API 是
 `GET/POST/PUT/DELETE /api/v1/settings/frequent-prompts`。
+
+### 聊天伙伴
+
+一位小巧的傀儡图书馆员可以站在聊天旁并回应 Agent：模型推理时它会思考，执行
+`search_knowledge` 时会搜索，在对应的工具期间会阅读、书写、计算、浏览和展示；
+Agent 也可以调用只读的 `companion_action` 工具做出明确的手势。内置角色随前端
+一起发布。每个账户还可以创建最多 20 个私有自定义伙伴，每个动作最多上传 12 张
+图像（PNG、JPEG、WebP 或 AVIF，每张最多 8 MB）；服务器会把每张图像重新编码为
+符合 384x576 和 40 KB 的 AVIF（只有在无法使用 AVIF 编码器时才用 WebP），并移除
+其元数据。每个账户的偏好会存储所选的伙伴（`preset:<id>` 或 `custom:<id>`）、
+是否显示、动态程度（`full`、`reduced`、`off`）以及归一化的位置。API 位于
+`/api/v1/companions` 之下（列出、创建、更新、删除、上传帧、帧排序、删除帧、
+帧图像，以及 `GET/PATCH /api/v1/companions/preference`）。
 
 ### Agent 运行时设置
 
@@ -1634,6 +1648,9 @@ agent_entry ──────┘  (source_kind = history)
 - `file_thumbnail`：每个文件版本一张极小的 WebP，以 `file_id` 为键，带有
   `status`（`ready`、`none` 或 `failed`）、像素尺寸、SHA-256、生成器版本和
   尝试次数。它会随其文件一起级联删除。
+- `companion` / `companion_frame` / `companion_preference`：账户的自定义聊天
+  伙伴、每个动作经编码的 AVIF（或 WebP）帧及其位置、大小和 SHA-256，以及账户
+  的伙伴选择、是否显示、动态程度和位置。
 - `ingest_config`：一行（`id=1`），带有经过校验的 worker 轮询、
   提取、在途、嵌入和分块大小设置。它不是分块来源；队列引用最终
   发布的文件。
@@ -1703,7 +1720,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `c7a3e9f1d5b2`。此分支上
+最新的迁移是 `a7d3c9e1f5b2`。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1804,10 +1821,14 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   上的 `storage_backend` 检查，允许 `s3`（RustFS、AWS S3、MinIO）；`rustfs`
   只是配置别名，`r2` 仍是独立的值。降级会恢复只有两个值的检查，并在仍有行
   记录 `s3` 时失败；
-- `c7a3e9f1d5b2`（当前 head）创建私有的 `file_thumbnail` 表：每个文件版本
+- `c7a3e9f1d5b2` 创建私有的 `file_thumbnail` 表：每个文件版本
   一张极小的 WebP（最多 32 KiB、512 px）、指向 `file` 且带
   `ON DELETE CASCADE` 的所有者安全复合外键、带所有者策略的强制 RLS，以及
-  `apsor_app` 授权。现有文件由 worker 回填补上。降级会删除该表。
+  `apsor_app` 授权。现有文件由 worker 回填补上。降级会删除该表；
+- `a7d3c9e1f5b2`（当前 head）创建私有的 `companion`、`companion_frame` 和
+  `companion_preference` 表，每张都带 `user_id`、仅限所有者的强制 RLS 和
+  `apsor_app` 授权。帧通过所有者安全的复合外键引用其伙伴并一起级联删除；
+  偏好行以 `user_id` 为键。降级会删除这三张表。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，

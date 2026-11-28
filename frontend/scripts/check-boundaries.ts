@@ -24,6 +24,8 @@ const SHARED_AREAS = new Set([
   // Supporting domains consumed by several workspaces (see src/app/AGENTS.md).
   "viewer",
   "auth",
+  // The floating chat companion: mounted by chat, configured by settings.
+  "companion",
 ]);
 
 /**

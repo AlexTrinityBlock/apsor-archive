@@ -37,6 +37,7 @@
   - [每位帳號的模型指派](#每位帳號的模型指派)
   - [網路研究工具](#網路研究工具)
   - [常用提示詞](#常用提示詞)
+  - [對話夥伴](#對話夥伴)
   - [代理執行階段設定](#代理執行階段設定)
   - [資料匯入執行階段](#資料匯入執行階段)
   - [本機開發](#本機開發)
@@ -507,6 +508,19 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 `prompts` 快取範圍下快取 60 秒。點擊捷徑會以完整的提示詞文字填入輸入區；
 它不會送出訊息。API 為
 `GET/POST/PUT/DELETE /api/v1/settings/frequent-prompts`。
+
+### 對話夥伴
+
+一位小巧的傀儡圖書館員可以站在對話旁並回應代理：模型推理時它會思考，執行
+`search_knowledge` 時會搜尋，在對應的工具期間會閱讀、書寫、計算、瀏覽與展示；
+代理也可以呼叫唯讀的 `companion_action` 工具做出明確的手勢。內建角色隨前端
+一起發佈。每個帳號還可以建立最多 20 個私人自訂夥伴，每個動作最多上傳 12 張
+圖片（PNG、JPEG、WebP 或 AVIF，每張最多 8 MB）；伺服器會把每張圖片重新編碼為
+符合 384x576 與 40 KB 的 AVIF（只有在無法使用 AVIF 編碼器時才用 WebP），並移除
+其中繼資料。每個帳號的偏好會儲存所選的夥伴（`preset:<id>` 或 `custom:<id>`）、
+是否顯示、動態程度（`full`、`reduced`、`off`）以及正規化的位置。API 位於
+`/api/v1/companions` 之下（列出、建立、更新、刪除、上傳影格、影格排序、刪除
+影格、影格圖片，以及 `GET/PATCH /api/v1/companions/preference`）。
 
 ### 代理執行階段設定
 
@@ -1615,6 +1629,9 @@ agent_entry ──────┘  (source_kind = history)
 - `file_thumbnail`：每個檔案版本一張極小的 WebP，以 `file_id` 為鍵，帶有
   `status`（`ready`、`none` 或 `failed`）、像素尺寸、SHA-256、產生器版本與
   嘗試次數。它會隨其檔案一併串聯刪除。
+- `companion` / `companion_frame` / `companion_preference`：帳號的自訂對話
+  夥伴、每個動作經編碼的 AVIF（或 WebP）影格及其位置、大小與 SHA-256，以及
+  帳號的夥伴選擇、是否顯示、動態程度與位置。
 - `ingest_config`：一列（`id=1`），帶有經驗證的 worker 輪詢、擷取、
   進行中工作、嵌入與分塊大小設定。它不是分塊來源；佇列會參照最終發佈
   的檔案。
@@ -1684,7 +1701,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
 圖說、已儲存的原始檔、路徑清單與搜尋結果；其 R2 案例會以假用戶端演練
 轉接器，並在沒有網路存取的情況下檢查缺少物件的轉譯。
 
-最新的移轉是 `c7a3e9f1d5b2`。此分支上 `agent_config` 之後的移轉為：
+最新的移轉是 `a7d3c9e1f5b2`。此分支上 `agent_config` 之後的移轉為：
 
 - `f3c8d5a1b7e2` 移除整回合的工具結果預算；
 - `a6e2f9c4d1b8` 將單一結果的工具字元上限提高至 100,000；
@@ -1784,10 +1801,14 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   上的 `storage_backend` 檢查，允許 `s3`（RustFS、AWS S3、MinIO）；`rustfs`
   只是設定別名，`r2` 仍是獨立的值。降級會還原只有兩個值的檢查，且在仍有
   資料列記錄 `s3` 時失敗；
-- `c7a3e9f1d5b2`（目前 head）建立私人的 `file_thumbnail` 資料表：每個檔案
+- `c7a3e9f1d5b2` 建立私人的 `file_thumbnail` 資料表：每個檔案
   版本一張極小的 WebP（最多 32 KiB、512 px）、指向 `file` 且帶
   `ON DELETE CASCADE` 的擁有者安全複合外鍵、附擁有者原則的強制 RLS，以及
-  `apsor_app` 授權。既有檔案由 worker 回填補上。降級會移除該資料表。
+  `apsor_app` 授權。既有檔案由 worker 回填補上。降級會移除該資料表；
+- `a7d3c9e1f5b2`（目前 head）建立私人的 `companion`、`companion_frame` 與
+  `companion_preference` 資料表，每張都帶 `user_id`、僅限擁有者的強制 RLS 與
+  `apsor_app` 授權。影格透過擁有者安全的複合外鍵參照其夥伴並一併串聯刪除；
+  偏好資料列以 `user_id` 為鍵。降級會移除這三張資料表。
 
 更早之前，`e7a1c4b9d2f6` 建立了單例 `agent_config` 資料表並植入資料列
 `1`。整合測試套件會在可拋棄的 PostgreSQL 資料庫上執行移轉鏈，因此會
