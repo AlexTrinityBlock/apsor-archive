@@ -3127,8 +3127,12 @@ def test_agent_status_system_message_exposes_runtime_limits(
         "compaction_at",
         "compaction_in",
     }
-    assert set(first) == expected_keys
-    assert re.findall(r' ([a-z_]+)="', first_content) == sorted(expected_keys)
+    # The default test deployment has no web provider, so the block also names
+    # the withheld web tools.
+    assert set(first) - {"unavailable_tools"} == expected_keys
+    assert re.findall(r' ([a-z_]+)="', first_content) == sorted(
+        expected_keys | {"unavailable_tools"}
+    )
 
     runtime = client.get("/api/v1/agent/settings").json()["config"]
     context_limit = runtime["context_window_tokens"]
@@ -3145,7 +3149,9 @@ def test_agent_status_system_message_exposes_runtime_limits(
     assert "conversation_id" not in first_content
     assert "run_id" not in first_content
     assert "tool_count" not in first_content
-    assert "web_search" not in first_content
+    # Provider identity never appears; only the withheld tool names may.
+    assert "web_search_provider" not in first_content
+    assert first["unavailable_tools"] == "web_fetch,web_search"
     assert "prompt_version" not in first_content
     assert "tools_version" not in first_content
     assert "context_window_tokens" not in first_content
@@ -3159,7 +3165,7 @@ def test_agent_status_system_message_exposes_runtime_limits(
     second_block = fake.requests[1].messages[-1]
     assert second_block["role"] == "system"
     second = _agent_status_attributes(fake.requests[1])
-    assert set(second) == expected_keys
+    assert set(second) - {"unavailable_tools"} == expected_keys
     second_used = int(second["context_used"])
     assert second_used > context_used
     assert int(second["context_limit"]) == context_limit

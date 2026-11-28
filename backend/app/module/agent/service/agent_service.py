@@ -54,7 +54,11 @@ from app.module.agent.domain.compaction_domain import (
     render_compaction_prompt,
 )
 from app.module.agent.domain.companion_persona_domain import CompanionPersona
-from app.module.agent.domain.context_domain import build_context, render_tool_result
+from app.module.agent.domain.context_domain import (
+    build_context,
+    prefix_hash,
+    render_tool_result,
+)
 from app.module.agent.domain.plot_spec_domain import PlotLimits
 from app.module.agent.domain.system_entry_domain import build_system_data, build_system_model
 from app.module.agent.domain.time_context_domain import current_time_block
@@ -809,13 +813,14 @@ class AgentService:
         self._withheld_tools = tuple(sorted(unavailable))
         if not unavailable:
             return context
+        offered = [
+            tool for tool in context.tools if _tool_definition_name(tool) not in unavailable
+        ]
+        # The prefix hash describes what the provider actually receives.
         return replace(
             context,
-            tools=[
-                tool
-                for tool in context.tools
-                if _tool_definition_name(tool) not in unavailable
-            ],
+            tools=offered,
+            cache_prefix_hash=prefix_hash(context.system_message, offered),
         )
 
     async def _enforce_context_budget(
