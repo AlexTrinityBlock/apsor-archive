@@ -63,7 +63,11 @@ import {
   ChatComposer,
   type ChatComposerHandle,
 } from "./component/ChatComposer";
-import { ChatHeader, type ChatPane } from "./component/ChatHeader";
+import {
+  CHAT_PANE_IDS,
+  ChatHeader,
+  type ChatPane,
+} from "./component/ChatHeader";
 import { ChatInspector, type InspectorTab } from "./component/ChatInspector";
 import { ChatIntro } from "./component/ChatIntro";
 import { ChatThread } from "./component/ChatThread";
@@ -1466,6 +1470,7 @@ export function ChatPage() {
 
   const streamPanel = (
     <section
+      id={CHAT_PANE_IDS.thread}
       className="panel chat-stream-panel"
       aria-label={t("chat.page.streamAria")}
     >
