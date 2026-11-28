@@ -119,6 +119,6 @@ be counting.*
   - the Backward Clock;
   - stopping for Vellum;
   - winding clocks for those who stopped coming;
-  - the ticking impression in the door;
+  - the palm print in the lintel that seems to tick;
   - the gap in the Ledger;
   - the 2:11 tug.
