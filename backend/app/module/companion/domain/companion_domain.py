@@ -8,6 +8,8 @@ from app.shared.companion_action import COMPANION_ACTIONS
 
 CompanionGender = Literal["female", "male", "other"]
 CompanionMotion = Literal["full", "reduced", "off"]
+CompanionSize = Literal["compact", "medium", "full"]
+CompanionOpacityMode = Literal["opaque", "translucent", "auto"]
 
 COMPANION_GENDERS: tuple[str, ...] = ("female", "male", "other")
 COMPANION_MOTIONS: tuple[str, ...] = ("full", "reduced", "off")
@@ -92,7 +94,9 @@ __all__ = [
     "SELECTION_MAX_CHARS",
     "CompanionGender",
     "CompanionMotion",
+    "CompanionOpacityMode",
     "CompanionSelection",
+    "CompanionSize",
     "frame_storage_key",
     "frame_version",
     "is_companion_action",

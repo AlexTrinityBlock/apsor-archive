@@ -93,6 +93,8 @@ class CompanionRepositoryProtocol(Protocol):
         selected: str | None,
         enabled: bool,
         motion: str,
+        size: str,
+        opacity_mode: str,
         position_x: float | None,
         position_y: float | None,
         now: datetime,

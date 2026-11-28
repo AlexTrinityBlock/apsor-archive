@@ -209,6 +209,8 @@ def test_companion_preference_round_trip(client: TestClient) -> None:
         "selected": None,
         "enabled": True,
         "motion": "full",
+        "size": "full",
+        "opacity_mode": "auto",
         "position": None,
         "updated_at": None,
     }
@@ -227,12 +229,27 @@ def test_companion_preference_round_trip(client: TestClient) -> None:
     assert motion.json()["selected"] == "preset:archivist-elise"
     assert motion.json()["motion"] == "reduced"
     assert motion.json()["enabled"] is False
+    assert motion.json()["size"] == "full"
+
+    look = client.patch(f"{BASE}/preference", json={"size": "compact", "opacity_mode": "opaque"})
+    assert look.status_code == 200, look.text
+    assert look.json()["size"] == "compact"
+    assert look.json()["opacity_mode"] == "opaque"
+    # Omitted fields keep their stored values.
+    assert look.json()["motion"] == "reduced"
+    kept = client.patch(f"{BASE}/preference", json={"enabled": True})
+    assert kept.json()["size"] == "compact"
+    assert kept.json()["opacity_mode"] == "opaque"
 
     for invalid in (
         {"selected": "preset:Bad Id"},
         {"selected": "custom:abc"},
         {"selected": "other:1"},
         {"motion": "wild"},
+        {"size": "huge"},
+        {"size": None},
+        {"opacity_mode": "ghost"},
+        {"opacity_mode": None},
         {"enabled": None},
         {"position": {"x": 1.5, "y": 0}},
     ):

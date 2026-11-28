@@ -293,6 +293,8 @@ class CompanionService:
         selected = current.selected if current is not None else None
         enabled = current.enabled if current is not None else True
         motion = current.motion if current is not None else "full"
+        size = current.size if current is not None else "full"
+        opacity_mode = current.opacity_mode if current is not None else "auto"
         position_x = current.position_x if current is not None else None
         position_y = current.position_y if current is not None else None
 
@@ -304,6 +306,10 @@ class CompanionService:
             enabled = payload.enabled
         if "motion" in fields and payload.motion is not None:
             motion = payload.motion
+        if "size" in fields and payload.size is not None:
+            size = payload.size
+        if "opacity_mode" in fields and payload.opacity_mode is not None:
+            opacity_mode = payload.opacity_mode
         if "position" in fields:
             position_x = payload.position.x if payload.position is not None else None
             position_y = payload.position.y if payload.position is not None else None
@@ -313,6 +319,8 @@ class CompanionService:
             selected=selected,
             enabled=enabled,
             motion=motion,
+            size=size,
+            opacity_mode=opacity_mode,
             position_x=position_x,
             position_y=position_y,
             now=utcnow(),
@@ -328,6 +336,8 @@ class CompanionService:
                 selected=None,
                 enabled=True,
                 motion="full",
+                size="full",
+                opacity_mode="auto",
                 position=None,
                 updated_at=None,
             )
@@ -344,6 +354,8 @@ class CompanionService:
             selected=selected,
             enabled=preference.enabled,
             motion=preference.motion,  # type: ignore[arg-type]
+            size=preference.size,  # type: ignore[arg-type]
+            opacity_mode=preference.opacity_mode,  # type: ignore[arg-type]
             position=position,
             updated_at=preference.updated_at,
         )
