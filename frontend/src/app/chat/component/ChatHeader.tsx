@@ -181,7 +181,7 @@ export function ChatHeader({
       <div className="chat-header__titles" title={details}>
         <h1 className="chat-header__title">
           <ConversationTitle
-            key={`${conversationId ?? "new"}:${title}`}
+            key={conversationId ?? "new"}
             title={title}
             editable={conversationId !== null && !archived}
             onRename={onRename}

@@ -13,7 +13,10 @@ export const CHAT_LAYOUT_SELECTORS = {
   composer: ".chat-composer-dock",
   column: ".chat-stream__inner",
   scroller: ".chat-stream__scroll",
-  content: ".app-main",
+  // The companion's free space is the chat panel, not the whole main area:
+  // the conversation rail and the inspector are content too, so a gutter
+  // measured against `.app-main` would count the inspector as empty room.
+  content: ".chat-stream-panel",
 } as const;
 
 const POLL_MS = 450;
