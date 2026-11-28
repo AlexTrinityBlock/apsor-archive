@@ -1859,7 +1859,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   层级的完成对话数。自定义伙伴的故事会随伙伴一起级联删除。降级会删除这三张表。
 - `c5f1a8d3e7b4` 为 `companion_preference` 新增 `size`（`compact`、
   `medium`、`full`，默认 `full`）与 `opacity_mode`（`opaque`、`translucent`、
-  `auto`，默认 `auto`），附检查约束与服务器默认值。RLS 与授权不变；降级会删除
+  `auto`，默认 `opaque`），附检查约束与服务器默认值。RLS 与授权不变；降级会删除
   这两个字段。
 - `d2b6f4a8c1e9`（当前 head）为 `companion_preference` 新增可为 NULL 的
   `scale` 浮点数（0 为精简、1 为完整），用于直接在屏幕上缩放，附范围检查。

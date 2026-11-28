@@ -16,7 +16,12 @@ from collections import OrderedDict
 from collections.abc import Callable
 from typing import Any, Protocol
 
-from app.module.companion.domain.story_domain import STORY_LOCALES, is_semantic_embedder
+from app.module.companion.domain.recall_domain import (
+    is_semantic_embedder,
+)
+from app.module.companion.domain.story_domain import (
+    STORY_LOCALES,
+)
 from app.module.companion.protocol.companion_story_protocol import LoreEmbedderProtocol
 from app.module.companion.service.preset_lore_catalog import load_presets
 

@@ -297,7 +297,7 @@ class CompanionService:
         motion = current.motion if current is not None else "full"
         size = current.size if current is not None else "full"
         scale = current.scale if current is not None else None
-        opacity_mode = current.opacity_mode if current is not None else "auto"
+        opacity_mode = current.opacity_mode if current is not None else "opaque"
         position_x = current.position_x if current is not None else None
         position_y = current.position_y if current is not None else None
 
@@ -351,7 +351,7 @@ class CompanionService:
                 motion="full",
                 size="full",
                 scale=None,
-                opacity_mode="auto",
+                opacity_mode="opaque",
                 position=None,
                 updated_at=None,
             )

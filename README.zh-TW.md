@@ -1840,7 +1840,7 @@ PUT／重設、驗證、後續執行使用的執行階段快照、自動與手�
   資料表。
 - `c5f1a8d3e7b4` 為 `companion_preference` 新增 `size`（`compact`、
   `medium`、`full`，預設 `full`）與 `opacity_mode`（`opaque`、`translucent`、
-  `auto`，預設 `auto`），附檢查約束與伺服器預設值。RLS 與授權不變；降級會刪除
+  `auto`，預設 `opaque`），附檢查約束與伺服器預設值。RLS 與授權不變；降級會刪除
   這兩個欄位。
 - `d2b6f4a8c1e9`（目前 head）為 `companion_preference` 新增可為 NULL 的
   `scale` 浮點數（0 為精簡、1 為完整），供直接在畫面上縮放使用，附範圍檢查。

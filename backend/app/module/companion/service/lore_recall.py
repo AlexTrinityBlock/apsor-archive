@@ -22,10 +22,8 @@ import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from app.module.companion.domain.story_domain import (
-    LoreFragment,
+from app.module.companion.domain.recall_domain import (
     RecalledFragment,
-    StoryLocale,
     cosine,
     is_self_query,
     is_semantic_embedder,
@@ -34,6 +32,10 @@ from app.module.companion.domain.story_domain import (
     rank_self_query,
     rank_topical,
     story_moment_due,
+)
+from app.module.companion.domain.story_domain import (
+    LoreFragment,
+    StoryLocale,
 )
 from app.module.companion.exception.domain_error import CompanionRefNotFoundError
 from app.module.companion.protocol.companion_story_protocol import (

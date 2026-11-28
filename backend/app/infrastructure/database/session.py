@@ -192,7 +192,10 @@ async def apply_admin_scope(session: AsyncSession, scope: str) -> None:
     if scope not in ADMIN_SCOPES:
         raise ValueError(f"Unsupported admin scope: {scope!r}")
     role = (
-        await session.execute(text("SELECT current_setting(:name, true)"), {"name": _USER_ROLE_SETTING})
+        await session.execute(
+            text("SELECT current_setting(:name, true)"),
+            {"name": _USER_ROLE_SETTING},
+        )
     ).scalar_one_or_none()
     if role != ROLE_ROOT:
         raise PermissionError("admin scope requires the root role")

@@ -17,6 +17,8 @@ from app.module.auth.schema.auth_schema import UserSchema
 from app.module.companion.domain.story_domain import StoryLocale
 from app.module.companion.protocol.companion_protocol import CompanionStorageProtocol
 from app.module.companion.protocol.companion_story_protocol import (
+    CompanionContentProviderProtocol,
+    CompanionPolicyProviderProtocol,
     CompanionStoryConfigProviderProtocol,
     LoreEmbedderProtocol,
     LoreEmbeddingQuotaProtocol,
@@ -33,7 +35,11 @@ from app.module.companion.service.lore_vectors import (
     LoreVectorStore,
     LoreVectorWarmer,
 )
-from app.module.companion.service.story_config import StaticStoryConfigProvider
+from app.module.companion.service.story_config import (
+    StaticCompanionContentProvider,
+    StaticCompanionPolicyProvider,
+    StaticStoryConfigProvider,
+)
 
 
 def get_companion_service(
@@ -90,6 +96,30 @@ def build_story_config_provider(state: State) -> CompanionStoryConfigProviderPro
     return StaticStoryConfigProvider()
 
 
+def build_content_provider(state: State) -> CompanionContentProviderProtocol:
+    """Return the preset/canon/world-doc provider (``app.state`` may install one).
+
+    The database-backed provider is installed on ``app.state.companion_content``;
+    until then the shipped seed files are served.
+    """
+    provider = getattr(state, "companion_content", None)
+    if provider is not None:
+        return cast(CompanionContentProviderProtocol, provider)
+    return StaticCompanionContentProvider()
+
+
+def build_policy_provider(state: State) -> CompanionPolicyProviderProtocol:
+    """Return root's per-account companion policy provider.
+
+    The database-backed provider is installed on ``app.state.companion_policy``;
+    until then every account gets the unrestricted default.
+    """
+    provider = getattr(state, "companion_policy", None)
+    if provider is not None:
+        return cast(CompanionPolicyProviderProtocol, provider)
+    return StaticCompanionPolicyProvider()
+
+
 def build_lore_vector_warmer(state: State) -> LoreVectorWarmer:
     """Build the worker loop that embeds shipped preset lore ahead of time."""
     return LoreVectorWarmer(
@@ -121,8 +151,10 @@ def build_lore_recall(
 
 __all__ = [
     "build_companion_story_service",
+    "build_content_provider",
     "build_lore_recall",
     "build_lore_vector_warmer",
+    "build_policy_provider",
     "build_story_config_provider",
     "get_companion_service",
     "get_companion_story_service",

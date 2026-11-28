@@ -39,7 +39,7 @@ export const DEFAULT_PREFERENCE: CompanionPreference = {
   motion: "full",
   size: "full",
   scale: null,
-  opacityMode: "auto",
+  opacityMode: "opaque",
 };
 
 export function readSize(value: unknown): CompanionSize {
@@ -49,7 +49,7 @@ export function readSize(value: unknown): CompanionSize {
 export function readOpacityMode(value: unknown): CompanionOpacityMode {
   return COMPANION_OPACITY_MODES.includes(value as CompanionOpacityMode)
     ? (value as CompanionOpacityMode)
-    : "auto";
+    : "opaque";
 }
 
 export function readPreference(value: unknown): CompanionPreference {

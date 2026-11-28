@@ -14,6 +14,14 @@ from app.module.agent.test.fake_chat_generator import (
     text_result,
     tool_call_result,
 )
+from app.module.companion.domain.recall_domain import (
+    is_self_query,
+    is_semantic_embedder,
+    next_untold,
+    rank_self_query,
+    rank_topical,
+    story_moment_due,
+)
 from app.module.companion.domain.story_domain import (
     DEFAULT_STORY_CONFIG,
     FAMILIAR_UNLOCK_RUNS,
@@ -25,13 +33,7 @@ from app.module.companion.domain.story_domain import (
     CompanionStoryConfig,
     LoreFragment,
     ToldRecord,
-    is_self_query,
-    is_semantic_embedder,
-    next_untold,
     normalize_locale,
-    rank_self_query,
-    rank_topical,
-    story_moment_due,
     unlocked_tiers,
 )
 from app.module.companion.service import lore_vectors
@@ -600,7 +602,7 @@ def test_shipped_lore_loads_in_every_locale() -> None:
         preset_id: [fragment.key for fragment in story.fragments]
         for preset_id, story in english.items()
     }
-    seed_dir = Path(load_presets.__code__.co_filename).resolve().parents[1] / "lore"
+    from app.module.companion.service.preset_lore_catalog import LORE_DIRECTORY as seed_dir
     for preset_id, ids in english_ids.items():
         seed = json.loads((seed_dir / f"{preset_id}.json").read_text(encoding="utf-8"))
         assert ids == [fragment["id"] for fragment in seed["fragments"]]

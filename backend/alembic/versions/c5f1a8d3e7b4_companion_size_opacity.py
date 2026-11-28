@@ -9,7 +9,7 @@ have server defaults, so existing rows keep working without a backfill; the
 table's owner-only RLS policy and ``apsor_app`` grants are unchanged.
 
 - ``size``: ``compact``, ``medium``, or ``full`` (default ``full``).
-- ``opacity_mode``: ``opaque``, ``translucent``, or ``auto`` (default ``auto``).
+- ``opacity_mode``: ``opaque``, ``translucent``, or ``auto`` (default ``opaque``).
 """
 
 from collections.abc import Sequence
@@ -34,7 +34,7 @@ def upgrade() -> None:
         sa.Column(
             "opacity_mode",
             sa.String(length=16),
-            server_default=sa.text("'auto'"),
+            server_default=sa.text("'opaque'"),
             nullable=False,
         ),
     )

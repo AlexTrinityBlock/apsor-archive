@@ -4,7 +4,13 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
-from app.module.companion.domain.story_domain import CompanionStoryConfig
+from app.module.companion.domain.companion_policy_domain import AccountCompanionPolicy
+from app.module.companion.domain.story_domain import (
+    CanonEntry,
+    CompanionRuntimeConfig,
+    PresetStory,
+    WorldDoc,
+)
 from app.module.companion.model.companion_model import (
     CompanionModel,
     CompanionPreferenceModel,
@@ -96,9 +102,37 @@ class CompanionLookupProtocol(Protocol):
 
 
 class CompanionStoryConfigProviderProtocol(Protocol):
-    """Supply the live story tunables (root-editable; seeded from defaults)."""
+    """Supply the live story tunables and templates (root-editable; seeded).
 
-    async def load(self) -> CompanionStoryConfig: ...
+    ``user_id=None`` returns the global configuration; an account id overlays
+    root's per-account overrides (``companion_user_config``).
+    """
+
+    async def load(self, user_id: int | None = None) -> CompanionRuntimeConfig: ...
+
+
+class CompanionContentProviderProtocol(Protocol):
+    """Supply preset stories, canon, and world documents (DB-backed; seeded)."""
+
+    async def presets(self, locale: str) -> list[PresetStory]: ...
+
+    async def preset(self, preset_id: str, locale: str) -> PresetStory | None: ...
+
+    async def enabled_preset_ids(self) -> list[str]: ...
+
+    async def global_default_preset_id(self) -> str: ...
+
+    async def canon(self, locale: str) -> dict[str, CanonEntry]: ...
+
+    async def world_doc(self, doc_key: str, locale: str) -> WorldDoc | None: ...
+
+    async def content_version(self) -> int: ...
+
+
+class CompanionPolicyProviderProtocol(Protocol):
+    """Supply root's companion policy for one account (defaults when unset)."""
+
+    async def load(self, user_id: int) -> AccountCompanionPolicy: ...
 
 
 class LoreEmbedderProtocol(Protocol):
@@ -119,7 +153,9 @@ class LoreEmbeddingQuotaProtocol(Protocol):
 
 
 __all__ = [
+    "CompanionContentProviderProtocol",
     "CompanionLookupProtocol",
+    "CompanionPolicyProviderProtocol",
     "CompanionStoryConfigProviderProtocol",
     "CompanionStoryRepositoryProtocol",
     "LoreEmbedderProtocol",

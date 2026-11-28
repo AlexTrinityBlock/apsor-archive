@@ -1,6 +1,6 @@
 # frontend/src/app/companion/ — Agent Guide
 
-The chat companion: a free-standing librarian (no strings or control bar) beside the chat box that mirrors what the agent is doing, and carries a persona and lore. It is a supporting domain (like `viewer/`), not a route. Chat mounts it once; the `companions/` workspace (`/companion`) is its per-account configuration page: choice, enable, size (compact/medium/full, default full), opacity mode (opaque/translucent/auto, default auto), motion, story, and custom companions.
+The chat companion: a free-standing librarian (no strings or control bar) beside the chat box that mirrors what the agent is doing, and carries a persona and lore. It is a supporting domain (like `viewer/`), not a route. Chat mounts it once; the `companions/` workspace (`/companion`) is its per-account configuration page: choice, enable, size (compact/medium/full, default full), opacity mode (opaque/translucent/auto, default opaque), motion, story, and custom companions.
 
 ## Architecture
 
