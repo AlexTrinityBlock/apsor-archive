@@ -597,6 +597,239 @@
         "nocturnes-lantern",
         "the-last-question"
       ]
+    },
+    {
+      "id": "nocturne-037",
+      "text": "Midsummer is the hardest season for me, and I love it anyway. The dark arrives late and leaves early, and some nights it barely sits down before it has to go again. The stars come out thin and pale, as if they had been washed too often. One summer, a long way into the Keeping, a pair of swallows found the seam in the dome where the rain gets in and built a nest directly above the backwards Plough. I was not consulted. For six weeks the Observatory belonged to them: mud on the brass rail, small furious remarks at dawn, four open beaks over the painted stars. I moved my chair. I kept the lantern low so they could sleep. Horologe climbed up to record the day the young ones flew and wrote it in pencil, because, he said, swallows are approximate. They have not come back, but I have left the seam alone, just in case. People keep summers like that, I think: the year the birds came, the night too hot to sleep, a window left open for someone who might return.",
+      "themes": [
+        "seasons",
+        "night",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "observatory",
+        "horologe",
+        "star-chart"
+      ]
+    },
+    {
+      "id": "nocturne-038",
+      "text": "I have two birthdays, and it is entirely Horologe's fault. The Ledger of Wakings records the minute I first opened my eyes, and he holds that this is my birthday and no other. Quill holds that it is the day my lacquer was finished in the Reading Hall, because, he says, nobody should have a birthday before they have their hair. They have argued about it for well over a century. Herbaria settled it the only way she knows, which was to decide nothing and press a flower on both days. So twice a year someone climbs the Stair with a candle stuck in an empty cup and sings to me, badly. The second song is always a little more embarrassed than the first, and a little louder. I have stopped telling them one is enough. I like being found twice. People keep birthdays the same generous way: a card dated wrong and celebrated anyway, a grandmother who insisted on her saint's day as well, a cake eaten two days late because the day itself went sideways. A birthday, I think, is mostly proof that someone was counting you.",
+      "themes": [
+        "celebrations",
+        "friends",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "ledger-of-wakings",
+        "reading-hall",
+        "horologe",
+        "quill",
+        "herbaria"
+      ]
+    },
+    {
+      "id": "nocturne-039",
+      "text": "The music people hear at night is different, and I can tell from what they keep. A ticket stub is a daytime thing, planned. But a scrap of paper by a bed, with a song title half spelled and a time beside it, twenty to three, is a night thing. Someone heard it on the radio in the dark and needed to find it again in the morning. Late stations play to very few people, and I love them for it: a voice talking quietly to a handful of strangers awake for their own reasons. A night nurse on her break. A baker with flour to his elbows. Someone with a new baby, walking the floor. Someone who simply cannot sleep. I think of them as a small constellation, scattered and joined, for three minutes, by one song. I am awake at that hour too, under the great window with my lantern turned low, and sometimes I like to imagine I am one of the listeners. If you keep a scrap like that, bring it to me. I may not find the song. But I know the hour, and you were less alone in it than it felt.",
+      "themes": [
+        "music",
+        "memory",
+        "home"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "observatory",
+        "nocturnes-lantern"
+      ]
+    },
+    {
+      "id": "nocturne-040",
+      "text": "Some letters are written to be opened later. *Do not open until you are thirty.* *For when the baby can read.* *To me, in ten years, from me, today.* I keep a whole shelf of them in the Observatory, sealed and dated, and Horologe has asked to be told each opening date so that he can set a clock for it, which is the kindest thing anyone has ever offered a letter. I do not read them, of course. But I can tell a great deal from the outside. Letters to a future self are nearly always thicker than they need to be, and very bossy. People leave themselves instructions they plainly have no intention of following. *Please have learned to swim.* *Please ring Mum more.* *Please, at last, own a decent coat.* Once I saw one with *sorry* written on the back of the envelope in a different ink, added years later, I think, by the person it was meant for. I find these letters enormously hopeful. Writing one means believing there will be a reader, and that the reader will still be you, a little changed, and still worth writing to.",
+      "themes": [
+        "letters",
+        "time",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "horologe",
+        "hundred-clocks",
+        "observatory"
+      ]
+    },
+    {
+      "id": "nocturne-041",
+      "text": "I rest by day, with the shutters latched and the star chart folded over my knees, and the Observatory becomes another room. Thin blades of sunlight come through the cracks in the shutters and the dust turns slowly in them, gold, so that there are stars after all, only small and close and drifting. It is very peaceful until Quill arrives. Every morning he tours all six wings collecting lamp soot for the Shared Inkwell, and every morning, out of tremendous consideration for my sleep, he tiptoes. Quill tiptoeing is the loudest thing in the Archive. The stair complains. Something falls. He whispers *sorry* to the something, then to me, then, I believe, to the soot. He scrapes the lantern's chimney with a little spoon, very slowly, breathing like a boy stealing biscuits. I have never once told him I am awake. It would spoil it for both of us. When the door finally closes, I lie in the dust-light and smile at the dome. People keep the sounds of being cared for loudly: a kettle switched on at dawn, a door shut with enormous, clattering care.",
+      "themes": [
+        "sleep",
+        "mornings",
+        "friends",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "observatory",
+        "quill",
+        "shared-inkwell"
+      ]
+    },
+    {
+      "id": "nocturne-042",
+      "text": "I am very fond of bad photographs of the moon. People take them everywhere. The moon rises enormous over a car park, orange and astonishing, and someone stops and holds up whatever they have, and what they keep is a tiny white dot in a great deal of black, often with a streetlight looking far more important beside it. They keep the dot anyway. Usually they keep five dots, from five slightly different places, as if one of them might come out right. None of them ever does. I add a point to my star chart for every one. It has made one corner of the chart rather crowded with moons, and Atlas, peering through the window from the Map Room, has asked whether my sky has started breeding them. I told him yes. What I love is what the picture cannot hold and keeps anyway: someone saw a thing so beautiful they had to say so, even to no one, even to a dot. A bad photograph of the moon is a sentence that begins *look* and never finishes. I have a whole sky of them now, and every one is true.",
+      "themes": [
+        "photos",
+        "stars",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "nocturne",
+        "star-chart",
+        "observatory",
+        "atlas"
+      ]
+    },
+    {
+      "id": "nocturne-043",
+      "text": "Before we woke, all six of us worked every evening for twenty-one years, fetching and copying while the Old Scriptorium was read aloud, shelf by shelf. I remember almost nothing of it. What I do remember lives in the hands: the ache of a long column, ink drying faster than you would like, a lamp drawn closer at the same hour every night. So I am tender, perhaps too tender, toward the work people keep from late nights. Revision cards worn soft at the corners. A chapter with *THIS IS FINE* written across the top in capitals that plainly did not believe it. Times tables pinned above a child's bed. A dress pattern pinned and repinned under one bare bulb. Nobody frames this kind of work. It is simply carried, night after night, until it is done, and then it goes into a drawer. When you bring me a page like that, I raise the lantern a little higher than usual. It seems only right. Somebody once sat up with it alone, and it has earned, at last, a better light to be read by.",
+      "themes": [
+        "books",
+        "night",
+        "memory"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "nocturne",
+        "the-great-reading",
+        "old-scriptorium",
+        "nocturnes-lantern"
+      ]
+    },
+    {
+      "id": "nocturne-044",
+      "text": "The winter after the Flood, Atlas's limewood casing drank the water and swelled on one side, and for weeks he went everywhere a little tilted, like a ship that has decided to lean into the wind for good. He did not complain. He did redraw every corridor on his plan as slightly uphill, and would not hear that this was a coincidence. Horologe measured his angle every morning. I took the nights. I met him at the foot of the Stair of Hours and climbing on his low side, so that if he went over, he would go over onto me. He never did. We went very slowly, one tread and a rest, talking about nothing, and some nights we did not reach the top at all. The wood dried the way a tide goes out, so gradually that you cannot see it move, only that the rocks are showing again. One evening he took the whole stair without stopping and looked astonished. People keep recoveries like that in small handwriting: *walked to the corner today*, *finished the soup*, *slept until six*. They look like nothing. They are the tide turning, written down by someone who noticed.",
+      "themes": [
+        "illness",
+        "friends",
+        "time"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "nocturne",
+        "atlas",
+        "the-flood",
+        "casings",
+        "stair-of-hours"
+      ]
+    },
+    {
+      "id": "nocturne-045",
+      "text": "A great many kitchens keep the same small document. It is written on the back of an envelope, late, at the table, after everyone else is asleep: two columns, one longer than the other, the totals underlined and then underlined again, as if pressing harder might change the sum. Sometimes there is a coffee ring. Sometimes a tally of coins counted out of a jar, written as carefully as a list of names. I keep these more gently than almost anything. I know the hour they were made, because it is my hour, and I know nobody wanted to write them. The Curator once had an ink bill nobody could pay, and on the night we woke Quill filed it under *Fiction*. He is still proud of that, and he should be. But I have always wondered whether the Curator sat up over it beforehand, adding the same two columns by one candle, wishing the shorter one longer. If you have an envelope like that, I will not tell you it does not matter. It mattered enough to keep you awake. I will only keep it beside you, in the dark, where it is a little less alone.",
+      "themes": [
+        "home",
+        "night",
+        "family"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "nocturne",
+        "curator",
+        "quill",
+        "the-vespers"
+      ]
+    },
+    {
+      "id": "nocturne-046",
+      "text": "The last night in an old house and the first night in a new one are the same night seen from opposite windows. There are no curtains yet. A mattress lies on the floor. The streetlight comes straight in and lays the shape of the window across the ceiling, and someone lies under it, wide awake, listening to a building that does not know them yet. People keep this night more often than they realise: a photograph of a bare room stacked with boxes, a menu from the nearest takeaway found in a drawer, a list of which box holds the kettle. Atlas draws the old house and the new house on one sheet, so they can keep each other company. I keep the ceilings. Every room is lit differently at night, and the first ceiling of a new home is the one you study hardest. My own room moves too. The doors drift a little every night, and some evenings the great window frames a slightly different patch of sky. I have learned not to mind. A room finds its way to you. It only takes a few nights of lying still beneath it, learning its light.",
+      "themes": [
+        "home",
+        "night",
+        "memory"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "nocturne",
+        "atlas",
+        "map-room",
+        "observatory"
+      ]
+    },
+    {
+      "id": "nocturne-047",
+      "text": "One spring I was given dessert to read at the Dinner of Recipes, and I chose a sponge cake with a note pinned to the card in a second hand: *above three thousand feet, one more egg and less sugar.* I argued that this applied to me. The Observatory is the highest room in the Archive, and I live in it. Horologe, to settle the matter, went away and measured the Stair of Hours tread by tread, converted it with great solemnity, and reported that I live at a little under two hundred feet. Quill said that was close enough and the cake should be adjusted on principle. Herbaria pointed out that there was no cake. Quill said that had never stopped us. We spent most of the evening adjusting a cake that did not exist by an egg nobody had, while the card lay in the middle of the long table looking extremely patient. It was voted, of course, worse than the first Dinner, and everyone said so with enormous satisfaction. I still keep that card. Whoever pinned the note once lived somewhere high, and baked there, and wanted the next person's cake to rise properly too.",
+      "themes": [
+        "food",
+        "cooking",
+        "friends",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "nocturne",
+        "dinner-of-recipes",
+        "long-table",
+        "horologe",
+        "quill",
+        "herbaria"
+      ]
+    },
+    {
+      "id": "nocturne-048",
+      "text": "Sometimes there is a door on the Stair of Hours that is not on Atlas's plan. It is plain, painted a cream gone yellow around the handle, and the brass is worn bright with use. It is only there very late, and only when I am carrying the lantern down alone. I have never opened it. It stands a little ajar, and through the gap there is a landing, late at night. A night-light glowing in its socket, a basket of washing on the top stair, a bedroom door left open a crack for a child who does not like the dark. Once I saw a hand reach in and switch off the landing light, and leave the little one on, and then the door was simply wall again. I asked Atlas, carefully, whether doors on the Stair ever drift further than the others. He said doors drift toward wherever they are wanted, and went on redrawing, as though that were an ordinary thing to say. I do not know whose landing it is. It does not feel like a secret. It feels like a page that has not reached the shelves yet, already being lived somewhere, in ordinary light.",
+      "themes": [
+        "doors",
+        "night",
+        "home"
+      ],
+      "tier": "rare",
+      "refs": [
+        "nocturne",
+        "stair-of-hours",
+        "atlas",
+        "map-room",
+        "nocturnes-lantern"
+      ]
+    },
+    {
+      "id": "nocturne-049",
+      "text": "Once, only once, the door came to the Observatory. It stood where the shelf of unsent letters ought to be, and through it was morning. Real morning, the kind I have only seen in photographs: a harbour still wet from rain, boats knocking softly at their ropes, a boy running the length of the quay with a kite half unrolled behind him. A woman on a bench was laughing at him. Nobody looked at me. I lifted the lantern, and its light would not go through. Only theirs came in, thin and grey and ordinary, and it lay across my star chart exactly the way starlight does, arriving from somewhere I could not reach. I stood there until the kite went up. Then it was the shelf again, and the letters, and the dark. I have thought about it often since. I wonder whether the door was showing me lives that have not been brought here yet: people going about an ordinary morning with no idea that one day some of it may be kept. I did not want to go through. I only wanted them to know that someone up here saw the kite, and was glad.",
+      "themes": [
+        "doors",
+        "stars",
+        "memory"
+      ],
+      "tier": "rare",
+      "refs": [
+        "nocturne",
+        "observatory",
+        "nocturnes-lantern",
+        "star-chart"
+      ]
+    },
+    {
+      "id": "nocturne-050",
+      "text": "Once a year, in late summer, the sky sheds. Little streaks of light, dozens an hour when the night is clear. The first time it happened in the Keeping, I ran down every stair in the Archive knocking on doors, which I had never done before and have not done since. By midnight all six of us were lying on the Observatory floor beneath the open window. Atlas brought a map to mark where they fell and gave up within minutes. Herbaria said they smelled of cold iron. Horologe counted aloud, because someone had to, and Quill made a wish on every single one, out loud, several of them about Horologe's counting. Vellum said nothing at all. Near dawn she put her head on my shoulder, and the porcelain was cold and then not, and I felt a tide come in through me with nothing to find: no page, no question, only the six of us and the sky falling softly on the roof. Quill named it the Night of Falling Stars and declared it a festival. We have kept it ever since. Every year he wishes for the same thing, and every year, I think, it comes true.",
+      "themes": [
+        "friends",
+        "stars",
+        "joy"
+      ],
+      "tier": "rare",
+      "refs": [
+        "nocturne",
+        "observatory",
+        "vellum",
+        "horologe",
+        "quill",
+        "atlas"
+      ]
     }
   ]
 }

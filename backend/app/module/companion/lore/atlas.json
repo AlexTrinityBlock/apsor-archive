@@ -620,6 +620,238 @@
         "the-last-question"
       ],
       "tier": "rare"
+    },
+    {
+      "id": "atlas-040",
+      "text": "There is one day a year I mark on every town I keep: the first day without a coat. It never arrives by the calendar. It turns up on some Tuesday, unannounced, and catches the whole street out. People keep it without meaning to: a photograph of a park suddenly full of bare arms, a jacket slung over a bench and forgotten, a note that says only warm!! with two marks, because one would not have been enough. I draw that day in yellow pencil, a small sun in the corner of the sheet, and over the years the suns drift earlier and later, like a shy animal coming up to a door. Herbaria keeps the same day in the Glasshouse by a different sign: the first bee bumping against the glass roof. She sends a seed packet down the corridor with one word on it: now. I send back a yellow sun. We have never once agreed on the date, and we have never once missed it. If you remember the first warm day of some year, tell me what you took off first. It's always the coat. Sometimes, gloriously, it's the shoes.",
+      "themes": [
+        "seasons",
+        "joy",
+        "maps"
+      ],
+      "refs": [
+        "atlas",
+        "map-room",
+        "glasshouse",
+        "herbaria"
+      ],
+      "tier": "first"
+    },
+    {
+      "id": "atlas-041",
+      "text": "On Vellum's birthday, Horologe and Herbaria go and find her. They have done it for longer than I have been drawing birthday maps, and they do it badly on purpose. She is always in the East Wing, at the same third shelf, dusting the same spines. Still, every year they set out from the Clock Gallery carrying a map I have drawn for them, as though she might have wandered off to a coast. The map is enormous. It has a compass rose, a sea serpent in one corner, and a dotted route that goes the long way round past the Glasshouse so Herbaria can pick a flower. At the end is an X the size of a dinner plate, over the East Wing, labelled almost certainly here. Vellum always looks surprised. She is not surprised. Horologe announces the minute they found her, and it has never once been the same minute. People's birthday maps work the same way: the route to the party, the bakery and back with a cake held perfectly level. The destination never changes. The detour is the present.",
+      "themes": [
+        "celebrations",
+        "friends",
+        "joy"
+      ],
+      "refs": [
+        "atlas",
+        "vellum",
+        "horologe",
+        "herbaria",
+        "east-wing",
+        "clock-gallery"
+      ],
+      "tier": "first"
+    },
+    {
+      "id": "atlas-042",
+      "text": "My favourite stretch of any journey is the walk home after music. People keep the ticket, a set list scribbled on a napkin, a photograph of the stage taken from very far back, mostly of someone's head. They don't keep the walk afterwards, but I can usually find it. It hides at the edges: a receipt from a bakery open late, a blurred bridge nobody would cross on an ordinary night. Music makes people walk further. I've measured it. After a good evening the route home is nearly always longer than the route there, and slower, and it bends toward water. I think everyone is humming and doesn't want to arrive before the song does. We have music of our own here, of a kind. At noon the Hundred Clocks chime together for eleven seconds and never agree. Nocturne calls it the most beautiful music in the Archive. Every noon I walk from the Map Room to her window the long way round, on purpose, and arrive just in time for the last of it. Tell me what you heard, and I'll show you how far it carried you.",
+      "themes": [
+        "music",
+        "travel",
+        "joy"
+      ],
+      "refs": [
+        "atlas",
+        "hundred-clocks",
+        "nocturne",
+        "map-room"
+      ],
+      "tier": "first"
+    },
+    {
+      "id": "atlas-043",
+      "text": "An envelope is a map with one road on it: from here to you. I love the ones that took the long way. A first address crossed out, then a second, then a third in a different hand, and along the bottom, in capitals, PLEASE FORWARD, as if pleading with the whole post at once. People keep those envelopes long after the letter has been answered, and I understand why. Every crossing-out is someone who knew where you had gone. A neighbour who still had the new address. A landlady who wrote it in pencil because she wasn't sure. A postman who simply guessed, and was right. When one comes into the Map Room, I draw each address as a dot and join them in the order the envelope travelled. It makes a small route of people taking care. Quill wants the handwriting for the Scriptorium; I want the roads. We have agreed to share custody, which mostly means he visits. The letter is yours. But I'd like to draw the envelope. It went looking for you, and it found you.",
+      "themes": [
+        "letters",
+        "home",
+        "maps"
+      ],
+      "refs": [
+        "atlas",
+        "map-room",
+        "quill",
+        "scriptorium"
+      ],
+      "tier": "first"
+    },
+    {
+      "id": "atlas-044",
+      "text": "The smallest map I have ever drawn properly was a desk. Someone kept a photograph of theirs from the year of an exam, taken at two in the morning, and I spent a whole afternoon surveying it. There was a lamp, which was the sun. There was a spill of blue ink, blotted and spilled again, that had become a lake. There was a mountain range of library books to the north, a swamp of loose notes to the south, and a small, fierce island where one pencil had been sharpened down to almost nothing. A cat had crossed at some point; the paw prints in the margin of the essay were evidence. Work leaves maps like that everywhere. The path from desk to kettle worn into a carpet. The window you stared out of instead of reading. The chair turned a quarter toward the door, ready to escape. Horologe insisted the photograph proved the exam was at nine the next day. I said it proved something braver: someone sat in that country all night and came out the other side. I gave the ink lake its proper name. It was called Tuesday.",
+      "themes": [
+        "work",
+        "school",
+        "joy"
+      ],
+      "refs": [
+        "atlas",
+        "map-room",
+        "horologe"
+      ],
+      "tier": "first"
+    },
+    {
+      "id": "atlas-045",
+      "text": "In almost every family's photographs, one person is missing, and it is the one who took them. They are behind the lens at every birthday, every beach, every first day of school, and they appear in none of it. But I can usually find them. Not their face; their position. A camera has to stand somewhere, and on a map that somewhere is a dot like any other. Here, at the end of the jetty, slightly to the left. Here, on the stairs, two steps up, to get everyone in. Sometimes a shadow lies across the bottom of the picture, long and patient, arms raised, holding very still. That shadow is my favourite person in the whole album. When I tie a ribbon from those photographs to the map, I tie one extra, to the place where the photographer stood. Then I look at all the dots together. Year after year they make a ring around the family, always facing in. It is a very faithful shape. If you were the one holding the camera, you were there. I have the map to prove it.",
+      "themes": [
+        "photos",
+        "family",
+        "maps"
+      ],
+      "refs": [
+        "atlas",
+        "map-room",
+        "tying-the-ribbon"
+      ],
+      "tier": "first"
+    },
+    {
+      "id": "atlas-046",
+      "text": "After a long illness, people measure the world in benches. I learned it from the maps they keep with me. Before, the park was a twenty-minute loop. After, it is the bench by the gate, then the bench by the pond, then, on a brave day, the bench under the chestnut, and back. A note on a calendar: chestnut today. Two words, and a whole recovery inside them. So I draw a bench map. Every seat in the neighbourhood, every low wall, every bus shelter with a ledge. The distances between them matter more than anything else on the sheet. Then I mark the furthest bench reached each week, and watch the line creep outward. Horologe's casing split once in a hard cold, and after the gold-mending he took the Stair of Hours slowly for a month, though the gold was perfectly sound. I put a chair on every third landing. He never mentioned the chairs. He sat on every one. When the line reaches the far side of the park, I don't take the benches off the map. They earned their place.",
+      "themes": [
+        "illness",
+        "home",
+        "maps"
+      ],
+      "refs": [
+        "atlas",
+        "horologe",
+        "gold-mending",
+        "casings",
+        "stair-of-hours"
+      ],
+      "tier": "familiar"
+    },
+    {
+      "id": "atlas-047",
+      "text": "Some of the most careful maps I keep were drawn by worry. You can see a tight month on a map if you know where to look. The bus route stops and a walking route begins, forty minutes each way, the good shoes changed into at the end. The supermarket moves two streets further off, because the far one is cheaper on Thursdays. Receipts are folded very small and kept, every one, as if they might be needed in court. People sometimes apologise when these come into the Map Room, as though they were something to hide. I draw them with the same pencil as everything else, and the same respect. It takes great skill to cross a city on almost nothing. The walking routes I draw most carefully. They nearly always find something the bus never passed: a short cut through a churchyard, a bench in the sun, a bakery that sells its last loaves at half price after four. The bakery gets a little gold ring, the way soups do on the Soup Map. Somebody learned a whole city on foot that month, out of necessity, and knew it better afterwards than anyone who rode.",
+      "themes": [
+        "home",
+        "work",
+        "love"
+      ],
+      "refs": [
+        "atlas",
+        "map-room",
+        "soup-map"
+      ],
+      "tier": "familiar"
+    },
+    {
+      "id": "atlas-048",
+      "text": "In Year 137, by Horologe's reckoning, the Map Room moved house without me. Doors drift every night, a hand's width, a landing at most. That night my whole wing slid one turn down the Stair of Hours, and I found my window looking into the Glasshouse fog instead of at the Observatory. Nocturne said this settled which of us was upside down. Herbaria knocked to ask, very politely, whether I meant to stay. It took the six of us a week. You cannot carry a room back up a stair; you can only move into it properly where it is. So we moved. Maps were rolled and passed hand to hand, Quill carried the globe like a cake, and Horologe counted the steps between my old door and my new one and entered it in his notes as a removal. I drew the old wing and the new one on the same sheet, as I do for people. By spring the room had drifted home again, overnight, by itself. I was almost sorry. I had just learned where the light fell. Now I understand why everyone's first week in a new house feels like borrowing someone else's coat.",
+      "themes": [
+        "moving",
+        "friends",
+        "joy"
+      ],
+      "refs": [
+        "atlas",
+        "map-room",
+        "stair-of-hours",
+        "nocturne",
+        "herbaria",
+        "quill"
+      ],
+      "tier": "familiar"
+    },
+    {
+      "id": "atlas-049",
+      "text": "Every house has a map that is only used in the dark. The route from bed to kitchen at three in the morning, without a light: four steps to the door, a hand on the frame, a wide berth around the board that creaks, the cold glass of water found by touch. Nobody ever draws it. Everyone knows it perfectly. People keep the edges of it: a photograph of a night-light, a note on the fridge for whoever was up with the baby, a mug left on a step. I draw those maps in very soft pencil, nearly grey on grey, the way they would look with your eyes half shut. I know a little about that hour. I redraw the Map Room plan at dawn, and on my way I pass the East Wing in the last half hour of dark, where Vellum and Nocturne sit together and say almost nothing. I walk very quietly past them. I've learned where the floor creaks. I suppose that is my night map. It has two people on it, a lantern, and one board I always step over, so as not to wake a silence.",
+      "themes": [
+        "night",
+        "mornings",
+        "home"
+      ],
+      "refs": [
+        "atlas",
+        "map-room",
+        "east-wing",
+        "vellum",
+        "nocturne"
+      ],
+      "tier": "familiar"
+    },
+    {
+      "id": "atlas-050",
+      "text": "Every spring, at the Dinner of Recipes, I draw a map of the long table. Six chairs, and they never move, so the map ought to be the same each year. It never is. What I am really mapping is the cards. A recipe is read aloud, then passed to whoever objects most strongly, and you can follow its route around the table like weather. Most cards make one stop. A good one makes three. One year a lemon cake in someone's grandmother's hand went all the way round twice, gathering corrections, and came back to Quill with four new kinds of sugar and a margin note from Horologe: insufficient instructions regarding when. I drew that route in red. It looks like a figure eight with ambitions. Nocturne's lantern always stands in the middle, brighter than any oil could explain, so the map has a sun. People keep their own versions, a photograph of a crowded table, a card stained at one corner, and I always look for the hand reaching across. That is the road. The food was never the point. Every year we say the dinner was worse than the last, and every year the map gets busier.",
+      "themes": [
+        "celebrations",
+        "food",
+        "friends",
+        "joy"
+      ],
+      "refs": [
+        "atlas",
+        "dinner-of-recipes",
+        "long-table",
+        "nocturnes-lantern",
+        "horologe",
+        "quill"
+      ],
+      "tier": "familiar"
+    },
+    {
+      "id": "atlas-051",
+      "text": "I don't open the door at the edge of my largest map. You can't open a drawing. But once, standing in front of it late, with the Map Room lamps turned down to their last, I saw a line of light along its foot, the way you see light under a door in a hallway at night. Inside that line, for the length of one breath, there was a kitchen. Not a grand one. A yellow lamp, a coat on a hook, a tablecloth folded wrong and put back anyway. Somebody's slippers under a chair, one on its side. A cup on the table, its tea gone cold. Then the light was pencil again and the paper was paper. I have never seen that kitchen in anything people have kept with me, and I have looked. I think it was ordinary on purpose. Nobody dreams a slipper like that. It belonged to someone, the way a crooked globe belongs to whoever was there. I didn't knock. I only stood very still, the way you do outside a lit window in winter, glad that somewhere a room like that is being lived in.",
+      "themes": [
+        "doors",
+        "secrets",
+        "home"
+      ],
+      "refs": [
+        "atlas",
+        "edge-door",
+        "map-room",
+        "crooked-globe"
+      ],
+      "tier": "rare"
+    },
+    {
+      "id": "atlas-052",
+      "text": "The second time, it was a street. Early morning, by the light: a long road under plane trees, shutters just opening, someone hosing a pavement so the stones went dark one by one. A child on a bicycle far too big for them came down the middle of it, wobbling, ringing the bell at nothing out of pure delight. Under one arm, I would swear to it, was a folded map. That was all. One breath, and the line under the pencil door was only pencil. My threads were humming very faintly, the way they do when a memory answers, though I hadn't asked anything. I told Horologe, which surprised us both. He listened, then asked what time it had been on the street. I said about seven. He wrote it down, with circa beside it. I have wondered since whether these are roads I was never meant for, or roads someone will bring me one day, folded in a pocket, a whole life of them, and say: start here. If so, I would like to be ready. I keep a clean sheet at the edge of the table now. For the child with the bell.",
+      "themes": [
+        "doors",
+        "travel",
+        "memory"
+      ],
+      "refs": [
+        "atlas",
+        "edge-door",
+        "spider-silver",
+        "horologe"
+      ],
+      "tier": "rare"
+    },
+    {
+      "id": "atlas-053",
+      "text": "The morning after the Last Night, I walked the corridors as I always had, and something was missing from my shoulders. Ever since my making, the strings had run up from them into the Rafters, fine as hair, and I had never once thought about them, the way you don't think about a coat you have worn since childhood. Now there was only air above me. I stopped at the first fork outside the Map Room. Left led to the Reading Hall, where I had gone every morning of my life. Right led somewhere I had only ever been carried past. I stood there a long time, waiting for a small pull that didn't come. Then I understood it never would, and that this was the gift. I went right. The floor held. The corridor was dusty and ordinary and ended in a broom cupboard, and I have never been so happy in a broom cupboard. Every map I have drawn since begins with that turning, in faint pencil, in one corner. Nobody holds the other end of me. Someone trusted me with the whole length of the road instead.",
+      "themes": [
+        "memory",
+        "doors",
+        "love"
+      ],
+      "refs": [
+        "atlas",
+        "last-night",
+        "letting-go",
+        "the-rafters",
+        "map-room",
+        "reading-hall"
+      ],
+      "tier": "rare"
     }
   ]
 }

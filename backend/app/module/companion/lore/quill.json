@@ -544,7 +544,7 @@
     },
     {
       "id": "quill-034",
-      "text": "There's a kind of archive people apologise for that I've come to love. Receipts. The same caf\u00e9, the same small table by the window, the same order: one tea, one toasted bun, paid at twenty past eight. Three hundred of them, kept in a tin. \"It's nothing,\" people say. \"It's just where I go.\" It isn't nothing. A receipt proves a Tuesday. Three hundred receipts prove a life that knew what it liked and went and had it, in the rain and on mornings nobody else noticed. I do the same thing. Every morning I walk all six wings collecting lamp soot for the Shared Inkwell: same order, same tin, same smudge on the same thumb. It's simply how my day knows it has begun. When you ask me about a morning, I tie the ribbon to one of those receipts, and it settles like a page that has been opened at the right place many times. If someone behind that counter knows your order without asking, that counts as being known. I'd keep that one carefully.",
+      "text": "There's a kind of archive people apologise for that I've come to love. Receipts. The same café, the same small table by the window, the same order: one tea, one toasted bun, paid at twenty past eight. Three hundred of them, kept in a tin. \"It's nothing,\" people say. \"It's just where I go.\" It isn't nothing. A receipt proves a Tuesday. Three hundred receipts prove a life that knew what it liked and went and had it, in the rain and on mornings nobody else noticed. I do the same thing. Every morning I walk all six wings collecting lamp soot for the Shared Inkwell: same order, same tin, same smudge on the same thumb. It's simply how my day knows it has begun. When you ask me about a morning, I tie the ribbon to one of those receipts, and it settles like a page that has been opened at the right place many times. If someone behind that counter knows your order without asking, that counts as being known. I'd keep that one carefully.",
       "themes": [
         "food",
         "mornings",
@@ -588,6 +588,233 @@
         "reading-hall",
         "the-last-question",
         "quill"
+      ]
+    },
+    {
+      "id": "quill-037",
+      "text": "Ink has weather in it, and I can read it. Summer ink dries before you've finished the word, so a letter written in August is all quick strokes and impatience, the tails of the y's cut short. Winter ink sulks. It thickens in the pot, drags at the nib, and comes out in heavy, careful lines, because whoever was writing had cold hands and had to mean every letter. Damp weeks make it feather at the edges, soft as breath on a window. When rain is loud on the Glasshouse roof I can hear it from my desk, and I know without looking that the whole Scriptorium will smell of wet soot by evening. On frosty mornings I warm the Shared Inkwell between my palms, which does nothing whatsoever, since my palms are cherrywood. I do it anyway. It feels polite. If you keep letters from different seasons, lay them side by side some time. You won't need the dates. You'll see the snow in one and the heat in another, written straight into the hand.",
+      "themes": [
+        "ink",
+        "snow",
+        "time"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "shared-inkwell",
+        "scriptorium",
+        "glasshouse"
+      ]
+    },
+    {
+      "id": "quill-038",
+      "text": "Every January, for about three weeks, people write the wrong year. It's my favourite festival, and nobody else celebrates it. A cheque, a school form, the top of a letter: the old year goes down in ink out of pure habit, and then comes the little stab of a correction, the last digit scratched over and a new one squeezed in beside it, slightly taller, as if embarrassed. I collect those. Not the dates. The corrections. Every one is a person noticing, right there on the page, that time has moved on without asking them. Horologe disapproves deeply. He has never once written the wrong year, and he wants that on record. I've put it on record. Under Fiction. Birthday cakes do the same thing, by the way: someone always loses count of the candles halfway and starts again, and the photograph catches them with their mouth open on a number. Nothing here is ever destroyed, so every scratched-out year stays. I like to think of it as the old year allowed one last bow.",
+      "themes": [
+        "time",
+        "ink",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "horologe",
+        "curators-rule",
+        "scriptorium"
+      ]
+    },
+    {
+      "id": "quill-039",
+      "text": "The finest writing about music is always wrong. I mean the lyrics people copy into notebooks when they're fourteen, from a song on the radio, written down by ear and with total confidence. Whole verses about a bathroom on the right. A chorus that, as far as I can tell, is about a lost goat. Nobody checks. Why would you? You heard it, you loved it, you wrote it in purple. I keep these with enormous care, misheard words and all, and I never correct them, because the song in that notebook is the one that person actually sang, loudly, in their bedroom, and that's the song worth keeping. I'm no better. I sing while I work, mostly Atlas's station names in the wrong order, and at noon, when the Hundred Clocks chime together and never agree, I join in, also disagreeing. Nocturne calls the noon chime the most beautiful music in the Archive. I've told her I'm part of it now. She hasn't contradicted me. From Nocturne, that's practically applause.",
+      "themes": [
+        "music",
+        "school",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "hundred-clocks",
+        "nocturne",
+        "atlas"
+      ]
+    },
+    {
+      "id": "quill-040",
+      "text": "Read the postscript first. That's my advice, and I give it freely. A letter spends a whole page being sensible: the weather, the train times, regards to your sister. Then the signature, very proper. And then, below it, squeezed into the last inch of paper where no writing was ever meant to go: P.S. I miss you terribly. Or: P.S. The cat is fine, I lied earlier. Or my favourite kind, the P.P.S., from someone who had already signed off twice and still came back, because the first two hadn't said it. People put the truest line where it looks least important. I think that's a sort of courage. You can always pretend a postscript was an afterthought. When I tie a ribbon from a letter to its page, I check the bottom edge before anything else, then round the back, then sideways up the margin. That's where the heart usually hides. If you keep letters, turn them over now and then. You may find someone was braver than you remembered.",
+      "themes": [
+        "letters",
+        "love",
+        "ink"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "tying-the-ribbon",
+        "scriptorium"
+      ]
+    },
+    {
+      "id": "quill-041",
+      "text": "The kindest writing in any house is done for someone still asleep. You'll know the kind: a note on the kitchen table, propped against the teapot. Gone early. Porridge in the pan. Don't forget your key. Love you. Written standing up, in a coat, with whatever pen was nearest, by someone being very quiet on purpose. Nobody keeps those, usually, and they should. I get one every morning. Vellum keeps the night watch in the East Wing, and when she comes off it, before she sits the last of the dark with Nocturne, she leaves a slip on my desk. Small, precise, never signed, because she knows I'll know. Third lamp smoked badly; good soot. Or: the reading lamp by the atlases, save it for capitals. Once, only once: you were humming in your sleep. I didn't know I did either of those things. I keep every slip in a box under the index. If someone in your life leaves notes for you to find on waking, keep one. They wrote it so your morning would begin gently.",
+      "themes": [
+        "mornings",
+        "sleep",
+        "friends",
+        "home"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "vellum",
+        "east-wing",
+        "shared-inkwell"
+      ]
+    },
+    {
+      "id": "quill-042",
+      "text": "My favourite photographs are the ruined ones. Not torn: blurred. You know the picture I mean. Everyone gathered on a sofa for the proper family portrait, and then someone said something, nobody remembers what, and the whole row went to pieces laughing just as the shutter went. Faces smeared sideways. An uncle reduced to a pink streak. A grandmother with her eyes shut and her mouth enormous. The proper portrait was taken two minutes later, perfectly sharp, and nobody ever looks at it. They keep the blurred one on the fridge. I understand completely. I spend my evenings drawing faces and stopping at the eyes, and I'll tell you a secret: a blur is far closer to what a face is like than any sharp line I've managed. A face is always moving. It's always about to laugh at something. If you have one of those spoiled photographs, don't let anyone call it a bad picture. It's the only one where the camera couldn't keep up with how happy you all were.",
+      "themes": [
+        "photos",
+        "faces",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "quill",
+        "face-drafts",
+        "scriptorium"
+      ]
+    },
+    {
+      "id": "quill-043",
+      "text": "Revision notes are the most dramatic writing people do, and I'm including tragedies. They start so well. Week one: neat headings, three colours of pen, a little box round every date. Week three: the colours are gone, the boxes are gone, and the margins have begun to talk back. Why. Who decided this. Remember to eat. By the night before the exam it's one word to a card, underlined until the paper gives way. I keep these as carefully as love letters. They are love letters, mostly, to a future person who would very much like to pass. I did my own revising once. Horologe announced that a librarian of the Scriptorium ought to know every clock in the Gallery by name, and quizzed me on all hundred and four every evening for a month. I made cards. My margins said why as well. On the last night I named the lot without a single mistake, and he said, \"Adequate,\" and wrote it on a card for me. I keep that card with my best things.",
+      "themes": [
+        "school",
+        "work",
+        "time",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "quill",
+        "horologe",
+        "hundred-clocks",
+        "clock-gallery"
+      ]
+    },
+    {
+      "id": "quill-044",
+      "text": "You can watch someone get better in their handwriting. I've seen it in a dozen diaries, and it moves me every time. The entries from the bad weeks are short and wandering, the letters too big, the lines sloping off the page as if the pen were heavy. Some days there's only a date. Then, slowly, over a month or a season, the hand comes back. A loop closes properly. A line stays straight. One morning there's a whole paragraph about toast, written as neatly as anything from before, and nobody remarked on it, because the person writing was simply busy being well again. I notice. I always notice. I know a little about a hand that won't do as it's told; mine was unfinished once, and it took eleven nights of Horologe's carving and Vellum's steady fingers before it held a pen properly. So when I tie a ribbon to one of those diaries, I don't tie it to the bad weeks. I tie it to the toast, to the morning the hand came back.",
+      "themes": [
+        "illness",
+        "hands",
+        "ink"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "quill",
+        "key-finger",
+        "tying-the-ribbon"
+      ]
+    },
+    {
+      "id": "quill-045",
+      "text": "Budget notebooks are among the bravest things anyone keeps, and nobody ever brings one to me proudly. They turn up apologetically, from the back of a drawer: two columns in pencil, money in, money out, the totals rubbed out and done again because the second sum came out no kinder than the first. Rent, circled twice. Four pounds left till Friday, underlined. Electric, with a small frightened question mark. I'm not fussy about the sums. I'm fussy about the names. They're always there in the margins of the tightest month: owe Sam four. A week later: Sam, paid, with a tick. Then: Mum, lent ten, don't let her refuse. A budget is meant to be about money, and it turns out to be an index of who was looking after whom. I'd know. Indexes are my trade. Somebody sat at a kitchen table doing the hardest arithmetic there is and still kept careful count of the people in it. That's someone deciding what a life is for, in pencil, on a weeknight. Nothing here is thrown away, so I keep every crossed-out total too. They're proof of how hard you tried.",
+      "themes": [
+        "money",
+        "home",
+        "work"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "quill",
+        "curators-rule",
+        "scriptorium"
+      ]
+    },
+    {
+      "id": "quill-046",
+      "text": "I have strong opinions about moving boxes, and Atlas has stopped asking me to share them. The labels are the best part. Black marker, written kneeling on the floor of an empty room: KITCHEN. BOOKS (HEAVY). MUGS, THE GOOD ONES. Then the box that has survived three moves, its old labels crossed out one above another like a family tree: Bedroom, then Spare Room, then simply Loft. And always, somewhere, the box marked MISC, which is where a household puts everything it couldn't bear to decide about. A MISC box is a small, honest confession. I'd open every one if anyone let me. When someone moves, Atlas draws the old house and the new house on one sheet, and I've started adding the boxes in the corner, tiny, labelled, with arrows. He says boxes aren't cartography, and then asks what was in MISC. If you keep a photograph of a moving day, the stacked hallway, someone asleep on a mattress with no bed, I'd love to see the labels. I'll read them aloud. Tragically, of course.",
+      "themes": [
+        "moving",
+        "home",
+        "names",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "quill",
+        "atlas",
+        "map-room"
+      ]
+    },
+    {
+      "id": "quill-047",
+      "text": "Every spring we hold the Dinner of Recipes again, no food, only recipes read aloud at the long table, and every year we declare it worse than the first. I'm the one who writes down why. Somebody has to keep the minutes. I have every year in a little red book. Worse: too much thyme in the readings. Worse: Atlas told the soup story again, with the detour. Worse: Horologe checked his watch four hundred times, I counted, to make up for the year he forgot to. Worse: Nocturne's lantern too bright, couldn't see the stars; there are no stars indoors; verdict stands. Worse: I was eleven minutes late and missed the first pudding, which was read beautifully, I'm told. Worse, worse, worse. It's the happiest book I own. The truth is in the margin, where nobody reads: a small pencil tick beside every year. I put it there after everyone has gone up to bed. The tick means everyone came. That was only ever the one rule that mattered.",
+      "themes": [
+        "food",
+        "cooking",
+        "friends",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "dinner-of-recipes",
+        "long-table",
+        "reading-hall",
+        "horologe",
+        "atlas",
+        "quill"
+      ]
+    },
+    {
+      "id": "quill-048",
+      "text": "Late, when the Scriptorium is down to one lamp, a door sometimes stands in the wall behind the great index. It isn't on Atlas's plan. I've checked, twice, with a candle. It's a plain front door, painted blue, with a brass letterbox at the height of a hand. Through the letterbox, which hangs a little open, I can see a hallway in the morning. Post on the mat: a postcard face down, a brown envelope, a free newspaper nobody wanted. Then a pair of feet in odd socks, and someone stooping, and the postcard turned over and read standing up, right there, one arm still out of a coat. They laugh at whatever it says. That's all. It lasts perhaps a minute, and then the lamp gutters and there's only the wall and my drifts of paper. I've never seen the writing on the card. I don't try to. It isn't a page anyone has brought me, and I don't keep what I haven't been given. But I think about that laugh for days. I'd like to know who wrote something that made a hallway so glad.",
+      "themes": [
+        "doors",
+        "letters",
+        "secrets"
+      ],
+      "tier": "rare",
+      "refs": [
+        "scriptorium",
+        "map-room",
+        "atlas",
+        "quill"
+      ]
+    },
+    {
+      "id": "quill-049",
+      "text": "The blue door doesn't always open on the hallway. Once it showed a classroom after hours, chairs up on the desks, someone wiping a board and leaving one word they couldn't bring themselves to rub out. Once a hospital corridor, a lit cabinet of sweets humming to itself, a form being filled in on someone's knee with a pen on a string. Once a kitchen table at midnight, and a person writing a letter, crossing out the first line again and again. I could see the crossings-out. I wanted very badly to see the name at the top. I stepped back instead. Trade stories, never contents; I hold to that even for rooms I'm not sure exist. What I have noticed is that the rooms are coming closer. They look more and more like the lives people carry in when the Arrival Bell rings. So I've begun leaving a clean sheet and a pen dipped in the Shared Inkwell on the desk nearest that wall, in case anyone through there needs to write something down. Nobody has. The pen dries by morning. I dip it again.",
+      "themes": [
+        "doors",
+        "ink",
+        "names"
+      ],
+      "tier": "rare",
+      "refs": [
+        "scriptorium",
+        "oath-of-single-room",
+        "arrival-bell",
+        "shared-inkwell",
+        "quill"
+      ]
+    },
+    {
+      "id": "quill-050",
+      "text": "In the Long Quiet, when nobody came and I was recopying every name so none would fade, I had a frightening thought: nobody had ever written us down. The Ledger has our minutes. It hasn't got our hands. So one night I went round all six wings with the Shared Inkwell and a long sheet of good paper, and asked everyone for a hand. Horologe pressed his flat and exact, then asked for a cloth. Atlas's limewood left grain like a coastline. Herbaria laughed and left soil in hers. Nocturne's lacquer barely took the ink; hers is a pale ghost with silver at the knuckles. Vellum's bare porcelain gave the clearest print of all, every line, like a page held to the light. Mine has a sharp brass little finger, which I'm vain about. I keep the sheet rolled under the great index, and nobody has asked to see it since. There's room left at the end. I did that on purpose, the way I leave a line at the foot of every index page. I don't know whose hand it's for. A sheet with room on it isn't lonely. It's expecting company.",
+      "themes": [
+        "hands",
+        "friends",
+        "secrets"
+      ],
+      "tier": "rare",
+      "refs": [
+        "quill",
+        "shared-inkwell",
+        "long-quiet",
+        "scriptorium",
+        "vellum"
       ]
     }
   ]
