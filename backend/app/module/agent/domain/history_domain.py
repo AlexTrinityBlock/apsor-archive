@@ -53,6 +53,17 @@ class HistoryMessage:
     role: str
     created_at: datetime
     content: str
+    # Which librarian said an assistant message (``None``: the archive assistant
+    # or a user message).
+    speaker_ref: str | None = None
+    speaker_name: str | None = None
+
+    @property
+    def speaker_label(self) -> str:
+        """Return who said it: ``you`` for the person, a librarian's name, or ``assistant``."""
+        if self.role == "user":
+            return "you"
+        return self.speaker_name or "assistant"
 
 
 @dataclass(frozen=True)

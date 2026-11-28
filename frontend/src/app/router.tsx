@@ -54,6 +54,16 @@ const AccountsPage = lazy(() =>
     default: module.AccountsPage,
   })),
 );
+const AccountDetailPage = lazy(() =>
+  import("./accounts/AccountDetailPage").then((module) => ({
+    default: module.AccountDetailPage,
+  })),
+);
+const CompanionWorldPage = lazy(() =>
+  import("./companion-admin/page").then((module) => ({
+    default: module.CompanionWorldPage,
+  })),
+);
 const ChangePasswordPage = lazy(() =>
   import("./auth/ChangePasswordPage").then((module) => ({
     default: module.ChangePasswordPage,
@@ -210,6 +220,22 @@ export const router = createBrowserRouter([
             element: (
               <RequireRoot>
                 <AccountsPage />
+              </RequireRoot>
+            ),
+          },
+          {
+            path: "accounts/world",
+            element: (
+              <RequireRoot>
+                <CompanionWorldPage />
+              </RequireRoot>
+            ),
+          },
+          {
+            path: "accounts/:userId",
+            element: (
+              <RequireRoot>
+                <AccountDetailPage />
               </RequireRoot>
             ),
           },

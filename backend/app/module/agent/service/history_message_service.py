@@ -2,6 +2,7 @@
 
 from app.infrastructure.database.session import Database
 from app.module.agent.domain.agent_domain import KIND_USER
+from app.module.agent.domain.companion_persona_domain import entry_speaker
 from app.module.agent.domain.history_domain import (
     HISTORY_MESSAGE_NEIGHBOR_LIMIT,
     HistoryMessage,
@@ -14,13 +15,17 @@ from app.module.agent.repository.history_repository import AgentHistoryRepositor
 
 
 def _message(entry: AgentEntryModel, conversation: AgentConversationModel) -> HistoryMessage:
+    role = "user" if entry.kind == KIND_USER else "assistant"
+    speaker = entry_speaker(entry.data) if role == "assistant" else None
     return HistoryMessage(
         entry_id=entry.id,
         conversation_id=conversation.id,
         conversation_title=conversation.title,
-        role="user" if entry.kind == KIND_USER else "assistant",
+        role=role,
         created_at=entry.created_at,
         content=entry_message_text(entry.kind, entry.model),
+        speaker_ref=speaker["ref"] if speaker else None,
+        speaker_name=(speaker["name"] or None) if speaker else None,
     )
 
 
@@ -75,6 +80,36 @@ class AgentHistoryMessageService:
                     if message.content
                 ],
             )
+
+    async def read_messages(self, entry_ids: list[int]) -> list[HistoryMessage]:
+        """Read several messages by id (owner-scoped, live conversations only)."""
+        if not entry_ids:
+            return []
+        async with self.database.user_session(self.user_id, self.role) as session:
+            rows = await AgentHistoryRepository(
+                session,
+                user_id=self.user_id,
+            ).get_entries_with_conversations(entry_ids)
+            return [
+                message
+                for message in (_message(entry, conversation) for entry, conversation in rows)
+                if message.content
+            ]
+
+    async def recent_replies(self, limit: int) -> list[HistoryMessage]:
+        """Return the most recent assistant replies (any conversation), newest first."""
+        if limit <= 0:
+            return []
+        async with self.database.user_session(self.user_id, self.role) as session:
+            rows = await AgentHistoryRepository(
+                session,
+                user_id=self.user_id,
+            ).recent_assistant_entries(limit)
+            return [
+                message
+                for message in (_message(entry, conversation) for entry, conversation in rows)
+                if message.content
+            ]
 
 
 __all__ = ["AgentHistoryMessageService"]

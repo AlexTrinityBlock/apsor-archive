@@ -4,21 +4,21 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
-import type { CompanionLoreFragmentSchemaTier } from './companionLoreFragmentSchemaTier';
 
 /**
- * One lore fragment as shown in the story editor.
+ * One lore fragment the account may see in its story editor.
  *
- * ``unlocked`` only says whether retrieval may surface the fragment yet; the
- * editor always shows the full text.
+ * The account sees only its own fragments and the ones it has already heard;
+ * weights and progress stay hidden (root sees them in administration).
  */
 export interface CompanionLoreFragmentSchema {
   edited: boolean;
+  /** Already surfaced to the account at least once. */
+  heard: boolean;
   id: string;
+  /** Written by the account (its own memory of the companion). */
+  own: boolean;
   position: number;
   text: string;
   themes: string[];
-  tier: CompanionLoreFragmentSchemaTier;
-  unlocked: boolean;
-  unlocked_at?: string | null;
 }

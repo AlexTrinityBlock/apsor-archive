@@ -191,6 +191,16 @@ class EmbeddingProviderError(KnowledgeError):
         self.status_code = status_code
 
 
+class EmbeddingConfigurationChangedError(EmbeddingProviderError):
+    """A refreshed provider changed model or dimension in the middle of a job.
+
+    Mixing two vector spaces inside one file would make its vectors incoherent,
+    so the durable job fails and is retried with the new configuration. This is
+    the only embedding failure that fails an ingestion job; provider outages,
+    billing, quota, and allowance failures leave the chunks pending instead.
+    """
+
+
 class EmbeddingUsageLimitExceededError(KnowledgeError):
     """Strict ingestion cannot embed because the account allowance is spent."""
 

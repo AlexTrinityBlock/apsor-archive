@@ -4,7 +4,9 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+from app.module.agent.domain.companion_persona_domain import entry_speaker
 
 AgentConversationStatus = Literal["active", "archived"]
 AgentProvider = Literal["deepseek", "openai-compatible", "anthropic"]
@@ -118,8 +120,21 @@ class AgentConversationSchema(BaseModel):
     deleted_at: datetime | None
 
 
+class AgentSpeakerSchema(BaseModel):
+    """The companion who said an assistant entry."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ref: str
+    name: str
+
+
 class AgentEntrySchema(BaseModel):
-    """One immutable transcript entry as returned by the API."""
+    """One immutable transcript entry as returned by the API.
+
+    ``speaker`` names the companion who said an assistant entry (``null`` for
+    the person's entries and for replies from a conversation without one).
+    """
 
     model_config = ConfigDict(frozen=True, from_attributes=True)
 
@@ -133,6 +148,17 @@ class AgentEntrySchema(BaseModel):
     edits: list[dict[str, Any]] | None
     by_run_id: int | None
     created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def speaker(self) -> AgentSpeakerSchema | None:
+        """Return the companion stamped on an assistant entry, if any."""
+        if self.kind != "pi.assistant":
+            return None
+        stamped = entry_speaker(self.data)
+        if stamped is None:
+            return None
+        return AgentSpeakerSchema(ref=stamped["ref"], name=stamped["name"])
 
 
 class AgentEntryPageSchema(BaseModel):
@@ -228,6 +254,14 @@ class AgentApprovalSchema(BaseModel):
     requested_at: datetime
     resolved_at: datetime | None
     created_at: datetime
+
+
+class AgentWebSourceSchema(BaseModel):
+    """One web page a conversation's tools saw, with its ``[web:wN]`` short id."""
+
+    ref: str = Field(description="Short id cited inline as [web:<ref>], for example w3.")
+    url: str
+    title: str | None = None
 
 
 class AgentTurnResultSchema(BaseModel):

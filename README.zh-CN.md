@@ -538,10 +538,12 @@ Agent 也可以调用只读的 `companion_action` 工具做出明确的手势。
 帧图像，以及 `GET/PATCH /api/v1/companions/preference`）。
 
 每个伙伴也有自己的故事：一段人设，会成为它在新对话中的声音（每个对话冻结，
-使用该对话的语言），以及传说，也就是它自己的记忆。Agent 搜索用户的档案馆时，
-最多两段相关的图书馆员自身记忆可能会以独立区块附在结果旁；它们永远不是档案
-证据，也不会被引用。询问图书馆员关于它自己或档案馆的事，它就会讲述自己的故事。
-账户与该伙伴完成越多对话，越深层的记忆就会解锁。每个账户都可以按语言编辑任何
+使用该对话的语言），以及传说，也就是它自己的记忆。没有任何记忆被上锁：每段记忆
+都带有分量（日常小事、往事、心底的事），要不要说、何时说、说多少，由图书馆员
+自己决定，她也知道你们已经相识多久。相关的记忆可能以独立区块附在消息或工具结果
+旁，她也能用 `recall_my_memories` 工具自己回想，包括她与其他图书馆员过去对这个人
+说过的话（每条过去的回复都记得是谁说的）。她的记忆永远不是档案证据，也不会被
+引用；`search_knowledge` 只搜索这个人的档案馆。每个账户都可以按语言编辑任何
 伙伴的人设与传说，并重置为默认值（`/api/v1/companions/stories/...`）。人设规则
 把用户视为平等的伙伴：图书馆员会用对方的名字或直接说“你”，绝不使用馆主、
 主人之类的称谓。
@@ -1538,9 +1540,26 @@ uv run python -m script.ingest_wikipedia \
    带有稳定的 `agent_entry` id，Agent 会用 `history_message` 展开它。已删除的
    对话会被标记为非当前，并从这条通道消失。
 
-如果向量召回不可用，搜索仍然返回 BM25 结果。当嵌入调用在重试预算
-内失败时，同步摄取会让分块保持纯文本；持久化 worker 会把耗尽嵌入
-重试视为任务失败，因此不会发布部分文件。
+如果向量召回不可用，搜索仍然返回 BM25 结果。嵌入失败绝不会丢失段落：
+当提供方额度用完（例如 OpenAI 的 `insufficient_quota`）、拒绝密钥、无法连接，
+或账号的嵌入用量额度已用完时，每一条摄取路径（持久化 worker 任务、同步文本、
+Markdown 编辑、记忆、摘要和对话历史）仍会保存分块的文本和 n-gram，让关键词
+搜索立即能找到，并把向量标为*待补*（`embedding IS NULL`）。专用 worker 的
+`EmbeddingBackfill` 循环（`APSOR_EMBEDDING_BACKFILL_ENABLED`，默认开启）会自动
+补上待补的向量：
+
+- 提供方错误（计费、额度、认证、速率限制、服务中断）会让循环以指数退避暂停，
+  最长 30 分钟，而且不会算到段落头上。退避结束后会自动恢复；嵌入提供方配置
+  变更时，或 root 在充值后于系统通知按下**立即重试**时，会立即恢复。
+- 嵌入用量额度已用完的账号会先跳过，直到 root 提高额度或周期重置；补嵌入
+  和其他嵌入一样会记录用量。
+- 被提供方以输入错误拒绝的段落（HTTP 400/413/422）会单独重试，最多五次，
+  之后只保留关键词搜索。
+
+root 可以在系统通知中看到待补数量、worker 状态和下次重试时间
+（`GET /api/v1/system/embedding-backfill`；`POST
+/api/v1/system/embedding-backfill/retry`）。只有在持久化任务进行中，提供方
+重新加载后会改变模型或维度时，该任务才会失败，避免同一个文件混用两种向量空间。
 
 ### 我需要嵌入模型密钥吗？
 
@@ -1674,7 +1693,7 @@ agent_entry ──────┘  (source_kind = history)
   伙伴、每个动作经编码的 AVIF（或 WebP）帧及其位置、大小和 SHA-256，以及账户
   的伙伴选择、是否显示、动态程度和位置。
 - `companion_story` / `companion_lore_fragment` / `companion_bond`：账户按语言
-  覆写的伙伴人设与传说、其片段，以及解锁更深层传说的完成对话数。
+  覆写的伙伴人设与传说、其片段，以及完成的运行与对话次数，和初次相遇的时间。
 - `ingest_config`：一行（`id=1`），带有经过校验的 worker 轮询、
   提取、在途、嵌入和分块大小设置。它不是分块来源；队列引用最终
   发布的文件。
@@ -1744,7 +1763,7 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
 文字、已存储原始文件、路径列表和搜索结果；其 R2 用例使用假客户端
 演练适配器，并在无网络访问的情况下检查缺失对象的转换。
 
-最新的迁移是 `d2b6f4a8c1e9`。此分支上
+最新的迁移是 `d6a1f3c8e2b7`。此分支上
 `agent_config` 之后的迁移是：
 
 - `f3c8d5a1b7e2` 删除轮次范围的工具结果预算；
@@ -1861,10 +1880,31 @@ root/user 生命周期、强制更改密码、一次性临时密码、禁用/重
   `medium`、`full`，默认 `full`）与 `opacity_mode`（`opaque`、`translucent`、
   `auto`，默认 `opaque`），附检查约束与服务器默认值。RLS 与授权不变；降级会删除
   这两个字段。
-- `d2b6f4a8c1e9`（当前 head）为 `companion_preference` 新增可为 NULL 的
+- `d2b6f4a8c1e9`为 `companion_preference` 新增可为 NULL 的
   `scale` 浮点数（0 为精简、1 为完整），用于直接在屏幕上缩放，附范围检查。
   NULL 表示“使用 `size`”；只发送 `scale` 时会推导出 `size`，只发送 `size` 时会清除
   `scale`。RLS 与授权不变；降级会删除这个字段。
+- `e4c8a2f6b0d3` 新增 `companion_lore_told`（每个账号、伙伴与片段的
+  `told_count`、`offered_at`、`last_told_at`、`source`）与
+  `companion_bond.last_story_run`，用于故事时刻的节奏。仅限所有者的 RLS。
+- `f1a6c3e8b2d4` 新增全局、可由 root 编辑的伙伴世界表（预设角色、片段、
+  设定词条、世界观文档与修订、配置、提示词模板、种子状态），从 `lore/`
+  预置，并通过 `seed_hash`／`admin_modified`／`upstream_seed_hash`
+  保留 root 的修改。所有人可读、仅 root 可写。
+- `a2d7e4f9c3b5` 新增 `app.admin_scope = 'companion'` 策略（root 只能读写
+  伙伴故事相关的数据行，永远接触不到档案馆内容）、由管理员管理的账号表
+  （账号可读不可写）、新的羁绊字段、`companion_lore_fragment.refs`，以及只能
+  追加的 `companion_admin_access_log`。
+- `b3e8f5a1d6c7` 新增 `companion_generated_story` 与 `companion_story_job`，
+  供 worker 撰写生活故事。
+- `e7b2d5a9c4f1` 新增 `chunk.embedding_failures` 与待嵌入的部分
+  索引，并把 JSON `null` 嵌入转为 SQL NULL，让 worker 能在供应商或额度中断后
+  补上向量。
+- `d6a1f3c8e2b7`（当前 head）把所有传说表的层级换成分量（`first` →
+  `everyday`、`familiar` → `past`、`rare` → `heart`），移除解锁计数与解锁时间，
+  新增 `companion_bond.first_met_at`，让 `companion_lore_told.source` 可记录
+  `recall`，并按对话冻结的伙伴，给每条过去的助手回复盖上
+  `data.speaker = {ref, name}`。
 
 更早的时候，`e7a1c4b9d2f6` 创建了单例 `agent_config` 表并预置了
 第 `1` 行。集成测试套件在一次性 PostgreSQL 数据库上运行迁移链，
@@ -1940,6 +1980,16 @@ docker/caddy/                   non-root reverse proxy
   转移给目标账户；停止模拟需要 root 密码、删除该会话并签发新的 root
   会话。请把 root 视为最高信任凭据，不要把 RLS 当作针对恶意 root
   的保护。
+- **伙伴管理是明文规定的例外。** 在 `/api/v1/admin/companions` 下，root
+  的请求会另外设置事务范围内的 `app.admin_scope = 'companion'`。数据库策略
+  因此允许 root 跨账号读取与管理伙伴相关数据：伙伴选择与策略、故事进度
+  （羁绊与已讲过的记忆）、root 的人格与记忆覆盖设置、生活故事任务，以及
+  **生活故事的全文**——这些故事取材自该账号自己的记忆。此范围永远不会触及
+  档案馆本身（`file`、`memory`、`chunk`、对话），除 root 之外的角色一律拒绝，
+  在模拟会话中也不适用。每次阅读生活故事全文、每次对账号伙伴的更改，
+  都会追加到 `companion_admin_access_log`（root 只能新增与读取，任何人都
+  无法修改或删除），而故事列表永远不含正文。账号的伙伴页面会明确告知
+  管理员可以阅读这些故事。
 - **RLS 是应用边界，而不是主机边界。** 部署登录是用于迁移和维护的
   PostgreSQL 超级用户；应用会为请求事务切换到 `apsor_app`。任何
   本地操作系统用户、数据库/缓存网络上的任何容器，或任何能读取

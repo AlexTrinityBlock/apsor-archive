@@ -54,6 +54,18 @@ export interface LayoutContext {
    * dock lines hug its edges so a drop never lands behind the rail.
    */
   readonly content?: Rect | null;
+  /**
+   * The part of the layout viewport the reader can actually see, from the
+   * visual viewport. An on-screen keyboard shrinks it without resizing the
+   * layout viewport, so placement keeps to this band while positions stay
+   * stored against the stable layout viewport.
+   */
+  readonly visible?: {
+    readonly top: number;
+    readonly bottom: number;
+    readonly left?: number;
+    readonly right?: number;
+  } | null;
 }
 
 export interface BoxSize {
@@ -65,6 +77,54 @@ export const EDGE_MARGIN = 10;
 export const TOP_MARGIN = 64;
 /** Free space above the figure for floating effects (?, zZ, sparkles). */
 export const FIGURE_HEADROOM = 20;
+
+/** Visible band (layout-viewport coordinates); the whole viewport by default. */
+export interface VisibleBand {
+  readonly top: number;
+  readonly bottom: number;
+  readonly left: number;
+  readonly right: number;
+}
+
+export function visibleBand(context: LayoutContext): VisibleBand {
+  const visible = context.visible ?? null;
+  const { width, height } = context.viewport;
+  if (visible === null) {
+    return { top: 0, bottom: height, left: 0, right: width };
+  }
+  return {
+    top: Math.max(0, visible.top),
+    bottom: Math.min(height, visible.bottom),
+    left: Math.max(0, visible.left ?? 0),
+    right: Math.min(width, visible.right ?? width),
+  };
+}
+
+/** An on-screen keyboard (or similar) is eating a large part of the viewport. */
+export function keyboardOpen(context: LayoutContext): boolean {
+  const band = visibleBand(context);
+  return context.viewport.height - (band.bottom - band.top) > 120;
+}
+
+/** Small margin kept from the visible top while the keyboard is open. */
+export const KEYBOARD_TOP_MARGIN = 8;
+
+/**
+ * Highest the head may rise. Normally below the top bar; with the keyboard
+ * open the free space is precious, so the figure may overlap the header and
+ * use the band from just below its visible top.
+ */
+export function topLimit(context: LayoutContext): number {
+  const band = visibleBand(context);
+  return band.top + (keyboardOpen(context) ? KEYBOARD_TOP_MARGIN : TOP_MARGIN);
+}
+
+/** The line the companion's feet rest on: above the composer and the keyboard. */
+export function feetLine(context: LayoutContext): number {
+  const bottom = visibleBand(context).bottom;
+  const composerTop = context.composer?.top ?? Number.POSITIVE_INFINITY;
+  return Math.min(composerTop, bottom) - 6;
+}
 
 export function breakpointFor(width: number): Breakpoint {
   if (width < 620) {
@@ -122,11 +182,15 @@ function clamp(value: number, min: number, max: number): number {
 /** Left coordinate of a dock line for a box of the given width. */
 export function dockX(side: DockSide, context: LayoutContext, width: number): number {
   const content = context.content ?? null;
-  const minX = content === null ? EDGE_MARGIN : Math.max(EDGE_MARGIN, content.left + EDGE_MARGIN);
-  const rightEdge =
-    content === null
-      ? context.viewport.width
-      : Math.min(context.viewport.width, content.left + content.width);
+  const band = visibleBand(context);
+  const minX = Math.max(
+    band.left + EDGE_MARGIN,
+    content === null ? EDGE_MARGIN : content.left + EDGE_MARGIN,
+  );
+  const rightEdge = Math.min(
+    band.right,
+    content === null ? context.viewport.width : content.left + content.width,
+  );
   const maxX = Math.max(minX, rightEdge - width - EDGE_MARGIN);
   const panel = context.panel;
   switch (side) {
@@ -145,7 +209,7 @@ export function dockX(side: DockSide, context: LayoutContext, width: number): nu
 
 /** Keep the box on screen and out of the composer's vertical band. */
 export function clampTop(top: number, context: LayoutContext, box: BoxSize, left: number): number {
-  let maxTop = context.viewport.height - box.height - EDGE_MARGIN;
+  let maxTop = visibleBand(context).bottom - box.height - EDGE_MARGIN;
   const composer = context.composer;
   if (composer !== null) {
     const overlapsX =
@@ -154,7 +218,9 @@ export function clampTop(top: number, context: LayoutContext, box: BoxSize, left
       maxTop = Math.min(maxTop, composer.top - box.height - 6);
     }
   }
-  return clamp(top, Math.min(TOP_MARGIN, maxTop), maxTop);
+  const minTop = topLimit(context);
+  // A box taller than the band keeps its head on screen rather than its feet.
+  return maxTop < minTop ? minTop : clamp(top, minTop, maxTop);
 }
 
 export function defaultPosition(
@@ -163,8 +229,7 @@ export function defaultPosition(
   box: BoxSize = boxSize(breakpoint),
 ): SavedPosition {
   const side: DockSide = breakpoint === "phone" ? "viewport-right" : "panel-right";
-  const bottom = (context.composer?.top ?? context.viewport.height) - 8;
-  return positionAt(side, bottom - box.height, box, context);
+  return positionAt(side, feetLine(context) - 2 - box.height, box, context);
 }
 
 /** Saved position for a box whose top edge is at `top` on a dock side. */
@@ -230,31 +295,56 @@ export function intersectionArea(a: Rect, b: Rect): number {
   return width > 0 && height > 0 ? width * height : 0;
 }
 
-export type Avoidance = "clear" | "peek" | "hidden";
+/**
+ * - clear: show the figure.
+ * - peek: shrink in place (panel docks) until hovered or focused.
+ * - retract: tuck away as a bookmark tab at the window edge.
+ * - hidden: a modal dialog is open.
+ */
+export type Avoidance = "clear" | "peek" | "retract" | "hidden";
+
+/** Whether even the smallest figure fits between the top bar and the feet line. */
+export function hasRoom(context: LayoutContext, minFigureHeight: number): boolean {
+  return feetLine(context) - topLimit(context) - FIGURE_HEADROOM >= minFigureHeight;
+}
 
 /**
- * Decide how present the companion may be. A modal dialog hides it; covering
- * more than a sliver of the reading column turns it into a peeking,
- * translucent figure until the reader hovers or focuses it.
+ * Decide how present the companion may be. A modal dialog hides it. On a
+ * phone the figure stays visible at its fitted size (the reader tucks it away
+ * explicitly) and only retracts when there is no room at all. Elsewhere,
+ * covering more than a sliver of the reading column retracts a window-edge
+ * figure into a bookmark tab and shrinks a panel-docked one.
  */
 export function avoidance(
   box: Rect,
   context: LayoutContext,
   dialogOpen: boolean,
   breakpoint: Breakpoint,
+  side: DockSide = "panel-right",
 ): Avoidance {
   if (dialogOpen) {
     return "hidden";
   }
+  // With the keyboard open, never slide, shrink or tuck away on its own: fit in
+  // the free space (the reader may still collapse it explicitly).
+  if (keyboardOpen(context)) {
+    return "clear";
+  }
+  if (!hasRoom(context, figureSize(breakpoint).height)) {
+    return "retract";
+  }
   if (breakpoint === "phone") {
-    return "peek";
+    return "clear";
   }
   const column = context.column;
   if (column === null) {
     return "clear";
   }
   const covered = intersectionArea(box, column) / Math.max(1, box.width * box.height);
-  return covered > 0.12 ? "peek" : "clear";
+  if (covered <= 0.12) {
+    return "clear";
+  }
+  return isViewportSide(side) ? "retract" : "peek";
 }
 
 /** Whether a dock side hugs the window edge (slide-out peek) or not (shrink). */
@@ -305,10 +395,10 @@ export function anchorFeet(
   from: Rect,
   next: BoxSize,
 ): SavedPosition {
-  const baseline = (context.composer?.top ?? context.viewport.height) - 6;
+  const baseline = feetLine(context);
   let feet = from.top + from.height;
-  if (feet - next.height < TOP_MARGIN) {
-    feet = Math.min(TOP_MARGIN + next.height, baseline);
+  if (feet - next.height < topLimit(context)) {
+    feet = Math.min(topLimit(context) + next.height, baseline);
   }
   return positionAt(position.side, feet - next.height, next, context);
 }
@@ -323,5 +413,35 @@ export interface PeekGeometry {
 /** Peek amounts that leave a large figure no wider than the free gutter. */
 export function peekGeometry(box: BoxSize, context: LayoutContext): PeekGeometry {
   const ratio = gutterWidth(context) / Math.max(1, box.width);
-  return { scale: clamp(ratio, 0.22, 0.6), slide: clamp(1 - ratio, 0.58, 0.82) };
+  // Never smaller than this: a peeking figure must stay recognisable.
+  return { scale: clamp(ratio, 0.45, 0.6), slide: clamp(1 - ratio, 0.58, 0.82) };
+}
+
+export interface BookmarkPlacement {
+  readonly top: number;
+  /** Distance from the layout viewport's left edge (left-docked tab). */
+  readonly left: number;
+  /** Distance from the layout viewport's right edge (right-docked tab). */
+  readonly right: number;
+}
+
+/**
+ * Where the collapsed bookmark tab sits: at the figure's height, but always
+ * fully inside the visible band, hugging the visible edge (not the layout
+ * edge, which can be off-screen while zoomed or with a keyboard open).
+ */
+export function bookmarkTop(
+  wantedTop: number,
+  tabHeight: number,
+  context: LayoutContext,
+): BookmarkPlacement {
+  const band = visibleBand(context);
+  const minTop = band.top + TOP_MARGIN;
+  const maxTop = band.bottom - tabHeight - EDGE_MARGIN;
+  const top = maxTop < minTop ? Math.max(band.top, maxTop) : clamp(wantedTop, minTop, maxTop);
+  return {
+    top,
+    left: band.left,
+    right: Math.max(0, context.viewport.width - band.right),
+  };
 }

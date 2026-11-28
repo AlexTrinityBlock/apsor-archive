@@ -35,7 +35,15 @@ from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.agent.service.history_indexer import AgentHistoryIndexer
+from app.module.companion.dependencies import (
+    build_life_story_worker,
+    build_lore_vector_warmer,
+    seed_companion,
+)
+from app.module.companion.service.life_story_worker import LifeStoryWorker
+from app.module.companion.service.lore_vectors import LoreVectorWarmer
 from app.module.knowledge.dependencies import (
+    build_embedding_backfill,
     build_history_chunk_store,
     build_ingest_worker,
     build_job_consumer,
@@ -45,6 +53,7 @@ from app.module.knowledge.dependencies import (
     load_ingest_runtime_config,
     reload_ai_runtime,
 )
+from app.module.knowledge.service.embedding_backfill import EmbeddingBackfill
 from app.module.knowledge.service.ingest_job_service import IngestWorker
 from app.module.knowledge.service.provider_error_notice_service import (
     ProviderErrorNoticeService,
@@ -77,6 +86,24 @@ async def open_process_state(state: State, settings: Settings) -> None:
     state.secret_cipher = cipher
     state.ai_runtime = runtime
     state.provider_notice_service = notice_service
+    await _seed_companion_world(state)
+
+
+async def _seed_companion_world(state: State) -> None:
+    """Apply the shipped companion seed and install the live providers.
+
+    Both the API lifespan and the worker open their process state here, so
+    either may seed first; the seeder takes an advisory lock and is a no-op
+    once the bundle is applied. A failure is logged and the providers fall back
+    to the seed files, so a bad seed never takes the archive down.
+    """
+    try:
+        result = await seed_companion(state)
+    except Exception:
+        logger.exception("companion seed failed; serving the seed files until it succeeds")
+        return
+    if result.applied:
+        logger.info("companion world seeded content_version=%s", result.content_version)
 
 
 async def close_process_state(state: State) -> None:
@@ -131,9 +158,13 @@ class BackgroundServices:
     worker: IngestWorker
     cleanup: ChatAttachmentCleanup
     history_indexer: AgentHistoryIndexer
+    lore_warmer: LoreVectorWarmer | None = None
     consumer: RabbitMQJobConsumer | None = None
-    # Only the dedicated worker process starts the backfill (see worker.py).
+    # Only the dedicated worker process starts the backfills (see worker.py).
     thumbnail_backfill: FileThumbnailBackfill | None = None
+    # --- C: life stories --- written only by the dedicated worker.
+    life_stories: LifeStoryWorker | None = None
+    embedding_backfill: EmbeddingBackfill | None = None
     _tasks: list[asyncio.Task[None]] = field(default_factory=list)
 
     def _spawn(self, coroutine: Coroutine[Any, Any, None], name: str) -> None:
@@ -149,6 +180,8 @@ class BackgroundServices:
             self.history_indexer.run_forever(stop_event),
             "conversation-history-indexer",
         )
+        if self.lore_warmer is not None:
+            self._spawn(self.lore_warmer.run_forever(stop_event), "companion-lore-vector-warmer")
 
     def start_thumbnail_backfill(self, stop_event: asyncio.Event | None) -> None:
         """Start the WebP thumbnail backfill loop (dedicated worker only)."""
@@ -156,6 +189,19 @@ class BackgroundServices:
             self._spawn(
                 self.thumbnail_backfill.run_forever(stop_event),
                 "file-thumbnail-backfill",
+            )
+
+    def start_life_stories(self, stop_event: asyncio.Event | None) -> None:
+        """Start the life-story writer loop (dedicated worker only)."""
+        if self.life_stories is not None:
+            self._spawn(self.life_stories.run_forever(stop_event), "companion-life-stories")
+
+    def start_embedding_backfill(self, stop_event: asyncio.Event | None) -> None:
+        """Start the pending-embedding backfill loop (dedicated worker only)."""
+        if self.embedding_backfill is not None:
+            self._spawn(
+                self.embedding_backfill.run_forever(stop_event),
+                "embedding-backfill",
             )
 
     def start_worker_loop(self) -> None:
@@ -198,9 +244,16 @@ async def build_background_services(state: State, settings: Settings) -> Backgro
         worker=worker,
         cleanup=cleanup,
         history_indexer=history_indexer,
+        lore_warmer=build_lore_vector_warmer(state),
+        life_stories=build_life_story_worker(state),
         thumbnail_backfill=(
             build_thumbnail_backfill(state, database)
             if settings.thumbnail_backfill_enabled
+            else None
+        ),
+        embedding_backfill=(
+            build_embedding_backfill(state, database)
+            if settings.embedding_backfill_enabled
             else None
         ),
     )

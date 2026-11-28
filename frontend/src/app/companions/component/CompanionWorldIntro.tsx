@@ -22,6 +22,15 @@ export function CompanionWorldIntro() {
     <section className="companions-world" aria-labelledby="companions-world-title">
       <p className="eyebrow">{t("companion.world.eyebrow")}</p>
       <h2 id="companions-world-title">{t("companion.world.title")}</h2>
+      <img
+        className="companions-world__door"
+        src="/companions/world/illusory-door.avif"
+        alt=""
+        width={1024}
+        height={683}
+        loading="lazy"
+        decoding="async"
+      />
       <figure className="companions-world__spirit">
         <blockquote>
           <p>{t("insights.about.librarians.spirit")}</p>
@@ -38,6 +47,15 @@ export function CompanionWorldIntro() {
           </li>
         ))}
       </ul>
+      <img
+        className="companions-world__dinner"
+        src="/companions/world/dinner-of-recipes.avif"
+        alt=""
+        width={896}
+        height={597}
+        loading="lazy"
+        decoding="async"
+      />
     </section>
   );
 }

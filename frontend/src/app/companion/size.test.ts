@@ -8,6 +8,8 @@ import {
   displayLevel,
   effectiveLevel,
   figureForLevel,
+  fittedFigure,
+  READABLE_FIGURE,
   gripLevel,
   heightForLevel,
   levelForHeight,
@@ -189,5 +191,44 @@ describe("presets and storage", () => {
       percent: Math.round((Math.sqrt(222 * 576) / 576) * 100),
     });
     expect(readoutFor(1, null, DESKTOP_RANGE)).toEqual({ labelKey: null, percent: 100 });
+  });
+});
+
+describe("fitted figure (derived, never persisted)", () => {
+  const keyboard: LayoutContext = {
+    ...phone,
+    visible: { top: 0, bottom: 500 },
+    composer: { left: 0, top: 400, width: 390, height: 100 },
+  };
+
+  test("keyboard 844 → 500 → 844: the chosen level maps back to the exact size", () => {
+    const level = 1;
+    const open = figureForLevel(level, sizeRange("phone", phone));
+    const shrunk = figureForLevel(level, sizeRange("phone", keyboard));
+    const closed = figureForLevel(level, sizeRange("phone", phone));
+    expect(shrunk.height).toBeLessThanOrEqual(open.height);
+    expect(shrunk.height).toBeGreaterThanOrEqual(READABLE_FIGURE.height);
+    expect(closed).toEqual(open);
+  });
+
+  test("with the keyboard open the figure uses the band up to just under the top", () => {
+    const range = sizeRange("phone", keyboard);
+    // feet line 394, top limit 8, 20px headroom: up to 366px tall, capped by width.
+    expect(range.maxHeight).toBe(292);
+    expect(fittedFigure(figureForLevel(1, range), "phone", keyboard).room).toBe(true);
+  });
+
+  test("desktop: shrinks to the free gutter, never below a readable size", () => {
+    const roomy: LayoutContext = { ...desktop, column: { left: 305, top: 80, width: 700, height: 600 } };
+    const chosen = figureForLevel(1, sizeRange("desktop", roomy));
+    const fitted = fittedFigure(chosen, "desktop", roomy);
+    expect(fitted.room).toBe(true);
+    expect(fitted.figure.width).toBeLessThan(chosen.width);
+    expect(fitted.figure.width).toBeGreaterThanOrEqual(READABLE_FIGURE.width);
+  });
+
+  test("desktop with no gutter at all: tuck away as a bookmark", () => {
+    const chosen = figureForLevel(0.5, sizeRange("desktop", desktop));
+    expect(fittedFigure(chosen, "desktop", desktop).room).toBe(false);
   });
 });

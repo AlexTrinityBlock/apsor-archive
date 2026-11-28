@@ -38,6 +38,9 @@ const ALLOWED_EDGES = new Set([
   "chat -> agent",
   // Saved-question citations reuse the chat citation href builders.
   "questions -> chat",
+  // The account detail page hosts root's companion tab (UserCompanionTab) and
+  // the directory reuses its pure filter and sparkline helpers.
+  "accounts -> companion-admin",
 ]);
 
 /** Shared areas may still import selected workspace modules. */

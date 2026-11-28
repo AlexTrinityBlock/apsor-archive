@@ -1,15 +1,13 @@
 """Load the shipped preset stories from ``app/module/companion/lore``.
 
 English is canonical: each preset is ``lore/<id>.json`` (``schema`` 1) and owns
-the fragment ids, tiers, and themes. Optional translations live in
+the fragment ids, weights, and themes. Optional translations live in
 ``lore/zh-TW/<id>.json`` and ``lore/zh-CN/<id>.json`` with the same ids; a
 translation may override ``name``, ``persona``, and each fragment's ``text``.
-Anything missing falls back to English per item, so unlock state stays
+Anything missing falls back to English per item, so told progress stays
 locale-independent. ``canon.json`` names the shared world entities that a
-fragment's ``refs`` may point at. ``vocabulary.json`` maps themes to English
-keywords; ``zh-TW/vocabulary.json`` and ``zh-CN/vocabulary.json`` add
-region-appropriate keywords for the same themes, and the loader merges all
-three so a query in any interface language can match a theme.
+fragment's ``refs`` may point at. Themes are editor metadata only: recall is
+semantic and never gated by keywords.
 
 The files are read once per process and validated strictly; a malformed shipped
 file is a deployment bug, so it raises.
@@ -23,19 +21,19 @@ from typing import Any, cast
 
 from app.module.companion.domain.story_domain import (
     FRAGMENT_MAX_CHARS,
-    LORE_TIERS,
+    LEGACY_TIER_WEIGHTS,
+    LORE_WEIGHTS,
     PERSONA_MAX_CHARS,
     STORY_LOCALES,
     LoreFragment,
-    LoreTier,
-    LoreVocabulary,
+    LoreWeight,
     PresetStory,
     is_fragment_key,
     normalize_themes,
 )
 
 LORE_DIRECTORY = Path(__file__).resolve().parent.parent / "lore"
-_RESERVED_FILES = frozenset({"vocabulary.json", "canon.json"})
+_RESERVED_FILES = frozenset({"canon.json"})
 
 
 class PresetLoreError(RuntimeError):
@@ -58,14 +56,15 @@ def _fragment(raw: Any, source: str) -> LoreFragment:
         raise PresetLoreError(f"{source}: every fragment must be an object")
     key = raw.get("id")
     text = raw.get("text")
-    tier = raw.get("tier")
+    # ``weight`` replaced ``tier``; older seed files still say tier.
+    weight = raw.get("weight", LEGACY_TIER_WEIGHTS.get(str(raw.get("tier")), raw.get("tier")))
     themes = raw.get("themes", [])
     if not isinstance(key, str) or not is_fragment_key(key):
         raise PresetLoreError(f"{source}: invalid fragment id {key!r}")
     if not isinstance(text, str) or not text.strip() or len(text) > FRAGMENT_MAX_CHARS:
         raise PresetLoreError(f"{source}: fragment {key} text is empty or too long")
-    if tier not in LORE_TIERS:
-        raise PresetLoreError(f"{source}: fragment {key} has invalid tier {tier!r}")
+    if weight not in LORE_WEIGHTS:
+        raise PresetLoreError(f"{source}: fragment {key} has invalid weight {weight!r}")
     if not isinstance(themes, list) or not all(isinstance(item, str) for item in themes):
         raise PresetLoreError(f"{source}: fragment {key} themes must be strings")
     refs = raw.get("refs", [])
@@ -75,7 +74,7 @@ def _fragment(raw: Any, source: str) -> LoreFragment:
         key=key,
         text=text.strip(),
         themes=normalize_themes(themes),
-        tier=cast(LoreTier, tier),
+        weight=cast(LoreWeight, weight),
         refs=tuple(dict.fromkeys(item.strip() for item in refs if item.strip())),
     )
 
@@ -174,43 +173,6 @@ def load_presets(
     return presets
 
 
-def _vocabulary_file(path: Path) -> dict[str, tuple[str, ...]]:
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    themes = raw.get("themes") if isinstance(raw, dict) else None
-    if not isinstance(themes, dict):
-        raise PresetLoreError(f"{path.name}: expected a themes object")
-    parsed: dict[str, tuple[str, ...]] = {}
-    for theme, keywords in themes.items():
-        if not isinstance(theme, str) or not isinstance(keywords, list):
-            raise PresetLoreError(f"{path.name}: themes map names to keyword lists")
-        parsed[theme.strip().lower()] = tuple(
-            str(keyword).strip().lower() for keyword in keywords if str(keyword).strip()
-        )
-    return parsed
-
-
-@lru_cache(maxsize=1)
-def load_vocabulary(directory: Path = LORE_DIRECTORY) -> LoreVocabulary:
-    """Return the theme vocabulary: English keywords plus every locale overlay.
-
-    A locale overlay may only add keywords to themes the English file defines,
-    so the theme set stays canonical. Missing files mean no keywords.
-    """
-    base_path = directory / "vocabulary.json"
-    if not base_path.exists():
-        return LoreVocabulary(themes={})
-    merged = {theme: list(keywords) for theme, keywords in _vocabulary_file(base_path).items()}
-    for locale in sorted(STORY_LOCALES):
-        overlay_path = directory / locale / "vocabulary.json"
-        if locale == "en" or not overlay_path.exists():
-            continue
-        for theme, keywords in _vocabulary_file(overlay_path).items():
-            if theme not in merged:
-                raise PresetLoreError(f"{locale}/vocabulary.json: unknown theme {theme!r}")
-            merged[theme].extend(keyword for keyword in keywords if keyword not in merged[theme])
-    return LoreVocabulary(themes={theme: tuple(words) for theme, words in merged.items()})
-
-
 def get_preset(preset_id: str, locale: str = "en") -> PresetStory | None:
     """Return one shipped preset story in ``locale``, or ``None`` when unknown."""
     return load_presets(locale).get(preset_id)
@@ -222,6 +184,5 @@ __all__ = [
     "apply_translation",
     "get_preset",
     "load_presets",
-    "load_vocabulary",
     "parse_preset",
 ]

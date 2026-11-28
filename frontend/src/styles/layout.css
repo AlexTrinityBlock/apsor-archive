@@ -577,6 +577,11 @@
 }
 
 .app-page {
+  /* The containing block for absolutely positioned page content (including
+     visually hidden inputs). Without it they anchor to the initial containing
+     block, and focusing one scrolls the whole document under the fixed
+     mobile bar, leaving a blank band at the bottom. */
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
@@ -833,9 +838,11 @@
     padding: 9px 16px;
   }
 
-  .content-container {
-    padding: 24px 20px 48px;
-    gap: 22px;
+  :root {
+    --page-pad-x: 20px;
+    --page-pad-top: 24px;
+    --page-pad-bottom: 48px;
+    --page-gap: 22px;
   }
 
   .page-title {
@@ -844,8 +851,10 @@
 }
 
 @media (max-width: 600px) {
-  .content-container {
-    padding: 20px 16px 44px;
+  :root {
+    --page-pad-x: 16px;
+    --page-pad-top: 20px;
+    --page-pad-bottom: 44px;
   }
 
   h1,

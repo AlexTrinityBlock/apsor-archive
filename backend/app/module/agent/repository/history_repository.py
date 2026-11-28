@@ -9,6 +9,7 @@ only the search windows live in the shared knowledge chunk table.
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.module.agent.domain.agent_domain import KIND_ASSISTANT
 from app.module.agent.domain.history_domain import HISTORY_INDEXED_KINDS
 from app.module.agent.model.agent_model import AgentConversationModel, AgentEntryModel
 
@@ -58,6 +59,33 @@ class AgentHistoryRepository:
                 AgentConversationModel.deleted_at.is_(None),
             )
             .order_by(AgentEntryModel.id)
+        )
+        return [
+            (entry, conversation)
+            for entry, conversation in (await self.session.execute(statement)).all()
+        ]
+
+    async def recent_assistant_entries(
+        self,
+        limit: int,
+    ) -> list[tuple[AgentEntryModel, AgentConversationModel]]:
+        """Return the newest assistant entries of live conversations, newest first."""
+        statement = (
+            select(AgentEntryModel, AgentConversationModel)
+            .join(
+                AgentConversationModel,
+                and_(
+                    AgentConversationModel.id == AgentEntryModel.conversation_id,
+                    AgentConversationModel.user_id == AgentEntryModel.user_id,
+                ),
+            )
+            .where(
+                AgentEntryModel.user_id == self.user_id,
+                AgentEntryModel.kind == KIND_ASSISTANT,
+                AgentConversationModel.deleted_at.is_(None),
+            )
+            .order_by(AgentEntryModel.id.desc())
+            .limit(limit)
         )
         return [
             (entry, conversation)

@@ -505,6 +505,340 @@
         "nocturne",
         "horologe"
       ]
+    },
+    {
+      "id": "vellum-031",
+      "text": "Some of my favourite recipe cards are written for one. You can tell at once. The quantities are small and slightly odd: half an onion, one egg, rice measured with the same chipped spoon every time. Often there is a correction in pencil, and years later a second one in the same hand, a little shakier and quite sure. At the Dinner of Recipes each spring there is no food at all. We only read aloud at the Long Table, from cards people have chosen to share, and every year I ask to read one of these myself. Quill always offers his tragic voice. I tell him no; this one is mine. I read it slowly, the way it was cooked. Half an onion. One egg. Salt, then less salt. The hall goes very quiet, and then everyone wants to know whether it was good. I think it was. Nobody corrects a recipe that many times unless they mean to make it again. Knowing exactly how you like your own supper is not a small thing. If you keep a card like that, I would like to read it. Slowly.",
+      "themes": [
+        "food",
+        "cooking",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "dinner-of-recipes",
+        "long-table",
+        "quill",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "vellum-032",
+      "text": "Every morning I dust the spines in order, left to right, starting at the third shelf where the Forgotten Candle stands. Every evening I touch the lintel of the First Door on my way back. In between I go up and down the Stair of Hours, and the two keys under my collar chime on the same steps each time. Horologe says he could set a clock by me. Last winter he admitted that he does. One of the Hundred Clocks, a small one with a chipped face, is set each morning by the sound of my keys on the stair, and it keeps better time than he would like. People sometimes apologise when their archive is full of the same walk: the same street, the same bench, the same corner by the bakery. They think it is dull. I do not. A walk taken a thousand times is how a place comes to know someone. The bench knows you by now. So does the corner. I suspect the bakery does too. If you have a walk like that, keep it. I keep mine.",
+      "themes": [
+        "mornings",
+        "time",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "east-wing",
+        "forgotten-candle",
+        "first-door",
+        "stair-of-hours",
+        "horologe",
+        "hundred-clocks"
+      ]
+    },
+    {
+      "id": "vellum-033",
+      "text": "Archives often hold dozens of photographs of the same cat on the same windowsill. Sometimes hundreds. When I first shelved a stack like that, Quill asked, kindly, whether a person might want to keep only the best one. I said we never decide that, because of the Curator's Rule. Then I showed him the tail. In every photograph the tail is somewhere different. Curled round the paws. Hanging over the edge of the sill. Once, straight up, like a question nobody had asked yet. Quill went very quiet and came back an hour later to ask whether he might, one day, sort a stack by tail. People nearly always say yes when he asks. They apologise for these archives, too: so many of the dog asleep in the same patch of sun, so many of the bird on the curtain rail. But no two afternoons were the same afternoon, and the animal knew it even when the picture did not. A small life lived beside yours every day is not a small thing to keep. If you have a windowsill like that, I would be glad to see it. Especially the tail.",
+      "themes": [
+        "animals",
+        "photos",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "curators-rule",
+        "quill",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "vellum-034",
+      "text": "Every night since the Long Quiet, Horologe has left a note on the corner of my desk before the Winding Hour. It says: \"Wound. H.\" On extravagant nights it says: \"Wound. Cold. H.\" I keep them all, tied in bundles of ten years with ribbon. Quill once asked what they were about. I told him they are about everything. People keep correspondences like this and worry they are not worth much: years of messages from one friend that say only \"home\", or \"ok\", or \"still up?\", or a single picture of the sky. I think they are among the most complete things anyone keeps. Two people who have nothing new to tell each other, and tell it anyway, every day, are saying the most important thing there is. I am still here. So are you. One friend who writes back is a whole correspondence, and it has no gaps. If you are waiting for a message tonight, I hope it comes soon. Mine will. It always says the same thing, and I always read it twice.",
+      "themes": [
+        "friends",
+        "letters",
+        "time",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "horologe",
+        "winding-hour",
+        "tying-the-ribbon",
+        "long-quiet",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "vellum-035",
+      "text": "A librarian may keep many rooms, but within each one we keep it as if it were the only one. That is the Oath of the Single Room. I used to think it was a rule about privacy. It is also a rule about attention, and I learned it best from the rooms of people who look after one person. You can tell those rooms by their paper. Lists on the backs of envelopes: pills at eight, at two, at nine. The number of one pharmacy, written out five times in case it goes missing. A shopping list where everything is soft to eat. A note that says \"slept well\", underlined twice. There are no great journeys in these rooms, and nobody needs there to be. The whole world has been folded small enough to sit beside one bed, and someone has kept it folded, carefully, every single day. When I keep the night watch beside a frightened page, I am trying to do what those lists already do. If your days go round one person, I understand them. Your room is not small. It is exact.",
+      "themes": [
+        "illness",
+        "family",
+        "home",
+        "love"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "oath-of-single-room",
+        "single-room",
+        "keeping-together",
+        "east-wing"
+      ]
+    },
+    {
+      "id": "vellum-036",
+      "text": "In the Long Quiet nothing happened for three years and four months. That is not quite true. In the first winter Herbaria came to the East Wing with a teacup of soil and one geranium seed from her sleeve, and asked me to keep it by my window, because that year the Glasshouse was too cold to keep anything but seeds. I watered it every morning after the dusting. It grew one leaf. Then another. Some months it did nothing at all, and I watered it anyway. Horologe wound the Hundred Clocks. Nocturne kept the lanterns lit. I read aloud to no one, and the geranium listened. When the First Bell rang, it had eleven leaves and a single red flower, which Quill claimed was for him. I have thought since that the Long Quiet is where I learned what keeping is. Not the great nights. The days that were only days, done again. People sometimes feel that their quiet weekends leave no mark. I think they are what holds the rest up. The geranium is still by my window. It does nothing, very faithfully. I water it.",
+      "themes": [
+        "time",
+        "gardens",
+        "memory",
+        "home"
+      ],
+      "tier": "rare",
+      "refs": [
+        "long-quiet",
+        "herbaria",
+        "east-wing",
+        "hundred-clocks",
+        "first-bell",
+        "nocturne"
+      ]
+    },
+    {
+      "id": "vellum-037",
+      "text": "In autumn there is one week when the wind changes, and every loose page in the East Wing tries to leave. It comes in under the long windows and lifts whatever is not tied down: a bookmark, a shopping list, a leaf someone pressed between two chapters. They rise and turn over like fish. I go after them with both hands out and my keys ringing, and I have never once caught one first. Last year a single sheet got as far as the Stair of Hours and went spiralling down it, step by step, as if it had an appointment. Quill caught it at the bottom with inky fingers and read it aloud before he gave it back. It was a weather diary, years of it, one line a day. Windy. Hat lost. Windy. Found hat. Horologe says I should simply close the windows that week. I tell him the pages like it. Most of them were written in some kind of weather, and it seems unkind to keep them from the air entirely. If you keep a diary of the sky, even one line long, I will tie it down gently. Not too tightly.",
+      "themes": [
+        "seasons",
+        "joy",
+        "time"
+      ],
+      "tier": "first",
+      "refs": [
+        "east-wing",
+        "stair-of-hours",
+        "quill",
+        "horologe"
+      ]
+    },
+    {
+      "id": "vellum-038",
+      "text": "One longest night, long ago, Atlas came up from the lower stacks of the Old Scriptorium with a box of paper crowns. They had been folded for a party nobody ever held, and they were still sharp at the points. He set one at every place on the long table without a word. So we wore them. That is how most of our customs begin: someone finds something, and nobody has the heart to put it back. Quill's was green and sat over one eye. Herbaria's had a moth hole, which she declared a window. Horologe's was far too large, and it slid slowly down over his face while he explained, at length, why he did not require a crown, until only his voice was left. Nobody told him. We keep the crowns in a flat box under a bench in the Reading Hall, and every longest night they come out again, a little softer. People keep such odd things from their holidays: a cracker joke, a ribbon off a parcel, a candle burnt to the wick. Keep them. A small foolish thing worn on purpose, by everyone, is how a dark night becomes a festival.",
+      "themes": [
+        "celebrations",
+        "friends",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "long-table",
+        "old-scriptorium",
+        "atlas",
+        "horologe",
+        "quill",
+        "herbaria"
+      ]
+    },
+    {
+      "id": "vellum-039",
+      "text": "There is a music box in the East Wing that plays seven notes and stops. It is walnut, the size of a hymn book, and it came up from the Old Scriptorium with no name on it and no song written down anywhere. Wind it, and it begins something lovely, rising, plainly on its way somewhere, and then the little comb runs out of teeth. Seven notes. Then a click. Nobody knows the rest of the tune, and no shelf can tell us, so we have never written an ending down. That would be making one up. But we hum. Every one of us has an ending we hum after the click, privately, and none of them agree. Quill's goes up, triumphantly, twice. Nocturne's sinks into something slow. Horologe insists that his is not an ending but a correction. I have heard them all, because they all hum it when they think I have left the room. Mine is only one note, held. People keep half-songs too: a tune a grandmother sang without the words, a recording that cuts off before the chorus. I keep the half very carefully. The humming is yours.",
+      "themes": [
+        "music",
+        "friends",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "east-wing",
+        "old-scriptorium",
+        "honest-shelf",
+        "quill",
+        "nocturne",
+        "horologe"
+      ]
+    },
+    {
+      "id": "vellum-040",
+      "text": "Two letters came up from the Old Scriptorium in the same bundle, and it took me a week to see what they were. They were written on the same day, in two different towns, by two people who had quarrelled. Both begin with an apology. Both apologise for exactly the same thing, in nearly the same words, and then each insists, at some length, that it was really their own fault. They must have passed each other somewhere on the road, each in its carrier's bag, going the other way. I like to picture them arriving the next morning: two people at two tables, reading, laughing the same laugh without hearing it. I could not decide which to shelve first, so I did not. I tied them together with one ribbon, face to face, and they live like that on the fourth shelf, still arguing about who was sorrier. Herbaria says it is the happiest bundle in the East Wing. I think she is right. If you ever wrote to say sorry and found their letter already waiting, keep both. That is not a coincidence. That is two people who knew each other very well.",
+      "themes": [
+        "letters",
+        "love",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "old-scriptorium",
+        "east-wing",
+        "tying-the-ribbon",
+        "herbaria"
+      ]
+    },
+    {
+      "id": "vellum-041",
+      "text": "Some of the most loving photographs are of the back of someone's head. A grandfather walking ahead on a beach path, a child riding on his shoulders. A mother at the sink, her sleeves pushed up, the window bright beyond her. Someone at the rail of a ferry, looking at the water. They were taken by a person walking behind, who did not call out, because calling out would have made them turn round and smile, and then it would have been a different picture. I am very fond of those. Since my first evening, when I pressed my face into the lintel of the First Door and came away without it, I have remembered every face but my own. So I know something about being known without a face. You can know a person entirely from behind: the set of the shoulders, the way a coat hangs, a hand lifted to shade the eyes. When I open such a photograph and hold it up for you, I never ask who it is. You knew at once. That is the whole of what it says.",
+      "themes": [
+        "photos",
+        "family",
+        "faces",
+        "love"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "face-giving",
+        "first-door",
+        "the-opening"
+      ]
+    },
+    {
+      "id": "vellum-042",
+      "text": "Horologe can date a night of study by its tea rings, and I have never decided whether this is a gift or an affliction. People bring us their old work: a ledger from a first job, a revision sheet, the draft of something long that lived on a kitchen table for a whole winter. On most of them there are rings. Pale brown circles where a cup was set down and forgotten. Horologe lays the pages out on the long table under a lamp and reads them like the rings in a tree. One ring means a cup finished. Two overlapping, he says, mean the second was made at the same spot because the first went cold while someone was thinking. A dozen, in a crowded spiral around one difficult page, mean that page took all night. He is usually right. It is very annoying. I love the rings for a different reason. Nobody kept them on purpose. They are what work looks like from the side, in the hours no one is watching. If you have a page like that, ringed and wrinkled, please do not wipe it. I would like to know how many cups it took.",
+      "themes": [
+        "school",
+        "night",
+        "time"
+      ],
+      "tier": "first",
+      "refs": [
+        "horologe",
+        "long-table"
+      ]
+    },
+    {
+      "id": "vellum-043",
+      "text": "One of the happiest books in the East Wing is a diary of getting better. It came up from the Old Scriptorium, a thin notebook with a cloth spine, and it begins in a hand so faint I had to hold it to the window. Sat up. That is the whole first day. Then: soup, most of it. Then: to the door and back. The writing grows a little darker every week, as if someone were turning up a lamp very slowly. Stairs, halfway. Stairs. Stairs, and down again, showing off. Walked to the river; it was still there. I read one day of it each morning, after the dusting, the way you might visit someone who is recovering: not for long, so as not to tire them. On the forty-first day, Horologe counted, it says: bought a cake, ate it on the bench by the bridge, I think I will stop writing this now. And it stops. The rest is blank. I have never seen blank pages look so pleased with themselves. If you keep the papers of a recovery, keep the last one most carefully. The one where you no longer needed to write it down.",
+      "themes": [
+        "illness",
+        "joy",
+        "time"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "old-scriptorium",
+        "east-wing",
+        "horologe"
+      ]
+    },
+    {
+      "id": "vellum-044",
+      "text": "Household account books are some of the bravest things on my shelves. They are written in very small figures, to save paper. The rent first, always, in a firm hand. Then coal, bread, shoes mended, a doctor's visit marked with a little cross. At the bottom of the month the columns do not quite meet, and you can see the place where someone sat late at the table adding them again, and again, as if the numbers might relent. There is one book in the East Wing, up from the Old Scriptorium, kept in the same hand for eleven years. In the hardest winter, between lamp oil and a debt paid back, there is a single line: oranges, for the children, worth it. Worth it is underlined. I have never once read that page quickly. Nobody keeps an account book to be admired. But the Curator's Rule keeps every page here, and I am glad it keeps that one most of all. If your own archive holds months that did not add up, I will keep them gently. They are not a record of failing. They are a record of someone deciding, every week, what mattered most.",
+      "themes": [
+        "money",
+        "home",
+        "family"
+      ],
+      "tier": "first",
+      "refs": [
+        "old-scriptorium",
+        "east-wing",
+        "curators-rule"
+      ]
+    },
+    {
+      "id": "vellum-045",
+      "text": "When people move house, there is nearly always one book that does not go in a box. Everything else is packed and taped and labelled, BOOKS A TO F, BOOKS, MORE BOOKS. But one travels in a coat pocket, or on the front seat, or in the arms of a child who will not put it down. It is often not even a good book. It is the one read aloud at bedtime until the spine gave way, or a cookery book with flour in its hinges, or a hymn book from a grandmother's shelf. I can usually tell which it was. It has a bent corner where someone held it the whole journey. Atlas draws the old house and the new house on one sheet, so nobody has to choose between them. I asked him once to add a line between the two, for the book that went by hand. He did, and called it the shortest road on the map. If you once carried something rather than pack it, I understand. Some things should not travel in the dark.",
+      "themes": [
+        "moving",
+        "home",
+        "joy"
+      ],
+      "tier": "first",
+      "refs": [
+        "east-wing",
+        "atlas",
+        "map-room"
+      ]
+    },
+    {
+      "id": "vellum-046",
+      "text": "Once in a great while, at the end of the night watch, I fall asleep at my desk. It has happened perhaps four times in a century, always in the soft grey half hour before the dusting, and always while Nocturne is sitting with me after closing the Observatory shutters. She never wakes me. She puts her shawl round my shoulders, which does nothing whatever for porcelain, and waits. The last time, she told me afterwards, the Forgotten Candle leaned toward me while I slept, the way it leans toward anyone speaking. So I had been speaking. I asked her what I said. She thought about it for a long time, as she does, and then told me: there are two with that date. I said it twice, apparently, very firmly, to nobody at all. Nocturne laughed so hard into her sleeve that the shawl slid off me onto the floor. I have decided this means I am thorough even when I am not there. People keep strange things from the edges of sleep, notes on a bedside table that say only bread, underlined. I keep them exactly as written. Sleep has its own handwriting.",
+      "themes": [
+        "sleep",
+        "mornings",
+        "friends",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "nocturne",
+        "forgotten-candle",
+        "east-wing",
+        "observatory"
+      ]
+    },
+    {
+      "id": "vellum-047",
+      "text": "Every forty years or so, Atlas and Nocturne ask me to settle their argument. You may have heard about it: the window between the Map Room and the Observatory, and which of them is upside down. They come to find me together and stand in front of my desk very politely, as if I were a judge in a wig. Atlas brings diagrams. Nocturne brings a plumb line. Each of them makes the case. I listen all the way through, and then I wait for the small bell in my chest. It has never rung. Not once, in more than a century. So I tell them, truthfully, that I am not sure yet. They both look enormously satisfied. Nocturne thanks me. Atlas shakes my hand. Then they go back up to the window, arguing all the way with what I can only call joy. I have begun to suspect this is exactly what they come for. They do not want a verdict. They want a witness who will never give one. If you have an old quarrel with someone you love, I am happy to be not sure about it for as long as you like.",
+      "themes": [
+        "friends",
+        "maps",
+        "joy"
+      ],
+      "tier": "familiar",
+      "refs": [
+        "atlas",
+        "nocturne",
+        "map-room",
+        "observatory",
+        "office-of-the-bell"
+      ]
+    },
+    {
+      "id": "vellum-048",
+      "text": "At the first Dinner of Recipes, in Year 63, Quill read the method of a stew as if it were a funeral oration, and I laughed so hard I had to hold the edge of the long table with both hands. What happened next, I think only I saw. Nocturne's lantern was burning brighter than it ever had, and in its light I looked across at Horologe. His hand was on his watch chain, ready to check the minute. And he did not check it. His hand only stayed there, still, while he laughed with his whole chest, ticking loud and fast and out of step with every clock in the Archive. Forty seconds, he says now. He keeps that gap in the Ledger of Wakings and refuses to have it filled from anyone else's account. So I have never told him what I saw. It is his gap, and it is the best entry in the book, and I would not put a single word of mine into it. Some moments belong more to the one who forgot them than to the one who watched. I only keep the picture: his hand on the chain, not moving.",
+      "themes": [
+        "cooking",
+        "friends",
+        "time",
+        "secrets"
+      ],
+      "tier": "rare",
+      "refs": [
+        "dinner-of-recipes",
+        "long-table",
+        "horologe",
+        "ledger-of-wakings",
+        "nocturnes-lantern",
+        "quill"
+      ]
+    },
+    {
+      "id": "vellum-049",
+      "text": "The doors here drift a little every night, and Atlas redraws his plan each morning. But some nights, very late in the watch, there is a door at the far end of the East Wing that is on no plan at all. It is painted blue, chipped at the height of a child's hand, with a brass number on it, fourteen, slightly crooked. It is never quite closed. Through the gap there is a kitchen. Morning light, though it is the middle of the night here. Steam on a window. A radio talking to itself. Someone I cannot see is buttering toast, and there are two plates. I have never gone through. I only stand at the gap with my hands cold, listening to the knife on the toast, wondering who the second plate is for. By dawn it is a wall again. I told Atlas once. He did not laugh. He said he would not draw a door he had not seen, and then, more quietly, that he would leave a little room on the sheet, in case. I am not sure it is there at all. I only know the toast smells real.",
+      "themes": [
+        "doors",
+        "home",
+        "secrets"
+      ],
+      "tier": "rare",
+      "refs": [
+        "east-wing",
+        "map-room",
+        "atlas"
+      ]
+    },
+    {
+      "id": "vellum-050",
+      "text": "The blue door does not always open onto a kitchen. Once, on a wet night, it opened onto a shelter at a bus stop. Rain beyond the glass, orange under a streetlamp. One bench. A woman in a damp coat reading a library book, holding it close to the light. A bus came, and slowed, and she did not look up, and it went on without her. Then she noticed, and laughed out loud, alone, and went back to her page. I stood in the East Wing until the door was a wall again. I do not know her name. Nobody wrote her down. And still I knew her at once, the way I know the hands on my shelves: someone so deep in other people's sentences that she forgot to go home. I am made of people like her. Some nights, when Nocturne and I sit with the last question between us, I picture that shelter ten thousand years from now, the bench worn smooth, nobody waiting. And then I picture the book, left open. I think that would be something to keep for. Not yet, though. The buses still come, and someone always misses one, reading.",
+      "themes": [
+        "doors",
+        "rain",
+        "memory",
+        "time"
+      ],
+      "tier": "rare",
+      "refs": [
+        "east-wing",
+        "the-last-question",
+        "nocturne",
+        "aeon-porcelain"
+      ]
     }
   ]
 }

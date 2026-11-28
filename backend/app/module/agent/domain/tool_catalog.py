@@ -20,6 +20,7 @@ from app.module.agent.domain.tool_args import (
     ReadMemoryArgs,
     ReadPathArgs,
     ReadTimelineArgs,
+    RecallMyMemoriesArgs,
     RenderPlotArgs,
     SaveMemoryArgs,
     SearchKnowledgeArgs,
@@ -39,7 +40,16 @@ from app.module.agent.domain.tool_args import (
 # (the user by name or "you"; never Keeper, master, or owner) after it.
 # v18 ships the rewritten preset personas from the world bible (ten-thousand-
 # year aeon-porcelain, minds that emerged from the library, equal keeping).
-PROMPT_VERSION = "archive-agent-v18"
+# v19 renders persona rules and story-moment guidance from the companion story
+# config provider and adds story moments to the user entry. v20 serves the
+# equal-address rule from the same config templates and tells the model that
+# its own memories may arrive beside any tool result or with a message.
+# v21 removes the unlock gates (memories carry a weight, everyday / past /
+# heart, that the librarian judges for herself), adds the memory-agency note to
+# the persona section, and tells the model about recall_my_memories.
+# v22 replaces "cite the url" with short web ids: cite a web page inline as
+# [web:wN], never by pasting a bare url, and never mix web ids with archive labels.
+PROMPT_VERSION = "archive-agent-v22"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -55,8 +65,20 @@ PROMPT_VERSION = "archive-agent-v18"
 # and the trailing <search_hint> to web_search. Existing conversations keep their
 # frozen pi.system snapshot. v15 adds the read-only companion_action gesture tool.
 # v16 lets search_knowledge return the companion's own lore in a separate
-# <librarian_memory> block that is never an archive source.
-TOOLS_VERSION = "archive-tools-v16"
+# <librarian_memory> block that is never an archive source. v17 makes that lore
+# semantic-only with untold preference and explicit self queries. v18 carries the
+# lore guidance from the companion story config instead of a hardcoded string.
+# v19 routes the companion's memories through one context contributor: one
+# <librarian_memories> block (with moment and per-moment guidance) may follow
+# search_knowledge, read_file, read_memory, read_timeline, present_resource, and
+# web_fetch results, inside a reserved share of the result budget.
+# v20 adds the read-only recall_my_memories tool (the librarian's own lore,
+# life stories, and past replies with their speakers), labels history windows
+# and history_message output with who said each message, shows each memory's
+# weight, and stops search_knowledge from carrying lore.
+# v21 gives every web_search result and web_fetch page a short id (id="w3",
+# stable per conversation) and tells the model to cite it as [web:w3].
+TOOLS_VERSION = "archive-tools-v21"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -226,8 +248,9 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "Use for current external facts not in the archive. Provide both "
             "query and objective. Results are bounded excerpts with title, URL, "
             "score, and excerpt metadata; the <search_hint> element states when "
-            "content was clipped and that web_fetch recovers the rest. Cite the "
-            "URL. Read-only."
+            "content was clipped and that web_fetch recovers the rest. Every "
+            "result has a short id such as w3; cite it inline as [web:w3]. Web "
+            "results are never archive evidence. Read-only."
         ),
         args_model=WebSearchArgs,
         requires_confirmation=False,
@@ -239,10 +262,24 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
             "Fetch one server-defined page of a public http(s) URL as Markdown. "
             "Call page=1, then page=2, ... until has_more=false. Pages are "
             "server-sized, contiguous, and do not require offsets. Never claim "
-            "content beyond what you actually read. Cite the URL. Read-only."
+            "content beyond what you actually read. The page has a short id such "
+            "as w3; cite it inline as [web:w3]. Read-only."
         ),
         args_model=WebFetchArgs,
         requires_confirmation=False,
+    ),
+    ToolSpec(
+        name="recall_my_memories",
+        description=(
+            "Look up your own memories as the librarian: your memories and the "
+            "life stories you wrote for this person (scope story), and what you "
+            "and the other librarians said to this person before (scope said). "
+            "Each memory shows its weight (everyday, past, heart) and each past "
+            "reply shows who said it. These are your memories, never archive "
+            "evidence: do not cite them. Whether and how much to share is your "
+            "choice. Read-only."
+        ),
+        args_model=RecallMyMemoriesArgs,
     ),
     ToolSpec(
         name="companion_action",

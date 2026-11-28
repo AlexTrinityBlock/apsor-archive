@@ -32,6 +32,7 @@ import {
   useGetAgentConversation,
   useListAgentApprovals,
   useListAgentConversations,
+  useListAgentWebSources,
   useUpdateAgentConversation,
 } from "../generated-apis-types/agent/agent";
 import type { AgentEntrySchema } from "../generated-apis-types/schemas";
@@ -66,6 +67,7 @@ import {
 import {
   CHAT_PANE_IDS,
   ChatHeader,
+  INSPECTOR_TOGGLE_ID,
   type ChatPane,
 } from "./component/ChatHeader";
 import { ChatInspector, type InspectorTab } from "./component/ChatInspector";
@@ -113,11 +115,17 @@ import {
   type ResourceMeta,
 } from "./types";
 import { titleFromMessage } from "./format";
+import {
+  mergeWebSources,
+  webSourcesFromEntries,
+  WebSourcesContext,
+} from "./web-sources";
 import "./chat.css";
 import "../agent/agent.css";
 
 const PAGE_SIZE = 200;
 const NO_ENTRIES: readonly AgentEntrySchema[] = [];
+const NO_LIVE_TOOLS: readonly { readonly name: string; readonly data: unknown }[] = [];
 const NARROW_QUERY = "(max-width: 899px)";
 const ENTRY_HASH = /^#entry-(\d+)$/;
 const ENTRY_HIGHLIGHT_MS = 2_000;
@@ -212,6 +220,25 @@ function isLiveForThread(
   return readRouteDraft(routeState) !== null;
 }
 
+/** The live run's tool steps, when that run belongs to the open conversation. */
+function liveToolsFor(
+  stream: { readonly conversationId: number; readonly toolCalls: readonly { readonly name: string; readonly data: unknown }[] } | null,
+  conversationId: number | null,
+): readonly { readonly name: string; readonly data: unknown }[] {
+  return stream && stream.conversationId === conversationId
+    ? stream.toolCalls
+    : NO_LIVE_TOOLS;
+}
+
+/** Phone: the inspector drawer is open; desktop: the column is not collapsed. */
+function isInspectorOpen(
+  narrow: boolean,
+  pane: ChatPane,
+  collapsed: boolean,
+): boolean {
+  return narrow ? pane === "inspector" : !collapsed;
+}
+
 /**
  * On narrow screens the inspector is a hidden pane most of the time; mount it
  * only when shown so streaming tokens do not re-render it off screen.
@@ -288,7 +315,7 @@ export function ChatPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const narrow = useMediaQuery(NARROW_QUERY);
-  const { t, locale, formatNumber, formatRelative } = useI18n();
+  const { t, locale, formatNumber } = useI18n();
   const {
     containerRef,
     inspectorRef,
@@ -794,6 +821,21 @@ export function ChatPage() {
     [baseEntries, retainedEntries],
   );
 
+  // `[web:wN]` chips resolve from the conversation's numbered web pages; the
+  // loaded and live tool results fill gaps (forks, or a run still streaming).
+  const webSourcesQuery = useListAgentWebSources(conversationId ?? 0, {
+    query: { enabled: conversationId !== null, staleTime: 30_000, retry: false },
+  });
+  const liveTools = liveToolsFor(stream, conversationId);
+  const webSources = useMemo(
+    () =>
+      mergeWebSources(
+        webSourcesQuery.data ?? [],
+        webSourcesFromEntries(entries, liveTools),
+      ),
+    [entries, liveTools, webSourcesQuery.data],
+  );
+
   // The detail endpoint now returns the newest page. Keep every page the reader
   // has already seen so a later refetch cannot drop the tail that moved out of
   // the page window, and reset the accumulated history on a conversation change.
@@ -1218,9 +1260,75 @@ export function ChatPage() {
     setPinnedId(null);
   }, []);
 
+  const focusInspectorToggle = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById(INSPECTOR_TOGGLE_ID)?.focus();
+    });
+  }, []);
+
+  // On a phone the inspector is a slide-over drawer above the thread; on a
+  // desktop it is the resizable right column.
   const collapseInspector = useCallback(() => {
+    if (narrow) {
+      setPane("thread");
+      focusInspectorToggle();
+      return;
+    }
     setCollapsed(true);
-  }, [setCollapsed]);
+  }, [focusInspectorToggle, narrow, setCollapsed]);
+
+  const inspectorOpen = isInspectorOpen(narrow, pane, collapsed);
+  const toggleInspector = useCallback(() => {
+    if (narrow) {
+      setPane((current) => (current === "inspector" ? "thread" : "inspector"));
+      setDrawerOpen(false);
+      return;
+    }
+    if (collapsed) {
+      openInspector();
+    } else {
+      setCollapsed(true);
+    }
+  }, [collapsed, narrow, openInspector, setCollapsed, setDrawerOpen]);
+
+  useEffect(() => {
+    if (!narrow || pane !== "inspector") {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      inspectorRef.current?.focus();
+    });
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        setPane("thread");
+        focusInspectorToggle();
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [focusInspectorToggle, inspectorRef, narrow, pane]);
+
+  const renameConversation = useCallback(
+    async (title: string) => {
+      if (conversationId === null) {
+        return;
+      }
+      try {
+        await updateConversation.mutateAsync({
+          conversationId,
+          data: { title },
+        });
+        await invalidateConversation(queryClient, conversationId);
+      } catch (error) {
+        toast.error(describeError(error));
+        throw error;
+      }
+    },
+    [conversationId, queryClient, toast, updateConversation],
+  );
 
   const restoreThread = async () => {
     if (conversationId === null || restoring) {
@@ -1454,22 +1562,6 @@ export function ChatPage() {
   const liveMessage = liveAnnouncementKey(stream, outcome);
 
   const totalEntries = conversation?.entries_total ?? entries.length;
-  const contextMeta = [
-    t(
-      totalEntries === 1 ? "chat.common.entryOne" : "chat.common.entryOther",
-      { count: formatNumber(totalEntries) },
-    ),
-    waitingForApproval
-      ? t("chat.page.awaitingApproval", {
-          count: formatNumber(pendingApprovals.length),
-        })
-      : null,
-    conversation?.last_entry_at
-      ? t("chat.common.updatedAt", {
-          time: formatRelative(conversation.last_entry_at),
-        })
-      : null,
-  ].filter((item): item is string => item !== null);
 
   const streamPanel = (
     <section
@@ -1477,20 +1569,6 @@ export function ChatPage() {
       className="panel chat-stream-panel"
       aria-label={t("chat.page.streamAria")}
     >
-      <div className="chat-stream__context">
-        <span className="chat-stream__session">
-          {conversationId === null
-            ? t("chat.page.newSession")
-            : t("chat.page.session", { id: conversationId })}
-        </span>
-        <span className="chat-stream__context-title">
-          {conversation?.title ?? t("chat.page.defaultTitle")}
-        </span>
-        <span className="chat-stream__context-meta">
-          {contextMeta.join(" · ")}
-        </span>
-      </div>
-
       <div
         className="chat-stream__scroll"
         ref={scrollRef}
@@ -1532,6 +1610,7 @@ export function ChatPage() {
   );
 
   return (
+    <WebSourcesContext value={webSources}>
     <div className="chat-page">
       <ChatHeader
         conversation={conversation}
@@ -1539,13 +1618,16 @@ export function ChatPage() {
         transcript={transcript}
         archived={archived}
         drawerOpen={drawerOpen}
-        narrow={narrow}
-        pane={pane}
-        inspectorCollapsed={collapsed}
+        status={{
+          streaming: isStreaming,
+          entries: totalEntries,
+          awaitingApprovals: pendingApprovals.length,
+        }}
+        inspectorOpen={inspectorOpen}
         onToggleDrawer={toggleDrawer}
-        onPane={setPane}
-        onOpenInspector={openInspector}
+        onToggleInspector={toggleInspector}
         onNew={startNewConversation}
+        onRename={renameConversation}
         contextActions={
           <ContextActions
             key={`${conversationId ?? "new"}:${archived ? "archived" : "active"}`}
@@ -1618,6 +1700,16 @@ export function ChatPage() {
             </div>
           ) : null}
 
+          {narrow && pane === "inspector" ? (
+            <button
+              type="button"
+              className="chat-scrim chat-inspector-scrim"
+              onClick={collapseInspector}
+              aria-label={t("chat.inspector.close")}
+              tabIndex={-1}
+            />
+          ) : null}
+
           {shouldMountInspector(
             narrow,
             collapsed,
@@ -1652,5 +1744,6 @@ export function ChatPage() {
       />
       <ChatCompanion stream={stream} draft={draft} conversationKey={String(conversationId ?? "new")} />
     </div>
+    </WebSourcesContext>
   );
 }

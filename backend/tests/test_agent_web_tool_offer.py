@@ -42,7 +42,8 @@ def _service(*, search: str, fetch: str, quota: _Quota | None) -> AgentService:
 
 def _context() -> ProviderContext:
     return ProviderContext(
-        system_message={"role": "system", "content": ""},
+        # A companion conversation, so recall_my_memories is offered.
+        system_message={"role": "system", "content": "# Companion persona: Vellum"},
         tools=tool_definitions(),
         messages=[],
         source_entry_ids=[],

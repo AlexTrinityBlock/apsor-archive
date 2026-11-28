@@ -11,9 +11,17 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.module.companion.model.companion_admin_model import (
+    CompanionAdminLoreOverrideModel,
+    CompanionAdminStoryOverrideModel,
+)
+from app.module.companion.model.companion_life_story_model import (
+    CompanionGeneratedStoryModel,
+)
 from app.module.companion.model.companion_story_model import (
     CompanionBondModel,
     CompanionLoreFragmentModel,
+    CompanionLoreToldModel,
     CompanionStoryModel,
 )
 
@@ -111,7 +119,7 @@ class CompanionStoryRepository:
         fragment_key: str,
         text: str,
         themes: Sequence[str],
-        tier: str,
+        weight: str,
         position: int,
         edited: bool,
         now: datetime,
@@ -122,7 +130,7 @@ class CompanionStoryRepository:
             fragment_key=fragment_key,
             text=text,
             themes=list(themes),
-            tier=tier,
+            weight=weight,
             position=position,
             edited=edited,
             created_at=now,
@@ -173,14 +181,124 @@ class CompanionStoryRepository:
         )
         return (await self.session.execute(statement)).scalar_one()
 
+    async def set_last_story_run(self, companion_ref: str, run: int, now: datetime) -> None:
+        """Remember the completed-run count at the latest story moment."""
+        statement = (
+            insert(CompanionBondModel)
+            .values(
+                user_id=self.user_id,
+                companion_ref=companion_ref,
+                completed_runs=run,
+                last_story_run=run,
+                updated_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=[CompanionBondModel.user_id, CompanionBondModel.companion_ref],
+                set_={"last_story_run": run, "updated_at": now},
+            )
+        )
+        await self.session.execute(statement)
+
+    async def list_told(self, companion_ref: str) -> list[CompanionLoreToldModel]:
+        statement = select(CompanionLoreToldModel).where(
+            CompanionLoreToldModel.user_id == self.user_id,
+            CompanionLoreToldModel.companion_ref == companion_ref,
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def record_told(
+        self,
+        companion_ref: str,
+        fragment_keys: list[str],
+        source: str,
+        now: datetime,
+    ) -> None:
+        """Count one telling of each fragment atomically."""
+        for key in fragment_keys:
+            statement = (
+                insert(CompanionLoreToldModel)
+                .values(
+                    user_id=self.user_id,
+                    companion_ref=companion_ref,
+                    fragment_key=key,
+                    told_count=1,
+                    source=source,
+                    offered_at=now,
+                    last_told_at=now,
+                )
+                .on_conflict_do_update(
+                    index_elements=[
+                        CompanionLoreToldModel.user_id,
+                        CompanionLoreToldModel.companion_ref,
+                        CompanionLoreToldModel.fragment_key,
+                    ],
+                    set_={
+                        "told_count": CompanionLoreToldModel.told_count + 1,
+                        "source": source,
+                        "last_told_at": now,
+                    },
+                )
+            )
+            await self.session.execute(statement)
+
     async def clear_companion_ref(self, companion_ref: str) -> None:
-        """Delete the bond row for a companion that no longer exists."""
+        """Delete the bond and told rows for a companion that no longer exists."""
         await self.session.execute(
             delete(CompanionBondModel).where(
                 CompanionBondModel.user_id == self.user_id,
                 CompanionBondModel.companion_ref == companion_ref,
             )
         )
+        await self.session.execute(
+            delete(CompanionLoreToldModel).where(
+                CompanionLoreToldModel.user_id == self.user_id,
+                CompanionLoreToldModel.companion_ref == companion_ref,
+            )
+        )
+
+    # --- root's layer and generated stories (owner-readable) ---------------
+
+    async def get_admin_persona(self, companion_ref: str, locale: str) -> str | None:
+        """Return root's persona override for this account, companion, and locale."""
+        statement = select(CompanionAdminStoryOverrideModel.persona).where(
+            CompanionAdminStoryOverrideModel.user_id == self.user_id,
+            CompanionAdminStoryOverrideModel.companion_ref == companion_ref,
+            CompanionAdminStoryOverrideModel.locale == locale,
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def list_admin_lore_overrides(
+        self,
+        companion_ref: str,
+        locale: str,
+    ) -> list[CompanionAdminLoreOverrideModel]:
+        """Return root's lore overrides for this account, companion, and locale."""
+        statement = (
+            select(CompanionAdminLoreOverrideModel)
+            .where(
+                CompanionAdminLoreOverrideModel.user_id == self.user_id,
+                CompanionAdminLoreOverrideModel.companion_ref == companion_ref,
+                CompanionAdminLoreOverrideModel.locale == locale,
+            )
+            .order_by(CompanionAdminLoreOverrideModel.fragment_key)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
+
+    async def list_published_generated(
+        self,
+        companion_ref: str,
+    ) -> list[CompanionGeneratedStoryModel]:
+        """Return this account's published life stories for one companion."""
+        statement = (
+            select(CompanionGeneratedStoryModel)
+            .where(
+                CompanionGeneratedStoryModel.user_id == self.user_id,
+                CompanionGeneratedStoryModel.companion_ref == companion_ref,
+                CompanionGeneratedStoryModel.status == "published",
+            )
+            .order_by(CompanionGeneratedStoryModel.created_at, CompanionGeneratedStoryModel.id)
+        )
+        return list((await self.session.execute(statement)).scalars().all())
 
 
 __all__ = ["CompanionStoryRepository"]

@@ -4,7 +4,7 @@
  * Apsor Archive
  * OpenAPI spec version: 0.1.0
  */
-import type { CompanionLoreCreateSchemaTier } from './companionLoreCreateSchemaTier';
+import type { CompanionLoreCreateSchemaWeight } from './companionLoreCreateSchemaWeight';
 
 /**
  * Add one fragment to this account's copy of the lore.
@@ -16,5 +16,5 @@ export interface CompanionLoreCreateSchema {
      */
   text: string;
   themes?: string[];
-  tier?: CompanionLoreCreateSchemaTier;
+  weight?: CompanionLoreCreateSchemaWeight;
 }

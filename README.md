@@ -609,12 +609,14 @@ order, frame delete, frame image, and `GET/PATCH /api/v1/companions/preference`)
 
 Each companion also has a story: a persona that becomes its voice in new
 conversations (frozen per conversation, in the conversation's language), and
-lore, its own memories. When the agent searches the user's archive, up to two
-relevant memories of the librarian's own may ride beside the results in a
-separate block; they are never archive evidence or citations. Asking the
-librarian about itself or the Archive lets it tell its own story. Deeper
-memories unlock as the account completes more conversations with that
-companion. The persona rules treat the user as an equal: the librarian uses
+lore, its own memories. Nothing is locked: every memory carries a weight
+(everyday, past, or heart) and the librarian decides whether, when, and how much
+to share, knowing how long she and the person have known each other. Relevant
+memories may ride beside a message or a tool result in a separate block, and she
+can look her own memories up with the `recall_my_memories` tool, including what
+she and the other librarians said to this person before (each past reply records
+who said it). Her memories are never archive evidence or citations;
+`search_knowledge` searches only the person's archive. The persona rules treat the user as an equal: the librarian uses
 their name or a plain "you", never a title such as Keeper or master. Every
 account can edit the persona and lore of any companion per language and reset
 to the default (`/api/v1/companions/stories/...`).
@@ -1730,10 +1732,33 @@ corpus.
    `history_message`. Deleted conversations are marked non-current and disappear
    from this lane.
 
-If vector recall is unavailable, search still returns BM25 results. Synchronous
-ingestion keeps a chunk text-only when its embedding call fails within the
-retry budget; the durable worker treats an exhausted embedding retry as a job
-failure, so no partial file is published.
+If vector recall is unavailable, search still returns BM25 results. An
+embedding failure never loses a passage: when the provider is out of credits
+(for example OpenAI `insufficient_quota`), rejects the key, is unreachable, or
+the account's embedding allowance is spent, every ingestion path (durable
+worker jobs, synchronous text, Markdown edits, memories, summaries, and
+conversation history) still stores the chunk's text and n-grams, so keyword
+search finds it at once, and leaves its vector *pending* (`embedding IS NULL`).
+The dedicated worker's `EmbeddingBackfill` loop
+(`APSOR_EMBEDDING_BACKFILL_ENABLED`, on by default) fills pending vectors in
+automatically:
+
+- Provider failures (billing, quota, authentication, rate limits, outages)
+  pause the loop with exponential backoff up to 30 minutes and never count
+  against a passage. It resumes on its own after the backoff, immediately when
+  the embedding provider configuration changes, or when root presses
+  **Retry now** in the system notices after recharging.
+- An account whose own embedding allowance is spent is skipped until root raises
+  the grant or the period resets; the backfill records usage like any other
+  embedding.
+- A passage the provider rejects as input (HTTP 400/413/422) is retried alone
+  up to five times and then left keyword-only.
+
+Root sees the pending count, the worker state, and the next retry time in the
+system notices (`GET /api/v1/system/embedding-backfill`; `POST
+/api/v1/system/embedding-backfill/retry`). Only a provider refresh that would
+switch model or dimension in the middle of a durable job still fails that job,
+so one file never mixes two vector spaces.
 
 ### Do I need an embedding model key?
 
@@ -1879,7 +1904,7 @@ user context exists; global config tables are read-all/root-write.
   level, and position.
 - `companion_story` / `companion_lore_fragment` / `companion_bond`: an
   account's per-locale persona and lore overrides for a companion, their
-  fragments, and the completed runs that unlock deeper lore tiers.
+  fragments, and the run and conversation counts plus when they first met.
 - `ingest_config`: one row (`id=1`) with the validated worker poll, extraction,
   in-flight, embedding, and chunk-size settings. It is not a chunk source; the
   queue references the file that is eventually published.
@@ -1959,7 +1984,7 @@ the filename caption, stored original, path listing, and search result; its R2
 case exercises the adapter with a fake client and checks missing-object
 translation without network access.
 
-The latest migration is `d2b6f4a8c1e9`. The migrations after `agent_config` on
+The latest migration is `d6a1f3c8e2b7`. The migrations after `agent_config` on
 this branch are:
 
 - `f3c8d5a1b7e2` drops the turn-wide tool-result budget;
@@ -2088,11 +2113,37 @@ this branch are:
   default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
   `opaque`) to `companion_preference`, with check constraints and server
   defaults. RLS and grants are unchanged; the downgrade drops both columns.
-- `d2b6f4a8c1e9` (current head) adds the nullable `scale` float (0 compact to
+- `d2b6f4a8c1e9` adds the nullable `scale` float (0 compact to
   1 full) to `companion_preference` for direct on-screen resizing, with a
   range check. NULL means "use `size`"; sending only `scale` derives `size`,
   and sending only `size` clears `scale`. RLS and grants are unchanged; the
   downgrade drops the column.
+- `e4c8a2f6b0d3` adds `companion_lore_told` (per account, companion and
+  fragment: `told_count`, `offered_at`, `last_told_at`, `source`) and
+  `companion_bond.last_story_run` for story-moment pacing. Owner-only RLS.
+- `f1a6c3e8b2d4` adds the global, root-editable companion world tables
+  (`companion_preset`, `_preset_text`, `_lore_item`, `_lore_item_text`,
+  `_canon_entity`, `_world_doc`, `_world_doc_revision`, `_config`,
+  `_prompt_template`, `_seed_state`), seeded from `lore/` with
+  `seed_hash`/`admin_modified`/`upstream_seed_hash` so root edits survive
+  upgrades. Read-all, root-write.
+- `a2d7e4f9c3b5` adds the `app.admin_scope = 'companion'` policies (root may
+  read and write companion story rows only, never the archive), the
+  admin-managed per-account tables (`companion_account_policy`,
+  `_user_config`, `_admin_story_override`, `_admin_lore_override`; the account
+  can read but not write them), new bond columns, `companion_lore_fragment.refs`,
+  and the append-only `companion_admin_access_log`.
+- `b3e8f5a1d6c7` adds `companion_generated_story` and `companion_story_job`
+  for worker-written life stories.
+- `e7b2d5a9c4f1` adds `chunk.embedding_failures`, a partial
+  pending-embedding index, and converts JSON `null` embeddings to SQL NULL so
+  the worker can backfill vectors after a provider or allowance outage.
+- `d6a1f3c8e2b7` (current head) replaces lore tiers with weights (`first` →
+  `everyday`, `familiar` → `past`, `rare` → `heart`) on every lore table, drops
+  the unlock counters and unlock timestamps, adds `companion_bond.first_met_at`,
+  lets `companion_lore_told.source` record `recall`, and stamps every past
+  assistant entry with `data.speaker = {ref, name}` from its conversation's
+  frozen companion.
 
 Earlier, `e7a1c4b9d2f6` created the singleton `agent_config` table and seeded
 row `1`. The integration suite runs the migration chain on a disposable
@@ -2171,6 +2222,19 @@ docker/caddy/                   non-root reverse proxy
   account; stopping impersonation requires the root password, deletes that
   session, and issues a fresh root session. Treat root as the highest-trust
   credential and do not model RLS as protection against a malicious root.
+- **Companion administration is a documented exception.** Under
+  `/api/v1/admin/companions`, a root request also sets the transaction-local
+  `app.admin_scope = 'companion'`. Database policies then let root read and
+  manage companion rows across accounts: the companion choice and policy,
+  story progress (bonds and told memories), root's persona and lore overrides,
+  life-story jobs, and the **full text of generated life stories**, which are
+  written from an account's own memories. The scope never reaches the archive
+  itself (`file`, `memory`, `chunk`, conversations), is refused for any role but
+  root, and does not apply in an impersonated session. Every full-text read of
+  a life story and every per-account companion change is appended to
+  `companion_admin_access_log` (root can insert and read it; nothing can update
+  or delete it), and story listings never carry the text. The account's
+  Companion page states that the administrator can read these stories.
 - **RLS is an application boundary, not a host boundary.** The deployment login
   is a PostgreSQL superuser used for migrations and maintenance; the app
   switches to `apsor_app` for request transactions. Any local OS user, any

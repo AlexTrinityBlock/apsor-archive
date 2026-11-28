@@ -89,7 +89,7 @@ _COMPACTION_CONTEXT_FIELDS = (
 _FORMATTER = Formatter()
 # Pasted briefs and IME output may use full-width brackets around a token.
 _CITATION_PATTERN = re.compile(
-    r"[\[［](?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+)[\]］]"
+    r"[\[［](?:(?:file|memory|summary):\d+(?:#\d+)?|history:\d+|web:w[1-9]\d{0,8})[\]］]"
 )
 # Primary argument keys for a concrete tool line. The first key that exists
 # wins, so a tool line names what the call was actually asked to do. Unknown

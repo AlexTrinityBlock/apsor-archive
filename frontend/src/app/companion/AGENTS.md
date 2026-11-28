@@ -23,3 +23,14 @@ The chat companion: a free-standing librarian (no strings or control bar) beside
 - Only `ChatCompanion` and `CompanionLoreTrace` may be imported from `chat/`; keep those call sites one line each.
 - Every UI string lives in the `companion` i18n namespace (plus `core.nav.companion`); character names are data.
 - Colors come from tokens; a character's accent is manifest data exposed as `--companion-accent`.
+
+## Root administration
+
+Root's white-box view of companions lives in the `companion-admin/` workspace: the
+Companion tab on `/accounts/:userId?tab=companion` (`UserCompanionTab`) and the
+"Companions & World" area at `/accounts/world`. Accounts never see progress,
+weights, or counts; their story editor lists only memories they have already
+heard plus their own (`splitHeardAndOwn` in `story.ts`). Every memory is visible
+to the librarian and none is locked: the old tiers are weights (everyday, the
+past, close to the heart) that the librarian judges for herself. The Companion
+page tells the account that root can read the life stories its librarian writes.

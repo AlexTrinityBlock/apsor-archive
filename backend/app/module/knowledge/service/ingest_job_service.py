@@ -59,6 +59,7 @@ from app.module.knowledge.domain.vision_prompt_domain import vision_mode_for_ext
 from app.module.knowledge.exception.domain_error import (
     AiNotConfiguredError,
     AiProviderError,
+    EmbeddingConfigurationChangedError,
     EmbeddingProviderError,
     EmbeddingUsageLimitExceededError,
     EmptyContentError,
@@ -132,6 +133,7 @@ _ERROR_CODES: tuple[tuple[type[BaseException], str], ...] = (
     (VisionExtractionError, "vision_extraction_failed"),
     (AiNotConfiguredError, "ai_not_configured"),
     (AiProviderError, "ai_provider_error"),
+    (EmbeddingConfigurationChangedError, "embedding_configuration_changed"),
     (EmbeddingProviderError, "embedding_provider_error"),
     (EmbeddingUsageLimitExceededError, "embedding_usage_limit_exceeded"),
     (FileStorageUnavailableError, "storage_unavailable"),

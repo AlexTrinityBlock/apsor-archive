@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "note": "Seed defaults for the companion story configuration. Root edits the live copy in the database (companion_config); a changed seed only updates rows root has not edited.",
+  "presets": {
+    "order": ["vellum", "atlas", "herbaria", "horologe", "nocturne", "quill"],
+    "global_default": "vellum"
+  },
+  "tunables": {
+    "max_recalled_fragments": 2,
+    "topical_min_similarity": 0.3,
+    "untold_bonus": 0.06,
+    "told_penalty": 0.04,
+    "told_penalty_cap": 3,
+    "story_moment_every_runs": 3,
+    "self_query_window": 6,
+    "max_contributions_per_run": 2
+  },
+  "life_story": {
+    "enabled": true,
+    "every_conversations": 5,
+    "weight": "past",
+    "max_per_30d": 4,
+    "memory_limit": 8,
+    "memory_chars": 6000,
+    "canon_chars": 4000,
+    "max_output_tokens": 1500,
+    "max_chars": 2400,
+    "require_review": false,
+    "poll_seconds": 30,
+    "max_attempts": 3
+  },
+  "self_query_phrases": [
+    "about yourself", "about you", "who are you", "tell me a story", "a story about",
+    "your past", "your story", "your stories", "your memories", "your memory",
+    "your life", "your childhood", "tell me about you",
+    "你自己", "你是誰", "你是谁", "關於你", "关于你", "說個故事", "说个故事",
+    "講個故事", "讲个故事", "講故事", "讲故事", "說說你", "说说你", "聊聊你",
+    "介紹你", "介绍你"
+  ],
+  "self_canon_terms": [
+    "past", "story", "stories", "memories", "memory", "childhood", "face", "body",
+    "vespers", "awakening", "letting go", "curator", "wing", "kiln", "porcelain",
+    "aeon-porcelain", "book", "name", "first bell", "long quiet",
+    "過去", "过去", "故事", "記憶", "记忆", "回憶", "回忆", "童年", "臉", "脸",
+    "身體", "身体", "晚禱", "晚祷", "甦醒", "苏醒", "放手", "館長", "馆长",
+    "萬古瓷", "万古瓷", "瓷", "書", "书", "名字", "初鈴", "初铃", "長寂", "长寂"
+  ],
+  "banned_address_terms": [
+    "keeper", "master", "my lord", "my lady", "館主", "馆主", "主人", "主公"
+  ]
+}
