@@ -12,8 +12,8 @@ import { citationHref, citationLabel, parseCitationLabel } from "../types";
 import { getActiveLocale, translate } from "../../i18n";
 
 // Literal alternatives plus one digit run: linear, but flagged heuristically.
-// eslint-disable-next-line security/detect-unsafe-regex
 const CITATION =
+  // eslint-disable-next-line security/detect-unsafe-regex
   /[［[](?:(?:file|memory|summary|history):\d+(?:#\d+)?|web:w[1-9]\d{0,8})[］\]]/g;
 const SKIP = new Set([
   "link",
