@@ -10,9 +10,9 @@ describe("companion preference", () => {
   });
 
   test("reads stored size and opacity, falling back on bad values", () => {
-    const stored = readPreference({ enabled: true, size: "compact", opacityMode: "opaque" });
+    const stored = readPreference({ enabled: true, size: "compact", opacityMode: "translucent" });
     expect(stored.size).toBe("compact");
-    expect(stored.opacityMode).toBe("opaque");
+    expect(stored.opacityMode).toBe("translucent");
     expect(readSize("huge")).toBe("full");
     expect(readOpacityMode(undefined)).toBe("opaque");
     // Older stored preferences without the new fields keep working.
@@ -20,7 +20,7 @@ describe("companion preference", () => {
       enabled: false,
       motion: "off",
       size: "full",
-      opacityMode: "auto",
+      opacityMode: "opaque",
     });
   });
 });
