@@ -14,6 +14,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import cast
 
 from fastapi import Depends, Request
@@ -468,6 +469,9 @@ class _OwnMemoriesAdapter:
     async def guidance(self) -> str:
         return await self.recall.guidance()
 
+    async def said_since(self) -> datetime | None:
+        return await self.recall.said_since()
+
 
 async def _conversation_own_memories(
     state: State,
@@ -587,6 +591,32 @@ class _CompanionPersonaLoader:
                 await build_story_config_provider(self.state).load(self.user_id),
             ),
         )
+
+
+class _CompanionHandoff:
+    """Resolve a conversation's current companion and the account's choice."""
+
+    def __init__(self, database: Database, state: State, *, user_id: int, role: str) -> None:
+        self.database = database
+        self.state = state
+        self.user_id = user_id
+        self.role = role
+        self.loader = _CompanionPersonaLoader(database, state, user_id=user_id, role=role)
+
+    async def current(self, conversation_id: int) -> dict[str, str] | None:
+        async with self.database.user_session(self.user_id, self.role) as session:
+            return await CompanionContextRepository(session, self.user_id).current(
+                conversation_id
+            )
+
+    async def active(self, locale: str | None) -> CompanionPersona | None:
+        return await self.loader(locale)
+
+    async def guidance_version(self, conversation_id: int) -> str | None:
+        async with self.database.user_session(self.user_id, self.role) as session:
+            return await CompanionContextRepository(session, self.user_id).guidance_version(
+                conversation_id
+            )
 
 
 class _CompanionRunObserver:
@@ -816,6 +846,12 @@ def get_agent_service(
         quota=AccountQuotaService(database, user.user_id),
         companion_runs=companion_observer,
         companion_context=_MessageContextContributor(
+            database,
+            request.app.state,
+            user_id=user.user_id,
+            role=user.role,
+        ),
+        companion_handoff=_CompanionHandoff(
             database,
             request.app.state,
             user_id=user.user_id,

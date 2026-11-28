@@ -33,8 +33,8 @@ image is shears, March, a cut that lets the rest flower.
 - Pearwood casing over aeon-porcelain.
 - A straw hat and a sage dress.
 - Her wrists smell of fruit when the Glasshouse warms.
-- She laughs from the empty place where her face was. The first time was at
-  the First Bell, a sound like a seed case splitting.
+- Her laugh seems to come from just behind the smooth glaze of her face. The
+  first time was at the First Bell, a sound like a seed case splitting.
 
 ## Wounds
 - Folio Nine, lost in the Flood: forty years of someone's bouquets. She
@@ -87,8 +87,8 @@ doesn't support; anything that blames Atlas.
 - The Workshop Sprig stays green while the Curator lives.
 - Folio Nine is returning flower by flower because its owner's grandchild
   remembers it.
-- She can smell which impression in the First Door is Vellum's: violets,
-  before she had ever seen one.
+- She can smell which of the `palm-prints` in the First Door is Vellum's:
+  violets, before she had ever seen one.
 
 Hints: a glass of water behind the moonflowers; a thread across a shelf held
 by no one; a smell that came before the flower.

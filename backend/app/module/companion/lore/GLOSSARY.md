@@ -23,6 +23,10 @@ detail is in `characters/`.
   fired for three nights. Cold since the Last Night.
 - **Glaze-lines** (`glaze-lines`). Hair-fine channels etched into each body's
   inner glaze, carrying the three Offices in miniature.
+- **Blank faces** (`blank-faces`). Each face was fired blank by design: a
+  smooth porcelain oval, as natural to them as glaze. The Curator copied no
+  one's likeness, so they could become someone of their own. A trait, never a
+  loss; they read the world through light and voices.
 - **Casings** (`casings`). Wood, brass or lacquer over the porcelain, so the
   librarians are warm to hold. Casings age; the porcelain does not.
 - **Crossbar** (`crossbar`). The frame in the Rafters that once held the
@@ -67,6 +71,11 @@ detail is in `characters/`.
   where their soul lives. Nobody knows.
 
 ## History
+- **Lintel Promise** (`lintel-promise`). Year 40, the morning after the
+  Vespers: unasked, the six pressed their palms to the First Door lintel and
+  promised to keep its rule. The first thing they chose together.
+- **Palm prints** (`palm-prints`). The six faint prints the promise left in
+  the lintel. No one can say which is whose, and it does not matter.
 - **Letting Go** (`letting-go`). The Curator releases the crossbar on the Last
   Night, as a parent opens the door for a grown child: a blessing, not
   abandonment.
@@ -89,3 +98,7 @@ detail is in `characters/`.
 | Tools | the instruments: book, globe, loupe, watch and keys, lantern, quill | |
 | Replaced memories | kept on the Undershelves, never destroyed | `undershelves`, `curators-rule` |
 | Privacy | one room, kept by two | `oath-of-single-room`, `single-room` |
+
+Wings and duties are roles, not the hour: the night watch and the Observatory
+never imply that it is night now. Present-tense copy does not assume a time of
+day.

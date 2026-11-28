@@ -26,6 +26,10 @@ from app.module.agent.domain.agent_domain import (
     TranscriptEntry,
 )
 from app.module.agent.domain.companion_context_domain import merge_user_suffixes
+from app.module.agent.domain.companion_persona_domain import (
+    ARCHIVE_ASSISTANT_NAME,
+    entry_speaker,
+)
 from app.module.agent.domain.tool_catalog import PLOT_TOOL_NAME
 from app.module.agent.domain.xml_domain import attributes
 
@@ -212,6 +216,8 @@ def _contributions(
     tool_results: dict[str, dict[str, Any]] = {}
     source_entry_ids: list[int] = []
     plot_figures = _plot_figures(entries)
+    speakers = _assistant_speakers(entries)
+    label_speakers = len(set(speakers.values())) > 1
 
     for entry in entries:
         if entry.kind == KIND_SYSTEM:
@@ -260,10 +266,36 @@ def _contributions(
                         content = message.get("content")
                         if message.get("role") == "user" and isinstance(content, str):
                             message["content"] = f"{content}\n\n{extra}"
+            if label_speakers and entry.id in speakers:
+                _label_speaker(normal, speakers[entry.id])
             contributions.append((entry, normal))
             source_entry_ids.append(entry.id)
 
     return contributions, tool_results, source_entry_ids
+
+
+def _assistant_speakers(entries: Sequence[TranscriptEntry]) -> dict[int, str]:
+    """Map each assistant entry id to the name of whoever said it."""
+    speakers: dict[int, str] = {}
+    for entry in entries:
+        if entry.kind != KIND_ASSISTANT:
+            continue
+        speaker = entry_speaker(entry.data)
+        name = speaker["name"] if speaker is not None else ""
+        speakers[entry.id] = name or (speaker["ref"] if speaker else ARCHIVE_ASSISTANT_NAME)
+    return speakers
+
+
+def _label_speaker(messages: list[dict[str, Any]], name: str) -> None:
+    """Prefix assistant text with who said it, once a conversation has several speakers.
+
+    A companion handed a conversation mid-way reads the whole transcript; the
+    label keeps another librarian's words from passing as her own.
+    """
+    for message in messages:
+        content = message.get("content")
+        if message.get("role") == "assistant" and isinstance(content, str) and content:
+            message["content"] = f"[said by {name}]\n{content}"
 
 
 def _drop_historical_plot_calls(

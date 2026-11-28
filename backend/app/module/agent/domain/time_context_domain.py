@@ -40,6 +40,17 @@ def _resolve_timezone(
         return UTC, "UTC", "server"
 
 
+def part_of_day(hour: int) -> str:
+    """Name the local part of day so greetings never guess it from a persona."""
+    if 5 <= hour < 12:
+        return "morning"
+    if 12 <= hour < 17:
+        return "afternoon"
+    if 17 <= hour < 21:
+        return "evening"
+    return "night"
+
+
 def current_time_block(
     *,
     now: datetime,
@@ -62,5 +73,6 @@ def current_time_block(
         f"timezone: {label} ({_offset_label(offset)})\n"
         f"timezone_source: {source}\n"
         f"local: {local_now.isoformat(timespec='seconds')}\n"
+        f"part_of_day: {part_of_day(local_now.hour)}\n"
         "</current_time>"
     )

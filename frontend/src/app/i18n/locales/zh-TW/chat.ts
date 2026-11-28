@@ -217,6 +217,7 @@ export const chat = {
     runFinished: "執行以 {reason} 結束。",
     limitStopped: "執行在工具或 token 上限停止。",
     author: "Apsor Archive 代理",
+    saidBy: "由 {name} 說",
   },
   transcript: {
     user: "使用者：",

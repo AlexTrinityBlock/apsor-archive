@@ -1034,6 +1034,20 @@ metadata only and never gate recall.
 Errors: `companion_not_found` (unknown or foreign reference),
 `companion_lore_not_found`, `companion_lore_limit`, and `400 invalid_request`.
 
+### Old-canon cleanup
+
+When the seed bundle changes, the seeder records the seeded lore texts it
+replaced, and a purge on the owner maintenance session (`purge_stale_lore`,
+`repository/lore_purge_repository.py`) removes what the earlier canon left
+behind across accounts: retired seeded lore items, unedited copy-on-write
+copies of fragments that no longer exist (or refreshes their text), stories left
+with no edited or own fragment, told-progress rows and root overrides of removed
+fragments, root `replace` overrides equal to a replaced seeded text, and life
+stories that retell the old canon (marked `retired`, never deleted). Anything a
+person wrote or edited is kept. Migration `f2c8d4a6b9e1` runs the same purge
+once and sets `companion_config.said_memory_since`, the cutoff before which
+past replies are no longer offered back as a librarian's "said" memories.
+
 ### Life stories
 
 Every few conversations with a companion, the dedicated worker writes a short

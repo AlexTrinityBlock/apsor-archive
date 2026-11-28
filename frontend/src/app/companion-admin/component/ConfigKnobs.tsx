@@ -31,6 +31,10 @@ function display(value: unknown): string {
 
 function toDraft(value: unknown): string {
   if (value === null || value === undefined) return "";
+  // An ISO date-time ("2026-11-28T07:55:00+00:00") fits datetime-local as UTC.
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) {
+    return value.slice(0, 16);
+  }
   return Array.isArray(value) ? value.join("\n") : String(value);
 }
 
@@ -98,6 +102,18 @@ function KnobInput({ id, knob, value, perAccount, onChange }: KnobInputProps) {
           </option>
         ))}
       </select>
+    );
+  }
+  if (knob.kind === "datetime") {
+    return (
+      <input
+        id={id}
+        className="input"
+        type="datetime-local"
+        value={value}
+        aria-describedby={`${id}-hint`}
+        onChange={(event) => onChange(event.target.value)}
+      />
     );
   }
   if (knob.kind === "list") {

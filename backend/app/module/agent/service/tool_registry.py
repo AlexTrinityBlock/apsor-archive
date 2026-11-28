@@ -888,6 +888,11 @@ async def _recall_my_memories(
         stories = await own.search_own(query, limit=limit)
     if args.scope in {"said", "all"}:
         said = await _past_replies(services, query, limit)
+        cutoff = await own.said_since()
+        if cutoff is not None:
+            # Replies from before the cutoff may speak an earlier canon; they
+            # stay in the archive's history but are no longer her memories.
+            said = [message for message in said if message.created_at >= cutoff]
     my_ref = own.identity.ref
     said.sort(key=lambda message: 0 if message.speaker_ref == my_ref else 1)
     facts = await own.relationship()

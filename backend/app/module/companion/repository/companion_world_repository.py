@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.module.companion.domain.seed_domain import CONFIG_COLUMNS, SEED_BUNDLE
+from app.module.companion.domain.seed_domain import CONFIG_COLUMNS, SAID_MEMORY_SINCE, SEED_BUNDLE
 from app.module.companion.model.companion_admin_model import (
     CompanionAccountPolicyModel,
     CompanionUserConfigModel,
@@ -126,7 +126,9 @@ class CompanionWorldRepository:
 
 def config_values(model: CompanionConfigModel) -> dict[str, Any]:
     """Return the tunable columns of the config singleton as a plain dict."""
-    return {name: getattr(model, name) for name in CONFIG_COLUMNS}
+    values = {name: getattr(model, name) for name in CONFIG_COLUMNS}
+    values[SAID_MEMORY_SINCE] = model.said_memory_since
+    return values
 
 
 __all__ = ["CompanionWorldRepository", "config_values"]

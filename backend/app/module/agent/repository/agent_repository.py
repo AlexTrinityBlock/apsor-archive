@@ -30,6 +30,7 @@ from app.module.agent.domain.agent_domain import (
     KIND_PAGE_CONTEXT,
     KIND_SYSTEM,
     KIND_TOOL_RESULT,
+    KIND_USER,
     RUN_CANCELLED,
     RUN_COMPLETED,
     RUN_FAILED,
@@ -39,7 +40,10 @@ from app.module.agent.domain.agent_domain import (
     ApprovalDraft,
     EntryDraft,
 )
-from app.module.agent.domain.companion_persona_domain import frozen_speaker
+from app.module.agent.domain.companion_persona_domain import (
+    COMPANION_SWITCH_KEY,
+    current_companion,
+)
 from app.module.agent.domain.web_source_domain import WebSource
 from app.module.agent.exception.domain_error import (
     AgentApprovalNotFoundError,
@@ -837,8 +841,9 @@ class AgentRepository:
     ) -> Any:
         """Return assistant ``data`` stamped with the companion who said it.
 
-        The speaker is the companion frozen in the conversation's system entry
-        (``None`` when no companion was active: the archive assistant).
+        The speaker is the conversation's current companion: the latest handoff on
+        a user entry, else the companion frozen in the system entry. ``None`` (the
+        archive assistant) leaves the data unstamped.
         """
         if isinstance(data, dict) and "speaker" in data:
             return data
@@ -854,7 +859,21 @@ class AgentRepository:
                 .limit(1)
             )
         ).scalar_one_or_none()
-        speaker = frozen_speaker(system_data)
+        switch_data = (
+            await session.execute(
+                select(AgentEntryModel.data)
+                .where(
+                    AgentEntryModel.user_id == self.user_id,
+                    AgentEntryModel.conversation_id == conversation_id,
+                    AgentEntryModel.kind == KIND_USER,
+                    AgentEntryModel.data.has_key(COMPANION_SWITCH_KEY),
+                )
+                .order_by(AgentEntryModel.id.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        current = current_companion(system_data, switch_data)
+        speaker = None if current is None else {"ref": current["ref"], "name": current["name"]}
         if speaker is None:
             return data
         stamped = dict(data) if isinstance(data, dict) else {}

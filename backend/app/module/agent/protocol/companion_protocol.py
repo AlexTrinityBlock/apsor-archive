@@ -10,6 +10,7 @@ context, its attachment names, and every tool result) builds one
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Literal, Protocol
 
 from app.module.agent.domain.companion_persona_domain import CompanionPersona
@@ -93,6 +94,10 @@ class CompanionOwnMemoriesProtocol(Protocol):
 
     async def guidance(self) -> str: ...
 
+    async def said_since(self) -> datetime | None:
+        """Return the cutoff before which past replies are not offered as "said"."""
+        ...
+
 
 class CompanionContextContributorProtocol(Protocol):
     """Decide which of the companion's own memories to offer for one signal."""
@@ -106,6 +111,28 @@ class CompanionPersonaLoaderProtocol(Protocol):
     async def __call__(self, locale: str | None) -> CompanionPersona | None: ...
 
 
+class CompanionHandoffProtocol(Protocol):
+    """Who speaks in a conversation now, and who the account has chosen.
+
+    ``current`` returns ``{ref, name, locale}`` of the conversation's current
+    companion (latest handoff, else the one frozen at creation) or ``None`` for
+    the plain archive assistant. ``active`` resolves the account's chosen
+    companion persona for ``locale`` or ``None`` when the companion is disabled.
+    """
+
+    async def current(self, conversation_id: int) -> dict[str, str] | None: ...
+
+    async def active(self, locale: str | None) -> CompanionPersona | None: ...
+
+    async def guidance_version(self, conversation_id: int) -> str | None:
+        """Return the prompt version the conversation's guidance was last given at.
+
+        The latest ``guidance_version`` stamped on a user entry (a handoff or a
+        refresh), else the ``prompt_version`` frozen in the system entry.
+        """
+        ...
+
+
 class CompanionRunObserverProtocol(Protocol):
     """Count a completed run toward the conversation companion's bond."""
 
@@ -114,6 +141,7 @@ class CompanionRunObserverProtocol(Protocol):
 
 __all__ = [
     "CompanionContextContributorProtocol",
+    "CompanionHandoffProtocol",
     "CompanionIdentity",
     "CompanionOwnMemoriesProtocol",
     "CompanionPersonaLoaderProtocol",
