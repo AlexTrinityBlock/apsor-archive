@@ -15,7 +15,7 @@ export const DOCX_FRAME = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
       html, body { margin: 0; padding: 0; background: #f3edde; }
-      body { min-height: 100vh; }
+      body { min-height: 0; }
     </style>
   </head>
   <body></body>
@@ -64,4 +64,36 @@ export function hardenFrame(document: Document) {
       }
     }
   });
+}
+
+/** Horizontal breathing room kept around a scaled page, in CSS pixels. */
+export const DOCX_FIT_GUTTER = 16;
+
+/**
+ * Scale that fits the widest DOCX page inside a frame of `frameWidth`.
+ *
+ * `docx-preview` centres fixed-width pages in a flex column, so a page wider
+ * than a narrow frame (phone modal, chat preview panel) overflows to the left
+ * where it cannot be scrolled to. Pages are scaled down to fit instead and
+ * never scaled up.
+ */
+export function docxFitScale(frameWidth: number, pageWidth: number): number {
+  if (Number.isNaN(frameWidth) || Number.isNaN(pageWidth) || frameWidth <= 0 || pageWidth <= 0) {
+    return 1;
+  }
+  const available = Math.max(1, frameWidth - DOCX_FIT_GUTTER * 2);
+  return Math.min(1, Math.round((available / pageWidth) * 1000) / 1000);
+}
+
+/** Apply `docxFitScale` to a rendered frame document; returns the scale used. */
+export function fitDocxPages(frameDocument: Document, frameWidth: number): number {
+  const body = frameDocument.body;
+  body.style.zoom = "1";
+  let pageWidth = 0;
+  frameDocument.querySelectorAll<HTMLElement>("section.docx, .docx-wrapper > section").forEach((page) => {
+    pageWidth = Math.max(pageWidth, page.offsetWidth);
+  });
+  const scale = docxFitScale(frameWidth, pageWidth);
+  body.style.zoom = scale < 1 ? String(scale) : "";
+  return scale;
 }

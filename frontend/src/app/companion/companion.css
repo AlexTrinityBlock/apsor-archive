@@ -2034,3 +2034,30 @@
     font-size: 16px;
   }
 }
+
+/*
+ * Hit area: the companion may visually cover message text, but only the figure
+ * itself (and its own controls) takes pointer input. The transparent parts of
+ * the box pass clicks through to citations, links and buttons underneath.
+ * Pointer events from the hit area still bubble to the root's gesture handlers.
+ */
+.companion {
+  pointer-events: none;
+}
+
+.companion .companion-figure__body::before {
+  position: absolute;
+  inset: 4% 24% 0;
+  border-radius: 40% 40% 12% 12%;
+  content: "";
+  pointer-events: auto;
+}
+
+.companion .companion__minimize,
+.companion .companion__grip,
+.companion [data-companion-grip],
+.companion .companion-coach,
+.companion.is-peek .companion-stage,
+.companion-tab {
+  pointer-events: auto;
+}

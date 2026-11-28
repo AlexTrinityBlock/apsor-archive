@@ -7,6 +7,7 @@ import {
   InspectorFileStage,
   InspectorMemoryStage,
 } from "../../agent/component/inspector/common";
+import { useGetFile } from "../../generated-apis-types/files/files";
 import { useI18n } from "../../i18n";
 import { handleTabListKeyDown } from "../tab-keys";
 import {
@@ -48,6 +49,13 @@ function PreviewEmpty() {
   );
 }
 
+/** Show the file's real name when the citation carried no title. */
+function FilePreviewTitle({ fileId, title }: { readonly fileId: number; readonly title: string | null }) {
+  const { t } = useI18n();
+  const query = useGetFile(fileId, { query: { enabled: title === null, retry: false } });
+  return <>{title ?? query.data?.file_name ?? t("chat.inspector.fileFallback", { id: fileId })}</>;
+}
+
 function ChatPreview({ target }: { readonly target: ResourceTarget | null }) {
   const { t } = useI18n();
   if (!target) {
@@ -76,13 +84,11 @@ function ChatPreview({ target }: { readonly target: ResourceTarget | null }) {
               : t("chat.inspector.documentPreview")}
           </p>
           <strong>
-            {target.title ??
-              t(
-                isMemory
-                  ? "chat.inspector.memoryFallback"
-                  : "chat.inspector.fileFallback",
-                { id: target.id },
-              )}
+            {isMemory ? (
+              target.title ?? t("chat.inspector.memoryFallback", { id: target.id })
+            ) : (
+              <FilePreviewTitle fileId={target.id} title={target.title ?? null} />
+            )}
           </strong>
           <code>{code}</code>
         </div>
