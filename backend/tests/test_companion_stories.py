@@ -97,7 +97,7 @@ def test_default_persona_is_frozen_and_disabled_companion_has_none(
     persona = load_presets()["vellum"].persona
     # The persona comes first; the rules that outrank it follow.
     assert section["content"].index(persona) < section["content"].index(PERSONA_RULES)
-    assert system["data"]["prompt_version"] == "archive-agent-v16"
+    assert system["data"]["prompt_version"] == "archive-agent-v17"
 
     zh = _system_entry(client, _new_conversation(client, locale="zh-TW"))
     assert zh["data"]["companion"]["locale"] == "zh-TW"
@@ -186,7 +186,7 @@ def test_lore_is_copy_on_write_and_resettable(client: TestClient) -> None:
 
     created = client.post(
         f"{STORIES}/{VELLUM}/lore",
-        json={"text": "A memory the Keeper wrote.", "tier": "rare"},
+        json={"text": "A memory the user wrote.", "tier": "rare"},
     )
     assert created.status_code == 201, created.text
     added = created.json()["fragments"][-1]

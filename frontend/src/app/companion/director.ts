@@ -16,7 +16,7 @@ import {
 export const MIN_DWELL_MS = 900;
 /** How long an explicit agent gesture overrides automatic poses. */
 export const AGENT_OVERRIDE_MS = 3000;
-/** Idle time before the companion dozes off on its strings. */
+/** Idle time before the companion dozes off where it stands. */
 export const SLEEP_AFTER_MS = 120_000;
 export const GREET_MS = 2400;
 export const SUCCESS_MS = 2600;

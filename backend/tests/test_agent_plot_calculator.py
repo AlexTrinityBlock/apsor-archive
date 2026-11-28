@@ -1030,7 +1030,7 @@ def test_plot_and_calculation_tools_are_in_catalog(client: TestClient) -> None:
     response = client.get("/api/v1/agent/tools")
     assert response.status_code == 200, response.text
     catalog = response.json()
-    assert catalog["prompt_version"] == "archive-agent-v16"
+    assert catalog["prompt_version"] == "archive-agent-v17"
     assert catalog["tools_version"] == "archive-tools-v16"
 
     tools = {tool["name"]: tool for tool in catalog["tools"]}

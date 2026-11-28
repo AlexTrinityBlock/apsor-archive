@@ -8,6 +8,8 @@ from app.shared.companion_action import COMPANION_ACTIONS
 
 CompanionGender = Literal["female", "male", "other"]
 CompanionMotion = Literal["full", "reduced", "off"]
+CompanionSize = Literal["compact", "medium", "full"]
+CompanionOpacityMode = Literal["opaque", "translucent", "auto"]
 
 COMPANION_GENDERS: tuple[str, ...] = ("female", "male", "other")
 COMPANION_MOTIONS: tuple[str, ...] = ("full", "reduced", "off")
@@ -66,6 +68,20 @@ def is_companion_action(value: str) -> bool:
     return value in COMPANION_ACTIONS
 
 
+def size_for_scale(scale: float) -> CompanionSize:
+    """Map a continuous display scale (0 compact .. 1 full) to its nearest preset."""
+    if scale < 0.25:
+        return "compact"
+    if scale < 0.75:
+        return "medium"
+    return "full"
+
+
+def normalize_scale(scale: float) -> float:
+    """Clamp a display scale to 0..1 and round it to three decimal places."""
+    return round(min(1.0, max(0.0, scale)), 3)
+
+
 def frame_version(sha256: str) -> str:
     """Return the short, cache-busting version of one immutable frame."""
     return sha256[:16]
@@ -92,9 +108,13 @@ __all__ = [
     "SELECTION_MAX_CHARS",
     "CompanionGender",
     "CompanionMotion",
+    "CompanionOpacityMode",
     "CompanionSelection",
+    "CompanionSize",
     "frame_storage_key",
     "frame_version",
     "is_companion_action",
+    "normalize_scale",
     "parse_selection",
+    "size_for_scale",
 ]

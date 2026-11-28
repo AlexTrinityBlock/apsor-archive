@@ -35,6 +35,7 @@ export const core = {
     openProfile: "Open User Profile",
     userProfile: "User profile",
     profile: "User profile",
+    companion: "Companion",
     personalSection: "Personal",
     accounts: "Accounts",
     changePassword: "Change password",
@@ -46,7 +47,7 @@ export const core = {
     apiOffline: "API offline",
     localFirst: "Local-first",
     version: "v{version}",
-    owner: "Owner",
+    owner: "You",
   },
   status: {
     ok: "ok",
@@ -596,7 +597,6 @@ export const core = {
     ingestRuntime: "Ingestion runtime",
     maintenance: "Maintenance",
     language: "Language",
-    companion: "Companion",
   },
   settings: {
     model: {

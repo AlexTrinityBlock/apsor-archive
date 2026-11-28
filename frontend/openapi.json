@@ -2930,6 +2930,15 @@
             "title": "Motion",
             "type": "string"
           },
+          "opacity_mode": {
+            "enum": [
+              "opaque",
+              "translucent",
+              "auto"
+            ],
+            "title": "Opacity Mode",
+            "type": "string"
+          },
           "position": {
             "anyOf": [
               {
@@ -2939,6 +2948,17 @@
                 "type": "null"
               }
             ]
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
           },
           "selected": {
             "anyOf": [
@@ -2950,6 +2970,15 @@
               }
             ],
             "title": "Selected"
+          },
+          "size": {
+            "enum": [
+              "compact",
+              "medium",
+              "full"
+            ],
+            "title": "Size",
+            "type": "string"
           },
           "updated_at": {
             "anyOf": [
@@ -2968,6 +2997,9 @@
           "selected",
           "enabled",
           "motion",
+          "size",
+          "scale",
+          "opacity_mode",
           "position",
           "updated_at"
         ],
@@ -3005,6 +3037,22 @@
             ],
             "title": "Motion"
           },
+          "opacity_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "opaque",
+                  "translucent",
+                  "auto"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opacity Mode"
+          },
           "position": {
             "anyOf": [
               {
@@ -3014,6 +3062,19 @@
                 "type": "null"
               }
             ]
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
           },
           "selected": {
             "anyOf": [
@@ -3026,6 +3087,22 @@
               }
             ],
             "title": "Selected"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "enum": [
+                  "compact",
+                  "medium",
+                  "full"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
           }
         },
         "title": "CompanionPreferenceUpdateSchema",

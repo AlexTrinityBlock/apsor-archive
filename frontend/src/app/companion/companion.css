@@ -1,5 +1,5 @@
 /*
- * Chat companion: the floating marionette, its rig and effects, the minimized
+ * Chat companion: the free-standing figure, its effects, the minimized
  * tab, and the Settings companion tab. Colors come from global tokens; the
  * per-character accent is manifest data exposed as --companion-accent.
  */
@@ -24,7 +24,9 @@
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   border-radius: var(--radius-md);
-  transform: translate3d(var(--companion-dx), var(--companion-dy), 0);
+  /* Live resizing scales the committed box from its top-left corner. */
+  transform: translate3d(var(--companion-dx), var(--companion-dy), 0) scale(var(--companion-k, 1));
+  transform-origin: 0 0;
   transition:
     opacity var(--speed-base) var(--ease-soft),
     visibility 0s linear 0s;
@@ -50,7 +52,11 @@
     visibility 0s linear var(--speed-fast);
 }
 
-/* Reader avoidance: slide out at the window edge, shrink and fade elsewhere. */
+/*
+ * Reader avoidance: slide out at the window edge, shrink elsewhere. How
+ * see-through the figure becomes is the opacity mode's job: avoidance and
+ * busy signals only set --companion-fade, which auto mode honours.
+ */
 .companion .companion-stage {
   transition:
     transform 0.34s var(--ease-out),
@@ -58,18 +64,48 @@
 }
 
 .companion.is-peek-slide.is-right:not(:hover, :focus-visible, :focus-within) .companion-stage {
-  transform: translateX(58%);
-  opacity: 0.78;
+  --companion-fade: 0.78;
+  transform: translateX(var(--companion-peek-slide, 58%));
 }
 
 .companion.is-peek-slide.is-left:not(:hover, :focus-visible, :focus-within) .companion-stage {
-  transform: translateX(-58%);
-  opacity: 0.78;
+  --companion-fade: 0.78;
+  transform: translateX(var(--companion-peek-slide-neg, -58%));
 }
 
 .companion.is-peek-shrink:not(:hover, :focus-visible, :focus-within) .companion-stage {
-  transform: scale(0.6);
-  opacity: 0.45;
+  --companion-fade: 0.45;
+  transform: scale(var(--companion-peek-scale, 0.6));
+}
+
+.companion.is-resizing .companion-stage {
+  transition: none;
+}
+
+.companion.is-resizing.opacity-auto .companion-stage,
+.companion.is-resizing.opacity-translucent .companion-stage {
+  opacity: 1;
+}
+
+/* Opacity modes: opaque always 100%, translucent fixed, auto fades when in the way. */
+.companion.opacity-opaque .companion-stage {
+  opacity: 1;
+}
+
+.companion.opacity-translucent .companion-stage {
+  opacity: 0.55;
+}
+
+.companion.opacity-auto .companion-stage {
+  opacity: var(--companion-fade, 1);
+}
+
+.companion.opacity-auto.is-busy:not(:hover, :focus-visible, :focus-within) {
+  --companion-busy-fade: 0.55;
+}
+
+.companion.opacity-auto.is-busy:not(:hover, :focus-visible, :focus-within) .companion-stage {
+  opacity: min(var(--companion-fade, 1), var(--companion-busy-fade));
 }
 
 .companion.is-peek-shrink.is-right .companion-stage {
@@ -121,6 +157,252 @@
 @media (hover: none) {
   .companion:not(.is-peek) .companion__minimize {
     opacity: 0.9;
+  }
+}
+
+/* Controls keep their on-screen size while the box is live-scaled. */
+.companion__minimize,
+.companion__grip,
+.companion-readout,
+.companion-coach {
+  scale: calc(1 / var(--companion-k, 1));
+}
+
+.companion__minimize {
+  transform-origin: 100% 0;
+}
+
+.companion.is-left .companion__minimize {
+  transform-origin: 0 0;
+}
+
+/* Resize grip: an L-bracket at the figure's inner top corner. */
+.companion__grip {
+  position: absolute;
+  top: 0;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  cursor: nwse-resize;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity var(--speed-fast) var(--ease-soft);
+}
+
+.companion.is-right .companion__grip {
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.companion.is-left .companion__grip {
+  right: 0;
+  cursor: nesw-resize;
+  transform-origin: 100% 0;
+}
+
+.companion__grip::before {
+  position: absolute;
+  inset: -4px;
+  content: "";
+}
+
+.companion__grip::after {
+  width: 11px;
+  height: 11px;
+  border-top: 1.5px solid var(--mono-l2);
+  border-left: 1.5px solid var(--mono-l2);
+  border-top-left-radius: 2px;
+  content: "";
+}
+
+.companion.is-left .companion__grip::after {
+  border-right: 1.5px solid var(--mono-l2);
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 2px;
+}
+
+.companion:hover .companion__grip,
+.companion:focus-within .companion__grip,
+.companion.is-resizing .companion__grip {
+  opacity: 1;
+}
+
+.companion__grip:hover::after,
+.companion.is-resizing .companion__grip::after {
+  border-color: var(--mono-ink);
+}
+
+.companion__grip:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--mono-ink);
+  outline-offset: 1px;
+}
+
+.companion.is-peek:not(:hover, :focus-within) .companion__grip {
+  opacity: 0;
+}
+
+@media (pointer: coarse) {
+  .companion__grip::before {
+    inset: -8px;
+  }
+}
+
+@media (hover: none) {
+  .companion:not(.is-awake, .is-resizing) .companion__grip {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .companion.is-awake .companion__grip {
+    opacity: 0.9;
+  }
+}
+
+:root.companion-resizing,
+:root.companion-resizing * {
+  cursor: nwse-resize !important;
+}
+
+/* Live size readout above the head. */
+.companion-readout {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  display: grid;
+  min-width: 96px;
+  gap: 4px;
+  padding: 5px 8px;
+  border: 0.7px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--mono-ink);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--speed-fast) var(--ease-soft);
+}
+
+.companion.is-right .companion-readout {
+  left: 0;
+  transform-origin: 0 100%;
+}
+
+.companion.is-left .companion-readout {
+  right: 0;
+  transform-origin: 100% 100%;
+}
+
+.companion-readout.is-visible {
+  opacity: 1;
+}
+
+.companion-readout__value {
+  font-weight: 600;
+}
+
+.companion-readout__percent {
+  margin-left: 6px;
+  color: var(--mono-l3);
+  font-weight: 400;
+}
+
+.companion-readout__track {
+  position: relative;
+  display: flex;
+  height: 6px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.companion-readout__track::before {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: var(--line-strong);
+  content: "";
+}
+
+.companion-readout__tick {
+  position: relative;
+  width: 1px;
+  height: 6px;
+  background: var(--mono-l3);
+}
+
+.companion-readout__marker {
+  position: absolute;
+  left: calc(var(--companion-level, 0) * (100% - 6px));
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--companion-accent, var(--mono-ink));
+}
+
+.companion-readout__note {
+  color: var(--mono-l3);
+  white-space: normal;
+}
+
+/* One-time resize coach bubble. */
+.companion-coach {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  z-index: 1;
+  display: grid;
+  width: 220px;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 0.7px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--mono-ink);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: var(--shadow-lift);
+  cursor: default;
+}
+
+.companion.is-right .companion-coach {
+  right: 0;
+  transform-origin: 100% 100%;
+}
+
+.companion.is-left .companion-coach {
+  left: 0;
+  transform-origin: 0 100%;
+}
+
+.companion-coach p {
+  margin: 0;
+}
+
+.companion-coach__dismiss {
+  justify-self: end;
+  padding: 2px 8px;
+  border: 0.7px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mono-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.companion-coach__dismiss:focus-visible {
+  outline: 2px solid var(--mono-ink);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companion__grip,
+  .companion-readout,
+  .companion-coach {
+    transition: none;
   }
 }
 
@@ -181,7 +463,7 @@
   transform: translateX(-50%);
 }
 
-/* Stage, rig, and figure -------------------------------------------------- */
+/* Stage and figure -------------------------------------------------------- */
 
 .companion-stage {
   position: relative;
@@ -202,49 +484,12 @@
   pointer-events: none;
 }
 
-.companion-rig {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.companion-rig__string {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-width: 0.9;
-}
-
-.companion-rig__string--head {
-  stroke-opacity: 0.85;
-}
-
-.companion-rig__handle {
-  stroke: var(--mono-l3);
-  stroke-linecap: round;
-  stroke-width: 1.6;
-}
-
-.companion-rig__beam {
-  fill: color-mix(in srgb, var(--accent-ochre) 46%, var(--mono-ink));
-}
-
-.companion-rig__cross {
-  fill: color-mix(in srgb, var(--accent-ochre) 30%, var(--mono-ink));
-}
-
-.companion-rig__cap {
-  fill: var(--companion-accent, var(--accent-ochre));
-  stroke: var(--mono-ink);
-  stroke-width: 0.6;
-}
-
 .companion-figure {
   position: absolute;
   left: 0;
   transform: translateY(var(--companion-bob, 0px)) rotate(var(--companion-sway, 0deg));
-  transform-origin: 50% 0;
+  /* Free-standing: the figure pivots at its feet. */
+  transform-origin: 50% 100%;
   will-change: transform;
 }
 
@@ -328,7 +573,13 @@
 }
 
 .companion-stage.is-animated.is-held .companion-figure__body {
-  animation: companion-dangle 1.1s var(--ease-soft) infinite alternate;
+  animation: companion-lifted 1.1s var(--ease-soft) infinite alternate;
+}
+
+/* While carried the figure floats a little and its shadow softens. */
+.companion-stage.is-held::after {
+  opacity: 0.45;
+  transform: scale(0.8);
 }
 
 @keyframes companion-hop {
@@ -368,12 +619,12 @@
   }
 }
 
-@keyframes companion-dangle {
+@keyframes companion-lifted {
   from {
-    transform: translateY(1px) scaleY(1.01);
+    transform: translateY(-4px);
   }
   to {
-    transform: translateY(-1px) scaleY(0.995);
+    transform: translateY(-7px);
   }
 }
 
@@ -1023,6 +1274,7 @@
   position: relative;
   display: grid;
   height: 300px;
+  transition: height 0.3s var(--ease-soft);
   place-items: end center;
   padding-bottom: 14px;
   overflow: hidden;
@@ -1042,9 +1294,36 @@
     var(--mono-card-warm);
 }
 
-.companion-preview__stage > .companion-stage {
-  width: 148px;
-  height: 268px;
+.companion-preview__figure {
+  position: relative;
+  transition:
+    width 0.3s var(--ease-soft),
+    height 0.3s var(--ease-soft);
+}
+
+/* The preview shows each opacity mode the way the overlay applies it. */
+.companion-preview__stage.opacity-translucent .companion-stage {
+  opacity: 0.55;
+}
+
+.companion-preview__stage.opacity-auto .companion-stage {
+  animation: companion-auto-fade 3.2s var(--ease-soft) infinite alternate;
+}
+
+@keyframes companion-auto-fade {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companion-preview__stage.opacity-auto .companion-stage {
+    animation: none;
+  }
 }
 
 .companion-preview__caption {

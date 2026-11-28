@@ -1,5 +1,7 @@
 import { useId } from "react";
 
+import "./shared.css";
+
 interface SwitchFieldProps {
   readonly label: string;
   readonly hint: string;
@@ -8,7 +10,7 @@ interface SwitchFieldProps {
   readonly onChange: (checked: boolean) => void;
 }
 
-/** A labelled switch used by provider and runtime forms. */
+/** A labelled switch, shared by settings forms and the companion page. */
 export function SwitchField({
   label,
   hint,

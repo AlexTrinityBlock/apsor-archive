@@ -18,7 +18,7 @@ import {
   RuntimeStatus,
   type RuntimeNumberSpec,
 } from "./RuntimeControls";
-import { SwitchField } from "./SwitchField";
+import { SwitchField } from "../../component/SwitchField";
 
 /** The runtime bounds the agent applies to a new run. */
 export interface AgentRuntimeValues {

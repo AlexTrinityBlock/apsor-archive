@@ -308,7 +308,7 @@ even when eligible calls execute through `asyncio.gather`.
 
 The `save_memory` panel remains a wax-seal receipt for an appended memory. The
 separate approval card is the human gate: the model cannot authorize a write, and
-the UI asks the keeper to approve or reject before the tool runs. The **Require
+the UI asks you to approve or reject before the tool runs. The **Require
 manual approval for memory writes** setting (default on) controls future calls
 only; when it is off, no approval card appears and the backend authorizes the
 write directly. Pending cards created while the setting was on keep rendering

@@ -52,3 +52,24 @@ export function readMinimized(): boolean {
 export function writeMinimized(value: boolean): void {
   writeJson("minimized", value);
 }
+
+/** The last size level that wasn't Full, for the double-click toggle. */
+export function readLastNonFull(): number | null {
+  const value = readJson("size.lastNonFull");
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value < 1
+    ? value
+    : null;
+}
+
+export function writeLastNonFull(value: number): void {
+  writeJson("size.lastNonFull", value);
+}
+
+/** Whether the one-time resize hint has been seen in this browser. */
+export function readResizeHintSeen(): boolean {
+  return readJson("hint.resize") === true;
+}
+
+export function writeResizeHintSeen(): void {
+  writeJson("hint.resize", true);
+}

@@ -190,7 +190,7 @@ def test_system_prompt_module_and_section_order(
     assert _section_names(system_entry) == [
         f"system_prompt:{section_id}" for section_id in reordered_ids
     ]
-    assert system_entry["data"]["prompt_version"] == "archive-agent-v16"
+    assert system_entry["data"]["prompt_version"] == "archive-agent-v17"
     sections = system_entry["data"]["sections"]
     assert sections[0] == {
         "name": f"system_prompt:{late_id}",

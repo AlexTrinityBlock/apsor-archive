@@ -552,7 +552,7 @@ export const chat = {
       suggestionInvalidArguments:
         "Re-issue the call with the required scalar arguments; arrays and objects must match the tool catalog.",
       suggestionConfirmation:
-        "The keeper must explicitly confirm the memory text before it can be pressed into the archive.",
+        "You must explicitly confirm the memory text before it can be pressed into the archive.",
       suggestionUnavailable:
         "This tool is not part of the conversation's frozen tool set. Start a new thread to refresh it.",
       suggestionExecution:

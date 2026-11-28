@@ -3,22 +3,54 @@
  * external store so the chat overlay and the settings panel stay in sync, and
  * so other tabs follow through the `storage` event.
  */
+import { readScale } from "./size";
 import { readJson, storageKeyMatches, writeJson } from "./storage";
 
 export type CompanionMotion = "full" | "reduced" | "off";
+/** Display size; `full` shows the art at up to its intrinsic 384×576. */
+export type CompanionSize = "compact" | "medium" | "full";
+/** How see-through the figure is; `auto` fades only when it is in the way. */
+export type CompanionOpacityMode = "opaque" | "translucent" | "auto";
+
+export const COMPANION_SIZES: readonly CompanionSize[] = ["compact", "medium", "full"];
+export const COMPANION_OPACITY_MODES: readonly CompanionOpacityMode[] = [
+  "opaque",
+  "translucent",
+  "auto",
+];
 
 export interface CompanionPreference {
   readonly enabled: boolean;
   /** Preset id or `custom-<id>`; null means the first available preset. */
   readonly companionId: string | null;
   readonly motion: CompanionMotion;
+  readonly size: CompanionSize;
+  /**
+   * Continuous size from direct resizing, 0 (compact) to 1 (full); null
+   * means "use the size preset".
+   */
+  readonly scale: number | null;
+  readonly opacityMode: CompanionOpacityMode;
 }
 
 export const DEFAULT_PREFERENCE: CompanionPreference = {
   enabled: true,
   companionId: null,
   motion: "full",
+  size: "full",
+  scale: null,
+  opacityMode: "auto",
 };
+
+export function readSize(value: unknown): CompanionSize {
+  return COMPANION_SIZES.includes(value as CompanionSize) ? (value as CompanionSize) : "full";
+}
+
+export function readOpacityMode(value: unknown): CompanionOpacityMode {
+  return COMPANION_OPACITY_MODES.includes(value as CompanionOpacityMode)
+    ? (value as CompanionOpacityMode)
+    : "auto";
+}
 
 export function readPreference(value: unknown): CompanionPreference {
   if (typeof value !== "object" || value === null) {
@@ -33,6 +65,9 @@ export function readPreference(value: unknown): CompanionPreference {
         ? record.companionId
         : null,
     motion: motion === "reduced" || motion === "off" || motion === "full" ? motion : "full",
+    size: readSize(record.size),
+    scale: readScale(record.scale),
+    opacityMode: readOpacityMode(record.opacityMode),
   };
 }
 

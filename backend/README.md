@@ -933,7 +933,7 @@ keywords so a Chinese query can find English-themed lore.
 - **Persona.** When a conversation is created, the account's enabled companion
   (the selection, or the flagship `preset:vellum`) is frozen into `pi.system` as
   a final `companion_persona` section: the persona, then the rules that outrank
-  it (grounding and citations, never inventing the Keeper's memories, safety,
+  it (grounding and citations, never inventing the user's memories, safety,
   dropping the voice on request). `data.companion` records `{ref, name, locale}`.
   `POST /api/v1/agent/conversations` takes an optional `locale`
   (`en`, `zh-TW`, `zh-CN`). A disabled companion adds nothing. Saved-question
@@ -1358,7 +1358,7 @@ fields, account/session auth (`app_user`,
 `agent_entry`, `agent_run`, `agent_approval`) plus the `agent_commit_seq`
 sequence, and durable
 ingestion (`file_ingest_job`, `ingest_config`). The current head is
-`b8e4d2f6a1c3`; every private table now has `user_id` and forced RLS, the
+`d2b6f4a8c1e9`; every private table now has `user_id` and forced RLS, the
 runtime role is `apsor_app`, and `file` / `file_ingest_job` record
 `storage_backend`. Earlier migrations add per-run and per-account agent usage
 counters and the impersonation session marker. `f7a3c2d9e1b4` adds the editable
@@ -1366,7 +1366,8 @@ vision prompt templates, per-file prompt fingerprints, and re-ingest source
 linkage. `a4c9e2f7b1d6` adds the per-account chat endpoint assignment and the
 compaction/escalation settings; the later revisions drop the step and tool-call
 caps, admit the `s3` storage backend, add `file_thumbnail`, and add the chat
-companion tables. The migration chain is executed by the test
+companion tables and the companion display size and opacity mode. The
+migration chain is executed by the test
 fixture and verifies the role, grants, and policies; downgrades are still a
 separate check. The agent
 migration is `a7c41e9d2b60`, after `f3cd26ca9f67`. The page-context migration
@@ -1497,12 +1498,21 @@ and seeds row `id=1` with the defaults. Later migrations in order:
   `companion_frame`, and `companion_preference` tables with forced owner-only
   RLS and `apsor_app` grants; frames cascade with their companion. The downgrade
   drops the three tables;
-- `b8e4d2f6a1c3` (current head) creates the private `companion_story`,
+- `b8e4d2f6a1c3` creates the private `companion_story`,
   `companion_lore_fragment`, and `companion_bond` tables with forced owner-only
   RLS and `apsor_app` grants: one account's per-locale copy of a companion's
   persona and lore, its fragments, and the completed-run count that unlocks lore
   tiers. A custom companion's story cascades with the companion. The downgrade
   drops the three tables.
+- `c5f1a8d3e7b4` adds `size` (`compact`, `medium`, `full`;
+  default `full`) and `opacity_mode` (`opaque`, `translucent`, `auto`; default
+  `auto`) to `companion_preference`, with check constraints and server
+  defaults. RLS and grants are unchanged; the downgrade drops both columns.
+- `d2b6f4a8c1e9` (current head) adds the nullable `scale` float (0 compact to
+  1 full) to `companion_preference` for direct on-screen resizing, with a
+  range check. NULL means "use `size`"; sending only `scale` derives `size`,
+  and sending only `size` clears `scale`. RLS and grants are unchanged; the
+  downgrade drops the column.
 
 The page-context migration names both existing constraints through `op.f(...)`.
 That matters on a real database: the constraint names must be the exact

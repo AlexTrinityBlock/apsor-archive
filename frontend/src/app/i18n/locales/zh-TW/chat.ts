@@ -531,7 +531,7 @@ export const chat = {
       suggestionInvalidArguments:
         "請以必要的純量參數重新發出呼叫；陣列與物件必須符合工具目錄。",
       suggestionConfirmation:
-        "館長必須明確確認記憶文字，才能壓進檔案館。",
+        "你必須明確確認記憶文字，才能壓進檔案館。",
       suggestionUnavailable:
         "這個工具不在對話凍結的工具集中。請開啟新的對話串以重新整理。",
       suggestionExecution:

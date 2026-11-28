@@ -1,5 +1,5 @@
 {
-  "style": "Highly detailed anime illustration, full-body standing character art (tachie), crisp clean line art, soft cel shading with painterly fabric detail, same rendering style and line quality as the reference image. The character is a faceless marionette-style ball-jointed doll: the face is a completely blank smooth porcelain oval with NO eyes, NO mouth, NO nose, NO facial features at all. Visible doll joints at knees, elbows and wrists. Small polished brass marionette rings sit on top of the head and on both shoulders where puppet strings would attach (draw the rings only, no strings). Fully transparent background, no floor, no shadow on the ground, no text, no letters, no watermark, no frame. The whole body from the top of the head to the soles of the shoes is visible and centered, with empty margin around it.",
+  "style": "Highly detailed anime illustration, full-body standing character art (tachie), crisp clean line art, soft cel shading with painterly fabric detail, same rendering style and line quality as the reference image. The character is a faceless ball-jointed doll who moves freely on its own (never a puppet): the face is a completely blank smooth porcelain oval with NO eyes, NO mouth, NO nose, NO facial features at all. Visible doll joints at knees, elbows and wrists. Small polished brass ornament rings sit on top of the head and on both shoulders. Never draw puppet strings, threads, wires, or a control bar. Fully transparent background, no floor, no shadow on the ground, no text, no letters, no watermark, no frame. The whole body from the top of the head to the soles of the shoes is visible and centered, with empty margin around it.",
   "icon": "Using the image as the exact character reference, draw a head-and-shoulders bust portrait of this same character for an app icon: short wavy silver hair, black beret with the gold medallion and ribbon, white jabot, black and gold collar. The face is a completely blank smooth porcelain oval with NO eyes, NO mouth, NO nose, NO features. Three-quarter view turned slightly to the left, the head large and centered, filling about 75% of the square, crisp bold silhouette, clean line art, rich but simplified detail that stays readable at very small sizes, soft cel shading. Fully transparent background, no text, no frame, no border.",
   "characters": [
     {
@@ -53,7 +53,7 @@
   ],
   "actions": {
     "base": "Neutral relaxed standing pose facing slightly toward the viewer, arms loosely at the sides holding the signature prop: {props}.",
-    "idle": "Calm idle stance, weight on one leg, holding {props} loosely, head slightly lowered as if resting on its strings.",
+    "idle": "Calm idle stance, weight on one leg, holding {props} loosely, head slightly lowered in quiet rest.",
     "greet": "Friendly greeting: a polite bow with one hand raised in a small wave, the other hand holding {props} against the body.",
     "listening": "Attentive listening pose: leaning slightly forward and sideways, head tilted, one hand cupped near the side of the head, as if listening closely to someone.",
     "thinking": "Thinking pose: one gloved hand touching the chin, head tilted, the other arm holding {props} against the chest, a small floating golden question-mark-shaped ribbon beside the head.",
@@ -66,9 +66,9 @@
     "speaking": "Explaining pose: one hand open and gesturing outward at shoulder height as if explaining something, the other hand holding {props}, lively posture.",
     "waiting": "Patient waiting pose: hands clasped together in front of the waist, standing very straight and still, head turned slightly toward the viewer.",
     "success": "Joyful success pose: a graceful curtsy or bow with arms opened outward, a few golden sparkles and tiny stars around, cheerful body language.",
-    "confused": "Confused pose: a few loose puppet strings tangled around one arm, head tilted strongly to the side, one hand raised to the head, knees slightly knocked together, a small floating tangle of thread.",
-    "sleeping": "Asleep on its strings: standing but slumped, head drooping forward onto the chest, arms hanging limp, knees slightly bent, {props} held loosely, a few small floating golden 'z' shaped ribbon curls above the head.",
-    "held": "Lifted by its puppet strings: dangling in the air with feet off the ground, limbs loose and relaxed like a marionette being picked up, arms hanging slightly outward, coat and skirt fluttering upward, a little surprised posture."
+    "confused": "Confused pose: head tilted strongly to the side, one hand raised to the head, knees slightly knocked together, {props} held loosely, a small floating golden question-mark ribbon curl beside the head. No strings or threads anywhere.",
+    "sleeping": "Dozing where it stands: standing but slumped, head drooping forward onto the chest, arms hanging limp, knees slightly bent, {props} held loosely, a few small floating golden 'z' shaped ribbon curls above the head.",
+    "held": "Being carried: gently lifted with feet just off the ground, limbs loose and relaxed, arms hanging slightly outward, coat and skirt fluttering upward, a little surprised posture. No strings, threads, or hands visible."
   },
   "frames": {
     "_comment": "Animation frames are pixel-locked warps of the approved pose (tilt: head degrees around the neck, nod: head drop px, lift: chest rise px, bob: detached props rise px; px at the 1024x1536 source). Frame 1 is the pose itself.",

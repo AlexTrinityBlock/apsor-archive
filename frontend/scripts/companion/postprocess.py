@@ -117,7 +117,7 @@ def _ramp(y: np.ndarray, full: float, zero: float) -> np.ndarray:
 
 
 def warp(img: Image.Image, tilt: float = 0.0, nod: float = 0.0, lift: float = 0.0, bob: float = 0.0) -> Image.Image:
-    """Pixel-locked marionette motion: the head pivots at the neck, the chest
+    """Pixel-locked free-standing motion: the head pivots at the neck, the chest
     rises, and detached props (sparkles, ribbons, cards) float upward."""
     rgba = np.array(img.convert("RGBA"), dtype=np.float32) / 255.0
     alpha = rgba[:, :, 3]
