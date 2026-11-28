@@ -10,7 +10,12 @@ import {
   positionAt,
   shiftPosition,
   avoidance,
+  bookmarkTop,
   boxSize,
+  feetLine,
+  keyboardOpen,
+  topLimit,
+  visibleBand,
   breakpointFor,
   defaultPosition,
   dockX,
@@ -106,13 +111,21 @@ describe("positions", () => {
 describe("avoidance", () => {
   const size = boxSize("desktop");
 
-  test("dialogs hide, phones peek, column overlap peeks, gutters are clear", () => {
+  test("dialogs hide, phones stay visible, overlap shrinks or tucks away, gutters are clear", () => {
     const inColumn = { left: 500, top: 300, ...size };
     const inGutter = { left: 1290, top: 300, ...size };
     expect(avoidance(inGutter, desktop, true, "desktop")).toBe("hidden");
-    expect(avoidance(inGutter, desktop, false, "phone")).toBe("peek");
-    expect(avoidance(inColumn, desktop, false, "desktop")).toBe("peek");
+    expect(avoidance(inGutter, desktop, false, "phone")).toBe("clear");
+    expect(avoidance(inColumn, desktop, false, "desktop", "panel-right")).toBe("peek");
+    expect(avoidance(inColumn, desktop, false, "desktop", "viewport-right")).toBe("retract");
     expect(avoidance(inGutter, desktop, false, "desktop")).toBe("clear");
+  });
+
+  test("with the keyboard open nothing slides, shrinks or tucks away", () => {
+    const keyboard: LayoutContext = { ...desktop, visible: { top: 0, bottom: 420 } };
+    const inColumn = { left: 500, top: 100, ...size };
+    expect(avoidance(inColumn, keyboard, false, "desktop", "viewport-right")).toBe("clear");
+    expect(avoidance(inColumn, keyboard, false, "phone")).toBe("clear");
   });
 });
 
@@ -196,7 +209,82 @@ describe("peek geometry", () => {
     const gutter = gutterWidth(narrow);
     const peek = peekGeometry({ width: 384, height: 596 }, narrow);
     expect(gutter).toBeLessThan(80);
-    expect(peek.scale).toBeCloseTo(0.22, 9);
+    // Never shrinks into an unreadable sliver.
+    expect(peek.scale).toBeCloseTo(0.45, 9);
     expect(peek.slide).toBeCloseTo(0.82, 9);
+  });
+});
+
+describe("keyboard and the visual viewport", () => {
+  const phone: LayoutContext = {
+    viewport: { width: 390, height: 844 },
+    panel: { left: 0, top: 56, width: 390, height: 788 },
+    composer: { left: 0, top: 740, width: 390, height: 100 },
+    column: { left: 12, top: 60, width: 366, height: 660 },
+    content: { left: 0, top: 0, width: 390, height: 844 },
+  };
+  const box = { width: 187, height: 300 };
+  // The keyboard covers the bottom 344px; the composer rides above it.
+  const keyboard: LayoutContext = {
+    ...phone,
+    visible: { top: 0, bottom: 500, left: 0, right: 390 },
+    composer: { left: 0, top: 400, width: 390, height: 100 },
+  };
+
+  const insideVisible = (rect: { left: number; top: number; width: number; height: number }, context: LayoutContext) => {
+    const band = visibleBand(context);
+    return (
+      rect.left >= band.left &&
+      rect.top >= band.top &&
+      rect.left + rect.width <= band.right &&
+      rect.top + rect.height <= band.bottom
+    );
+  };
+
+  test("detects the keyboard from the visible band", () => {
+    expect(keyboardOpen(phone)).toBe(false);
+    expect(keyboardOpen(keyboard)).toBe(true);
+  });
+
+  test("with the keyboard open the head may rise into the header band", () => {
+    expect(topLimit(phone)).toBe(64);
+    expect(topLimit(keyboard)).toBe(8);
+    expect(feetLine(keyboard)).toBe(394);
+  });
+
+  test("docked on either side, the box stays inside the visual viewport", () => {
+    for (const side of ["viewport-left", "viewport-right", "panel-left", "panel-right"] as const) {
+      const position = defaultPosition("phone", phone, box);
+      const rect = resolveBox({ ...position, side }, keyboard, box);
+      expect(insideVisible(rect, keyboard)).toBe(true);
+      expect(rect.top + rect.height).toBeLessThanOrEqual(keyboard.composer!.top);
+    }
+  });
+
+  test("after a drag the landing stays inside the visual viewport", () => {
+    const landed = landingPosition(500, 700, { x: 3, y: 2 }, keyboard, box);
+    expect(insideVisible(resolveBox(landed, keyboard, box), keyboard)).toBe(true);
+  });
+
+  test("a pinch-zoomed visual viewport clamps horizontally too", () => {
+    const zoomed: LayoutContext = { ...keyboard, visible: { top: 0, bottom: 500, left: 60, right: 330 } };
+    for (const side of ["viewport-left", "viewport-right"] as const) {
+      const rect = resolveBox({ side, y: 0.3 }, zoomed, { width: 120, height: 180 });
+      expect(insideVisible(rect, zoomed)).toBe(true);
+    }
+  });
+
+  test("closing the keyboard restores the exact box", () => {
+    const position = defaultPosition("phone", phone, box);
+    const before = resolveBox(position, phone, box);
+    resolveBox(position, keyboard, box);
+    expect(resolveBox(position, phone, box)).toEqual(before);
+  });
+
+  test("the bookmark tab stays fully inside the visible band", () => {
+    const placement = bookmarkTop(900, 56, keyboard);
+    expect(placement.top).toBeGreaterThanOrEqual(64);
+    expect(placement.top + 56).toBeLessThanOrEqual(500);
+    expect(placement.right).toBe(0);
   });
 });

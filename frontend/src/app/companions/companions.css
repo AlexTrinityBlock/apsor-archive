@@ -69,6 +69,7 @@
 }
 
 .companions-segmented__option {
+  position: relative;
   display: grid;
   min-width: 0;
   gap: 6px;
