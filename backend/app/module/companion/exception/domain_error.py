@@ -47,6 +47,21 @@ class CompanionStorageError(CompanionError):
         super().__init__("Companion image storage is unavailable.")
 
 
+class CompanionRefNotFoundError(CompanionError):
+    def __init__(self, companion_ref: str) -> None:
+        super().__init__(f"Companion {companion_ref} was not found.")
+
+
+class CompanionLoreNotFoundError(CompanionError):
+    def __init__(self, fragment_id: str) -> None:
+        super().__init__(f"Lore fragment {fragment_id} was not found.")
+
+
+class CompanionLoreLimitError(CompanionError):
+    def __init__(self, limit: int) -> None:
+        super().__init__(f"A companion can have at most {limit} lore fragments.")
+
+
 __all__ = [
     "CompanionError",
     "CompanionFrameLimitError",
@@ -55,6 +70,9 @@ __all__ = [
     "CompanionFrameUnsupportedError",
     "CompanionInvalidError",
     "CompanionLimitError",
+    "CompanionLoreLimitError",
+    "CompanionLoreNotFoundError",
     "CompanionNotFoundError",
+    "CompanionRefNotFoundError",
     "CompanionStorageError",
 ]

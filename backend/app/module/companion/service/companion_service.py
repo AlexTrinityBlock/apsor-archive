@@ -38,6 +38,9 @@ from app.module.companion.protocol.companion_protocol import (
     CompanionRepositoryProtocol,
     CompanionStorageProtocol,
 )
+from app.module.companion.protocol.companion_story_protocol import (
+    CompanionStoryRepositoryProtocol,
+)
 from app.module.companion.schema.companion_schema import (
     CompanionCreateSchema,
     CompanionFrameOrderSchema,
@@ -94,10 +97,14 @@ class CompanionService:
         repository: CompanionRepositoryProtocol,
         storage: CompanionStorageProtocol,
         user_id: int,
+        stories: CompanionStoryRepositoryProtocol | None = None,
     ) -> None:
         self.repository = repository
         self.storage = storage
         self.user_id = user_id
+        # Story rows cascade with the companion; the bond is keyed by reference
+        # string, so it is cleared explicitly when a custom companion goes.
+        self.stories = stories
 
     async def list_companions(self) -> list[CompanionSchema]:
         companions = await self.repository.list_companions(self.user_id)
@@ -139,11 +146,10 @@ class CompanionService:
         frames = await self.repository.list_frames(self.user_id, [companion.id])
         objects = [(frame.storage_key, frame.storage_backend) for frame in frames]
         await self.repository.delete_companion(companion)
-        await self.repository.clear_selection(
-            self.user_id,
-            CompanionSelection(kind="custom", companion_id=companion_id).serialize(),
-            utcnow(),
-        )
+        reference = CompanionSelection(kind="custom", companion_id=companion_id).serialize()
+        await self.repository.clear_selection(self.user_id, reference, utcnow())
+        if self.stories is not None:
+            await self.stories.clear_companion_ref(reference)
         await self._delete_objects(objects)
 
     async def upload_frames(

@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "themes": {
+    "books": ["book", "books", "reading", "novel", "書", "书", "閱讀", "阅读", "小說", "小说"],
+    "rain": ["rain", "rainy", "storm", "雨", "下雨", "暴雨"],
+    "family": ["family", "mother", "father", "mom", "dad", "家人", "家庭", "媽媽", "妈妈", "爸爸"],
+    "grandparents": ["grandmother", "grandfather", "grandma", "grandpa", "外婆", "奶奶", "爺爺", "爷爷", "外公", "祖母", "祖父"],
+    "food": ["food", "recipe", "cook", "cooking", "dinner", "食物", "食譜", "食谱", "料理", "做菜", "晚餐", "年菜"],
+    "travel": ["travel", "trip", "journey", "flight", "旅行", "旅遊", "旅游", "出差", "飛機", "飞机"],
+    "places": ["city", "town", "harbor", "country", "城市", "小鎮", "小镇", "港口", "國家", "国家"],
+    "seasons": ["spring", "summer", "autumn", "winter", "snow", "春天", "夏天", "秋天", "冬天", "雪"],
+    "home": ["home", "house", "hometown", "老家", "故鄉", "故乡"],
+    "loss": ["loss", "funeral", "passed away", "grief", "失去", "喪禮", "丧礼", "過世", "过世", "悲傷", "悲伤"]
+  }
+}
