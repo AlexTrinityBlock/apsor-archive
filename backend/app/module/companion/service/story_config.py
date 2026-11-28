@@ -1,9 +1,10 @@
 """Seed-backed providers for companion configuration, content, and policy.
 
 Every tunable of companion stories, the preset stories, the canon, and the
-world documents are root-editable and live in the database. Until (and in
-tests where) the database-backed providers are not installed, these static
-providers serve the shipped seed data behind the same protocols:
+world documents are root-editable and live in the database (see
+``service/db_providers.py``). These static providers serve the shipped seed
+files behind the same protocols; they are the fallback when no database is
+available (pure unit tests, or a process that has not seeded yet):
 
 - :class:`StaticStoryConfigProvider` — the seed :class:`CompanionRuntimeConfig`
   (global and per account alike).
@@ -13,7 +14,7 @@ providers serve the shipped seed data behind the same protocols:
 """
 
 import json
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -22,8 +23,6 @@ from app.module.companion.domain.companion_policy_domain import (
     AccountCompanionPolicy,
 )
 from app.module.companion.domain.story_domain import (
-    DEFAULT_PRESET_ID,
-    DEFAULT_RUNTIME_CONFIG,
     CanonEntry,
     CompanionRuntimeConfig,
     CompanionStoryConfig,
@@ -32,21 +31,22 @@ from app.module.companion.domain.story_domain import (
     WorldDocKind,
 )
 from app.module.companion.service.preset_lore_catalog import LORE_DIRECTORY, load_presets
+from app.module.companion.service.seed_catalog import load_seed_bundle, seed_runtime_config
 
 
 def as_runtime_config(config: CompanionStoryConfig) -> CompanionRuntimeConfig:
-    """Lift a plain story config into a runtime config with seed templates."""
+    """Lift a plain story config into a runtime config (seed values for the rest)."""
     if isinstance(config, CompanionRuntimeConfig):
         return config
     values = {field.name: getattr(config, field.name) for field in fields(CompanionStoryConfig)}
-    return CompanionRuntimeConfig(**values, templates=DEFAULT_RUNTIME_CONFIG.templates)
+    return replace(seed_runtime_config(), **values)
 
 
 class StaticStoryConfigProvider:
-    """Serve one fixed configuration (the seed defaults unless given one)."""
+    """Serve one fixed configuration (the seed configuration unless given one)."""
 
-    def __init__(self, config: CompanionStoryConfig = DEFAULT_RUNTIME_CONFIG) -> None:
-        self.config = as_runtime_config(config)
+    def __init__(self, config: CompanionStoryConfig | None = None) -> None:
+        self.config = as_runtime_config(config) if config is not None else seed_runtime_config()
 
     async def load(self, user_id: int | None = None) -> CompanionRuntimeConfig:
         """Return the configuration (identical for every account)."""
@@ -70,7 +70,8 @@ class StaticCompanionContentProvider:
     async def presets(self, locale: str) -> list[PresetStory]:
         """Return every shipped preset in ``locale`` (English fallback per item)."""
         loaded = load_presets(locale, self.directory)
-        return list(loaded.values())
+        order = load_seed_bundle(self.directory).preset_order
+        return [loaded[preset_id] for preset_id in order if preset_id in loaded]
 
     async def preset(self, preset_id: str, locale: str) -> PresetStory | None:
         """Return one shipped preset in ``locale``."""
@@ -78,12 +79,11 @@ class StaticCompanionContentProvider:
 
     async def enabled_preset_ids(self) -> list[str]:
         """Return every shipped preset id, flagship first."""
-        ids = sorted(load_presets("en", self.directory))
-        return sorted(ids, key=lambda preset_id: preset_id != DEFAULT_PRESET_ID)
+        return list(load_seed_bundle(self.directory).preset_order)
 
     async def global_default_preset_id(self) -> str:
-        """Return the flagship preset id."""
-        return DEFAULT_PRESET_ID
+        """Return the seed's global default preset id."""
+        return load_seed_bundle(self.directory).global_default
 
     async def canon(self, locale: str) -> dict[str, CanonEntry]:
         """Return canon entities in ``locale`` with English fallback per entity."""

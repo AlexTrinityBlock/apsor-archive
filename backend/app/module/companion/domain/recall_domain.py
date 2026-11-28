@@ -2,8 +2,8 @@
 
 Ranking (topical, self query), story-moment cadence, arc order, and the small
 lexical/vector helpers they need. Every function takes the live
-:class:`CompanionStoryConfig` (or the seed defaults) instead of reading module
-constants, so root administration can tune them.
+:class:`CompanionStoryConfig` from the config provider instead of reading
+module constants, so root administration can tune them.
 """
 
 import math
@@ -13,9 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.module.companion.domain.story_domain import (
-    DEFAULT_STORY_CONFIG,
     LORE_TIERS,
-    MAX_RECALLED_FRAGMENTS,
     Bond,
     CompanionStoryConfig,
     StoryItem,
@@ -105,10 +103,10 @@ def is_semantic_embedder(model_name: str, dimension: int) -> bool:
 def is_self_query(
     query: str,
     names: Iterable[str],
-    config: CompanionStoryConfig | None = None,
+    config: CompanionStoryConfig,
 ) -> bool:
     """Return whether ``query`` explicitly asks about the librarian or its kin."""
-    settings = config or DEFAULT_STORY_CONFIG
+    settings = config
     lowered = query.lower()
     if any(phrase and phrase in lowered for phrase in settings.self_query_phrases):
         return True
@@ -141,9 +139,9 @@ def arc_order(fragments: Iterable[StoryItem]) -> list[StoryItem]:
     return sorted(fragments, key=lambda item: (rank.get(item.tier, len(rank)), item.key))
 
 
-def story_moment_due(bond: Bond, config: CompanionStoryConfig | None = None) -> bool:
+def story_moment_due(bond: Bond, config: CompanionStoryConfig) -> bool:
     """Return whether a run starting now may offer a story moment."""
-    every = (config or DEFAULT_STORY_CONFIG).story_moment_every_runs
+    every = config.story_moment_every_runs
     if every <= 0:
         return False
     if bond.last_story_run is None:
@@ -188,17 +186,17 @@ def rank_topical(
     similarity: Mapping[str, float] | None,
     told: Mapping[str, ToldRecord],
     *,
-    limit: int = MAX_RECALLED_FRAGMENTS,
-    config: CompanionStoryConfig | None = None,
+    limit: int,
+    config: CompanionStoryConfig,
 ) -> list[RecalledFragment]:
     """Rank unlocked fragments by meaning; nothing without a semantic score.
 
-    Only the raw similarity must clear :data:`TOPICAL_MIN_SIMILARITY`; the
+    Only the raw similarity must clear ``config.topical_min_similarity``; the
     untold bonus and telling penalty then order the survivors.
     """
     if not similarity:
         return []
-    settings = config or DEFAULT_STORY_CONFIG
+    settings = config
     ranked: list[RecalledFragment] = []
     for fragment in fragments:
         if fragment.tier not in unlocked:
@@ -220,11 +218,11 @@ def rank_self_query(
     told: Mapping[str, ToldRecord],
     relevance: Mapping[str, float],
     *,
-    limit: int = MAX_RECALLED_FRAGMENTS,
-    config: CompanionStoryConfig | None = None,
+    limit: int,
+    config: CompanionStoryConfig,
 ) -> list[RecalledFragment]:
     """Return the next untold fragments, the most relevant of a small window first."""
-    window_size = (config or DEFAULT_STORY_CONFIG).self_query_window
+    window_size = config.self_query_window
     window = next_untold(fragments, unlocked, told, limit=max(limit, window_size))
     order = {item.key: index for index, item in enumerate(window)}
     chosen = sorted(
