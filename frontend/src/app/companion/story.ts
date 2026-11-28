@@ -49,6 +49,30 @@ export function isLoreTier(value: unknown): value is LoreTier {
   return value === "first" || value === "familiar" || value === "rare";
 }
 
+/** The API's memory weight (everyday, past, heart) for an editor tier. */
+export type LoreWeight = "everyday" | "past" | "heart";
+
+const TIER_WEIGHTS: Readonly<Record<LoreTier, LoreWeight>> = {
+  first: "everyday",
+  familiar: "past",
+  rare: "heart",
+};
+
+export function tierToWeight(tier: LoreTier): LoreWeight {
+  return TIER_WEIGHTS[tier];
+}
+
+/** Read a row's weight (or a legacy tier) as an editor tier. */
+export function readLoreTier(value: unknown): LoreTier | null {
+  if (isLoreTier(value)) {
+    return value;
+  }
+  const match = (Object.keys(TIER_WEIGHTS) as LoreTier[]).find(
+    (tier) => TIER_WEIGHTS[tier] === value,
+  );
+  return match ?? null;
+}
+
 /** Parse one lore fragment from an API row; unknown shapes are dropped. */
 export function parseLoreFragment(value: unknown): LoreFragment | null {
   if (!isObject(value)) {
@@ -63,7 +87,7 @@ export function parseLoreFragment(value: unknown): LoreFragment | null {
     : [];
   return {
     id,
-    tier: isLoreTier(value.tier) ? value.tier : "familiar",
+    tier: readLoreTier(value.weight) ?? readLoreTier(value.tier) ?? "familiar",
     text: value.text,
     themes,
     isDefault: value.is_default === true || value.isDefault === true,

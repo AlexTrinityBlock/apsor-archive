@@ -13,14 +13,12 @@ from app.module.companion.domain.story_domain import (
     TEMPLATE_STORY_MOMENT_GUIDANCE,
     CompanionRuntimeConfig,
     LifeStoryConfig,
-    LoreTier,
+    LoreWeight,
 )
 
 SEED_BUNDLE = "companion"
 
 TUNABLE_FIELDS: tuple[str, ...] = (
-    "familiar_unlock_runs",
-    "rare_unlock_runs",
     "max_recalled_fragments",
     "topical_min_similarity",
     "untold_bonus",
@@ -33,7 +31,7 @@ TUNABLE_FIELDS: tuple[str, ...] = (
 LIFE_STORY_FIELDS: tuple[str, ...] = (
     "enabled",
     "every_conversations",
-    "tier",
+    "weight",
     "max_per_30d",
     "memory_limit",
     "memory_chars",
@@ -57,8 +55,6 @@ CONFIG_COLUMNS: tuple[str, ...] = (
 )
 # Per-account override columns (``companion_user_config``); NULL inherits.
 USER_CONFIG_COLUMNS: tuple[str, ...] = (
-    "familiar_unlock_runs",
-    "rare_unlock_runs",
     "max_recalled_fragments",
     "topical_min_similarity",
     "untold_bonus",
@@ -69,7 +65,7 @@ USER_CONFIG_COLUMNS: tuple[str, ...] = (
     "max_contributions_per_run",
     "life_story_enabled",
     "life_story_every_conversations",
-    "life_story_tier",
+    "life_story_weight",
     "life_story_max_per_30d",
     "life_story_require_review",
 )
@@ -89,7 +85,7 @@ def build_runtime_config(
     life = LifeStoryConfig(
         enabled=bool(values["life_story_enabled"]),
         every_conversations=int(values["life_story_every_conversations"]),
-        tier=cast(LoreTier, values["life_story_tier"]),
+        weight=cast(LoreWeight, values["life_story_weight"]),
         max_per_30d=int(values["life_story_max_per_30d"]),
         memory_limit=int(values["life_story_memory_limit"]),
         memory_chars=int(values["life_story_memory_chars"]),
@@ -101,8 +97,6 @@ def build_runtime_config(
         max_attempts=int(values["life_story_max_attempts"]),
     )
     return CompanionRuntimeConfig(
-        familiar_unlock_runs=int(values["familiar_unlock_runs"]),
-        rare_unlock_runs=int(values["rare_unlock_runs"]),
         max_recalled_fragments=int(values["max_recalled_fragments"]),
         topical_min_similarity=float(values["topical_min_similarity"]),
         untold_bonus=float(values["untold_bonus"]),

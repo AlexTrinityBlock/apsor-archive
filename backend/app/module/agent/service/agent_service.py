@@ -58,7 +58,10 @@ from app.module.agent.domain.companion_context_domain import (
     render_contributions,
     signal_text,
 )
-from app.module.agent.domain.companion_persona_domain import CompanionPersona
+from app.module.agent.domain.companion_persona_domain import (
+    COMPANION_PERSONA_HEADING,
+    CompanionPersona,
+)
 from app.module.agent.domain.context_domain import (
     build_context,
     prefix_hash,
@@ -881,6 +884,9 @@ class AgentService:
     ) -> ProviderContext:
         """Drop withheld tools from the outbound request; the transcript is unchanged."""
         unavailable = await self._unavailable_tool_names(run_id)
+        if not _has_companion_persona(context):
+            # Only a conversation with a companion has own memories to recall.
+            unavailable = unavailable | {COMPANION_MEMORY_TOOL}
         self._withheld_tools = tuple(sorted(unavailable))
         if not unavailable:
             return context
@@ -2993,6 +2999,22 @@ def _transcript_from_rows(rows: list[AgentEntryModel]) -> list[TranscriptEntry]:
             )
         )
     return transcript
+
+
+COMPANION_MEMORY_TOOL = "recall_my_memories"
+
+
+def _has_companion_persona(context: ProviderContext) -> bool:
+    """Return whether the frozen system message carries a companion persona section."""
+    content = context.system_message.get("content") if context.system_message else None
+    if isinstance(content, str):
+        return COMPANION_PERSONA_HEADING in content
+    if isinstance(content, list):
+        return any(
+            isinstance(part, dict) and COMPANION_PERSONA_HEADING in str(part.get("text", ""))
+            for part in content
+        )
+    return False
 
 
 def _companion_turn(turn: AgentTurnState) -> CompanionTurnContext:

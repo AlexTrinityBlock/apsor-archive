@@ -115,7 +115,7 @@ class CompanionLoreItemModel(_SeedTrackedMixin, Base):
         nullable=False,
     )
     fragment_key: Mapped[str] = mapped_column(String(64), nullable=False)
-    tier: Mapped[str] = mapped_column(String(16), nullable=False)
+    weight: Mapped[str] = mapped_column(String(16), nullable=False)
     themes: Mapped[list[Any]] = _jsonb_list()
     refs: Mapped[list[Any]] = _jsonb_list()
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -196,8 +196,6 @@ class CompanionConfigModel(_SeedTrackedMixin, Base):
     __tablename__ = "companion_config"
 
     id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, default=1)
-    familiar_unlock_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
-    rare_unlock_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=20)
     max_recalled_fragments: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     topical_min_similarity: Mapped[float] = mapped_column(Float, nullable=False, default=0.30)
     untold_bonus: Mapped[float] = mapped_column(Float, nullable=False, default=0.06)
@@ -215,7 +213,7 @@ class CompanionConfigModel(_SeedTrackedMixin, Base):
         nullable=False,
         default=5,
     )
-    life_story_tier: Mapped[str] = mapped_column(String(16), nullable=False, default="familiar")
+    life_story_weight: Mapped[str] = mapped_column(String(16), nullable=False, default="past")
     life_story_max_per_30d: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
     life_story_memory_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=8)
     life_story_memory_chars: Mapped[int] = mapped_column(Integer, nullable=False, default=6000)

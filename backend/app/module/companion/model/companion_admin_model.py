@@ -91,8 +91,6 @@ class CompanionUserConfigModel(_TimestampsMixin, Base):
     __tablename__ = "companion_user_config"
 
     user_id: Mapped[int] = _owner_id()
-    familiar_unlock_runs: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    rare_unlock_runs: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_recalled_fragments: Mapped[int | None] = mapped_column(Integer, nullable=True)
     topical_min_similarity: Mapped[float | None] = mapped_column(Float, nullable=True)
     untold_bonus: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -103,7 +101,7 @@ class CompanionUserConfigModel(_TimestampsMixin, Base):
     max_contributions_per_run: Mapped[int | None] = mapped_column(Integer, nullable=True)
     life_story_enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     life_story_every_conversations: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    life_story_tier: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    life_story_weight: Mapped[str | None] = mapped_column(String(16), nullable=True)
     life_story_max_per_30d: Mapped[int | None] = mapped_column(Integer, nullable=True)
     life_story_require_review: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
@@ -130,7 +128,7 @@ class CompanionAdminLoreOverrideModel(_TimestampsMixin, Base):
     fragment_key: Mapped[str] = mapped_column(String(64), primary_key=True)
     action: Mapped[str] = mapped_column(String(16), nullable=False)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    tier: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    weight: Mapped[str | None] = mapped_column(String(16), nullable=True)
     themes: Mapped[list[Any]] = _jsonb_list()
     refs: Mapped[list[Any]] = _jsonb_list()
     position: Mapped[int | None] = mapped_column(Integer, nullable=True)

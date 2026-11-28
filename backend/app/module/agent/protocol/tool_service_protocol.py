@@ -5,8 +5,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
-from app.module.agent.domain.history_domain import HistoryMessageRead
-from app.module.agent.protocol.companion_protocol import CompanionContextContributorProtocol
+from app.module.agent.domain.history_domain import HistoryMessage, HistoryMessageRead
+from app.module.agent.protocol.companion_protocol import (
+    CompanionContextContributorProtocol,
+    CompanionOwnMemoriesProtocol,
+)
 from app.module.knowledge.schema.file_schema import FileChunksSchema, FileSchema, PathListingSchema
 from app.module.knowledge.schema.memory_schema import (
     MemoryReadSchema,
@@ -86,6 +89,10 @@ class HistoryToolServiceProtocol(Protocol):
         message_range: int = 1,
     ) -> HistoryMessageRead: ...
 
+    async def read_messages(self, entry_ids: list[int]) -> list[HistoryMessage]: ...
+
+    async def recent_replies(self, limit: int) -> list[HistoryMessage]: ...
+
 
 class TimelineToolServiceProtocol(Protocol):
     async def get_timeline(
@@ -143,6 +150,9 @@ class AgentToolServices:
     # Present only when the conversation froze a companion persona: the one
     # contributor through which the companion's own memories reach a result.
     companion_context: CompanionContextContributorProtocol | None = None
+    # Present only when the conversation froze a companion: her own memories
+    # (lore and life stories) for the recall_my_memories tool.
+    companion_memories: CompanionOwnMemoriesProtocol | None = None
 
 
 class ToolServiceScopeProtocol(Protocol):

@@ -66,7 +66,7 @@ class CompanionStoryRepositoryProtocol(Protocol):
         fragment_key: str,
         text: str,
         themes: Sequence[str],
-        tier: str,
+        weight: str,
         position: int,
         edited: bool,
         now: datetime,

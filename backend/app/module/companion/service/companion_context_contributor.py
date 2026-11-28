@@ -11,8 +11,12 @@ Every input site of a run reaches the companion through
   questions are not decorated with lore before any evidence is read.
 - **Page context and attachment names** — semantic, topical recall against the
   page the person is viewing or the names of what they attached.
-- **Tool results** — semantic, topical recall against the result; a search
-  query may also be a self query.
+- **Tool results** — semantic, topical recall against the result (never for
+  ``search_knowledge``, which searches only the person's archive).
+
+Nothing is locked: each memory carries a weight the librarian judges for
+herself, and the block tells her how long the two of them have known each
+other.
 
 Every offer is capped per run (``max_contributions_per_run``), never repeats a
 fragment already offered in the run, and is recorded in the progress table by
@@ -22,7 +26,7 @@ provider; this module holds no story wording.
 
 from typing import Literal
 
-from app.module.companion.domain.story_domain import CompanionRuntimeConfig
+from app.module.companion.domain.story_domain import CompanionRuntimeConfig, Relationship
 from app.module.companion.protocol.companion_story_protocol import (
     CompanionStoryConfigProviderProtocol,
 )
@@ -92,6 +96,10 @@ class CompanionContextContributor:
             allow_self_query=query is not None,
             allow_topical=True,
         )
+
+    async def relationship(self) -> Relationship | None:
+        """Return how long the person and this companion have known each other."""
+        return await self.recall.relationship()
 
 
 __all__ = ["CompanionContextContributor", "ContributionSite"]

@@ -8,9 +8,13 @@ import type { AgentEntrySchemaData } from './agentEntrySchemaData';
 import type { AgentEntrySchemaEdits } from './agentEntrySchemaEdits';
 import type { AgentEntrySchemaKind } from './agentEntrySchemaKind';
 import type { AgentEntrySchemaModel } from './agentEntrySchemaModel';
+import type { AgentSpeakerSchema } from './agentSpeakerSchema';
 
 /**
  * One immutable transcript entry as returned by the API.
+ *
+ * ``speaker`` names the companion who said an assistant entry (``null`` for
+ * the person's entries and for replies from a conversation without one).
  */
 export interface AgentEntrySchema {
   by_run_id: number | null;
@@ -23,4 +27,6 @@ export interface AgentEntrySchema {
   id: number;
   kind: AgentEntrySchemaKind;
   model: AgentEntrySchemaModel;
+  /** Return the companion stamped on an assistant entry, if any. */
+  readonly speaker: AgentSpeakerSchema | null;
 }

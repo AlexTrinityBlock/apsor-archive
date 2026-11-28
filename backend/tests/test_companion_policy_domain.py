@@ -32,7 +32,7 @@ CUSTOM = ["custom:7"]
 
 
 def _item(key: str, text: str = "t", origin: str = "preset") -> StoryItem:
-    return StoryItem(key=key, text=text, themes=(), tier="first", origin=origin)  # type: ignore[arg-type]
+    return StoryItem(key=key, text=text, themes=(), weight="everyday", origin=origin)  # type: ignore[arg-type]
 
 
 def test_user_choice_wins_when_allowed() -> None:
@@ -191,7 +191,7 @@ def test_merge_config_overrides_ignores_null_and_unknown() -> None:
 
 def test_lore_fragment_alias_and_origin_default() -> None:
     assert LoreFragment is StoryItem
-    assert StoryItem(key="k", text="t", themes=(), tier="first").origin == "preset"
+    assert StoryItem(key="k", text="t", themes=(), weight="everyday").origin == "preset"
 
 
 def test_static_providers_serve_seed() -> None:

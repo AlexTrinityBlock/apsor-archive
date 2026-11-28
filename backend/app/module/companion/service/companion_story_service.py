@@ -12,7 +12,7 @@ rows, and reset deletes the copy. A custom companion has no shipped default;
 its rows are the story, falling back from the requested locale to English and
 then to any locale the owner wrote.
 
-The account sees its own lore and the lore it has already heard; tiers, locks,
+The account sees its own lore and the lore it has already heard; weights,
 and progress stay hidden (root sees them in administration).
 """
 
@@ -34,12 +34,13 @@ from app.module.companion.domain.story_domain import (
     Bond,
     CompanionRuntimeConfig,
     LoreFragment,
-    LoreTier,
+    LoreWeight,
     StoryItem,
     StoryLocale,
     ToldRecord,
     custom_persona,
     normalize_themes,
+    normalize_weight,
 )
 from app.module.companion.exception.domain_error import (
     CompanionLoreLimitError,
@@ -100,7 +101,7 @@ def _fragment_from_row(row: CompanionLoreFragmentModel) -> LoreFragment:
         key=row.fragment_key,
         text=row.text,
         themes=normalize_themes(_strings(row.themes)),
-        tier=cast(LoreTier, row.tier),
+        weight=normalize_weight(row.weight),
         edited=row.edited,
         refs=tuple(_strings(getattr(row, "refs", None))),
         origin="user",
@@ -114,7 +115,7 @@ def _admin_override(row: CompanionAdminLoreOverrideModel) -> AdminLoreOverride:
             key=row.fragment_key,
             text=row.text,
             themes=normalize_themes(_strings(row.themes)),
-            tier=cast(LoreTier, row.tier or "first"),
+            weight=normalize_weight(row.weight or "everyday"),
             refs=tuple(_strings(row.refs)),
             origin="admin",
         )
@@ -131,7 +132,7 @@ def _generated_item(row: CompanionGeneratedStoryModel) -> StoryItem:
         key=row.fragment_key,
         text=row.text,
         themes=normalize_themes(_strings(row.themes)),
-        tier=cast(LoreTier, row.tier),
+        weight=normalize_weight(row.weight),
         origin="generated",
     )
 
@@ -141,8 +142,8 @@ def _bond(model: CompanionBondModel | None) -> Bond:
         return Bond()
     return Bond(
         completed_runs=model.completed_runs,
-        familiar_unlocked_at=model.familiar_unlocked_at,
-        rare_unlocked_at=model.rare_unlocked_at,
+        conversations=model.conversations,
+        first_met_at=model.first_met_at,
         last_story_run=model.last_story_run,
     )
 
@@ -378,21 +379,11 @@ class CompanionStoryService:
         await self.repository.set_last_story_run(companion_ref, completed_runs, utcnow())
 
     async def record_completed_run(self, companion_ref: str) -> Bond:
-        """Count one completed run and stamp any tier it unlocks."""
+        """Count one completed run and remember when the two of them first met."""
         now = utcnow()
         model = await self.repository.increment_bond(companion_ref, now)
-        changed = False
-        config = await self.config()
-        if (
-            model.completed_runs >= config.familiar_unlock_runs
-            and model.familiar_unlocked_at is None
-        ):
-            model.familiar_unlocked_at = now
-            changed = True
-        if model.completed_runs >= config.rare_unlock_runs and model.rare_unlocked_at is None:
-            model.rare_unlocked_at = now
-            changed = True
-        if changed:
+        if model.first_met_at is None:
+            model.first_met_at = now
             await self.repository.flush()
         return _bond(model)
 
@@ -444,7 +435,7 @@ class CompanionStoryService:
     async def list_lore(self, companion_ref: str, locale: StoryLocale) -> CompanionLoreSchema:
         """Return what the account may see: its own lore and the lore it has heard.
 
-        Tiers, locks, and progress are never shown to the account.
+        Weights and progress are never shown to the account.
         """
         target = await self.resolve(companion_ref)
         story = await self._story(target, locale)
@@ -493,7 +484,7 @@ class CompanionStoryService:
             fragment_key=f"u-{uuid4().hex[:16]}",
             text=payload.text.strip(),
             themes=normalize_themes(payload.themes),
-            tier=payload.tier,
+            weight=payload.weight,
             position=(max((row.position for row in rows), default=-1) + 1),
             edited=True,
             now=utcnow(),
@@ -517,8 +508,8 @@ class CompanionStoryService:
             row.text = payload.text.strip()
         if "themes" in fields and payload.themes is not None:
             row.themes = list(normalize_themes(payload.themes))
-        if "tier" in fields and payload.tier is not None:
-            row.tier = payload.tier
+        if "weight" in fields and payload.weight is not None:
+            row.weight = payload.weight
         if "position" in fields and payload.position is not None:
             row.position = payload.position
         row.edited = True
@@ -579,7 +570,7 @@ class CompanionStoryService:
                     fragment_key=fragment.key,
                     text=fragment.text,
                     themes=fragment.themes,
-                    tier=fragment.tier,
+                    weight=fragment.weight,
                     position=position,
                     edited=fragment.edited,
                     now=now,
@@ -599,6 +590,6 @@ class CompanionStoryService:
 __all__ = [
     "ActiveCompanion",
     "CompanionStoryService",
-    "LoreTier",
+    "LoreWeight",
     "StoryTarget",
 ]

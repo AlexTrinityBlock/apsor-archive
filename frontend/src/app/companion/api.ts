@@ -66,6 +66,7 @@ import {
 } from "./preference";
 import {
   parseLoreFragment,
+  tierToWeight,
   type CompanionPersona,
   type LoreFragment,
   type LoreInput,
@@ -461,7 +462,7 @@ export function useCompanionStory(ref: CompanionRef): CompanionStory {
         setLore(
           await createCompanionLore(
             ref,
-            { text: input.text, themes: [...input.themes], tier: input.tier },
+            { text: input.text, themes: [...input.themes], weight: tierToWeight(input.tier) },
             params,
           ),
         );
@@ -471,7 +472,7 @@ export function useCompanionStory(ref: CompanionRef): CompanionStory {
           await updateCompanionLore(
             ref,
             id,
-            { text: input.text, themes: [...input.themes], tier: input.tier },
+            { text: input.text, themes: [...input.themes], weight: tierToWeight(input.tier) },
             params,
           ),
         );

@@ -5,6 +5,11 @@ class AgentError(Exception):
     """Base class for every agent-domain failure."""
 
 
+class AgentCompanionUnavailableError(AgentError):
+    def __init__(self) -> None:
+        super().__init__("This conversation has no companion, so there are no own memories.")
+
+
 class AgentConversationNotFoundError(AgentError):
     def __init__(self, conversation_id: int) -> None:
         super().__init__(f"Agent conversation {conversation_id} was not found.")

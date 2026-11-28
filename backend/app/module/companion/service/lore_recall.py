@@ -13,9 +13,14 @@ There are three ways a fragment reaches the model, and none needs a keyword:
   untold fragment of the arc, whatever the user talks about, so a person whose
   life circles a few topics still hears the whole story in time.
 
-Every offer is counted in the progress table with its source. Locked tiers are
-never offered. Thresholds, cadence, phrases, and guidance come from the story
-config provider, never from module constants.
+She can also look her memories up herself with the ``recall_my_memories`` tool
+(:meth:`CompanionLoreRecall.search_own`), any weight at all.
+
+Nothing is locked: every memory carries a weight (everyday, past, heart) that
+the librarian sees and judges for herself, together with plain facts about how
+long she and the person have known each other. Every offer is counted in the
+progress table with its source. Thresholds, cadence, phrases, and guidance come
+from the story config provider, never from module constants.
 """
 
 import logging
@@ -40,7 +45,9 @@ from app.module.companion.domain.story_domain import (
     CompanionRuntimeConfig,
     CompanionStoryConfig,
     LoreFragment,
+    Relationship,
     StoryLocale,
+    relationship,
 )
 from app.module.companion.exception.domain_error import CompanionRefNotFoundError
 from app.module.companion.protocol.companion_story_protocol import (
@@ -53,6 +60,7 @@ from app.module.companion.service.companion_story_service import (
     StoryTarget,
 )
 from app.module.companion.service.lore_vectors import LoreVectorStore
+from app.shared.time import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +91,7 @@ class RecalledLore:
 
     id: str
     text: str
-    tier: str
+    weight: str
     score: float
     # The configured guidance the model reads with this memory.
     guidance: str = ""
@@ -101,7 +109,7 @@ def _offered(
         RecalledLore(
             id=item.fragment.key,
             text=item.fragment.text,
-            tier=item.fragment.tier,
+            weight=item.fragment.weight,
             score=item.score,
             guidance=guidance,
             moment=moment,
@@ -164,12 +172,7 @@ class CompanionLoreRecall:
         fragments = await self.stories.fragments(target, self.locale, include_generated=True)
         if not fragments:
             return []
-        unlocked = (await self.stories.bond(target.ref)).unlocked_tiers(config)
-        candidates = [
-            fragment
-            for fragment in fragments
-            if fragment.tier in unlocked and fragment.key not in exclude
-        ]
+        candidates = [fragment for fragment in fragments if fragment.key not in exclude]
         if not candidates:
             return []
         told = await self.stories.told(target.ref)
@@ -183,18 +186,14 @@ class CompanionLoreRecall:
                 if semantic is not None
                 else {fragment.key: lexical_overlap(query, fragment) for fragment in candidates}
             )
-            chosen = rank_self_query(
-                candidates, unlocked, told, relevance, limit=size, config=config
-            )
+            chosen = rank_self_query(candidates, told, relevance, limit=size, config=config)
             source = "self_query"
             moment = "self"
         elif not allow_topical:
             return []
         else:
             semantic = await self._semantic(scoring_text, candidates)
-            chosen = rank_topical(
-                candidates, unlocked, semantic, told, limit=size, config=config
-            )
+            chosen = rank_topical(candidates, semantic, told, limit=size, config=config)
             source = "topical"
             moment = "topical"
         await self.stories.record_told(
@@ -226,7 +225,7 @@ class CompanionLoreRecall:
             if fragment.key not in exclude
         ]
         told = await self.stories.told(target.ref)
-        upcoming = next_untold(fragments, bond.unlocked_tiers(config), told, limit=1)
+        upcoming = next_untold(fragments, told, limit=1)
         if not upcoming:
             return None
         fragment = upcoming[0]
@@ -235,11 +234,72 @@ class CompanionLoreRecall:
         return RecalledLore(
             id=fragment.key,
             text=fragment.text,
-            tier=fragment.tier,
+            weight=fragment.weight,
             score=0.0,
             guidance=_story_moment_guidance(config),
             moment="story",
         )
+
+    async def guidance(self) -> str:
+        """Return the configured guidance the model reads with her own memories."""
+        return _lore_guidance(await self.config.load(self.stories.user_id))
+
+    async def relationship(self) -> Relationship | None:
+        """Return how long this account and the companion have known each other."""
+        try:
+            target = await self.stories.resolve(self.companion_ref)
+        except CompanionRefNotFoundError:
+            return None
+        return relationship(await self.stories.bond(target.ref), utcnow())
+
+    async def search_own(self, query: str, *, limit: int) -> list[RecalledLore]:
+        """Look up the librarian's own memories (any weight) for her own tool.
+
+        Every lore fragment and every published life story written for this
+        account is a candidate. Ranking is by meaning when a semantic embedder
+        is available, otherwise by word overlap; with an empty query the arc
+        order (untold first) decides. Returned fragments count as told with
+        source ``recall``.
+        """
+        if limit <= 0:
+            return []
+        try:
+            target = await self.stories.resolve(self.companion_ref)
+        except CompanionRefNotFoundError:
+            return []
+        config = await self.config.load(self.stories.user_id)
+        fragments = list(
+            await self.stories.fragments(target, self.locale, include_generated=True)
+        )
+        if not fragments:
+            return []
+        told = await self.stories.told(target.ref)
+        cleaned = query.strip()
+        if cleaned:
+            relevance = await self._semantic(cleaned, fragments)
+            if relevance is None:
+                relevance = {item.key: lexical_overlap(cleaned, item) for item in fragments}
+            ranked = sorted(
+                fragments,
+                key=lambda item: (-round(relevance.get(item.key, 0.0), 4), item.key),
+            )[:limit]
+            scores = {item.key: round(relevance.get(item.key, 0.0), 4) for item in ranked}
+        else:
+            ranked = next_untold(fragments, told, limit=limit)
+            scores = {item.key: 0.0 for item in ranked}
+        await self.stories.record_told(target.ref, [item.key for item in ranked], "recall")
+        guidance = _lore_guidance(config)
+        return [
+            RecalledLore(
+                id=item.key,
+                text=item.text,
+                weight=item.weight,
+                score=scores[item.key],
+                guidance=guidance,
+                moment="self",
+            )
+            for item in ranked
+        ]
 
     async def _names(self, target: StoryTarget) -> list[str]:
         """Return the librarian's own name and every preset librarian's name."""

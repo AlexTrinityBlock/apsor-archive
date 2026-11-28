@@ -119,7 +119,7 @@ def _stories(owner_engine: Engine) -> list[dict[str, Any]]:
     with owner_engine.connect() as connection:
         rows = connection.execute(
             text(
-                "SELECT id, user_id, companion_ref, locale, fragment_key, title, text, tier, "
+                "SELECT id, user_id, companion_ref, locale, fragment_key, title, text, weight, "
                 "status, source_refs, job_id, model, prompt_tokens, completion_tokens "
                 "FROM companion_generated_story ORDER BY id"
             )
@@ -391,7 +391,7 @@ def test_worker_writes_a_story_that_later_surfaces(
     assert job["id"] == job_id and job["status"] == "succeeded" and job["attempts"] == 1
     [story] = _stories(owner_engine)
     assert story["fragment_key"] == f"g-{story['id']}"
-    assert story["status"] == "published" and story["tier"] == "familiar"
+    assert story["status"] == "published" and story["weight"] == "past"
     assert story["title"] == "The Kitchen Door" and story["text"] == STORY_BODY
     assert (story["model"], story["prompt_tokens"], story["completion_tokens"]) == (
         "fake-aux",

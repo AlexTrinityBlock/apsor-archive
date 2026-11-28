@@ -1,10 +1,10 @@
 """Load the shipped preset stories from ``app/module/companion/lore``.
 
 English is canonical: each preset is ``lore/<id>.json`` (``schema`` 1) and owns
-the fragment ids, tiers, and themes. Optional translations live in
+the fragment ids, weights, and themes. Optional translations live in
 ``lore/zh-TW/<id>.json`` and ``lore/zh-CN/<id>.json`` with the same ids; a
 translation may override ``name``, ``persona``, and each fragment's ``text``.
-Anything missing falls back to English per item, so unlock state stays
+Anything missing falls back to English per item, so told progress stays
 locale-independent. ``canon.json`` names the shared world entities that a
 fragment's ``refs`` may point at. Themes are editor metadata only: recall is
 semantic and never gated by keywords.
@@ -21,11 +21,12 @@ from typing import Any, cast
 
 from app.module.companion.domain.story_domain import (
     FRAGMENT_MAX_CHARS,
-    LORE_TIERS,
+    LEGACY_TIER_WEIGHTS,
+    LORE_WEIGHTS,
     PERSONA_MAX_CHARS,
     STORY_LOCALES,
     LoreFragment,
-    LoreTier,
+    LoreWeight,
     PresetStory,
     is_fragment_key,
     normalize_themes,
@@ -55,14 +56,15 @@ def _fragment(raw: Any, source: str) -> LoreFragment:
         raise PresetLoreError(f"{source}: every fragment must be an object")
     key = raw.get("id")
     text = raw.get("text")
-    tier = raw.get("tier")
+    # ``weight`` replaced ``tier``; older seed files still say tier.
+    weight = raw.get("weight", LEGACY_TIER_WEIGHTS.get(str(raw.get("tier")), raw.get("tier")))
     themes = raw.get("themes", [])
     if not isinstance(key, str) or not is_fragment_key(key):
         raise PresetLoreError(f"{source}: invalid fragment id {key!r}")
     if not isinstance(text, str) or not text.strip() or len(text) > FRAGMENT_MAX_CHARS:
         raise PresetLoreError(f"{source}: fragment {key} text is empty or too long")
-    if tier not in LORE_TIERS:
-        raise PresetLoreError(f"{source}: fragment {key} has invalid tier {tier!r}")
+    if weight not in LORE_WEIGHTS:
+        raise PresetLoreError(f"{source}: fragment {key} has invalid weight {weight!r}")
     if not isinstance(themes, list) or not all(isinstance(item, str) for item in themes):
         raise PresetLoreError(f"{source}: fragment {key} themes must be strings")
     refs = raw.get("refs", [])
@@ -72,7 +74,7 @@ def _fragment(raw: Any, source: str) -> LoreFragment:
         key=key,
         text=text.strip(),
         themes=normalize_themes(themes),
-        tier=cast(LoreTier, tier),
+        weight=cast(LoreWeight, weight),
         refs=tuple(dict.fromkeys(item.strip() for item in refs if item.strip())),
     )
 

@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
-from app.module.agent.protocol.companion_protocol import ContextContribution
+from app.module.agent.protocol.companion_protocol import ContextContribution, RelationshipFacts
 
 # Bounded text of one signal; embeddings and phrase checks need no more.
 SIGNAL_TEXT_LIMIT = 1_600
@@ -56,8 +56,10 @@ def signal_text(*parts: str | None, limit: int = SIGNAL_TEXT_LIMIT) -> str:
 def render_contributions(contributions: Sequence[ContextContribution]) -> str:
     """Return one ``<librarian_memories>`` block, or ``""`` when none are offered.
 
-    The block carries ``moment`` when every memory shares it, each distinct
-    configured guidance once, and every memory with its id, tier, and moment.
+    The block carries ``moment`` when every memory shares it, the relationship
+    facts (when known: first met, days known, conversations together), each
+    distinct configured guidance once, and every memory with its id, weight, and
+    moment.
     """
     if not contributions:
         return ""
@@ -65,6 +67,9 @@ def render_contributions(contributions: Sequence[ContextContribution]) -> str:
     block_attrs: dict[str, object] = {}
     if len(moments) == 1:
         block_attrs["moment"] = next(iter(moments))
+    facts = next((item.relationship for item in contributions if item.relationship), None)
+    if facts is not None:
+        block_attrs.update(relationship_attributes(facts))
     parts = [f"<librarian_memories{attributes(block_attrs)}>"]
     seen: set[str] = set()
     for item in contributions:
@@ -75,7 +80,7 @@ def render_contributions(contributions: Sequence[ContextContribution]) -> str:
                 f"<guidance{attributes({'moment': item.moment})}>{xml_text(guidance)}</guidance>"
             )
     for item in contributions:
-        values = {"id": item.id, "tier": item.tier, "moment": item.moment}
+        values = {"id": item.id, "weight": item.weight, "moment": item.moment}
         parts.append(
             f"<librarian_memory{attributes(values)}>{xml_text(item.text)}</librarian_memory>"
         )
@@ -86,9 +91,20 @@ def render_contributions(contributions: Sequence[ContextContribution]) -> str:
 def contribution_data(contributions: Sequence[ContextContribution]) -> list[dict[str, str]]:
     """Return the UI copy of offered memories (``data["lore"]`` on a tool result)."""
     return [
-        {"id": item.id, "tier": item.tier, "text": item.text, "moment": item.moment}
+        {"id": item.id, "weight": item.weight, "text": item.text, "moment": item.moment}
         for item in contributions
     ]
+
+
+def relationship_attributes(facts: RelationshipFacts) -> dict[str, object]:
+    """Return the attributes that tell the librarian how long they have known each other."""
+    values: dict[str, object] = {
+        "days_known": facts.days_known,
+        "conversations_together": facts.conversations,
+    }
+    if facts.first_met:
+        values["first_met"] = facts.first_met
+    return values
 
 
 def merge_user_suffixes(data: Mapping[str, Any] | None) -> list[str]:
@@ -108,6 +124,7 @@ __all__ = [
     "CompanionTurnContext",
     "contribution_data",
     "merge_user_suffixes",
+    "relationship_attributes",
     "render_contributions",
     "signal_text",
 ]

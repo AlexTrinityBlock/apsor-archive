@@ -83,8 +83,8 @@ READ_USAGE = {
     "prompt_cache_hit_tokens": 22,
     "prompt_cache_miss_tokens": 7,
 }
-PROMPT_VERSION = "archive-agent-v20"
-TOOLS_VERSION = "archive-tools-v19"
+PROMPT_VERSION = "archive-agent-v21"
+TOOLS_VERSION = "archive-tools-v20"
 PAGE_KEY = "/library"
 PAGE_PATH = "/library"
 PAGE_TITLE = "File Library"
@@ -104,6 +104,7 @@ TOOL_NAMES = [
     "render_plot",
     "web_search",
     "web_fetch",
+    "recall_my_memories",
     "companion_action",
 ]
 

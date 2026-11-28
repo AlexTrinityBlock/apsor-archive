@@ -6,7 +6,7 @@ All three tables are private (owner-only RLS):
   one locale. A preset story references ``preset_id``; a custom companion's
   story references ``(companion_id, user_id)`` and cascades with it.
 - ``companion_lore_fragment``: the fragments of one customized story.
-- ``companion_bond``: completed runs per companion, which unlock lore tiers,
+- ``companion_bond``: completed runs and conversations per companion and when they first met,
   and the run count at the last story moment.
 - ``companion_lore_told``: the per-account progress through one companion's
   lore: which fragments were offered, how often, when, and by which path
@@ -44,7 +44,7 @@ from app.infrastructure.database.base import Base
 from app.shared.time import utcnow
 
 _LOCALES = "'en', 'zh-TW', 'zh-CN'"
-_TIERS = "'first', 'familiar', 'rare'"
+_WEIGHTS = "'everyday', 'past', 'heart'"
 
 
 class CompanionStoryModel(Base):
@@ -133,7 +133,7 @@ class CompanionLoreFragmentModel(Base):
             ondelete="CASCADE",
         ),
         UniqueConstraint("story_id", "fragment_key", name="uq_companion_lore_fragment_key"),
-        CheckConstraint(f"tier IN ({_TIERS})", name="tier_valid"),
+        CheckConstraint(f"weight IN ({_WEIGHTS})", name="weight_valid"),
         CheckConstraint(
             "char_length(text) BETWEEN 1 AND 2000",
             name="text_length",
@@ -165,7 +165,7 @@ class CompanionLoreFragmentModel(Base):
         default=list,
         server_default=sql_text("'[]'::jsonb"),
     )
-    tier: Mapped[str] = mapped_column(String(16), nullable=False)
+    weight: Mapped[str] = mapped_column(String(16), nullable=False)
     refs: Mapped[list[Any]] = mapped_column(
         JSONB,
         nullable=False,
@@ -195,7 +195,7 @@ class CompanionLoreFragmentModel(Base):
 
 
 class CompanionBondModel(Base):
-    """Completed runs with one companion, and when each lore tier opened."""
+    """Completed runs and conversations with one companion, and when they first met."""
 
     __tablename__ = "companion_bond"
     __table_args__ = (
@@ -222,11 +222,7 @@ class CompanionBondModel(Base):
         default=0,
         server_default=sql_text("0"),
     )
-    familiar_unlocked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-    rare_unlocked_at: Mapped[datetime | None] = mapped_column(
+    first_met_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -274,7 +270,7 @@ class CompanionLoreToldModel(Base):
             name="fragment_key_format",
         ),
         CheckConstraint(
-            "source IN ('topical', 'story_moment', 'self_query', 'admin')",
+            "source IN ('topical', 'story_moment', 'self_query', 'admin', 'recall')",
             name="source_valid",
         ),
     )
@@ -291,7 +287,7 @@ class CompanionLoreToldModel(Base):
     companion_ref: Mapped[str] = mapped_column(String(64), primary_key=True)
     fragment_key: Mapped[str] = mapped_column(String(64), primary_key=True)
     told_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    # The path of the latest offer: topical | story_moment | self_query | admin.
+    # The path of the latest offer: topical | story_moment | self_query | admin | recall.
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     # When the fragment was first offered to this account.
     offered_at: Mapped[datetime] = mapped_column(

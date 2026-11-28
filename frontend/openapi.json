@@ -1001,7 +1001,7 @@
         "type": "object"
       },
       "AgentEntrySchema": {
-        "description": "One immutable transcript entry as returned by the API.",
+        "description": "One immutable transcript entry as returned by the API.\n\n``speaker`` names the companion who said an assistant entry (``null`` for\nthe person's entries and for replies from a conversation without one).",
         "properties": {
           "by_run_id": {
             "anyOf": [
@@ -1101,6 +1101,18 @@
               }
             ],
             "title": "Model"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentSpeakerSchema"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Return the companion stamped on an assistant entry, if any.",
+            "readOnly": true
           }
         },
         "required": [
@@ -1113,7 +1125,8 @@
           "head_entry_id",
           "edits",
           "by_run_id",
-          "created_at"
+          "created_at",
+          "speaker"
         ],
         "title": "AgentEntrySchema",
         "type": "object"
@@ -1744,6 +1757,25 @@
           "max_plot_nodes"
         ],
         "title": "AgentSettingsValuesSchema",
+        "type": "object"
+      },
+      "AgentSpeakerSchema": {
+        "description": "The companion who said an assistant entry.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "name"
+        ],
+        "title": "AgentSpeakerSchema",
         "type": "object"
       },
       "AgentToolCatalogSchema": {
@@ -2576,14 +2608,14 @@
             "title": "Themes",
             "type": "array"
           },
-          "tier": {
-            "default": "first",
+          "weight": {
+            "default": "everyday",
             "enum": [
-              "first",
-              "familiar",
-              "rare"
+              "everyday",
+              "past",
+              "heart"
             ],
-            "title": "Tier",
+            "title": "Weight",
             "type": "string"
           }
         },
@@ -2594,7 +2626,7 @@
         "type": "object"
       },
       "CompanionLoreFragmentSchema": {
-        "description": "One lore fragment the account may see in its story editor.\n\nThe account sees only its own fragments and the ones it has already heard;\ntiers, locks, and progress stay hidden (root sees them in administration).",
+        "description": "One lore fragment the account may see in its story editor.\n\nThe account sees only its own fragments and the ones it has already heard;\nweights and progress stay hidden (root sees them in administration).",
         "properties": {
           "edited": {
             "title": "Edited",
@@ -2729,13 +2761,13 @@
             ],
             "title": "Themes"
           },
-          "tier": {
+          "weight": {
             "anyOf": [
               {
                 "enum": [
-                  "first",
-                  "familiar",
-                  "rare"
+                  "everyday",
+                  "past",
+                  "heart"
                 ],
                 "type": "string"
               },
@@ -2743,7 +2775,7 @@
                 "type": "null"
               }
             ],
-            "title": "Tier"
+            "title": "Weight"
           }
         },
         "title": "CompanionLoreUpdateSchema",
@@ -10533,7 +10565,7 @@
     },
     "/api/v1/companions/stories/{companion_ref}/lore": {
       "get": {
-        "description": "Return every lore fragment with its tier and unlock state.",
+        "description": "Return the lore the account may see (its own and what it has heard).",
         "operationId": "listCompanionLore",
         "parameters": [
           {
@@ -10801,7 +10833,7 @@
         ]
       },
       "patch": {
-        "description": "Edit one fragment's text, themes, tier, or position.",
+        "description": "Edit one fragment's text, themes, weight, or position.",
         "operationId": "updateCompanionLore",
         "parameters": [
           {

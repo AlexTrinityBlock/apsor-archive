@@ -1,4 +1,4 @@
-"""Pure rules for companion stories: persona, lore fragments, tiers, and recall.
+"""Pure rules for companion stories: persona, lore fragments, weights, and recall.
 
 A companion's story has two layers. The **persona** is the voice that enters a
 new conversation's frozen system entry. The **lore** is the librarian's own
@@ -13,15 +13,24 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, cast
 
-LoreTier = Literal["first", "familiar", "rare"]
+# How much a memory means to the librarian: everyday things, the past, and
+# matters of the heart. A weight is metadata she can see, never a lock: every
+# memory is hers to share or keep, whenever she judges the moment right.
+LoreWeight = Literal["everyday", "past", "heart"]
 StoryLocale = Literal["en", "zh-TW", "zh-CN"]
 
 STORY_LOCALES: tuple[str, ...] = ("en", "zh-TW", "zh-CN")
 DEFAULT_LOCALE = "en"
 
-LORE_TIERS: tuple[str, ...] = ("first", "familiar", "rare")
+LORE_WEIGHTS: tuple[str, ...] = ("everyday", "past", "heart")
+# Seed files written before weights used tiers; map them on read.
+LEGACY_TIER_WEIGHTS: dict[str, str] = {
+    "first": "everyday",
+    "familiar": "past",
+    "rare": "heart",
+}
 # Structural limits (schema sizes), not tunables.
 PERSONA_MAX_CHARS = 4000
 FRAGMENT_MAX_CHARS = 2000
@@ -41,8 +50,6 @@ class CompanionStoryConfig:
     (``lore/seed/config.json`` and ``lore/seed/templates``), root edits the live
     copy in the database, and services receive it through a config provider.
 
-    - ``familiar_unlock_runs`` / ``rare_unlock_runs``: completed runs with one
-      companion that open each tier.
     - ``max_recalled_fragments``: fragments offered beside one search.
     - ``topical_min_similarity``: cosine bar for topical recall (semantic only;
       there is no keyword gate, so no topic is needed to "unlock" lore).
@@ -56,8 +63,6 @@ class CompanionStoryConfig:
       model reads with the persona and with surfaced memories.
     """
 
-    familiar_unlock_runs: int
-    rare_unlock_runs: int
     max_recalled_fragments: int
     topical_min_similarity: float
     untold_bonus: float
@@ -77,12 +82,14 @@ TEMPLATE_PERSONA_RULES = "persona_rules"
 TEMPLATE_EQUAL_ADDRESS_RULE = "equal_address_rule"
 TEMPLATE_LORE_GUIDANCE = "lore_guidance"
 TEMPLATE_STORY_MOMENT_GUIDANCE = "story_moment_guidance"
+TEMPLATE_MEMORY_AGENCY = "memory_agency"
 TEMPLATE_CUSTOM_PERSONA_DEFAULT = "custom_persona_default"
 TEMPLATE_LIFE_STORY_SYSTEM = "life_story_system"
 TEMPLATE_LIFE_STORY_USER = "life_story_user"
 TEMPLATE_KEYS: tuple[str, ...] = (
     TEMPLATE_PERSONA_RULES,
     TEMPLATE_EQUAL_ADDRESS_RULE,
+    TEMPLATE_MEMORY_AGENCY,
     TEMPLATE_LORE_GUIDANCE,
     TEMPLATE_STORY_MOMENT_GUIDANCE,
     TEMPLATE_CUSTOM_PERSONA_DEFAULT,
@@ -93,6 +100,7 @@ TEMPLATE_KEYS: tuple[str, ...] = (
 TEMPLATE_PLACEHOLDERS: dict[str, tuple[str, ...]] = {
     TEMPLATE_PERSONA_RULES: (),
     TEMPLATE_EQUAL_ADDRESS_RULE: (),
+    TEMPLATE_MEMORY_AGENCY: (),
     TEMPLATE_LORE_GUIDANCE: (),
     TEMPLATE_STORY_MOMENT_GUIDANCE: (),
     TEMPLATE_CUSTOM_PERSONA_DEFAULT: ("name",),
@@ -107,7 +115,7 @@ class LifeStoryConfig:
 
     enabled: bool
     every_conversations: int
-    tier: LoreTier
+    weight: LoreWeight
     max_per_30d: int
     memory_limit: int
     memory_chars: int
@@ -158,7 +166,7 @@ class StoryItem:
     key: str
     text: str
     themes: tuple[str, ...]
-    tier: LoreTier
+    weight: LoreWeight
     edited: bool = False
     # Canon entity ids (``lore/canon.json``) this passage mentions; empty for
     # account-written lore.
@@ -206,26 +214,54 @@ class WorldDoc:
 
 @dataclass(frozen=True)
 class Bond:
-    """How far one account has come with one companion."""
+    """How long one account and one companion have known each other.
+
+    Nothing here gates a memory. The librarian reads these facts and decides
+    for herself what to share, and when.
+    """
 
     completed_runs: int = 0
-    familiar_unlocked_at: datetime | None = None
-    rare_unlocked_at: datetime | None = None
+    conversations: int = 0
+    # When they first spoke; ``None`` before the first completed run.
+    first_met_at: datetime | None = None
     # ``completed_runs`` when the last story moment was offered; ``None`` before
     # the first one.
     last_story_run: int | None = None
 
-    def unlocked_tiers(self, config: "CompanionStoryConfig") -> frozenset[str]:
-        """Return the tiers this bond has opened."""
-        return unlocked_tiers(self.completed_runs, config)
 
-    def unlocked_at(self, tier: str) -> datetime | None:
-        """Return when a tier opened; ``first`` is open from the start."""
-        if tier == "familiar":
-            return self.familiar_unlocked_at
-        if tier == "rare":
-            return self.rare_unlocked_at
-        return None
+@dataclass(frozen=True)
+class Relationship:
+    """Plain facts about the relationship the librarian may weigh."""
+
+    first_met_at: datetime | None
+    days_known: int
+    conversations: int
+    completed_runs: int
+
+
+def relationship(bond: Bond, now: datetime) -> Relationship:
+    """Return the relationship facts for ``bond`` as of ``now``."""
+    days = 0
+    if bond.first_met_at is not None:
+        days = max(0, (now - bond.first_met_at).days)
+    return Relationship(
+        first_met_at=bond.first_met_at,
+        days_known=days,
+        conversations=bond.conversations,
+        completed_runs=bond.completed_runs,
+    )
+
+
+def normalize_weight(value: object) -> LoreWeight:
+    """Map a weight (or a legacy tier) to a weight; unknown values are everyday."""
+    if isinstance(value, str):
+        cleaned = value.strip().lower()
+        if cleaned in LORE_WEIGHTS:
+            return cast(LoreWeight, cleaned)
+        mapped = LEGACY_TIER_WEIGHTS.get(cleaned)
+        if mapped is not None:
+            return cast(LoreWeight, mapped)
+    return "everyday"
 
 
 def normalize_locale(value: str | None) -> StoryLocale:
@@ -238,19 +274,6 @@ def normalize_locale(value: str | None) -> StoryLocale:
     if tag in {"zh-cn", "zh-hans", "zh-sg", "zh"} or tag.startswith("zh-hans"):
         return "zh-CN"
     return "en"
-
-
-def unlocked_tiers(
-    completed_runs: int,
-    config: CompanionStoryConfig,
-) -> frozenset[str]:
-    """Return the tiers opened by ``completed_runs`` finished runs."""
-    tiers = {"first"}
-    if completed_runs >= config.familiar_unlock_runs:
-        tiers.add("familiar")
-    if completed_runs >= config.rare_unlock_runs:
-        tiers.add("rare")
-    return frozenset(tiers)
 
 
 def is_fragment_key(value: str) -> bool:
@@ -292,15 +315,18 @@ def custom_persona(config: "CompanionRuntimeConfig", name: str) -> str:
 def render_persona_section(persona: str, config: CompanionStoryConfig) -> str:
     """Return the persona followed by the rules that outrank it.
 
-    The persona rules and the equal-address rule both come from the config
+    The persona rules, the memory-agency note (her memories are hers to share
+    or keep), and the equal-address rule all come from the config
     (root-editable templates seeded from ``lore/seed/templates``).
     """
     rules = config.persona_rules
+    agency = ""
     equal_rule = ""
     if isinstance(config, CompanionRuntimeConfig):
         rules = config.template(TEMPLATE_PERSONA_RULES, rules) or rules
+        agency = config.template(TEMPLATE_MEMORY_AGENCY, "")
         equal_rule = config.template(TEMPLATE_EQUAL_ADDRESS_RULE, "")
-    parts = [persona.strip(), rules.strip(), equal_rule.strip()]
+    parts = [persona.strip(), rules.strip(), agency.strip(), equal_rule.strip()]
     return "\n\n".join(part for part in parts if part)
 
 
@@ -316,7 +342,8 @@ __all__ = [
     "DEFAULT_LOCALE",
     "FRAGMENT_KEY_MAX_CHARS",
     "FRAGMENT_MAX_CHARS",
-    "LORE_TIERS",
+    "LEGACY_TIER_WEIGHTS",
+    "LORE_WEIGHTS",
     "MAX_FRAGMENTS_PER_COMPANION",
     "MAX_THEMES_PER_FRAGMENT",
     "PERSONA_MAX_CHARS",
@@ -328,6 +355,7 @@ __all__ = [
     "TEMPLATE_LIFE_STORY_SYSTEM",
     "TEMPLATE_LIFE_STORY_USER",
     "TEMPLATE_LORE_GUIDANCE",
+    "TEMPLATE_MEMORY_AGENCY",
     "TEMPLATE_PERSONA_RULES",
     "TEMPLATE_PLACEHOLDERS",
     "TEMPLATE_STORY_MOMENT_GUIDANCE",
@@ -338,8 +366,9 @@ __all__ = [
     "CompanionStoryConfig",
     "LifeStoryConfig",
     "LoreFragment",
-    "LoreTier",
+    "LoreWeight",
     "PresetStory",
+    "Relationship",
     "StoryItem",
     "StoryItemOrigin",
     "StoryLocale",
@@ -351,7 +380,8 @@ __all__ = [
     "missing_placeholders",
     "normalize_locale",
     "normalize_themes",
+    "normalize_weight",
+    "relationship",
     "render_persona_section",
     "render_template",
-    "unlocked_tiers",
 ]

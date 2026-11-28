@@ -99,7 +99,7 @@ class _Prepared:
     user: str
     max_output_tokens: int
     max_chars: int
-    tier: str
+    weight: str
     require_review: bool
     banned_terms: tuple[str, ...]
     source_refs: SourceRefs
@@ -317,7 +317,7 @@ class LifeStoryWorker:
                 user=user,
                 max_output_tokens=max(64, life.max_output_tokens),
                 max_chars=life.max_chars,
-                tier=life.tier,
+                weight=life.weight,
                 require_review=life.require_review,
                 banned_terms=config.banned_address_terms,
                 source_refs=SourceRefs(
@@ -361,7 +361,7 @@ class LifeStoryWorker:
                     "fragment_key": pending_fragment_key(prepared.job_id),
                     "title": story.title,
                     "text": story.text,
-                    "tier": prepared.tier,
+                    "weight": prepared.weight,
                     "themes": [],
                     "status": "draft" if prepared.require_review else "published",
                     "source_refs": prepared.source_refs.as_json(),

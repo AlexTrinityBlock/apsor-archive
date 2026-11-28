@@ -466,7 +466,7 @@ export const useUpdateCompanionPreference = <TError = HTTPValidationError,
 }
 
 /**
- * Return every lore fragment with its tier and unlock state.
+ * Return the lore the account may see (its own and what it has heard).
  * @summary List Companion Lore
  */
 export const listCompanionLore = async (companionRef: string,
@@ -849,7 +849,7 @@ export const useDeleteCompanionLore = <TError = HTTPValidationError,
 }
 
 /**
- * Edit one fragment's text, themes, tier, or position.
+ * Edit one fragment's text, themes, weight, or position.
  * @summary Update Companion Lore
  */
 export const updateCompanionLore = async (companionRef: string,
