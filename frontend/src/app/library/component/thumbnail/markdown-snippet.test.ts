@@ -1,7 +1,7 @@
 // @ts-expect-error -- `bun:test` is provided by the Bun runtime; the frontend tsconfig does not load @types/bun.
 import { expect, test } from "bun:test";
 
-import { extractMarkdownSnippet } from "./markdown-snippet";
+import { extractMarkdownSnippet, extractTextSnippet } from "./markdown-snippet";
 
 test("a leading YAML frontmatter block is removed", () => {
   const source = [
@@ -53,4 +53,22 @@ test("empty input and frontmatter-only files produce an empty snippet", () => {
 
 test("a byte-order mark before the frontmatter is ignored", () => {
   expect(extractMarkdownSnippet("\uFEFF---\ntitle: Note\n---\nBody")).toBe("Body");
+});
+
+test("plain-text snippets keep CSV headers and config keys verbatim", () => {
+  expect(extractTextSnippet("name,count\r\nFamily,6\r\n")).toBe("name,count\nFamily,6\n");
+  expect(extractTextSnippet("---\nkey = value\n")).toBe("---\nkey = value\n");
+});
+
+test("single-line JSON is pretty-printed, JSON Lines are left alone", () => {
+  expect(extractTextSnippet('{"a":1,"b":[2]}')).toBe('{\n  "a": 1,\n  "b": [\n    2\n  ]\n}');
+  expect(extractTextSnippet('{"a":1}\n{"a":2}\n')).toBe('{"a":1}\n{"a":2}\n');
+});
+
+test("long text stops at a line boundary within the budget", () => {
+  const source = Array.from({ length: 200 }, (_, index) => `line ${index}`).join("\n");
+  const snippet = extractTextSnippet(source, 50);
+  expect(snippet.length).toBeLessThanOrEqual(50);
+  expect(snippet.endsWith("\n")).toBe(false);
+  expect(source.startsWith(snippet)).toBe(true);
 });

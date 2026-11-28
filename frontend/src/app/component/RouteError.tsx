@@ -3,21 +3,12 @@ import { isRouteErrorResponse, useRouteError } from "react-router-dom";
 
 import { useI18n, type Translate } from "../i18n";
 import { Button } from "./Button";
+import { isChunkError } from "./chunk-error";
 import { TreeMark } from "./TreeMark";
 import { TreeRings } from "./TreeRings";
 import "./route-error.css";
 
 const RELOAD_GUARD_KEY = "apsor-archive.route-error.reload-at";
-const CHUNK_ERROR_PATTERN =
-  /failed to fetch dynamically imported module|importing a module script failed|chunkloaderror|loading chunk/i;
-
-/** True when a lazy route chunk vanished after a new deployment. */
-function isChunkError(error: unknown): boolean {
-  if (error instanceof Error) {
-    return CHUNK_ERROR_PATTERN.test(error.message);
-  }
-  return typeof error === "string" && CHUNK_ERROR_PATTERN.test(error);
-}
 
 function errorDetail(error: unknown, t: Translate): string {
   if (isRouteErrorResponse(error)) {

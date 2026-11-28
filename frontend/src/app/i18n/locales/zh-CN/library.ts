@@ -521,6 +521,13 @@ export const library = {
     loadingDefault: "正在打开文件",
     errorsEyebrow: "预览中断",
     retry: "重试",
+    boundary: {
+      title: "无法显示这份预览",
+      body: "绘制这个文件时出了点问题。页面其他部分仍可使用；可以重试，或直接下载原文件。",
+      updatedTitle: "Apsor Archive 刚刚更新了",
+      updatedBody: "这个标签页还在运行旧版本，所以预览器少了一部分。刷新即可继续。",
+      reload: "刷新",
+    },
     downloadOriginal: "下载原始文件",
     errorFallback: "档案馆无法打开此资源。",
     kind: {
@@ -592,6 +599,7 @@ export const library = {
     markdown: {
       untitled: "未命名",
       imagePlaceholder: "[图片：{alt}]",
+      renderFallback: "这份 Markdown 无法排版，先以纯文本显示。",
     },
     zoomOut: "缩小",
     zoomIn: "放大",

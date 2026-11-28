@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { lazyRetry } from "../../../component/chunk-error";
 
 import type { PathFileSchema } from "../../../generated-apis-types/schemas";
 import { getGetFileContentUrl } from "../../../generated-apis-types/files/files";
@@ -16,12 +17,12 @@ import {
 import { thumbCacheKey, thumbKindFor, type ThumbKind } from "./thumb-kind";
 import { useInView } from "./useInView";
 
-const DocxThumb = lazy(() =>
+const DocxThumb = lazyRetry(() =>
   import("./DocxThumb").then((module) => ({ default: module.DocxThumb })),
 );
 
 // The Markdown renderer is deliberately split from the library page chunk.
-const MarkdownThumb = lazy(() =>
+const MarkdownThumb = lazyRetry(() =>
   import("./MarkdownThumb").then((module) => ({ default: module.MarkdownThumb })),
 );
 
@@ -128,6 +129,7 @@ function markdownThumbContent(props: ThumbContentProps): ReactNode {
         fileId={props.file.file_id}
         cacheKey={props.cacheKey}
         onFailure={props.onMarkdownFailure}
+        plain={props.kind === "text"}
       />
     </Suspense>
   );
@@ -190,6 +192,7 @@ function thumbContent(props: ThumbContentProps): ReactNode {
     case "docx":
       return docxThumbContent(props);
     case "markdown":
+    case "text":
       return markdownThumbContent(props);
     case "image":
       return imageThumbContent(props);

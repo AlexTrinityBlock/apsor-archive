@@ -31,6 +31,12 @@ test("markdown extensions map to the rendered page", () => {
   expect(thumbKindFor("/notes/guide.Markdown")).toBe("markdown");
 });
 
+test("plain-text extensions show a text page", () => {
+  for (const extension of ["txt", "log", "csv", "json", "jsonl", "toml", "ini", "env", "TXT"]) {
+    expect(thumbKindFor(`/notes/data.${extension}`)).toBe("text");
+  }
+});
+
 test("nested folders use the real basename, not a directory dot", () => {
   expect(thumbKindFor("/archive.v2/photos/cover.png")).toBe("image");
   expect(thumbKindFor("/archive.v2/notes/summary.pdf")).toBe("pdf");
@@ -40,14 +46,14 @@ test("nested folders use the real basename, not a directory dot", () => {
 });
 
 test("unknown, missing, and trailing-dot extensions fall back to file", () => {
-  expect(thumbKindFor("/notes/readme.txt")).toBe("file");
+  expect(thumbKindFor("/notes/readme.xyz")).toBe("file");
   expect(thumbKindFor("/notes/readme")).toBe("file");
   expect(thumbKindFor("/notes/readme.")).toBe("file");
   expect(thumbKindFor("")).toBe("file");
 });
 
 test("a document name with a dot in the folder is still classified by the file", () => {
-  expect(thumbKindFor("/2024.notes/final.txt")).toBe("file");
+  expect(thumbKindFor("/2024.notes/final.txt")).toBe("text");
   expect(thumbKindFor("/2024.notes/final.pdf")).toBe("pdf");
 });
 
