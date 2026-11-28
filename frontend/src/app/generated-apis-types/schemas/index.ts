@@ -56,6 +56,7 @@ export * from './agentToolSchema';
 export * from './agentToolSchemaParameters';
 export * from './agentTurnResultSchema';
 export * from './agentTurnResultSchemaUsage';
+export * from './agentWebSourceSchema';
 export * from './aiStatusSchema';
 export * from './authResponseSchema';
 export * from './authStatusSchema';

@@ -11,6 +11,18 @@ from dataclasses import dataclass
 from typing import Any
 
 PERSONA_SECTION_NAME = "companion_persona"
+# A user entry that hands the conversation to another companion (or to the plain
+# archive assistant) carries ``data[COMPANION_SWITCH_KEY] = {ref, name, locale}``
+# (``ref`` is ``None`` for the archive assistant) and the rendered handoff text
+# under ``data[COMPANION_HANDOFF_KEY]``, which the context builder appends to that
+# user message only. The frozen system entry never changes.
+COMPANION_SWITCH_KEY = "companion_switch"
+COMPANION_HANDOFF_KEY = "companion_handoff"
+# The prompt version whose persona rules a user entry delivered (handoff or
+# refresh). A conversation frozen at an older version gets one refresh on its
+# next message, so rule fixes reach chats that started before them.
+GUIDANCE_VERSION_KEY = "guidance_version"
+ARCHIVE_ASSISTANT_NAME = "the archive assistant"
 # The heading the persona section renders under in the frozen system message.
 COMPANION_PERSONA_HEADING = "# Companion persona:"
 
@@ -84,11 +96,110 @@ def frozen_companion(system_data: Any) -> tuple[str, str] | None:
     return ref, locale if isinstance(locale, str) and locale else "en"
 
 
+def entry_switch(data: Any) -> tuple[bool, dict[str, str] | None]:
+    """Return ``(is_switch, companion)`` for a user entry's handoff record.
+
+    ``companion`` is ``{ref, name, locale}`` or ``None`` when the conversation was
+    handed to the plain archive assistant.
+    """
+    if not isinstance(data, dict):
+        return False, None
+    switch = data.get(COMPANION_SWITCH_KEY)
+    if not isinstance(switch, dict):
+        return False, None
+    ref = switch.get("ref")
+    if not isinstance(ref, str) or not ref:
+        return True, None
+    name = switch.get("name")
+    locale = switch.get("locale")
+    return True, {
+        "ref": ref,
+        "name": name if isinstance(name, str) else "",
+        "locale": locale if isinstance(locale, str) and locale else "en",
+    }
+
+
+def current_companion(
+    system_data: Any,
+    latest_switch_data: Any = None,
+) -> dict[str, str] | None:
+    """Return ``{ref, name, locale}`` of whoever speaks now, or ``None``.
+
+    The latest handoff wins; without one, the companion frozen at creation.
+    """
+    is_switch, switched = entry_switch(latest_switch_data)
+    if is_switch:
+        return switched
+    frozen = frozen_companion(system_data)
+    speaker = frozen_speaker(system_data)
+    if frozen is None or speaker is None:
+        return None
+    return {"ref": frozen[0], "name": speaker["name"], "locale": frozen[1]}
+
+
+def switch_record(companion: "CompanionPersona | None") -> dict[str, str | None]:
+    """Return the handoff record stored on the user entry."""
+    if companion is None:
+        return {"ref": None, "name": ARCHIVE_ASSISTANT_NAME, "locale": None}
+    return {"ref": companion.ref, "name": companion.name, "locale": companion.locale}
+
+
+def render_handoff(new: "CompanionPersona | None", previous_name: str | None) -> str:
+    """Render the provider-only handoff appended to the switching user message."""
+    before = previous_name or ARCHIVE_ASSISTANT_NAME
+    if new is None:
+        body = (
+            "From here on you answer as the archive assistant, without any companion "
+            f"persona. Earlier assistant replies in this conversation were said by {before} "
+            "(and others as labeled); they are not your own words, and that persona no "
+            "longer applies. Labels like [said by …] only mark who said earlier "
+            "replies; never write such a label yourself."
+        )
+        return f"<companion_handoff>\n{body}\n</companion_handoff>"
+    body = (
+        f"From here on you are {new.name}. Earlier assistant replies in this conversation "
+        f"were said by {before} (and others as labeled); they are not your own words. "
+        "The persona below replaces any companion persona in the system message. "
+        "Labels like [said by …] only mark who said earlier replies; never write "
+        "such a label yourself."
+    )
+    return (
+        f"<companion_handoff>\n{body}\n\n{new.content.rstrip()}\n</companion_handoff>"
+    )
+
+
+def render_refresh(companion: "CompanionPersona") -> str:
+    """Render the one-time guidance refresh for a conversation frozen at an older version.
+
+    The persona and the rules that outrank it were updated after this
+    conversation began; the fresh section replaces the one in the system
+    message from here on. The speaker does not change.
+    """
+    body = (
+        f"Your guidance as {companion.name} was updated after this conversation began. "
+        "The persona and rules below replace the companion persona in the system "
+        "message from here on; follow them, including the current_time block for the "
+        "time of day."
+    )
+    return (
+        f"<companion_handoff>\n{body}\n\n{companion.content.rstrip()}\n</companion_handoff>"
+    )
+
+
 __all__ = [
+    "ARCHIVE_ASSISTANT_NAME",
+    "COMPANION_HANDOFF_KEY",
     "COMPANION_PERSONA_HEADING",
+    "COMPANION_SWITCH_KEY",
+    "GUIDANCE_VERSION_KEY",
     "PERSONA_SECTION_NAME",
     "CompanionPersona",
+    "current_companion",
     "entry_speaker",
+    "entry_switch",
     "frozen_companion",
     "frozen_speaker",
+    "render_handoff",
+    "render_refresh",
+    "switch_record",
 ]

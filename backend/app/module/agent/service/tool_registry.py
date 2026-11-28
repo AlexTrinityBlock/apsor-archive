@@ -53,6 +53,7 @@ from app.module.agent.domain.tool_catalog import (
     ToolSpec,
     tool_catalog,
 )
+from app.module.agent.domain.web_source_domain import ephemeral_refs, web_ref
 from app.module.agent.domain.xml_domain import attributes, clip, xml_text
 from app.module.agent.exception.domain_error import (
     AgentCompanionUnavailableError,
@@ -106,7 +107,8 @@ WEB_SEARCH_HINT = (
     "past an excerpt, on later pages of the URL, or in matches the provider did "
     "not return; absence from these results is not proof that the source lacks "
     "the detail. If a result matters, call web_fetch with its url, start at "
-    "page=1, and follow page, total_pages, has_more, and next_page."
+    "page=1, and follow page, total_pages, has_more, and next_page. Cite a "
+    "result you use inline by its id, for example [web:w3]."
 )
 
 WEB_TOOL_NAMES = frozenset({"web_search", "web_fetch"})
@@ -886,6 +888,11 @@ async def _recall_my_memories(
         stories = await own.search_own(query, limit=limit)
     if args.scope in {"said", "all"}:
         said = await _past_replies(services, query, limit)
+        cutoff = await own.said_since()
+        if cutoff is not None:
+            # Replies from before the cutoff may speak an earlier canon; they
+            # stay in the archive's history but are no longer her memories.
+            said = [message for message in said if message.created_at >= cutoff]
     my_ref = own.identity.ref
     said.sort(key=lambda message: 0 if message.speaker_ref == my_ref else 1)
     facts = await own.relationship()
@@ -1258,6 +1265,7 @@ async def _web_search(
         objective=args.objective,
     )
     retrieved_at = result.retrieved_at.isoformat()
+    refs = await _web_refs(services, [(item.url, item.title) for item in result.results])
     rendered: list[str] = []
     clipped_any = False
     for index, item in enumerate(result.results, start=1):
@@ -1268,6 +1276,7 @@ async def _web_search(
             _open(
                 "result",
                 {
+                    "id": _ref_or_none(refs, item.url),
                     "index": index,
                     "title": item.title,
                     "url": item.url,
@@ -1308,6 +1317,7 @@ async def _web_search(
         "provider": result.provider,
         "results": [
             {
+                "ref": _ref_or_none(refs, item.url),
                 "title": item.title,
                 "url": item.url,
                 "excerpt": _excerpt(item.content),
@@ -1321,6 +1331,28 @@ async def _web_search(
         "excerpt_truncated": clipped_any,
     }
     return content, data, None
+
+
+async def _web_refs(
+    services: AgentToolServices,
+    pages: list[tuple[str, str | None]],
+) -> dict[str, int]:
+    """Number pages through the conversation registry, or locally outside one.
+
+    A registry failure must never fail the web tool itself: the result is still
+    useful, it just falls back to numbers local to this one result.
+    """
+    if services.web_sources is not None:
+        try:
+            return await services.web_sources.assign(pages)
+        except Exception:
+            logger.warning("web source numbering failed; using local numbers")
+    return ephemeral_refs([url for url, _ in pages])
+
+
+def _ref_or_none(refs: dict[str, int], url: str) -> str | None:
+    number = refs.get(url)
+    return web_ref(number) if number is not None else None
 
 
 def _search_hint(*, provider_truncated: bool, excerpts_clipped: bool) -> str:
@@ -1389,10 +1421,13 @@ async def _web_fetch(
     )
     retrieved_at = result.retrieved_at.isoformat()
     content_chars = len(result.content)
+    refs = await _web_refs(services, [(result.url, None)])
+    ref = _ref_or_none(refs, result.url)
     content = (
         _open(
             "web_fetch",
             {
+                "id": ref,
                 "url": result.url,
                 "provider": result.provider,
                 "retrieved_at": retrieved_at,
@@ -1415,6 +1450,7 @@ async def _web_fetch(
         + _close("web_fetch")
     )
     data = {
+        "ref": ref,
         "url": result.url,
         "provider": result.provider,
         "content_chars": content_chars,

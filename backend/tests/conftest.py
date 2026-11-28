@@ -67,6 +67,7 @@ PRIVATE_TABLES: tuple[str, ...] = (
     "agent_conversation",
     "agent_entry",
     "agent_run",
+    "agent_web_source",
     "chunk",
     "chunk_ngram",
     "companion",

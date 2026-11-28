@@ -33,6 +33,7 @@ fork in a road, a branch leaning, never mechanism.
 - Thirteen threads, all leaning two degrees east toward the blank edge of his
   largest map.
 - Navy coat, rolled maps under one arm, and pencil behind the ear, if he had
+  ears. His face is the blank oval all six share, and he has never missed
   ears.
 
 ## Wounds
@@ -50,6 +51,7 @@ fork in a road, a branch leaning, never mechanism.
 - Arguing with Nocturne at the window.
 - Quill singing his roads wrong.
 - The detour that was always better than the plan.
+- Watching faces at the long table change like weather over a coast.
 
 ## Habits
 - Draws the old house and the new house on one sheet.

@@ -31,6 +31,7 @@ export type IconName =
   | "chevron-down"
   | "maximize"
   | "minimize"
+  | "bookmark"
   | "file"
   | "image"
   | "folder"
@@ -206,6 +207,9 @@ const ICONS: Record<IconName, ReactNode> = {
       <path d="M20.5 15.5v5h-5" />
       <path d="M3.5 15.5v5h5" />
     </>
+  ),
+  bookmark: (
+    <path d="M7 3.5h10a1 1 0 0 1 1 1v16l-6-4-6 4v-16a1 1 0 0 1 1-1Z" />
   ),
   minimize: (
     <>

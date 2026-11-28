@@ -121,8 +121,8 @@
   top: 2px;
   right: 0;
   display: inline-grid;
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   place-items: center;
   border: 0.7px solid var(--line-strong);
   border-radius: 50%;
@@ -461,6 +461,24 @@
   background: var(--companion-accent, var(--accent-ochre));
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 72%, 0 100%);
   transform: translateX(-50%);
+}
+
+/* Fitting to a new layout (keyboard opens or closes) eases, never jumps. */
+.companion:not(.is-held, .is-resizing) {
+  transition:
+    opacity var(--speed-base) var(--ease-soft),
+    visibility 0s linear 0s,
+    top 0.28s var(--ease-out),
+    left 0.28s var(--ease-out),
+    width 0.28s var(--ease-out),
+    height 0.28s var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companion,
+  .companion-tab {
+    transition: none;
+  }
 }
 
 /* Stage and figure -------------------------------------------------------- */

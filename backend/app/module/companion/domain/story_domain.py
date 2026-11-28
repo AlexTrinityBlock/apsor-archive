@@ -141,6 +141,9 @@ class CompanionRuntimeConfig(CompanionStoryConfig):
     life_story: LifeStoryConfig
     templates: tuple[tuple[str, str], ...] = ()
     version: int = 0
+    # Assistant replies older than this are not offered back as her own "said"
+    # memories (they may speak an earlier canon). ``None`` offers every reply.
+    said_memory_since: datetime | None = None
 
     def template(self, key: str, default: str = "") -> str:
         """Return the template body for ``key`` (or ``default`` when absent)."""

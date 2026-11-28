@@ -8,6 +8,7 @@ from app.module.agent.model.agent_model import (
     AgentConversationModel,
     AgentEntryModel,
     AgentRunModel,
+    AgentWebSourceModel,
 )
 from app.module.agent.model.saved_question_model import SavedQuestionModel
 from app.module.agent.model.system_prompt_model import SystemPromptSectionModel
@@ -20,6 +21,7 @@ __all__ = [
     "AgentConversationModel",
     "AgentEntryModel",
     "AgentRunModel",
+    "AgentWebSourceModel",
     "SavedQuestionModel",
     "SystemPromptSectionModel",
 ]

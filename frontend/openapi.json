@@ -1930,6 +1930,37 @@
         "title": "AgentTurnResultSchema",
         "type": "object"
       },
+      "AgentWebSourceSchema": {
+        "description": "One web page a conversation's tools saw, with its ``[web:wN]`` short id.",
+        "properties": {
+          "ref": {
+            "description": "Short id cited inline as [web:<ref>], for example w3.",
+            "title": "Ref",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "url"
+        ],
+        "title": "AgentWebSourceSchema",
+        "type": "object"
+      },
       "AiStatusSchema": {
         "description": "Configuration state for the AI, vector, and web paths.",
         "properties": {
@@ -2825,7 +2856,8 @@
               "float",
               "bool",
               "weight",
-              "list"
+              "list",
+              "datetime"
             ],
             "title": "Kind",
             "type": "string"
@@ -15082,6 +15114,53 @@
           }
         },
         "summary": "Retry Run",
+        "tags": [
+          "agent"
+        ]
+      }
+    },
+    "/api/v1/agent/conversations/{conversation_id}/web-sources": {
+      "get": {
+        "description": "List the web pages this conversation cited or saw, by their short ids.",
+        "operationId": "listAgentWebSources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentWebSourceSchema"
+                  },
+                  "title": "Response Listagentwebsources",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Web Sources",
         "tags": [
           "agent"
         ]

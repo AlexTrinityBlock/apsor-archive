@@ -1,5 +1,6 @@
 """Consumer-owned protocols for the knowledge and web-research services used by tools."""
 
+from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -137,6 +138,12 @@ class WebResearchServiceProtocol(Protocol):
     ) -> WebFetchResponse: ...
 
 
+class WebSourceRegistryProtocol(Protocol):
+    """Number the web pages one conversation has seen for ``[web:wN]`` citations."""
+
+    async def assign(self, pages: Sequence[tuple[str, str | None]]) -> dict[str, int]: ...
+
+
 @dataclass(frozen=True)
 class AgentToolServices:
     """The live services one tool execution may use."""
@@ -153,6 +160,8 @@ class AgentToolServices:
     # Present only when the conversation froze a companion: her own memories
     # (lore and life stories) for the recall_my_memories tool.
     companion_memories: CompanionOwnMemoriesProtocol | None = None
+    # Present only inside a conversation: stable short ids for web pages.
+    web_sources: WebSourceRegistryProtocol | None = None
 
 
 class ToolServiceScopeProtocol(Protocol):

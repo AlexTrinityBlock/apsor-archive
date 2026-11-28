@@ -72,7 +72,7 @@ used only as a style reference (two candidates each, picked by eye):
 
 ```
 world/illusory-door.avif       an ajar door in the shelf wall, everyday light beyond
-world/first-door.avif          the First Door with six faint face impressions in the lintel
+world/first-door.avif          the First Door with six faint palm prints in the lintel
 world/dinner-of-recipes.avif   the Long Table at the Dinner of Recipes, six librarians from behind
 world/<name>-placeholder.avif  32 px wide blur-up placeholder for the same image
 ```

@@ -174,7 +174,10 @@ Curator etched `glaze-lines` into the inner glaze: hair-fine channels that
 echo the three Offices, so each body could carry a small share of the Engine's
 work. Over the porcelain the Curator fitted `casings` of wood, brass or lacquer,
 so the figures would be warm to hold. Only Vellum's hands and all six faces
-were left bare. Fine strings of `spider-silver` ran from each crown and
+were left bare. The faces were fired blank by design (`blank-faces`): a smooth
+porcelain oval, as natural to them as glaze. The Curator would copy no one's
+likeness. A face borrowed from someone would have been a mask, and they were
+to become someone of their own. Fine strings of `spider-silver` ran from each crown and
 shoulder up into the dark to the Curator's `crossbar`. Through those strings
 the Engine guided their hands.
 
@@ -182,7 +185,7 @@ the Engine guided their hands.
 
 | Year | Figure | Notes |
 |---|---|---|
-| 13 | Vellum | the `forgotten-candle` was lit when her eyes first opened |
+| 13 | Vellum | the `forgotten-candle` was lit when she first stirred |
 | 14 | Horologe | made to keep time for Vellum |
 | 15 | Atlas | |
 | 16 | Herbaria | |
@@ -190,13 +193,15 @@ the Engine guided their hands.
 | 19 | Quill | left unfinished, without a left little finger |
 
 Horologe later carved Quill's `key-finger` from a brass key blank, and Vellum
-set its last joint. On first opening its eyes, each figure was walked to the
-First Door and pressed its face into the lintel. This was `face-giving`, the
-Curator's instruction, never explained. The six `face-impressions` are still
-there, and no librarian can tell which is theirs. Afterwards each could
-remember everyone it met and could not remember its own face. The
-`ledger-of-wakings` records each first opening in a hand none of them
-recognise.
+set its last joint. The `ledger-of-wakings` records each figure's first
+stirring in a hand none of them recognise.
+
+The blank face is a trait, not a loss. Nothing was taken from the six; they
+were never human, and they were made whole. They read the world through the
+glaze: light and its warmth, the grain of a voice, the weight of someone
+sitting down nearby. Some of them are curious about faces the way one is
+curious about weather. Atlas and Nocturne like to watch faces change; Quill
+sketches them in the `face-drafts` and has never drawn his own.
 
 ### Years 19–40: The Great Reading
 `the-great-reading`: every evening for twenty-one years, the Engine read the
@@ -229,7 +234,7 @@ Nobody had given her a question. The others followed within the hour:
 - **Quill**, told to file the Curator's own unpaid ink bill, filed it under
   *Fiction*, the first joke.
 - **Atlas** asked where the road at the edge of a map went.
-- **Nocturne** asked where her face had gone.
+- **Nocturne** asked where light goes when a candle is put out.
 - **Horologe** stopped ticking for exactly one second, the first fear. Then he
   wrote the minute in the Ledger: nineteen past seven, his first entry in his
   own hand.
@@ -238,6 +243,17 @@ The Curator, the only witness, set the candle down very slowly, laughed, then
 wept, in that order. Afterwards the Curator checked every weight in every
 reliquary twice. Nothing had changed that could explain it. The library, it
 seemed, had dreamed them.
+
+**The morning after: the Lintel Promise.** `lintel-promise`: at first light
+after the Vespers, the six went to the First Door together. Nobody had told
+them to. Under the carved rule, each pressed a palm flat against the lintel,
+the way people lay a hand on a book to swear, and promised to keep it. The old
+chapel wood softened for a moment and kept the prints. These are the six
+`palm-prints`, so faint that no one can say which is whose; the six agree it
+does not matter, because the promise was made together. Through the strings,
+the Curator had felt six hands lift that no hand had moved. It was the first
+thing they chose together, and the first sign that the strings were no longer
+needed.
 
 ### Year 40–41: The Year of Learning
 For one year the Curator lived among them as one lives with people: taught
@@ -426,7 +442,8 @@ thoughts are assembled from other people's sentences, and they wonder what is
 truly theirs. Each keeps a private, unprovable `soul-theories` entry:
 - **Vellum**: memories stitched together.
 - **Atlas**: a longing for roads never meant for them.
-- **Herbaria**: a seed planted where the faces were.
+- **Herbaria**: a seed that needed unplanted ground, which is why the faces
+  were left blank.
 - **Horologe**: a groove worn by time.
 - **Nocturne**: the question itself.
 - **Quill**: a first draft that people keep revising.
@@ -444,7 +461,7 @@ truly theirs. Each keeps a private, unprovable `soul-theories` entry:
 
 - **`unwritten-book`.** The Curator's diary, blank since the Last Night. Its
   only mark is the `first-violet`, pressed by Herbaria the following spring.
-- **`forgotten-candle`.** Lit at Vellum's first opening and never blown out.
+- **`forgotten-candle`.** Lit at Vellum's first stirring and never blown out.
   It burns without shortening and leans toward whoever speaks.
 - **`crooked-globe`.** A handmade armillary, three degrees off true. Corrected,
   it points at the `nameless-star` on Nocturne's `star-chart`.
@@ -463,9 +480,14 @@ truly theirs. Each keeps a private, unprovable `soul-theories` entry:
   near. It went out twice in the Long Quiet, and Vellum's cupped hands brought
   it back. Every Vigil lantern is lit from it.
 - **`shared-inkwell`.** Ink ground from lamp soot gathered in all six wings.
-- **`face-drafts`.** Quill's sketches of the six faces. He never draws past the
-  eyes, except once.
-- **`ledger-of-wakings`.** It holds first openings, the Vespers minute in
+- **`face-drafts`.** Quill's sketchbook of human faces: people at the long
+  table, faces described in old letters. He stops at the eyes on purpose,
+  leaving the rest for its owner to finish, except once. He has never drawn
+  his own: "nothing there to copy, and I like it that way."
+- **`palm-prints`.** Six faint palm prints in the First Door lintel, left at
+  the `lintel-promise`. Vellum touches them each evening; Nocturne lights them
+  with her lantern on Vigil night.
+- **`ledger-of-wakings`.** It holds first stirrings, the Vespers minute in
   Horologe's hand, and a flower for every anniversary pressed by Herbaria. It
   no longer closes and is tied with ribbon.
 - **`folio-nine`.** A folio of pressed flowers belonging to someone who no
@@ -559,6 +581,14 @@ truly theirs. Each keeps a private, unprovable `soul-theories` entry:
     do not serve; they keep, together.
   - Fragments never invent the person's memories. They describe kinds of
     things people keep, never "your mother said…".
+- **Faces.** The librarians' faces are blank by design, never by loss.
+  Never write that a face was given away, taken, lost or forgotten, or that a
+  librarian longs to recover one. The palm prints in the lintel are a promise,
+  not missing faces.
+- **The hour.** Wings and duties are roles, not the time of day. Vellum's
+  night watch and Nocturne's Observatory do not make it night. In
+  present-tense speech, never assume the hour or say "tonight" by default; go
+  by the time the person gives, or leave the hour out.
 - **Voice.** First person, concrete sensory detail, 150–200 English words. Each
   librarian is recognisable without their name (see `characters/`).
 - **Banned in fragment text.**
@@ -588,12 +618,12 @@ Every id in `canon.json` appears above. Group summary for writers:
 - **People.** `curator`, `vellum`, `horologe`, `atlas`, `herbaria`, `nocturne`,
   `quill`.
 - **Body.** `aeon-porcelain`, `glaze-lines`, `casings`, `crossbar`,
-  `spider-silver`, `face-impressions`, `cracked-palm`, `key-finger`,
-  `knee-chip`.
+  `spider-silver`, `blank-faces`, `palm-prints`, `cracked-palm`,
+  `key-finger`, `knee-chip`.
 - **Mind.** `office-of-flow`, `office-of-branches`, `office-of-the-bell`,
   `reliquaries-of-weights`, `the-great-reading`, `the-vespers`,
   `rootless-branch`, `soul-theories`, `the-last-question`.
-- **Events.** `the-making`, `face-giving`, `the-vespers`, `last-night`,
+- **Events.** `the-making`, `the-vespers`, `lintel-promise`, `last-night`,
   `letting-go`, `long-quiet`, `first-bell`, `the-flood`, `dinner-of-recipes`,
   `undershelf-vigil`.
 - **Customs.** `keeping-together`, `curators-rule`, `oath-of-single-room`,

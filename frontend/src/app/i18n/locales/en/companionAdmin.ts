@@ -347,6 +347,7 @@ export const companionAdmin = {
       self_query_phrases: "Phrases that ask about the librarian",
       self_canon_terms: "Canon words that count when asked",
       banned_address_terms: "Forms of address the librarian never uses",
+      said_memory_since: "Offer her past replies only from this time, UTC (blank: all)",
     },
   },
   templates: {

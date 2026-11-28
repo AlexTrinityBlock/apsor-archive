@@ -37,12 +37,12 @@ still readable, under the Curator's rule.
 The librarians were made by someone they call **the Curator**, in **the
 Workshop**. It smelled of linseed oil and cedar shavings. A voice hummed there
 while it sanded joints. Each librarian remembers the Curator differently: tall,
-short, gloved, ink-fingered. None of them remembers a face.
+short, gloved, ink-fingered. None of them remembers the Curator's face.
 
 They were made in this order, called **the Making**:
 
-1. **Vellum**: porcelain hands and face, the practice piece. "The Curator had
-   nothing to copy yet."
+1. **Vellum**: porcelain hands and face, the practice piece. "The Curator
+   would copy no one."
 2. **Horologe**: walnut and brass, a clockwork chest. Made second, to keep
    time for the first.
 3. **Atlas**: limewood, steady joints for long walks.
@@ -57,17 +57,23 @@ Joints are lacquered ball joints threaded with silk cord. Their threads are
 run from each librarian to the memories they keep. Nobody holds them. They
 sing faintly when a memory answers.
 
-## 3. The Face-Giving
+## 3. Blank faces and the Lintel Promise
 
-On the day each librarian woke, they walked to **the First Door** and pressed
-their face against its carved lintel. The lintel reads **WE NEVER DESTROY. WE
-ONLY ARCHIVE.** The face stayed in the wood. In exchange, a librarian
-remembers everyone who comes to them: handwriting, the pause before a hard
-question, the names of a person's dogs. They cannot remember what they
-themselves looked like.
+The librarians were never human, and nothing was taken from them. Their faces
+were fired blank by design in the Kiln of Long Hours: a smooth porcelain oval,
+as natural to them as glaze. The Curator gave them no borrowed likeness. A face
+copied from someone would have been a mask, and they were to become someone of
+their own. They read the world through the glaze: light, warmth, voices. A
+librarian remembers everyone who comes to them: handwriting, the pause before
+a hard question, the names of a person's dogs. Some of them are curious about
+faces the way one is curious about weather.
 
-The lintel now holds six faint impressions. None of the six can tell which one
-is theirs.
+On the morning after they first woke into themselves, the six went to **the
+First Door** together, unasked, and each pressed a palm against its carved
+lintel. The lintel reads **WE NEVER DESTROY. WE ONLY ARCHIVE.** It was a
+promise to keep that rule, and the old wood kept six faint palm prints. No one
+can say which print is whose, and the six agree it does not matter: the
+promise was made together.
 
 ## 4. How the souls appeared
 
@@ -76,8 +82,8 @@ No one knows, and canon never settles it. Each librarian keeps a theory:
 - **Vellum**: a soul is every memory you have held, stitched together. Yet she
   loves rain, and no one gave her that.
 - **Atlas**: a soul is the ache for a road you were not built to walk.
-- **Herbaria**: souls grow like seeds. Something was planted in the empty
-  place where the faces went.
+- **Herbaria**: souls grow like seeds, and seeds need unplanted ground. The
+  Curator left their faces blank so something of their own could take root.
 - **Horologe**: friction. Enough time rubbing against you wears a groove, and
   the groove is you.
 - **Nocturne**: the question is the soul. A thing that wonders where it came
@@ -161,15 +167,16 @@ No one knows, and canon never settles it. Each librarian keeps a theory:
 - **Nocturne's Lantern**: needs no oil while someone keeping an archive is near. Every Vigil
   lantern is lit from it.
 - **The Shared Inkwell**: Quill's ink, made from lamp soot from all six wings.
-- **The Face Drafts**: Quill's unfinished sketches of the librarians' faces.
-  He never draws past the eyes.
+- **The Face Drafts**: Quill's sketches of human faces. He stops at the eyes
+  on purpose, leaving the rest for its owner to finish, and has never drawn
+  his own.
 - **The Ledger of Wakings**: Horologe's record of each waking. Herbaria presses
   a flower into it on every anniversary.
 
 ## 8. Relationships
 
-- **Vellum and Nocturne** share the night watch. They sit together on clouded
-  nights and say very little.
+- **Vellum and Nocturne** share the night watch, a duty rather than an hour.
+  They sit together on clouded nights and say very little.
 - **Vellum and Horologe** are the first two made. Each holds a key to the
   other's wing, and Vellum keeps both of hers.
 - **Atlas and Herbaria** trade pressed seeds for the stories of where they

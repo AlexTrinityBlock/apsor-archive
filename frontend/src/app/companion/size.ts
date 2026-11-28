@@ -8,9 +8,11 @@
 import {
   FIGURE_HEADROOM,
   INTRINSIC_FIGURE,
-  TOP_MARGIN,
+  feetLine,
   figureSize,
   gutterWidth,
+  keyboardOpen,
+  topLimit,
   type BoxSize,
   type Breakpoint,
   type LayoutContext,
@@ -58,9 +60,9 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-/** The line the companion's feet rest on: just above the composer. */
+/** The line the companion's feet rest on: above the composer and keyboard. */
 export function baselineY(context: LayoutContext): number {
-  return (context.composer?.top ?? context.viewport.height) - 6;
+  return feetLine(context);
 }
 
 function contentWidth(context: LayoutContext): number {
@@ -85,7 +87,10 @@ export function levelForHeight(height: number, range: SizeRange): number {
 
 export function sizeRange(breakpoint: Breakpoint, context: LayoutContext): SizeRange {
   const minHeight = figureSize(breakpoint).height;
-  const heightCap = baselineY(context) - TOP_MARGIN - FIGURE_HEADROOM;
+  // Derived every layout pass from the visible band, never persisted: an
+  // on-screen keyboard narrows it, and closing the keyboard restores it, while
+  // the user's chosen level stays the same.
+  const heightCap = baselineY(context) - topLimit(context) - FIGURE_HEADROOM;
   const widthCap = contentWidth(context) * (breakpoint === "phone" ? 0.5 : 0.4);
   const maxHeight = Math.floor(
     Math.max(minHeight, Math.min(ART.height, heightCap, widthCap * 1.5)),
@@ -304,4 +309,42 @@ export function previewRange(maxHeight: number): SizeRange {
     fitLevel: null,
     resizable: true,
   };
+}
+
+/** Smallest figure that still reads as a person (2:3), on any screen. */
+export const READABLE_FIGURE: BoxSize = { width: 96, height: 144 };
+
+export interface FittedFigure {
+  /** What to draw this layout pass; never persisted. */
+  readonly figure: BoxSize;
+  /** False when not even a readable figure fits: show the bookmark tab. */
+  readonly room: boolean;
+}
+
+/**
+ * Fit the user's chosen figure into the free space of this layout pass.
+ * The chosen size (a persisted level) is untouched; this only derives what is
+ * drawn. Height is already bounded by the visible band through
+ * {@link sizeRange}. On wider screens the figure also shrinks to the free
+ * gutter beside the reading column so it never covers messages, but never
+ * below a readable size: with less room than that it tucks into a bookmark.
+ * Phones and an open keyboard keep the moderate, height-bounded size.
+ */
+export function fittedFigure(
+  chosen: BoxSize,
+  breakpoint: Breakpoint,
+  context: LayoutContext,
+): FittedFigure {
+  if (breakpoint === "phone" || keyboardOpen(context) || context.column === null) {
+    return { figure: chosen, room: true };
+  }
+  const gutter = gutterWidth(context);
+  if (chosen.width <= gutter) {
+    return { figure: chosen, room: true };
+  }
+  const width = Math.floor(gutter);
+  if (width < READABLE_FIGURE.width) {
+    return { figure: chosen, room: false };
+  }
+  return { figure: { width, height: Math.round(width * 1.5) }, room: true };
 }

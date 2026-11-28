@@ -5,6 +5,7 @@ tunable), not tunable values: the values live in ``lore/seed/config.json`` and,
 once seeded, in the database.
 """
 
+from dataclasses import dataclass
 from typing import Any, cast
 
 from app.module.companion.domain.story_domain import (
@@ -17,6 +18,20 @@ from app.module.companion.domain.story_domain import (
 )
 
 SEED_BUNDLE = "companion"
+
+
+@dataclass(frozen=True)
+class SupersededText:
+    """A seeded lore text that a newer seed just replaced (kept only for a purge)."""
+
+    preset_id: str
+    fragment_key: str
+    locale: str
+    old_text: str
+
+
+# The config singleton's "said" memory cutoff: root edits it, the seed never does.
+SAID_MEMORY_SINCE = "said_memory_since"
 
 TUNABLE_FIELDS: tuple[str, ...] = (
     "max_recalled_fragments",
@@ -114,15 +129,18 @@ def build_runtime_config(
         life_story=life,
         templates=tuple(sorted(templates.items())),
         version=version,
+        said_memory_since=values.get(SAID_MEMORY_SINCE),
     )
 
 
 __all__ = [
     "CONFIG_COLUMNS",
     "LIFE_STORY_FIELDS",
+    "SAID_MEMORY_SINCE",
     "SEED_BUNDLE",
     "TUNABLE_FIELDS",
     "USER_CONFIG_COLUMNS",
     "WORD_LIST_FIELDS",
+    "SupersededText",
     "build_runtime_config",
 ]

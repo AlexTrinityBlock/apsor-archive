@@ -6,14 +6,13 @@ import type { AgentEntrySchema } from "../../generated-apis-types/schemas";
 import { useI18n, type TranslationKey } from "../../i18n";
 import {
   assistantText,
-  parseCitationLabel,
   readAssistantMeta,
   readToolCalls,
   type CitationToken,
   type ToolResultInfo,
 } from "../types";
-import { CitationChip } from "./CitationChip";
 import { MarkdownBody } from "./MarkdownBody";
+import { SpeakerMark } from "./SpeakerMark";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallCard } from "./ToolCallCard";
 import { finishReasonTone } from "./status";
@@ -78,20 +77,6 @@ export function AssistantEntry({
   const meta = readAssistantMeta(entry);
   const text = assistantText(entry);
   const calls = readToolCalls(entry);
-  const citations: CitationToken[] = [];
-  const seenCitations = new Set<string>();
-  for (const label of meta.citations) {
-    const token = parseCitationLabel(label);
-    if (!token) {
-      continue;
-    }
-    const key = `${token.kind}:${token.id}:${token.chunk ?? ""}`;
-    if (seenCitations.has(key)) {
-      continue;
-    }
-    seenCitations.add(key);
-    citations.push(token);
-  }
   const usage = usageRows(meta.usage);
   // A call whose result entry is in the transcript is rendered by that entry.
   // Only a call that never produced one keeps a compact waiting chip here.
@@ -117,10 +102,16 @@ export function AssistantEntry({
   return (
     <article className="chat-turn chat-turn--agent">
       <header className="chat-turn__author">
-        <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
-          <Icon name="spark" size={11} />
-        </span>
-        <span>{t("chat.assistant.author")}</span>
+        {entry.speaker ? (
+          <SpeakerMark speaker={entry.speaker} />
+        ) : (
+          <>
+            <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
+              <Icon name="spark" size={11} />
+            </span>
+            <span>{t("chat.assistant.author")}</span>
+          </>
+        )}
         <span className="chat-turn__meta">
           {[meta.provider, meta.model]
             .filter((item): item is string => Boolean(item))
@@ -167,23 +158,6 @@ export function AssistantEntry({
             <strong>{meta.error.code}</strong>
             <p>{meta.error.detail}</p>
           </div>
-        </div>
-      ) : null}
-
-      {citations.length > 0 ? (
-        <div className="citations-row chat-turn__citations">
-          {citations.map((token) => (
-            <CitationChip
-              key={`${token.kind}:${token.id}:${token.chunk ?? ""}`}
-              token={token}
-              memoryTitle={
-                token.kind === "memory"
-                  ? memoryTitles?.get(token.id)
-                  : undefined
-              }
-              onOpen={onOpenCitation}
-            />
-          ))}
         </div>
       ) : null}
 

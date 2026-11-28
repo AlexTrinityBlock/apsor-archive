@@ -600,9 +600,26 @@ export const ConversationRail = memo(function ConversationRail({
         aria-modal={modal ? true : undefined}
         onKeyDown={trapFocus}
       >
-        <div className="chat-sessions__head">
-          <div className="chat-sessions__head-row">
+        {/*
+          The header bar owns the rail toggle and New chat. Only the phone
+          drawer keeps a compact head, because it covers the header and needs
+          its own close and New chat controls.
+        */}
+        {overlay ? (
+          <div className="chat-sessions__head">
             <span className="mono-label">{t("chat.rail.heading")}</span>
+            <button
+              type="button"
+              className="chat-sessions__new-icon"
+              onClick={() => {
+                clearLastChatConversation();
+                onNew();
+              }}
+              aria-label={t("chat.rail.newChat")}
+              title={t("chat.rail.newChat")}
+            >
+              <Icon name="plus" size={13} />
+            </button>
             <button
               type="button"
               ref={collapseRef}
@@ -614,20 +631,7 @@ export const ConversationRail = memo(function ConversationRail({
               <Icon name="panel-left-close" size={13} />
             </button>
           </div>
-          <Button
-            variant="ink"
-            size="sm"
-            block
-            className="chat-sessions__new"
-            onClick={() => {
-              clearLastChatConversation();
-              onNew();
-            }}
-          >
-            <Icon name="plus" size={13} />
-            {t("chat.rail.newChat")}
-          </Button>
-        </div>
+        ) : null}
 
         {body}
 

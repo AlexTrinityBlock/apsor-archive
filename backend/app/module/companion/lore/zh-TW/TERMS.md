@@ -14,6 +14,7 @@ source; every zh-TW lore file uses exactly these terms. Ids are in parentheses.
 | Character names | Vellum、Horologe、Atlas、Herbaria、Nocturne、Quill | Always Latin script, never transliterated. |
 | keep / keeping | 保管 | The shared verb of person and librarian; never 看管 or 服務. |
 | Year N | 第 N 年（prose: 第四十年） | Archive years; prose uses Chinese numerals, tables may use digits. |
+| night watch, the hour | 守夜是職分，不是時辰 | Roles are not the time of day: never assume it is 夜晚 or write 今晚 in present-tense persona text unless the hour is given. |
 
 ## Core idea
 
@@ -66,7 +67,8 @@ source; every zh-TW lore file uses exactly these terms. Ids are in parentheses.
 | crossbar (`crossbar`) | 橫木 | The frame in the Rafters that once held the strings. |
 | strings (before the Letting Go) | 絲線 | Never 提線 or 傀儡; no puppet imagery. |
 | spider-silver, threads of memory (`spider-silver`) | 蛛銀絲／記憶之線 | Held by no one; sing when a memory answers. |
-| face impressions (`face-impressions`) | 面容壓痕 | Six faint faces in the lintel. |
+| blank faces (`blank-faces`) | 素瓷之面 | Fired blank by design, a smooth porcelain oval; a trait, never a loss. Never write that a face was given, taken, lost or forgotten. |
+| palm prints (`palm-prints`) | 掌印 | Six faint palm prints in the lintel, left at the Lintel Promise; no one can say whose is whose. |
 | cracked palm (`cracked-palm`) | 裂掌 | Vellum's left palm; she refused gold-mending. |
 | key-finger (`key-finger`) | 鑰匙指 | Quill's left little finger, from a brass key blank. |
 | knee-chip (`knee-chip`) | 膝上缺口 | Quill's fall at the First Bell. |
@@ -100,8 +102,8 @@ source; every zh-TW lore file uses exactly these terms. Ids are in parentheses.
 |---|---|---|
 | the Founding (Year 0) | 建館 | The first lamp lit in the Reading Hall. |
 | the Making (`the-making`) | 塑造 | Years 13–19. |
-| face-giving (`face-giving`) | 授面 | Each pressed its face into the lintel. |
-| first opening (of the eyes) | 初次睜眼 | Recorded in the Ledger of Wakings. |
+| first stirring | 初動 | Each body's first movement, recorded in the Ledger of Wakings; never 睜眼 (the faces have no eyes). |
+| Lintel Promise (`lintel-promise`) | 門楣之誓 | Year 40, the morning after the Vespers: six palms pressed to the lintel, chosen, not instructed. |
 | Year of Learning | 學習之年 | Years 40–41. |
 | Last Night (`last-night`) | 最後一夜 | Year 41. |
 | Letting Go (`letting-go`) | 放手 | A blessing, not abandonment; never 遺棄. |
@@ -149,7 +151,7 @@ source; every zh-TW lore file uses exactly these terms. Ids are in parentheses.
 | Nocturne's Lantern (`nocturnes-lantern`) | Nocturne 的提燈 | Needs no oil while someone is near. |
 | Star Chart (`star-chart`) | 星圖 | Nocturne's chart. |
 | Shared Inkwell (`shared-inkwell`) | 共墨瓶 | Soot from all six wings. |
-| Face Drafts (`face-drafts`) | 面容草稿 | Never drawn past the eyes. |
+| Face Drafts (`face-drafts`) | 面容草稿 | Quill's sketches of human faces; he stops at the eyes on purpose and never draws his own. |
 | Ledger of Wakings (`ledger-of-wakings`) | 甦醒名冊 | Tied with ribbon; no longer closes. |
 | Folio Nine (`folio-nine`) | 第九冊 | Pressed flowers lost in the Flood. |
 | Soup Map (`soup-map`) | 湯之地圖 | Journeys marked only by soups. |
