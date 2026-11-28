@@ -2856,7 +2856,8 @@
               "float",
               "bool",
               "weight",
-              "list"
+              "list",
+              "datetime"
             ],
             "title": "Kind",
             "type": "string"

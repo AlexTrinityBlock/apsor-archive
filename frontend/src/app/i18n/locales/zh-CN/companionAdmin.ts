@@ -342,6 +342,7 @@ export const companionAdmin = {
       self_query_phrases: "询问图书馆员本人的语句",
       self_canon_terms: "被问到时算数的设定词",
       banned_address_terms: "图书馆员绝不使用的称呼",
+      said_memory_since: "只把这个时间（UTC）之后的回复当作她说过的话（留空：全部）",
     },
   },
   templates: {

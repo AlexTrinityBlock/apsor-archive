@@ -49,7 +49,7 @@ from app.module.agent.domain.tool_args import (
 # the persona section, and tells the model about recall_my_memories.
 # v22 replaces "cite the url" with short web ids: cite a web page inline as
 # [web:wN], never by pasting a bare url, and never mix web ids with archive labels.
-PROMPT_VERSION = "archive-agent-v22"
+PROMPT_VERSION = "archive-agent-v23"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -78,7 +78,7 @@ PROMPT_VERSION = "archive-agent-v22"
 # weight, and stops search_knowledge from carrying lore.
 # v21 gives every web_search result and web_fetch page a short id (id="w3",
 # stable per conversation) and tells the model to cite it as [web:w3].
-TOOLS_VERSION = "archive-tools-v21"
+TOOLS_VERSION = "archive-tools-v22"
 
 PLOT_TOOL_NAME = "render_plot"
 
@@ -123,15 +123,16 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="search_knowledge",
         description=(
-            "Search the archive for files, memories, periodic summaries, and "
-            "past conversation windows. Use this before making factual claims. "
+            "Search the owner's own archive: files, memories, periodic summaries, "
+            "and past conversation windows. Call it alongside web_search in the "
+            "same step for most questions, since the archive often holds the "
+            "owner's earlier notes, preferences, or conversations on the topic, "
+            "and always before making claims about the owner's files or memories. "
             "Results carry source labels such as [file:10#2], [memory:7], and "
             "[history:123]. A history hit is a raw 256-character window; use "
-            "history_message with its id when the excerpt is not enough. When "
-            "you speak as a librarian companion, the result may also carry up "
-            "to two of your own memories in <librarian_memory> blocks; they "
-            "are not archive sources and are never cited. Search with a "
-            "question about yourself or the Archive to recall your own story."
+            "history_message with its id when the excerpt is not enough. A "
+            "librarian's own memories are not here; she recalls them with "
+            "recall_my_memories."
         ),
         args_model=SearchKnowledgeArgs,
     ),
@@ -245,8 +246,12 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         name="web_search",
         description=(
             "Search the public web with the configured web-search provider. "
-            "Use for current external facts not in the archive. Provide both "
-            "query and objective. Results are bounded excerpts with title, URL, "
+            "Use it by default, without asking, for anything time-sensitive or "
+            "about the outside world (news, prices, versions, places, people, "
+            "recommendations, how-to) and whenever your own knowledge may be "
+            "stale. Issue two or three differently angled queries in the same step "
+            "when the question is broad. Provide both query and objective. "
+            "Results are bounded excerpts with title, URL, "
             "score, and excerpt metadata; the <search_hint> element states when "
             "content was clipped and that web_fetch recovers the rest. Every "
             "result has a short id such as w3; cite it inline as [web:w3]. Web "
@@ -260,6 +265,8 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         name="web_fetch",
         description=(
             "Fetch one server-defined page of a public http(s) URL as Markdown. "
+            "Fetch the most promising search results, several in one step when "
+            "they are independent. "
             "Call page=1, then page=2, ... until has_more=false. Pages are "
             "server-sized, contiguous, and do not require offsets. Never claim "
             "content beyond what you actually read. The page has a short id such "

@@ -24,7 +24,12 @@ SIGNAL_TEXT_LIMIT = 1_600
 # Keys of the provider-only suffixes stored on a user entry, appended to the
 # user's message in this order. ``story_moment`` is the legacy key written by
 # conversations before the unified contributor; it is still read.
-USER_SUFFIX_KEYS: tuple[str, ...] = ("time_context", "companion_context", "story_moment")
+USER_SUFFIX_KEYS: tuple[str, ...] = (
+    "time_context",
+    "companion_handoff",
+    "companion_context",
+    "story_moment",
+)
 
 _TAG = re.compile(r"<[^>]+>")
 _SPACE = re.compile(r"\s+")

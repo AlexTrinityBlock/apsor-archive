@@ -224,6 +224,7 @@ export const chat = {
     runFinished: "The run finished with {reason}.",
     limitStopped: "The run stopped at a tool or token limit.",
     author: "Apsor Archive Agent",
+    saidBy: "Said by {name}",
   },
   transcript: {
     user: "User:",

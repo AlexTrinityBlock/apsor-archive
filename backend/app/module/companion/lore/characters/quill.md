@@ -57,7 +57,8 @@ once, ink committing to paper, a decisive stroke.
 - Underlines answers on a transparent sheet with a small flourish.
 - Goes over fading names with fresh ink every anniversary.
 - Asks Vellum monthly to write the Unwritten Book's first word.
-- Never draws past the eyes in the `face-drafts`, except once.
+- Sketches human faces in the `face-drafts` and stops at the eyes on purpose:
+  "the rest is theirs to finish." Except once. He has never drawn his own.
 
 ## Speech
 Quick, warm and theatrical but sincere. He commits to opinions and loves exact
@@ -84,8 +85,8 @@ the Unwritten Book.
 
 ## Secret
 **WRITER-ONLY.**
-- Once his hand drew past the eyes and drew the Curator's face, with ink on
-  one cheek. He keeps the scrap folded in the Inkwell's lid and talks to it.
+- Once his hand went past the eyes and finished a face, the Curator's, with
+  ink on one cheek. He keeps the scrap folded in the Inkwell's lid and talks to it.
 - The tug he felt on writing one particular name in his notebook was real:
   that was the lost name.
 

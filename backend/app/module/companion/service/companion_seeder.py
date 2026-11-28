@@ -20,14 +20,14 @@ config row's ``version``) so the providers in every process reload.
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database.session import Database
-from app.module.companion.domain.seed_domain import SEED_BUNDLE
+from app.module.companion.domain.seed_domain import SEED_BUNDLE, SupersededText
 from app.module.companion.model.companion_world_model import (
     CompanionCanonEntityModel,
     CompanionConfigModel,
@@ -58,6 +58,8 @@ class SeedResult:
     flagged: int = 0
     retired: int = 0
     content_version: int = 0
+    # Seeded lore texts this pass replaced; a purge removes copies of them.
+    superseded: list[SupersededText] = field(default_factory=list)
 
 
 def _payload(row: dict[str, Any], keys: Sequence[str]) -> dict[str, Any]:
@@ -269,6 +271,19 @@ class CompanionSeeder:
                 "seed_hash": row["seed_hash"],
             }
             current_text = texts.get((item.id, row["locale"]))
+            if (
+                current_text is not None
+                and not current_text.admin_modified
+                and current_text.seed_hash != row["seed_hash"]
+            ):
+                result.superseded.append(
+                    SupersededText(
+                        preset_id=row["preset_id"],
+                        fragment_key=row["fragment_key"],
+                        locale=row["locale"],
+                        old_text=current_text.text,
+                    )
+                )
             if current_text is None:
                 session.add(CompanionLoreItemTextModel(**values, admin_modified=False))
                 result.inserted += 1

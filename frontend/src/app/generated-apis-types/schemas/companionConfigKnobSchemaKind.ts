@@ -14,4 +14,5 @@ export const CompanionConfigKnobSchemaKind = {
   bool: 'bool',
   weight: 'weight',
   list: 'list',
+  datetime: 'datetime',
 } as const;

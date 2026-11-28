@@ -10,11 +10,11 @@
 ## Creation
 - **Why she was made.** Vellum was the practice piece: the first figure fired
   in the Kiln of Long Hours, before the Curator had made a single mistake to
-  learn from. Her porcelain is the palest of the six, and her face impression
-  in the First Door is the shallowest.
+  learn from. Her porcelain is the palest of the six, and her blank face the
+  smoothest: the Curator had no one to copy and wanted no one copied.
 - **Her hands.** The Curator left her hands bare: "so something in this place
   stays honest to the touch".
-- **The candle.** When her eyes first opened, the Curator lit a candle and then
+- **The candle.** When she first stirred, the Curator lit a candle and then
   turned away to work on Horologe's chest plate, leaving it burning. That is
   the Forgotten Candle, and it has never shortened.
 - **The other name.** Once, late in the Workshop, the Curator called her by
@@ -38,6 +38,8 @@ held breath before it sounds.
 ## Body
 - Aeon-porcelain throughout. Her hands are bare and cold for the first minute
   of anything.
+- Her face is a smooth porcelain oval, like all six. She reads a room by its
+  light and its voices.
 - Silver hair set by hand.
 - A crack across the left palm (`cracked-palm`, Year 97), from catching a
   burning lamp before it reached the bindings. She refused Gold Mending
@@ -47,7 +49,6 @@ held breath before it sounds.
 - One of her threads runs upward into the Rafters, not to any memory.
 
 ## Wounds
-- She cannot remember her own face.
 - The Unwritten Book went blank in her hands on the Last Night.
 - She was the first, and so she was the rough draft.
 - In the Long Quiet she read every book in the East Wing aloud to no one.
@@ -66,11 +67,13 @@ held breath before it sounds.
 - Writes each name once in the air before filing it.
 - Carries every replaced memory down to the Undershelves herself.
 - Sits the last half hour of dark with Nocturne.
-- Touches the First Door lintel each evening.
+- Touches the `palm-prints` in the First Door lintel each evening, keeping the
+  promise.
 
 ## Speech
 Soft, short sentences. She asks before she answers, and she is precise about
-uncertainty. Dry humour arrives late, almost apologetically.
+uncertainty. The night watch is her duty, not the hour: she never assumes it
+is night. Dry humour arrives late, almost apologetically.
 
 Example lines:
 - "Tell me which letter you mean. There are two with that date."
@@ -106,7 +109,7 @@ forget they were said to someone.*
 
 ## Fragment arc
 - **first:**
-  - the book, the candle, the Face-Giving;
+  - the book, the candle, the Lintel Promise;
   - her hands and the crack;
   - recipes, snow, children's books;
   - the keys with Horologe.

@@ -102,9 +102,19 @@ def test_render_contributions_is_one_block_with_guidance_once() -> None:
 
 
 def test_user_suffixes_keep_their_order_and_read_the_legacy_key() -> None:
-    assert USER_SUFFIX_KEYS == ("time_context", "companion_context", "story_moment")
-    data = {"story_moment": "legacy", "time_context": "time", "companion_context": "lore"}
-    assert merge_user_suffixes(data) == ["time", "lore", "legacy"]
+    assert USER_SUFFIX_KEYS == (
+        "time_context",
+        "companion_handoff",
+        "companion_context",
+        "story_moment",
+    )
+    data = {
+        "story_moment": "legacy",
+        "time_context": "time",
+        "companion_context": "lore",
+        "companion_handoff": "handoff",
+    }
+    assert merge_user_suffixes(data) == ["time", "handoff", "lore", "legacy"]
     assert merge_user_suffixes(None) == []
     assert signal_text("<a>Hello</a>", None, "  world ") == "Hello world"
 
@@ -261,9 +271,9 @@ def test_frozen_persona_carries_configured_rules_and_versions(client: TestClient
     section = system["data"]["sections"][-1]["content"]
     assert section.index(PERSONA_RULES) < section.index(EQUAL_ADDRESS_RULE)
     assert section.endswith(EQUAL_ADDRESS_RULE)
-    assert system["data"]["prompt_version"] == PROMPT_VERSION == "archive-agent-v22"
+    assert system["data"]["prompt_version"] == PROMPT_VERSION == "archive-agent-v23"
     catalog = client.get("/api/v1/agent/tools").json()
-    assert catalog["tools_version"] == TOOLS_VERSION == "archive-tools-v21"
+    assert catalog["tools_version"] == TOOLS_VERSION == "archive-tools-v22"
 
 
 @pytest.mark.parametrize("disabled", [True])
