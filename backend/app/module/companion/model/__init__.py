@@ -8,6 +8,7 @@ from app.module.companion.model.companion_model import (
 from app.module.companion.model.companion_story_model import (
     CompanionBondModel,
     CompanionLoreFragmentModel,
+    CompanionLoreToldModel,
     CompanionStoryModel,
 )
 
@@ -15,6 +16,7 @@ __all__ = [
     "CompanionBondModel",
     "CompanionFrameModel",
     "CompanionLoreFragmentModel",
+    "CompanionLoreToldModel",
     "CompanionModel",
     "CompanionPreferenceModel",
     "CompanionStoryModel",

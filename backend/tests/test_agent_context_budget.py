@@ -125,6 +125,9 @@ def test_three_hundred_k_context_truncates_once_and_completes(
     owner_engine: Engine,
 ) -> None:
     """A ~300K-token history forces compaction, truncation, and one notice."""
+    # The budget below is measured to the token; a companion story moment on a
+    # later run would add text the warm-up never saw.
+    client.patch("/api/v1/companions/preference", json={"enabled": False})
     baseline = _baseline_tokens(client)
     defaults = client.get("/api/v1/agent/settings").json()["defaults"]
     window = min(2_000_000, baseline + 10_500)

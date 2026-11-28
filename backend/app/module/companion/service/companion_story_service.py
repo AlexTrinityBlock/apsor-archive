@@ -18,13 +18,14 @@ from app.module.companion.domain.companion_domain import (
 )
 from app.module.companion.domain.story_domain import (
     DEFAULT_PRESET_ID,
-    FAMILIAR_UNLOCK_RUNS,
+    DEFAULT_STORY_CONFIG,
     MAX_FRAGMENTS_PER_COMPANION,
-    RARE_UNLOCK_RUNS,
     Bond,
+    CompanionStoryConfig,
     LoreFragment,
     LoreTier,
     StoryLocale,
+    ToldRecord,
     default_custom_persona,
     normalize_themes,
 )
@@ -93,6 +94,7 @@ def _bond(model: CompanionBondModel | None) -> Bond:
         completed_runs=model.completed_runs,
         familiar_unlocked_at=model.familiar_unlocked_at,
         rare_unlocked_at=model.rare_unlocked_at,
+        last_story_run=model.last_story_run,
     )
 
 
@@ -105,10 +107,12 @@ class CompanionStoryService:
         repository: CompanionStoryRepositoryProtocol,
         companions: CompanionLookupProtocol,
         user_id: int,
+        config: CompanionStoryConfig = DEFAULT_STORY_CONFIG,
     ) -> None:
         self.repository = repository
         self.companions = companions
         self.user_id = user_id
+        self.config = config
 
     # --- resolution -------------------------------------------------------
 
@@ -243,15 +247,40 @@ class CompanionStoryService:
         """Return the account's bond with one companion reference."""
         return _bond(await self.repository.get_bond(companion_ref))
 
+    async def told(self, companion_ref: str) -> dict[str, ToldRecord]:
+        """Return which fragments of one companion this account has been told."""
+        return {
+            row.fragment_key: ToldRecord(told_count=row.told_count, last_told_at=row.last_told_at)
+            for row in await self.repository.list_told(companion_ref)
+        }
+
+    async def record_told(
+        self,
+        companion_ref: str,
+        fragment_keys: Sequence[str],
+        source: str,
+    ) -> None:
+        """Count one offer of each fragment (topical, story_moment, or self_query)."""
+        if fragment_keys:
+            await self.repository.record_told(companion_ref, list(fragment_keys), source, utcnow())
+
+    async def mark_story_moment(self, companion_ref: str, completed_runs: int) -> None:
+        """Remember that a story moment was offered at ``completed_runs``."""
+        await self.repository.set_last_story_run(companion_ref, completed_runs, utcnow())
+
     async def record_completed_run(self, companion_ref: str) -> Bond:
         """Count one completed run and stamp any tier it unlocks."""
         now = utcnow()
         model = await self.repository.increment_bond(companion_ref, now)
         changed = False
-        if model.completed_runs >= FAMILIAR_UNLOCK_RUNS and model.familiar_unlocked_at is None:
+        config = self.config
+        if (
+            model.completed_runs >= config.familiar_unlock_runs
+            and model.familiar_unlocked_at is None
+        ):
             model.familiar_unlocked_at = now
             changed = True
-        if model.completed_runs >= RARE_UNLOCK_RUNS and model.rare_unlocked_at is None:
+        if model.completed_runs >= config.rare_unlock_runs and model.rare_unlocked_at is None:
             model.rare_unlocked_at = now
             changed = True
         if changed:
@@ -309,7 +338,7 @@ class CompanionStoryService:
         customized = story is not None and story.lore_customized
         fragments = await self.fragments(target, locale)
         bond = await self.bond(target.ref)
-        unlocked = bond.unlocked_tiers()
+        unlocked = bond.unlocked_tiers(self.config)
         return CompanionLoreSchema(
             companion_ref=target.ref,
             locale=locale,
@@ -317,8 +346,8 @@ class CompanionStoryService:
             customized=customized,
             bond=CompanionBondSchema(
                 completed_runs=bond.completed_runs,
-                familiar_unlock_runs=FAMILIAR_UNLOCK_RUNS,
-                rare_unlock_runs=RARE_UNLOCK_RUNS,
+                familiar_unlock_runs=self.config.familiar_unlock_runs,
+                rare_unlock_runs=self.config.rare_unlock_runs,
                 familiar_unlocked_at=bond.familiar_unlocked_at,
                 rare_unlocked_at=bond.rare_unlocked_at,
             ),

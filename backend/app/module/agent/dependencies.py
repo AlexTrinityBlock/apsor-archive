@@ -18,6 +18,7 @@ from typing import cast
 
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.datastructures import State
 
 from app.dependency.auth import (
     require_authenticated,
@@ -82,7 +83,11 @@ from app.module.auth.dependencies import get_auth_service
 from app.module.auth.schema.auth_schema import UserSchema
 from app.module.auth.service.auth_service import AuthService
 from app.module.auth.service.quota_service import AccountQuotaService
-from app.module.companion.dependencies import build_companion_story_service, build_lore_recall
+from app.module.companion.dependencies import (
+    build_companion_story_service,
+    build_lore_recall,
+    build_story_config_provider,
+)
 from app.module.companion.domain.story_domain import normalize_locale, render_persona_section
 from app.module.companion.service.lore_recall import CompanionLoreRecall
 from app.module.knowledge.dependencies import (
@@ -402,14 +407,18 @@ class _LibrarianMemoryAdapter:
 
     async def recall(self, query: str, context: Sequence[str]) -> list[LibrarianMemory]:
         recalled = await self.recall_service.recall(query, context)
-        return [LibrarianMemory(id=item.id, text=item.text, tier=item.tier) for item in recalled]
+        return [
+            LibrarianMemory(id=item.id, text=item.text, tier=item.tier, guidance=item.guidance)
+            for item in recalled
+        ]
 
 
 class _CompanionPersonaLoader:
     """Resolve the active companion persona in a short owner session."""
 
-    def __init__(self, database: Database, *, user_id: int, role: str) -> None:
+    def __init__(self, database: Database, state: State, *, user_id: int, role: str) -> None:
         self.database = database
+        self.state = state
         self.user_id = user_id
         self.role = role
 
@@ -426,15 +435,19 @@ class _CompanionPersonaLoader:
             ref=active.ref,
             name=active.name,
             locale=active.locale,
-            content=render_persona_section(active.persona),
+            content=render_persona_section(
+                active.persona,
+                await build_story_config_provider(self.state).load(),
+            ),
         )
 
 
 class _CompanionRunObserver:
-    """Count completed runs toward the bond of the conversation's companion."""
+    """Count completed runs toward the bond, and pace the companion's story."""
 
-    def __init__(self, database: Database, *, user_id: int, role: str) -> None:
+    def __init__(self, database: Database, state: State, *, user_id: int, role: str) -> None:
         self.database = database
+        self.state = state
         self.user_id = user_id
         self.role = role
 
@@ -451,6 +464,33 @@ class _CompanionRunObserver:
                 user_id=self.user_id,
             ).record_completed_run(frozen[0])
 
+    async def story_moment(self, conversation_id: int) -> LibrarianMemory | None:
+        """Return the companion's next untold fragment when a story moment is due."""
+        async with self.database.user_session(self.user_id, self.role) as session:
+            frozen = await CompanionContextRepository(
+                session,
+                self.user_id,
+            ).conversation_companion(conversation_id)
+            if frozen is None:
+                return None
+            companion_ref, locale = frozen
+            recall = build_lore_recall(
+                self.state,
+                session,
+                user_id=self.user_id,
+                companion_ref=companion_ref,
+                locale=normalize_locale(locale),
+            )
+            moment = await recall.story_moment()
+        if moment is None:
+            return None
+        return LibrarianMemory(
+            id=moment.id,
+            text=moment.text,
+            tier=moment.tier,
+            guidance=moment.guidance,
+        )
+
 
 def get_companion_persona_loader(
     request: Request,
@@ -458,7 +498,12 @@ def get_companion_persona_loader(
 ) -> CompanionPersonaLoaderProtocol:
     """Return the loader that freezes the active companion into a new conversation."""
     database = cast(Database, request.app.state.db)
-    return _CompanionPersonaLoader(database, user_id=user.user_id, role=user.role)
+    return _CompanionPersonaLoader(
+        database,
+        request.app.state,
+        user_id=user.user_id,
+        role=user.role,
+    )
 
 
 async def load_agent_runtime_config(database: Database) -> AgentRuntimeConfig:
@@ -616,6 +661,12 @@ def get_agent_service(
     tool_registry = AgentToolRegistry(
         _ToolServiceScope(request, user_id=user.user_id, role=user.role)
     )
+    companion_observer = _CompanionRunObserver(
+        database,
+        request.app.state,
+        user_id=user.user_id,
+        role=user.role,
+    )
     return AgentService(
         repository=repository,
         chat_generator=chat_generator,
@@ -638,11 +689,8 @@ def get_agent_service(
             runtime.web_fetch_client,
         ),
         quota=AccountQuotaService(database, user.user_id),
-        companion_runs=_CompanionRunObserver(
-            database,
-            user_id=user.user_id,
-            role=user.role,
-        ),
+        companion_runs=companion_observer,
+        story_moments=companion_observer,
     )
 
 

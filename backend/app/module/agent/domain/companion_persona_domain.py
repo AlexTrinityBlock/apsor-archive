@@ -9,6 +9,8 @@ outrank it) and the librarian memories chosen for one search.
 from dataclasses import dataclass
 from typing import Any
 
+from app.module.agent.domain.xml_domain import xml_attr, xml_text
+
 PERSONA_SECTION_NAME = "companion_persona"
 
 
@@ -41,6 +43,19 @@ class LibrarianMemory:
     id: str
     text: str
     tier: str
+    # The companion slice's configured guidance for this memory; the agent
+    # never hardcodes story wording.
+    guidance: str = ""
+
+
+def render_story_moment(memory: LibrarianMemory) -> str:
+    """Return the block appended to the user's message for a story moment."""
+    guidance = f"<guidance>{xml_text(memory.guidance)}</guidance>" if memory.guidance else ""
+    return (
+        f'<librarian_memory moment="story" id={xml_attr(memory.id)} '
+        f"tier={xml_attr(memory.tier)}>"
+        f"{guidance}{xml_text(memory.text)}</librarian_memory>"
+    )
 
 
 def frozen_companion(system_data: Any) -> tuple[str, str] | None:
@@ -62,4 +77,5 @@ __all__ = [
     "CompanionPersona",
     "LibrarianMemory",
     "frozen_companion",
+    "render_story_moment",
 ]

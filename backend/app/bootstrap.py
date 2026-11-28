@@ -35,6 +35,8 @@ from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.agent.service.history_indexer import AgentHistoryIndexer
+from app.module.companion.dependencies import build_lore_vector_warmer
+from app.module.companion.service.lore_vectors import LoreVectorWarmer
 from app.module.knowledge.dependencies import (
     build_history_chunk_store,
     build_ingest_worker,
@@ -131,6 +133,7 @@ class BackgroundServices:
     worker: IngestWorker
     cleanup: ChatAttachmentCleanup
     history_indexer: AgentHistoryIndexer
+    lore_warmer: LoreVectorWarmer | None = None
     consumer: RabbitMQJobConsumer | None = None
     # Only the dedicated worker process starts the backfill (see worker.py).
     thumbnail_backfill: FileThumbnailBackfill | None = None
@@ -149,6 +152,8 @@ class BackgroundServices:
             self.history_indexer.run_forever(stop_event),
             "conversation-history-indexer",
         )
+        if self.lore_warmer is not None:
+            self._spawn(self.lore_warmer.run_forever(stop_event), "companion-lore-vector-warmer")
 
     def start_thumbnail_backfill(self, stop_event: asyncio.Event | None) -> None:
         """Start the WebP thumbnail backfill loop (dedicated worker only)."""
@@ -198,6 +203,7 @@ async def build_background_services(state: State, settings: Settings) -> Backgro
         worker=worker,
         cleanup=cleanup,
         history_indexer=history_indexer,
+        lore_warmer=build_lore_vector_warmer(state),
         thumbnail_backfill=(
             build_thumbnail_backfill(state, database)
             if settings.thumbnail_backfill_enabled

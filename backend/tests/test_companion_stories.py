@@ -15,17 +15,26 @@ from app.module.agent.test.fake_chat_generator import (
     tool_call_result,
 )
 from app.module.companion.domain.story_domain import (
+    DEFAULT_STORY_CONFIG,
     FAMILIAR_UNLOCK_RUNS,
     FRAGMENT_MAX_CHARS,
     PERSONA_RULES,
+    STORY_MOMENT_EVERY_RUNS,
+    TOPICAL_MIN_SIMILARITY,
+    Bond,
+    CompanionStoryConfig,
     LoreFragment,
-    LoreVocabulary,
+    ToldRecord,
     is_self_query,
-    lexical_score,
+    is_semantic_embedder,
+    next_untold,
     normalize_locale,
-    select_fragments,
+    rank_self_query,
+    rank_topical,
+    story_moment_due,
     unlocked_tiers,
 )
+from app.module.companion.service import lore_vectors
 from app.module.companion.service.preset_lore_catalog import load_presets
 from tests.conftest import UserClient, rls_connection
 from tests.helpers import create_memory
@@ -97,7 +106,7 @@ def test_default_persona_is_frozen_and_disabled_companion_has_none(
     persona = load_presets()["vellum"].persona
     # The persona comes first; the rules that outrank it follow.
     assert section["content"].index(persona) < section["content"].index(PERSONA_RULES)
-    assert system["data"]["prompt_version"] == "archive-agent-v16"
+    assert system["data"]["prompt_version"] == "archive-agent-v18"
 
     zh = _system_entry(client, _new_conversation(client, locale="zh-TW"))
     assert zh["data"]["companion"]["locale"] == "zh-TW"
@@ -252,49 +261,205 @@ def test_custom_companion_story_and_cascade(
 # --- recall in search -----------------------------------------------------------
 
 
-def test_search_offers_unlocked_lore_in_a_separate_block(client: TestClient) -> None:
-    """Lore rides beside archive sources, never as one, and respects tiers."""
+class _KeywordEmbedder:
+    """A deterministic stand-in for a semantic embedder: one axis per keyword."""
+
+    model_name = "fake-semantic"
+    dimension = 5
+    words = ("rain", "clock", "seed", "star")
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls += 1
+        vectors = []
+        for value in texts:
+            lowered = value.lower()
+            vectors.append([1.0 if word in lowered else 0.0 for word in self.words] + [0.05])
+        return vectors
+
+
+@pytest.fixture()
+def semantic_embedder(monkeypatch: pytest.MonkeyPatch) -> _KeywordEmbedder:
+    """Give lore recall a semantic embedder without touching archive search."""
+    from app.module.companion import dependencies as companion_dependencies
+
+    embedder = _KeywordEmbedder()
+    lore_vectors.clear_memory()
+    monkeypatch.setattr(companion_dependencies, "_state_embedder", lambda _state: embedder)
+    return embedder
+
+
+def _complete_runs(client: TestClient, count: int) -> list[dict[str, Any]]:
+    """Finish ``count`` plain runs in one conversation; return each user entry."""
+    client.app.state.agent_chat_generator = FakeChatGenerator(
+        [text_result("ok.") for _ in range(count)]
+    )
+    conversation_id = _new_conversation(client)
+    users: list[dict[str, Any]] = []
+    for index in range(count):
+        turn = _turn(client, conversation_id, f"hello {index}")
+        users.extend(entry for entry in turn["entries"] if entry["kind"] == "pi.user")
+    return users
+
+
+def _progress(owner_engine: Engine) -> dict[str, tuple[int, str]]:
+    with owner_engine.connect() as connection:
+        rows = connection.execute(
+            text("SELECT fragment_key, told_count, source FROM companion_lore_told")
+        ).all()
+    return {row[0]: (row[1], row[2]) for row in rows}
+
+
+def test_self_query_offers_lore_in_a_separate_block(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    """Asking about the librarian brings its own untold story, never as a source."""
     create_memory(
         client,
         "Grandmother taught me her braised pork recipe: soy sauce goes in last.",
         "2026-01-20T10:00:00+08:00",
     )
-
-    # A question about the librarian herself lowers the bar for first-tier lore.
-    about_self = _search_once(client, "Vellum, tell me about your past and your strings")
+    about_self = _search_once(client, "Vellum, tell me about your past")
     lore = about_self["data"]["lore"]
     assert 1 <= len(lore) <= 2
     assert {item["tier"] for item in lore} == {"first"}
     content = about_self["model"][0]["content"]
     assert "<librarian_memories>" in content
-    assert "never cite it as evidence" in content
+    assert DEFAULT_STORY_CONFIG.lore_guidance in content
     assert content.index("<summary>") < content.index("<librarian_memories>")
     lore_ids = {item["id"] for item in lore}
     for item in about_self["data"]["memory_results"]:
         assert str(item["memory_id"]) not in lore_ids
+    assert {key: value[1] for key, value in _progress(owner_engine).items()} == {
+        key: "self_query" for key in lore_ids
+    }
 
-    # Family/letters/love lore includes familiar-tier passages (for example
-    # vellum-014): none may surface before enough completed runs.
-    family_query = "family letters love grandmother recipe soy sauce"
-    locked = _search_once(client, family_query)
-    assert "familiar" not in {item["tier"] for item in locked["data"].get("lore", [])}
-    assert locked["data"]["memory_results"], "the archive memory is still found"
+    # A second self query prefers fragments not told yet.
+    again = _search_once(client, "Tell me a story about yourself")
+    assert lore_ids.isdisjoint({item["id"] for item in again["data"]["lore"]})
 
-    bond = client.get(f"{STORIES}/{VELLUM}/lore").json()["bond"]
-    assert bond["completed_runs"] == 2
-    client.app.state.agent_chat_generator = FakeChatGenerator(
-        [text_result("ok.") for _ in range(FAMILIAR_UNLOCK_RUNS)]
-    )
-    conversation_id = _new_conversation(client)
-    for index in range(FAMILIAR_UNLOCK_RUNS - 2):
-        _turn(client, conversation_id, f"hello {index}")
+
+def test_topical_recall_is_semantic_only(client: TestClient) -> None:
+    """The offline hash never gates lore by keywords: topical recall needs meaning."""
+    create_memory(client, "It rained all evening; I stayed in.", "2026-01-20T10:00:00+08:00")
+    plain = _search_once(client, "rained all evening")
+    assert "lore" not in plain["data"]
+    assert plain["data"]["memory_results"], "the archive memory is still found"
+
+
+def test_topical_recall_respects_tiers_and_prefers_untold(
+    client: TestClient,
+    semantic_embedder: _KeywordEmbedder,
+    owner_engine: Engine,
+) -> None:
+    """Only rain passages are near a rain query; they are familiar-tier (vellum-016/018)."""
+    locked = _search_once(client, "rain at night")
+    assert "lore" not in locked["data"], "no first-tier fragment is about rain"
+
+    _complete_runs(client, FAMILIAR_UNLOCK_RUNS)
     unlocked = client.get(f"{STORIES}/{VELLUM}/lore").json()
-    assert unlocked["bond"]["completed_runs"] == FAMILIAR_UNLOCK_RUNS
     assert unlocked["bond"]["familiar_unlocked_at"] is not None
-    assert {item["tier"]: item["unlocked"] for item in unlocked["fragments"]}["familiar"]
 
-    opened = _search_once(client, family_query)
-    assert "familiar" in {item["tier"] for item in opened["data"]["lore"]}
+    opened = _search_once(client, "rain at night")
+    first = [item["id"] for item in opened["data"]["lore"]]
+    assert first and set(first) <= {"vellum-016", "vellum-018"}
+    assert {item["tier"] for item in opened["data"]["lore"]} == {"familiar"}
+    assert all(_progress(owner_engine)[key][1] == "topical" for key in first)
+    assert semantic_embedder.calls >= 1
+
+
+def test_story_moments_pace_the_arc_whatever_the_topic(
+    client: TestClient,
+    owner_engine: Engine,
+) -> None:
+    """A run may open with the next untold fragment, every few completed runs."""
+    users = _complete_runs(client, 1 + 1 + STORY_MOMENT_EVERY_RUNS)
+    moments = [entry["data"].get("story_moment_id") for entry in users]
+    # Run 1 has no completed run yet; run 2 opens the first moment; the next
+    # waits until STORY_MOMENT_EVERY_RUNS more runs have completed.
+    assert moments[0] is None
+    assert moments[1] == "vellum-001"
+    assert all(value is None for value in moments[2:-1])
+    assert moments[-1] == "vellum-002"
+    block = users[1]["data"]["story_moment"]
+    assert 'moment="story"' in block
+    assert "keep it for another time" in block
+    progress = _progress(owner_engine)
+    assert progress["vellum-001"] == (1, "story_moment")
+    assert progress["vellum-002"] == (1, "story_moment")
+
+
+# --- pacing (pure) --------------------------------------------------------------
+
+
+def _arc(count: int) -> list[LoreFragment]:
+    tiers = ["first"] * (count // 2) + ["familiar"] * (count - count // 2)
+    return [
+        LoreFragment(key=f"f-{index:03d}", text=f"memory {index}", themes=(), tier=tier)  # type: ignore[arg-type]
+        for index, tier in enumerate(tiers)
+    ]
+
+
+def test_a_narrow_life_still_hears_every_unlocked_fragment() -> None:
+    """Someone who only ever talks about one thing still hears the whole story."""
+    fragments = _arc(12)
+    told: dict[str, ToldRecord] = {}
+    last_story_run: int | None = None
+    heard: list[str] = []
+    for run in range(200):
+        bond = Bond(completed_runs=run, last_story_run=last_story_run)
+        if story_moment_due(bond):
+            upcoming = next_untold(fragments, bond.unlocked_tiers(), told)
+            if upcoming:
+                key = upcoming[0].key
+                heard.append(key)
+                told[key] = ToldRecord(told_count=told.get(key, ToldRecord()).told_count + 1)
+                last_story_run = run
+        # A single narrow topic with no semantic match never offers lore at all.
+        assert rank_topical(fragments, bond.unlocked_tiers(), {}, told) == []
+    assert set(heard[: len(fragments)]) == {item.key for item in fragments}
+    first_half = [item.key for item in fragments[: len(fragments) // 2]]
+    assert heard[: len(first_half)] == first_half
+
+
+def test_pacing_and_ranking_rules() -> None:
+    assert not story_moment_due(Bond(completed_runs=0))
+    assert story_moment_due(Bond(completed_runs=1))
+    assert not story_moment_due(Bond(completed_runs=3, last_story_run=1))
+    assert story_moment_due(Bond(completed_runs=1 + STORY_MOMENT_EVERY_RUNS, last_story_run=1))
+    slower = CompanionStoryConfig(story_moment_every_runs=10)
+    assert not story_moment_due(Bond(completed_runs=8, last_story_run=1), slower)
+    never = CompanionStoryConfig(story_moment_every_runs=0)
+    assert not story_moment_due(Bond(completed_runs=8), never)
+
+    fragments = _arc(4)
+    unlocked = frozenset({"first", "familiar"})
+    told = {"f-000": ToldRecord(told_count=2)}
+    assert [item.key for item in next_untold(fragments, unlocked, told, limit=2)] == [
+        "f-001",
+        "f-002",
+    ]
+    everything = {item.key: ToldRecord(told_count=1) for item in fragments}
+    everything["f-003"] = ToldRecord(told_count=3)
+    assert next_untold(fragments, unlocked, everything)[0].key == "f-000"
+
+    similarity = {"f-000": 0.9, "f-001": 0.85, "f-002": TOPICAL_MIN_SIMILARITY - 0.01}
+    ranked = rank_topical(fragments, unlocked, similarity, told)
+    assert [item.fragment.key for item in ranked] == ["f-001", "f-000"]
+    assert rank_topical(fragments, unlocked, None, told) == []
+    strict = CompanionStoryConfig(topical_min_similarity=0.95)
+    assert rank_topical(fragments, unlocked, similarity, told, config=strict) == []
+
+    chosen = rank_self_query(fragments, unlocked, told, {"f-002": 0.5}, limit=1)
+    assert [item.fragment.key for item in chosen] == ["f-002"]
+
+    assert is_semantic_embedder("text-embedding-3-small", 1536)
+    assert not is_semantic_embedder("apsor-hash-384", 384)
+    assert not is_semantic_embedder("none", 0)
+    assert unlocked_tiers(3, CompanionStoryConfig(familiar_unlock_runs=2)) == {"first", "familiar"}
 
 
 def test_no_lore_without_a_frozen_companion(client: TestClient) -> None:
@@ -314,10 +479,9 @@ def test_stories_and_bonds_are_private_per_account(
     owner_engine: Engine,
 ) -> None:
     """Another account never sees overrides, lore copies, or bonds."""
-    client.app.state.agent_chat_generator = FakeChatGenerator([text_result("ok.")])
     client.put(f"{STORIES}/{VELLUM}/persona", json={"persona": "Owner-only voice."})
     client.post(f"{STORIES}/{VELLUM}/lore", json={"text": "Owner-only memory."})
-    _turn(client, _new_conversation(client), "hi")
+    _complete_runs(client, 2)  # the second run opens a story moment
     companion = client.post("/api/v1/companions", json={"name": "Private"}).json()
 
     other = user_client_factory().client
@@ -338,7 +502,12 @@ def test_stories_and_bonds_are_private_per_account(
             text("SELECT id FROM app_user WHERE id <> :owner ORDER BY id DESC LIMIT 1"),
             {"owner": owner_id},
         ).scalar_one()
-    for table in ("companion_story", "companion_lore_fragment", "companion_bond"):
+    for table in (
+        "companion_story",
+        "companion_lore_fragment",
+        "companion_bond",
+        "companion_lore_told",
+    ):
         with rls_connection(owner_engine, user_id=other_id, role="user") as connection:
             assert connection.execute(text(f"SELECT count(*) FROM {table}")).scalar_one() == 0
         with rls_connection(owner_engine, user_id=owner_id, role="root") as connection:
@@ -358,28 +527,16 @@ def test_locale_tiers_and_selection_rules() -> None:
     assert unlocked_tiers(FAMILIAR_UNLOCK_RUNS) == {"first", "familiar"}
     assert "rare" in unlocked_tiers(1000)
     assert is_self_query("Tell me about Atlas", ["Vellum", "Atlas"])
+    assert is_self_query("說說你的過去", ["Vellum"])
+    assert is_self_query("What happened at your Vespers?", [])
     assert not is_self_query("What did I eat on Tuesday?", ["Vellum"])
-
-    vocabulary = LoreVocabulary(themes={"rain": ("rain", "storm")})
-    rain = LoreFragment(key="rain", text="The strings grow heavy.", themes=("rain",), tier="first")
-    other = LoreFragment(key="other", text="A quiet shelf.", themes=("shelves",), tier="rare")
-    lexical = {
-        fragment.key: lexical_score("It rained all night, a storm.", fragment, vocabulary)
-        for fragment in (rain, other)
-    }
-    chosen = select_fragments(
-        fragments=[rain, other],
-        unlocked=frozenset({"first", "rare"}),
-        lexical=lexical,
-        semantic=None,
-    )
-    assert [item.fragment.key for item in chosen] == ["rain"]
-    assert select_fragments(
-        fragments=[rain],
-        unlocked=frozenset({"familiar"}),
-        lexical=lexical,
-        semantic=None,
-    ) == []
+    # Everyday phrasing about one's own archive is not a question about the librarian.
+    assert not is_self_query("What is in the archive about my trip?", ["Vellum"])
+    assert not is_self_query("我的檔案館裡有外婆的食譜嗎", ["Vellum"])
+    assert not is_self_query("Ask the curator of the museum", ["Vellum"])
+    custom = CompanionStoryConfig(self_query_phrases=("old friend",), self_canon_terms=())
+    assert is_self_query("hello old friend", [], custom)
+    assert not is_self_query("tell me about your past", [], custom)
 
 
 def test_translation_overlay_falls_back_per_item(tmp_path: Path) -> None:
@@ -470,11 +627,36 @@ def test_shipped_lore_refs_point_at_canon() -> None:
     assert presets["vellum"].fragments[0].refs
 
 
-def test_vocabulary_overlays_match_chinese_queries() -> None:
-    """English themes stay canonical; zh overlays add keywords for both scripts."""
-    from app.module.companion.service.preset_lore_catalog import load_vocabulary
+def test_lore_vector_warmer_is_idempotent_and_semantic_only() -> None:
+    """The worker embeds every shipped fragment once per model, shared via the cache."""
+    import asyncio
 
-    vocabulary = load_vocabulary()
-    assert {"rain", "family", "cooking"} <= vocabulary.themes_in("昨天下雨，想起外婆的食譜")
-    assert {"rain", "family", "cooking"} <= vocabulary.themes_in("昨天下雨，想起外婆的菜谱")
-    assert "rain" in vocabulary.themes_in("a rainy evening")
+    from app.infrastructure.embedding.hashing_embedder import HashingEmbedder
+
+    class _Cache:
+        def __init__(self) -> None:
+            self.values: dict[str, Any] = {}
+
+        async def get_json(self, key: str) -> Any:
+            return self.values.get(key)
+
+        async def set_json(self, key: str, value: Any, ttl_seconds: int) -> None:
+            self.values[key] = value
+
+    cache = _Cache()
+    warmer = lore_vectors.LoreVectorWarmer(
+        embedder=lambda: _KeywordEmbedder(),
+        vectors=lore_vectors.LoreVectorStore(cache),
+    )
+    lore_vectors.clear_memory()
+    total = len(lore_vectors.preset_lore_texts())
+    assert asyncio.run(warmer.run_once()) == total
+    assert len(cache.values) == total
+    lore_vectors.clear_memory()  # another process: empty memory, warm shared cache
+    assert asyncio.run(warmer.run_once()) == 0
+
+    offline = lore_vectors.LoreVectorWarmer(
+        embedder=lambda: HashingEmbedder(),
+        vectors=lore_vectors.LoreVectorStore(_Cache()),
+    )
+    assert asyncio.run(offline.run_once()) == 0

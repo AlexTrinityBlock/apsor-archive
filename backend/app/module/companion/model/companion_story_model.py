@@ -6,7 +6,12 @@ All three tables are private (owner-only RLS):
   one locale. A preset story references ``preset_id``; a custom companion's
   story references ``(companion_id, user_id)`` and cascades with it.
 - ``companion_lore_fragment``: the fragments of one customized story.
-- ``companion_bond``: completed runs per companion, which unlock lore tiers.
+- ``companion_bond``: completed runs per companion, which unlock lore tiers,
+  and the run count at the last story moment.
+- ``companion_lore_told``: the per-account progress through one companion's
+  lore: which fragments were offered, how often, when, and by which path
+  (topical recall, story moment, or self query). It drives recall and pacing
+  and is the source of truth for root's progress view; users never see it.
 
 Bond rows are keyed by the companion reference string so they stay
 locale-independent; the service clears them when a custom companion is deleted.
@@ -219,6 +224,7 @@ class CompanionBondModel(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    last_story_run: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -228,8 +234,58 @@ class CompanionBondModel(Base):
     )
 
 
+class CompanionLoreToldModel(Base):
+    """One fragment of one companion that this account has been told."""
+
+    __tablename__ = "companion_lore_told"
+    __table_args__ = (
+        CheckConstraint("told_count >= 1", name="told_count_positive"),
+        CheckConstraint(
+            "char_length(companion_ref) BETWEEN 1 AND 64",
+            name="companion_ref_length",
+        ),
+        CheckConstraint(
+            "fragment_key ~ '^[a-z0-9][a-z0-9-]{0,63}$'",
+            name="fragment_key_format",
+        ),
+        CheckConstraint(
+            "source IN ('topical', 'story_moment', 'self_query')",
+            name="source_valid",
+        ),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "app_user.id",
+            ondelete="RESTRICT",
+            name="fk_companion_lore_told_user_id_app_user",
+        ),
+        primary_key=True,
+    )
+    companion_ref: Mapped[str] = mapped_column(String(64), primary_key=True)
+    fragment_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    told_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    # The path of the latest offer: topical | story_moment | self_query.
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    # When the fragment was first offered to this account.
+    offered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=sql_text("now()"),
+    )
+    last_told_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        server_default=sql_text("now()"),
+    )
+
+
 __all__ = [
     "CompanionBondModel",
     "CompanionLoreFragmentModel",
+    "CompanionLoreToldModel",
     "CompanionStoryModel",
 ]

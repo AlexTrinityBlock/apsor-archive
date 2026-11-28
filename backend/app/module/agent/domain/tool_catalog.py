@@ -36,7 +36,7 @@ from app.module.agent.domain.tool_args import (
 # KV cache lineage is untouched. v15 adds the companion_action guidance line.
 # v16 adds the optional companion persona section (persona, then the rules that
 # outrank it) frozen per conversation.
-PROMPT_VERSION = "archive-agent-v16"
+PROMPT_VERSION = "archive-agent-v18"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on
@@ -53,7 +53,7 @@ PROMPT_VERSION = "archive-agent-v16"
 # frozen pi.system snapshot. v15 adds the read-only companion_action gesture tool.
 # v16 lets search_knowledge return the companion's own lore in a separate
 # <librarian_memory> block that is never an archive source.
-TOOLS_VERSION = "archive-tools-v16"
+TOOLS_VERSION = "archive-tools-v17"
 
 PLOT_TOOL_NAME = "render_plot"
 

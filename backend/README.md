@@ -927,27 +927,51 @@ Each companion has a story in two layers. The **persona** is its voice; the
 `app/module/companion/lore/`: `<id>.json` is the canonical English story (it
 owns fragment ids, tiers, and themes), `zh-TW/<id>.json` and `zh-CN/<id>.json`
 may override `name`, `persona`, and each fragment's `text` with the same ids,
-falling back to English per item. `vocabulary.json` maps themes to multilingual
-keywords so a Chinese query can find English-themed lore.
+falling back to English per item. The files are seed data; themes are editor
+metadata only and never gate recall.
 
 - **Persona.** When a conversation is created, the account's enabled companion
   (the selection, or the flagship `preset:vellum`) is frozen into `pi.system` as
   a final `companion_persona` section: the persona, then the rules that outrank
-  it (grounding and citations, never inventing the Keeper's memories, safety,
+  it (grounding and citations, never inventing the user's memories, safety,
   dropping the voice on request). `data.companion` records `{ref, name, locale}`.
   `POST /api/v1/agent/conversations` takes an optional `locale`
   (`en`, `zh-TW`, `zh-CN`). A disabled companion adds nothing. Saved-question
   answers never carry a persona.
-- **Lore recall.** `search_knowledge` in a conversation with a frozen companion
-  offers at most two unlocked fragments in a separate
-  `<librarian_memories>` block after every archive source, with the guidance
-  that they are the librarian's own memories and never evidence. Tool data
-  carries them as `lore: [{id, tier, text}]`; they are never in the source
-  lists or the citation vocabulary. Scoring combines theme/word overlap with the
-  account's embedder (fragment vectors cached in process; the query counts
-  against the embedding allowance). A question about the librarian, the other
-  librarians, or the Archive lowers the threshold so it can tell its own story.
-  How often a memory is woven in is left to the model.
+- **Lore recall (topical).** `search_knowledge` in a conversation with a frozen
+  companion offers at most two unlocked fragments in a separate
+  `<librarian_memories>` block after every archive source, with the configured
+  guidance that they are the librarian's own memories and never evidence. Tool
+  data carries them as `lore: [{id, tier, text}]`; they are never in the source
+  lists or the citation vocabulary. Relevance is **semantic only**: cosine
+  similarity between the fragment and the query plus the top archive excerpts,
+  using the account's embedder, must reach 0.30. There is no keyword list, so no
+  topic is needed to reach any fragment; the offline hashing embedder offers no
+  topical lore. Untold fragments get a small bonus and each earlier telling a
+  small penalty. Fragment vectors are cached per embedder model in process and
+  in Valkey; the dedicated worker warms every shipped preset fragment, so a
+  search embeds only the query (which counts against the embedding allowance).
+- **Self queries.** An explicit question about the librarian ("tell me about
+  yourself", "your past", a librarian's name, "your Vespers"; bare words such as
+  "archive" or "curator" do not count) returns the next untold fragments of its
+  arc, the most relevant of a small window first.
+- **Story moments.** At the start of a run, once at least one run has completed
+  and then every 3 completed runs, the next untold fragment of the arc (first,
+  familiar, rare; then id) is appended to that user message as
+  `<librarian_memory moment="story">` with guidance to tell it only if the
+  moment is calm and fits. It is stored on the user entry (`data.story_moment`,
+  `data.story_moment_id`) so the transcript and prompt cache stay stable.
+  Whatever a person talks about, every unlocked fragment surfaces in time.
+- **Progress.** `companion_lore_told` records, per account and companion, each
+  offered fragment's `told_count`, `offered_at`, `last_told_at`, and latest
+  `source` (`topical`, `story_moment`, `self_query`); `companion_bond` keeps
+  `last_story_run`. Users never see this progress; it is the source of truth
+  for root's view. How a memory is woven in is left to the model.
+- **Configuration.** Unlock runs, cadence, thresholds, bonuses, self-query
+  phrases, the persona rules, and both guidance texts are one
+  `CompanionStoryConfig`, served by a provider (`build_story_config_provider`;
+  seed defaults until root administration installs a stored one). Services
+  never read the module constants directly.
 - **Tiers.** `first` is always eligible; `familiar` opens after 5 completed runs
   with that companion and `rare` after 20. `companion_bond` counts completed
   runs per companion reference (best-effort, after the run is settled) and
