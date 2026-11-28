@@ -22,6 +22,14 @@ const CATEGORY_LABEL_KEYS = {
   web_fetch: "core.accounts.quotaWebFetch",
 } as const satisfies Record<QuotaCategory, TranslationKey>;
 
+/** Short names for the on/off switch, so web tools read as "Web search: Allowed". */
+const TOGGLE_LABEL_KEYS = {
+  chat: "core.accounts.quotaToggleChat",
+  embedding: "core.accounts.quotaToggleEmbedding",
+  web_search: "core.accounts.quotaToggleWebSearch",
+  web_fetch: "core.accounts.quotaToggleWebFetch",
+} as const satisfies Record<QuotaCategory, TranslationKey>;
+
 const TOP_UP_MAX = 10 ** 12;
 
 interface QuotaDialogProps {
@@ -180,8 +188,19 @@ function QuotaEditor({
           disabled={submitting}
         />
         <span>
-          <strong>{t("core.accounts.quotaEnabledLabel")}</strong>
-          <small>{t("core.accounts.quotaEnabledHint")}</small>
+          <strong>
+            {t("core.accounts.quotaToggleState", {
+              category: t(TOGGLE_LABEL_KEYS[quota.category]),
+              state: enabled
+                ? t("core.accounts.quotaAllowed")
+                : t("core.accounts.quotaBlocked"),
+            })}
+          </strong>
+          <small>
+            {quota.category === "web_search" || quota.category === "web_fetch"
+              ? t("core.accounts.quotaToggleWebHint")
+              : t("core.accounts.quotaEnabledHint")}
+          </small>
         </span>
       </label>
 

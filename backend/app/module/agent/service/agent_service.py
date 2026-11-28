@@ -289,6 +289,11 @@ class AgentService:
         # optional so isolated tests that exercise conversation mechanics keep
         # working with no quota policy.
         self.quota = quota
+        # Web tools this account cannot use, resolved once at run start (see
+        # ``_unavailable_tools``). The web-research service still enforces the
+        # account toggles on every call, so a mid-run change is caught there.
+        self._unavailable_tools: dict[int, frozenset[str]] = {}
+        self._withheld_tools: tuple[str, ...] = ()
         # Provider calls use the current model, not the conversation's
         # creation-time metadata. Escalation is capped at one swap per run and
         # every generator in the plan comes from the same primary endpoint row.
@@ -759,12 +764,58 @@ class AgentService:
                 last_entry_id,
                 keep_plot_run_id=run_id,
             )
+        context = await self._offered_tools_only(context, run_id)
         return await self._enforce_context_budget(
             context,
             conversation_id=conversation_id,
             run_id=run_id,
             last_entry_id=last_entry_id,
             last_compaction_entry_id=last_compaction_entry_id,
+        )
+
+    async def _unavailable_tool_names(self, run_id: int) -> frozenset[str]:
+        """Return the web tools this account cannot use, once per run.
+
+        A web tool is withheld when no provider is configured for it or the
+        account's web toggle (or allowance) forbids it, so the model is never
+        offered a tool that can only fail.
+        """
+        cached = self._unavailable_tools.get(run_id)
+        if cached is not None:
+            return cached
+        unavailable: set[str] = set()
+        checks = (
+            ("web_search", self.web_search_provider, "web_search_allowed"),
+            ("web_fetch", self.web_fetch_provider, "web_fetch_allowed"),
+        )
+        for tool_name, provider, allowed_name in checks:
+            if provider == "none":
+                unavailable.add(tool_name)
+                continue
+            allowed = getattr(self.quota, allowed_name, None) if self.quota else None
+            if allowed is not None and not await allowed():
+                unavailable.add(tool_name)
+        result = frozenset(unavailable)
+        self._unavailable_tools[run_id] = result
+        return result
+
+    async def _offered_tools_only(
+        self,
+        context: ProviderContext,
+        run_id: int,
+    ) -> ProviderContext:
+        """Drop withheld tools from the outbound request; the transcript is unchanged."""
+        unavailable = await self._unavailable_tool_names(run_id)
+        self._withheld_tools = tuple(sorted(unavailable))
+        if not unavailable:
+            return context
+        return replace(
+            context,
+            tools=[
+                tool
+                for tool in context.tools
+                if _tool_definition_name(tool) not in unavailable
+            ],
         )
 
     async def _enforce_context_budget(
@@ -2264,6 +2315,7 @@ class AgentService:
                     context_remaining=max(0, limit - used),
                     compaction_at=compaction_at,
                     compaction_in=max(0, compaction_at - used),
+                    unavailable_tools=self._withheld_tools,
                 )
             )
 
@@ -3322,6 +3374,16 @@ def _output_limit_text(max_output_tokens: int) -> str:
         "complete that request. Please ask again for a smaller or simpler result, "
         "for example a chart with fewer points."
     )
+
+
+def _tool_definition_name(tool: Mapping[str, Any]) -> str | None:
+    """Return the function name of one OpenAI-style tool definition."""
+    function = tool.get("function")
+    if isinstance(function, Mapping):
+        name = function.get("name")
+        return name if isinstance(name, str) else None
+    name = tool.get("name")
+    return name if isinstance(name, str) else None
 
 
 def _web_provider_name(value: str) -> str:
