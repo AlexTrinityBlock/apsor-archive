@@ -14,7 +14,7 @@ import { useReadMemory } from "../../generated-apis-types/memories/memories";
 import { useI18n } from "../../i18n";
 import { useScrollLock } from "../../hook/useScrollLock";
 import { formatBytes } from "../../../lib/format";
-import { libraryFileUrl } from "../../../lib/library-url";
+import { libraryFileUrl, libraryMemoryUrl } from "../../../lib/library-url";
 import { FileRenderer } from "../../viewer/component/FileViewer";
 import {
   ViewerErrorState,
@@ -231,7 +231,7 @@ function MemoryResourceBody({
             time: formatDateTime(memory.update_time),
           })}
         </span>
-        <Link className="text-link" to={`/memory/${memory.memory_id}`}>
+        <Link className="text-link" to={libraryMemoryUrl(memory.memory_id)}>
           {t("chat.resource.openMemory")}
           <Icon name="arrow-up-right" size={12} />
         </Link>

@@ -8,7 +8,7 @@ import type {
   AgentConversationDetailSchema,
   AgentEntrySchema,
 } from "../generated-apis-types/schemas";
-import { libraryFileUrl } from "../../lib/library-url";
+import { libraryFileUrl, libraryMemoryUrl } from "../../lib/library-url";
 import { getActiveLocale, translate, type Locale } from "../i18n";
 import { readThumbnail, type ThumbnailInfo } from "../viewer/component/thumbnail";
 
@@ -593,7 +593,7 @@ export function citationHref(token: CitationToken): string | null {
     return libraryFileUrl(token.id, "files", { chunk: token.chunk });
   }
   if (token.kind === "memory") {
-    return `/memory/${token.id}`;
+    return libraryMemoryUrl(token.id);
   }
   // History chips resolve their conversation URL after fetching the message;
   // summary chips have no standalone destination either.
@@ -610,7 +610,7 @@ export function resourceHref(resource: ResourceMeta): string | null {
       chunk: resource.chunk,
     });
   }
-  return `/memory/${resource.resourceId}`;
+  return libraryMemoryUrl(resource.resourceId);
 }
 
 export function noticeText(

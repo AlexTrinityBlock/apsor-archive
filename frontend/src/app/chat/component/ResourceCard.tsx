@@ -187,6 +187,24 @@ function ThumbnailImage({
   );
 }
 
+/** Box ratio for an image card without a thumbnail, before its original loads. */
+const IMAGE_FRAME_RATIO = "4 / 3";
+
+/** The reserved A4 sheet a PDF card shows until page 1 is drawn. */
+function PdfPendingSheet() {
+  return (
+    <span className="chat-resource__thumb chat-resource__thumb--pdf" aria-hidden="true">
+      <span className="chat-resource__pdf-pending" />
+    </span>
+  );
+}
+
+/**
+ * Chooses the preview for one presented resource, in a fixed order:
+ * server WebP thumbnail → image original → PDF page 1 → type tile. Every
+ * branch reserves its final box up front, so loading never shifts the
+ * transcript.
+ */
 function ResourceThumb({
   resource,
   kind,
@@ -227,13 +245,23 @@ function ResourceThumb({
 
   if (isImage && !failed) {
     return (
-      <span className="chat-resource__thumb chat-resource__thumb--image">
+      // No thumbnail yet (older file or backfill pending): a fixed 4:3 frame
+      // reserves the final box, and the original fades in when decoded.
+      <span
+        className="chat-resource__thumb chat-resource__thumb--image"
+        style={{ aspectRatio: IMAGE_FRAME_RATIO }}
+      >
         {imageLoaded ? null : (
           <span className="chat-resource__thumb-loading" aria-hidden="true">
             <Loader size={18} className="chat-resource__thumb-loader" />
           </span>
         )}
         <img
+          className={
+            imageLoaded
+              ? "chat-resource__thumb-full is-loaded"
+              : "chat-resource__thumb-full"
+          }
           src={fileContentUrl(resourceId)}
           alt=""
           loading="lazy"
@@ -282,8 +310,10 @@ function ResourceThumb({
     if (failed) {
       return tile;
     }
+    // Without a thumbnail the fallback is the reserved A4 sheet, so the card
+    // already has its final height while pdf.js loads.
     return (
-      <Suspense fallback={tile}>
+      <Suspense fallback={<PdfPendingSheet />}>
         <ResourcePdfThumb fileId={resourceId} thumbnail={null} onError={markFailed} />
       </Suspense>
     );

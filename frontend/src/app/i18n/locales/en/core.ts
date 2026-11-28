@@ -62,6 +62,7 @@ export const core = {
     defaultLabel: "Loading the archive",
   },
   route: {
+    title: "{page} — {app}",
     fallbackLabel: "Opening the archive",
     fallbackEyebrow: "Opening the archive",
     errorEyebrow: "Archive · route error",

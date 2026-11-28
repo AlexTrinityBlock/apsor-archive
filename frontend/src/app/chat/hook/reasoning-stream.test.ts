@@ -2,7 +2,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { appendReasoningDelta } from "./reasoning-stream";
-import type { ChatStreamSegment } from "./useChatStream";
+import type { ChatStreamSegment } from "./stream-reducer";
 
 function segment(index: number, reasoning = ""): ChatStreamSegment {
   return {

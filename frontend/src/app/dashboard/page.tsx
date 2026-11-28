@@ -32,7 +32,7 @@ import {
   formatBytes,
   truncate,
 } from "../../lib/format";
-import { libraryFileUrl } from "../../lib/library-url";
+import { libraryFileUrl, libraryMemoryUrl } from "../../lib/library-url";
 import "./dashboard.css";
 
 
@@ -281,7 +281,7 @@ function eventLink(
   t: Translate,
 ): { to: string; label: string } | null {
   if (event.kind === "memory" && event.memory_id != null) {
-    return { to: `/memory/${event.memory_id}`, label: t("core.home.readMemory") };
+    return { to: libraryMemoryUrl(event.memory_id), label: t("core.home.readMemory") };
   }
   if (event.kind === "file_update" && event.file_id != null) {
     return {

@@ -986,6 +986,24 @@
   opacity: 1;
 }
 
+.toast__action {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  color: inherit;
+  border: 0.7px solid currentColor;
+  border-radius: 3px;
+  font-family: var(--mono-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.toast__action:hover,
+.toast__action:focus-visible {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
 /* --------------------------------------------------------------------------
    Citations, code, metadata
    -------------------------------------------------------------------------- */

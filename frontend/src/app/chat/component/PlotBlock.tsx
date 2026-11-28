@@ -275,6 +275,15 @@ function downloadFileName(title: string): string {
   return `${base.length > 0 ? base : "plot"}.png`;
 }
 
+/** A stable content key for tool data, or null when it cannot be serialized. */
+function plotDataKey(data: unknown): string | null {
+  try {
+    return JSON.stringify(data) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 interface PlotBlockProps {
   /** Tool result `data`; a `{ plot: PlotSpec }` envelope or a bare PlotSpec. */
   readonly data: unknown;
@@ -283,7 +292,16 @@ interface PlotBlockProps {
 /** One persisted or streaming Plotly chart with an accessible data table. */
 export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
   const { t, formatNumber } = useI18n();
-  const spec = useMemo(() => readPlotSpec(data), [data]);
+  // Compare charts by content, not object identity: a refetch or the
+  // live-to-persisted handoff hands over equal data in a new object, which
+  // must not purge and redraw the canvas.
+  const dataKey = useMemo(() => plotDataKey(data), [data]);
+  const spec = useMemo(
+    () => readPlotSpec(dataKey === null ? data : JSON.parse(dataKey)),
+    // `data` is read only when it cannot be serialized; the key is the identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dataKey],
+  );
   const is3d = useMemo(() => (spec ? isThreeDimensional(spec) : false), [spec]);
   const config = useMemo(() => plotConfig(is3d), [is3d]);
   const table = useMemo(() => (spec ? buildPlotTable(spec) : null), [spec]);
@@ -327,7 +345,6 @@ export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
 
     let cancelled = false;
     let observer: ResizeObserver | null = null;
-    let loaded: PlotlyRuntime | null = null;
 
     const draw = async (): Promise<void> => {
       try {
@@ -336,7 +353,6 @@ export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
           return;
         }
         const plotly = module.default as unknown as PlotlyRuntime;
-        loaded = plotly;
         plotlyRef.current = plotly;
         await plotly.react(
           element,
@@ -370,14 +386,20 @@ export const PlotBlock = memo(function PlotBlock({ data }: PlotBlockProps) {
     return () => {
       cancelled = true;
       observer?.disconnect();
-      if (loaded) {
-        loaded.purge(element);
-        if (plotlyRef.current === loaded) {
-          plotlyRef.current = null;
-        }
-      }
     };
   }, [spec, is3d, config]);
+
+  // Purge only when the block leaves the page; a spec change redraws in place
+  // through `plotly.react`, so the old chart stays visible until the new one.
+  useEffect(() => {
+    const element = canvasRef.current;
+    return () => {
+      if (element && plotlyRef.current) {
+        plotlyRef.current.purge(element);
+        plotlyRef.current = null;
+      }
+    };
+  }, []);
 
   if (!spec) {
     return null;

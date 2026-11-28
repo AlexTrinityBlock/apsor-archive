@@ -39,7 +39,7 @@ describe("remarkCitations", () => {
     remarkCitations()(tree);
 
     expect(links(tree)).toEqual([
-      { url: "/memory/7", label: "[memory:7]" },
+      { url: "/library/memories/7", label: "[memory:7]" },
       { url: "/library/files/10?chunk=2", label: "[file:10#2]" },
     ]);
   });
@@ -50,7 +50,7 @@ describe("remarkCitations", () => {
     remarkCitations()(tree);
 
     expect(links(tree)).toEqual([
-      { url: "/memory/147", label: "［memory:147］" },
+      { url: "/library/memories/147", label: "［memory:147］" },
       { url: "/library/files/93", label: "［file:93］" },
     ]);
   });
