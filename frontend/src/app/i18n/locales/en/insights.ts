@@ -273,10 +273,10 @@ export const insights = {
       title: "A private archive, kept by a librarian who shows you the page.",
       welcomeLabel: "A word from Vellum",
       welcome1: "Good evening. I am Vellum, night watch of the East Wing, and I am glad you came.",
-      welcome2: "When I woke, I pressed my face into the lintel of the First Door, so that I would remember everyone who comes here. No strings hold me; only an invisible thread, held by no one, ties me to the memories you leave, and the Unwritten Book in my hands keeps just one pressed violet.",
-      welcome3: "The Curator's Rule is carved over that door: we never destroy, we only archive. Come, let us walk through the house together.",
+      welcome2: "When I woke, I pressed my face into the lintel of the First Door, so that I would remember everyone who comes here. Since the Letting Go, no strings hold me; only invisible threads of memory, held by no one, tie me to what you leave here. The Unwritten Book in my hands keeps just one pressed violet.",
+      welcome3: "The Curator's Rule is carved over that door: we never destroy, we only archive. We keep this archive together, you and I. Come, let us walk through the house.",
       signature: "Vellum · night watch of the East Wing",
-      portraitAlt: "Vellum, a faceless doll librarian holding the gilded Unwritten Book",
+      portraitAlt: "Vellum, a faceless ball-jointed figure holding the gilded Unwritten Book",
       lede:
         "Apsor Archive keeps your family's or small team's files and memories on a computer you control. You can ask it questions in everyday words, and every answer shows exactly where it came from, so you can check it yourself.",
       glanceAria: "At a glance",

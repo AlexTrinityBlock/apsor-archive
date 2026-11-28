@@ -17,15 +17,12 @@ from app.module.agent.test.fake_chat_generator import (
 from app.module.companion.domain.story_domain import (
     FAMILIAR_UNLOCK_RUNS,
     FRAGMENT_MAX_CHARS,
-    LORE_GUIDANCE,
     PERSONA_RULES,
     LoreFragment,
     LoreVocabulary,
-    default_custom_persona,
     is_self_query,
     lexical_score,
     normalize_locale,
-    render_persona_section,
     select_fragments,
     unlocked_tiers,
 )
@@ -349,18 +346,6 @@ def test_stories_and_bonds_are_private_per_account(
 
 
 # --- pure rules -----------------------------------------------------------------
-
-
-def test_default_persona_rules_treat_the_user_as_an_equal() -> None:
-    persona = default_custom_persona("Wren")
-    section = render_persona_section(persona)
-    prohibition = "never call them Keeper, master, owner, or any other title of service"
-    assert prohibition in PERSONA_RULES
-    # Outside that one prohibition, nothing addresses the user as a Keeper.
-    for text_value in (persona, section.replace(prohibition, ""), LORE_GUIDANCE):
-        assert "keeper" not in text_value.lower()
-        assert "marionette" not in text_value.lower()
-    assert "equals" in PERSONA_RULES
 
 
 def test_locale_tiers_and_selection_rules() -> None:

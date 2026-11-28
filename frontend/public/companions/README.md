@@ -1,6 +1,6 @@
 # Chat companion presets
 
-Built-in sprite sets for the chat companion: faceless, ball-jointed doll
+Built-in sprite sets for the chat companion: faceless, ball-jointed figures:
 librarians who stand freely beside the chat and change pose with the agent's
 work. No strings hold them; they move on their own.
 
