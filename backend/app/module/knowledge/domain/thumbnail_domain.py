@@ -8,7 +8,7 @@ output changes so the backfill regenerates older rows.
 
 from dataclasses import dataclass
 
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 THUMBNAIL_MAX_EDGE = 320
 THUMBNAIL_FALLBACK_EDGE = 224
 THUMBNAIL_TARGET_BYTES = 12 * 1024
