@@ -164,6 +164,10 @@ class CompanionPreferenceModel(Base):
             name="opacity_mode_valid",
         ),
         CheckConstraint(
+            "scale IS NULL OR (scale >= 0 AND scale <= 1)",
+            name="scale_range",
+        ),
+        CheckConstraint(
             "selected IS NULL OR char_length(selected) BETWEEN 1 AND 64",
             name="selected_length",
         ),
@@ -211,6 +215,8 @@ class CompanionPreferenceModel(Base):
         default="auto",
         server_default=text("'auto'"),
     )
+    # Continuous display scale (0 compact .. 1 full); NULL means "use ``size``".
+    scale: Mapped[float | None] = mapped_column(Float, nullable=True)
     position_x: Mapped[float | None] = mapped_column(Float, nullable=True)
     position_y: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(

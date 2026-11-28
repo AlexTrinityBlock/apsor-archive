@@ -17,6 +17,7 @@ export interface CompanionPreferenceSchema {
   motion: CompanionPreferenceSchemaMotion;
   opacity_mode: CompanionPreferenceSchemaOpacityMode;
   position: CompanionPositionSchema | null;
+  scale: number | null;
   selected: string | null;
   size: CompanionPreferenceSchemaSize;
   updated_at: string | null;

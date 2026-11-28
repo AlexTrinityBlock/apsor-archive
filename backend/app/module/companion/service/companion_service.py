@@ -17,7 +17,9 @@ from app.module.companion.domain.companion_domain import (
     CompanionSelection,
     frame_storage_key,
     frame_version,
+    normalize_scale,
     parse_selection,
+    size_for_scale,
 )
 from app.module.companion.exception.domain_error import (
     CompanionFrameLimitError,
@@ -294,6 +296,7 @@ class CompanionService:
         enabled = current.enabled if current is not None else True
         motion = current.motion if current is not None else "full"
         size = current.size if current is not None else "full"
+        scale = current.scale if current is not None else None
         opacity_mode = current.opacity_mode if current is not None else "auto"
         position_x = current.position_x if current is not None else None
         position_y = current.position_y if current is not None else None
@@ -306,8 +309,17 @@ class CompanionService:
             enabled = payload.enabled
         if "motion" in fields and payload.motion is not None:
             motion = payload.motion
-        if "size" in fields and payload.size is not None:
+        size_sent = "size" in fields and payload.size is not None
+        scale_sent = "scale" in fields
+        if size_sent and payload.size is not None:
             size = payload.size
+        if scale_sent:
+            scale = normalize_scale(payload.scale) if payload.scale is not None else None
+            if not size_sent and scale is not None:
+                size = size_for_scale(scale)
+        elif size_sent:
+            # A preset button wins over an earlier free-form scale.
+            scale = None
         if "opacity_mode" in fields and payload.opacity_mode is not None:
             opacity_mode = payload.opacity_mode
         if "position" in fields:
@@ -320,6 +332,7 @@ class CompanionService:
             enabled=enabled,
             motion=motion,
             size=size,
+            scale=scale,
             opacity_mode=opacity_mode,
             position_x=position_x,
             position_y=position_y,
@@ -337,6 +350,7 @@ class CompanionService:
                 enabled=True,
                 motion="full",
                 size="full",
+                scale=None,
                 opacity_mode="auto",
                 position=None,
                 updated_at=None,
@@ -355,6 +369,7 @@ class CompanionService:
             enabled=preference.enabled,
             motion=preference.motion,  # type: ignore[arg-type]
             size=preference.size,  # type: ignore[arg-type]
+            scale=preference.scale,
             opacity_mode=preference.opacity_mode,  # type: ignore[arg-type]
             position=position,
             updated_at=preference.updated_at,

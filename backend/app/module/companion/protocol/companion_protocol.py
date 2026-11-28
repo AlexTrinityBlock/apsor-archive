@@ -94,6 +94,7 @@ class CompanionRepositoryProtocol(Protocol):
         enabled: bool,
         motion: str,
         size: str,
+        scale: float | None,
         opacity_mode: str,
         position_x: float | None,
         position_y: float | None,

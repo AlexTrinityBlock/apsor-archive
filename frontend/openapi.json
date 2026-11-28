@@ -2949,6 +2949,17 @@
               }
             ]
           },
+          "scale": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
+          },
           "selected": {
             "anyOf": [
               {
@@ -2987,6 +2998,7 @@
           "enabled",
           "motion",
           "size",
+          "scale",
           "opacity_mode",
           "position",
           "updated_at"
@@ -3050,6 +3062,19 @@
                 "type": "null"
               }
             ]
+          },
+          "scale": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scale"
           },
           "selected": {
             "anyOf": [

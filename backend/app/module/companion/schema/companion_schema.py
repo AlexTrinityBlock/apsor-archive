@@ -116,6 +116,8 @@ class CompanionPreferenceSchema(BaseModel):
     enabled: bool
     motion: CompanionMotion
     size: CompanionSize
+    # Continuous display scale from 0 (compact) to 1 (full); null means "use size".
+    scale: float | None
     opacity_mode: CompanionOpacityMode
     position: CompanionPositionSchema | None
     updated_at: datetime | None
@@ -130,6 +132,9 @@ class CompanionPreferenceUpdateSchema(BaseModel):
     enabled: bool | None = None
     motion: CompanionMotion | None = None
     size: CompanionSize | None = None
+    # Sending only ``scale`` derives ``size``; sending only ``size`` clears
+    # ``scale``; null clears it back to the preset.
+    scale: float | None = Field(default=None, ge=0, le=1)
     opacity_mode: CompanionOpacityMode | None = None
     position: CompanionPositionSchema | None = None
 
