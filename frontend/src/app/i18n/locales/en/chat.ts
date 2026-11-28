@@ -170,7 +170,9 @@ export const chat = {
     earlier: "Earlier",
     listError: "The conversation list could not be read.",
     renamed: "Conversation renamed.",
-    deletedToast: "Conversation deleted.",
+    archivedUndoToast: "Conversation deleted.",
+    undo: "Undo",
+    restoredToast: "Conversation restored.",
     forkToast: "Forked “{title}”.",
     loadingLabel: "Reading the conversation list",
     loading: "Reading the desk…",
@@ -221,6 +223,7 @@ export const chat = {
     errorFallback: "The assistant step failed.",
     runFinished: "The run finished with {reason}.",
     limitStopped: "The run stopped at a tool or token limit.",
+    author: "Apsor Archive Agent",
   },
   transcript: {
     user: "User:",
@@ -330,6 +333,7 @@ export const chat = {
     pageAttached: "This page is already attached to the thread",
     pageCaptured: "Page context captured",
     pageCapturedEntry: "Page context captured · entry #{id}",
+    thinking: "Thinking…",
   },
   tool: {
     noArguments: "no arguments",

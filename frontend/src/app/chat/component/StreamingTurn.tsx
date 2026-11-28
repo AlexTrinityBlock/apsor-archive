@@ -105,6 +105,8 @@ export const StreamingTurn = memo(function StreamingTurn({
       segment.reasoning.trim().length > 0,
   );
   const hasHistory = visibleSegments.length > 0;
+  const running = stream.status === "running";
+  const lastIndex = visibleSegments.at(-1)?.index ?? null;
 
   return (
     <div className="chat-live-turn" aria-busy={stream.status === "running"}>
@@ -121,7 +123,7 @@ export const StreamingTurn = memo(function StreamingTurn({
           <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
             <span className="chat-pulse" />
           </span>
-          <span>Apsor Archive Agent</span>
+          <span>{t("chat.assistant.author")}</span>
           <span className="chat-turn__meta">
             {stream.runId === null
               ? t("chat.streaming.openingRun")
@@ -136,7 +138,16 @@ export const StreamingTurn = memo(function StreamingTurn({
 
         {hasHistory ? (
           <div className="chat-timeline chat-timeline--live">
-            {visibleSegments.map((segment) => (
+            {visibleSegments.map((segment) => {
+              const writing =
+                running &&
+                segment.index === lastIndex &&
+                segment.toolCalls.length === 0;
+              const thinking =
+                writing &&
+                segment.text.trim().length === 0 &&
+                segment.reasoning.trim().length > 0;
+              return (
               <div className="chat-timeline__segment" key={segment.index}>
                 {segment.reasoning.trim().length > 0 ||
                 segment.text.trim().length > 0 ? (
@@ -148,8 +159,20 @@ export const StreamingTurn = memo(function StreamingTurn({
                       text={segment.reasoning}
                       tokens={segment.reasoningTokens}
                     />
+                    {thinking ? (
+                      <p className="chat-live-thinking">
+                        <span className="chat-pulse" aria-hidden="true" />
+                        {t("chat.streaming.thinking")}
+                      </p>
+                    ) : null}
                     {segment.text.trim().length > 0 ? (
-                      <div className="chat-turn__bubble">
+                      <div
+                        className={
+                          writing
+                            ? "chat-turn__bubble is-writing"
+                            : "chat-turn__bubble"
+                        }
+                      >
                         <MarkdownBody
                           markdown={segment.text}
                           memoryTitles={memoryTitles}
@@ -174,7 +197,8 @@ export const StreamingTurn = memo(function StreamingTurn({
                   </div>
                 ) : null}
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : null}
 

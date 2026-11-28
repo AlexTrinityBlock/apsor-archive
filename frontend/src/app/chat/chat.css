@@ -4086,12 +4086,13 @@
 }
 
 /* A blinking caret marks where the live answer is still being written. */
-.chat-live-caret {
+.chat-turn__bubble.is-writing .chat-markdown > :last-child::after {
   display: inline-block;
-  width: 0.5em;
+  width: 0.45em;
   height: 1.05em;
-  margin-left: 2px;
+  margin-left: 3px;
   vertical-align: text-bottom;
+  content: "";
   background: currentColor;
   opacity: 0.55;
   animation: chat-live-caret 1s steps(2, start) infinite;

@@ -1,9 +1,19 @@
-import { memo, useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 
 import { ApiError } from "../../../apis/fetch-client";
 import { Button } from "../../component/Button";
+import { ContextMenu, type ContextMenuItem } from "../../component/ContextMenu";
 import { Icon } from "../../component/Icon";
 import { Loader } from "../../component/Loader";
 import { useToast } from "../../component/Toast";
@@ -34,6 +44,32 @@ interface ConversationRailProps {
 }
 
 type SessionGroup = "today" | "week" | "earlier";
+
+interface SessionMenuState {
+  readonly id: number;
+  readonly x: number;
+  readonly y: number;
+  readonly anchor: HTMLElement;
+}
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Return focus to a session row's link after an inline edit closes. */
+function focusSessionAnchor(conversationId: number): void {
+  window.requestAnimationFrame(() => {
+    document
+      .querySelector<HTMLElement>(`[data-session-anchor="${conversationId}"]`)
+      ?.focus();
+  });
+}
+
+/** Return focus to the header's drawer toggle when the overlay closes. */
+function focusDrawerToggle(): void {
+  window.requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>(".chat-header__drawer")?.focus();
+  });
+}
 
 const GROUP_ORDER: ReadonlyArray<{
   key: SessionGroup;
@@ -103,7 +139,10 @@ export const ConversationRail = memo(function ConversationRail({
   const updateConversation = useUpdateAgentConversation();
   const forkConversation = useForkAgentConversation();
 
-  const [menuId, setMenuId] = useState<number | null>(null);
+  const [menu, setMenu] = useState<SessionMenuState | null>(null);
+  const menuId = menu?.id ?? null;
+  const asideRef = useRef<HTMLElement>(null);
+  const collapseRef = useRef<HTMLButtonElement>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -112,32 +151,49 @@ export const ConversationRail = memo(function ConversationRail({
     () => new Set(),
   );
 
+  // The overlay drawer is a modal: focus enters it, Tab stays inside, and
+  // focus returns to the header toggle when it closes.
+  const wasOverlayOpen = useRef(false);
   useEffect(() => {
-    if (menuId === null) {
+    const overlayOpen = open && overlay;
+    if (overlayOpen) {
+      const frame = window.requestAnimationFrame(() => {
+        collapseRef.current?.focus();
+      });
+      wasOverlayOpen.current = true;
+      return () => window.cancelAnimationFrame(frame);
+    }
+    if (wasOverlayOpen.current) {
+      wasOverlayOpen.current = false;
+      focusDrawerToggle();
+    }
+    return undefined;
+  }, [open, overlay]);
+
+  const trapFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (!overlay || event.key !== "Tab") {
       return;
     }
-    const handlePointer = (event: PointerEvent) => {
-      const target = event.target;
-      if (
-        target instanceof Element &&
-        target.closest(`[data-session-menu="${menuId}"]`) !== null
-      ) {
-        return;
-      }
-      setMenuId(null);
-    };
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setMenuId(null);
-      }
-    };
-    document.addEventListener("pointerdown", handlePointer);
-    document.addEventListener("keydown", handleKey);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointer);
-      document.removeEventListener("keydown", handleKey);
-    };
-  }, [menuId]);
+    const aside = asideRef.current;
+    if (!aside) {
+      return;
+    }
+    const focusable = Array.from(
+      aside.querySelectorAll<HTMLElement>(FOCUSABLE),
+    ).filter((element) => element.offsetParent !== null);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) {
+      return;
+    }
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   const visible = useMemo(
     () => visibleConversations(conversations, removedIds),
@@ -177,6 +233,7 @@ export const ConversationRail = memo(function ConversationRail({
     const nextTitle = editTitle.trim();
     if (nextTitle.length === 0 || nextTitle === conversation.title) {
       setEditingId(null);
+      focusSessionAnchor(conversation.id);
       return;
     }
     setBusyId(conversation.id);
@@ -187,6 +244,7 @@ export const ConversationRail = memo(function ConversationRail({
       });
       await refresh(conversation.id);
       setEditingId(null);
+      focusSessionAnchor(conversation.id);
       toast.success(t("chat.rail.renamed"));
     } catch (caught) {
       toast.error(describeError(caught));
@@ -210,7 +268,12 @@ export const ConversationRail = memo(function ConversationRail({
         data: { status: "archived" },
       });
       await refresh(conversation.id);
-      toast.success(t("chat.rail.deletedToast"));
+      toast.success(t("chat.rail.archivedUndoToast"), {
+        action: {
+          label: t("chat.rail.undo"),
+          onAction: () => void restoreConversation(conversation),
+        },
+      });
       if (activeId === conversation.id) {
         clearLastChatConversation();
         navigate("/chat");
@@ -230,6 +293,74 @@ export const ConversationRail = memo(function ConversationRail({
       setBusyId(null);
     }
   };
+
+  // "Delete" is a soft archive, so Undo simply makes the thread active again.
+  const restoreConversation = async (conversation: AgentConversationSchema) => {
+    try {
+      await updateConversation.mutateAsync({
+        conversationId: conversation.id,
+        data: { status: "active" },
+      });
+      setRemovedIds((current) => {
+        if (!current.has(conversation.id)) {
+          return current;
+        }
+        const next = new Set(current);
+        next.delete(conversation.id);
+        return next;
+      });
+      await refresh(conversation.id);
+      toast.success(t("chat.rail.restoredToast"));
+    } catch (caught) {
+      toast.error(describeError(caught));
+    }
+  };
+
+  const openSessionMenu = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    conversation: AgentConversationSchema,
+  ) => {
+    if (menuId === conversation.id) {
+      setMenu(null);
+      return;
+    }
+    const anchor = event.currentTarget;
+    const rect = anchor.getBoundingClientRect();
+    setMenu({ id: conversation.id, x: rect.left, y: rect.bottom + 4, anchor });
+  };
+
+  const menuConversation =
+    menu === null
+      ? null
+      : (visible.find((conversation) => conversation.id === menu.id) ?? null);
+  const menuItems: readonly ContextMenuItem[] =
+    menuConversation === null
+      ? []
+      : [
+          {
+            id: "rename",
+            label: t("chat.rail.rename"),
+            icon: "pencil",
+            onSelect: () => {
+              setEditingId(menuConversation.id);
+              setEditTitle(menuConversation.title);
+            },
+          },
+          {
+            id: "delete",
+            label: t("chat.rail.delete"),
+            icon: "trash",
+            danger: true,
+            onSelect: () => void deleteConversation(menuConversation),
+          },
+          {
+            id: "fork",
+            label: t("chat.rail.fork"),
+            icon: "branch",
+            disabled: forkingId !== null,
+            onSelect: () => void forkThread(menuConversation),
+          },
+        ];
 
   const forkThread = async (conversation: AgentConversationSchema) => {
     if (busyId !== null || forkingId !== null) {
@@ -339,6 +470,7 @@ export const ConversationRail = memo(function ConversationRail({
                                 event.preventDefault();
                                 event.stopPropagation();
                                 setEditingId(null);
+                                focusSessionAnchor(conversation.id);
                               }
                             }}
                           />
@@ -355,7 +487,10 @@ export const ConversationRail = memo(function ConversationRail({
                               type="button"
                               size="sm"
                               variant="ghost"
-                              onClick={() => setEditingId(null)}
+                              onClick={() => {
+                                setEditingId(null);
+                                focusSessionAnchor(conversation.id);
+                              }}
                             >
                               {t("chat.rail.cancel")}
                             </Button>
@@ -366,8 +501,9 @@ export const ConversationRail = memo(function ConversationRail({
                           <Link
                             className="chat-session__anchor"
                             to={`/chat/${conversation.id}`}
+                            data-session-anchor={conversation.id}
                             onClick={() => {
-                              setMenuId(null);
+                              setMenu(null);
                               onNavigate();
                             }}
                             aria-current={active ? "page" : undefined}
@@ -396,73 +532,29 @@ export const ConversationRail = memo(function ConversationRail({
                             />
                           ) : null}
 
-                          <div
-                            className="chat-session__menu"
-                            data-session-menu={conversation.id}
-                          >
+                          <div className="chat-session__menu">
                             <button
                               type="button"
                               className="chat-session__menu-btn"
-                              onClick={() =>
-                                setMenuId(menuOpen ? null : conversation.id)
+                              onClick={(event) =>
+                                openSessionMenu(event, conversation)
                               }
                               aria-label={t("chat.rail.actionsFor", {
                                 title: conversation.title,
                               })}
+                              aria-haspopup="menu"
                               aria-expanded={menuOpen}
                               disabled={busy || forking}
                             >
-                              <span aria-hidden="true">⋯</span>
+                              {forking ? (
+                                <Loader
+                                  size={12}
+                                  label={t("chat.rail.forkingLabel")}
+                                />
+                              ) : (
+                                <span aria-hidden="true">⋯</span>
+                              )}
                             </button>
-                            {menuOpen ? (
-                              <div
-                                className="chat-session__menu-panel"
-                                role="group"
-                                aria-label={t("chat.rail.actionsFor", {
-                                  title: conversation.title,
-                                })}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setMenuId(null);
-                                    setEditingId(conversation.id);
-                                    setEditTitle(conversation.title);
-                                  }}
-                                >
-                                  <Icon name="pencil" size={13} />
-                                  {t("chat.rail.rename")}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setMenuId(null);
-                                    void deleteConversation(conversation);
-                                  }}
-                                >
-                                  <Icon name="trash" size={13} />
-                                  {t("chat.rail.delete")}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setMenuId(null);
-                                    void forkThread(conversation);
-                                  }}
-                                  title={t("chat.rail.forkTitle")}
-                                >
-                                  {forking ? (
-                                    <Loader
-                                      size={12}
-                                      label={t("chat.rail.forkingLabel")}
-                                    />
-                                  ) : (
-                                    <Icon name="branch" size={13} />
-                                  )}
-                                  {t("chat.rail.fork")}
-                                </button>
-                              </div>
-                            ) : null}
                           </div>
                         </>
                       )}
@@ -477,40 +569,43 @@ export const ConversationRail = memo(function ConversationRail({
     );
   }
 
-  if (!open) {
-    return (
-      <aside
-        id="chat-sessions"
-        className="chat-sessions is-collapsed"
-        aria-hidden="true"
-      />
-    );
-  }
+  const asideClassName = [
+    "chat-sessions",
+    overlay ? "chat-sessions--overlay" : null,
+    open ? "is-open" : "is-collapsed",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const modal = open && overlay;
 
   return (
     <>
-      {overlay ? (
+      {modal ? (
         <button
           type="button"
           className="chat-scrim"
           onClick={onClose}
           aria-label={t("chat.rail.close")}
+          tabIndex={-1}
         />
       ) : null}
       <aside
+        ref={asideRef}
         id="chat-sessions"
-        className={
-          overlay
-            ? "chat-sessions chat-sessions--overlay is-open"
-            : "chat-sessions is-open"
-        }
+        className={asideClassName}
         aria-label={t("chat.rail.aria")}
+        aria-hidden={open ? undefined : true}
+        inert={!open}
+        role={modal ? "dialog" : undefined}
+        aria-modal={modal ? true : undefined}
+        onKeyDown={trapFocus}
       >
         <div className="chat-sessions__head">
           <div className="chat-sessions__head-row">
             <span className="mono-label">{t("chat.rail.heading")}</span>
             <button
               type="button"
+              ref={collapseRef}
               className="chat-sessions__collapse"
               onClick={onClose}
               aria-label={t("chat.rail.collapse")}
@@ -544,6 +639,16 @@ export const ConversationRail = memo(function ConversationRail({
           </span>
         </div>
       </aside>
+      {menu && menuConversation ? (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems}
+          label={t("chat.rail.actionsFor", { title: menuConversation.title })}
+          onClose={() => setMenu(null)}
+          returnFocus={menu.anchor}
+        />
+      ) : null}
     </>
   );
 });

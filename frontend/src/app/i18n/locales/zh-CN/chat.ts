@@ -163,7 +163,9 @@ export const chat = {
     earlier: "更早",
     listError: "无法读取对话列表。",
     renamed: "对话已重命名。",
-    deletedToast: "对话已删除。",
+    archivedUndoToast: "对话已删除。",
+    undo: "撤销",
+    restoredToast: "对话已恢复。",
     forkToast: "已分叉“{title}”。",
     loadingLabel: "正在读取对话列表",
     loading: "正在读取工作桌…",
@@ -214,6 +216,7 @@ export const chat = {
     errorFallback: "助理步骤失败。",
     runFinished: "运行以 {reason} 结束。",
     limitStopped: "运行在工具或 token 上限停止。",
+    author: "Apsor Archive Agent",
   },
   transcript: {
     user: "用户：",
@@ -314,6 +317,7 @@ export const chat = {
     pageAttached: "此页面已经附加到对话串",
     pageCaptured: "已获取页面上下文",
     pageCapturedEntry: "已获取页面上下文 · 条目 #{id}",
+    thinking: "思考中…",
   },
   tool: {
     noArguments: "没有参数",

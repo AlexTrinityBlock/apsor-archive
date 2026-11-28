@@ -120,7 +120,7 @@ export function AssistantEntry({
         <span className="chat-turn__mark chat-turn__mark--agent" aria-hidden="true">
           <Icon name="spark" size={11} />
         </span>
-        <span>Apsor Archive Agent</span>
+        <span>{t("chat.assistant.author")}</span>
         <span className="chat-turn__meta">
           {[meta.provider, meta.model]
             .filter((item): item is string => Boolean(item))
