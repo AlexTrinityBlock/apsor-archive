@@ -76,6 +76,7 @@ import { ConversationRail } from "./component/ConversationRail";
 import { JumpToLatest } from "./component/JumpToLatest";
 import { LeaveRunDialog } from "./component/LeaveRunDialog";
 import { ResourcePreviewDialog } from "./component/ResourcePreviewDialog";
+import { ChatCompanion } from "../companion/component/ChatCompanion";
 import { RetryBar } from "./component/RetryBar";
 import { StreamingTurn } from "./component/StreamingTurn";
 import { StreamErrorBanner, StreamLiveRegion } from "./component/StreamStatus";
@@ -1647,6 +1648,7 @@ export function ChatPage() {
         onStay={stayOnRun}
         onLeave={leaveRun}
       />
+      <ChatCompanion stream={stream} draft={draft} conversationKey={String(conversationId ?? "new")} />
     </div>
   );
 }
