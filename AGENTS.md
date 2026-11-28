@@ -1,6 +1,6 @@
 # Apsor Archive — Agent Guide
 
-Apsor Archive is a local-first, private family/small-team knowledge and memory archive for files, memories, their lineage, and grounded AI answers. One root account manages membership and global runtime settings; every account has its own private archive. This file is the repository-wide orientation and guardrail sheet; product behavior and API detail belong in the READMEs.
+Apsor Archive is a local-first, private family/small-team knowledge and memory archive for files, memories, their lineage, and grounded AI answers. One root account manages membership and global runtime settings; every account has its own private archive. This file is the repository-wide orientation and guardrail sheet; product behavior and API detail belong in the READMEs and `docs/`.
 
 ## Purpose
 
@@ -25,7 +25,8 @@ Use this guide to choose the right subsystem, respect cross-cutting invariants, 
 
 ## Key files
 
-- `README.md` — product behavior, feature surface, and operator-facing setup.
+- `README.md` — short product overview and quick start; the deep reference lives in `docs/` (`deployment.md`, `configuration.md`, `features.md`, `architecture.md`, `development.md`, `security.md`, `cloudflare-tunnel.md`).
+- `docker-compose.local.yml` / `docker-stack.yml` — home-network override (no tunnel, port 8080) and the single-node Docker Swarm stack.
 - `Makefile` — canonical lint, test, build, API-contract, and Compose commands.
 - `backend/AGENTS.md` — backend service rules and verification.
 - `frontend/AGENTS.md` — frontend architecture, generated-client, and UI rules.
@@ -43,7 +44,7 @@ Use this guide to choose the right subsystem, respect cross-cutting invariants, 
 - **Keep the validation envelope stable.** Request validation is normalized by the backend to `400 invalid_request`; domain failures use the shared `{status, error, detail}` envelope with stable machine-readable `error` codes.
 - **Chat models are per-account assignments.** `app_user` stores the primary and auxiliary `chat_provider_config` row ids, free-text model/effort, and optional context and compaction budgets. Resolution is by exact endpoint row id with no global or environment chat fallback; the auxiliary slot inherits the primary only when both auxiliary fields are NULL. Provider rows remain global root-write configuration, and an endpoint's key is shared by every account assigned to it.
 - **Respect the account boundary.** The supported product is one local deployment with exactly one root and any number of normal accounts, each with one private archive. Do not add tenants, workspaces, memberships, shared archives, or per-user provider keys without an explicit product change. Root account management is not a data-access grant, but password reset and explicit impersonation are trusted-recovery capabilities that can transfer sign-in access; impersonation is visible, uses a marked target session, and requires the root password to end. Treat root as the highest-trust credential and never describe RLS as protection against a malicious root. Companion administration is the one documented data exception: under `/api/v1/admin/companions` root's transaction also carries `app.admin_scope = 'companion'`, which lets RLS expose companion tables (choice, progress, overrides, life-story jobs, and generated life-story text) across accounts but never the archive tables; every full-text read of a life story and every per-account companion change is appended to `companion_admin_access_log`, and the account's Companion page says so.
-- **English is canonical; Chinese mirrors it completely.** Code, comments, docstrings, commit messages, PR titles and bodies, and documentation are written in English. Traditional (zh-TW) and Simplified (zh-CN) Chinese appear only in `frontend/src/app/i18n/locales/` and in translation files that mirror an English source: `README.zh-TW.md`, `README.zh-CN.md`, and `backend/app/module/companion/lore/zh-TW/` and `zh-CN/`. Translations stay complete: a change to an English source updates its translations in the same change. User archive content is never translated.
+- **English is canonical; Chinese mirrors it completely.** Code, comments, docstrings, commit messages, PR titles and bodies, and documentation are written in English. Traditional (zh-TW) and Simplified (zh-CN) Chinese appear only in `frontend/src/app/i18n/locales/` and in translation files that mirror an English source: `README.zh-TW.md`, `README.zh-CN.md`, `docs/zh-TW/`, `docs/zh-CN/`, and `backend/app/module/companion/lore/zh-TW/` and `zh-CN/`. Translations stay complete: a change to an English source updates its translations in the same change. User archive content is never translated.
 - **Archive content is not UI copy.** Frontend UI strings exist in English, Traditional Chinese, and Simplified Chinese; user content, file names, citations, raw URLs, and model output are never translated. Run `bun run i18n:check` after locale changes.
 - **Keep tests offline and isolated.** Provider tests use injected fakes. Never call DeepSeek, OpenAI, Anthropic, Tavily, Exa, or a live archive database from tests.
 - **Gitflow:** branch `feat/*` or `fix/*` from `develop` and merge back through a PR; `develop` merges into `main` for release; `hotfix/*` branches from `main` and merges into both.
