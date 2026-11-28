@@ -119,7 +119,7 @@ class CompanionLoreRecall:
             target = await self.stories.resolve(self.companion_ref)
         except CompanionRefNotFoundError:  # a deleted custom companion has no lore
             return []
-        fragments = await self.stories.fragments(target, self.locale)
+        fragments = await self.stories.fragments(target, self.locale, include_generated=True)
         if not fragments:
             return []
         unlocked = (await self.stories.bond(target.ref)).unlocked_tiers(config)
@@ -166,7 +166,7 @@ class CompanionLoreRecall:
         bond = await self.stories.bond(target.ref)
         if not story_moment_due(bond, config):
             return None
-        fragments = await self.stories.fragments(target, self.locale)
+        fragments = await self.stories.fragments(target, self.locale, include_generated=True)
         told = await self.stories.told(target.ref)
         upcoming = next_untold(fragments, bond.unlocked_tiers(config), told, limit=1)
         if not upcoming:

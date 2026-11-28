@@ -43,6 +43,7 @@ from app.module.companion.protocol.companion_story_protocol import (
     CompanionLookupProtocol,
     CompanionStoryRepositoryProtocol,
 )
+from app.module.companion.protocol.life_story_protocol import GeneratedStorySourceProtocol
 from app.module.companion.schema.companion_story_schema import (
     CompanionBondSchema,
     CompanionLoreCreateSchema,
@@ -108,11 +109,14 @@ class CompanionStoryService:
         companions: CompanionLookupProtocol,
         user_id: int,
         config: CompanionStoryConfig = DEFAULT_STORY_CONFIG,
+        generated: GeneratedStorySourceProtocol | None = None,
     ) -> None:
         self.repository = repository
         self.companions = companions
         self.user_id = user_id
         self.config = config
+        # Published life stories written for this account (``g-<id>`` lore).
+        self.generated = generated
 
     # --- resolution -------------------------------------------------------
 
@@ -195,14 +199,40 @@ class CompanionStoryService:
                 )
         return ()
 
-    async def fragments(self, target: StoryTarget, locale: str) -> tuple[LoreFragment, ...]:
-        """Return the lore in effect for this account and locale."""
+    async def fragments(
+        self,
+        target: StoryTarget,
+        locale: str,
+        *,
+        include_generated: bool = False,
+    ) -> tuple[LoreFragment, ...]:
+        """Return the lore in effect for this account and locale.
+
+        ``include_generated`` appends the account's published life stories for
+        this companion and locale, so recall and pacing treat them like any
+        other lore item. Editing surfaces leave it off.
+        """
         story = await self._story(target, locale)
         if story is not None and story.lore_customized:
-            return tuple(
+            items = tuple(
                 _fragment_from_row(row) for row in await self.repository.list_fragments(story.id)
             )
-        return await self.default_fragments(target, locale)
+        else:
+            items = await self.default_fragments(target, locale)
+        if not include_generated or self.generated is None:
+            return items
+        generated = await self.generated.list_published(target.ref, locale)
+        return items + tuple(
+            LoreFragment(
+                key=row.fragment_key,
+                text=row.text,
+                themes=normalize_themes(str(item) for item in (row.themes or [])),
+                tier=row.tier,  # type: ignore[arg-type]
+                origin="generated",
+            )
+            for row in generated
+            if not row.fragment_key.startswith("g-pending-")
+        )
 
     async def persona(self, target: StoryTarget, locale: str) -> tuple[str, bool]:
         """Return the persona in effect and whether it is the default."""

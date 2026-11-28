@@ -87,6 +87,7 @@ from app.module.companion.dependencies import (
     build_companion_story_service,
     build_lore_recall,
     build_story_config_provider,
+    record_companion_run,
 )
 from app.module.companion.domain.story_domain import normalize_locale, render_persona_section
 from app.module.companion.service.lore_recall import CompanionLoreRecall
@@ -459,10 +460,15 @@ class _CompanionRunObserver:
             ).conversation_companion(conversation_id)
             if frozen is None:
                 return
-            await build_companion_story_service(
+            companion_ref, locale = frozen
+            await record_companion_run(
+                self.state,
                 session,
                 user_id=self.user_id,
-            ).record_completed_run(frozen[0])
+                companion_ref=companion_ref,
+                locale=locale,
+                conversation_id=conversation_id,
+            )
 
     async def story_moment(self, conversation_id: int) -> LibrarianMemory | None:
         """Return the companion's next untold fragment when a story moment is due."""

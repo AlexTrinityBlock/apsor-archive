@@ -35,7 +35,11 @@ from app.infrastructure.security.secret_cipher import SecretCipher
 from app.module.agent.dependencies import load_agent_runtime_config
 from app.module.agent.service.chat_attachment_cleanup import ChatAttachmentCleanup
 from app.module.agent.service.history_indexer import AgentHistoryIndexer
-from app.module.companion.dependencies import build_lore_vector_warmer
+from app.module.companion.dependencies import (
+    build_life_story_worker,
+    build_lore_vector_warmer,
+)
+from app.module.companion.service.life_story_worker import LifeStoryWorker
 from app.module.companion.service.lore_vectors import LoreVectorWarmer
 from app.module.knowledge.dependencies import (
     build_history_chunk_store,
@@ -137,6 +141,8 @@ class BackgroundServices:
     consumer: RabbitMQJobConsumer | None = None
     # Only the dedicated worker process starts the backfill (see worker.py).
     thumbnail_backfill: FileThumbnailBackfill | None = None
+    # --- C: life stories --- written only by the dedicated worker.
+    life_stories: LifeStoryWorker | None = None
     _tasks: list[asyncio.Task[None]] = field(default_factory=list)
 
     def _spawn(self, coroutine: Coroutine[Any, Any, None], name: str) -> None:
@@ -162,6 +168,11 @@ class BackgroundServices:
                 self.thumbnail_backfill.run_forever(stop_event),
                 "file-thumbnail-backfill",
             )
+
+    def start_life_stories(self, stop_event: asyncio.Event | None) -> None:
+        """Start the life-story writer loop (dedicated worker only)."""
+        if self.life_stories is not None:
+            self._spawn(self.life_stories.run_forever(stop_event), "companion-life-stories")
 
     def start_worker_loop(self) -> None:
         """Run the ingestion poller as a background task (API dev mode)."""
@@ -204,6 +215,7 @@ async def build_background_services(state: State, settings: Settings) -> Backgro
         cleanup=cleanup,
         history_indexer=history_indexer,
         lore_warmer=build_lore_vector_warmer(state),
+        life_stories=build_life_story_worker(state),
         thumbnail_backfill=(
             build_thumbnail_backfill(state, database)
             if settings.thumbnail_backfill_enabled

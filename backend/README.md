@@ -993,6 +993,60 @@ metadata only and never gate recall.
 Errors: `companion_not_found` (unknown or foreign reference),
 `companion_lore_not_found`, `companion_lore_limit`, and `400 invalid_request`.
 
+### Life stories
+
+Every few conversations with a companion, the dedicated worker writes a short
+life story: the librarians' world opens an illusory door onto a corner of the
+account's own life. The API only counts and queues; it never calls a model for
+this.
+
+- **Counting and queueing.** After a run settles, the run observer counts it
+  toward the bond and counts its conversation once (`companion_bond.conversations`;
+  conversation ids only increase). When `conversations −
+  last_life_story_conversations ≥ every_conversations`, no job is active, and
+  fewer than `max_per_30d` jobs started in the last 30 days, one
+  `companion_story_job` is inserted with `trigger_key =
+  cadence:<ref>:<conversations>` (`ON CONFLICT DO NOTHING`, so a repeat is a
+  no-op).
+- **The job** (`LifeStoryWorker`, worker only). A maintenance session settles
+  cancellations, recovers expired leases (requeue below `max_attempts`, else
+  `failed`/`lease_expired`), and claims one job with `FOR UPDATE SKIP LOCKED`.
+  The work then runs in the owner's session in three short phases, so no
+  transaction is open during the model call:
+  1. *Prepare*: cancel and idempotency checks; the companion's persona; up to
+     `memory_limit` of the owner's own active memories and current files
+     (recent ones plus one search seeded by the companion's lore themes,
+     excluding items earlier stories used), clipped to `memory_chars`; a canon
+     digest (`character:<preset>`, `world`, `glossary`) clipped to
+     `canon_chars`; the account's own auxiliary model with no global fallback;
+     the chat allowance.
+  2. *Write*: one call through `MeteredTextGenerator`, which checks and records
+     the chat allowance.
+  3. *Save*: cancel check; the output is judged (title line, citation markup
+     stripped, length clipped to `max_chars`, banned forms of address such as
+     Keeper or 館主 rejected) and stored in `companion_generated_story` as
+     lore item `g-<id>` (`draft` when `require_review`, else `published`), with
+     tier, locale, model, token counts, and `source_refs` holding ids and counts
+     only. The bond's `last_life_story_conversations` is stamped.
+- **Outcomes.** `skipped` with `disabled`, `companion_not_found`,
+  `no_material`, `model_not_assigned`, or `quota`; `failed` with
+  `provider_rejected`, `template_invalid`, `internal_error`, or a judging code
+  (`story_too_short`, `story_banned_address`) once attempts run out; retryable
+  provider errors and judging failures requeue with exponential backoff
+  (60 s doubling, capped at one hour). Logs carry ids and codes, never prompt,
+  memory, or story text.
+- **Surfacing.** Published stories join the companion's lore for that locale in
+  recall and story moments (`fragments(..., include_generated=True)`); editing
+  surfaces do not list them.
+- **Configuration.** All knobs live in `LifeStoryConfig` on the runtime config
+  (enabled, every_conversations, tier, max_per_30d, memory_limit,
+  memory_chars, canon_chars, max_output_tokens, max_chars, require_review,
+  poll_seconds, max_attempts). The prompt templates are
+  `life_story_system` / `life_story_user` (placeholders `{companion_name}`,
+  `{persona}`, `{canon}`, `{memories}`, `{language}`, `{max_chars}`); their
+  seeds live in `app/module/companion/lore/seed/templates/`.
+- `apsor-archive worker --once` reports `life_stories=<n>`.
+
 ### Tool result preview data
 
 `pi.tool-result.data` is UI-only and is never sent to the provider. It contains
