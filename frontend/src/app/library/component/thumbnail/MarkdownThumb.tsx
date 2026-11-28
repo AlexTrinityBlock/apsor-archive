@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 
 import { useElementWidth } from "../../../viewer/component/useElementWidth";
 import { fetchViewerText, fileContentUrl } from "../../../viewer/component/viewer-utils";
-import { extractMarkdownSnippet } from "./markdown-snippet";
+import { extractMarkdownSnippet, extractTextSnippet } from "./markdown-snippet";
 import {
   getMarkdownSnippet,
   setMarkdownSnippet,
@@ -36,6 +36,8 @@ interface MarkdownThumbProps {
   readonly fileId: number;
   readonly cacheKey: string;
   readonly onFailure: () => void;
+  /** Show the first lines verbatim (plain text, CSV, JSON) instead of Markdown. */
+  readonly plain?: boolean;
 }
 
 /**
@@ -47,7 +49,7 @@ interface MarkdownThumbProps {
  * plain text so a decorative thumbnail can never navigate. The page is scaled
  * from a fixed 320px layout and continues past a bottom fade.
  */
-export function MarkdownThumb({ fileId, cacheKey, onFailure }: MarkdownThumbProps) {
+export function MarkdownThumb({ fileId, cacheKey, onFailure, plain = false }: MarkdownThumbProps) {
   const [setHostElement, hostWidth] = useElementWidth<HTMLSpanElement>();
   const [state, setState] = useState<SnippetState>(() => initialState(cacheKey));
   const onFailureRef = useRef(onFailure);
@@ -73,7 +75,7 @@ export function MarkdownThumb({ fileId, cacheKey, onFailure }: MarkdownThumbProp
         if (disposed) {
           return;
         }
-        const text = extractMarkdownSnippet(source);
+        const text = plain ? extractTextSnippet(source) : extractMarkdownSnippet(source);
         setMarkdownSnippet(cacheKey, text);
         setState({ kind: "ready", text });
       },
@@ -90,7 +92,7 @@ export function MarkdownThumb({ fileId, cacheKey, onFailure }: MarkdownThumbProp
       disposed = true;
       controller.abort();
     };
-  }, [cacheKey, fileId, state.kind]);
+  }, [cacheKey, fileId, plain, state.kind]);
 
   const ready = state.kind === "ready";
   const scale = hostWidth > 0 ? hostWidth / MARKDOWN_PAGE_WIDTH : 0;
@@ -110,6 +112,11 @@ export function MarkdownThumb({ fileId, cacheKey, onFailure }: MarkdownThumbProp
               transform: `scale(${scale})`,
             }}
           >
+            {plain ? (
+              <span className="library-markdown-thumb library-markdown-thumb--plain">
+                {state.text}
+              </span>
+            ) : (
             <span className="library-markdown-thumb">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -124,6 +131,7 @@ export function MarkdownThumb({ fileId, cacheKey, onFailure }: MarkdownThumbProp
                 {state.text}
               </ReactMarkdown>
             </span>
+            )}
           </span>
           <span className="library-thumb__markdown-fade" />
         </>

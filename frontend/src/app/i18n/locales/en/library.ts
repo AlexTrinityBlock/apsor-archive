@@ -532,6 +532,13 @@ export const library = {
     loadingDefault: "Opening the file",
     errorsEyebrow: "Preview interrupted",
     retry: "Try again",
+    boundary: {
+      title: "This preview could not be shown",
+      body: "Something went wrong while drawing this file. The rest of the page still works; try again or download the original.",
+      updatedTitle: "Apsor Archive was just updated",
+      updatedBody: "This tab is still running the previous version, so part of the viewer is missing. Reload to continue.",
+      reload: "Reload",
+    },
     downloadOriginal: "Download original",
     errorFallback: "The archive could not open this resource.",
     kind: {
@@ -604,6 +611,7 @@ export const library = {
     markdown: {
       untitled: "untitled",
       imagePlaceholder: "[image: {alt}]",
+      renderFallback: "This Markdown could not be formatted, so it is shown as plain text.",
     },
     zoomOut: "Zoom out",
     zoomIn: "Zoom in",

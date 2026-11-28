@@ -284,6 +284,32 @@
   padding-left: 1.4em;
 }
 
+/* The global reset strips list markers; Markdown lists need them back. */
+.viewer-markdown ul {
+  list-style: disc;
+}
+
+.viewer-markdown ul ul {
+  list-style: circle;
+}
+
+.viewer-markdown ol {
+  list-style: decimal;
+}
+
+.viewer-markdown li::marker {
+  color: var(--mono-l3);
+}
+
+.viewer-markdown li > input[type="checkbox"] {
+  margin-right: 0.4em;
+}
+
+.viewer-markdown ul:has(> li > input[type="checkbox"]) {
+  list-style: none;
+  padding-left: 0.2em;
+}
+
 .viewer-markdown li + li {
   margin-top: 0.25em;
 }

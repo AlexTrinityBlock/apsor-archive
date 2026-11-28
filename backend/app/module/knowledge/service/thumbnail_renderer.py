@@ -38,6 +38,8 @@ ThumbnailRenderer = Callable[[bytes, str], RenderedThumbnail | None]
 # Render PDF pages a little larger than the thumbnail, then downsample with
 # LANCZOS for a sharper result than rendering straight at the target size.
 _PDF_RENDER_EDGE = THUMBNAIL_MAX_EDGE * 2
+# Embedded previews whose grey levels span no more than this are placeholders.
+BLANK_PREVIEW_RANGE = 6
 
 
 def render_thumbnail(data: bytes, extension: str) -> RenderedThumbnail | None:
@@ -48,12 +50,35 @@ def render_thumbnail(data: bytes, extension: str) -> RenderedThumbnail | None:
     if ext in PDF_THUMBNAIL_EXTENSIONS:
         return _encode(_render_pdf_first_page(data))
     if ext in OFFICE_THUMBNAIL_EXTENSIONS:
-        preview = _embedded_preview(data, OFFICE_PREVIEW_PARTS)
-        return None if preview is None else _encode(_open_image(preview))
+        return _encode_embedded(_embedded_preview(data, OFFICE_PREVIEW_PARTS))
     if ext in OPENDOCUMENT_THUMBNAIL_EXTENSIONS:
-        preview = _embedded_preview(data, OPENDOCUMENT_PREVIEW_PARTS)
-        return None if preview is None else _encode(_open_image(preview))
+        return _encode_embedded(_embedded_preview(data, OPENDOCUMENT_PREVIEW_PARTS))
     return None
+
+
+def _encode_embedded(preview: bytes | None) -> RenderedThumbnail | None:
+    """Encode an embedded preview, treating a blank placeholder as no preview.
+
+    Many generators (python-docx/python-pptx templates, some exporters) embed a
+    single-colour placeholder ``docProps/thumbnail``. A blank card is worse than
+    none: returning ``None`` lets the client render the real first page.
+    """
+    if preview is None:
+        return None
+    image = _open_image(preview)
+    if _is_blank(image):
+        return None
+    return _encode(image)
+
+
+def _is_blank(image: Image.Image) -> bool:
+    """True when the image is a near-uniform placeholder."""
+    grey = image.convert("L")
+    grey.thumbnail((64, 64))
+    extrema = grey.getextrema()
+    if isinstance(extrema[0], tuple):  # multi-band; cannot happen after "L"
+        return False
+    return float(extrema[1]) - float(extrema[0]) <= BLANK_PREVIEW_RANGE
 
 
 def _open_image(data: bytes) -> Image.Image:

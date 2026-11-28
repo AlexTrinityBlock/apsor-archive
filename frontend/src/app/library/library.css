@@ -1254,6 +1254,13 @@ button.library-crumb:hover {
   line-height: 1.55;
 }
 
+.library-markdown-thumb--plain {
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mono-ink);
+}
+
 .library-markdown-thumb > :first-child {
   margin-top: 0;
 }

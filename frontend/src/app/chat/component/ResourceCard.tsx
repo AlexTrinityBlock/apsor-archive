@@ -1,11 +1,11 @@
 import {
-  lazy,
   memo,
   Suspense,
   useCallback,
   useState,
   type ReactNode,
 } from "react";
+import { lazyRetry } from "../../component/chunk-error";
 import { Link } from "react-router-dom";
 
 import { Icon, type IconName } from "../../component/Icon";
@@ -37,7 +37,7 @@ const PRESENTED_LABEL_KEYS = {
   memory: "chat.resource.presentedMemory",
 } as const;
 
-const ResourcePdfThumb = lazy(() =>
+const ResourcePdfThumb = lazyRetry(() =>
   import("./ResourcePdfThumb").then((module) => ({
     default: module.ResourcePdfThumb,
   })),
