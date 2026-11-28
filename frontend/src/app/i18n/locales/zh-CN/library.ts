@@ -676,7 +676,7 @@ export const library = {
     editing: "正在编辑 Markdown",
     folderLabel: "文件夹",
     fileNameLabel: "文件名",
-    fileNamePlaceholder: "untitled.md",
+    fileNamePlaceholder: "未命名.md",
     fileNameError: "请输入不含斜线的单个文件名；“.”和“..”不能作为文件名。",
     write: "撰写",
     preview: "预览",

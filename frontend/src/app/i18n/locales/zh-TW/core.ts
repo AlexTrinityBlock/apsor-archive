@@ -6,7 +6,7 @@
 export const core = {
   app: {
     name: "Apsor Archive",
-    studio: "Archive Studio",
+    studio: "檔案館工作室",
   },
   boot: {
     missingRoot: "index.html 中缺少檔案館的根元素。",

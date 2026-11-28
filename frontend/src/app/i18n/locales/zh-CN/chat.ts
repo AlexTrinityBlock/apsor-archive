@@ -216,7 +216,7 @@ export const chat = {
     errorFallback: "助理步骤失败。",
     runFinished: "运行以 {reason} 结束。",
     limitStopped: "运行在工具或 token 上限停止。",
-    author: "Apsor Archive Agent",
+    author: "Apsor Archive 代理",
   },
   transcript: {
     user: "用户：",
@@ -378,7 +378,7 @@ export const chat = {
     noTarget: "没有记录目标",
     presentedFile: "展示的文件",
     presentedMemory: "展示的记忆",
-    memoryBadge: "MEM",
+    memoryBadge: "记忆",
     previewHint: "打开预览",
     previewAria: "预览 {title}",
     previewEyebrow: "资源预览",

@@ -676,7 +676,7 @@ export const library = {
     editing: "正在編輯 Markdown",
     folderLabel: "資料夾",
     fileNameLabel: "檔名",
-    fileNamePlaceholder: "untitled.md",
+    fileNamePlaceholder: "未命名.md",
     fileNameError: "請輸入不含斜線的單一檔名；「.」與「..」不能作為檔名。",
     write: "撰寫",
     preview: "預覽",
