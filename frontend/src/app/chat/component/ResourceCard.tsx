@@ -4,6 +4,7 @@ import {
   Suspense,
   useCallback,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { Link } from "react-router-dom";
@@ -113,35 +114,132 @@ function thumbnailBadge(kind: ViewerKind, title: string | null): string {
   }
 }
 
+/**
+ * A small server-rendered preview for a presented file.
+ *
+ * THUMBNAIL SEAM: nothing produces this yet, so every caller passes `null`.
+ * The WebP-thumbnail workstream fills it from the file's thumbnail metadata;
+ * when present it is shown immediately in a box sized from `width`/`height`,
+ * and the full preview (image original or PDF page) layers over it once
+ * loaded, so the card never changes size or flashes empty.
+ */
+export interface ResourceThumbnail {
+  readonly url: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Box ratio for an image card before its original loads. */
+const IMAGE_FRAME_RATIO = "4 / 3";
+
+function frameStyle(thumbnail: ResourceThumbnail | null): CSSProperties | undefined {
+  if (thumbnail === null || thumbnail.width <= 0 || thumbnail.height <= 0) {
+    return undefined;
+  }
+  return { aspectRatio: `${thumbnail.width} / ${thumbnail.height}` };
+}
+
+/** The reserved A4 sheet a PDF card shows until page 1 is drawn. */
+function PdfPendingSheet() {
+  return (
+    <span
+      className="chat-resource__thumb chat-resource__thumb--pdf"
+      aria-hidden="true"
+    >
+      <span className="chat-resource__pdf-pending" />
+    </span>
+  );
+}
+
+/**
+ * Chooses the preview for one presented resource, in a fixed order:
+ * server thumbnail (future WebP) → image original → PDF page 1 → type tile.
+ * Every visual branch reserves its final box up front, so loading never
+ * shifts the transcript.
+ */
 function ResourceThumb({
   resource,
   kind,
+  thumbnail = null,
 }: {
   readonly resource: ResourceMeta;
   readonly kind: ViewerKind | null;
+  readonly thumbnail?: ResourceThumbnail | null;
 }) {
   const { t } = useI18n();
   const [failed, setFailed] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const handlePdfError = useCallback(() => setFailed(true), []);
   const resourceId = resource.resourceId;
-  const isImage = kind === "image" && resourceId !== null;
+  const isFile = resource.resourceType === "file" && resourceId !== null;
   const title = resource.title ?? t(RESOURCE_LABEL_KEYS[resource.resourceType]);
 
-  if (isImage && !failed) {
+  if (isFile && kind === "image" && !failed) {
     return (
-      <span className="chat-resource__thumb chat-resource__thumb--image">
-        {imageLoaded ? null : (
+      <span
+        className="chat-resource__thumb chat-resource__thumb--image"
+        style={frameStyle(thumbnail) ?? { aspectRatio: IMAGE_FRAME_RATIO }}
+      >
+        {thumbnail ? (
+          <img
+            className="chat-resource__thumb-base"
+            src={thumbnail.url}
+            alt=""
+            decoding="async"
+            draggable={false}
+          />
+        ) : null}
+        {imageLoaded || thumbnail ? null : (
           <span className="chat-resource__thumb-loading" aria-hidden="true">
             <Loader size={18} className="chat-resource__thumb-loader" />
           </span>
         )}
         <img
+          className={
+            imageLoaded
+              ? "chat-resource__thumb-full is-loaded"
+              : "chat-resource__thumb-full"
+          }
           src={fileContentUrl(resourceId)}
           alt=""
           loading="lazy"
           decoding="async"
           onLoad={() => setImageLoaded(true)}
+          onError={() => setFailed(true)}
+        />
+      </span>
+    );
+  }
+
+  // A PDF shows its first page instead of a generic file tile. The lazy chunk
+  // keeps pdf.js out of the transcript until a PDF is actually presented, and
+  // the fallback already has the final A4 size.
+  if (isFile && kind === "pdf" && !failed) {
+    return (
+      <Suspense fallback={<PdfPendingSheet />}>
+        <ResourcePdfThumb
+          fileId={resourceId}
+          thumbnail={thumbnail}
+          onError={handlePdfError}
+        />
+      </Suspense>
+    );
+  }
+
+  // Office documents and other kinds use the thumbnail directly when one
+  // exists; there is no heavier preview to layer over it in the transcript.
+  if (isFile && thumbnail && !failed) {
+    return (
+      <span
+        className="chat-resource__thumb chat-resource__thumb--image"
+        style={frameStyle(thumbnail)}
+      >
+        <img
+          className="chat-resource__thumb-base"
+          src={thumbnail.url}
+          alt=""
+          decoding="async"
+          draggable={false}
           onError={() => setFailed(true)}
         />
       </span>
@@ -158,22 +256,7 @@ function ResourceThumb({
     resource.resourceType === "memory"
       ? t("chat.resource.memoryBadge")
       : thumbnailBadge(kind ?? "unsupported", resource.title);
-  const tile = <FileTile icon={icon} badge={badge} title={title} />;
-
-  // A PDF shows its first page instead of a generic file tile. The lazy chunk
-  // keeps pdf.js out of the transcript until a PDF is actually presented.
-  if (resource.resourceType === "file" && kind === "pdf" && resourceId !== null) {
-    if (failed) {
-      return tile;
-    }
-    return (
-      <Suspense fallback={tile}>
-        <ResourcePdfThumb fileId={resourceId} onError={handlePdfError} />
-      </Suspense>
-    );
-  }
-
-  return tile;
+  return <FileTile icon={icon} badge={badge} title={title} />;
 }
 
 interface ResourceCardProps {
@@ -232,7 +315,8 @@ export const ResourceCard = memo(function ResourceCard({
   const body = (
     <>
       <span className="chat-resource__preview">
-        <ResourceThumb resource={resource} kind={kind} />
+        {/* Thumbnail seam: always null until server thumbnails exist. */}
+        <ResourceThumb resource={resource} kind={kind} thumbnail={null} />
       </span>
       <span className="chat-resource__body">
         <span className="chat-resource__body-text">

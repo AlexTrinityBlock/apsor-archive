@@ -1,8 +1,25 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 
 import { Icon } from "../../component/Icon";
 import { useI18n } from "../../i18n";
 import type { ChatAttachmentView } from "../types";
+
+const MAX_EDGE = 240;
+
+/**
+ * Reserve the rendered box before the image loads: the stored pixel size is
+ * scaled into the 240px frame so the transcript does not jump on load.
+ */
+function reservedStyle(width: number, height: number): CSSProperties | undefined {
+  if (width <= 0 || height <= 0) {
+    return undefined;
+  }
+  const scale = Math.min(1, MAX_EDGE / width, MAX_EDGE / height);
+  return {
+    width: `min(${Math.round(width * scale)}px, 100%)`,
+    aspectRatio: `${width} / ${height}`,
+  };
+}
 
 interface ChatImageProps {
   readonly attachment: ChatAttachmentView;
@@ -40,6 +57,11 @@ export function ChatImage({ attachment, compact = false }: ChatImageProps) {
         alt={attachment.fileName}
         width={attachment.width}
         height={attachment.height}
+        style={
+          compact
+            ? undefined
+            : reservedStyle(attachment.width, attachment.height)
+        }
         loading="lazy"
         decoding="async"
         onError={() => setFailed(true)}

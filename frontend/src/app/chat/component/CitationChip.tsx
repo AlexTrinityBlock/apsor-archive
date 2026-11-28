@@ -96,6 +96,12 @@ interface CitationChipProps {
   readonly memoryTitle?: string | null;
   /** When present, the chip opens an in-app surface instead of navigating. */
   readonly onOpen?: (token: CitationToken) => void;
+  /**
+   * Replaces the kind icon in the fixed leading slot (for example a tiny file
+   * thumbnail). The slot keeps the icon's size so a late image never reflows
+   * the sentence around the chip.
+   */
+  readonly leading?: ReactNode;
 }
 
 /** A citation token rendered as a preview trigger or a resolved link. */
@@ -105,6 +111,7 @@ export function CitationChip({
   fileTitle,
   memoryTitle,
   onOpen,
+  leading,
 }: CitationChipProps) {
   const { t } = useI18n();
   const needsMemoryTitle = token.kind === "memory" && !memoryTitle;
@@ -159,7 +166,7 @@ export function CitationChip({
   const className = `citation-chip ${token.kind}`;
   const content = (
     <>
-      <Icon name={CITATION_ICONS[token.kind]} size={11} />
+      {leading ?? <Icon name={CITATION_ICONS[token.kind]} size={11} />}
       <span className="citation-chip__label" title={chipTitle}>
         {text}
       </span>

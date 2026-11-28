@@ -4,6 +4,7 @@ import { Document, Page } from "react-pdf";
 import { PDF_THUMB_OPTIONS } from "../../viewer/pdfjs-config";
 import { useElementWidth } from "../../viewer/component/useElementWidth";
 import { fileContentUrl } from "../../viewer/component/viewer-utils";
+import type { ResourceThumbnail } from "./ResourceCard";
 
 // Keep a portrait page readable without letting it dominate a wide transcript.
 // The rendered width follows the card, so a phone gets a full-width page too.
@@ -11,6 +12,8 @@ const PREVIEW_MAX_WIDTH = 420;
 
 interface ResourcePdfThumbProps {
   readonly fileId: number;
+  /** Optional server thumbnail shown in the sheet until page 1 is drawn. */
+  readonly thumbnail?: ResourceThumbnail | null;
   readonly onError: () => void;
 }
 
@@ -23,6 +26,7 @@ interface ResourcePdfThumbProps {
  */
 export const ResourcePdfThumb = memo(function ResourcePdfThumb({
   fileId,
+  thumbnail = null,
   onError,
 }: ResourcePdfThumbProps) {
   const [setMeasuredElement, measuredWidth] =
@@ -71,6 +75,21 @@ export const ResourcePdfThumb = memo(function ResourcePdfThumb({
       ? Math.min(PREVIEW_MAX_WIDTH, Math.round(measuredWidth))
       : PREVIEW_MAX_WIDTH;
   const ready = visible && (measuredWidth > 0 || !canMeasure);
+  const placeholder = thumbnail ? (
+    <span
+      className="chat-resource__pdf-sheet"
+      style={{ aspectRatio: `${thumbnail.width} / ${thumbnail.height}` }}
+    >
+      <img src={thumbnail.url} alt="" decoding="async" draggable={false} />
+    </span>
+  ) : (
+    <span className="chat-resource__pdf-sheet" />
+  );
+  const pending = thumbnail ? (
+    placeholder
+  ) : (
+    <span className="chat-resource__pdf-pending" />
+  );
 
   return (
     <span
@@ -82,7 +101,7 @@ export const ResourcePdfThumb = memo(function ResourcePdfThumb({
         <Document
           file={fileContentUrl(fileId)}
           options={PDF_THUMB_OPTIONS}
-          loading={<span className="chat-resource__pdf-sheet" />}
+          loading={placeholder}
           error={<span className="chat-resource__pdf-sheet" />}
           onLoadError={() => onErrorRef.current()}
         >
@@ -92,14 +111,14 @@ export const ResourcePdfThumb = memo(function ResourcePdfThumb({
             devicePixelRatio={Math.min(window.devicePixelRatio || 1, 2)}
             renderTextLayer={false}
             renderAnnotationLayer={false}
-            loading={<span className="chat-resource__pdf-sheet" />}
+            loading={placeholder}
             error={<span className="chat-resource__pdf-sheet" />}
             onLoadError={() => onErrorRef.current()}
             onRenderError={() => onErrorRef.current()}
           />
         </Document>
       ) : (
-        <span className="chat-resource__pdf-pending" />
+        pending
       )}
     </span>
   );
