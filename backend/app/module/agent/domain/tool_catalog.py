@@ -37,7 +37,9 @@ from app.module.agent.domain.tool_args import (
 # v16 adds the optional companion persona section (persona, then the rules that
 # outrank it) frozen per conversation. v17 appends the equal-address rule
 # (the user by name or "you"; never Keeper, master, or owner) after it.
-PROMPT_VERSION = "archive-agent-v17"
+# v18 ships the rewritten preset personas from the world bible (ten-thousand-
+# year aeon-porcelain, minds that emerged from the library, equal keeping).
+PROMPT_VERSION = "archive-agent-v18"
 # v6 replaced web_fetch's line-offset pagination with server-defined pages. v7
 # makes ``objective`` a required web_search field in the model-facing schema
 # while keeping it optional on the validation model, so conversations frozen on

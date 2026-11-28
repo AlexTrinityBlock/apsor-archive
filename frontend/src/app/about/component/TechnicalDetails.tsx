@@ -55,6 +55,24 @@ const TERMS: readonly { term: string; plain: TranslationKey; detail: Translation
 
 const CITATION_FORMATS = ["[file:id#chunk]", "[memory:id]", "[summary:id]"] as const;
 
+/** Each real behaviour paired with its image in the librarians' world. */
+const LORE_ROWS: readonly { what: TranslationKey; image: TranslationKey }[] = [
+  { what: "insights.about.tech.loreSearchWhat", image: "insights.about.tech.loreSearchImage" },
+  { what: "insights.about.tech.loreCiteWhat", image: "insights.about.tech.loreCiteImage" },
+  { what: "insights.about.tech.loreOpenWhat", image: "insights.about.tech.loreOpenImage" },
+  { what: "insights.about.tech.loreUnsureWhat", image: "insights.about.tech.loreUnsureImage" },
+  { what: "insights.about.tech.loreEmptyWhat", image: "insights.about.tech.loreEmptyImage" },
+  { what: "insights.about.tech.loreNeverWhat", image: "insights.about.tech.loreNeverImage" },
+  {
+    what: "insights.about.tech.loreReplacedWhat",
+    image: "insights.about.tech.loreReplacedImage",
+  },
+  {
+    what: "insights.about.tech.lorePrivacyWhat",
+    image: "insights.about.tech.lorePrivacyImage",
+  },
+];
+
 /** Collapsible glossary for technical readers: term → plain line → detail. */
 export function TechnicalDetails() {
   const { t } = useI18n();
@@ -82,6 +100,16 @@ export function TechnicalDetails() {
             </code>
           ))}
         </p>
+        <h3 className="about-tech__lore-title">{t("insights.about.tech.loreTitle")}</h3>
+        <p>{t("insights.about.tech.loreIntro")}</p>
+        <dl className="about-tech__lore">
+          {LORE_ROWS.map((row) => (
+            <div className="about-tech__lore-row" key={row.what}>
+              <dt>{t(row.what)}</dt>
+              <dd>{t(row.image)}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </details>
   );

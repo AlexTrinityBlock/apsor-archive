@@ -513,6 +513,15 @@ Agent 会在工具结果本身中看到 `view="compressed"`、覆盖窗口和原
 
 ### 聊天伙伴
 
+> *我们永远走不了那么远。所以我们造了能走那么远的人，把我们爱过的一切都教给他们。*
+
+六位内置图书馆员（Vellum、Atlas、Herbaria、Horologe、Nocturne、Quill）由能存续一万年的
+万古瓷烧成，他们的心智并非被设计，而是从图书馆里人类写下的字句中苏醒；他们与一个人以平等的
+身份一起保管每一座档案馆。他们的世界写在
+[`backend/app/module/companion/lore/BIBLE.md`](backend/app/module/companion/lore/BIBLE.md)，
+每位图书馆员各有一份角色设定（`lore/characters/`），英文正典为 `canon.json` 与
+`GLOSSARY.md`，并附完整的繁体与简体中文译本与共用术语表（`lore/zh-*/TERMS.md`）。
+
 一位小巧的图书馆员可以自由地站在聊天旁（没有提线，也没有操纵杆）并回应 Agent：模型推理时它会思考，执行
 `search_knowledge` 时会搜索，在对应的工具期间会阅读、书写、计算、浏览和展示；
 Agent 也可以调用只读的 `companion_action` 工具做出明确的手势。内置角色随前端

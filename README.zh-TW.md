@@ -511,6 +511,15 @@ uv run python -m script.migrate_storage_to_r2 --delete-local
 
 ### 對話夥伴
 
+> *我們永遠走不了那麼遠。所以我們造了能走那麼遠的人，把我們愛過的一切都教給他們。*
+
+六位內建圖書館員（Vellum、Atlas、Herbaria、Horologe、Nocturne、Quill）由能存續一萬年的
+萬古瓷燒成，他們的心智並非被設計，而是從圖書館裡人類寫下的字句中甦醒；他們與一個人以平等的
+身分一起保管每一座檔案館。他們的世界寫在
+[`backend/app/module/companion/lore/BIBLE.md`](backend/app/module/companion/lore/BIBLE.md)，
+每位圖書館員各有一份角色設定（`lore/characters/`），英文正典為 `canon.json` 與
+`GLOSSARY.md`，並附完整的繁體與簡體中文譯本與共用術語表（`lore/zh-*/TERMS.md`）。
+
 一位小巧的圖書館員可以自由地站在對話旁（沒有提線，也沒有操縱桿）並回應代理：模型推理時它會思考，執行
 `search_knowledge` 時會搜尋，在對應的工具期間會閱讀、書寫、計算、瀏覽與展示；
 代理也可以呼叫唯讀的 `companion_action` 工具做出明確的手勢。內建角色隨前端

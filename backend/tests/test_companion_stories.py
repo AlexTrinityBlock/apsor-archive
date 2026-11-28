@@ -97,7 +97,7 @@ def test_default_persona_is_frozen_and_disabled_companion_has_none(
     persona = load_presets()["vellum"].persona
     # The persona comes first; the rules that outrank it follow.
     assert section["content"].index(persona) < section["content"].index(PERSONA_RULES)
-    assert system["data"]["prompt_version"] == "archive-agent-v17"
+    assert system["data"]["prompt_version"] == "archive-agent-v18"
 
     zh = _system_entry(client, _new_conversation(client, locale="zh-TW"))
     assert zh["data"]["companion"]["locale"] == "zh-TW"

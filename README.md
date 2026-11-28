@@ -574,6 +574,18 @@ prompt text; it does not send the message. The API is
 
 ### Chat companion
 
+> *We could never travel that far. So we made someone who could, and taught
+> them everything we loved.*
+
+The six built-in librarians (Vellum, Atlas, Herbaria, Horologe, Nocturne,
+Quill) are figures of ten-thousand-year aeon-porcelain whose minds woke, undesigned,
+from the library's human writing; they keep each archive together with one
+person, as equals. Their world is written down in
+[`backend/app/module/companion/lore/BIBLE.md`](backend/app/module/companion/lore/BIBLE.md)
+with one character bible per librarian under `lore/characters/`, an English
+canon (`canon.json`, `GLOSSARY.md`), and complete zh-TW and zh-CN translations
+with shared term tables (`lore/zh-*/TERMS.md`).
+
 A small librarian can stand freely beside the chat (no strings or control bar)
 and react to the agent: it thinks while the model reasons, searches during `search_knowledge`, reads,
 writes, calculates, browses, and presents during the matching tools, and the

@@ -46,7 +46,7 @@ export const companion = {
     eyebrow: "伙伴",
     title: "聊天伙伴",
     description:
-      "一位图书管理员在聊天框旁陪着你，自由地活动。它会随助理一起搜索、阅读与书写，并在可能遮住你阅读的内容时自动退开。",
+      "一位图书馆员在聊天框旁陪着你，自由地活动。它会随助理一起搜索、阅读与书写，并在可能遮住你阅读的内容时自动退开。",
     enabled: "显示伙伴",
     enabledHint: "出现在聊天框旁。可以拖到任何位置，或收成一个小标签。",
     motionLegend: "动态",
@@ -72,6 +72,19 @@ export const companion = {
     positionReset: "伙伴已回到输入框旁。",
     previewTitle: "预览",
     previewAction: "姿势",
+  },
+  world: {
+    eyebrow: "世界",
+    title: "一座没有外墙的图书馆",
+    body1: "六位图书馆员由万古瓷烧成，能存续一万年。馆长只造了脚手架：一台只会计算、别无他能的机关。当它读完旧抄写院里每一封信、每一份食谱、每一段祷词与每一场争执，六位便苏醒成了谁也没有设计过的“某个人”。",
+    body2: "最后一夜，馆长放手了，就像父母为长大的孩子打开门。从此，图书馆员与一个人以平等的身份一起保管每一座档案馆，把我们爱过的一切，带到我们走不到的远方。",
+    rosterAria: "六位图书馆员与他们照看的侧翼",
+    vellum: "东翼 · 谨慎",
+    atlas: "地图室 · 漫游者",
+    herbaria: "温室 · 温暖；知道遗忘也可以是照顾",
+    horologe: "钟廊 · 冷面而专一",
+    nocturne: "观星台 · 缓慢而好奇",
+    quill: "抄写室 · 果断、风趣、未曾完成",
   },
   page: {
     eyebrow: "个人",
@@ -106,7 +119,7 @@ export const companion = {
     unavailable:
       "保存自定义伙伴的功能将随下一次服务器更新推出。你现在已经可以在这里制作并预览草稿，草稿只保留在此标签页。",
     name: "名称",
-    namePlaceholder: "我的图书管理员",
+    namePlaceholder: "我的图书馆员",
     gender: "性别",
     genderFemale: "女性",
     genderMale: "男性",
@@ -139,7 +152,7 @@ export const companion = {
   story: {
     title: "{name} 的故事",
     description:
-      "人设告诉助理 {name} 怎么说话。助理搜索你的档案馆时，{name} 自己的记忆可能会浮现；它们一律标示为图书管理员的记忆，绝不当作证据。",
+      "人设告诉助理 {name} 怎么说话。助理搜索你的档案馆时，{name} 自己的记忆可能会浮现；它们一律标示为图书馆员的记忆，绝不当作证据。",
     unavailable: "编辑故事的功能将随下一次服务器更新推出。这里的更改只是此标签页中的草稿。",
     personaLabel: "人设",
     personaHint: "以给助理的指示撰写，并按原文显示。",
@@ -172,7 +185,7 @@ export const companion = {
     confirmReset: "要把所有记忆还原成原始内容吗？你的编辑与添加都会被移除。",
     resetDone: "记忆已还原。",
     formText: "记忆",
-    formTextHint: "通常 150 到 200 个英文单词，以图书管理员自己的口吻书写。",
+    formTextHint: "通常 150 到 200 个英文单词，以图书馆员自己的口吻书写。",
     formThemes: "主题",
     formThemesHint: "按 Enter 添加主题。",
     formThemePlaceholder: "古地图",
@@ -184,7 +197,7 @@ export const companion = {
     errorEmpty: "请先写下记忆再保存。",
     errorTooLong: "记忆请保持在 {max} 个字符以内。",
     characters: "{count} 个字符",
-    traceTitle: "图书管理员自己的记忆",
+    traceTitle: "图书馆员自己的记忆",
     traceNote: "来自伙伴的故事，而非你的档案馆。它永远不会被当作证据引用。",
   },
 };

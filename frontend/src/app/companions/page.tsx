@@ -1,6 +1,7 @@
 import { PageHeader } from "../component/PageHeader";
 import { useI18n } from "../i18n";
 import { CompanionControls } from "./component/CompanionControls";
+import { CompanionWorldIntro } from "./component/CompanionWorldIntro";
 import "../companion/companion.css";
 import "./companions.css";
 
@@ -19,6 +20,7 @@ export function CompanionPage() {
         description={t("companion.page.description")}
       />
       <CompanionControls />
+      <CompanionWorldIntro />
     </div>
   );
 }
