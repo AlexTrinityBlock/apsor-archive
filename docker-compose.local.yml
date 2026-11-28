@@ -1,0 +1,22 @@
+# Home-network override: run Apsor Archive without a Cloudflare Tunnel.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# Caddy publishes port 8080 on this machine, the tunnel connector is switched
+# off, and the session cookie works over plain HTTP. Set APSOR_PUBLIC_HOST in
+# .env to the name you type in the browser (for example `localhost`, or this
+# machine's name on your home network). Use the tunnel instead for anything
+# reachable from the internet: see docs/cloudflare-tunnel.md.
+services:
+  api:
+    environment:
+      APSOR_COOKIE_SECURE: "false"
+
+  caddy:
+    ports:
+      - "${APSOR_LOCAL_PORT:-8080}:80"
+
+  cloudflare-tunnel:
+    # A profile nobody enables keeps the connector (and its token) out of a
+    # home-network install.
+    profiles: ["tunnel"]
