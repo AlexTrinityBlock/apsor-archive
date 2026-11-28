@@ -1,14 +1,14 @@
 // @ts-expect-error -- `bun:test` is provided by the Bun runtime; the frontend tsconfig does not load @types/bun.
 import { describe, expect, test } from "bun:test";
 
-import { readResource } from "../../chat/types";
-import { previewBoxWidth } from "../../chat/component/resource-frame";
+import { readResource } from "../types";
+import { previewBoxWidth } from "./resource-frame";
 import {
   fileThumbnailUrl,
   readThumbnail,
   thumbnailAspect,
   thumbnailPageRatio,
-} from "./thumbnail";
+} from "../../viewer/component/thumbnail";
 
 const THUMBNAIL = { version: "0123456789abcdef", width: 320, height: 160 };
 

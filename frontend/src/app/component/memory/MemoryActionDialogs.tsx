@@ -9,11 +9,7 @@ import {
   useUpdateMemory,
 } from "../../generated-apis-types/memories/memories";
 import { useApiErrorMessage, useI18n } from "../../i18n";
-// SettingsDialog's frame uses the global modal classes; its two
-// `.settings-dialog__*` heading rules still live in settings/settings.css.
-// Promote it to a shared ConfirmDialog (architecture tidy) to drop this
-// cross-workspace import.
-import { SettingsDialog } from "../../settings/component/SettingsDialog";
+import { ConfirmDialog } from "../ConfirmDialog";
 import { invalidateMemorySurfaces } from "./query";
 import "./memory-shared.css";
 
@@ -71,7 +67,7 @@ export function MemoryEditDialog({ memory, onClose }: DialogProps) {
   };
 
   return (
-    <SettingsDialog
+    <ConfirmDialog
       eyebrow={t("memory.editDialog.eyebrow")}
       title={t("memory.editDialog.title")}
       description={t("memory.editDialog.description", {
@@ -133,7 +129,7 @@ export function MemoryEditDialog({ memory, onClose }: DialogProps) {
           </p>
         ) : null}
       </form>
-    </SettingsDialog>
+    </ConfirmDialog>
   );
 }
 
@@ -176,7 +172,7 @@ export function MemoryDeprecateDialog({ memory, onClose }: DialogProps) {
   };
 
   return (
-    <SettingsDialog
+    <ConfirmDialog
       eyebrow={t("memory.deprecateDialog.eyebrow")}
       title={t("memory.deprecateDialog.title")}
       description={t("memory.deprecateDialog.description", {
@@ -246,6 +242,6 @@ export function MemoryDeprecateDialog({ memory, onClose }: DialogProps) {
           </p>
         ) : null}
       </form>
-    </SettingsDialog>
+    </ConfirmDialog>
   );
 }

@@ -34,12 +34,6 @@ const ALLOWED_EDGES = new Set([
   // The agent run inspector and the chat workspace share run types/renderers.
   "agent -> chat",
   "chat -> agent",
-  // Timeline reuses the memory edit/deprecate dialogs until they move to
-  // `component/` with the memory merge.
-  "timeline -> memory",
-  // Memory still imports the confirmation dialog through the Settings re-export
-  // (settings/component/SettingsDialog.tsx); switch it to component/ConfirmDialog.
-  "memory -> settings",
   // Saved-question citations reuse the chat citation href builders.
   "questions -> chat",
 ]);

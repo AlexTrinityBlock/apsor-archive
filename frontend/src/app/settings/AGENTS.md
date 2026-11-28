@@ -56,7 +56,6 @@ Settings does not own backend validation, generated API definitions, or global i
 - `component/LanguagePanel.tsx` / `LanguagePanel.css` — immediate locale switching and its option grid.
 - `component/RuntimeControls.tsx` — `RuntimeNumberField` and `RuntimeTextField` shared by the runtime panels.
 - `component/SwitchField.tsx`, `component/StatusPill.tsx` — the toggle and status-pill controls.
-- `component/SettingsDialog.tsx` — compatibility re-export of `app/component/ConfirmDialog.tsx`; new code imports `ConfirmDialog` directly.
 - `component/settings-utils.ts` — status tones, labels, and localized API errors.
 - `component/settings-invalidation.ts` — scoped provider and reindex invalidation.
 - `settings.css` — page composition, tab strip, runtime forms, and responsive rules.
